@@ -1,0 +1,41 @@
+{
+  "id": "request-condition-no-comma",
+  "about": "Genuine requests whose condition has no comma before the main clause: 'Even if you sent it last year the credentialing office still needs your current BLS card' and 'In case you missed my last note the hospital still needs your TB results by Friday'. A condition that opens its sentence and runs to the stop holds the main clause, so the sentence is kept whole. Synthetic.",
+  "subject": "Two items for your file",
+  "from": {
+    "name": "Parker Linwood",
+    "address": "plinwood@cedarfall-staffing.example"
+  },
+  "body": "Hi Dr. Testa,\n\nWe are close to finishing your file for the January block at Mossgate Example Hospital. Even if you sent it last year the credentialing office still needs your current BLS card. In case you missed my last note the hospital still needs your TB results by Friday.\n\nThanks,\nParker Linwood\nCredentialing Coordinator\nCedarfall Staffing\nOffice: 541.555.0132",
+  "attachments": [],
+  "expected": {
+    "intent": "request",
+    "asks": [
+      {
+        "kind": "bls"
+      },
+      {
+        "kind": "tb"
+      }
+    ],
+    "roles": []
+  },
+  "modelReply": {
+    "intent": "request",
+    "asks": [
+      {
+        "quote": "Even if you sent it last year the credentialing office still needs your current BLS card",
+        "kind": "bls",
+        "who": "physician"
+      },
+      {
+        "quote": "In case you missed my last note the hospital still needs your TB results by Friday",
+        "kind": "tb",
+        "who": "physician"
+      }
+    ],
+    "attachments": [],
+    "summary": "your current BLS card and your TB results for the January block",
+    "confidence": "high"
+  }
+}

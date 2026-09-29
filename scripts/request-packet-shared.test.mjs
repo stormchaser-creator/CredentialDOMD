@@ -132,7 +132,10 @@ for (const b of bodies) eq(`parseAsks agrees on ${String(JSON.stringify(b)).slic
   }
   for (const sentence of ["Please send your DEA.", "The policy covers emergency care.", "Nothing is missing.", "Return the form", "Proof of coverage is required.", "", null,
     "This means that if you are required to provide urgent surgical care, that care is treated as insured work.", "Required: current CV and two references",
-    "Even if you sent it last year, please send your current BLS card.", "Whether or not you are credentialed, emergency care you provide is covered."]) {
+    "Even if you sent it last year, please send your current BLS card.", "Whether or not you are credentialed, emergency care you provide is covered.",
+    "Whether or not you plan to renew the hospital needs your signed release form.", "In other words, send us the renewed COI before your next shift.",
+    "You are required to provide malpractice coverage of $1,000,000/$3,000,000 before your start date of 11/2.",
+    "In other words, you will not need to buy tail coverage when the assignment ends."]) {
     eq(`hasAskForm agrees on ${JSON.stringify(sentence)}`, server.hasAskForm(sentence), client.hasAskForm(sentence));
   }
 }

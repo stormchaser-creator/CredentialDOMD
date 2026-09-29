@@ -1,0 +1,41 @@
+{
+  "id": "request-explained-duty",
+  "about": "Genuine requests inside an explanation: 'In other words, send us the renewed COI before your next shift' opens on a verb that tells the reader to act, and 'This means that you must submit your updated CV by October 1' is a duty on the reader. An explanation that asks is kept. Synthetic.",
+  "subject": "Before your next shift",
+  "from": {
+    "name": "Quinn Adair",
+    "address": "qadair@larkspur-locums.example"
+  },
+  "body": "Dr. Testa,\n\nYour COI expired on 9/30. In other words, send us the renewed COI before your next shift. The medical staff office also changed its reappointment cycle this year. This means that you must submit your updated CV by October 1.\n\nRegards,\nQuinn Adair\nProvider Services\nLarkspur Locums\nDirect: 919.555.0171",
+  "attachments": [],
+  "expected": {
+    "intent": "request",
+    "asks": [
+      {
+        "kind": "coi_malpractice"
+      },
+      {
+        "kind": "cv"
+      }
+    ],
+    "roles": []
+  },
+  "modelReply": {
+    "intent": "request",
+    "asks": [
+      {
+        "quote": "In other words, send us the renewed COI before your next shift",
+        "kind": "coi_malpractice",
+        "who": "physician"
+      },
+      {
+        "quote": "This means that you must submit your updated CV by October 1",
+        "kind": "cv",
+        "who": "physician"
+      }
+    ],
+    "attachments": [],
+    "summary": "your renewed malpractice certificate and your updated CV",
+    "confidence": "high"
+  }
+}

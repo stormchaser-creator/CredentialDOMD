@@ -469,6 +469,80 @@ test("verifyRecords: an insurance record takes the attached agreement's start, w
   assert.equal(verifyRecords(bwRecord(), { corpus: corpusIndex([COVER_LETTER, AGREEMENT_WORDS]), physicianName: "Rowan Testa" }).records[0].fields.effectiveDate, undefined);
 });
 
+// Review of 2026-09-29: the host gave an insurance record the attached
+// agreement's date when the agreement's words anywhere held "malpractice"
+// and "provide" (negated or not), when the email alone named malpractice and
+// "agreement" (a housing agreement then passed), and when the agreement was
+// the agency's contract with a hospital; and it did so over a start the
+// email gave in other words than "effective". Each of these wrote a wrong
+// date on a verified forward.
+const GIVES = "Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of April 1, 2026. Section 4: Brightwater provides malpractice insurance for the physician on each Assignment.";
+/** The start the host writes on the rules' record, with one attached agreement. */
+const rulesStart = (email, notes, physicianName = "Rowan Testa") => {
+  const attachments = [`agency: Brightwater Locum Partners, LLC\nnotes: ${notes}`];
+  const { records } = verifyRecords(rulesRecords({ message: email, physicianName }), agreementCtx(email, attachments, physicianName));
+  assert.equal(records.length, 1, "the record itself is still read");
+  return records[0].fields.effectiveDate;
+};
+
+test("an attached agreement's start only when that same agreement gives the physician the cover, and the physician is a party to it", () => {
+  assert.equal(rulesStart(COVER_LETTER, GIVES), "2026-04-01");
+  assert.equal(rulesStart(COVER_LETTER, GIVES, ""), "2026-04-01", "without the name, a doctor's letters name the party");
+  // The agreement says the agency gives no cover, or puts it on the physician.
+  for (const notes of [
+    "Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of April 1, 2026. Section 4: Brightwater does not provide malpractice insurance; Physician shall maintain professional liability insurance at Physician's own expense.",
+    "Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of April 1, 2026. Section 4: Physician shall maintain professional liability insurance and provide Brightwater a certificate.",
+    "Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of April 1, 2026. Section 4: Brightwater shall not be responsible for malpractice coverage; the physician's own policy covers each Assignment.",
+    // No malpractice cover in it at all, however the email ties cover to "your agreement".
+    "Housing agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD for the apartment near the assignment, effective as of October 30, 2026.",
+    // The agency's contract with a hospital, with and without "between".
+    "Facility services agreement between Brightwater Locum Partners, LLC and Harborview Example Hospital, effective as of January 1, 2024. Section 3: Brightwater provides malpractice insurance for each locum physician it places.",
+    "Facility services agreement, Brightwater Locum Partners, LLC and Harborview Example Hospital; effective as of January 1, 2024. Section 3: Brightwater provides malpractice insurance for each locum physician it places.",
+    // Another doctor's agreement.
+    "Locum services agreement between Brightwater Locum Partners, LLC and Jordan Vale, MD, effective as of April 1, 2026. Section 4: Brightwater provides malpractice insurance for the physician on each Assignment.",
+  ]) {
+    for (const email of [COVER_LETTER, "Brightwater Locum Partners provides your professional liability insurance per your agreement, at $2,000,000 per claim and a $4,000,000 annual aggregate."]) {
+      assert.equal(rulesStart(email, notes), undefined, notes);
+    }
+  }
+  // A hospital in Maryland is not a doctor, when the host has no name to go by.
+  assert.equal(rulesStart(COVER_LETTER, "Facility services agreement between Brightwater Locum Partners, LLC and Harborview Example Hospital, MD, effective as of January 1, 2024. Section 3: Brightwater provides malpractice insurance for each locum physician it places.", ""), undefined);
+  // Parties named without "between", the agreement's own word for the physician, or the email calling it theirs.
+  assert.equal(rulesStart(COVER_LETTER, "Independent contractor agreement, Brightwater Locum Partners, LLC and Rowan Testa, MD; effective as of April 1, 2026. Section 4: Brightwater provides malpractice insurance for each Assignment."), "2026-04-01");
+  assert.equal(rulesStart(COVER_LETTER, "Physician staffing agreement, effective as of 04/01/2026, between Brightwater Physician Staffing, Inc. and the physician. Section 4: Brightwater insures the physician for professional liability on each Assignment."), "2026-04-01");
+  assert.equal(rulesStart(COVER_LETTER, "Master services agreement effective April 1, 2026. Section 4: malpractice coverage is provided for each Assignment through the agency's insurer."), "2026-04-01", "the email calls it 'your agreement'");
+  assert.equal(rulesStart("In Section 4.1 of the agreement, Brightwater Locum Partners provides professional liability insurance on each Assignment at $2,000,000 per claim and a $4,000,000 annual aggregate.", "Master services agreement effective April 1, 2026. Section 4: malpractice coverage is provided for each Assignment through the agency's insurer."), undefined, "nothing says it is the physician's");
+  // Cover that leaves some work out is still cover.
+  assert.equal(rulesStart(COVER_LETTER, `${GIVES} Administrative tasks are not insured.`), "2026-04-01");
+  // The reading's start from such an agreement is dropped the same way.
+  const hospital = "agency: Brightwater Locum Partners, LLC\nnotes: Facility services agreement between Brightwater Locum Partners, LLC and Harborview Example Hospital, effective as of January 1, 2024. Section 3: Brightwater provides malpractice insurance for each locum physician it places.";
+  const v = verifyRecords(bwRecord([["effectiveDate", "2024-01-01", "effective as of January 1, 2024"]]), agreementCtx(COVER_LETTER, [hospital]));
+  assert.equal(v.records[0].fields.effectiveDate, undefined);
+  assert.ok(v.dropped.some((d) => d.field === "effectiveDate" && d.why === DROP.agreementDate));
+});
+
+test("an attached agreement's start never replaces a start the email states, in whatever words", () => {
+  const begins = "Brightwater Locum Partners provides your malpractice insurance: $1,000,000 per claim and $3,000,000 aggregate. Your coverage begins with your first shift on November 2, 2026.";
+  assert.equal(rulesStart(begins, GIVES), undefined);
+  for (const email of [
+    begins,
+    `${COVER_LETTER} Your coverage starts November 2.`,
+    `${COVER_LETTER} Your first shift is on 11/02/2026.`,
+    `${COVER_LETTER} You are insured from 11/2/2026.`,
+    `${COVER_LETTER} Coverage commences on your start date of 11/2.`,
+    `${COVER_LETTER} The policy took effect on 02/01/2026.`,
+  ]) assert.equal(agreementCoverageStart(email, [GIVES], { physicianName: "Rowan Testa" }), null, email);
+  // A date that is neither a start nor about the coverage leaves the agreement's, and so does a quoted message's header.
+  assert.equal(agreementCoverageStart(`Following up on your email of September 25, 2026. ${COVER_LETTER}`, [GIVES], { physicianName: "Rowan Testa" }).iso, "2026-04-01");
+  assert.equal(agreementCoverageStart(`${COVER_LETTER}\n\n> From: Rowan Testa\n> Sent: Monday, September 28, 2026 9:00 AM\n> Subject: Malpractice coverage\n> Is my coverage in place?`, [GIVES], { physicianName: "Rowan Testa" }).iso, "2026-04-01");
+  // The reading: the email's own start is kept, and the agreement's is dropped beside it.
+  const own = verifyRecords(one([["provider", "Brightwater Locum Partners (through its insurer)", "Brightwater Locum Partners provides your malpractice insurance"], ["coveragePerClaim", "1000000", "$1,000,000 per claim and $3,000,000 aggregate"], ["effectiveDate", "2026-11-02", "Your coverage begins with your first shift on November 2, 2026"]]), agreementCtx(begins, [GIVES]));
+  assert.equal(own.records[0].fields.effectiveDate, "2026-11-02");
+  const theirs = verifyRecords(one([["provider", "Brightwater Locum Partners (through its insurer)", "Brightwater Locum Partners provides your malpractice insurance"], ["coveragePerClaim", "1000000", "$1,000,000 per claim and $3,000,000 aggregate"], ["effectiveDate", "2026-04-01", "effective as of April 1, 2026"]]), agreementCtx(begins, [GIVES]));
+  assert.equal(theirs.records[0].fields.effectiveDate, undefined);
+  assert.ok(theirs.dropped.some((d) => d.field === "effectiveDate" && d.why === DROP.agreementDate));
+});
+
 test("an insurance expiration is when the coverage ends, never an agreement's term, a renewal or tail wording", () => {
   const text = "Master professional services agreement effective March 1, 2026 through February 28, 2027, renewing automatically. Tail coverage is in effect for claims after 12/31/2026. Your Quillfeather Staffing policy expires on 06/30/2027.";
   const exp = (quote, value) => verifyRecords(one([["provider", "Quillfeather Staffing", "Your Quillfeather Staffing policy expires on 06/30/2027"], ["expirationDate", value, quote]]), ctx([text])).records[0]?.fields.expirationDate;

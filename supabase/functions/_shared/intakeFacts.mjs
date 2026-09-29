@@ -47,9 +47,12 @@
  *                  one). Everything else waits for the model.
  *   agreementCoverageStart
  *                  an insurance record's start, when the email states none
- *                  and the coverage is provided under an attached agreement:
- *                  that agreement's own "effective as of" date, from its
- *                  words (verifyRecords checks a start the reading takes from
+ *                  in any words and an attached agreement gives the
+ *                  physician the cover: that agreement's own "effective as
+ *                  of" date, from its words, when the same agreement's words
+ *                  give malpractice cover (never "does not provide", never
+ *                  the physician's own policy) and the physician is a party
+ *                  to it (verifyRecords checks a start the reading takes from
  *                  an attachment against it, and gives a record the email
  *                  gives no start this one)
  *   planRecords    each checked record against what is on file
@@ -244,7 +247,7 @@ export const DROP = Object.freeze({
   section: "not a section an email may add to",
   ref: "names no record on file",
   notAbout: "not about the record it names",
-  agreementDate: "not the attached agreement's effective date, or the email states its own",
+  agreementDate: "not the effective date of an attached agreement that gives the physician the cover, or the email states its own",
 });
 
 // An instruction to whoever reads the email, or to the app: "add a licence",
@@ -574,7 +577,7 @@ export function verifyRecords(raw, { corpus, refs = new Map(), physicianName = "
   const dropped = [];
   const c = corpus || corpusIndex([]);
   const emailNorm = typeof email === "string" ? normalizeForQuote(email) : null;
-  const agreement = emailNorm === null ? null : agreementCoverageStart(email, attachments);
+  const agreement = emailNorm === null ? null : agreementCoverageStart(email, attachments, { physicianName });
   for (const r of (Array.isArray(raw) ? raw : []).slice(0, MAX_RECORDS)) {
     if (!r || typeof r !== "object") continue;
     let section = String(r.section ?? "");
@@ -844,8 +847,9 @@ const FIELD_LABEL_RE = /^[A-Za-z][\w ]{0,30}:\s+/;
  * says "effective as of <date>" (or "effective <date>", "effective on
  * <date>"), the date straight after. One date across every attachment, or
  * null: two agreements that differ leave it to the physician. Returns { iso,
- * text: that attachment's words, quotes: the sentence up to the date, then
- * the "effective as of <date>" words alone }.
+ * text: that attachment's words, sentence: the sentence that says it,
+ * quotes: the sentence up to the date, then the "effective as of <date>"
+ * words alone }.
  */
 export function agreementEffective(attachments) {
   const found = [];
@@ -857,7 +861,7 @@ export function agreementEffective(attachments) {
           const before = sentence.slice(0, d.index);
           if (!EFFECTIVE_FROM_RE.test(before)) continue;
           const at = before.toLowerCase().lastIndexOf("effective");
-          found.push({ iso: d.iso, text, quotes: [sentence.slice(0, d.end).trim(), sentence.slice(at, d.end).trim()] });
+          found.push({ iso: d.iso, text, sentence, quotes: [sentence.slice(0, d.end).trim(), sentence.slice(at, d.end).trim()] });
         }
       }
     }
@@ -865,23 +869,91 @@ export function agreementEffective(attachments) {
   return found.length && found.every((f) => f.iso === found[0].iso) ? found[0] : null;
 }
 
+// The email states when the coverage starts, in whatever words: a sentence
+// about the coverage that holds a date, or a sentence that holds a date and
+// says something begins ("Your coverage begins with your first shift on
+// November 2, 2026", "your assignment starts 11/02/2026"). A date with no
+// year counts ("begins November 2"). A quoted message's header line ("Sent:
+// Monday, September 28, 2026") dates the message, not the coverage.
+const COVERAGE_WORD_RE = /\b(?:coverage|cover|covers|covered|policy|policies|insurance|insured|insures?|malpractice|liability|claims?)\b/i;
+const START_WORD_RE = /\b(?:begin|begins|beginning|began|start|starts|started|starting|commenc\w*|effective|in\s+effect|took\s+effect|takes\s+effect|as\s+of|first\s+(?:shift|day|assignment|placement))\b/i;
+const MONTH_WORD = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+const YEARLESS_DATE_RE = new RegExp(`\\b${MONTH_WORD}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?\\b|\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_WORD}\\b|\\b(?:0?[1-9]|1[0-2])\\/(?:0?[1-9]|[12]\\d|3[01])\\b`, "i");
+const HEADER_LINE_RE = /^[\s>]*(?:from|sent|date|to|cc|bcc|subject)\s*:.*$/gim;
+
+/** Does the email state a start of its own (see COVERAGE_WORD_RE)? */
+function emailStatesStart(email) {
+  return sentencesOf(String(email ?? "").replace(HEADER_LINE_RE, " "))
+    .some((s) => (datesIn(s).length > 0 || YEARLESS_DATE_RE.test(s)) && (COVERAGE_WORD_RE.test(s) || START_WORD_RE.test(s)));
+}
+
+// The agreement gives the physician malpractice cover: a clause of its own
+// that names malpractice (professional liability) cover and a verb that
+// gives it ("Brightwater carries malpractice insurance for the physician").
+const GIVES_COVER_RE = /\b(?:provides?|provided|providing|carries|carry|carried|maintains?|maintained|furnish(?:es|ed)?|insures?|insured|covers?|covered|procures?|procured|purchases?|purchased|buys|arranges?|arranged|extends?)\b/i;
+// ...and no clause of it says the agency gives none, or that the physician
+// carries their own: "Brightwater does not provide malpractice insurance",
+// "Physician shall maintain professional liability insurance at Physician's
+// own expense". (A cover that leaves out some work, "administrative tasks are
+// not insured", is still a cover.)
+const DENIES_COVER_RE = /(?:\bnot|\bnever|n't)\s+(?:[\w-]+\s+){0,2}?(?:provide|provides|carry|carries|maintain|maintains|furnish|furnishes|procure|procures|purchase|purchases|arrange|arranges|obtain|obtains|insure|insures|cover|covers|(?:be\s+)?responsible\s+for)\b(?:\s+[\w-]+){0,4}?\s+(?:malpractice|professional\s+liability|liability|insurance|coverage)\b|\bno\s+(?:[\w-]+\s+){0,2}?(?:malpractice|professional\s+liability|liability\s+insurance)\b/i;
+const OWN_COVER_RE = /\b(?:physician|doctor|contractor|provider|you)\s+(?:shall|must|will|agrees?\s+to|(?:is|are)\s+(?:required|responsible|obligated|expected)\s+(?:to|for))\s+(?:(?:obtain|secure|keep|carry|maintain|procure|purchase|buy|provide|pay\s+for)\b|(?:[\w-]+\s+){0,2}?(?:malpractice|professional\s+liability|liability|insurance|coverage)\b)|\b(?:physician|doctor|contractor|provider)(?:'s|’s)\s+own\s+(?:expense|cost|policy|insurance)\b|\b(?:his|her|their|your)\s+own\s+(?:expense|cost|malpractice|professional\s+liability|liability|policy|insurance)\b/i;
+
+/** The agreement's own words give malpractice cover, and none deny it or put it on the physician. */
+function givesCover(text) {
+  const clauses = sentencesOf(text).flatMap((s) => s.split(/;\s*/));
+  if (clauses.some((c) => DENIES_COVER_RE.test(c) || OWN_COVER_RE.test(c))) return false;
+  return clauses.some((c) => MALPRACTICE_RE.test(c) && GIVES_COVER_RE.test(c));
+}
+
+// The physician is a party to the agreement. Where it names its parties
+// ("between A and B"), one of them is the physician: their surname when the
+// host knows it; when it does not, a doctor's letters ("Rowan Testa, MD",
+// "Avery Quinn DO a Professional Corporation") or "Dr."; or the agreement's
+// own word for them ("the physician", "Doctor"). Where it names none, the
+// sentence that dates it names the physician, or the email calls it the
+// physician's ("your signed agreement is attached") and the sentence names
+// no hospital or facility. A contract between the agency and a hospital is
+// not the physician's cover, whatever it says of malpractice.
+const BETWEEN_RE = /\b[Bb]etween\s+(.{3,240}?)(?=;|,?\s+(?:[Ee]ffective|[Dd]ated|[Mm]ade|[Ee]ntered)\b|\.\s+[A-Z]|\.?\s*$)/m;
+const DOCTOR_LETTERS_RE = /\b(?:M\.\s?D\.?|D\.\s?O\.?|MD|DO)\b|\bDr\.?\s+[A-Z]/;
+const PHYSICIAN_TERM_RE = /^\W*(?:the\s+)?(?:physician|doctor)\b(?!\s+(?:staffing|services|group|partners|placement|recruit\w*|search|network|associates)\b)/i;
+const FACILITY_RE = /\b(?:hospitals?|medical\s+cent(?:er|re)|health\s*(?:care\s+)?(?:system|network)|clinics?|facility|facilities)\b/i;
+const YOUR_AGREEMENT_RE = /\byour\s+(?:[\w-]+\s+){0,4}?(?:agreement|contract)\b/i;
+const NOT_A_NAME = /^(?:md|do|dr|phd|jr|sr|ii|iii|iv|mr|mrs|ms|mx)$/i;
+const surnameOf = (name) => String(name ?? "").split(/[\s,]+/).map((w) => w.replace(/[^A-Za-z'-]/g, "")).filter((w) => w.length > 1 && !NOT_A_NAME.test(w)).pop() || "";
+
+function namesPhysician(s, surname) {
+  if (surname) return new RegExp(`\\b${surname}\\b`, "i").test(s);
+  return DOCTOR_LETTERS_RE.test(s) && !FACILITY_RE.test(s);
+}
+
+/** Is the physician a party to the agreement `a` (agreementEffective)? */
+function physicianParty(a, email, physicianName) {
+  const surname = surnameOf(physicianName);
+  const between = a.sentence.match(BETWEEN_RE) || a.text.match(BETWEEN_RE);
+  if (between) return between[1].split(/\s+and\s+|\s*&\s*/i).some((p) => PHYSICIAN_TERM_RE.test(p) || namesPhysician(p, surname));
+  if (namesPhysician(a.sentence, surname) || /\bthe\s+physician\b/i.test(a.sentence)) return true;
+  return YOUR_AGREEMENT_RE.test(String(email ?? "")) && !FACILITY_RE.test(a.sentence);
+}
+
 /**
  * The start an insurance record may take from an attached agreement, or
- * null: the email itself states no start of the coverage (effectiveDateIn),
- * one agreement in the attachments says when it takes effect
- * (agreementEffective), and the coverage is provided under it (the
- * agreement's own words give malpractice cover, or the email ties the
- * malpractice cover it describes to an agreement). The owner's case of
- * 2026-09-28: the letter gave the limits and the section of the agreement,
- * the attached agreement was "effective as of" a date, and he entered that
- * date as the coverage's start.
+ * null: the email itself states no start of the coverage, in any words
+ * (emailStatesStart), one agreement in the attachments says when it takes
+ * effect (agreementEffective), and that same agreement gives the physician
+ * the cover: its own words give malpractice cover and none deny it or put it
+ * on the physician (givesCover), and the physician is a party to it
+ * (physicianParty). The owner's case of 2026-09-28: the letter gave the
+ * limits and the section of the agreement, the attached agreement between
+ * him and the agency was "effective as of" a date and gave him the agency's
+ * cover, and he entered that date as the coverage's start.
  */
-export function agreementCoverageStart(email, attachments) {
-  if (effectiveDateIn(sentencesOf(email))) return null;
+export function agreementCoverageStart(email, attachments, { physicianName = "" } = {}) {
+  if (emailStatesStart(email)) return null;
   const a = agreementEffective(attachments);
-  if (!a) return null;
-  const under = (MALPRACTICE_RE.test(a.text) && COVERS_RE.test(a.text)) || (MALPRACTICE_RE.test(String(email ?? "")) && AGREEMENT_WORD_RE.test(String(email ?? "")));
-  return under ? a : null;
+  if (!a || !givesCover(a.text) || !physicianParty(a, email, physicianName)) return null;
+  return a;
 }
 
 const distinctWords = (s) => wordsOf(s).filter((w) => w.length > 2 && !GENERIC.has(w) && !INSTITUTION.has(w) && !MONTHS_AND_DAYS.has(w) && !/^\d+$/.test(w));

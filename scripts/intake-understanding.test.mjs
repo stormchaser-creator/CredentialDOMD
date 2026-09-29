@@ -18,7 +18,7 @@ import {
 import { KINDS, classifyAsk } from "../supabase/functions/_shared/requestPacket.ts";
 import { planFiling, roleTarget, masterAgreement, fileableFromMixed } from "../supabase/functions/_shared/intakeFiling.mjs";
 import {
-  loadCases, runEval, readerFor, formatReport, corpusAllowed, scoreCase, composeForward, requestFor, SYNTHETIC_DIR, DEFAULT_CORPUS,
+  loadCases, runEval, readerFor, formatReport, corpusAllowed, scoreCase, composeForward, requestFor, readByRules, SYNTHETIC_DIR, DEFAULT_CORPUS,
 } from "./intake-eval.mjs";
 
 const EM_DASH = String.fromCodePoint(0x2014);
@@ -278,17 +278,18 @@ test("the synthetic corpus: recorded replies read right, and the rules alone nev
   const cases = loadCases(SYNTHETIC_DIR);
   assert.deepEqual(cases.map((c) => c.id), [
     "delivery-approval", "informational-agreement", "informational-call-followup-conditional", "informational-coverage-required-explained",
-    "informational-even-if-not-credentialed", "informational-malpractice-limits", "informational-should-you-need-to", "mixed-approval-and-form",
-    "request-no-attachment", "request-require-dea", "request-required-coi", "request-required-label", "request-with-form",
+    "informational-even-if-not-credentialed", "informational-malpractice-limits", "informational-no-tail-needed", "informational-should-you-need-to",
+    "mixed-approval-and-form", "request-condition-no-comma", "request-explained-duty", "request-no-attachment", "request-provide-coverage",
+    "request-require-dea", "request-required-coi", "request-required-label", "request-with-form",
   ]);
   const stub = await runEval(cases, readerFor("stub"));
-  assert.deepEqual([stub.totals.intent, stub.totals.request, stub.totals.invented, stub.totals.asksHit, stub.totals.asksWanted, stub.totals.byModel], [13, 13, 0, 10, 10, 13]);
-  assert.match(formatReport(stub, "stub"), /intent: 13\/13 \(100%\)\nrequest or not: 13\/13 \(100%\)/);
+  assert.deepEqual([stub.totals.intent, stub.totals.request, stub.totals.invented, stub.totals.asksHit, stub.totals.asksWanted, stub.totals.byModel], [17, 17, 0, 15, 15, 17]);
+  assert.match(formatReport(stub, "stub"), /intent: 17\/17 \(100%\)\nrequest or not: 17\/17 \(100%\)/);
   // The owner's case and its stand-ins: every expected fact read, through the host's check, and none from an email that states none.
-  assert.deepEqual([stub.totals.factsHit, stub.totals.factsWanted, stub.totals.factsInvented], [25, 25, 0]);
-  assert.match(formatReport(stub, "stub"), /facts to enter: 25\/25 expected fields read right \(100%\)/);
+  assert.deepEqual([stub.totals.factsHit, stub.totals.factsWanted, stub.totals.factsInvented], [29, 29, 0]);
+  assert.match(formatReport(stub, "stub"), /facts to enter: 29\/29 expected fields read right \(100%\)/);
   const rules = await runEval(cases, readerFor("rules"));
-  assert.equal(rules.totals.request, 13, "request or not is right even without the model");
+  assert.equal(rules.totals.request, 17, "request or not is right even without the model");
   assert.equal(rules.totals.invented, 0, "no ask on an email that asked for nothing");
   assert.equal(rules.totals.factsInvented, 0, "no fact from an email that states none to enter");
   const info = rules.rows.find((r) => r.id === "informational-agreement");
@@ -310,13 +311,55 @@ test("the synthetic corpus: recorded replies read right, and the rules alone nev
     const row = rules.rows.find((r) => r.id === id);
     assert.deepEqual([row.reading.intent, row.reading.asks, row.reading.askForm, row.score.factsHit, row.score.factsWanted], ["informational", [], false, 5, 5], id);
   }
-  // Genuine requests that say "required" still ask, by the rules and by the reading.
-  for (const [id, kinds] of [["request-required-coi", ["coi_malpractice"]], ["request-require-dea", ["dea"]], ["request-required-label", ["cv", "references"]]]) {
+  // "In other words, you will not need to buy tail coverage": a need denied
+  // asks for nothing, and the letter keeps its one record.
+  const tail = rules.rows.find((r) => r.id === "informational-no-tail-needed");
+  assert.deepEqual([tail.reading.intent, tail.reading.asks, tail.reading.askForm, tail.score.factsHit, tail.score.factsWanted], ["informational", [], false, 4, 4]);
+  // Genuine requests that say "required", that put a condition with no comma
+  // before the main clause, that ask inside an explanation, or that require
+  // the physician to provide malpractice coverage still ask, by the rules and
+  // by the reading (whose quotes the host keeps).
+  for (const [id, kinds] of [
+    ["request-required-coi", ["coi_malpractice"]], ["request-require-dea", ["dea"]], ["request-required-label", ["cv", "references"]],
+    ["request-condition-no-comma", ["bls", "tb"]], ["request-explained-duty", ["coi_malpractice", "cv"]], ["request-provide-coverage", ["coi_malpractice"]],
+  ]) {
     for (const run of [rules, stub]) {
       const row = run.rows.find((r) => r.id === id);
       assert.equal(row.reading.intent, "request", id);
       assert.deepEqual(row.reading.asks.map((a) => a.kind || classifyAsk(a.quote).kind), kinds, id);
     }
+  }
+});
+
+// Review of 2026-09-29: each of these asked on main, and on the first version
+// of askingPart the rules found no ask in the email and the host dropped the
+// model's own quote of it as "not worded as an ask". Whole emails, read by
+// the rules and through the host's check of a reading that quotes the ask.
+test("a condition with no comma, an explanation that tells the reader to act, and a requirement to provide coverage: the rules ask and the reading's quote is kept", async () => {
+  for (const sentence of [
+    "Whether or not you plan to renew the hospital needs your signed release form.",
+    "Even if you sent it last year the credentialing office still needs your current BLS card.",
+    "Should you accept the offer the signed agreement must be returned by Friday.",
+    "If you are required to carry your own policy your certificate must reach us by Friday.",
+    "If an emergency delays your arrival our office needs your updated ETA.",
+    "In case you missed my last note the hospital still needs your TB results by Friday",
+    "If you are asked to provide immunization records they must reach us by 10/5 so the hospital needs your flu shot record and hepatitis B titer",
+    "In other words, send us the renewed COI before your next shift.",
+    "This means that you must submit your updated CV by October 1.",
+    "You are required to provide malpractice coverage of $1,000,000/$3,000,000 before your start date of 11/2.",
+  ]) {
+    const quote = sentence.replace(/\.$/, "");
+    const c = {
+      id: "one-ask", subject: "Your file", from: { name: "Harper Voss", address: "hvoss@wrenfield-staffing.example" }, attachments: [],
+      body: `Hi Dr. Testa,\n\n${sentence}\n\nThanks,\nHarper Voss\nCredentialing Coordinator`,
+      modelReply: { intent: "request", asks: [{ quote, kind: "", who: "physician" }], attachments: [], summary: "one item for your file", confidence: "high" },
+    };
+    const rules = readByRules(c);
+    assert.equal(rules.intent, "request", sentence);
+    assert.ok(rules.asks.length >= 1, `the rules find the ask: ${sentence}`);
+    const read = await readerFor("stub")(c);
+    assert.equal(read.method, "model", sentence);
+    assert.deepEqual([read.intent, read.asks.map((a) => a.quote)], ["request", [quote]], sentence);
   }
 });
 

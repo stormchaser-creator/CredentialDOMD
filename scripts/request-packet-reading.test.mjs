@@ -140,8 +140,52 @@ for (const [name, m] of COPIES) {
       "If required send your COI to the medical staff office.",
       "In the event your licence is renewed can you forward the new copy",
     ]) assert.equal(m.hasAskForm(s), true, s);
-    assert.equal(m.hasAskForm("This means that if you are required to provide urgent care that care is insured work."), false, "no comma: the condition runs to the stop");
+    // No comma: the condition is kept, and the care duty and the explanation
+    // that does not ask still come out.
+    assert.equal(m.hasAskForm("This means that if you are required to provide urgent care that care is insured work."), false);
     assert.equal(m.askingPart("Even if you sent it already, please resend your BLS card."), ", please resend your BLS card.");
+  });
+
+  // Review of 2026-09-29: cutting a condition with no comma to the stop took
+  // the main clause with it, an explanation lost its imperative and its "you
+  // must", and "coverage" counted as care. Each of these asked on main and
+  // read as nothing on the first version of askingPart, which also dropped
+  // the model's own quote of it ("not worded as an ask").
+  test(`${name}: a condition with no comma keeps its main clause; an explanation that tells the reader to act, or insurance to provide, still asks`, () => {
+    for (const s of [
+      "Whether or not you plan to renew the hospital needs your signed release form.",
+      "Even if you sent it last year the credentialing office still needs your current BLS card.",
+      "Should you accept the offer the signed agreement must be returned by Friday.",
+      "If you are required to carry your own policy your certificate must reach us by Friday.",
+      "If an emergency delays your arrival our office needs your updated ETA.",
+      "In case you missed my last note the hospital still needs your TB results by Friday",
+      "If you are asked to provide immunization records they must reach us by 10/5 so the hospital needs your flu shot record and hepatitis B titer",
+      "Also even if you sent it last year the credentialing office still needs your current BLS card.",
+      "This means that even if you sent it before the office needs your BLS card.",
+      "In other words, send us the renewed COI before your next shift.",
+      "This means that you must submit your updated CV by October 1.",
+      "In other words, you are required to return the signed attestation before your start date.",
+      "You are required to provide malpractice coverage of $1,000,000/$3,000,000 before your start date of 11/2.",
+      "This means you are required to provide professional liability coverage before your first shift.",
+    ]) assert.equal(m.hasAskForm(s), true, s);
+    for (const s of [
+      // A condition after its main clause still comes out to the stop.
+      "Emergency care is covered should you need to provide it.",
+      "Your cover still applies even if you are required to provide urgent surgery there.",
+      // Care is still not a document, call coverage included.
+      "Whether or not you are on the call list, the call coverage you provide is insured.",
+      "When on call you are expected to give trauma coverage, which means those nights are insured.",
+      // An explanation of what is covered still asks for nothing.
+      "In other words, complete protection applies to emergency cases.",
+      // A need denied asks for nothing.
+      "In other words, you will not need to buy tail coverage when the assignment ends.",
+      "You won't need to resend the application.",
+      "The physician no longer needs a separate certificate for this site.",
+    ]) assert.equal(m.hasAskForm(s), false, s);
+    // A denied need beside one that asks still asks.
+    assert.equal(m.hasAskForm("You will not need to buy tail coverage, but we need your updated COI."), true);
+    assert.equal(m.askingPart("Whether or not you plan to renew the hospital needs your signed release form."), "Whether or not you plan to renew the hospital needs your signed release form.");
+    assert.equal(m.askingPart("The agency carries malpractice insurance, raised where required by state law."), "The agency carries malpractice insurance, raised .");
   });
 
   test(`${name}: kindName reads every kind`, () => {

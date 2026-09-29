@@ -270,34 +270,66 @@ function requirementForm(t) {
 //   stop inside a number, "$2,000,000", does not end it): "even if",
 //   "whether or not", "in the event", "in case", "should you", "if you are
 //   required (asked, called on, expected) to", "if you ever need to", "if
-//   required", "where (when) required", "if an emergency";
+//   required", "where (when) required", "if an emergency". A condition that
+//   opens its clause and runs on to the stop with no comma has the main
+//   clause inside it ("Whether or not you plan to renew the hospital needs
+//   your signed release form"), and nothing says where that clause starts,
+//   so the sentence is kept whole: cutting it to the stop dropped genuine
+//   asks, the model's among them. A condition that follows its main clause
+//   ("..., raised where required by state law") still comes out to the stop;
 //   care as a duty: "you are required to render urgent care", "the
-//   urgent care you provide" (care, treatment and services are not
-//   documents; "provide proof of coverage" and "provide a copy" stay);
+//   urgent care you provide", "provide call coverage" (care, treatment and
+//   services are not documents; insurance is not care, so "you are required
+//   to provide malpractice coverage", "provide proof of coverage" and
+//   "provide a copy" stay);
 //   an explanation ("this means that", "which means", "in other words") to
-//   the end of its clause, unless it asks in so many words (please, a
-//   question, "need", "can you", "missing", "we require", or a requirement
-//   on the reader's own file).
+//   the end of its clause, unless it asks: in so many words (please, a
+//   question, "need", "can you", "missing", "we require"), by opening on a
+//   verb that tells the reader to act ("in other words, send us the renewed
+//   COI"), by a duty on the reader ("you must submit your CV") or by a
+//   requirement on the reader's own file. What goes is an explanation of
+//   what is covered or of the care, never one that tells the reader to act.
 // The main clause is still read, so "Even if you sent it last year, please
 // send your current BLS card" and "If you are required to carry your own
 // policy, send your COI by Friday" still ask.
 const CONDITION_RE = /\b(?:even\s+(?:if|when|though)|whether\s+or\s+not|in\s+the\s+event\b|in\s+case\s+(?:of|you|an?|the|there)\b|should\s+you\b|if\s+(?:you\s+(?:are|were|get|become)\s+(?:ever\s+|also\s+)?(?:required|asked|called\s+(?:up)?on|needed|expected|obligated)\b|you\s+(?:ever\s+)?(?:need|have)\s+to\b|(?:it\s+is\s+|so\s+)?required\b|(?:an?|the|any)\s+(?:emergen\w*|urgent)\b)|(?:where|when|wherever|whenever)\s+(?:so\s+)?required\b)(?:[^,;.!?]|[,.](?=\d))*?(?=,(?!\d)|[;!?]|\.(?!\d)|\s+then\b|\s+(?:please|kindly)\b|\s+(?:we|i)\s+(?:(?:still|also|will|would|do)\s+)*(?:need|require|request)\b|\s+(?:can|could|would|will)\s+you\b|(?<!\bto)\s+(?:send|resend|submit|provide|upload|return|forward|fax|attach|complete|sign|email|e-mail)\s+(?:us|me|your|the|a|an|it|them|over|back|in|along|copies|a\s+copy)\b|$)/gi;
-const CARE_DUTY_RE = /\b(?:(?:is|are|were|be|been|being)\s+(?:(?:ever|also|still|then)\s+)?(?:required|asked|expected|called\s+(?:up)?on|needed|obligated)\s+to\s+)?(?:provides?|provided|providing|render(?:s|ed|ing)?|give|giving|deliver(?:s|ed|ing)?|perform(?:s|ed|ing)?)\s+(?:(?:urgent|emergency|emergent|medical|clinical|patient|professional|any|the|that|this|such|appropriate|immediate|life-?saving|stabili[sz]ing|acute|bedside|direct|hands-on|in-person|on-site|call|trauma|inpatient|outpatient|malpractice|liability|insurance|[a-z]+(?:al|ic|ive|ary|ent|ant))\s+){0,3}(?:care|treatment|services?|surgery|surgeries|procedures?|consults?|consultations?|coverage)\b(?!\s+(?:proof|cop(?:y|ies)|certificates?|documentation|documents?|verification|letters?|declarations?|face\s*sheets?|forms?|details|information|info|records?|evidence|summary)\b)|\b(?:care|treatment|services?|surgery|surgeries|procedures?|consults?|consultations?)\s+(?:that\s+|which\s+)?(?:you|we|they)\s+(?:(?:may|might|will|would|could|also|then|ever)\s+)?(?:provide|render|give|deliver|perform)\b/gi;
+// Where the clause before a condition starts: after a comma or a stop outside
+// a number, a semicolon, a colon, a bracket or a dash.
+const CLAUSE_BREAK_RE = /,(?!\d)|[;:!?()\u2014\u2013]|\.(?!\d)|\s-\s/;
+// What may stand before a condition that opens its clause: nothing, or a
+// joining word ("and", "also", "this means that", "in other words").
+const CLAUSE_OPENER_RE = /^\W*(?:(?:and|but|or|so|also|however|now|then|plus|yet|still|additionally|(?:this|that|which|it)\s+means(?:\s+that)?|in\s+other\s+words|(?:please\s+)?note\s+that)\s+)*$/i;
+const CARE_DUTY_RE = /\b(?:(?:is|are|were|be|been|being)\s+(?:(?:ever|also|still|then)\s+)?(?:required|asked|expected|called\s+(?:up)?on|needed|obligated)\s+to\s+)?(?:provides?|provided|providing|render(?:s|ed|ing)?|give|giving|deliver(?:s|ed|ing)?|perform(?:s|ed|ing)?)\s+(?:(?:urgent|emergency|emergent|medical|clinical|patient|professional|any|the|that|this|such|appropriate|immediate|life-?saving|stabili[sz]ing|acute|bedside|direct|hands-on|in-person|on-site|call|trauma|inpatient|outpatient|[a-z]+(?:al|ic|ive|ary|ent|ant))\s+){0,3}(?:care|treatment|services?|surgery|surgeries|procedures?|consults?|consultations?|(?:call|on-?call|emergency|trauma)\s+coverage)\b(?!\s+(?:proof|cop(?:y|ies)|certificates?|documentation|documents?|verification|letters?|declarations?|face\s*sheets?|forms?|details|information|info|records?|evidence|summary)\b)|\b(?:care|treatment|services?|surgery|surgeries|procedures?|consults?|consultations?|(?:call|on-?call|emergency|trauma)\s+coverage)\s+(?:that\s+|which\s+)?(?:you|we|they)\s+(?:(?:may|might|will|would|could|also|then|ever)\s+)?(?:provide|render|give|deliver|perform)\b/gi;
 const EXPLAIN_RE = /\b(?:(?:this|that|which|it)\s+means(?:\s+that)?|in\s+other\s+words)\b([^;!?]*?)(?=[;!?]|\.(?:\s|$)|$)/gi;
 // The asking forms an explanation must use to ask: ASK_FORM_RE without the
 // bare verbs ("send", "provide", "submit"), which an explanation uses to say
 // what is covered.
 const PLAIN_ASK_RE = /\?|\b(?:please|pls|kindly)\b|\bneed(?:s|ed)?\b(?!\s+not\b)|\b(?:can|could|would|will)\s+you\b|\b(?:missing|outstanding|awaiting)\b|\bwaiting\s+(?:on|for)\b|\b(?:we|i)\s+(?:are\s+|am\s+|will\s+|would\s+|do\s+|shall\s+)?(?:still\s+|also\s+)?(?:request|requesting|require)\b/i;
+// A duty on the reader to do something with a document: "you must submit",
+// "you are required to provide", "you will need to send".
+const READER_DUTY_RE = /\byou\s+(?:(?:will|would|also|still|now|then|first)\s+)*(?:must|need\s+to|have\s+to|should|are\s+(?:(?:also|still|now)\s+)?(?:required|expected|asked|obligated)\s+to)\s+(?:(?:please|also|still|now|then|first|promptly)\s+)?(?:send|resend|submit|provide|upload|return|forward|fax|attach|complete|sign|fill|email|e-mail|mail|bring|include|get|obtain|update|renew|carry|maintain|purchase|buy|show|present)\b/i;
+// A need denied asks for nothing: "you will not need to buy tail coverage",
+// "you won't need to resend it", "no longer needed". Taken out before the
+// asking words are looked for; "need not" and "no need" are NEGATED_ASK_RE's.
+const NEGATED_NEED_RE = /(?:\bnot|\bnever|n't|\bno\s+longer)\s+(?:(?:even|really|ever|also)\s+)?need(?:s|ed)?\b(?:\s+to\s+(?:re-?send|send|provide|submit|re-?submit|upload|forward|return|fax|e-?mail|mail))?/gi;
+
+/** Does an explanation's clause ask (see CONDITION_RE)? */
+function explanationAsks(clause) {
+  const asking = clause.replace(NON_ASK_PLEASE_RE, " ").replace(NEGATED_NEED_RE, " ");
+  return PLAIN_ASK_RE.test(asking) || IMPERATIVE_RE.test(clause) || READER_DUTY_RE.test(asking) || requirementForm(clause);
+}
 
 /** The sentence with its conditions, its care duties and any explanation that does not ask taken out (see CONDITION_RE). */
 export function askingPart(s) {
-  const t = String(s ?? "").replace(/\s+/g, " ").trim()
-    .replace(CONDITION_RE, " ")
-    .replace(CARE_DUTY_RE, " ");
-  return t.replace(EXPLAIN_RE, (whole, clause) => {
-    const asking = clause.replace(NON_ASK_PLEASE_RE, " ");
-    return PLAIN_ASK_RE.test(asking) || requirementForm(clause) ? whole : " ";
-  }).replace(/\s+/g, " ").trim();
+  const t = String(s ?? "").replace(/\s+/g, " ").trim();
+  // A condition that opens its clause and runs on to the stop is kept whole.
+  const keep = (cond, at) => /^\s*(?:[.!?]|$)/.test(t.slice(at + cond.length))
+    && CLAUSE_OPENER_RE.test(t.slice(0, at).split(CLAUSE_BREAK_RE).pop() ?? "");
+  return t
+    .replace(CONDITION_RE, (cond, at) => (keep(cond, at) ? cond : " "))
+    .replace(CARE_DUTY_RE, " ")
+    .replace(EXPLAIN_RE, (whole, clause) => (explanationAsks(clause) ? whole : " "))
+    .replace(/\s+/g, " ").trim();
 }
 // A label that asks: "Required: current CV and two references". ("Needed:",
 // "Missing:" and "Outstanding:" ask already, by their words.)
@@ -328,7 +360,7 @@ export function hasAskForm(s) {
   if (REQUIRED_LABEL_RE.test(t)) return true;
   const part = askingPart(t);
   if (!part) return false;
-  const asking = part.replace(NON_ASK_PLEASE_RE, " ").replace(DONT_SEND_RE, " ");
+  const asking = part.replace(NON_ASK_PLEASE_RE, " ").replace(DONT_SEND_RE, " ").replace(NEGATED_NEED_RE, " ");
   return ASK_FORM_RE.test(asking) || IMPERATIVE_RE.test(t) || IMPERATIVE_RE.test(part) || requirementForm(part);
 }
 

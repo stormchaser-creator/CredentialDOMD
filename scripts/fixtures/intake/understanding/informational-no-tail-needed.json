@@ -1,0 +1,73 @@
+{
+  "id": "informational-no-tail-needed",
+  "about": "An informational letter whose explanation denies a need: 'In other words, you will not need to buy tail coverage when the assignment ends'. A need denied asks for nothing, so the letter stays informational with its one insurance record. Synthetic.",
+  "subject": "Your liability coverage for the spring assignment",
+  "from": {
+    "name": "Ellis Varga",
+    "address": "evarga@marrowby-locums.example"
+  },
+  "body": "Dr. Testa,\n\nMarrowby Locum Partners provides your professional liability insurance for this assignment, $1,000,000 per claim and $3,000,000 aggregate. The policy is written on an occurrence basis. In other words, you will not need to buy tail coverage when the assignment ends.\n\nKind regards,\nEllis Varga\nRecruiting Manager\nMarrowby Locum Partners\nMobile: 406.555.0188",
+  "attachments": [],
+  "physicianName": "Rowan Testa",
+  "expected": {
+    "intent": "informational",
+    "asks": [],
+    "roles": [],
+    "records": [
+      {
+        "section": "insurance",
+        "fields": {
+          "type": "Medical Professional Liability Coverage",
+          "provider": "Marrowby Locum Partners (through its insurer)",
+          "coveragePerClaim": "1000000",
+          "coverageAggregate": "3000000"
+        }
+      }
+    ]
+  },
+  "modelReply": {
+    "intent": "informational",
+    "asks": [],
+    "attachments": [],
+    "summary": "how Marrowby Locum Partners covers your liability on the spring assignment",
+    "confidence": "high",
+    "records": [
+      {
+        "section": "insurance",
+        "match_existing": "",
+        "fields": [
+          {
+            "field": "type",
+            "value": "Medical Professional Liability Coverage",
+            "quote": "Marrowby Locum Partners provides your professional liability insurance for this assignment, $1,000,000 per claim and $3,000,000 aggregate"
+          },
+          {
+            "field": "name",
+            "value": "Marrowby Locum Partners assignment malpractice coverage",
+            "quote": "Marrowby Locum Partners provides your professional liability insurance for this assignment, $1,000,000 per claim and $3,000,000 aggregate"
+          },
+          {
+            "field": "provider",
+            "value": "Marrowby Locum Partners (through its insurer)",
+            "quote": "Marrowby Locum Partners provides your professional liability insurance for this assignment, $1,000,000 per claim and $3,000,000 aggregate"
+          },
+          {
+            "field": "coveragePerClaim",
+            "value": "1000000",
+            "quote": "Marrowby Locum Partners provides your professional liability insurance for this assignment, $1,000,000 per claim and $3,000,000 aggregate"
+          },
+          {
+            "field": "coverageAggregate",
+            "value": "3000000",
+            "quote": "Marrowby Locum Partners provides your professional liability insurance for this assignment, $1,000,000 per claim and $3,000,000 aggregate"
+          },
+          {
+            "field": "notes",
+            "value": "Written on an occurrence basis, so no tail coverage is needed when the assignment ends.",
+            "quote": "The policy is written on an occurrence basis"
+          }
+        ]
+      }
+    ]
+  }
+}

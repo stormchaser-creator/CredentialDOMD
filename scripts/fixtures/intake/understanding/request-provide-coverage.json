@@ -1,0 +1,33 @@
+{
+  "id": "request-provide-coverage",
+  "about": "A genuine requirement that the physician provide malpractice coverage: 'You are required to provide malpractice coverage of $1,000,000/$3,000,000 before your start date of 11/2'. Insurance is not care, so the sentence still asks. Synthetic.",
+  "subject": "Coverage for the Birchmont assignment",
+  "from": {
+    "name": "Reese Calloway",
+    "address": "rcalloway@birchmont-health.example"
+  },
+  "body": "Hello Dr. Testa,\n\nThank you for accepting the assignment at Birchmont Example Medical Center. This group does not supply malpractice insurance to locum physicians. You are required to provide malpractice coverage of $1,000,000/$3,000,000 before your start date of 11/2.\n\nBest,\nReese Calloway\nMedical Staff Services\nBirchmont Example Medical Center\nPhone: 802.555.0149",
+  "attachments": [],
+  "expected": {
+    "intent": "request",
+    "asks": [
+      {
+        "kind": "coi_malpractice"
+      }
+    ],
+    "roles": []
+  },
+  "modelReply": {
+    "intent": "request",
+    "asks": [
+      {
+        "quote": "You are required to provide malpractice coverage of $1,000,000/$3,000,000 before your start date of 11/2",
+        "kind": "coi_malpractice",
+        "who": "physician"
+      }
+    ],
+    "attachments": [],
+    "summary": "proof of your malpractice coverage before your November start",
+    "confidence": "high"
+  }
+}
