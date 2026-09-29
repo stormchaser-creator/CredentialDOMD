@@ -21,11 +21,20 @@
 //                then a count of the rest
 // The attachments are the host facts' (att-N with local_path), not repeated.
 //
-// The host keeps the full history (runs/<run>/context.json) and checks every
-// result against it: evidence ids, answered questions and pending follow-up.
-// A summary never makes a check pass that the full history would fail, so a
-// session sees less but cannot claim more. The extractor, the reviewer and
-// the confirmer still get what they got before.
+// caseHistory() is the whole history, which the runner writes to a file the
+// same two sessions may Grep and Read on demand (HISTORY_FILE, in this
+// ticket's own attachment folder), so a message the summary leaves out (a
+// related ticket's middle messages, a long thread's middle) is still one
+// search away and costs nothing on the turns that do not need it.
+//
+// What the host checks against the full history (runs/<run>/context.json):
+// every cited evidence id, completed_follow_up against the saved pending
+// work, and each question's wording against the answers saved in case
+// reviews (an exact match of the normalized text). It does NOT read the
+// customer's messages for answers: a question answered only in a message
+// passes the host, so the session must search the history file before it
+// asks (review of 2026-09-29). The extractor, the reviewer and the confirmer
+// still get what they got before.
 const CUSTOMER_LABELS = new Set(['recorded_customer_author', 'owner_author']);
 export const EVIDENCE_LIMIT = 40 * 1024;
 // A whole first prompt (the role's prompt file, the host facts and this
@@ -36,6 +45,9 @@ const TARGET_SHARE = 20 * 1024;
 const REVIEW_SHARE = 8 * 1024;
 const ANSWERS_SHARE = 3 * 1024;
 const DETAILED_MAX = 25;
+
+// What stands for a saved review too large for the session view.
+const REVIEW_LEFT_OUT = Object.freeze({ omitted: 'too large for this session; it is in the case history file' });
 
 const size = value => Buffer.byteLength(JSON.stringify(value));
 export const clip = (text, max) => {
@@ -57,7 +69,7 @@ function targetView(ticket, share) {
     const whole = { ...shaped, messages };
     if (size(whole) <= share) return { view: whole, shown: messages.length, total: messages.length };
     const skeleton = { ...shaped, messages: [], omitted_messages: { count: messages.length, from: '0000-00-00T00:00:00.000000+00:00', to: '0000-00-00T00:00:00.000000+00:00',
-      note: 'The host holds these messages and extracted the checklist from every one; ask for none of them again.' } };
+      note: 'Left out here to keep each turn small; every one is in the case history file named in the host facts (Grep it). The checklist was extracted from all of them.' } };
     let used = size(skeleton);
     if (used > share) continue;
     const keep = new Set();
@@ -151,7 +163,7 @@ export function sessionEvidence(context, { limit = EVIDENCE_LIMIT } = {}) {
   const thread = targetView(target, Math.min(TARGET_SHARE, limit));
   const header = {
     view: 'session',
-    about: 'The host trimmed the case history for this session so each turn stays small: the target ticket and its thread, this ticket\'s saved review, answers saved on the customer\'s other tickets, and a summary of those tickets. The host holds the whole history and checks your result against it: any id shown here may be cited, a question answered anywhere in the history is refused, and completed_follow_up must repeat a saved_review.pending_follow_up work text exactly. Attachments are listed in the host facts (att-N with local_path).',
+    about: 'The host trimmed the case history for this session so each turn stays small: the target ticket and its thread, this ticket\'s saved review, answers saved on the customer\'s other tickets, and a summary of those tickets. The whole history (every ticket, message and saved review of this customer) is in the case history file named in the host facts: Grep it before you ask the customer anything or cite a confirmation, and Read only the lines you need. Any ticket or message id in it may be cited. The host checks every cited id against the whole history, and completed_follow_up must repeat a saved_review.pending_follow_up work text exactly. The host refuses a question only when its wording matches an answer saved in a case review; it does not read the messages for you, so an answer given only in a message is yours to find. Attachments are listed in the host facts (att-N with local_path).',
     target_id: context.target_id, run_mode: context.run_mode, owner_id: context.owner_id, approval: context.approval, action_scope: context.action_scope,
     history_complete: context.history_complete, limitations: context.limitations, interpretation: context.interpretation,
   };
@@ -171,7 +183,9 @@ export function sessionEvidence(context, { limit = EVIDENCE_LIMIT } = {}) {
     if (view.related_tickets.index.length) view.related_tickets.index.pop();
     else if (view.related_tickets.detailed.length) view.related_tickets.detailed.pop();
     else if (view.answered_on_other_tickets.length) view.answered_on_other_tickets.pop();
-    else if (view.saved_review) view.saved_review = { omitted: 'too large for this session; the host still checks against it' };
+    // Replaced once: the next steps are the limitations, then a failure (the
+    // replacement is still truthy, and testing that alone looped forever).
+    else if (view.saved_review && view.saved_review !== REVIEW_LEFT_OUT) view.saved_review = REVIEW_LEFT_OUT;
     else if (view.limitations?.length > 20) view.limitations = view.limitations.slice(0, 20);
     else throw Error('The session evidence cannot fit its limit');
     view.related_tickets.omitted = related.length - view.related_tickets.detailed.length - view.related_tickets.index.length;
@@ -180,7 +194,43 @@ export function sessionEvidence(context, { limit = EVIDENCE_LIMIT } = {}) {
   return { text, view, stats: { bytes: Buffer.byteLength(text), full_bytes: fullBytes, limit,
     target_messages: { shown: thread.shown, total: thread.total },
     related: { total: related.length, detailed: view.related_tickets.detailed.length, indexed: view.related_tickets.index.length, omitted: view.related_tickets.omitted },
-    saved_review: Boolean(view.saved_review), answered_elsewhere: { shown: view.answered_on_other_tickets.length, total: answers.total } } };
+    saved_review: view.saved_review === REVIEW_LEFT_OUT ? 'omitted' : Boolean(view.saved_review), answered_elsewhere: { shown: view.answered_on_other_tickets.length, total: answers.total } } };
+}
+
+// The whole history as the case history file: one JSON record per line, its
+// kind first, so a Grep hit carries the ids it may cite and a Read of a few
+// lines never needs the rest:
+//   case               the target, run mode, owner, completeness, approval
+//   ticket             each ticket without its messages (their count instead)
+//   message            each message, after its ticket, in the history's order
+//   saved_answer       each answered or remembered question of a saved review
+//   pending_follow_up  each pending work item of a saved review
+//   saved_review       the rest of each saved review
+//   attachment         the history's attachment inventory (storage paths; the
+//                      files to Read are the host facts' local_path)
+export const HISTORY_FILE = 'case-history.jsonl';
+export function caseHistory(context) {
+  const lines = [];
+  // The kind is first and cannot be overwritten by a field of the record.
+  const add = (kind, ...parts) => lines.push(JSON.stringify(Object.assign({ kind }, ...parts, { kind })));
+  add('case', { target_id: context.target_id, run_mode: context.run_mode ?? null, owner_id: context.owner_id ?? null, history_complete: context.history_complete ?? null,
+    limitations: context.limitations ?? [], approval: context.approval ?? null, action_scope: context.action_scope ?? null });
+  for (const ticket of context.tickets ?? []) {
+    const { messages = [], ...fields } = ticket;
+    add('ticket', fields, { messages: messages.length });
+    for (const message of messages) add('message', { ticket_id: ticket.id }, message);
+  }
+  for (const record of context.prior_reviews ?? []) {
+    const { remembered_answers: remembered = [], pending_follow_up: pending = [], assessment = null, ...rest } = record ?? {};
+    const { answered_questions: answered = [], ...assessed } = assessment ?? {};
+    const about = { ticket_id: record?.target_id ?? null, recorded_at: record?.recorded_at ?? null };
+    for (const q of remembered ?? []) add('saved_answer', about, { from: 'remembered_answers' }, q);
+    for (const q of answered ?? []) add('saved_answer', about, { from: 'assessment.answered_questions' }, q);
+    for (const f of pending ?? []) add('pending_follow_up', about, f);
+    add('saved_review', about, rest, assessment ? { assessment: assessed } : {});
+  }
+  for (const attachment of context.attachments ?? []) add('attachment', attachment);
+  return `${lines.join('\n')}\n`;
 }
 
 export const kb = n => `${Math.round(n / 1024)} KB`;

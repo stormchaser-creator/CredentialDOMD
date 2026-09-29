@@ -43,7 +43,7 @@
 // there), which is the only proof that an attachment was looked at (G6). A
 // session may Read this ticket's attachment directory and nothing next to it.
 import { spawn } from 'node:child_process';
-import { promises as fs, rmSync, readdirSync, existsSync } from 'node:fs';
+import { promises as fs, rmSync, readdirSync, existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import path from 'node:path';
 import { SANDBOX_EXEC, shortTmpRoot, sandboxProfile, sandboxEnv, real } from './sandbox.mjs';
 import { ATTACH_ROOT_PREFIX } from './attachments.mjs';
@@ -268,11 +268,38 @@ const GROUPS = new Set();
 export function killGroup(pid) {
   try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ }
 }
+// When the runner is signalled, a session's stderr is still in memory (it is
+// written when the session ends) and the run record has no entry for it
+// (review of 2026-09-29): the stop handler writes the stderr of every session
+// in flight, synchronously, then runs the hooks the runner registered with
+// onStop(fn) (fn(signal), synchronous: run.mjs puts the session and the stop
+// on the run record), then exits.
+const ACTIVE = new Set();
+const STOP_HOOKS = new Set();
+export function onStop(fn) {
+  STOP_HOOKS.add(fn);
+  return () => { STOP_HOOKS.delete(fn); };
+}
+export function flushActiveSessions(signal) {
+  for (const active of ACTIVE) {
+    ACTIVE.delete(active);
+    try {
+      const err = active.errors.end();
+      keepStderrSync(active.file, redactSecrets(err.text, active.secrets), err.dropped, `[the runner was stopped by ${signal} while this session was running]`);
+    } catch { /* the run record says the session was killed either way */ }
+  }
+}
 let handlersInstalled = false;
 export function installSignalHandlers() {
   if (handlersInstalled) return;
   handlersInstalled = true;
-  const stop = (signal, code) => () => { for (const pid of GROUPS) killGroup(pid); removeSessionTemps(); process.exit(code); };
+  const stop = (signal, code) => () => {
+    for (const pid of GROUPS) killGroup(pid);
+    flushActiveSessions(signal);
+    for (const hook of STOP_HOOKS) { try { hook(signal); } catch { /* never keep the runner from stopping */ } }
+    removeSessionTemps();
+    process.exit(code);
+  };
   process.on('SIGTERM', stop('SIGTERM', 143));
   process.on('SIGINT', stop('SIGINT', 130));
   process.on('SIGHUP', stop('SIGHUP', 129));
@@ -417,6 +444,15 @@ export function failureReason(head, facts) {
     Number.isFinite(facts?.cost_usd) ? `$${facts.cost_usd.toFixed(4)}` : null].filter(Boolean);
   return `${head}${parts.length ? ` (${parts.join(', ')})` : ''}${facts?.error ? `: ${facts.error}` : ''}`;
 }
+// The same, synchronously, for the stop handler; note: a last line saying why
+// the file ends where it does.
+function keepStderrSync(file, text, dropped, note) {
+  if (!file || !text.trim()) return null;
+  mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  writeFileSync(file, `${dropped ? `[the first ${dropped} characters were dropped; the newest are kept]\n` : ''}${text}${text.endsWith('\n') ? '' : '\n'}${note}\n`, { mode: 0o600, flag: 'w' });
+  chmodSync(file, 0o600);
+  return file;
+}
 // The session's stderr, redacted, owner-only. Nothing is written for a
 // session that printed nothing.
 async function keepStderr(file, text, dropped) {
@@ -443,14 +479,20 @@ export async function runSession({ claude, role, cwd, input, schema, settings, s
   const how = await sessionLaunch({ claude, args, cwd: real(cwd), sessionDir: real(sessionDir), baseEnv, sandbox, apiBaseUrl });
   const stream = streamCollector();
   const errors = stderrCollector();
-  const text = roleTakesStream(role) && !String(input).startsWith('{"type":"user"') ? streamMessage(String(input)) : input;
-  const r = await launch({ command: how.command, args: how.args, cwd, env: how.env, input: text, timeoutMs, secret: how.secret,
-    onStdout: chunk => stream.feed(chunk), onStderr: chunk => errors.feed(chunk) });
-  const { result: output, reads, tail } = stream.end();
   const secrets = sessionSecrets(baseEnv);
-  const err = errors.end();
-  let kept = null;
-  try { kept = await keepStderr(stderrFile, redactSecrets(err.text, secrets), err.dropped); } catch { kept = null; }
+  const text = roleTakesStream(role) && !String(input).startsWith('{"type":"user"') ? streamMessage(String(input)) : input;
+  // In flight until its stderr is kept: the stop handler writes it if the
+  // runner is signalled first.
+  const active = { errors, file: stderrFile, secrets };
+  ACTIVE.add(active);
+  let r, err, kept = null;
+  try {
+    r = await launch({ command: how.command, args: how.args, cwd, env: how.env, input: text, timeoutMs, secret: how.secret,
+      onStdout: chunk => stream.feed(chunk), onStderr: chunk => errors.feed(chunk) });
+    err = errors.end();
+    try { kept = await keepStderr(stderrFile, redactSecrets(err.text, secrets), err.dropped); } catch { kept = null; }
+  } finally { ACTIVE.delete(active); }
+  const { result: output, reads, tail } = stream.end();
   const session = sessionFacts({ output, stderrText: err.text, secrets, stderrFile: kept });
   if (r.timedOut) return { ok: false, reason: failureReason(`timed out after ${Math.round(timeoutMs / 1000)} s`, session), timedOut: true, raw: tail, reads, session };
   if (r.code !== 0) return { ok: false, reason: failureReason(`exited ${r.code ?? r.signal ?? r.error}`, session), raw: tail, reads, session };

@@ -229,3 +229,39 @@ console.log(JSON.stringify({ type: 'result', is_error: false, session_id: '00000
     assert.ok(cwd.startsWith(path.join(p.work, 'gates', 'review-')), cwd);
   } finally { p.cleanup(); }
 });
+
+// The owner's merge command re-reviews a rebased diff with its own sessions
+// (review of 2026-09-29): they were kept only as stderr files, while the
+// owner is told a session's cost and failure are in run.json's sessions list.
+test('the owner\'s merge re-review goes on the run record like the runner\'s sessions: role, phase merge, cost, turns and stderr, and a SESSION line', async () => {
+  const q = await held();
+  try {
+    const original = readFileSync(path.join(q.p.repo, 'src/format.js'), 'utf8');
+    q.p.moveMain({ 'src/format.js': original.replace("export const title = 'Synthetic summary line';", "export const title = 'Synthetic summary line, edited on main';") });
+    const fake = path.join(q.p.root, 'fake-claude.mjs');
+    writeFileSync(fake, `#!/usr/bin/env node
+for await (const _ of process.stdin) { /* drain */ }
+process.stderr.write('debug: synthetic merge review\\n');
+console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, num_turns: 4, total_cost_usd: 0.25, session_id: '00000000-0000-4000-8000-0000000000ce', structured_output: {
+  items: [{ ac_id: 'AC-1', requirement: 'Summary lines are separated by line breaks', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\\\n');" }] }],
+  observations: [], non_asks: [], missed_asks: [],
+  regressions: [], missed_paths: [], test_changes: [], sibling_exclusions: [], verdict: 'approve', summary: 'Synthetic.' } }));
+`, { mode: 0o755 });
+    const before = await readRun(q.p.work, NAME);
+    const logs = [];
+    const support = await mergeSupport({ run: before, work: q.p.work, claude: fake, sandbox: null, log: line => logs.push(line) });
+    let merged;
+    try {
+      merged = await mergeRun({ work: q.p.work, runId: NAME, manual: true, verify: noRelease, regate: passGates([]), reviewAgain: support.reviewAgain });
+    } finally { await support.cleanup(); }
+    assert.equal(merged.status, 'released', JSON.stringify(merged));
+    const after = await readRun(q.p.work, NAME);
+    assert.equal(after.review_after_rebase.pass, true);
+    const added = after.sessions.slice(before.sessions.length);
+    assert.deepEqual(added.map(s => [s.n, s.role, s.phase, s.ok, s.subtype, s.cost_usd, s.turns]), [[before.sessions.length + 1, 'review', 'merge', true, 'success', 0.25, 4]]);
+    assert.match(added[0].stderr, /^sessions\/merge-review-\d+-\d+-\d+\.stderr\.log$/);
+    assert.match(readFileSync(path.join(q.p.work, 'runs', NAME, added[0].stderr), 'utf8'), /debug: synthetic merge review/);
+    assert.equal(after.cost_usd, Math.round((before.cost_usd + 0.25) * 10000) / 10000);
+    assert.deepEqual(logs, [`SESSION — ${TICKET.slice(0, 8)}: merge review 4 turn(s), $0.2500`]);
+  } finally { q.p.cleanup(); }
+});

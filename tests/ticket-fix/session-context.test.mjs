@@ -4,8 +4,10 @@
 // budget (2026-09-29). Everything here is synthetic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sessionEvidence, EVIDENCE_LIMIT, PROMPT_LIMIT } from '../../scripts/ticket-fix/session-context.mjs';
-import { EXIT } from '../../scripts/ticket-fix/run.mjs';
+import { readFileSync, existsSync } from 'node:fs';
+import { Worker } from 'node:worker_threads';
+import { sessionEvidence, caseHistory, HISTORY_FILE, EVIDENCE_LIMIT, PROMPT_LIMIT } from '../../scripts/ticket-fix/session-context.mjs';
+import { EXIT, WORKER_PROMPT } from '../../scripts/ticket-fix/run.mjs';
 import { readRun } from '../../scripts/ticket-fix/merge.mjs';
 import { EVIDENCE_MARKER } from '../../scripts/ticket-fix/review.mjs';
 import { project, runStub, standardScript, context as baseContext, TICKET, OWNER, RUN_ID } from './stage2-helpers.mjs';
@@ -150,5 +152,146 @@ test('run.mjs gives the reproduction and the worker the trimmed history: each fi
     assert.ok(run.session_context.bytes <= EVIDENCE_LIMIT);
     assert.equal(run.session_context.related.total, 120);
     assert.ok(!r.logs.some(l => l.includes('over the')), r.logs.join('\n'));
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+// A customer's answer in the middle of a related thread (review of
+// 2026-09-29). The trimmed view shows each related ticket's opening and its
+// newest customer message only, and the host's question check compares a
+// question's wording with answers saved in case reviews, never with the
+// messages. So the answer has to be one search away for the sessions: the
+// whole history in a file they may Grep and Read.
+const ANSWER = 'SYNTHETIC-ANSWER-7731: it happens on the synthetic tablet, on the summary screen.';
+const records = text => text.trim().split('\n').map(line => JSON.parse(line));
+// Whether the session's own permission rules let it Read file: an allow rule
+// on a folder holding it, and no deny rule on it or a folder holding it.
+function mayRead(settings, file) {
+  const under = rule => { const m = /^Read\(\/(\/.+?)(\/\*\*)?\)$/.exec(rule); return m ? (m[2] ? file.startsWith(`${m[1]}/`) : file === m[1]) : false; };
+  return settings.permissions.allow.some(under) && !settings.permissions.deny.some(under);
+}
+
+test('an answer in a related ticket\'s middle message is left out of the trimmed view, and the reproduction and the worker get the whole history as a file they may search', async () => {
+  const p = project();
+  let r;
+  try {
+    const ctx = largeContext({ related: 30 });
+    const related = ctx.tickets[5];
+    // A customer message (even index), neither the opening nor the newest customer message.
+    const answered = related.messages[2];
+    answered.body = ANSWER;
+    const base = standardScript();
+    const seen = {};
+    const look = (role, opts) => {
+      const file = /The case history file, `([^`]+)`/.exec(opts.input)?.[1] ?? null;
+      seen[role] = { file, input: opts.input, settings: opts.settings, text: file && existsSync(file) ? readFileSync(file, 'utf8') : null };
+    };
+    r = await runStub(p, standardScript({
+      repro: (opts, n) => { if (!opts.resume) look('repro', opts); return base.repro(opts, n); },
+      worker: (opts, n) => { if (!opts.resume) look('worker', opts); return base.worker(opts, n); },
+    }), { context: ctx });
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    for (const role of ['repro', 'worker']) {
+      const { file, input, settings, text } = seen[role];
+      const evidence = input.slice(input.indexOf(EVIDENCE_MARKER) + EVIDENCE_MARKER.length);
+      assert.ok(!evidence.includes('SYNTHETIC-ANSWER-7731'), `${role}: the trimmed view leaves the middle message out`);
+      assert.ok(file && file.endsWith(`/${HISTORY_FILE}`), `${role}: the host facts name the case history file`);
+      assert.ok(text, `${role}: the file is there while the session runs`);
+      const lines = records(text);
+      const hit = lines.find(l => l.kind === 'message' && l.id === answered.id);
+      assert.deepEqual([hit?.ticket_id, hit?.body, hit?.actor_label], [related.id, ANSWER, 'recorded_customer_author'], `${role}: the answer, with the ids to cite`);
+      // One Grep of the answer's words finds it on one line with its ids.
+      const grep = text.split('\n').filter(line => line.includes('synthetic tablet'));
+      assert.equal(grep.length, 1);
+      assert.ok(grep[0].includes(answered.id) && grep[0].includes(related.id));
+      // Every ticket, message and saved answer of the history is in it.
+      const ids = kind => new Set(lines.filter(l => l.kind === kind).map(l => l.id));
+      assert.deepEqual(ids('ticket'), new Set(ctx.tickets.map(t => t.id)));
+      assert.deepEqual(ids('message'), new Set(ctx.tickets.flatMap(t => t.messages.map(m => m.id))));
+      const saved = ctx.prior_reviews.reduce((n, rv) => n + (rv.remembered_answers?.length ?? 0) + (rv.assessment?.answered_questions?.length ?? 0), 0);
+      assert.equal(lines.filter(l => l.kind === 'saved_answer').length, saved);
+      assert.equal(lines.filter(l => l.kind === 'pending_follow_up')[0].work, ctx.prior_reviews[0].pending_follow_up[0].work);
+      // The session's permission rules let it read the file.
+      assert.ok(mayRead(settings, file), `${role}: ${JSON.stringify(settings.permissions.allow)}`);
+      // The view no longer says the host refuses what it does not check.
+      const view = JSON.parse(evidence);
+      assert.doesNotMatch(view.about, /answered anywhere in the history is refused/);
+      assert.match(view.about, /does not read the messages/);
+      assert.match(input, /The host does not check your questions against the messages/);
+    }
+    assert.equal(seen.repro.file, seen.worker.file);
+    assert.equal(existsSync(seen.worker.file), false, 'the file goes when the run ends');
+    const run = await readRun(p.work, `${TICKET.slice(0, 8)}-${RUN_ID}`);
+    assert.equal(run.session_context.history_bytes, Buffer.byteLength(seen.worker.text));
+    // The worker's instructions say what the host checks.
+    const prompt = readFileSync(WORKER_PROMPT, 'utf8');
+    assert.doesNotMatch(prompt, /question answered anywhere in the\s+history is refused/);
+    assert.match(prompt, /Grep the case history file/);
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+test('the case history file: one record per line, its kind first and never overwritten; the saved reviews are split so a Grep hit is short', () => {
+  const ctx = baseContext();
+  ctx.tickets[0].messages = [{ id: 'm-1', ticket_id: TICKET, kind: 'not-a-kind', body: 'Synthetic message.' }];
+  ctx.prior_reviews = [{ target_id: TICKET, recorded_at: at(1), summary: 'Synthetic summary.', remembered_answers: [{ question: 'Which synthetic screen?', answer: 'The list.', evidence_ids: ['m-1'] }],
+    pending_follow_up: [{ work: 'Synthetic work', owner: 'support_worker', next_action: 'Synthetic next.' }], assessment: { answered_questions: [{ question: 'Which synthetic device?', answer: 'A tablet.', evidence_ids: [TICKET] }], prior_fixes: [] } }];
+  const lines = records(caseHistory(ctx));
+  assert.deepEqual(lines.map(l => l.kind), ['case', 'ticket', 'message', 'saved_answer', 'saved_answer', 'pending_follow_up', 'saved_review']);
+  for (const line of caseHistory(ctx).trim().split('\n')) assert.ok(line.startsWith('{"kind":'), line);
+  assert.equal(lines[0].target_id, TICKET);
+  assert.equal(lines[1].messages, 1);
+  assert.deepEqual([lines[2].ticket_id, lines[2].id], [TICKET, 'm-1']);
+  assert.deepEqual(lines.slice(3, 5).map(l => [l.ticket_id, l.from, l.question]), [[TICKET, 'remembered_answers', 'Which synthetic screen?'], [TICKET, 'assessment.answered_questions', 'Which synthetic device?']]);
+  assert.equal(lines[6].remembered_answers, undefined);
+  assert.equal(lines[6].assessment.answered_questions, undefined);
+  assert.deepEqual(lines[6].assessment.prior_fixes, []);
+});
+
+// sessionEvidence in a worker thread, stopped after a few seconds: its hard
+// bound replaced the saved review and then tested only that it was truthy,
+// so a view that still did not fit looped forever (review of 2026-09-29).
+function evidenceInThread(ctx, limit, ms = 15000) {
+  const url = new URL('../../scripts/ticket-fix/session-context.mjs', import.meta.url).href;
+  const code = `const { workerData, parentPort } = require('node:worker_threads');
+import(workerData.url).then(({ sessionEvidence }) => {
+  try { const r = sessionEvidence(workerData.ctx, { limit: workerData.limit }); parentPort.postMessage({ ok: true, bytes: r.stats.bytes, saved: r.view.saved_review, stats: r.stats }); }
+  catch (error) { parentPort.postMessage({ ok: false, error: String(error.message) }); }
+});`;
+  return new Promise(resolve => {
+    const worker = new Worker(code, { eval: true, workerData: { url, ctx, limit } });
+    const timer = setTimeout(() => { worker.terminate(); resolve({ hung: true }); }, ms);
+    worker.once('message', message => { clearTimeout(timer); worker.terminate(); resolve(message); });
+    worker.once('error', error => { clearTimeout(timer); resolve({ ok: false, error: `worker: ${error.message}` }); });
+  });
+}
+
+test('a view that cannot fit its limit fails at once instead of looping; one that fits once the saved review is left out says so', async () => {
+  const ctx = largeContext({ related: 3, targetMessages: 3, targetChars: 600, reviews: 2 });
+  const failed = await evidenceInThread(ctx, 3000);
+  assert.ok(!failed.hung, 'sessionEvidence never returned');
+  assert.deepEqual(failed, { ok: false, error: 'The session evidence cannot fit its limit' });
+  // A saved review near its 8 KB share, a small target: leaving the review out is enough.
+  const big = largeContext({ related: 3, targetMessages: 1, targetChars: 200, reviews: 2 });
+  big.prior_reviews[0].pending_follow_up = Array.from({ length: 30 }, (_, i) => ({ work: `Synthetic pending work ${i} ${'y'.repeat(400)}`, owner: 'support_worker', next_action: 'Synthetic.' }));
+  const fits = await evidenceInThread(big, 5000);
+  assert.equal(fits.ok, true, JSON.stringify(fits));
+  assert.ok(fits.bytes <= 5000);
+  assert.match(fits.saved.omitted, /in the case history file/);
+  assert.equal(fits.stats.saved_review, 'omitted');
+});
+
+test('run.mjs: session evidence that cannot be shaped is a host failure on the run record, before any model session', async () => {
+  const p = project();
+  let r;
+  try {
+    // No saved review for the target: this failure never depends on the loop above.
+    const ctx = { ...largeContext({ related: 3, reviews: 1 }), prior_reviews: [], action_scope: Array.from({ length: 1500 }, (_, i) => uuid(700000 + i)) };
+    r = await runStub(p, standardScript(), { context: ctx });
+    assert.equal(r.code, EXIT.host, r.logs.join('\n'));
+    assert.deepEqual(r.calls, [], 'no model session started');
+    const run = await readRun(p.work, `${TICKET.slice(0, 8)}-${RUN_ID}`);
+    assert.equal(run.status, 'host_failed');
+    assert.equal(run.reason, 'the session evidence: The session evidence cannot fit its limit');
+    assert.ok(r.logs.includes(`CONTEXT — ${TICKET.slice(0, 8)}: The session evidence cannot fit its limit; no session started`), r.logs.join('\n'));
+    assert.equal(r.facts.code_outcome, 'none');
   } finally { r?.cleanup(); p.cleanup(); }
 });

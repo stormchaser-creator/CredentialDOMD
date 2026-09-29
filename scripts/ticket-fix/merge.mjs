@@ -154,6 +154,17 @@ function runContext(dir) {
   try { return JSON.parse(readOwnerFile(path.join(dir, 'context.json'))); } catch { return null; }
 }
 
+// Model sessions a merge started (the owner's re-review of a rebased diff,
+// returned by reviewAgain as `sessions`) go on the run record's sessions list
+// and cost total, like the runner's own, numbered after them.
+export function addSessions(run, entries) {
+  if (!Array.isArray(entries) || !entries.length) return run;
+  const last = Math.max(0, ...(run.sessions ?? []).map(s => (Number.isInteger(s?.n) ? s.n : 0)));
+  run.sessions = [...(run.sessions ?? []), ...entries.map((entry, i) => ({ ...entry, n: last + i + 1 }))];
+  run.cost_usd = Math.round(run.sessions.reduce((n, s) => n + (Number.isFinite(s?.cost_usd) ? s.cost_usd : 0), 0) * 10000) / 10000;
+  return run;
+}
+
 // mergeRun: see the header. reviewAgain({ base, head }) and regate({ base,
 // head }) are supplied by the caller (the runner, or this CLI).
 export async function mergeRun({ work, runId, repo = null, manual = false, hooksReviewed = false, binary = 'git', reviewAgain = null, regate = null,
@@ -196,6 +207,7 @@ export async function mergeRun({ work, runId, repo = null, manual = false, hooks
       if (before !== after) {
         if (!reviewAgain) return refuse('main moved and the rebased diff differs from the reviewed one; it needs a new review');
         const review = await reviewAgain({ base: origin, head: rebased });
+        addSessions(run, review.sessions);
         run.review_after_rebase = { pass: review.pass, reasons: review.reasons };
         if (!review.pass) return refuse(`the review of the rebased diff did not approve: ${review.reasons.join('; ').slice(0, 300)}`);
       }
