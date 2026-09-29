@@ -10,6 +10,10 @@ import { mountComponent, settle } from '../component-harness.mjs';
 import * as welcomeEmail from '../../src/utils/welcomeEmail.js';
 
 const FINGERPRINT = await welcomeEmail.welcomeEmailFingerprint();
+// The page hashes the email with crypto.subtle, which can take longer than one
+// settle() on a busy runner (CI failed 2026-09-29 while the Studio passed); the
+// same content's fingerprint is handed over already computed.
+const FAST_WELCOME = { ...welcomeEmail, welcomeEmailFingerprint: async () => FINGERPRINT };
 const OFF = { enabled: false, enabledAt: null, approvedFingerprint: null, approvedVersion: null, approvedAt: null, approvedBy: null, senderFingerprint: null, senderCheckedAt: null, purchasesSinceOn: 0, sent: 0, notSent: 0, history: [] };
 const ON = { ...OFF, enabled: true, enabledAt: '2026-09-29T15:00:00Z', approvedFingerprint: FINGERPRINT, approvedVersion: welcomeEmail.WELCOME_EMAIL_VERSION, approvedAt: '2026-09-29T15:00:00Z', approvedBy: 'Synthetic Owner',
   senderFingerprint: FINGERPRINT, senderCheckedAt: '2026-09-29T15:05:00Z',
@@ -24,7 +28,7 @@ async function mount(status = OFF, answers = {}) {
     const answer = answers[name];
     return typeof answer === 'function' ? answer(args) : answer;
   } };
-  const view = await mountComponent('src/components/pages/AdminWelcomeEmail.jsx', { modules: { supabase: { supabase }, welcomeEmail }, props: { T: {} } });
+  const view = await mountComponent('src/components/pages/AdminWelcomeEmail.jsx', { modules: { supabase: { supabase }, welcomeEmail: FAST_WELCOME }, props: { T: {} } });
   view.render(); await settle(); view.render();
   const button = label => view.nodes().find(n => n.type === 'button' && view.text(n) === label);
   const checkbox = () => view.nodes().find(n => n.type === 'input' && n.props.type === 'checkbox');
