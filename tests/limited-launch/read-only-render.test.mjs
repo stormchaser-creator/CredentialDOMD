@@ -102,8 +102,12 @@ test('each saved offer renders only Resume checkout and requires a fresh quote b
     assert.match(html, /Resume checkout/);
     assert.doesNotMatch(html, /disabled=""[^>]*>Resume checkout/);
     assert.doesNotMatch(html, /Review Credential offer|Review Credential \+ Practice offer|type="checkbox"|Continue to secure payment/);
+    // A stale answer keeps Resume reachable: a tap asks for a fresh answer
+    // before any quote (review in LimitedLaunchMembership), and no consent shows.
     value.limitedLaunch.access.needsRefresh=true;
-    assert.match(render(Membership), /disabled=""[^>]*>Resume checkout/);
+    const stale=render(Membership);
+    assert.doesNotMatch(stale, /disabled=""[^>]*>Resume checkout/);
+    assert.doesNotMatch(stale, /type="checkbox"|Continue to secure payment/);
   }
 });
 

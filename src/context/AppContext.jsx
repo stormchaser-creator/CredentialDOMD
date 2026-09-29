@@ -4,6 +4,7 @@ import { accessAuthority, accessVerifying, allowsDataChange, allowsSettingsChang
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
+import { useBillingReturn } from "../hooks/useBillingReturn.js";
 import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
 import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage, lsGet, lsSet, WIPE_SEEN_KEY, pendingOpCount, retireContinuityRecovery } from "../utils/storageScope";
 import { recordLastIdentity } from "../utils/offlineSession";
@@ -553,6 +554,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
 
   // ─── Subscription ─────────────────────────────────────────
   const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout: sbCheckout, manage: sbManage, setMockPlan, isDevMode, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly } = useSubscription(user ?? null, { profileReady: !offlineMode && profileOwner === user?.id });
+  // Back from Stripe (?billing=complete|canceled): confirm the purchase, or say nothing was charged.
+  const billingReturn = useBillingReturn(limitedLaunch, user?.id);
 
   // Enrollment may finish after the initial cloud load. Retry the owner-bound
   // replay/self-heal once when protected write scopes become available.
@@ -763,8 +766,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
-    isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null }, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly,
-  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, profileIssue, recordsLoadIssue, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+    isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null, billingReturn }, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly,
+  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, profileIssue, recordsLoadIssue, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

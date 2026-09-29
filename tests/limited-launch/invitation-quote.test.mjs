@@ -17,7 +17,11 @@ const source = await readFile(new URL('../../src/components/pages/LimitedLaunchM
 const start = source.indexOf('  const review = async offerId => {');
 const end = source.indexOf('  const purchase = async () => {', start);
 assert.ok(start >= 0 && end > start);
-const code = source.slice(start, end) + '\nglobalThis.reviewOffer = review;';
+// review() asks for a fresh membership answer first, with the page's own helper.
+const freshStart = source.indexOf('  const freshAccess = async () => {');
+const freshEnd = source.indexOf('  const activate = async () => {', freshStart);
+assert.ok(freshStart >= 0 && freshEnd > freshStart);
+const code = source.slice(freshStart, freshEnd) + source.slice(start, end) + '\nglobalThis.reviewOffer = review;';
 const accountId = 'user_syntheticA';
 const profileId = '10000000-0000-4000-8000-000000000001';
 const token = 'synthetic_saved_launch_token_A1b2c3d4e5f6g7h8j9';
@@ -67,7 +71,9 @@ function fixture({ invitationEnabled = false, renderedInvitationEnabled = invita
   const output = { quote: null, message: null };
   const context = { busy: false, invitation, client, accountId, accessAuthority: authority,
     access: { ...snapshot, invitationActivationEnabled: renderedInvitationEnabled }, request: { current: 0 }, quoteMatchesBetaWindow,
-    currentlyPermitted: offerId => canReviewBillingOffer(authority.state(accountId), offerId), current: () => true,
+    currentlyPermitted: offerId => canReviewBillingOffer(authority.state(accountId), offerId), current: () => true, mine: () => true,
+    canReviewBillingOffer, window: { Clerk: { user: { id: accountId } } }, limitedLaunch: { refresh: async () => { calls.push(['refresh']); } },
+    messages: { access_unconfirmed: 'access_unconfirmed', offer_unavailable: 'offer_unavailable', quote_expired: 'quote_expired' }, refusedHere() {},
     setBusy() {}, setConsent() {}, setMessage: value => { output.message = value; }, setQuote: value => { output.quote = value; }, messageFor: error => error.code,
   };
   vm.runInNewContext(code, context);
@@ -95,5 +101,7 @@ test('explicitly enabled manual invitation path still sends saved token through 
 });
 test('stale membership authority cannot request an offer with or without an invitation', async () => {
   const f = fixture({ invitationEnabled: true }); f.authority.suspendWrites(); await f.review('core');
-  assert.deepEqual(f.calls, []); assert.equal(f.output.quote, null);
+  // A fresh answer is asked for; without one no offer is requested and the buyer is told.
+  assert.deepEqual(f.calls, [['refresh']]); assert.equal(f.output.quote, null);
+  assert.equal(f.output.message, 'access_unconfirmed');
 });
