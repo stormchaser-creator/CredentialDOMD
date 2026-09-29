@@ -15,9 +15,12 @@ export function createPublicMembershipOfferHandler({ readOffer, origin = 'https:
       const offer = await readOffer();
       if (offer?.schemaVersion !== 1 || !Object.hasOwn(amounts, offer.phase) || offer.annualCents !== amounts[offer.phase]
         || typeof offer.checkoutEnabled !== 'boolean' || !['available', 'temporarily_full', 'paused'].includes(offer.availability)
-        || (offer.availability === 'paused') !== !offer.checkoutEnabled) throw Error('Invalid public policy');
+        || (offer.availability === 'paused') !== !offer.checkoutEnabled
+        // Founding Credential includes Practice, so the $245 bundle is not
+        // offered to new buyers until founding is sold out or ended.
+        || (offer.bundleAvailable !== undefined && offer.bundleAvailable !== (offer.phase !== 'founding'))) throw Error('Invalid public policy');
       return reply(200, { schemaVersion: 1, phase: offer.phase, annualCents: offer.annualCents,
-        checkoutEnabled: offer.checkoutEnabled, availability: offer.availability });
+        checkoutEnabled: offer.checkoutEnabled, availability: offer.availability, bundleAvailable: offer.phase !== 'founding' });
     } catch { return reply(503, { error: 'membership_offer_unavailable' }); }
   };
 }

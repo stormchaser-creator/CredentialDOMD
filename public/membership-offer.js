@@ -1,19 +1,33 @@
 // Public presentation only: no account, capacity count, storage, or checkout action.
 const PRICES = Object.freeze({ founding: 9900, earlybird: 14900, standard: 19900 });
+const CONFIRMED = 'The app confirms your available offer before you choose to pay.';
+// The Credential card's rate paragraph for each phase. The founding one is the
+// page's own static text (publicLaunch foundingRate); a later phase replaces it,
+// so a $149 or $199 card never keeps the founding "Practice included" line.
+const RATES = Object.freeze({
+  founding: `Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member. That annual rate stays locked for life while membership remains continuously active. ${CONFIRMED}`,
+  earlybird: `Early bird Credential: $149/year, with one 30 day Practice trial when your first annual payment is confirmed. That annual rate stays locked for life while membership remains continuously active. ${CONFIRMED}`,
+  standard: `Standard Credential: $199/year, with one 30 day Practice trial when your first annual payment is confirmed. ${CONFIRMED}`,
+});
+// Founding Credential includes Practice, so while founding lasts the $245
+// package is a later price, not a plan beside the $99 one.
+const BUNDLE_LABELS = Object.freeze({ founding: ' / year, after founding', later: ' / year total' });
 const FALLBACK = Object.freeze({ action: 'Create your account', reviewAction: 'See membership plans',
   status: 'Your offer is confirmed before payment. Creating an account does not reserve a founding place.',
   headline: 'First 100 paid founding memberships: $99/year', price: '$99', priceLabel: ' / year, founding rate for the first 100 paid members',
-  heroHeadline: 'Founding offer: $99/year for the first 100 paid members',
+  heroHeadline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
   heroNote: 'The founding annual rate stays locked for life while membership remains active.',
-  heading: 'Create your account', phase: 'Membership options' });
+  heading: 'Create your account', phase: 'Membership options', rateNote: RATES.founding, bundleLabel: BUNDLE_LABELS.founding });
 
 export function offerPresentation(value) {
   if (value?.schemaVersion !== 1 || !Object.hasOwn(PRICES, value.phase)
     || value.annualCents !== PRICES[value.phase] || typeof value.checkoutEnabled !== 'boolean'
     || !['available', 'temporarily_full', 'paused'].includes(value.availability)
     || (value.availability === 'paused') !== !value.checkoutEnabled
-    || (value.availability === 'temporarily_full' && value.phase !== 'founding')) throw Error('Unavailable');
-  const phase = value.phase === 'founding' ? 'Founding' : value.phase === 'earlybird' ? 'Early-bird' : 'Standard';
+    || (value.availability === 'temporarily_full' && value.phase !== 'founding')
+    // Founding Credential includes Practice, so the bundle waits for founding to end.
+    || (value.bundleAvailable !== undefined && value.bundleAvailable !== (value.phase !== 'founding'))) throw Error('Unavailable');
+  const phase = value.phase === 'founding' ? 'Founding' : value.phase === 'earlybird' ? 'Early bird' : 'Standard';
   const rate = `$${value.annualCents / 100}/year`;
   const status = value.availability === 'paused'
     ? 'Paid checkout is paused. You can create your account now; no payment will be taken.'
@@ -21,11 +35,12 @@ export function offerPresentation(value) {
       ? 'Founding checkout is temporarily unavailable. Creating an account does not reserve a place.'
       : 'Your offer is confirmed before payment. Creating an account does not reserve a founding place.';
   return { action: 'Create your account', reviewAction: value.phase === 'founding' ? 'See the $99 founding plan' : `See the ${rate} plan`, status,
-    heroHeadline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid members' : ''}`,
+    heroHeadline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid members, Practice included while you are a member' : ''}`,
     heroNote: value.phase === 'standard' ? 'One annual membership for your credentials, CME and professional records.' : `Your $${value.annualCents / 100} annual rate stays locked for life while membership remains active.`,
-    headline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid founding members' : ''}.`,
+    headline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid founding members, Practice included while you are a member' : ''}.`,
     price: `$${value.annualCents / 100}`, priceLabel: ` / year, ${phase.toLowerCase()} Credential`,
-    heading: 'Create your account', phase: `${phase} membership` };
+    heading: 'Create your account', phase: `${phase} membership`,
+    rateNote: RATES[value.phase], bundleLabel: value.phase === 'founding' ? BUNDLE_LABELS.founding : BUNDLE_LABELS.later };
 }
 
 export async function fetchPublicOffer(endpoint, { fetchImpl = globalThis.fetch, timeoutMs = 6000 } = {}) {
@@ -71,7 +86,7 @@ export function createOfferUpdater(root, endpoint, options) {
   let lastValidated = null;
   const paint = value => {
     for (const [attribute, key] of [['action','action'], ['review-action','reviewAction'], ['hero-headline','heroHeadline'], ['hero-note','heroNote'], ['status','status'], ['headline','headline'], ['price','price'],
-      ['price-label','priceLabel'], ['heading','heading'], ['phase','phase']]) {
+      ['price-label','priceLabel'], ['heading','heading'], ['phase','phase'], ['rate','rateNote'], ['bundle-label','bundleLabel']]) {
       for (const node of root.querySelectorAll(`[data-membership-${attribute}]`)) node.textContent = value[key];
     }
   };

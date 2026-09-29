@@ -6,9 +6,17 @@ const view = publicLaunchPresentation();
 export const MEMBERSHIP_COPY = Object.freeze({
   foundingHeadline: view.publicRateHeadline,
   credentialPrices: `${view.foundingRate} ${view.rateComparison}`,
-  rateLock: "The founding and early-bird annual rates stay the same while membership remains continuously active.",
+  rateLock: "The founding and early bird annual rates stay the same while membership remains continuously active.",
   fullPackage: view.fullPackage,
+  // The $245 offer on the membership screen, which shows it only once this
+  // account's own offer is no longer founding: no founding sentence here.
+  bundleOffer: view.bundleOffer,
   practiceTrial: view.practiceTrial,
+  foundingOffer: view.foundingOffer,
+  // Shown in place of the $245 offer while this account's offer is founding.
+  bundleDuringFounding: "Founding Credential already includes Practice for as long as your membership stays active, so Credential + Practice is not offered separately while founding places remain.",
+  // A paid founding member's own membership, on Profile & settings.
+  foundingPracticeIncluded: "Practice is included for as long as this membership stays active.",
   lifetimePolicy: view.lifetimeException,
   promisedBeta: view.promisedBeta,
   availability: "Open More > Profile & settings and review your membership offer under Your membership. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed before payment; viewing an offer does not reserve a place. Paid membership requires a card at checkout and your explicit agreement. You keep the same account and saved records.",

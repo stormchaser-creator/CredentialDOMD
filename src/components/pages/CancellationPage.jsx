@@ -69,7 +69,7 @@ function CancellationPage() {
 
   if (limitedLaunch.enabled) return <section style={{ color: T.text, maxWidth: 520, margin: "0 auto" }}>
     <h1 style={{ fontSize: 22 }}>Membership and cancellation</h1>
-    <p style={{ color: T.textMuted, lineHeight: 1.6 }}>A free beta does not enroll you in payment automatically. If you explicitly chose a scheduled paid membership, manage that purchase below. The included Practice trial never adds a charge automatically. Your saved records remain available to view and export.</p>
+    <p style={{ color: T.textMuted, lineHeight: 1.6 }}>A free beta does not enroll you in payment automatically. If you explicitly chose a scheduled paid membership, manage that purchase below. A Practice trial never adds a charge automatically, and founding Credential includes Practice only while that membership stays active. Your saved records remain available to view and export.</p>
     {limitedLaunch.access?.scheduledMembership ? <>
       <p>{scheduledMembershipCopy(limitedLaunch.access.scheduledMembership)}</p>
       <button onClick={manage}>Manage scheduled membership</button>

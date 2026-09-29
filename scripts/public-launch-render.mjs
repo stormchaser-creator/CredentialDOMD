@@ -52,8 +52,8 @@ function signupInsteadOfForm(fallback, view) {
 const SIGNUP_NOTE = 'Card required at checkout. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time.';
 
 const minimumSlots = {
-  home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1 },
-  locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 1, 'signup-eyebrow': 2, 'signup-card-heading': 1 },
+  home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1, 'refund-guarantee': 1 },
+  locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 1, 'signup-eyebrow': 2, 'signup-card-heading': 1, 'refund-guarantee': 1 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
   'state-guides': { cta: 4, 'guide-consent': 4, 'guide-offer': 1, 'early-release': 1, participation: 1 },
@@ -77,11 +77,12 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     if (fallback.includes('<!-- public-launch:')) throw Error('Nested public launch slots are not allowed');
     if (slot === 'cta') return navigation(fallback, view);
     if (slot === 'form') return signupInsteadOfForm(fallback, view);
-    if (slot === 'hero-offer') return '<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">Founding offer: $99/year for the first 100 paid members</p><p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>';
+    if (slot === 'hero-offer') return `<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${escapeHtml(view.foundingOffer)}</p>`
+      + '<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>';
     // Same approved strings and data attributes as the home hero, so membership-offer.js
     // repaints this block when the live phase changes. No new claims, no new price.
     if (slot === 'guide-offer') return '<div class="guide-offer" style="margin:18px 0 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);max-width:600px;">'
-      + '<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">Founding offer: $99/year for the first 100 paid members</p>'
+      + `<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">${escapeHtml(view.foundingOffer)}</p>`
       + '<p style="font-size:14.5px;line-height:1.55;margin:0 0 6px;color:var(--text-secondary);">Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents.</p>'
       + '<p data-membership-hero-note style="font-size:13.5px;line-height:1.5;margin:0 0 14px;color:var(--text-secondary);">The founding annual rate stays locked for life while membership remains active.</p>'
       + `<a href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;background:var(--emerald);color:#0d0d1a;border-radius:10px;padding:12px 22px;font-weight:700;font-size:15px;text-decoration:none;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a>`
@@ -105,9 +106,20 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       return `${match[1]}\n${JSON.stringify(json, null, 2).replace(/</g, '\\u003c')}\n${match[3]}`;
     }
     if (slot === 'faq-cost') return escapeHtml(publicLaunchCostAnswer(view));
-    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, 'Credential: $99/year for the first 100 paid founding members, then $149 early-bird and $199 standard. Check availability in the app. Early release; card required at checkout.');
+    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, 'Credential: $99/year for the first 100 paid founding members, then $149 early bird and $199 standard. Check availability in the app. Early release; card required at checkout.');
     if (slot === 'founding-price') return `<b data-membership-price>${escapeHtml(view.publicPrice)}</b><span data-membership-price-label>${escapeHtml(view.publicPriceLabel)}</span>`;
-    if (slot === 'full-price') return '$245<span> / year total</span>';
+    // Founding Credential includes Practice, so while founding lasts $245 is a
+    // later price, not a plan beside $99; membership-offer.js says " / year
+    // total" once the live phase has moved on.
+    if (slot === 'full-price') return '$245<span data-membership-bundle-label> / year, after founding</span>';
+    // A later phase replaces this paragraph (membership-offer.js), so a $149
+    // or $199 card never keeps the founding "Practice included" line.
+    if (slot === 'founding-rate') return `<span data-membership-rate>${escapeHtml(view.foundingRate)}</span>`;
+    // The guarantee covers every membership, so it stands on its own line
+    // instead of inside the Credential + Practice card.
+    if (slot === 'refund-guarantee') return surface === 'home'
+      ? `<p style="text-align: center; margin-top: 24px; color: var(--text-secondary);">${escapeHtml(view.refundGuarantee)}</p>`
+      : `<p style="margin-bottom: 16px;">${escapeHtml(view.refundGuarantee)}</p>`;
     if (slot === 'brand') return fallback.replace(/Credential<span>(?:DoMD|DOMD)<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
     const text = {
       'availability': view.availability,
@@ -122,9 +134,8 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       'signup-trust': 'Early release · Card required at checkout',
       'audience-badge': 'For MDs and DOs · Membership options',
       'founding-headline': view.publicRateHeadline,
-      'founding-rate': view.foundingRate,
       'rate-comparison': `${view.rateComparison} ${view.earlyBirdRateLock}`,
-      'full-package': `${view.fullPackage} ${view.refundGuarantee}`,
+      'full-package': view.fullPackage,
       'practice-trial': view.practiceTrial,
       'promised-beta': view.promisedBeta,
       'lifetime-exception': view.lifetimeException,

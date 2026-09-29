@@ -240,7 +240,7 @@ test('paid mode packages all public signup surfaces while retaining guide-only r
   assert.equal(await read(resolve(output, 'app/knowledge/credentialdo-help.json')), await read(resolve(output, 'knowledge/credentialdo-help.json')));
   assert.match(knowledge.articles.find(article => article.id === 'first-license').availability, /signed-in account with active Credential access/);
   assert.doesNotMatch(JSON.stringify(knowledge), /An invited, signed-in account|new invited physicians|billing is off/i);
-  assert.match(knowledge.articles.find(article => article.id === 'locum-contract').availability, /separate 30-day Practice trial/);
+  assert.match(knowledge.articles.find(article => article.id === 'locum-contract').availability, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
   assert.equal(await read(resolve(output, 'knowledge/credentialdo-cme.json')), await read(resolve(root, 'public/knowledge/credentialdo-cme.json')));
 });
 

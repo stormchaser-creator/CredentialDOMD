@@ -11,13 +11,17 @@ const founding = { schemaVersion: 1, phase: 'founding', annualCents: 9900, check
 
 test('shows the founding offer exactly as the public site words it', async () => {
   const offer = await loadAuthOffer({ ...base, fetchImpl: reply(founding) });
-  assert.deepEqual(offer, { headline: 'Founding Credential: $99/year for the first 100 paid members',
+  assert.deepEqual(offer, { headline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
     status: 'Your offer is confirmed before payment. Creating an account does not reserve a founding place.' });
+  // The endpoint also says the bundle waits for founding to end; a reply that disagrees is refused.
+  assert.equal((await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, bundleAvailable: false }) })).headline, offer.headline);
+  assert.equal(await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, bundleAvailable: true }) }), null);
 });
 
 test('follows the live phase rather than a hardcoded price', async () => {
   const offer = await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, phase: 'earlybird', annualCents: 14900 }) });
-  assert.equal(offer.headline, 'Early-bird Credential: $149/year');
+  assert.equal(offer.headline, 'Early bird Credential: $149/year');
+  assert.equal((await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, phase: 'earlybird', annualCents: 14900, bundleAvailable: true }) })).headline, 'Early bird Credential: $149/year');
 });
 
 test('when checkout is paused or founding is full it says so in the words the site uses', async () => {

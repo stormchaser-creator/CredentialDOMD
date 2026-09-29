@@ -272,7 +272,7 @@ export function getPublicTiers(phase = PUBLIC_BILLING_POLICY.pricePhase) {
       "CME tracking and renewal reminders",
       "Document scanning, credential packets and CV tools",
       "Vera, the in-app assistant",
-      "30-day Practice trial; no automatic charge",
+      offer.practiceIncluded ? "Practice included while you are a member" : "30-day Practice trial; no automatic charge",
     ] : [
       "Everything in Credential",
       "Contracts, scheduling and invoices",

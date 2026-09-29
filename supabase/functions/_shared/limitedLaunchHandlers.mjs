@@ -97,7 +97,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     return { profile, eligibility };
   }
   function summary(offer, preview) {
-    return { schemaVersion: 1, policyVersion: config.policyVersion, offerId: offer.id, name: offer.name, annualCents: offer.unitAmount, currency: 'usd', interval: 'year', pricePhase: offer.pricePhase, priceLockedWhileActive: offer.priceLockedWhileActive, practiceTrialDays: offer.practiceTrialDays, trialAutoCharges: false, checkoutEnabled: true, ...limitedBillingTiming(preview) };
+    return { schemaVersion: 1, policyVersion: config.policyVersion, offerId: offer.id, name: offer.name, annualCents: offer.unitAmount, currency: 'usd', interval: 'year', pricePhase: offer.pricePhase, priceLockedWhileActive: offer.priceLockedWhileActive, practiceIncluded: offer.practiceIncluded, practiceTrialDays: offer.practiceTrialDays, trialAutoCharges: false, checkoutEnabled: true, ...limitedBillingTiming(preview) };
   }
   const quote = route(async (req, trace) => {
     trace.phase = 'config';
@@ -107,6 +107,8 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const { profile, eligibility } = await purchaser(req, data, live, trace);
     if (eligibility.checkout_enabled !== true) refuse(503, 'billing_disabled');
     if (data.offerId === 'core' && ['reserved', 'disabled', 'unavailable'].includes(eligibility.founding_state)) refuse(409, 'founding_capacity_pending');
+    // While this buyer's offer is founding, $99 Credential already includes Practice.
+    if (data.offerId === 'core_locum' && eligibility.bundle_available === false) refuse(409, 'bundle_unavailable');
     trace.phase = 'preview';
     const preview = await deps.store.createPreview(profile.id, profile.auth_user_id, live, data.offerId);
     const offer = limitedOffer(preview.offer_id, preview.price_phase, config.productIds);
@@ -176,6 +178,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (eligibility.free_beta?.state === 'active' && previewTiming.paymentTiming !== 'after_beta') refuse(409, 'quote_expired');
     if (previewTiming.paymentTiming === 'after_beta' && (!['active','expired'].includes(eligibility.free_beta?.state) || Date.parse(eligibility.free_beta?.endsAt) !== Date.parse(previewTiming.betaEndsAt))) refuse(409, 'quote_expired');
     data.offerId = preview.offer_id;
+    if (data.offerId === 'core_locum' && eligibility.bundle_available === false) refuse(409, 'bundle_unavailable');
     trace.phase = 'stripe_customer';
     const stripe = deps.stripe();
     let account = await deps.store.account(profile.id, live);
@@ -233,6 +236,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (unfinished.length) refuse(409, 'subscription_already_exists');
     if (claim.state === 'quote_expired') refuse(409, 'quote_expired');
     if (claim.state === 'founding_capacity_pending') refuse(409, 'founding_capacity_pending');
+    if (claim.state === 'bundle_unavailable') refuse(409, 'bundle_unavailable');
     if (claim.state !== 'claimed') refuse(claim.state === 'offer_conflict' ? 409 : 503, claim.state === 'offer_conflict' ? 'checkout_offer_already_selected' : 'checkout_pending');
     const q = claim.quote;
     if (!q || q.clerk_subject !== profile.auth_user_id || q.offer_id !== data.offerId || q.policy_version !== config.policyVersion) refuse(409, 'quote_mismatch');

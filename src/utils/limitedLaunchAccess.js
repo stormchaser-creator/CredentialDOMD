@@ -44,7 +44,12 @@ export function validateAccessSnapshot(value) {
   if (value.accessStatus !== "active" && scopes.some(scope => operations.some(op => value.capabilities[scope][op]))) {
     throw new Error("Membership information could not be verified.");
   }
-  for (const flag of ["checkoutEligible", "checkoutResumeAvailable", "invitationActivationEnabled"]) {
+  // A paid membership that includes Practice: the bundle, or founding Credential.
+  // Older servers leave it out; a present value must agree with the purchase.
+  if (value.practiceIncluded !== undefined && (typeof value.practiceIncluded !== "boolean"
+    || (value.practiceIncluded && !["core", "core_locum"].includes(value.purchasedOfferId))
+    || (value.purchasedOfferId === "core_locum" && !value.practiceIncluded))) throw new Error("Membership information could not be verified.");
+  for (const flag of ["checkoutEligible", "checkoutResumeAvailable", "invitationActivationEnabled", "bundleAvailable"]) {
     if (value[flag] !== undefined && typeof value[flag] !== "boolean") throw new Error("Membership information could not be verified.");
   }
   if (value.checkoutResumeAvailable === true
@@ -75,12 +80,18 @@ export function validateAccessSnapshot(value) {
   return structuredClone(value);
 }
 
+/** The active paid membership includes Practice: the bundle, or founding Credential. */
+const membershipIncludesPractice = access => access?.purchasedOfferId === "core_locum"
+  || (access?.purchasedOfferId === "core" && access.practiceIncluded === true);
+
 /** Resume permits only the server's saved offer; it never grants product access. */
 export function canReviewBillingOffer(access, offerId) {
   if (!access || access.needsRefresh || access.billingEnabled !== true
     || !["core", "core_locum"].includes(offerId) || !["active", "pending"].includes(access.accessStatus)
     || access.purchasedOfferId || access.lifetime?.credential || access.lifetime?.practice
     || access.scheduledMembership) return false;
+  // While this account's offer is founding, $99 Credential already includes Practice.
+  if (offerId === "core_locum" && access.bundleAvailable === false) return false;
   if (access.checkoutResumeAvailable === true) return access.checkoutResumeOfferId === offerId;
   return access.checkoutEligible === true;
 }
@@ -101,7 +112,7 @@ export function accessAt(snapshot, receivedAt, now = Date.now()) {
   }
   if (result.practiceTrial.state === "active" && serverNow >= Date.parse(result.practiceTrial.endsAt)) {
     result.practiceTrial.state = "expired";
-    if (!result.lifetime.practice && result.purchasedOfferId !== "core_locum") result.capabilities.practice.write = false;
+    if (!result.lifetime.practice && !membershipIncludesPractice(result)) result.capabilities.practice.write = false;
   }
   if (result.freeBeta?.state === "active") {
     const remaining = Date.parse(result.freeBeta.endsAt) - serverNow;
@@ -109,7 +120,7 @@ export function accessAt(snapshot, receivedAt, now = Date.now()) {
     else {
       result.freeBeta.state = "expired";
       if (!result.lifetime.credential && !result.purchasedOfferId) result.capabilities.credential.write = false;
-      if (!result.lifetime.practice && result.purchasedOfferId !== "core_locum"
+      if (!result.lifetime.practice && !membershipIncludesPractice(result)
         && !(result.purchasedOfferId === "core" && result.practiceTrial.state === "active")) result.capabilities.practice.write = false;
     }
   }

@@ -10,10 +10,14 @@ const offer = {schemaVersion:1,phase:'founding',annualCents:9900,checkoutEnabled
 test('anonymous public offer exposes only matching authoritative price and availability with no caching',async()=>{
   for(const [phase,annualCents] of [['founding',9900],['earlybird',14900],['standard',19900]])
     for(const availability of ['available','temporarily_full','paused']) {
-      const expected={...offer,phase,annualCents,availability,checkoutEnabled:availability!=='paused'};
+      // Founding Credential includes Practice, so the bundle waits for founding to end (20260928190000).
+      const expected={...offer,phase,annualCents,availability,checkoutEnabled:availability!=='paused',bundleAvailable:phase!=='founding'};
       const h=createPublicMembershipOfferHandler({readOffer:async()=>({...expected,email:'private@example.invalid',paidCount:42,remaining:58})});
       const response=await h(request());
       assert.equal(response.status,200);assert.deepEqual(await response.json(),expected);
+      // A database from before that migration sends no bundleAvailable; the answer is the same.
+      const older=createPublicMembershipOfferHandler({readOffer:async()=>({...expected,bundleAvailable:undefined})});
+      assert.deepEqual(await (await older(request())).json(),expected);
       assert.equal(response.headers.get('cache-control'),'no-store');
       assert.equal(response.headers.get('access-control-allow-origin'),'https://credentialdomd.com');
     }
@@ -26,7 +30,7 @@ test('foreign origins and writes never read policy; OPTIONS is bounded and authe
   assert.equal((await h(request('GET',null))).status,200);assert.equal(reads,1);
 });
 test('unavailable or inconsistent public policy never invents a founding price or remaining count',async()=>{
-  for(const value of [null,{}, {...offer,phase:'unknown'}, {...offer,annualCents:14900}, {...offer,checkoutEnabled:'true'}, {...offer,availability:'sold_out'}, {...offer,availability:'paused'}, {...offer,checkoutEnabled:false}]) {
+  for(const value of [null,{}, {...offer,phase:'unknown'}, {...offer,annualCents:14900}, {...offer,checkoutEnabled:'true'}, {...offer,availability:'sold_out'}, {...offer,availability:'paused'}, {...offer,checkoutEnabled:false}, {...offer,bundleAvailable:true}, {...offer,phase:'earlybird',annualCents:14900,bundleAvailable:false}, {...offer,bundleAvailable:'false'}]) {
     const response=await createPublicMembershipOfferHandler({readOffer:async()=>value})(request());
     assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'membership_offer_unavailable'});
   }

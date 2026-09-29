@@ -263,13 +263,14 @@ export function getLegalDocuments(mode = PUBLIC_LAUNCH_MODE) {
   const privacy = structuredClone(CURRENT_PRIVACY);
   const terms = structuredClone(CURRENT_TERMS);
   privacy.updated = 'September 25, 2026';
-  terms.updated = 'September 21, 2026';
+  // Founding members keep Practice while they are members (owner, 2026-09-28).
+  terms.updated = 'September 28, 2026';
   privacy.intro[1] = privacy.intro[1].replace('is in free beta.', 'is in early release.');
   const membership = terms.sections[0];
   membership.title = '1. Membership, early release and pricing';
   membership.blocks[0] = 'CredentialDOMD offers paid membership in an early release. Features and workflows are still being refined. You will see the applicable price and renewal terms before choosing a membership, and a card is required at paid checkout. Nothing will be charged without your agreement.';
-  membership.blocks[2] = 'The first 100 paid founding members get Credential for $99 per year. After those founding memberships, the early-bird price is $149 per year, followed by the standard price of $199 per year. Founding and early-bird members keep their annual rate for life while their membership remains continuously active. The available offer and eligibility are confirmed before purchase; creating an account or viewing an offer does not reserve a founding place. Protected historical founding offers remain honored within the 100-member founding allocation.';
-  membership.blocks[3] = view.fullPackage.replace('$245/year', '$245 per year');
+  membership.blocks[2] = 'The first 100 paid founding members get Credential for $99 per year. After those founding memberships, the early bird price is $149 per year, followed by the standard price of $199 per year. Founding and early bird members keep their annual rate for life while their membership remains continuously active. The available offer and eligibility are confirmed before purchase; creating an account or viewing an offer does not reserve a founding place. Protected historical founding offers remain honored within the 100 member founding allocation.';
+  membership.blocks[3] = view.fullPackage.replaceAll('/year', ' per year');
   membership.blocks[4] = view.practiceTrial;
   membership.blocks.splice(2, 0, view.promisedBeta.replace('$99/year', '$99 per year') + ' If an unfinished checkout is completed after the original beta end date, the first charge is collected when checkout completes; the paid year still starts at that original beta end date. Beta expiry does not delete your account or records; saved records remain available to read and export.');
   membership.blocks.push(view.refundGuarantee);
