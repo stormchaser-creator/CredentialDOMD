@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
 import { agentReplyBody, labeledBody, EMAIL_ATTEMPTED, EMAIL_OWN_TICKET, emailStatus } from '../../scripts/ticket-fix/reply.mjs';
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
@@ -42,7 +43,9 @@ const EMAIL = read('supabase/migrations/20260929134100_support_reply_email.sql')
 const EMAIL_ROLLBACK = read('docs/rollback/20260929134100_support_reply_email.rollback.sql');
 const RETRY = read('supabase/migrations/20260929150000_support_reply_email_retry.sql');
 const RETRY_ROLLBACK = read('docs/rollback/20260929150000_support_reply_email_retry.rollback.sql');
-const NOTIFIER = read('scripts/signup-notify.sh');
+// The notifier's SQL lives in scripts/signup-notify.py (signup-notify.sh runs
+// it); take the query it really sends, with a fixed window start.
+const NOTIFIER = spawnSync('python3', ['-c', "import importlib.util,sys;spec=importlib.util.spec_from_file_location('sn',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);print(m.query_sql('2026-01-01T00:00:00Z',[]))", fileURLToPath(new URL('../../scripts/signup-notify.py', import.meta.url))], { encoding: 'utf8' }).stdout;
 const SEND_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/send-ticket-reply';
 const HOOK_SECRET = 'synthetic-hook-secret-for-reply-email-0123456789';
 
@@ -315,7 +318,7 @@ test('a verified support reply on a member ticket is handed to send-ticket-reply
     } finally { pg.sql(`update vault.secrets set name = 'welcome_hook_secret' where id = '${saved}'`); }
   });
 
-  await t.test("scripts/signup-notify.sh's TICKET REPLY no longer reports a support reply as the member writing", () => {
+  await t.test("the notifier's TICKET REPLY (signup-notify.py) no longer reports a support reply as the member writing", () => {
     const where = NOTIFIER.match(/union all select 'TICKET REPLY'.*?\n {2}(where .*?)(?=\nunion all)/s);
     assert.ok(where, 'the notifier reply predicate was found');
     const predicate = where[1].replace('$SINCE', '2026-01-01T00:00:00Z');
@@ -326,7 +329,9 @@ test('a verified support reply on a member ticket is handed to send-ticket-reply
     assert.ok(writerReplies.length >= 3, 'the fixture has member-authored support replies to leave out');
     assert.deepEqual(writerReplies.filter(id => reported.has(id)), [], 'no agent or post-reply reply is reported as the member writing');
     // What 20260929134100 found: the old predicate reported every one of them.
-    const before = predicate.replace(/\n\s*and not coalesce\(m\.is_admin_reply, false\)/, '');
+    const before = predicate.replace(/\n\s*and \(to_jsonb\(m\)->>'verification_id'\) is null/, '')
+      .replace(/\n\s*and coalesce\(m\.body, ''\) not ilike 'CredentialDOMD Support%'/, '')
+      .replace(/\n\s*and coalesce\(\(to_jsonb\(m\)->>'is_admin_reply'\)::boolean, false\) = false/, '');
     assert.notEqual(before, predicate);
     const old = new Set(pg.sql(`select m.id from public.support_messages m
       join public.support_tickets t on t.id = m.ticket_id left join public.profiles p on p.id = m.author_id ${before}`).split('\n'));
