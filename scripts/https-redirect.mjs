@@ -12,7 +12,13 @@
 import { createHash } from 'node:crypto';
 
 export const HTTPS_REDIRECT_HOST = 'credentialdomd.com';
-export const HTTPS_REDIRECT_SOURCE = `if(location.protocol==="http:"&&location.hostname==="${HTTPS_REDIRECT_HOST}")location.replace(location.href.replace(/^http:/,"https:"))`;
+// True on exactly the page that is about to switch. The visit beacon on the
+// landing pages and guides skips itself under this same test: that page is
+// replaced before anyone sees it, the https page counts the visit, and a
+// count from both would record one arrival twice, the second credited to
+// credentialdomd.com (the https page's referrer is the http page).
+export const HTTPS_REDIRECT_CONDITION = `location.protocol==="http:"&&location.hostname==="${HTTPS_REDIRECT_HOST}"`;
+export const HTTPS_REDIRECT_SOURCE = `if(${HTTPS_REDIRECT_CONDITION})location.replace(location.href.replace(/^http:/,"https:"))`;
 export const HTTPS_REDIRECT_SCRIPT = `<script id="https-redirect">${HTTPS_REDIRECT_SOURCE}</script>`;
 export const HTTPS_REDIRECT_CSP_HASH = `'sha256-${createHash('sha256').update(HTTPS_REDIRECT_SOURCE).digest('base64')}'`;
 

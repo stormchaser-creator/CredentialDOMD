@@ -135,3 +135,86 @@ test('the check refuses a missing, late, repeated or blocked redirect', () => {
   assert.match(httpsRedirectProblem(withCsp(`default-src 'none'; script-src 'self' ${HTTPS_REDIRECT_CSP_HASH}`)), /upgrade-insecure-requests/);
   assert.throws(() => assertHttpsRedirect(page('<title>x</title>'), 'landing/example.html'), /^Error: landing\/example\.html has no https redirect script/);
 });
+
+// The /api/pv visit beacon on the landing pages and guides. A page opened as
+// plain http://credentialdomd.com/ keeps parsing until the https response
+// arrives, so a beacon there counted the arrival once over http and again on
+// the https page, and the second count's referrer is the http page itself
+// (http to https sends the origin only), which credited credentialdomd.com.
+const PV_BEACON = /<script>([^<]*navigator\.sendBeacon\('\/api\/pv'[^<]*)<\/script>/g;
+
+async function beaconPages() {
+  const pages = [];
+  for (const page of await sourcePages()) if ((await read(page)).includes("sendBeacon('/api/pv'")) pages.push(page);
+  return pages;
+}
+
+// Runs a page's visit beacon at a synthetic location and returns what it sent.
+function beacons(html, href, referrer) {
+  const scripts = [...html.matchAll(PV_BEACON)].map(match => match[1]);
+  assert.equal(scripts.length, 1, 'page has one visit beacon');
+  const url = new URL(href);
+  const sent = [];
+  const location = { href: url.href, protocol: url.protocol, host: url.host, hostname: url.hostname, port: url.port, pathname: url.pathname, search: url.search, hash: url.hash, origin: url.origin };
+  const navigator = { sendBeacon: (to, body) => { sent.push([to, JSON.parse(body)]); return true; } };
+  vm.runInNewContext(scripts[0], { location, navigator, document: { referrer } });
+  return sent;
+}
+
+// One arrival as the browser runs it: the page as first opened and, when its
+// redirect fires, the https page it replaces itself with, whose referrer is
+// the http origin. Returns every visit beacon sent across both.
+function arrive(html, href, referrer) {
+  const first = beacons(html, href, referrer);
+  const [navigation] = visit(html, href);
+  if (!navigation) return first;
+  assert.equal(visit(html, navigation[1]).length, 0, 'the https page stays put');
+  return [...first, ...beacons(html, navigation[1], `${new URL(href).origin}/`)];
+}
+
+test('every landing page and guide with a visit beacon is covered', async () => {
+  const pages = await beaconPages();
+  for (const page of ['landing/index.html', 'landing/locums.html', 'landing/states/index.html', 'landing/state-template.html']) assert.ok(pages.includes(page), page);
+  // 3 root pages and the template, the directory and 51 guides.
+  assert.ok(pages.length >= 55, `found only ${pages.length} pages with a visit beacon`);
+});
+
+test('the page that is switching to https sends no visit beacon', async () => {
+  for (const page of await beaconPages()) {
+    const html = await read(page);
+    for (const href of ['http://credentialdomd.com/', 'http://credentialdomd.com/locums?src=li', 'http://credentialdomd.com/states/texas', 'http://credentialdomd.com/states/']) {
+      assert.deepEqual(beacons(html, href, 'https://www.google.com/'), [], `${page} at ${href}`);
+    }
+  }
+});
+
+test('a plain http arrival counts once, never credited to credentialdomd.com, and keeps a LinkedIn tag', async () => {
+  for (const page of await beaconPages()) {
+    const html = await read(page);
+    for (const referrer of ['', 'https://www.google.com/']) {
+      const sent = arrive(html, 'http://credentialdomd.com/states/texas', referrer);
+      assert.equal(sent.length, 1, `${page} from ${referrer || 'nowhere'}`);
+      assert.equal(sent[0][0], '/api/pv', page);
+      assert.equal(sent[0][1].r, '', `${page} from ${referrer || 'nowhere'}`);
+    }
+    const tagged = arrive(html, 'http://credentialdomd.com/states/texas?src=li', '');
+    assert.deepEqual(tagged.map(([, body]) => body.r), ['https://www.linkedin.com/'], page);
+  }
+});
+
+test('on https, on localhost and on any other host the visit beacon counts once with the real referrer', async () => {
+  const cases = [
+    ['https://credentialdomd.com/states/texas', 'https://www.google.com/', 'https://www.google.com/'],
+    ['https://credentialdomd.com/states/texas', 'https://credentialdomd.com/', 'https://credentialdomd.com/'],
+    ['https://credentialdomd.com/states/texas?src=li', '', 'https://www.linkedin.com/'],
+    ['http://localhost:5173/states/texas', '', ''],
+    ['http://127.0.0.1:4173/states/texas', 'http://127.0.0.1:4173/', 'http://127.0.0.1:4173/'],
+    ['http://credentialdomd.test/states/texas', '', ''],
+  ];
+  for (const page of await beaconPages()) {
+    const html = await read(page);
+    for (const [href, referrer, credited] of cases) {
+      assert.deepEqual(arrive(html, href, referrer).map(([to, body]) => [to, body.r]), [['/api/pv', credited]], `${page} at ${href}`);
+    }
+  }
+});

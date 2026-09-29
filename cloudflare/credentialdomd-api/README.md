@@ -22,7 +22,10 @@ recycles, not shared across POPs).
 the RPC (supabase/migrations/20260827_page_views.sql) whitelists the path,
 reduces the referrer to its registrable domain, and upserts a daily counter.
 Counts only, no visitor data. DB-side ceilings: 100k hits/row/day, row
-cardinality folds to 'other' past 2,000 rows/day.
+cardinality folds to 'other' past 2,000 rows/day. A page opened as plain
+http on credentialdomd.com sends nothing, because it is already switching to
+https; the https page counts the visit once and reads a referrer that is the
+site's own http address as no referrer (tests/https-redirect.test.mjs).
 
 `/api/confirm-forwarding` (2026-09-03) is the link in the forwarding-address
 confirmation email. It forwards `?token=` to
