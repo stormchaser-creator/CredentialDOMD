@@ -3,6 +3,7 @@
 // shape intake-eval reads. Nothing here touches the network. Synthetic data.
 // Run: node --test scripts/intake-eval-seed.test.mjs
 import { test } from "node:test";
+import { fileURLToPath } from 'node:url';
 import assert from "node:assert/strict";
 import { parseArgs, seedQuery, redactText, observed, suggestExpected, caseFrom } from "./intake-eval-seed.mjs";
 import { scoreCase } from "./intake-eval.mjs";
@@ -13,7 +14,7 @@ test("the arguments: a profile uuid is required, the window is bounded, and the 
   assert.match(parseArgs([]).error, /--profile/);
   assert.match(parseArgs(["--profile", "x'; drop table profiles; --"]).error, /uuid/);
   assert.match(parseArgs(["--profile", P, "--days", "400"]).error, /1 to 90/);
-  assert.match(parseArgs(["--profile", P, "--out", new URL("./fixtures", import.meta.url).pathname]).error, /outside this repository/);
+  assert.match(parseArgs(["--profile", P, "--out", fileURLToPath(new URL("./fixtures", import.meta.url))]).error, /outside this repository/);
   const ok = parseArgs(["--profile", P.toUpperCase(), "--days", "30", "--redact", "--dry-run"]);
   assert.deepEqual([ok.profile, ok.days, ok.redact, ok.dryRun], [P, 30, true, true]);
   assert.match(ok.out, /Application Support\/CredentialDOMD\/intake-eval$/);

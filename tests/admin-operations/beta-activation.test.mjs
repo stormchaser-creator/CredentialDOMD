@@ -4,11 +4,12 @@
 // so the webhook refuses only a revoked invitation or a revoked profile, and
 // its two writes are ordered so a retry after a partial failure finishes.
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { buildSync } from 'esbuild';
 
 const source = buildSync({
-  entryPoints: [new URL('../../supabase/functions/clerk-webhook/betaActivation.ts', import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL('../../supabase/functions/clerk-webhook/betaActivation.ts', import.meta.url))],
   bundle: true, platform: 'node', format: 'cjs', write: false,
 }).outputFiles[0].text;
 const mod = { exports: {} };

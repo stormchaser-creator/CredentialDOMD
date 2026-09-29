@@ -1,6 +1,7 @@
 // Generate PWA icons — white medical cross on emerald, matching the app brand.
 // One master design; every size/variant derives from it.
 import { writeFileSync } from "fs";
+import { fileURLToPath } from 'node:url';
 
 const makeSVG = (size, maskable = false) => {
   // Maskable icons must be full-bleed (the OS applies its own mask).
@@ -24,7 +25,7 @@ const makeSVG = (size, maskable = false) => {
 </svg>`;
 };
 
-const dir = new URL("../public/icons/", import.meta.url).pathname;
+const dir = fileURLToPath(new URL("../public/icons/", import.meta.url));
 for (const s of [192, 512]) {
   writeFileSync(`${dir}icon-${s}.svg`, makeSVG(s, false));
   writeFileSync(`${dir}icon-maskable-${s}.svg`, makeSVG(s, true));

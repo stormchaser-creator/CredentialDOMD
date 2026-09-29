@@ -5,6 +5,7 @@
 // Every email here is synthetic.
 // Run: node --test scripts/intake-understanding.test.mjs
 import { test } from "node:test";
+import { fileURLToPath } from 'node:url';
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -382,8 +383,8 @@ test("the harness sends the request production sends, and scores only labelled c
 
 test("a real corpus may not live in this repository; the synthetic cases and anywhere outside may", () => {
   assert.equal(corpusAllowed(SYNTHETIC_DIR), true);
-  assert.equal(corpusAllowed(new URL("../scripts", import.meta.url).pathname), false);
-  assert.equal(corpusAllowed(new URL("../", import.meta.url).pathname), false);
+  assert.equal(corpusAllowed(fileURLToPath(new URL("../scripts", import.meta.url))), false);
+  assert.equal(corpusAllowed(fileURLToPath(new URL("../", import.meta.url))), false);
   assert.equal(corpusAllowed(DEFAULT_CORPUS), true);
   const dir = mkdtempSync(join(tmpdir(), "intake-eval-"));
   try {

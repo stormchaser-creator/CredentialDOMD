@@ -5,12 +5,13 @@
 // and that CLERK_SECRET_KEY reaches the Clerk request and nothing else.
 // Synthetic values only: the repository is public.
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { buildSync } from 'esbuild';
 
 const code = buildSync({
-  entryPoints: [new URL('../../supabase/functions/admin-mailbox-repair/index.ts', import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL('../../supabase/functions/admin-mailbox-repair/index.ts', import.meta.url))],
   bundle: true, platform: 'node', format: 'cjs', write: false, external: ['https://*'],
 }).outputFiles[0].text;
 

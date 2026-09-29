@@ -2,6 +2,7 @@
 // reproduction first, the contained worker in its worktree, the host commit,
 // gates, review and the merge decision (held unless AUTO_MERGE).
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -249,7 +250,7 @@ test('AUTO_MERGE is what the runner was told when the run started: a flag file c
     assert.equal(run.hold_reason, 'AUTO_MERGE is off');
     assert.equal(p.originHead(), sh(p.repo, ['rev-parse', 'origin/main']), 'nothing pushed');
     // The shell reads the flag for the NEXT run through run.mjs auto-merge.
-    const cli = path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'scripts', 'ticket-fix', 'run.mjs');
+    const cli = path.join(path.dirname(fileURLToPath(new URL(import.meta.url))), '..', '..', 'scripts', 'ticket-fix', 'run.mjs');
     assert.equal(spawnSync(process.execPath, [cli, 'auto-merge', '--work', p.work], { encoding: 'utf8' }).stdout.trim(), 'on');
     chmodSync(path.join(p.work, 'AUTO_MERGE'), 0o666);
     assert.equal(autoMergeEnabled(p.work), false, 'a flag others can write is not the owner\'s');

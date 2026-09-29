@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { readFile, writeFile, unlink } from 'node:fs/promises';
@@ -14,7 +15,7 @@ const gate = source.slice(start, source.indexOf('\n\n', start));
 const temp = new URL(`.records-load-${randomUUID()}.tmp.mjs`, import.meta.url);
 const bundle = await build({ stdin: {
   contents: `import React from 'react'; import AccountRecordsLoadError from '../../src/components/shared/AccountRecordsLoadError.jsx'; export { AccountRecordsLoadError }; export function Gate({recordsLoadIssue,T}) { ${gate}\n return <div>Loaded account</div>; }`,
-  resolveDir: new URL('.', import.meta.url).pathname, loader: 'jsx',
+  resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'jsx',
 }, bundle: true, write: false, platform: 'node', format: 'esm', jsx: 'automatic', external: ['react', 'react/jsx-runtime'], logLevel: 'silent' });
 await writeFile(temp, bundle.outputFiles[0].text);
 const { Gate, AccountRecordsLoadError } = await import(temp.href);

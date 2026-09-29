@@ -13,6 +13,7 @@
 //
 // Every address and identifier here is synthetic. The repository is public.
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { buildSync } from 'esbuild';
@@ -23,7 +24,7 @@ const START = Date.UTC(2026, 8, 28, 19, 41, 25);
 const ADDRESS = 'new.member@example.invalid';
 
 const webhookCode = buildSync({
-  entryPoints: [new URL('../../supabase/functions/clerk-webhook/index.ts', import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL('../../supabase/functions/clerk-webhook/index.ts', import.meta.url))],
   bundle: true, platform: 'node', format: 'cjs', write: false, external: ['https://*'],
 }).outputFiles[0].text;
 

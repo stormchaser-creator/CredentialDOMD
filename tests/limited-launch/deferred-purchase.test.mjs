@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
@@ -35,7 +36,7 @@ const scheduled = (status = 'scheduled') => ({
 // Exercise actual component click handlers with a synchronous hook scheduler.
 // Provider requests are stubs: no token, storage, card, or customer is involved.
 const require = createRequire(import.meta.url);
-const built = await build({ stdin: { contents: 'export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as Notice} from "./src/components/shared/LaunchAccessNotice.jsx"; export {default as Cancellation} from "./src/components/pages/CancellationPage.jsx"; export {useSubscription} from "./src/hooks/useSubscription.js";', resolveDir: new URL('../..', import.meta.url).pathname },
+const built = await build({ stdin: { contents: 'export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as Notice} from "./src/components/shared/LaunchAccessNotice.jsx"; export {default as Cancellation} from "./src/components/pages/CancellationPage.jsx"; export {useSubscription} from "./src/hooks/useSubscription.js";', resolveDir: fileURLToPath(new URL('../..', import.meta.url)) },
   bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react/jsx-runtime'], define: { 'import.meta.env': '{}' },
   plugins: [{ name: 'synthetic-ui', setup(b) {
     b.onResolve({ filter: /useLimitedLaunchAccess\.js$/ }, () => ({ path: 'hook', namespace: 'fixture' }));

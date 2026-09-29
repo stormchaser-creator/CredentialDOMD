@@ -3,6 +3,7 @@
 // rebased, re-gated, and re-reviewed when the diff changed; hooks must be
 // unchanged; a conflict holds.
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, chmodSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -139,7 +140,7 @@ test('a held run can be discarded; AUTO_MERGE is a regular file the owner create
 test('the owner\'s one command: node scripts/ticket-fix/merge.mjs <run-id> fast-forwards a held run', async () => {
   const { p, run } = await held();
   try {
-    const cli = path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'scripts', 'ticket-fix', 'merge.mjs');
+    const cli = path.join(path.dirname(fileURLToPath(new URL(import.meta.url))), '..', '..', 'scripts', 'ticket-fix', 'merge.mjs');
     // A minimal environment (inside the gates' sandbox git may not read the
     // global config, so its override is kept).
     const cliEnv = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, ...(process.env.GIT_CONFIG_GLOBAL ? { GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL } : {}) };

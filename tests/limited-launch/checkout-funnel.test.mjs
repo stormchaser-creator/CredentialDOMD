@@ -6,6 +6,7 @@
 // hook runtime that also runs effects; the client, membership authority and
 // error reporter are synthetic. No network, token, card or account.
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -37,7 +38,7 @@ const quoteFor = (offerId = 'core') => ({
 
 const require = createRequire(import.meta.url);
 const built = await build({
-  stdin: { contents: 'export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as Notice} from "./src/components/shared/BillingReturnNotice.jsx"; export {useBillingReturn} from "./src/hooks/useBillingReturn.js";', resolveDir: new URL('../..', import.meta.url).pathname },
+  stdin: { contents: 'export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as Notice} from "./src/components/shared/BillingReturnNotice.jsx"; export {useBillingReturn} from "./src/hooks/useBillingReturn.js";', resolveDir: fileURLToPath(new URL('../..', import.meta.url)) },
   bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react/jsx-runtime'], define: { 'import.meta.env': '{}' },
   plugins: [{ name: 'synthetic-funnel', setup(b) {
     b.onResolve({ filter: /context\/AppContext$/ }, () => ({ path: 'context', namespace: 'fixture' }));

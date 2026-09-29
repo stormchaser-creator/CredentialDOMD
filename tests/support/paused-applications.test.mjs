@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -49,7 +50,7 @@ test('a missing, malformed or other account cache never retains previous account
 });
 
 test('actual availability UI exposes no editor, sharing control or record contents and describes backup limits', async () => {
-  const output = await build({ entryPoints: [new URL('../../src/components/features/ApplicationRecordsPaused.jsx', import.meta.url).pathname], bundle: true, write: false, platform: 'node', format: 'esm', jsx: 'automatic', plugins: [{ name: 'react-from-test', setup(builder) { builder.onResolve({ filter: /^react\/jsx-runtime$/ }, () => ({ path: 'jsx', namespace: 'test' })); builder.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: 'export const {jsx,jsxs}=globalThis.__pausedJsx;' })); } }] });
+  const output = await build({ entryPoints: [fileURLToPath(new URL('../../src/components/features/ApplicationRecordsPaused.jsx', import.meta.url))], bundle: true, write: false, platform: 'node', format: 'esm', jsx: 'automatic', plugins: [{ name: 'react-from-test', setup(builder) { builder.onResolve({ filter: /^react\/jsx-runtime$/ }, () => ({ path: 'jsx', namespace: 'test' })); builder.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: 'export const {jsx,jsxs}=globalThis.__pausedJsx;' })); } }] });
   globalThis.__pausedJsx = jsxRuntime;
   try {
     const { default: Gate } = await import('data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64'));

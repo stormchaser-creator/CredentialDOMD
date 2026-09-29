@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { build } from 'esbuild';
 import { writeFile, unlink } from 'node:fs/promises';
@@ -12,7 +13,7 @@ const variants = new Map();
 for (const value of [undefined, 'false', 'TRUE', 'true']) {
   const file = new URL(`.sign-in-methods-${randomUUID()}.tmp.mjs`, import.meta.url);
   const result = await build({
-    stdin: { contents: 'export { default as Card } from "./src/components/pages/SignInMethodsCard.jsx"; export * from "./src/utils/signInMethods.js";', resolveDir: new URL('..', import.meta.url).pathname, loader: 'js' },
+    stdin: { contents: 'export { default as Card } from "./src/components/pages/SignInMethodsCard.jsx"; export * from "./src/utils/signInMethods.js";', resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'js' },
     bundle: true, write: false, format: 'esm', platform: 'node', jsx: 'automatic',
     external: ['react', 'react/jsx-runtime'], logLevel: 'silent',
     define: { 'import.meta.env': JSON.stringify(value === undefined ? {} : { VITE_SMS_SIGN_IN_ENABLED: value }) },

@@ -38,6 +38,7 @@
  * does, under the owner's own key.
  */
 import { execSync } from "node:child_process";
+import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync, existsSync, chmodSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { corpusAllowed, DEFAULT_CORPUS } from "./intake-eval.mjs";
@@ -159,5 +160,5 @@ async function main(argv) {
   return 0;
 }
 
-const isMain = (() => { try { return resolve(process.argv[1] || "") === resolve(new URL(import.meta.url).pathname); } catch { return false; } })();
+const isMain = (() => { try { return resolve(process.argv[1] || "") === resolve(fileURLToPath(new URL(import.meta.url))); } catch { return false; } })();
 if (isMain) main(process.argv).then((code) => process.exit(code), (e) => { console.error(e?.message || e); process.exit(1); });

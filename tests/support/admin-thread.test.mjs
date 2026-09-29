@@ -1,8 +1,9 @@
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 
-const bundle = await build({entryPoints:[new URL('../../src/utils/adminSupportThread.js',import.meta.url).pathname],bundle:true,write:false,format:'esm',platform:'node',define:{'import.meta.env.VITE_SUPPORT_OPERATIONS_ENABLED':'"false"'}});
+const bundle = await build({entryPoints:[fileURLToPath(new URL('../../src/utils/adminSupportThread.js',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node',define:{'import.meta.env.VITE_SUPPORT_OPERATIONS_ENABLED':'"false"'}});
 const {adminSupportActorLabel,loadAdminSupportThread} = await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const automated={id:'message-1',author_id:null,support_actor_id:'00000000-0000-4000-8000-000000000018',support_job_id:'job-1',is_admin_reply:true};
 

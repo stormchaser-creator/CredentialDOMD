@@ -1,4 +1,5 @@
 import test from "node:test";
+import { fileURLToPath } from 'node:url';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -34,7 +35,7 @@ const HEADER_LITERAL = /['"]x-hook-secret['"]\s*[,:]\s*['"]([^'"]+)['"]/g;
 const PLACEHOLDERS = new Set(["__HOOK_SECRET__"]);
 
 function sqlAndFunctionFiles() {
-  const root = new URL("../", import.meta.url).pathname;
+  const root = fileURLToPath(new URL("../", import.meta.url));
   const out = [];
   const walk = dir => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

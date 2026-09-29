@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { writeFile, unlink, readFile } from 'node:fs/promises';
@@ -10,7 +11,7 @@ import { CME_PROVIDERS } from '../src/constants/cmeProviders.js';
 
 const temp = new URL(`.cme-link-status-${randomUUID()}.tmp.mjs`, import.meta.url);
 const built = await build({
-  stdin: { contents: 'export { default } from "../src/components/features/CMEResourcesSection.jsx";', resolveDir: new URL('.', import.meta.url).pathname },
+  stdin: { contents: 'export { default } from "../src/components/features/CMEResourcesSection.jsx";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, write: false, platform: 'node', format: 'esm', jsx: 'automatic', external: ['react', 'react/jsx-runtime'], logLevel: 'silent',
   plugins: [{ name: 'test-context', setup(b) {
     b.onResolve({ filter: /context\/AppContext$/ }, () => ({ path: 'context', namespace: 'test' }));

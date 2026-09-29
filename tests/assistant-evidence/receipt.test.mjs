@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -12,7 +13,7 @@ test('real receipt renders trusted fixed links, honest cached dates, saved-only 
   const directory = await mkdtemp(path.join(os.tmpdir(), 'vera-receipt-'));
   try {
     const output = path.join(directory, 'receipt.cjs');
-    await build({ entryPoints: [new URL('../../src/components/features/VeraSourceReceipt.jsx', import.meta.url).pathname], bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', outfile: output, logLevel: 'silent' });
+    await build({ entryPoints: [fileURLToPath(new URL('../../src/components/features/VeraSourceReceipt.jsx', import.meta.url))], bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', outfile: output, logLevel: 'silent' });
     const Receipt = createRequire(import.meta.url)(output).default;
     const render = evidence => renderToStaticMarkup(React.createElement(Receipt, { evidence }));
     assert.match(render({ mode: 'saved_references', attempted: false, sources: [] }), /Saved references; no live source check/);

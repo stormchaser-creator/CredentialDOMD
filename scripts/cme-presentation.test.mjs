@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { writeFile, unlink, readFile } from 'node:fs/promises';
@@ -17,7 +18,7 @@ const ca = (answers = {}, degree = 'MD', entries = caEntries) => computeComplian
 const oh = (hours = 50, answer) => computeCompliance([row(hours, ['Ethics'])], 'OH', 'MD', { licenseExpiration: expiry, topicApplicability: { [OHIO_PAIN_CLINIC_FIELD]: answer } });
 const temp = new URL(`.cme-presentation-${randomUUID()}.tmp.mjs`, import.meta.url);
 const built = await build({
-  stdin: { contents: 'export { default as Summary } from "../src/components/shared/CmeReviewSummary.jsx"; export { default as Conditional } from "../src/components/shared/ConditionalCmeTopics.jsx";', resolveDir: new URL('.', import.meta.url).pathname },
+  stdin: { contents: 'export { default as Summary } from "../src/components/shared/CmeReviewSummary.jsx"; export { default as Conditional } from "../src/components/shared/ConditionalCmeTopics.jsx";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, write: false, platform: 'node', format: 'esm', jsx: 'automatic', external: ['react', 'react/jsx-runtime'], logLevel: 'silent',
   plugins: [{ name: 'test-context', setup(b) {
     b.onResolve({ filter: /context\/AppContext$/ }, () => ({ path: 'context', namespace: 'test' }));
