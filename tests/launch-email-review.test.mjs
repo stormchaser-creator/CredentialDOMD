@@ -92,28 +92,22 @@ test('launch helper rejects unrelated email purposes', () => {
   }
 });
 
-const adminSource = fs.readFileSync(new URL('../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
-const helper = adminSource.slice(adminSource.indexOf('async function sendInvite(body)'), adminSource.indexOf('\nfunction timeAgo('));
-async function adminResult(reply) {
-  const context = { supabase: { functions: { invoke: async () => reply } } };
-  return new vm.Script(`${helper}\nsendInvite({email:'synthetic@example.invalid'})`).runInNewContext(context);
+// send-invite is retired (2026-09-29): its hold stays, and the admin screens
+// send "Invite to join" through invite-to-join instead. Nothing the app ships
+// may call it, so no screen can show its refusal as if something happened.
+function appSources(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir);
+    return entry.isDirectory() ? appSources(full) : /\.(m?js|jsx|ts|tsx)$/.test(entry.name) ? [full] : [];
+  });
 }
-test('Admin reports a 409 owner-review hold without confirming success', async () => {
-  const held = launchEmailReviewHold('invitation');
-  const response = new Response(JSON.stringify(held), { status: 409 });
-  const result = await adminResult({ error: { message: 'Edge function error', context: response } });
-  assert.equal(result.ok, false);
-  assert.equal(result.held, true);
-  assert.equal(result.error, held.error);
-});
-test('Admin treats a held or unconfirmed 2xx response as unsent', async () => {
-  for (const data of [launchEmailReviewHold('invitation'), undefined, null, {}, { ok: false }, { sent: false }]) {
-    assert.equal((await adminResult({ data })).ok, false);
+test('nothing in the app calls send-invite; the admin screens use invite-to-join', () => {
+  const files = appSources(new URL('../src/', import.meta.url));
+  assert.ok(files.length > 50);
+  for (const file of files) {
+    assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /["'`]send-invite["'`]|functions\/v1\/send-invite/, String(file));
   }
-});
-test('Admin only confirms an explicit successful invitation response', async () => {
-  assert.equal((await adminResult({ data: { ok: true, id: 'synthetic-invite' } })).ok, true);
-  const result = await adminResult({ error: { message: 'Network unavailable' } });
-  assert.equal(result.ok, false);
-  assert.equal(result.error, 'Network unavailable');
+  const admin = fs.readFileSync(new URL('../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
+  assert.match(admin, /<AdminInviteToJoin \/>/);
+  assert.doesNotMatch(admin, /Invite a physician|Re-send email|sendInvite/);
 });

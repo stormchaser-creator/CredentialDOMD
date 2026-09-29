@@ -1,16 +1,24 @@
 /**
- * The beta-invitation decision clerk-webhook makes on every user.created and
- * user.updated, and the two writes that carry it out, kept free of Deno I/O so
- * they run in plain node tests.
+ * The beta-invitation bookkeeping clerk-webhook does on every user.created and
+ * user.updated, and the one write that carries it out, kept free of Deno I/O
+ * so they run in plain node tests.
  *
- * What stops a re-grant (2026-09-25): an administrator's decisions are Approve
- * ('active') and Pause ('revoked'), and a revoked profile is never activated
- * here, by claim_beta_access(), by send-invite or by bootstrap_limited_signup.
- * An administrator can no longer set 'pending'
- * (20260925110000_admin_access_regrant_guard.sql), because every one of those
- * paths finishes a pending account. A pending profile here is one nobody has
- * decided on, so its invitation activates it, including an invitation this
- * same profile already stamped when an earlier attempt's profile write failed.
+ * AN INVITATION IS NOT ACCESS (owner decision, 2026-09-29). An invitation is
+ * an invite to join: the person signs up and pays like anyone else. Until
+ * then this decision moved a pending profile to 'active' whenever a
+ * beta_access row matched its verified email. An account activated that way
+ * has no grant, so it landed in a read-only app with no paywall instead of
+ * checkout. Now nothing here writes profiles at all:
+ *   * a pending (or unset) profile stays pending, and its invitation is left
+ *     exactly as it was;
+ *   * an active profile gets its matching invitation linked to it, so a later
+ *     Pause revokes the invitation with the account;
+ *   * a paused profile stays paused; its invitation is linked the same way;
+ *   * a revoked or unrecognised invitation is left alone.
+ * Access comes only from an administrator's audited Approve, a lifetime grant
+ * or a paid membership. claim_beta_access() follows the same rule
+ * (20260929131600_invitation_is_not_access.sql), and send-invite no longer
+ * activates either.
  */
 
 export interface BetaInvite {
@@ -28,7 +36,7 @@ export interface BetaProfile {
 
 export type BetaDecision =
   | { action: "none"; log: string; warn?: boolean }
-  | { action: "apply"; betaPatch: Record<string, unknown>; activateProfile: boolean; log: string; warn?: boolean };
+  | { action: "apply"; betaPatch: Record<string, unknown>; log: string; warn?: boolean };
 
 export function decideBetaActivation(match: BetaInvite, profile: BetaProfile, now: string): BetaDecision {
   const status = (match.status ?? "").trim().toLowerCase();
@@ -40,6 +48,9 @@ export function decideBetaActivation(match: BetaInvite, profile: BetaProfile, no
   if (status !== "invited" && status !== "active") {
     return { action: "none", warn: true, log: `beta: invite ${match.id} for ${match.email} has unknown status "${match.status}"; no change` };
   }
+  if (current !== "active" && current !== "revoked") {
+    return { action: "none", log: `beta: invite ${match.id} for ${match.email} is an invitation to join, not access; profile ${profile.id} stays ${profile.access_status ?? "pending"}` };
+  }
 
   const betaPatch: Record<string, unknown> = {};
   if (status !== "active") betaPatch.status = "active";
@@ -47,49 +58,32 @@ export function decideBetaActivation(match: BetaInvite, profile: BetaProfile, no
   if (match.profile_id !== profile.id) betaPatch.profile_id = profile.id;
 
   if (current === "revoked") {
-    return { action: "apply", betaPatch, activateProfile: false, warn: true, log: `beta: profile ${profile.id} is revoked; invite ${match.id} is active but access_status left revoked` };
+    return { action: "apply", betaPatch, warn: true, log: `beta: profile ${profile.id} is revoked; invite ${match.id} linked and access_status left revoked` };
   }
-  if (current === "active") {
-    return { action: "apply", betaPatch, activateProfile: false, log: `beta: profile ${profile.id} already active` };
-  }
-  return { action: "apply", betaPatch, activateProfile: true, log: `beta: profile ${profile.id} access_status set to active (${match.email})` };
+  return { action: "apply", betaPatch, log: `beta: profile ${profile.id} already active; invite ${match.id} linked` };
 }
 
-/** The slice of the Supabase client the two writes use (from().update().eq().or()). */
+/** The slice of the Supabase client the link write uses (from().update().eq()). */
 // deno-lint-ignore no-explicit-any
 export type BetaWriteClient = { from(table: string): any };
 
 /**
- * Carry out an "apply" decision. The profile goes first and the invitation
- * second. The two are separate requests, so one can land without the other,
- * and Svix retries the event on a 500. In this order a failed profile write
- * leaves the invitation untouched, and a failed invitation write leaves an
- * active profile whose retry takes the "already active" branch and links the
- * invitation. Either way the retry finishes the job.
+ * Carry out an "apply" decision: link the invitation to the account it
+ * matched. The profile is never written here.
  */
 export async function applyBetaDecision(
   client: BetaWriteClient,
   match: BetaInvite,
   profile: BetaProfile,
   decision: Extract<BetaDecision, { action: "apply" }>,
-  now: string,
+  _now: string,
   log: { log: (line: string) => void; warn: (line: string) => void } = console,
 ): Promise<{ error: string | null }> {
-  if (decision.activateProfile) {
-    // Keeps its own revoked guard: a Pause that lands between the read and
-    // this write is never overwritten.
-    const { error } = await client.from("profiles")
-      .update({ access_status: "active", updated_at: now })
-      .eq("id", profile.id)
-      .or("access_status.is.null,access_status.neq.revoked");
-    if (error) return { error: `update profiles.access_status: ${error.message}` };
-    log.log(`beta: profile ${profile.id} access_status → active (${match.email})`);
-  }
   if (Object.keys(decision.betaPatch).length > 0) {
     const { error } = await client.from("beta_access").update(decision.betaPatch).eq("id", match.id);
     if (error) return { error: `update beta_access: ${error.message}` };
-    log.log(`beta: invite ${match.id} for ${match.email} → active (profile ${profile.id})`);
+    log.log(`beta: invite ${match.id} for ${match.email} linked to profile ${profile.id}`);
   }
-  if (!decision.activateProfile) (decision.warn ? log.warn : log.log)(decision.log);
+  (decision.warn ? log.warn : log.log)(decision.log);
   return { error: null };
 }

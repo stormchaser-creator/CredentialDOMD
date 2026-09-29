@@ -198,6 +198,45 @@ test('outside production (no issuer) the handler still reaches the mailbox step'
   assert.equal(f.tables.profiles[0].verified_email, ADDRESS);
 });
 
+// ── an invitation is an invite to join, not access (owner, 2026-09-29) ───
+
+test('an invited person who signs up stays pending: no invitation record activates the account', async () => {
+  // Both kinds of invitation record are present for the new member's verified
+  // address: a historical beta_access invitation (the table this webhook reads)
+  // and an invite-to-join send. The account must go through the normal
+  // pending path to the paywall, on the first event and on every later one.
+  const f = fixture();
+  const beta = { id: 'invite-synthetic', email: ADDRESS, status: 'invited', activated_at: null, profile_id: null };
+  const join = { id: '44444444-4444-4444-8444-444444444444', email: ADDRESS, status: 'sent', provider_id: 'synthetic-provider-id' };
+  f.tables.beta_access.push({ ...beta });
+  f.tables.invite_to_join_sends = [{ ...join }];
+  for (const type of ['user.created', 'user.updated', 'user.updated']) {
+    const response = await f.deliver(type);
+    assert.equal(response.status, 200, `${type}: ${await response.clone().text()} ${JSON.stringify(f.failures())}`);
+    assert.equal(await response.text(), 'ok');
+  }
+  const profile = f.tables.profiles[0];
+  assert.equal(profile.access_status, 'pending', 'the invited account stays pending');
+  assert.equal(profile.verified_email, ADDRESS, 'the rest of the event still ran');
+  assert.deepEqual(f.tables.beta_access, [beta], 'the invitation is not consumed or linked');
+  assert.deepEqual(f.tables.invite_to_join_sends, [join]);
+  assert.ok(!f.calls.some((c) => c.table === 'beta_access' && c.op === 'update'));
+  assert.ok(!f.calls.some((c) => c.table === 'invite_to_join_sends'), 'the invite-to-join ledger is never read');
+  assert.ok(f.logs.some((l) => /invitation to join, not access; profile .* stays pending/.test(l.line)));
+  assert.deepEqual(f.failures(), []);
+});
+
+test('an account that already has access only gets its invitation linked', async () => {
+  const f = fixture();
+  f.tables.profiles.push({ id: PROFILE, auth_user_id: 'user_Synthetic1', name: 'Test Member', email: ADDRESS,
+    access_status: 'active', verified_email: null, verified_email_event_ms: null });
+  f.tables.beta_access.push({ id: 'invite-synthetic', email: ADDRESS, status: 'invited', activated_at: null, profile_id: null });
+  assert.equal((await f.deliver('user.updated')).status, 200);
+  assert.equal(f.tables.profiles[0].access_status, 'active');
+  assert.equal(f.tables.beta_access[0].profile_id, PROFILE);
+  assert.equal(f.tables.beta_access[0].status, 'active');
+});
+
 test('user.deleted clears the route through the same apply and is acknowledged', async () => {
   const f = fixture();
   f.tables.profiles.push({ id: PROFILE, auth_user_id: 'user_Synthetic1', name: '', email: null,
