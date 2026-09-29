@@ -62,12 +62,21 @@
 // later run (exit 6); origin main moving for any other reason alerts the
 // owner.
 //
+// The reproduction and the worker read a trimmed history (session-context.mjs:
+// the target thread, its saved review, answers saved elsewhere and a bounded
+// summary of the related tickets); the host checks their results against the
+// full history. Every session's cost, turns and CLI result subtype go on the
+// run record ("sessions") and the log; a failed session's last error line
+// too, and each session's stderr is kept, redacted and owner-only, under
+// <work>/runs/<run>/sessions/ (the shell deletes its run directory on exit).
+//
 // Exit: 0 the result is ready to record; 2 the reply was still refused after
 // two repairs; 3 the worker session failed or timed out; 4 the run changed
 // the runner's own code; 5 the run changed files outside its scope; 6 the
 // run changed git state outside its worktree; 7 the checklist could not be
-// extracted; 1 a host step failed. Log lines carry ids, rule and check
-// names and attachment storage paths, never ticket text.
+// extracted; 1 a host step failed. Log lines carry ids, rule and check names,
+// attachment storage paths and a failed session's redacted last error line
+// from the CLI, never ticket text.
 import { createHash } from 'node:crypto';
 import { promises as fs, existsSync, readFileSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -89,6 +98,7 @@ import { mergeRun, autoMergeEnabled, writeRun, writeRunFile, readRun, runDirecto
 import { raise } from './alert.mjs';
 import { sandboxAvailable } from './sandbox.mjs';
 import { isMain } from './is-main.mjs';
+import { sessionEvidence, PROMPT_LIMIT, kb } from './session-context.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const WORKER_PROMPT = path.join(HERE, '..', 'ticket-agent-prompt.md');
@@ -209,10 +219,15 @@ function hostFacts({ worktree, base, repro, held, stage3 }) {
   return lines.join('\n') + checklistWording(stage3.items);
 }
 
-// The runner's default model session launcher; tests pass a stub.
-export function defaultLauncher({ claude, stderrFile = null, sandbox = null }) {
-  return opts => runSession({ claude, ...opts, stderrFile, sandbox });
+// The runner's default model session launcher; tests pass a stub. Each call
+// names its own stderrFile (runs/<run>/sessions/, see runTicket).
+export function defaultLauncher({ claude, sandbox = null }) {
+  return opts => runSession({ claude, ...opts, sandbox });
 }
+// Where a session's stderr is kept: under the run's own record, which the
+// shell does not delete (its run directory is removed on exit).
+export const SESSION_LOGS = 'sessions';
+const money = n => (Number.isFinite(n) ? `$${n.toFixed(4)}` : '$?');
 
 export async function runTicket(o) {
   const { ticket, contextFile, outputFile, runFile, runId, runDir, repo, work, state, fixState = null, committer, notify = null,
@@ -248,14 +263,34 @@ export async function runTicket(o) {
   const attachments = () => modelView(manifest, reviewed);
   // Every model session and every gate step runs sandboxed (finding 1).
   const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir, attachments: attachDir });
-  const launchSession = o.launchSession ?? defaultLauncher({ claude: o.claude, stderrFile: o.stderrFile ?? null, sandbox: box });
+  const launchSession = o.launchSession ?? defaultLauncher({ claude: o.claude, sandbox: box });
   const facts = { run: name, record_repo: repo, base: null, release_file: null, code_outcome: 'none', stage3_file: null };
   const writeFacts = () => fs.writeFile(runFile, `${JSON.stringify(facts)}\n`, { mode: 0o600 });
   const alert = (kind, detail, message) => (state ? raise(state, kind, detail, message, { notify, send }).catch(() => false) : Promise.resolve(false));
   const run = { version: 1, id: name, ticket, run_id: runId, committer, repo, mode: context.run_mode, started_at: new Date().toISOString(), status: 'started', auto_merge: Boolean(autoMerge) };
+  // Every session of the run, pass or fail: role, CLI result subtype, cost,
+  // turns, and for a failure the last error line and its kept stderr. Kept
+  // apart from `run` so a record re-read from disk (the merge) never drops it.
+  const sessionLog = [];
+  const spent = () => Math.round(sessionLog.reduce((n, s) => n + (Number.isFinite(s.cost_usd) ? s.cost_usd : 0), 0) * 10000) / 10000;
+  const saveRun = (value = run) => writeRun(work, { ...value, sessions: sessionLog, cost_usd: spent() });
   // Evidence stays private to this run (re-review after a rebase needs it).
   await writeRunFile(work, name, 'context.json', `${JSON.stringify(context)}\n`);
+  const sessionLogs = path.join(runDirectory(work, name), SESSION_LOGS);
+  await fs.mkdir(sessionLogs, { recursive: true, mode: 0o700 });
   const evidence = JSON.stringify(context);
+  // The reproduction and the worker read a trimmed history (session-context.mjs):
+  // every turn re-reads the prompt, and the full history spent a $3 budget.
+  const trimmed = sessionEvidence(context);
+  run.session_context = trimmed.stats;
+  const promptSizes = {};
+  const measured = (role, text) => {
+    const bytes = Buffer.byteLength(text);
+    promptSizes[role] = bytes;
+    run.prompt_bytes = { ...promptSizes };
+    if (bytes > PROMPT_LIMIT) log(`CONTEXT — ${id8}: the ${role} prompt is ${kb(bytes)}, over the ${kb(PROMPT_LIMIT)} limit`);
+    return text;
+  };
   const tmp = realpathSync(os.tmpdir());
   const gEnv = { ...gatesEnv(env), ...(pgBin(env) ? { PG_BIN: pgBin(env) } : {}) };
   const secrets = credentialValues(env);
@@ -267,14 +302,14 @@ export async function runTicket(o) {
     modules_source: wt.modules_source, origin_at_start: originAtStart, held_earlier: held,
     attachments: manifest.attachments.map(a => ({ id: a.id, target: a.target, access: a.access })) });
   facts.base = wt.base; facts.record_repo = wt.dir;
-  await writeRun(work, run);
+  await saveRun();
   const cleanup = async ({ keepBranch = false } = {}) => {
     removeWorktree({ repo, dir: wt.dir, branch: wt.branch, deleteBranch: !keepBranch, binary });
     facts.record_repo = repo;
   };
   const finishWith = async (code, status, extra = {}) => {
     Object.assign(run, { status, finished_at: new Date().toISOString(), ...extra });
-    await writeRun(work, run); await writeFacts();
+    await saveRun(); await writeFacts();
     return code;
   };
   // Finding 12: what an escape from the sandbox would change outside the
@@ -294,7 +329,27 @@ export async function runTicket(o) {
       }
     }
   };
-  const session = async opts => { const r = await launchSession(opts); await hostCheck(`the ${opts.role} session`); return r; };
+  // Every model session goes through here: its stderr is kept under
+  // runs/<run>/sessions/ (redacted, owner-only), and what it cost, how many
+  // turns it took and, when it failed, why go on the run record and the log.
+  let sessionCount = 0;
+  const session = async opts => {
+    const n = ++sessionCount;
+    const stderrFile = path.join(sessionLogs, `${String(n).padStart(2, '0')}-${opts.role}.stderr.log`);
+    const r = await launchSession({ ...opts, stderrFile });
+    const s = r?.session ?? {};
+    const kept = s.stderr_file ? path.relative(runDirectory(work, name), s.stderr_file) : null;
+    const entry = { n, role: opts.role, resumed: Boolean(opts.resume), ok: Boolean(r?.ok), subtype: s.subtype ?? null, cost_usd: s.cost_usd ?? r?.output?.total_cost_usd ?? null,
+      turns: s.turns ?? null, ...(r?.ok ? {} : { reason: String(r?.reason ?? 'failed').slice(0, 400), error: s.error ?? null }), stderr: kept };
+    sessionLog.push(entry);
+    log(r?.ok ? `SESSION — ${id8}: ${opts.role} ${entry.turns ?? '?'} turn(s), ${money(entry.cost_usd)}`
+      : `SESSION — ${id8}: ${opts.role} FAILED ${entry.reason}${kept ? `; stderr kept in ticket-work/runs/${name}/${kept}` : ''}`);
+    await hostCheck(`the ${opts.role} session`);
+    return r;
+  };
+  // A failed session's facts for the run record.
+  const failed = r => ({ reason: r.reason, ...(r.session ? { session: { subtype: r.session.subtype ?? null, cost_usd: r.session.cost_usd ?? null, turns: r.session.turns ?? null,
+    error: r.session.error ?? null, stderr: r.session.stderr_file ? path.relative(runDirectory(work, name), r.session.stderr_file) : null } } : {}) });
 
   try {
     // 1b. The checklist (G1): every customer message no extraction has read.
@@ -315,7 +370,7 @@ export async function runTicket(o) {
       let r = await call(streamMessage(text, images));
       let accepted = null;
       for (let attempt = 1; attempt <= 2; attempt++) {
-        if (!r.ok) { log(`CHECKLIST — ${id8}: extraction session ${r.reason}`); return await finishWith(EXIT.model, 'model_failed', { reason: `checklist extraction: ${r.reason}` }); }
+        if (!r.ok) { log(`CHECKLIST — ${id8}: extraction session ${r.reason}`); return await finishWith(EXIT.model, 'model_failed', { ...failed(r), reason: `checklist extraction: ${r.reason}` }); }
         const checked = checkExtraction(r.output.structured_output, { context, record: checklist, sources, confirmTriggers: attempt === 1 });
         if (!checked.errors.length && !checked.confirm.length) { accepted = checked; break; }
         if (attempt === 2 || !r.session_id) { log(`CHECKLIST — ${id8}: refused after a repair (${checked.errors.length} problem(s))`); break; }
@@ -351,10 +406,10 @@ export async function runTicket(o) {
     let repro = null;
     if (!held) {
       const settings = sessionSettings({ role: 'repro', worktree: wt.dir, home, work, state: denyState, runDir, tmp, attachments: attachDir });
-      const input = `${readFileSync(REPRO_PROMPT, 'utf8')}\n\n${reproFacts({ worktree: wt.dir, base: wt.base, stage3: { items: workerItems, prior, attachments: attachments() } })}${EVIDENCE_MARKER}${evidence}`;
+      const input = measured('repro', `${readFileSync(REPRO_PROMPT, 'utf8')}\n\n${reproFacts({ worktree: wt.dir, base: wt.base, stage3: { items: workerItems, prior, attachments: attachments() } })}${EVIDENCE_MARKER}${trimmed.text}`);
       let r = await session({ role: 'repro', cwd: wt.dir, input, schema: REPRO_SCHEMA, settings, sessionDir: path.join(sessions, 'repro'), timeoutMs: reproSeconds * 1000, baseEnv: env });
       for (let attempt = 1; attempt <= 2; attempt++) {
-        if (!r.ok) { log(`REPRO — ${id8}: session ${r.reason}; no reproduction recorded`); run.repro = { status: 'failed', reason: r.reason }; break; }
+        if (!r.ok) { log(`REPRO — ${id8}: session ${r.reason}; no reproduction recorded`); run.repro = { status: 'failed', ...failed(r) }; break; }
         let out;
         try { out = checkRepro(r.output.structured_output, itemIds); } catch (error) { log(`REPRO — ${id8}: ${error.message}`); run.repro = { status: 'unusable' }; break; }
         const changed = changedPaths(wt.dir, wt.base, { binary });
@@ -375,7 +430,7 @@ export async function runTicket(o) {
       }
       run.repro = repro ? { kind: repro.kind, recorded: repro.recorded, tests: repro.tests, frozen: repro.frozen } : run.repro;
       log(`REPRO — ${id8}: ${repro ? (repro.kind === 'no_code' ? 'no code change to reproduce' : `${repro.tests.length} test(s), ${repro.recorded ? 'recorded failing on base' : 'NOT recorded failing on base'}`) : 'none'}`);
-      await writeRun(work, run);
+      await saveRun();
     }
 
     // 3. The worker (fixer), then the reply checks with up to two repairs.
@@ -395,12 +450,12 @@ export async function runTicket(o) {
     // what released runs bound. The host's decision uses hostBindings().
     const provisional = (out, changed) => mergeBindings(prior, runBindings({ repro, declared: changed ? out?.structured_output?.change?.tests ?? [] : [], items: workerItems }));
     const facts3 = { items: workerItems, bindings: reproBound(), prior, attachments: attachments() };
-    const prompt = `${readFileSync(o.workerPrompt ?? WORKER_PROMPT, 'utf8')}\n\n${hostFacts({ worktree: wt.dir, base: wt.base, repro, held, stage3: facts3 })}${EVIDENCE_MARKER}${evidence}`;
+    const prompt = measured('worker', `${readFileSync(o.workerPrompt ?? WORKER_PROMPT, 'utf8')}\n\n${hostFacts({ worktree: wt.dir, base: wt.base, repro, held, stage3: facts3 })}${EVIDENCE_MARKER}${trimmed.text}`);
     let first = await workerCall(prompt);
     if (!first.ok) {
       log(`MODEL — ${ticket} worker session ${first.reason}`);
       await cleanup();
-      return finishWith(EXIT.model, 'model_failed', { reason: first.reason });
+      return finishWith(EXIT.model, 'model_failed', failed(first));
     }
     let output = first.output, sessionId = first.session_id;
     const saveOutput = () => fs.writeFile(outputFile, JSON.stringify(output), { mode: 0o600 });
@@ -598,7 +653,7 @@ export async function runTicket(o) {
       run.status = 'held'; run.hold_reason = holdReason; run.held_at = new Date().toISOString();
       facts.code_outcome = 'held';
       await decide({ outcome: 'held', gates, review });
-      await writeRun(work, run);
+      await saveRun();
       await writeRunFile(work, name, 'HELD.txt', heldSummary(run, gates));
       log(`HELD — ticket ${id8} run ${name}: ${holdReason}. Merge it with: node scripts/ticket-fix/merge.mjs ${name}`);
       await alert('merge_held', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: a change for ticket ${id8} passed its gates and an independent review and is held for you (${holdReason}). Summary: ticket-work/runs/${name}/HELD.txt. Merge it with: node scripts/ticket-fix/merge.mjs ${name}`);
@@ -606,7 +661,7 @@ export async function runTicket(o) {
       return EXIT.ok;
     }
     run.status = 'ready';
-    await writeRun(work, run);
+    await saveRun();
     const support = await mergeSupport({ run, work, launch: reviewLaunch, commands, env: gEnv, binary, sandbox: box, state: denyState, secrets });
     const merged = await mergeRun({ work, runId: name, repo, reviewAgain: support.reviewAgain, regate: support.regate, releaseOptions, binary, env, log,
       ...(o.verify ? { verify: o.verify } : {}) });
@@ -621,7 +676,7 @@ export async function runTicket(o) {
     // The decision reads the merged run record; its bindings go on the record.
     Object.assign(run, after);
     await decide({ outcome: facts.code_outcome, gates, review, released: merged.status === 'released' && after.release?.verified === true });
-    await writeRun(work, { ...(await readRun(work, name)), bindings_met: run.bindings_met, stage3: run.stage3 });
+    await saveRun({ ...(await readRun(work, name)), bindings_met: run.bindings_met, stage3: run.stage3 });
     await writeFacts();
     return EXIT.ok;
   } catch (error) {
@@ -682,7 +737,8 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
     }
     factory = reviewDir => async (input, { index, attempt }) => runSession({ claude: bin, role: 'review', cwd: reviewDir, input, schema: REVIEW_SCHEMA,
       settings: reviewSettings({ worktree: reviewDir, home: os.homedir(), work, state: denyState, runDir: await scratch(), tmp: realpathSync(os.tmpdir()) }),
-      sessionDir: path.join(await scratch(), `review-${index}-${attempt}`), timeoutMs: 1200 * 1000, baseEnv, sandbox: await policy() });
+      sessionDir: path.join(await scratch(), `review-${index}-${attempt}`), timeoutMs: 1200 * 1000, baseEnv, sandbox: await policy(),
+      stderrFile: path.join(runDirectory(work, run.id), SESSION_LOGS, `merge-review-${Date.now()}-${index}-${attempt}.stderr.log`) });
   }
   return {
     // Review transcripts quote the ticket: removed once the merge is done.
@@ -771,8 +827,7 @@ async function main([command, ...rest]) {
     if (!['on', 'off'].includes(o.autoMerge)) throw Error('work needs --auto-merge on|off, read before any model ran');
     return runTicket({ ticket: o.ticket, contextFile: o.context, outputFile: o.output, runFile: o.runFile, runId: o.runId, runDir: o.runDir, repo: o.repo,
       work: o.work, state: o.state, fixState: o.fixState, claude: o.claude, committer: o.committer, notify: o.notify ?? null, autoMerge: o.autoMerge === 'on',
-      workerSeconds: seconds(o.workerSeconds), reproSeconds: seconds(o.reproSeconds), reviewSeconds: seconds(o.reviewSeconds),
-      stderrFile: o.runDir ? path.join(o.runDir, `${o.ticket}-model-stderr.log`) : null, runStarted: o.runStarted,
+      workerSeconds: seconds(o.workerSeconds), reproSeconds: seconds(o.reproSeconds), reviewSeconds: seconds(o.reviewSeconds), runStarted: o.runStarted,
       attachmentsDir: o.attachmentsDir ?? null, attachmentsManifest: o.attachmentsManifest ?? null });
   }
   throw Error('Usage: run.mjs work|held-for|get|finish|auto-merge ...');

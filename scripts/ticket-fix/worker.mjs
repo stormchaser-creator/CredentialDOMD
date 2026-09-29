@@ -47,6 +47,7 @@ import { promises as fs, rmSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { SANDBOX_EXEC, shortTmpRoot, sandboxProfile, sandboxEnv, real } from './sandbox.mjs';
 import { ATTACH_ROOT_PREFIX } from './attachments.mjs';
+import { redactSecrets, redactedLine } from './redact.mjs';
 
 export const WORKER_MODEL = 'claude-sonnet-5';
 export const REPRO_MODEL = 'claude-sonnet-5';
@@ -286,8 +287,10 @@ export function installSignalHandlers() {
 // the child reads it once, and nothing it starts can read it from the
 // environment.
 // onStdout: a consumer for stdout as it arrives (a session's stream-json);
-// stdout is then not kept.
-export function launch({ command, args = [], cwd, env, input = '', timeoutMs, stdoutLimit = 32 * 1024 * 1024, stderrFile = null, secret = null, onStdout = null }) {
+// stdout is then not kept. onStderr: the same for stderr (a model session's
+// stderr is redacted before it is written anywhere); stderrFile is then
+// not written.
+export function launch({ command, args = [], cwd, env, input = '', timeoutMs, stdoutLimit = 32 * 1024 * 1024, stderrFile = null, secret = null, onStdout = null, onStderr = null }) {
   return new Promise(resolve => {
     let child;
     const stdio = secret === null ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe', 'pipe'];
@@ -297,13 +300,17 @@ export function launch({ command, args = [], cwd, env, input = '', timeoutMs, st
     GROUPS.add(child.pid);
     const chunks = []; let size = 0; let timedOut = false;
     let errOut = null;
-    if (stderrFile) errOut = fs.open(stderrFile, 'a', 0o600).catch(() => null);
+    if (stderrFile && !onStderr) errOut = fs.open(stderrFile, 'a', 0o600).catch(() => null);
     if (onStdout) child.stdout.setEncoding('utf8');
+    if (onStderr) child.stderr.setEncoding('utf8');
     child.stdout.on('data', d => {
       if (onStdout) { try { onStdout(String(d)); } catch { /* a consumer error never breaks the launch */ } return; }
       if (size < stdoutLimit) { chunks.push(d); size += d.length; }
     });
-    child.stderr.on('data', async d => { const handle = await errOut; if (handle) handle.write(d).catch(() => {}); });
+    child.stderr.on('data', async d => {
+      if (onStderr) { try { onStderr(String(d)); } catch { /* a consumer error never breaks the launch */ } return; }
+      const handle = await errOut; if (handle) handle.write(d).catch(() => {});
+    });
     child.stdin.on('error', () => {});
     if (secret !== null) { child.stdio[3].on('error', () => {}); child.stdio[3].end(secret); }
     const timer = setTimeout(() => { timedOut = true; killGroup(child.pid); }, timeoutMs);
@@ -370,24 +377,86 @@ export async function sessionLaunch({ claude, args, cwd, sessionDir, baseEnv = p
   return { command: SANDBOX_EXEC, args: ['-f', profileFile, claude, ...args], env, secret: credential?.value ?? null };
 }
 
-// One model session. Returns { ok, output, session_id, reason, reads }:
+// A session's stderr as it arrives, the newest limit characters of it (a
+// crash or a refusal is at the end).
+export function stderrCollector({ limit = 64 * 1024 } = {}) {
+  let text = '', dropped = 0;
+  const trim = () => { if (text.length > limit) { dropped += text.length - limit; text = text.slice(-limit); } };
+  return {
+    feed(chunk) { text += chunk; if (text.length > 2 * limit) trim(); },
+    end() { trim(); return { text, dropped }; },
+  };
+}
+// The model credentials a session was given, for redaction.
+export const sessionSecrets = (base = process.env) => MODEL_CREDENTIALS.map(k => base[k]).filter(v => typeof v === 'string' && v.trim().length >= 8).map(v => v.trim());
+
+// What the host records of one session, pass or fail (the run record and the
+// log; runs/<run>/sessions/ keeps the stderr): the CLI's result subtype
+// (success, error_max_budget_usd, error_max_turns, error_during_execution,
+// error_max_structured_output_retries), its cost and turns, and the last
+// error line: the result's own error, or else the last line of stderr. Every
+// string is redacted and one line (redact.mjs).
+export function sessionFacts({ output = null, stderrText = '', secrets = [], stderrFile = null }) {
+  const errors = Array.isArray(output?.errors) ? output.errors.filter(e => typeof e === 'string' && e.trim()) : [];
+  const lastLine = String(stderrText).split('\n').map(l => l.trim()).filter(Boolean).at(-1) ?? null;
+  const failedResult = output?.is_error === true && typeof output.result === 'string' && output.result.trim() ? output.result : null;
+  const error = errors.at(-1) ?? failedResult ?? lastLine;
+  return {
+    subtype: typeof output?.subtype === 'string' ? redactedLine(output.subtype, secrets, 60) : null,
+    cost_usd: Number.isFinite(output?.total_cost_usd) ? output.total_cost_usd : null,
+    turns: Number.isInteger(output?.num_turns) ? output.num_turns : null,
+    ...(typeof output?.terminal_reason === 'string' ? { terminal_reason: redactedLine(output.terminal_reason, secrets, 60) } : {}),
+    error: error === null ? null : redactedLine(error, secrets),
+    stderr_last_line: lastLine === null ? null : redactedLine(lastLine, secrets),
+    stderr_file: stderrFile,
+  };
+}
+// "exited 1 (error_max_budget_usd, 57 turns, $3.0096): Reached maximum budget ($3)"
+export function failureReason(head, facts) {
+  const parts = [facts?.subtype, Number.isInteger(facts?.turns) ? `${facts.turns} turn${facts.turns === 1 ? '' : 's'}` : null,
+    Number.isFinite(facts?.cost_usd) ? `$${facts.cost_usd.toFixed(4)}` : null].filter(Boolean);
+  return `${head}${parts.length ? ` (${parts.join(', ')})` : ''}${facts?.error ? `: ${facts.error}` : ''}`;
+}
+// The session's stderr, redacted, owner-only. Nothing is written for a
+// session that printed nothing.
+async function keepStderr(file, text, dropped) {
+  if (!file || !text.trim()) return null;
+  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+  const body = `${dropped ? `[the first ${dropped} characters were dropped; the newest are kept]\n` : ''}${text}`;
+  await fs.writeFile(file, body, { mode: 0o600, flag: 'w' });
+  await fs.chmod(file, 0o600);
+  return file;
+}
+
+// One model session. Returns { ok, output, session_id, reason, reads, session }:
 // output is the CLI's result event when there is one and it is not an error;
-// reads are the session's Read tool calls, each with whether it succeeded.
-// input: text, or (the extractor) a ready stream-json message.
+// reads are the session's Read tool calls, each with whether it succeeded;
+// session is sessionFacts() (subtype, cost, turns, last error line and the
+// stderr file). A failed session's reason carries the subtype, cost and
+// error line. input: text, or (the extractor) a ready stream-json message.
+// stderrFile: where the session's redacted stderr is kept (the runner puts it
+// under runs/<run>/sessions/, which outlives the run directory).
 export async function runSession({ claude, role, cwd, input, schema, settings, sessionDir, resume = null, timeoutMs, baseEnv = process.env, stderrFile = null, budget = null,
   sandbox = null, apiBaseUrl = null }) {
   const { settingsFile } = await prepareSession({ sessionDir, settings });
   const args = sessionArgs({ role, settingsFile, schema, resume, budget });
   const how = await sessionLaunch({ claude, args, cwd: real(cwd), sessionDir: real(sessionDir), baseEnv, sandbox, apiBaseUrl });
   const stream = streamCollector();
+  const errors = stderrCollector();
   const text = roleTakesStream(role) && !String(input).startsWith('{"type":"user"') ? streamMessage(String(input)) : input;
-  const r = await launch({ command: how.command, args: how.args, cwd, env: how.env, input: text, timeoutMs, stderrFile, secret: how.secret, onStdout: chunk => stream.feed(chunk) });
+  const r = await launch({ command: how.command, args: how.args, cwd, env: how.env, input: text, timeoutMs, secret: how.secret,
+    onStdout: chunk => stream.feed(chunk), onStderr: chunk => errors.feed(chunk) });
   const { result: output, reads, tail } = stream.end();
-  if (r.timedOut) return { ok: false, reason: `timed out after ${Math.round(timeoutMs / 1000)} s`, timedOut: true, raw: tail, reads };
-  if (r.code !== 0) return { ok: false, reason: `exited ${r.code ?? r.signal ?? r.error}`, raw: tail, reads };
-  if (!output) return { ok: false, reason: 'output is not JSON', raw: tail, reads };
+  const secrets = sessionSecrets(baseEnv);
+  const err = errors.end();
+  let kept = null;
+  try { kept = await keepStderr(stderrFile, redactSecrets(err.text, secrets), err.dropped); } catch { kept = null; }
+  const session = sessionFacts({ output, stderrText: err.text, secrets, stderrFile: kept });
+  if (r.timedOut) return { ok: false, reason: failureReason(`timed out after ${Math.round(timeoutMs / 1000)} s`, session), timedOut: true, raw: tail, reads, session };
+  if (r.code !== 0) return { ok: false, reason: failureReason(`exited ${r.code ?? r.signal ?? r.error}`, session), raw: tail, reads, session };
+  if (!output) return { ok: false, reason: failureReason('output is not JSON', session), raw: tail, reads, session };
   if (output.is_error || !output.structured_output || typeof output.structured_output !== 'object') {
-    return { ok: false, reason: 'no structured result', output, raw: tail, reads };
+    return { ok: false, reason: failureReason('no structured result', session), output, raw: tail, reads, session };
   }
-  return { ok: true, output, session_id: /^[0-9a-f-]{36}$/i.test(output.session_id || '') ? output.session_id : null, raw: tail, reads };
+  return { ok: true, output, session_id: /^[0-9a-f-]{36}$/i.test(output.session_id || '') ? output.session_id : null, raw: tail, reads, session };
 }

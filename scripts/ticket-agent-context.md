@@ -473,3 +473,46 @@ it is live; the continuation that confirms it is action-only and never publishes
 record keeps it as pending work). The attachment download needs the service key from the
 management API's key listing; the endpoint's shape was not called against production while
 building this (only its documented forms, with a local stub).
+
+## Session context and failure records (2026-09-29)
+
+The reproduction session of 2026-09-29 16:35Z stopped at its $3 budget
+(`error_max_budget_usd`, $3.0096) before it wrote a test, and the log said only "exited 1":
+its stderr went to the shell's run directory, which is deleted on exit. Every turn re-reads
+the prompt, and the prompt carried the full history of the owner's account (99 tickets, 308
+messages and 78 KB of saved reviews, 418 KB of JSON, a first turn near 196K tokens).
+
+- **Trimmed context** (`scripts/ticket-fix/session-context.mjs`). The reproduction and the
+  worker get at most 40 KB of evidence: the target ticket and its thread (a thread too long
+  for its 20 KB share keeps its first message and the newest that fit, with the count and
+  dates of the rest), this ticket's saved review (pending follow-up with its exact work
+  text, remembered answers, the host's last item states), answers saved on the customer's
+  other tickets, and those tickets newest first: 25 in detail (subject, status, dates, the
+  opening, the newest customer message) and the rest as an index. The owner's account comes
+  to 30 KB. The whole first prompt stays under 96 KB (`PROMPT_LIMIT`; the runner logs one
+  that does not). The host still checks each result against the full history, so a summary
+  can hide evidence but never makes a check pass. The extractor (one turn), the reviewer
+  and the confirmer read what they read before. The run record carries `session_context`
+  (bytes shown of the full size, messages and tickets shown) and `prompt_bytes`.
+- **Failure records.** `runSession` reads the CLI's result event even when it exits
+  non-zero, so a failed session's reason reads
+  `exited 1 (error_max_budget_usd, 57 turns, $3.0096): Reached maximum budget ($3)`.
+  Every session goes on the run record's `sessions` list (role, whether it resumed, the
+  result subtype, cost, turns, and for a failure the reason and the last error line) with
+  a `cost_usd` total, and on one `SESSION` log line. Each session's stderr is kept under
+  `ticket-work/runs/<run>/sessions/NN-<role>.stderr.log` (the newest 64 KB, owner-only in an
+  owner-only directory no session can read), after `scripts/ticket-fix/redact.mjs` removes
+  the runner's own credential, token shapes, values after a key or token name and any long
+  opaque string. The merge command's re-reviews keep theirs there too.
+- **Budgets are unchanged** (worker $6, reproduction $3, reviewer $5, confirmer $3,
+  extractor $2). The successful 27-turn reproduction of 17:01Z (same account) read 5.8M
+  cached tokens, about $1.93 at Sonnet 5 list prices, most of it the history re-read each
+  turn. With the trimmed evidence the first turn is estimated near 35K tokens instead of
+  196K, and the same session near $0.70, so $3 leaves room for more than twice the turns. If a reproduction still records `error_max_budget_usd`, its `sessions` entry has
+  the turns and cost to decide a new budget from.
+
+Tests: `tests/ticket-fix/session-context.test.mjs` (the bound on a large synthetic history,
+a very long target thread, multibyte text; the prompt size through `run.mjs`) and
+`tests/ticket-fix/session-failure.test.mjs` (a stand-in CLI that stops at its budget: the
+reason, the run record, the log, the kept and redacted stderr after the run directory is
+gone).
