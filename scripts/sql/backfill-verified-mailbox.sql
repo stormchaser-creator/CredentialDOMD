@@ -4,7 +4,7 @@
 -- running this file unchanged writes nothing. It is run once, by hand, after
 -- clerk-webhook with the CONSOLE_LOG fix is deployed.
 --
--- PREFER THE ADMIN TOOL. Since 20260928190000, Admin > Users > "Repair sign-in
+-- PREFER THE ADMIN TOOL. Since 20260928191000, Admin > Users > "Repair sign-in
 -- emails" (the admin-mailbox-repair function, calling
 -- public.repair_account_mailboxes) does what this file does, reading Clerk
 -- itself with the function's CLERK_SECRET_KEY: same users, same address,
@@ -87,7 +87,7 @@
 -- Known interaction, same as the webhook: when the verified primary is also
 -- an address the SAME account confirmed as a forwarding address, the function
 -- turns that claim's proof from 'confirmed' into 'provider'. It keeps routing.
--- Before 20260928190000 it stopped routing if the member later changed their
+-- Before 20260928191000 it stopped routing if the member later changed their
 -- Clerk primary, because a provider event released the account's other
 -- provider claims while the forwarding row still said Confirmed. Since then a
 -- released provider claim goes back to 'confirmed' when the same account

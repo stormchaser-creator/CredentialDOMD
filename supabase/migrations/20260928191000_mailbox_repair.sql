@@ -83,7 +83,7 @@
 -- Idempotent: every statement can run twice. No data is changed by applying
 -- this file; it reports, without changing, any confirmed forwarding row
 -- whose address does not route to its own account (0 on 2026-09-28).
--- Rollback: docs/rollback/20260928190000_mailbox_repair.rollback.sql
+-- Rollback: docs/rollback/20260928191000_mailbox_repair.rollback.sql
 
 -- ── 1. Grants ───────────────────────────────────────────────────────────────
 
@@ -118,7 +118,7 @@ drop policy if exists forwarding_addresses_owner_delete on public.forwarding_add
 -- ── 2b. A released provider claim falls back to the account's confirmation ──
 --
 -- The body is 20260918a's, byte for byte, except for the two blocks marked
--- 20260928190000 and the 'restored' count in two answers. The lock order is
+-- 20260928191000 and the 'restored' count in two answers. The lock order is
 -- still domain lock, then profiles -> forwarding_addresses -> mailbox_claims.
 create or replace function public.apply_account_mailbox(
   p_profile uuid,
@@ -226,7 +226,7 @@ begin
   -- is keeping. Confirmed claims are untouched: they are the physician's own
   -- separate evidence.
   --
-  -- 20260928190000: the account's CONFIRMED forwarding rows are read below,
+  -- 20260928191000: the account's CONFIRMED forwarding rows are read below,
   -- so they are locked first, in id order, before any claim row: the order in
   -- this file is profiles -> forwarding_addresses -> mailbox_claims. FOR
   -- SHARE, because all this needs is that none is deleted underneath it.
@@ -238,7 +238,7 @@ begin
       and (v_addr is null or address <> v_addr)
     order by address for update;
 
-  -- 20260928190000: a provider claim this account is letting go of, on an
+  -- 20260928191000: a provider claim this account is letting go of, on an
   -- address the SAME account also confirmed as a forwarding address, goes
   -- back to the proof the account produced itself instead of to nobody.
   -- Taking the address as provider (below) turned the confirmed claim into a

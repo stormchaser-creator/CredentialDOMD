@@ -1,4 +1,4 @@
-// 20260928190000_mailbox_repair.sql against a disposable PostgreSQL that
+// 20260928191000_mailbox_repair.sql against a disposable PostgreSQL that
 // carries the real mailbox and forwarding migrations AND Supabase's
 // public-schema default privileges, because those defaults are the gap: every
 // new function and table is granted straight to anon and authenticated, and
@@ -35,8 +35,8 @@ const exec = promisify(execFile);
 const PORT = 56473;
 const root = new URL('../../', import.meta.url);
 const read = (rel) => fs.readFileSync(new URL(rel, root), 'utf8');
-const MIGRATION = read('supabase/migrations/20260928190000_mailbox_repair.sql');
-const ROLLBACK = read('docs/rollback/20260928190000_mailbox_repair.rollback.sql');
+const MIGRATION = read('supabase/migrations/20260928191000_mailbox_repair.sql');
+const ROLLBACK = read('docs/rollback/20260928191000_mailbox_repair.rollback.sql');
 const EVENTS = read('supabase/migrations/20260918a_mailbox_account_events.sql');
 // Identity continuity. Not part of DOMAIN (its storage policies are meant for
 // authenticated), but loaded between 20260918a and 20260921015000, where

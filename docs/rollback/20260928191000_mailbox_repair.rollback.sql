@@ -1,5 +1,5 @@
--- docs/rollback/20260928190000_mailbox_repair.rollback.sql
--- Rollback for 20260928190000_mailbox_repair.sql.
+-- docs/rollback/20260928191000_mailbox_repair.rollback.sql
+-- Rollback for 20260928191000_mailbox_repair.sql.
 --
 -- Run as postgres in one transaction (the SQL editor runs a script as one;
 -- with psql use -1). Idempotent. Deploy order: remove the
