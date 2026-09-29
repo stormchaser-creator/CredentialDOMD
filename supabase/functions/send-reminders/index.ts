@@ -3,9 +3,10 @@
  *
  * Runs from pg_cron (see migrations/20260816_reminders.sql) with the hook
  * secret, or by an admin JWT for a manual run. For every active profile with
- * notify_email on and an email address, it collects records whose
- * expiration_date falls between 30 days ago and reminder_lead_days ahead
- * (default 60), skips items the user has acknowledged (alert_acks.until in
+ * an email address whose notify_email is not off (null is the app's default,
+ * on: reminderPreferences), it collects records whose expiration_date falls
+ * between 30 days ago and reminder_lead_days ahead (default 90, as the app
+ * shows it), skips items the user has acknowledged (alert_acks.until in
  * the future) and records that are historical, superseded, awaiting
  * confirmation or whose date is not known yet (_shared/reminderRows.mjs),
  * and sends ONE plain-text digest through Resend. It re-sends
@@ -19,7 +20,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "./renewalLinks.json" with { type: "json" };
-import { remindable, reminderLabel } from "../_shared/reminderRows.mjs";
+import { remindable, reminderLabel, reminderPreferences } from "../_shared/reminderRows.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") || "";
@@ -70,7 +71,8 @@ serve(async (req) => {
 
   let pq = db.from("profiles")
     .select("id, name, email, notify_email, reminder_lead_days, notify_freq_days, last_notified, alerts_fingerprint, access_status")
-    .eq("notify_email", true)
+    // Not off: an untouched switch (null) is on, as the app shows it.
+    .not("notify_email", "is", false)
     .not("email", "is", null)
     .neq("email", "")
     .eq("access_status", "active");
@@ -82,8 +84,8 @@ serve(async (req) => {
   const results: any[] = [];
 
   for (const p of profiles || []) {
-    const lead = Math.min(Math.max(parseInt(p.reminder_lead_days) || 60, 7), 365);
-    const freq = Math.min(Math.max(parseInt(p.notify_freq_days) || 7, 1), 60);
+    const { emailOn, leadDays: lead, freqDays: freq } = reminderPreferences(p);
+    if (!emailOn) continue;
     const lo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     const hi = new Date(Date.now() + lead * 86400000).toISOString().slice(0, 10);
 
