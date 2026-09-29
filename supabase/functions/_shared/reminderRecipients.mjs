@@ -17,7 +17,10 @@ import { emailRemindersOn, reminderLeadDays, notifyFreqDays } from './app/utils/
 
 export { reminderLeadDays, notifyFreqDays };
 
-export const RECIPIENT_COLUMNS = 'id, name, email, notify_email, reminder_lead_days, notify_freq_days, last_notified, alerts_fingerprint, access_status';
+// The server's own send state (reminder_email_fingerprint, reminder_emailed_at)
+// and the member's banner snooze; never the app's alerts_fingerprint or
+// last_notified (reminderCadence.mjs says why).
+export const RECIPIENT_COLUMNS = 'id, name, email, notify_email, reminder_lead_days, notify_freq_days, snoozed_until, reminder_email_fingerprint, reminder_emailed_at, access_status';
 
 /**
  * The profiles query send-reminders runs, on a supabase-js client. profileId

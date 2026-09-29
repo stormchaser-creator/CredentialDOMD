@@ -252,6 +252,10 @@ export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
   last_notified: null,
   snoozed_until: null,
   alerts_fingerprint: null,
+  // send-reminders' own send state (migration 20260929140000). Not synced by
+  // the app, so the SETTINGS_TO_PROFILE check cannot see it; listed by hand.
+  reminder_email_fingerprint: null,
+  reminder_emailed_at: null,
   cme_verification_results: null,
   cme_verification_alerted: null,
   last_cme_verification: null,
