@@ -32,14 +32,26 @@
 // owner's credential files or the runner's state, cannot run security, gh or
 // a git credential helper, and cannot reach an ssh-agent. The host's gates run
 // the fixer's code in a sandbox with no network at all.
+//
+// Stage 3: two more roles. The checklist extractor ("extract", design G1)
+// has no tools at all and gets the ticket's screenshots inline
+// (--input-format stream-json); the confirmer ("confirm") is the reviewer's
+// read-only role for runs with no change to review (attachment observations,
+// sentences judged not to be asks). Every session now reports on
+// --output-format stream-json: the host reads each Read tool call and its
+// result from the CLI's own stdout (a test file a session runs cannot write
+// there), which is the only proof that an attachment was looked at (G6). A
+// session may Read this ticket's attachment directory and nothing next to it.
 import { spawn } from 'node:child_process';
-import { promises as fs, rmSync } from 'node:fs';
+import { promises as fs, rmSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { SANDBOX_EXEC, shortTmpRoot, sandboxProfile, sandboxEnv, real } from './sandbox.mjs';
+import { ATTACH_ROOT_PREFIX } from './attachments.mjs';
 
 export const WORKER_MODEL = 'claude-sonnet-5';
 export const REPRO_MODEL = 'claude-sonnet-5';
 export const REVIEW_MODEL = 'claude-opus-5-5';
+export const EXTRACT_MODEL = 'claude-opus-5-5';
 export const WORKER_TOOLS = Object.freeze(['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash']);
 export const REVIEW_TOOLS = Object.freeze(['Read', 'Grep', 'Glob']);
 // Exact commands. The one wildcard is the test file path, anchored to tests/.
@@ -80,27 +92,53 @@ export function secretReadDenials({ home, state = [], runDir = null, tmp = null 
 // (a deny rule beats an allow rule), while the work directory's run records
 // are. frozen: repository paths the session may not edit (the reproduction,
 // once recorded). Grep and Glob have no allow rule of their own: the Read rule
-// on the worktree is what lets them search it (checked live).
-export function sessionSettings({ role, worktree, home, work, state = [], runDir = null, tmp = null, frozen = [] }) {
+// on the worktree is what lets them search it (checked live). attachments:
+// this ticket's attachment directory (read only).
+export function sessionSettings({ role, worktree, home, work, state = [], runDir = null, tmp = null, frozen = [], attachments = null }) {
   if (!['worker', 'repro'].includes(role)) throw Error('Unknown session role');
   const root = abs(worktree);
   const editRoots = role === 'repro' ? ['tests'] : EDIT_ROOTS;
-  const allow = [`Read(${root}/**)`,
+  const files = attachmentRules(attachments);
+  const allow = [`Read(${root}/**)`, ...files.allow,
     ...editRoots.flatMap(dir => [`Edit(${root}/${dir}/**)`, `Write(${root}/${dir}/**)`]),
     ...(role === 'repro' ? REPRO_COMMANDS : WORKER_COMMANDS)];
   const noEdit = [...NOT_EDITABLE.map(dir => `${root}/${dir}/**`), ...NOT_EDITABLE_FILES.map(f => `${root}/${f}`), `${root}/**/.env*`,
     ...frozen.map(f => `${root}/${f}`)];
   const deny = [...noEdit.flatMap(p => [`Edit(${p})`, `Write(${p})`]), ...DENIED_COMMANDS, 'WebFetch', 'WebSearch', 'Task', 'NotebookEdit',
-    ...secretReadDenials({ home, state: [...state, path.join(work, 'runs'), path.join(work, 'baseline')], runDir, tmp })];
+    ...secretReadDenials({ home, state: [...state, path.join(work, 'runs'), path.join(work, 'baseline')], runDir, tmp }), ...files.deny];
   return { permissions: { defaultMode: 'dontAsk', allow, deny, disableBypassPermissionsMode: 'disable' }, env: {} };
 }
 
-// The reviewer: read-only, no Bash at all. The host hands it the diff.
-export function reviewSettings({ worktree, home, work, state = [], runDir = null, tmp = null }) {
+// This ticket's attachment directory (G6): Read is allowed there, and denied
+// in every other directory next to it (another ticket of the same run) and in
+// any other run's attachment root (left by a crash). The runner removes those
+// before a session starts; the denial covers the case it could not.
+export function attachmentRules(dir) {
+  if (!dir) return { allow: [], deny: [] };
+  const own = path.resolve(dir);
+  const root = path.dirname(own);
+  const deny = [];
+  const list = d => { try { return readdirSync(d); } catch { return []; } };
+  for (const name of list(root)) if (path.join(root, name) !== own) deny.push(`Read(${abs(path.join(root, name))}/**)`, `Read(${abs(path.join(root, name))})`);
+  const parent = path.dirname(root);
+  for (const name of list(parent)) if (name.startsWith(ATTACH_ROOT_PREFIX) && path.join(parent, name) !== root) deny.push(`Read(${abs(path.join(parent, name))}/**)`);
+  return { allow: existsSync(own) ? [`Read(${abs(own)}/**)`] : [], deny };
+}
+
+// The reviewer and the confirmer: read-only, no Bash at all. The host hands
+// the reviewer the diff.
+export function reviewSettings({ worktree, home, work, state = [], runDir = null, tmp = null, attachments = null }) {
   const root = abs(worktree);
-  return { permissions: { defaultMode: 'dontAsk', allow: [`Read(${root}/**)`],
+  const files = attachmentRules(attachments);
+  return { permissions: { defaultMode: 'dontAsk', allow: [`Read(${root}/**)`, ...files.allow],
     deny: ['Edit', 'Write', 'Bash', 'WebFetch', 'WebSearch', 'Task', 'NotebookEdit',
-      ...secretReadDenials({ home, state: [...state, path.join(work, 'runs'), path.join(work, 'baseline')], runDir, tmp })],
+      ...secretReadDenials({ home, state: [...state, path.join(work, 'runs'), path.join(work, 'baseline')], runDir, tmp }), ...files.deny],
+    disableBypassPermissionsMode: 'disable' }, env: {} };
+}
+// The checklist extractor: the CLI offers it no tool but the structured
+// result; everything is denied besides, so a CLI change cannot give it one.
+export function extractSettings() {
+  return { permissions: { defaultMode: 'dontAsk', allow: [], deny: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'Task', 'NotebookEdit'],
     disableBypassPermissionsMode: 'disable' }, env: {} };
 }
 
@@ -108,9 +146,58 @@ const ROLE = {
   worker: { model: WORKER_MODEL, effort: 'high', tools: WORKER_TOOLS, budget: 6 },
   repro: { model: REPRO_MODEL, effort: 'high', tools: WORKER_TOOLS, budget: 3 },
   review: { model: REVIEW_MODEL, effort: 'high', tools: REVIEW_TOOLS, budget: 5 },
+  confirm: { model: REVIEW_MODEL, effort: 'high', tools: REVIEW_TOOLS, budget: 3 },
+  extract: { model: EXTRACT_MODEL, effort: 'high', tools: [], budget: 2, streamInput: true },
 };
+export const SESSION_ROLES = Object.freeze(Object.keys(ROLE));
+export const roleTakesStream = role => Boolean(ROLE[role]?.streamInput);
+// One stream-json user message: text, then images (base64) for the extractor.
+export function streamMessage(text, images = []) {
+  return `${JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text },
+    ...images.map(i => ({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } }))] } })}\n`;
+}
+
+// The CLI's stream-json stdout, read as it arrives (a Read of an image carries
+// the image, so nothing is kept but what the host needs): the final result
+// event, and every Read tool call with whether its result was an error.
+const TOOL_ERROR = /^\s*<tool_use_error>/;
+export function streamCollector({ tailLimit = 4000 } = {}) {
+  let buffer = '', result = null, events = 0, unparsed = 0, tail = '';
+  const pending = new Map();
+  const reads = [];
+  const keep = line => { if (line.length < 2000) tail = `${tail}${line}\n`.slice(-tailLimit); };
+  const handle = line => {
+    if (!line.trim()) return;
+    let event;
+    try { event = JSON.parse(line); } catch { unparsed++; keep(line); return; }
+    events++;
+    keep(line);
+    if (event?.type === 'result') { result = event; return; }
+    const content = event?.message?.content;
+    if (!Array.isArray(content)) return;
+    if (event.type === 'assistant') {
+      for (const block of content) if (block?.type === 'tool_use' && block.name === 'Read' && typeof block.input?.file_path === 'string') pending.set(block.id, block.input.file_path);
+    } else if (event.type === 'user') {
+      for (const block of content) {
+        if (block?.type !== 'tool_result' || !pending.has(block.tool_use_id)) continue;
+        const text = typeof block.content === 'string' ? block.content : '';
+        reads.push({ file_path: pending.get(block.tool_use_id), ok: block.is_error !== true && !TOOL_ERROR.test(text) });
+        pending.delete(block.tool_use_id);
+      }
+    }
+  };
+  return {
+    feed(chunk) {
+      buffer += chunk;
+      for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) { handle(buffer.slice(0, i)); buffer = buffer.slice(i + 1); }
+    },
+    end() { if (buffer) handle(buffer); buffer = ''; return { result, reads, events, unparsed, tail }; },
+  };
+}
+
 // The command line for one session. resume: a session id to continue (the
-// repair, gate and review loops); the same settings apply again.
+// repair, gate and review loops); the same settings apply again. Every role
+// reports on stream-json; the extractor also reads stream-json (its images).
 export function sessionArgs({ role, settingsFile, schema, resume = null, budget = null }) {
   const r = ROLE[role];
   if (!r) throw Error('Unknown session role');
@@ -118,7 +205,8 @@ export function sessionArgs({ role, settingsFile, schema, resume = null, budget 
   return ['-p', ...(resume ? ['--resume', resume] : []), '--model', r.model, '--effort', r.effort,
     '--permission-mode', 'dontAsk', '--setting-sources', '', '--settings', settingsFile,
     '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--tools', r.tools.join(','),
-    '--max-budget-usd', String(budget ?? r.budget), '--output-format', 'json', '--json-schema', JSON.stringify(schema)];
+    '--max-budget-usd', String(budget ?? r.budget), '--output-format', 'stream-json', '--verbose',
+    ...(r.streamInput ? ['--input-format', 'stream-json'] : []), '--json-schema', JSON.stringify(schema)];
 }
 
 // Environment for a model session, from an allowlist. configDir is fresh per
@@ -197,7 +285,9 @@ export function installSignalHandlers() {
 // secret: a string written to file descriptor 3 (a pipe) and nowhere else;
 // the child reads it once, and nothing it starts can read it from the
 // environment.
-export function launch({ command, args = [], cwd, env, input = '', timeoutMs, stdoutLimit = 32 * 1024 * 1024, stderrFile = null, secret = null }) {
+// onStdout: a consumer for stdout as it arrives (a session's stream-json);
+// stdout is then not kept.
+export function launch({ command, args = [], cwd, env, input = '', timeoutMs, stdoutLimit = 32 * 1024 * 1024, stderrFile = null, secret = null, onStdout = null }) {
   return new Promise(resolve => {
     let child;
     const stdio = secret === null ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe', 'pipe'];
@@ -208,7 +298,11 @@ export function launch({ command, args = [], cwd, env, input = '', timeoutMs, st
     const chunks = []; let size = 0; let timedOut = false;
     let errOut = null;
     if (stderrFile) errOut = fs.open(stderrFile, 'a', 0o600).catch(() => null);
-    child.stdout.on('data', d => { if (size < stdoutLimit) { chunks.push(d); size += d.length; } });
+    if (onStdout) child.stdout.setEncoding('utf8');
+    child.stdout.on('data', d => {
+      if (onStdout) { try { onStdout(String(d)); } catch { /* a consumer error never breaks the launch */ } return; }
+      if (size < stdoutLimit) { chunks.push(d); size += d.length; }
+    });
     child.stderr.on('data', async d => { const handle = await errOut; if (handle) handle.write(d).catch(() => {}); });
     child.stdin.on('error', () => {});
     if (secret !== null) { child.stdio[3].on('error', () => {}); child.stdio[3].end(secret); }
@@ -260,25 +354,30 @@ export async function sessionLaunch({ claude, args, cwd, sessionDir, baseEnv = p
   // otherwise; that directory holds other sessions' output and is denied.
   Object.assign(env, sandboxEnv(tmp), { CLAUDE_CODE_TMPDIR: tmp });
   const profileFile = path.join(sandbox.profileDir, `session-${process.pid}-${++profiles}.sb`);
-  const profile = sandboxProfile({ kind: 'session', home: sandbox.home, writable: [cwd, sessionDir, tmp], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [] });
+  const profile = sandboxProfile({ kind: 'session', home: sandbox.home, writable: [cwd, sessionDir, tmp], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [],
+    readable: (sandbox.readable ?? []).filter(d => existsSync(d)) });
   await fs.writeFile(profileFile, profile, { mode: 0o600 });
   return { command: SANDBOX_EXEC, args: ['-f', profileFile, claude, ...args], env, secret: credential?.value ?? null };
 }
 
-// One model session. Returns { ok, output, session_id, reason }: output is
-// the CLI's JSON result when it parsed and is not an error.
+// One model session. Returns { ok, output, session_id, reason, reads }:
+// output is the CLI's result event when there is one and it is not an error;
+// reads are the session's Read tool calls, each with whether it succeeded.
+// input: text, or (the extractor) a ready stream-json message.
 export async function runSession({ claude, role, cwd, input, schema, settings, sessionDir, resume = null, timeoutMs, baseEnv = process.env, stderrFile = null, budget = null,
   sandbox = null, apiBaseUrl = null }) {
   const { settingsFile } = await prepareSession({ sessionDir, settings });
   const args = sessionArgs({ role, settingsFile, schema, resume, budget });
   const how = await sessionLaunch({ claude, args, cwd: real(cwd), sessionDir: real(sessionDir), baseEnv, sandbox, apiBaseUrl });
-  const r = await launch({ command: how.command, args: how.args, cwd, env: how.env, input, timeoutMs, stderrFile, secret: how.secret });
-  if (r.timedOut) return { ok: false, reason: `timed out after ${Math.round(timeoutMs / 1000)} s`, timedOut: true, raw: r.stdout };
-  if (r.code !== 0) return { ok: false, reason: `exited ${r.code ?? r.signal ?? r.error}`, raw: r.stdout };
-  let output;
-  try { output = JSON.parse(r.stdout); } catch { return { ok: false, reason: 'output is not JSON', raw: r.stdout }; }
-  if (!output || output.is_error || !output.structured_output || typeof output.structured_output !== 'object') {
-    return { ok: false, reason: 'no structured result', output, raw: r.stdout };
+  const stream = streamCollector();
+  const text = roleTakesStream(role) && !String(input).startsWith('{"type":"user"') ? streamMessage(String(input)) : input;
+  const r = await launch({ command: how.command, args: how.args, cwd, env: how.env, input: text, timeoutMs, stderrFile, secret: how.secret, onStdout: chunk => stream.feed(chunk) });
+  const { result: output, reads, tail } = stream.end();
+  if (r.timedOut) return { ok: false, reason: `timed out after ${Math.round(timeoutMs / 1000)} s`, timedOut: true, raw: tail, reads };
+  if (r.code !== 0) return { ok: false, reason: `exited ${r.code ?? r.signal ?? r.error}`, raw: tail, reads };
+  if (!output) return { ok: false, reason: 'output is not JSON', raw: tail, reads };
+  if (output.is_error || !output.structured_output || typeof output.structured_output !== 'object') {
+    return { ok: false, reason: 'no structured result', output, raw: tail, reads };
   }
-  return { ok: true, output, session_id: /^[0-9a-f-]{36}$/i.test(output.session_id || '') ? output.session_id : null, raw: r.stdout };
+  return { ok: true, output, session_id: /^[0-9a-f-]{36}$/i.test(output.session_id || '') ? output.session_id : null, raw: tail, reads };
 }

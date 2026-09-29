@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, RESULT_SCHEMA, assertReplyVerificationInstalled } from './ticket-agent-context.mjs';
+import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, LEGACY_RESULT_SCHEMA, assertReplyVerificationInstalled } from './ticket-agent-context.mjs';
 import { customerReplyText } from './ticket-fix/claims.mjs';
 import { checkVerification, verificationInsertSQL } from './ticket-fix/reply.mjs';
 
@@ -20,7 +20,9 @@ export const AWAITING = `t.archived_at IS NULL AND t.status IN ('open', 'in_prog
       AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE 'Status set to%'
       AND m.body NOT ILIKE 'CredentialDOMD Support%'))`;
 export const QUEUE_SQL = queueSQL();
-const SCHEMA = RESULT_SCHEMA;
+// The staged container runner keeps the free-text result its prompt
+// describes; the hourly runner's structured result (stage 3) is not its own.
+const SCHEMA = LEGACY_RESULT_SCHEMA;
 const SETTINGS = {
   permissions: {
     defaultMode: 'dontAsk', disableBypassPermissionsMode: 'disable',
@@ -79,13 +81,16 @@ export { customerReplyText };
 // A reply is stored only with its verification row (scripts/ticket-fix/reply.mjs,
 // migration 20260928150000), written in the same statement. The ticket keeps
 // its status: a reply never reopens a resolved or archived ticket (on 09-25/26
-// seven resolved tickets were reopened by "confirming" replies).
-export function replySQL(ticket, reply, { includeArchived = false, verification } = {}) {
+// seven resolved tickets were reopened by "confirming" replies). max: the
+// hourly runner's host-rendered reply carries one footer line per checklist
+// item (stage 3) and may be longer than a free-text reply.
+export function replySQL(ticket, reply, { includeArchived = false, verification, max = 4000 } = {}) {
+  if (!Number.isInteger(max) || max < 1 || max > 12000) throw Error('Invalid reply limit');
   if (!/^[a-f0-9-]{36}$/.test(ticket.id)) throw Error('Invalid ticket id');
   if (!/^[a-f0-9-]{36}$/.test(ticket.owner_id || '')) throw Error('Invalid ticket owner');
   if (typeof ticket.updated_at !== 'string' || !Number.isFinite(Date.parse(ticket.updated_at))) throw Error('Invalid ticket version');
   const approval = approvalSQL(ticket.approval);
-  if (typeof reply !== 'string' || !reply.trim() || reply.length > 4000 || reply.includes('\0')) throw Error('Invalid reply');
+  if (typeof reply !== 'string' || !reply.trim() || reply.length > max || reply.includes('\0')) throw Error('Invalid reply');
   // The row lock + version comparison prevents stale answers from stamping over a newer
   // message or withdrawn approval. Statements are sequential inside one transaction:
   // support_messages has an AFTER INSERT trigger that also updates the ticket row.
@@ -94,7 +99,7 @@ export function replySQL(ticket, reply, { includeArchived = false, verification 
   // reviewed support-job actor is installed; the body identifies automation and
   // must never present this profile ID as a human author. No actor is fabricated.
   const body = customerReplyText(reply);
-  if (!body.trim() || body.length > 4000) throw Error('Invalid reply');
+  if (!body.trim() || body.length > max) throw Error('Invalid reply');
   const labeledReply = `CredentialDOMD Support · Automated\n\n${body}`;
   checkVerification(verification, ticket.id, labeledReply);
   const awaiting = includeArchived ? AWAITING.replace('t.archived_at IS NULL AND ', '') : AWAITING;

@@ -39,7 +39,7 @@ test('publication SQL on PostgreSQL: verified replies, refused operator inserts,
 // nest: inside the gates' own sandbox this path skips (both at base and head).
 const shellSkip = () => skipBase() || (process.platform !== 'darwin' || !existsSync('/bin/zsh') ? 'the full runner path needs macOS and zsh'
   : !sandboxAvailable() ? 'the full runner path needs sandbox-exec, which cannot run inside another sandbox' : false);
-test('the real runner shell end to end: repair loop, parked skip, alerts, stale lock, verification, host-code hold, timeouts, reconcile, worktrees and refused changes', { skip: shellSkip(), timeout: 480000 }, () => {
+test('the real runner shell end to end: repair loop, parked skip, alerts, stale lock, verification, host-code hold, timeouts, reconcile, worktrees, refused changes, checklist and attachments', { skip: shellSkip(), timeout: 480000 }, () => {
   const result = run('scripts/ticket-agent-hostpath.test.py');
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /\d+ synthetic full-host checks passed/);
@@ -51,12 +51,18 @@ test('the real runner shell end to end: repair loop, parked skip, alerts, stale 
     'edits already present before the run do not hold it', 'a model killed by the alarm counts toward the breaker',
     'the third timeout parks the ticket and alerts the owner', 'reconcile reports it to the owner by id prefix',
     'reconcile finds every stored reply in a ledger and alerts nobody', 'the log names the broken rules, never the refused reply text',
-    'the verification records the run and that its prose is unbound',
+    'the verification records the run and that its claims are bound',
     // Stage 2: branch-only work, runner-owned gates, held merges.
-    'each ticket gets a reproduction session before its worker', 'every session ran in a worktree under the work directory, never the owner checkout',
+    'each ticket gets a checklist, then a reproduction session, before its worker', 'every session ran in a worktree under the work directory, never the owner checkout',
     'the owner checkout and origin main are untouched', 'a run with no change leaves no worktree and no branch',
     'a change with no reproduction is refused by the gates, but the reply is still recorded', 'the refused change counts toward the breaker and alerts the owner',
     'the gate failure went back to the worker once, as rule names', 'nothing reached origin main; the branch is kept for inspection',
     // Stage 2 review: sessions in the sandbox, credential on a pipe; an escape refused.
-    'every session ran inside the sandbox, with its credential on a pipe', 'tamper: the sandbox refused the write to the owner checkout and its git']) assert.ok(result.stdout.includes(`ok ${name}`), name);
+    'every session ran inside the sandbox, with its credential on a pipe', 'tamper: the sandbox refused the write to the owner checkout and its git',
+    // Stage 3: the checklist, the host-rendered reply, attachments delivered and proven read.
+    'the checklist extractor has no tools', 'the stored reply is rendered by the host with one footer line per checklist item', 'the frozen checklist is private host state',
+    'the case record keeps the host decision per item', 'attachment: downloaded by the host before any session, logged by ticket id and storage path only',
+    'attachment: the storage key never reaches the log', 'attachment: the extractor saw the screenshot inline', 'attachment: an answer with no Read of it was refused and the worker resumed',
+    "attachment: the session sandbox let this ticket's sessions read it", 'attachment: the confirmer judged the observation', 'attachment: the verification records it as reviewed',
+    'attachment: the downloaded files are gone after the run']) assert.ok(result.stdout.includes(`ok ${name}`), name);
 });

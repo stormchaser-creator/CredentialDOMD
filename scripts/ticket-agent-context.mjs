@@ -4,9 +4,10 @@ import { promises as fs, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
-import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames } from './ticket-fix/claims.mjs';
-import { prepareAgentReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
+import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentences } from './ticket-fix/claims.mjs';
+import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
   MIGRATION, EMAIL_NOT_SENT, RUN_COMMITTER } from './ticket-fix/reply.mjs';
+import { checklistErrors, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
 export const AWAITING = `t.status IN ('open', 'in_progress', 'resolved')
@@ -176,17 +177,20 @@ const strings = { type: 'array', maxItems: 100, items: { type: 'string' } };
 const cited = fields => ({ type: 'object', additionalProperties: false,
   properties: { ...fields, evidence_ids: strings }, required: [...Object.keys(fields), 'evidence_ids'] });
 const text = { type: 'string', minLength: 1, maxLength: 4000 };
-export const RESULT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
-  reply: text, summary: text, needs_owner_review: { type: 'boolean' },
-  assessment: { type: 'object', additionalProperties: false, properties: {
-    acceptance_criteria: { type: 'array', minItems: 1, maxItems: 30, items: cited({ requirement: text, state: { enum: ['open', 'claimed_fixed', 'customer_confirmed'] } }) },
-    answered_questions: { type: 'array', maxItems: 30, items: cited({ question: text, answer: text }) },
-    prior_fixes: { type: 'array', maxItems: 30, items: cited({ summary: text, state: { enum: ['claimed', 'customer_confirmed'] } }) },
-    questions: { type: 'array', maxItems: 3, items: cited({ question: text, why_needed: text, required_attachment_paths: strings }) },
-    follow_up: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { work: text, owner: { enum: ['support_worker', 'support_owner'] }, next_action: text }, required: ['work', 'owner', 'next_action'] } },
-    completed_follow_up: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { work: text, verification: text }, required: ['work', 'verification'] } },
-    verification: { type: 'object', additionalProperties: false, properties: { kind: { enum: ['not_run', 'source_review', 'verified_change'] }, reproduction: text, checks: text, release: text }, required: ['kind', 'reproduction', 'checks', 'release'] },
-  }, required: ['acceptance_criteria', 'answered_questions', 'prior_fixes', 'questions', 'follow_up', 'completed_follow_up', 'verification'] },
+const line = (max, min = 1) => ({ type: 'string', minLength: min, maxLength: max });
+const assessment = ({ criteria }) => ({ type: 'object', additionalProperties: false, properties: {
+  ...(criteria ? { acceptance_criteria: { type: 'array', minItems: 1, maxItems: 30, items: cited({ requirement: text, state: { enum: ['open', 'claimed_fixed', 'customer_confirmed'] } }) } } : {}),
+  answered_questions: { type: 'array', maxItems: 30, items: cited({ question: text, answer: text }) },
+  prior_fixes: { type: 'array', maxItems: 30, items: cited({ summary: text, state: { enum: ['claimed', 'customer_confirmed'] } }) },
+  questions: { type: 'array', maxItems: 3, items: cited({ question: text, why_needed: text, required_attachment_paths: strings }) },
+  follow_up: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { work: text, owner: { enum: ['support_worker', 'support_owner'] }, next_action: text }, required: ['work', 'owner', 'next_action'] } },
+  completed_follow_up: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { work: text, verification: text }, required: ['work', 'verification'] } },
+  verification: { type: 'object', additionalProperties: false, properties: { kind: { enum: ['not_run', 'source_review', 'verified_change'] }, reproduction: text, checks: text, release: text }, required: ['kind', 'reproduction', 'checks', 'release'] },
+}, required: [...(criteria ? ['acceptance_criteria'] : []), 'answered_questions', 'prior_fixes', 'questions', 'follow_up', 'completed_follow_up', 'verification'] });
+// The staged isolated runner's result: a free-text reply that may report no
+// result (ticket-agent-isolated.mjs and its prompt).
+export const LEGACY_RESULT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  reply: text, summary: text, needs_owner_review: { type: 'boolean' }, assessment: assessment({ criteria: true }),
   // Optional: set when the run changed code. The host writes the commit
   // (this subject, sanitised) and runs these tests itself (G2).
   change: { type: 'object', additionalProperties: false, properties: { subject: { type: 'string', minLength: 1, maxLength: 200 },
@@ -194,12 +198,44 @@ export const RESULT_SCHEMA = { type: 'object', additionalProperties: false, prop
       file: { type: 'string', minLength: 1, maxLength: 200 }, name: { type: 'string', minLength: 1, maxLength: 300 } }, required: ['file', 'name'] } } },
     required: ['subject', 'tests'] },
 }, required: ['reply', 'summary', 'needs_owner_review', 'assessment'] };
+// The hourly runner's result (stage 3, critique amendment A3): no free prose
+// reaches the customer. The reply is a fixed opening and closing plus claims,
+// each bound to a checklist item and to a test or a quoted source line; the
+// host verifies each claim, drops what it cannot verify, and renders the
+// footer from its own decision per item. checklist: one entry per frozen
+// item, the worker's proposal. attachment_observations: what each
+// attachment it read shows (the reviewer confirms each).
+const CLAIM = { type: 'object', additionalProperties: false, properties: {
+  ac_id: line(12), text: line(160),
+  evidence: { type: 'object', additionalProperties: false, properties: { test: line(400), file: line(300), line: { type: 'integer', minimum: 1 }, text: line(300) }, required: [] },
+}, required: ['ac_id', 'text', 'evidence'] };
+export const RESULT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  reply: { type: 'object', additionalProperties: false, properties: {
+    opening: { enum: ['update', 'answer', 'checked'] }, claims: { type: 'array', maxItems: 12, items: CLAIM }, closing: { enum: ['reply_here', 'follow_up', 'none'] } },
+    required: ['opening', 'claims', 'closing'] },
+  summary: text, needs_owner_review: { type: 'boolean' },
+  checklist: { type: 'array', minItems: 1, maxItems: MAX_ITEMS, items: { type: 'object', additionalProperties: false, properties: {
+    ac_id: line(12), state: { enum: ['done', 'partial', 'not_done', 'needs_owner'] }, remaining: line(REMAINING_MAX, 0),
+    tests: { type: 'array', maxItems: 10, items: line(400) } }, required: ['ac_id', 'state', 'remaining', 'tests'] } },
+  attachment_observations: { type: 'array', maxItems: 40, items: { type: 'object', additionalProperties: false, properties: {
+    attachment: line(12), observed: line(OBSERVED_MAX), supports: { type: 'array', maxItems: MAX_ITEMS, items: line(12) } }, required: ['attachment', 'observed', 'supports'] } },
+  assessment: assessment({ criteria: false }),
+  // Optional: set when the run changed code. The host writes the commit
+  // (this subject, sanitised) and runs these tests itself (G2); ac_id binds
+  // each test to the checklist item it pins.
+  change: { type: 'object', additionalProperties: false, properties: { subject: { type: 'string', minLength: 1, maxLength: 200 },
+    tests: { type: 'array', maxItems: 20, items: { type: 'object', additionalProperties: false, properties: {
+      file: { type: 'string', minLength: 1, maxLength: 200 }, name: { type: 'string', minLength: 1, maxLength: 300 }, ac_id: line(12) }, required: ['file', 'name', 'ac_id'] } } },
+    required: ['subject', 'tests'] },
+}, required: ['reply', 'summary', 'needs_owner_review', 'checklist', 'attachment_observations', 'assessment'] };
+export const isStructured = result => Boolean(result && typeof result === 'object' && result.reply && typeof result.reply === 'object' && !Array.isArray(result.reply));
 
 function checkShape(value, schema) {
   if (schema.const !== undefined && value !== schema.const) throw Error('Invalid fixed value');
   if (schema.enum && !schema.enum.includes(value)) throw Error('Invalid review state');
   if (schema.type === 'string' && (typeof value !== 'string' || value.includes('\0') || value.length < (schema.minLength ?? 0) || value.length > (schema.maxLength ?? 4000))) throw Error('Invalid review text');
   if (schema.type === 'boolean' && typeof value !== 'boolean') throw Error('Invalid review flag');
+  if (schema.type === 'integer' && (!Number.isInteger(value) || value < (schema.minimum ?? -Infinity))) throw Error('Invalid review number');
   if (schema.type === 'array') {
     if (!Array.isArray(value) || value.length < (schema.minItems ?? 0) || value.length > schema.maxItems) throw Error('Invalid review list');
     value.forEach(v => checkShape(v, schema.items));
@@ -210,6 +246,7 @@ function checkShape(value, schema) {
   }
 }
 const questionKey = value => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const COMPLETION_CLAIM = /\b(?:it(?:'s| is)|this is|the (?:issue|bug|problem) is|now|we(?:'ve| have)?|i(?:'ve| have)?)\s+(?:now\s+)?(?:fixed|shipped|deployed|live)\b|\bfixed and live\b/i;
 // What the host knows about this run's code change (ticket-fix/run.mjs):
 // 'pending' while the gates have not run, then none | held | refused |
 // merged | released | release_failed. A change that is not released cannot
@@ -234,21 +271,30 @@ export function checkVerifiedChange(result, { codeOutcome, release = null } = {}
 export function demoteUnreleased(result, codeOutcome) {
   if (!UNRELEASED_CHANGE.includes(codeOutcome)) return result;
   const copy = JSON.parse(JSON.stringify(result));
-  const claimed = { completed_follow_up: copy.assessment.completed_follow_up, claimed_fixed: copy.assessment.acceptance_criteria.filter(a => a.state === 'claimed_fixed').map(a => a.requirement) };
+  const criteria = copy.assessment.acceptance_criteria ?? [];
+  const claimed = { completed_follow_up: copy.assessment.completed_follow_up, claimed_fixed: criteria.filter(a => a.state === 'claimed_fixed').map(a => a.requirement) };
   copy.assessment.completed_follow_up = [];
-  for (const a of copy.assessment.acceptance_criteria) if (a.state === 'claimed_fixed') a.state = 'open';
+  for (const a of criteria) if (a.state === 'claimed_fixed') a.state = 'open';
   if (copy.assessment.verification.kind === 'verified_change') copy.assessment.verification.kind = 'source_review';
   copy.unreleased_claims = { code_outcome: codeOutcome, ...claimed };
   return copy;
 }
-export function validateAssessment(result, context, { isolated = false, codeOutcome = undefined, release = null } = {}) {
-  checkShape(result, RESULT_SCHEMA);
+// stage3: what the host knows before it decides (run.mjs): the frozen
+// checklist the worker saw, the tests bound to its items, and the attachments
+// with whether each was read. A structured result is refused without it.
+export class ResultRefused extends Error {
+  constructor(problems) { super(`Checklist, claims or attachments refused: ${problems.join('; ')}`.slice(0, 3000)); this.problems = problems; }
+}
+const bindingMap = value => new Map(Object.entries(value ?? {}).map(([id, tests]) => [id, new Set(tests)]));
+export function validateAssessment(result, context, { isolated = false, codeOutcome = undefined, release = null, stage3 = null } = {}) {
+  const structured = isStructured(result);
+  checkShape(result, structured ? RESULT_SCHEMA : LEGACY_RESULT_SCHEMA);
   if (Buffer.byteLength(JSON.stringify(result)) > 64000) throw Error('Case review exceeds bound');
   const review = result.assessment;
   const evidence = new Set(context.tickets.flatMap(t => [t.id, ...t.messages.map(m => m.id)]));
   const customerMessages = new Set(context.tickets.flatMap(t => t.messages)
     .filter(m => m.author_id === context.owner_id && m.is_admin_reply === false).map(m => m.id));
-  for (const item of [...review.acceptance_criteria, ...review.answered_questions, ...review.prior_fixes, ...review.questions]) {
+  for (const item of [...(review.acceptance_criteria ?? []), ...review.answered_questions, ...review.prior_fixes, ...review.questions]) {
     // A git revision is a release detail, never customer evidence. The model cites one when a fix
     // exists only as a commit. Drop it when real evidence remains; an item left with no real
     // evidence still fails below, so no claim ever stands on a revision alone.
@@ -264,16 +310,37 @@ export function validateAssessment(result, context, { isolated = false, codeOutc
     if (unknown.length) throw Error(`Review cites unavailable evidence: ${unknown.slice(0, 3).map(ref => JSON.stringify(String(ref).slice(0, 48))).join(', ')} is not a ticket or message id in the supplied context`);
     if (item.state === 'customer_confirmed' && !item.evidence_ids.some(ref => customerMessages.has(ref))) throw Error('Customer confirmation needs a customer message, not a legacy support claim');
   }
-  // Fixed reply rules (G5 phase 0) on the text the customer would see, and no
-  // sentence reporting a result: nothing binds this prose to evidence yet. A
-  // continuation's reply is an internal note and is never published.
-  if (context.run_mode !== 'continuation') {
+  if (structured) {
+    // Stage 3: every frozen item once, claims bound to items and evidence,
+    // attachments read and observed. The customer text is rendered by the
+    // host; each piece of it the model wrote passes the fixed rules here.
+    if (!stage3?.checklist?.items?.length) throw Error('A structured result needs the frozen checklist (stage 3); nothing was recorded');
+    const problems = checklistErrors(result, { items: stage3.worker_items ?? stage3.checklist.items, bindings: bindingMap(stage3.bindings),
+      attachments: stage3.attachments ?? [], ownerTicket: context.approval?.from_admin === true });
+    review.questions.forEach((q, i) => {
+      const value = q.question.trim();
+      if (!value.endsWith('?') || sentences(value).length !== 1 || value.length > 300) problems.push(`assessment.questions[${i}]: one question of at most 300 characters, ending with "?"`);
+      const broken = checkFixedRules(value, { claims: false });
+      if (broken.length) problems.push(`assessment.questions[${i}]: ${ruleNames(broken)}`);
+      if (COMPLETION_CLAIM.test(value)) problems.push(`assessment.questions[${i}]: a question may not report a result`);
+    });
+    // A decision waiting on CredentialDOMD reaches the owner as durable work.
+    if (context.approval?.from_admin !== true && result.checklist.some(e => e.state === 'needs_owner') && !review.follow_up.some(f => f.owner === 'support_owner')) {
+      problems.push('checklist: an item waiting on a decision needs a support_owner follow-up saying what the owner must decide');
+    }
+    if (problems.length) throw new ResultRefused(problems);
+  } else if (context.run_mode !== 'continuation') {
+    // Fixed reply rules (G5 phase 0) on the text the customer would see, and
+    // no sentence reporting a result: nothing binds this prose to evidence. A
+    // continuation's reply is an internal note and is never published.
     const broken = checkFixedRules(customerReplyText(result.reply), { claims: true });
     if (broken.length) throw new ReplyRuleError(broken);
   }
   if (!context.history_complete && review.questions.length) throw Error('Read missing history before asking the customer');
   const answered = new Set([...review.answered_questions, ...context.prior_reviews.flatMap(r => [...(r.assessment?.answered_questions || []), ...(r.remembered_answers || [])])].map(q => questionKey(q.question)));
-  const replyQuestions = [...result.reply.matchAll(/(?:^|[.!\n])\s*([^?\n]+\?)(?=\s|$)/g)].map(m => questionKey(m[1]));
+  // The legacy free text is parsed for questions; the structured reply's
+  // questions are exactly the assessment's (the host renders them).
+  const replyQuestions = structured ? [] : [...result.reply.matchAll(/(?:^|[.!\n])\s*([^?\n]+\?)(?=\s|$)/g)].map(m => questionKey(m[1]));
   for (const question of replyQuestions) {
     if ([...answered].some(known => known && question.includes(known))) throw Error('Reply repeats an answered question');
     if (!review.questions.some(q => questionKey(q.question) === question)) throw Error('Customer question is missing from the review');
@@ -293,10 +360,10 @@ export function validateAssessment(result, context, { isolated = false, codeOutc
     if (review.follow_up.some(f => questionKey(f.work) === questionKey(completed.work))) throw Error('Work cannot be both pending and complete');
     if (review.verification.kind === 'not_run') throw Error('Completed work requires recorded verification');
   }
-  if ((review.acceptance_criteria.some(a => a.state === 'open') || !context.history_complete) && !review.questions.length && !review.follow_up.length) throw Error('Unfinished work requires follow-through');
+  const open = structured ? result.checklist.some(e => e.state !== 'done') : review.acceptance_criteria.some(a => a.state === 'open');
+  if ((open || !context.history_complete) && !review.questions.length && !review.follow_up.length) throw Error('Unfinished work requires follow-through');
   if (isolated && review.verification.kind === 'verified_change') throw Error('Isolated source review cannot claim runtime verification');
-  const completionClaim = /\b(?:it(?:'s| is)|this is|the (?:issue|bug|problem) is|now|we(?:'ve| have)?|i(?:'ve| have)?)\s+(?:now\s+)?(?:fixed|shipped|deployed|live)\b|\bfixed and live\b/i;
-  if (review.verification.kind !== 'verified_change' && completionClaim.test(result.reply)) throw Error('Completion claim lacks runtime/release verification');
+  if (!structured && review.verification.kind !== 'verified_change' && COMPLETION_CLAIM.test(result.reply)) throw Error('Completion claim lacks runtime/release verification');
   if (review.verification.kind === 'verified_change' &&
       (['reproduction', 'checks', 'release'].some(k => /not (?:run|tested|deployed|verified)|pending|unverified/i.test(review.verification[k])) ||
        !/\b[a-f0-9]{7,40}\b/i.test(review.verification.release))) throw Error('Verified change needs reproduction, checks and release revision');
@@ -406,9 +473,17 @@ export async function loadQueuedContext(query, item, directory, options = {}) {
 export function assertReplyMode(context) {
   if (context.run_mode !== 'reply') throw Error('Action-only continuation cannot publish a customer reply');
 }
-export async function saveReview(directory, context, given, sourceRevision, { now = Date.now(), codeOutcome = undefined, release = null } = {}) {
-  validateAssessment(given, context, { codeOutcome, release });
-  const result = demoteUnreleased(given, codeOutcome);
+export async function saveReview(directory, context, given, sourceRevision, { now = Date.now(), codeOutcome = undefined, release = null, stage3 = null } = {}) {
+  validateAssessment(given, context, { codeOutcome, release, stage3 });
+  let result = demoteUnreleased(given, codeOutcome);
+  // Work the host itself knows is left (stage 3): an attachment it could not
+  // download, an item whose change waits for release. Never dropped by a
+  // summary that omits it.
+  const hostFollowUp = Array.isArray(stage3?.final?.follow_up) ? stage3.final.follow_up : [];
+  if (hostFollowUp.length) {
+    const own = result.assessment.follow_up;
+    result = { ...result, assessment: { ...result.assessment, follow_up: [...own, ...hostFollowUp.filter(h => !own.some(f => questionKey(f.work) === questionKey(h.work)))] } };
+  }
   await ensureState(directory);
   const filename = path.join(directory, `${id(context.target_id)}.json`);
   let previous;
@@ -439,6 +514,8 @@ export async function saveReview(directory, context, given, sourceRevision, { no
     history_complete: context.history_complete, limitations: context.limitations,
     // A saved draft is evidence of follow-through, never proof of delivery or deployment.
     publication: 'not_confirmed', remembered_answers: [...answers.values()], follow_up_history: [...followUps.values()], ...result,
+    // The host's decision per checklist item (stage 3), not the model's.
+    ...(stage3?.final ? { checklist_sha256: stage3.checklist.items_sha256, checklist_states: stage3.final.items, claims_checked: stage3.final.claims } : {}),
     needs_owner_review: ownerPending };
   const serialized = JSON.stringify(record, null, 2);
   if (Buffer.byteLength(serialized) > 100000) throw Error('Case memory needs review before compaction; nothing discarded');
@@ -451,29 +528,44 @@ export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 // feeds a failure here back to the model (up to twice) before it counts.
 // {{FIX_COMMIT}} is taken only from the one commit this run made (committer
 // identity) that touches a file cited in verification.checks.
-export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild, codeOutcome = undefined } = {}) {
-  validateAssessment(result, context, { codeOutcome, release });
+// Stage 3: a structured result is checked here before the host has decided
+// anything (stage3 without final: nothing to sign yet, null is returned); at
+// record time stage3.final holds the host's decision per item and per claim,
+// and the reply is rendered from it. requireStructured: the hourly runner
+// accepts no free-text reply.
+export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild, codeOutcome = undefined,
+  stage3 = null, requireStructured = false } = {}) {
+  if (requireStructured && !isStructured(result)) throw Error('Structured reply required: reply is {opening, claims, closing}; the host renders the rest');
+  validateAssessment(result, context, { codeOutcome, release, stage3 });
   if (context.run_mode === 'continuation') return null;
+  if (isStructured(result)) {
+    if (!stage3?.final) return null;
+    if (stage3.ticket_id !== context.target_id) throw Error('The host decision is for another ticket');
+    return prepareRenderedReply({ result, ticketId: context.target_id, ownerTicket: context.approval?.from_admin === true, stage3, runId, preHead, runStarted });
+  }
   return prepareAgentReply({ reply: result.reply, ticketId: context.target_id, git: gitRunner(repo), preHead, runStarted, runCommitter, runId, release,
     citedFiles: filesCitedIn(result.assessment.verification.checks), verificationKind: result.assessment.verification.kind,
     ...(fetchBuild ? { fetchBuild } : {}) });
 }
-export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild, codeOutcome = undefined } = {}) {
-  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild, codeOutcome });
+export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild, codeOutcome = undefined,
+  stage3 = null, requireStructured = false } = {}) {
+  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild, codeOutcome, stage3, requireStructured });
   if (context.run_mode === 'continuation') {
     const rows = await query(continuationSQL(context));
     if (rows.length !== 1 || rows[0].id !== context.target_id || rows[0].user_id !== context.owner_id || rows[0].updated_at !== context.target_version) throw Error('Continuation changed or approval withdrawn; no result applied');
-    const record = await saveReview(directory, context, result, sourceRevision, { codeOutcome, release });
+    const record = await saveReview(directory, context, result, sourceRevision, { codeOutcome, release, stage3 });
     return { kind: 'continuation_saved', continuation_state: record.continuation.state };
   }
+  if (!prepared) throw Error('Nothing to publish: the host has not decided the checklist');
   assertReplyMode(context);
   // Same path as post-reply.mjs: a verification row bound to the exact body,
   // signed with the vault key, written in the same statement as the reply.
   const secret = await readVerificationKey(query);
   const verification = signPreparedReply(prepared, { ticketId: context.target_id, secret });
-  await saveReview(directory, context, result, sourceRevision, { codeOutcome, release });
+  await saveReview(directory, context, result, sourceRevision, { codeOutcome, release, stage3 });
   const { replySQL } = await import('./ticket-agent-isolated.mjs');
-  const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version, approval: context.approval }, prepared.text, { includeArchived, verification }));
+  const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version, approval: context.approval }, prepared.text,
+    { includeArchived, verification, ...(isStructured(result) ? { max: AGENT_REPLY_MAX } : {}) }));
   if (rows.length !== 1) return { kind: 'reply_withheld', verification_id: null };
   // The runner's own record of the reply: reconcile.mjs reports any stored
   // verification that neither this ledger nor post-reply's has.
@@ -493,7 +585,31 @@ const runFacts = () => ({
   runId: /^[0-9a-f]{16}$/.test(process.env.TICKET_RUN_ID || '') ? process.env.TICKET_RUN_ID : null,
   release: releaseRecord(process.env.TICKET_RELEASE_FILE),
   codeOutcome: readCodeOutcome(process.env.TICKET_CODE_OUTCOME),
+  stage3: readStage3(process.env.TICKET_STAGE3_FILE),
 });
+// The host's stage 3 record for this run (ticket-fix/run.mjs writes it in the
+// run's private directory, which no session can write): the frozen checklist,
+// the attachments and whether each was read, and the host's decision per item
+// and per claim. No record: a structured reply cannot be recorded.
+export function readStage3(file) {
+  if (!file) return null;
+  if (!path.isAbsolute(file)) throw Error('TICKET_STAGE3_FILE must be an absolute path');
+  const stat = statSync(file);
+  if (!stat.isFile() || stat.uid !== process.getuid() || (stat.mode & 0o077) || stat.size > 4 * 1024 * 1024) throw Error('The stage 3 record must be an owner-only file');
+  const record = JSON.parse(readFileSync(file, 'utf8'));
+  if (record?.version !== 1 || !UUID.test(record.ticket_id || '') || !Array.isArray(record.checklist?.items) || !record.final || !Array.isArray(record.final.items)) throw Error('The stage 3 record is unusable');
+  return record;
+}
+// What the host proved about each attachment, onto the context the model's
+// questions are checked against ("reviewed" only on a proven Read).
+export function applyAttachmentAccess(context, stage3) {
+  if (!stage3?.attachments) return context;
+  for (const a of context.attachments) {
+    const known = stage3.attachments.find(x => x.storage_path === a.storage_path && x.ticket_id === a.ticket_id);
+    if (known) a.access = known.access;
+  }
+  return context;
+}
 // The run's code outcome from run.mjs (ticket-agent.sh passes it). Unset:
 // the caller is not the runner (stage 1 behaviour).
 function readCodeOutcome(value) {
@@ -546,9 +662,20 @@ export async function readRunnerContext(filename, key) {
 // Logs get rule names and fixed message heads, never reply text.
 export function logSafe(error) {
   if (error?.violations) return `Reply breaks fixed reply rules: ${ruleNames(error.violations)}`;
+  if (Array.isArray(error?.problems)) return `Checklist, claims or attachments refused: ${refusalHead(error)}`;
   return String(error?.message ?? error);
 }
-export const refusalHead = error => (error?.violations ? ruleNames(error.violations) : String(error?.message ?? error).split(':')[0].slice(0, 160));
+// A stage 3 refusal: each problem's field and the rule names in it (ids,
+// field and rule names only; the text the model wrote stays out of the log).
+const problemHead = problem => {
+  const at = problem.indexOf(': ');
+  const where = at < 0 ? problem : problem.slice(0, at);
+  const rules = [...new Set((at < 0 ? '' : problem.slice(at + 2)).match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? [])];
+  return (rules.length ? `${where} ${rules.join(', ')}` : where).replace(/[^\w .,:\-[\]()/]/g, '').slice(0, 120);
+};
+export const refusalHead = error => (error?.violations ? ruleNames(error.violations)
+  : Array.isArray(error?.problems) ? [...new Set(error.problems.map(problemHead))].join('; ').slice(0, 400)
+    : String(error?.message ?? error).split(':')[0].slice(0, 160));
 export async function databaseQuery(query) {
   const token = process.env.TICKET_DATABASE_TOKEN;
   if (!token) throw Error('Existing runner database credential is required');
@@ -607,8 +734,13 @@ async function main(args) {
     const output = JSON.parse(await fs.readFile(filename, 'utf8'));
     if (output.is_error) throw Error('Model run failed; no reply sent');
     const facts = runFacts();
-    const result = validateAssessment(output.structured_output, context, { codeOutcome: facts.codeOutcome, release: facts.release });
-    const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true, repo: repository(), ...facts });
+    // The hourly runner records only a structured result with the host's
+    // stage 3 decision for this very ticket.
+    if (!isStructured(output.structured_output)) throw Error('Structured reply required; nothing was recorded');
+    if (!facts.stage3 || facts.stage3.ticket_id !== context.target_id) throw Error('No stage 3 record for this ticket; nothing was recorded');
+    applyAttachmentAccess(context, facts.stage3);
+    const result = validateAssessment(output.structured_output, context, { codeOutcome: facts.codeOutcome, release: facts.release, stage3: facts.stage3 });
+    const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true, repo: repository(), ...facts, requireStructured: true });
     console.log(JSON.stringify(status)); return;
   }
   throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');

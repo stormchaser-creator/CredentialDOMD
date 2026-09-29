@@ -22,7 +22,10 @@ test('AUTO_MERGE off: the change is committed, gated, reviewed and HELD with one
     assert.equal(autoMergeEnabled(p.work), false, 'off by default');
     r = await runStub(p, standardScript());
     assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
-    assert.deepEqual(r.calls.map(c => c.role), ['repro', 'worker', 'review'], 'the reproduction comes first');
+    assert.deepEqual(r.calls.map(c => c.role), ['extract', 'repro', 'worker', 'review'], 'the checklist, then the reproduction, before any fix');
+    // Stage 3: the item the held change fixes is "in progress", not done.
+    assert.deepEqual(r.stage3.final.items.map(f => [f.id, f.state]), [['AC-1', 'in_progress']]);
+    assert.equal(r.facts.stage3_file, path.join(r.runDir, `${TICKET}-stage3.json`));
     const run = await readRun(p.work, NAME);
     assert.equal(run.status, 'held');
     assert.equal(run.hold_reason, 'AUTO_MERGE is off');
@@ -91,6 +94,10 @@ test('AUTO_MERGE on: the runner merges a clean change, runs the release check an
     assert.equal(p.originHead(), run.fix_commit);
     assert.equal(r.facts.code_outcome, 'released');
     assert.equal(r.facts.release_file, path.join(p.work, 'runs', NAME, 'release.json'));
+    // Released and verified, its test green in the gates, the reviewer found it met: done.
+    assert.deepEqual(r.stage3.final.items.map(f => [f.id, f.state]), [['AC-1', 'done']]);
+    assert.deepEqual(r.stage3.final.claims.map(c => [c.ac_id, c.verified, c.source]), [['AC-1', true, 'this_change']]);
+    assert.deepEqual(run.bindings_met, { 'AC-1': ['tests/join.test.mjs::lines are joined with a line break'] }, 'a later run may cite the released test');
     await finish({ runFile: path.join(r.runDir, `${TICKET}-run.json`), work: p.work });
     assert.equal(existsSync(run.worktree), false, 'the worktree goes once the reply is recorded');
   } finally { r?.cleanup(); p.cleanup(); }
@@ -136,7 +143,8 @@ test('no change: the worktree and branch go, and the reply is recorded against t
     assert.equal(run.status, 'no_code');
     assert.equal(existsSync(run.worktree), false);
     assert.equal(sh(p.repo, ['branch', '--list', run.branch]), '');
-    assert.deepEqual(r.calls.map(c => c.role), ['repro', 'worker']);
+    assert.deepEqual(r.calls.map(c => c.role), ['extract', 'repro', 'worker']);
+    assert.deepEqual(r.stage3.final.items.map(f => [f.id, f.state]), [['AC-1', 'not_done']]);
   } finally { r?.cleanup(); p.cleanup(); }
 });
 
@@ -164,7 +172,8 @@ test('a product change with no reproduction recorded on base is refused by the g
   const p = project();
   let r;
   try {
-    r = await runStub(p, standardScript({ repro: () => ({ kind: 'no_code', reason: 'Synthetic.', tests: [] }) }));
+    r = await runStub(p, standardScript({ repro: () => ({ kind: 'no_code', reason: 'Synthetic.', tests: [] }),
+      worker: opts => { p.write(opts.cwd, FIX_FILES); return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } }); } }));
     assert.equal(r.facts.code_outcome, 'refused');
     assert.ok((await readRun(p.work, NAME)).gates_failures.includes('reproduction_recorded'));
   } finally { r?.cleanup(); p.cleanup(); }
@@ -182,7 +191,7 @@ test('a reproduction that does not fail on base is sent back once with the host\
     assert.equal((await readRun(p.work, NAME)).repro.recorded, true);
   } finally { r?.cleanup(); p.cleanup(); }
 });
-const REPRO_RESULT_COPY = { kind: 'bug', reason: 'Synthetic.', tests: [{ file: 'tests/join.test.mjs', name: 'lines are joined with a line break', requirement: 'Line breaks' }] };
+const REPRO_RESULT_COPY = { kind: 'bug', reason: 'Synthetic.', tests: [{ file: 'tests/join.test.mjs', name: 'lines are joined with a line break', requirement: 'Line breaks', ac_id: 'AC-1' }] };
 
 test('a review that asks for changes resumes the worker once with its findings, then reviews again', async () => {
   const p = project();
@@ -202,11 +211,11 @@ test('the reply checks still run: a refused reply is repaired twice, then the ru
   const p = project();
   let r, s;
   try {
-    r = await runStub(p, standardScript({ worker: () => workerResult({ reply: 'This was fixed in build c237149 and works on your iPhone.' }) }));
+    r = await runStub(p, standardScript({ worker: () => workerResult({ claims: [{ ac_id: 'AC-1', text: 'This was fixed in build c237149 and works on your iPhone.', evidence: { test: 'tests/format.test.mjs::the title is set' } }] }) }));
     assert.equal(r.code, EXIT.refused);
     assert.equal(r.calls.filter(c => c.role === 'worker' && c.resume).length, 2);
     assert.equal(r.logs.filter(l => l.startsWith(`REPAIR — ${TICKET} attempt`)).length, 2);
-    assert.ok(r.logs.some(l => l.startsWith(`REFUSED — ${TICKET}: commit_or_build_id`)));
+    assert.ok(r.logs.some(l => l.startsWith(`REFUSED — ${TICKET}: reply.claims[0] commit_or_build_id, device_not_tested`)), r.logs.join('\n'));
     assert.ok(!r.logs.join('\n').includes('c237149'), 'rule names only in the log');
     s = await runStub(p, standardScript({ worker: () => ({ fail: 'timed out after 2 s', timedOut: true }) }), { runId: 'fedcba9876543210' });
     assert.equal(s.code, EXIT.model);
@@ -219,8 +228,9 @@ test('while a change for the ticket is held, a new run may answer but not make a
   try {
     r = await runStub(p, standardScript());
     assert.equal((await readRun(p.work, NAME)).status, 'held');
-    s = await runStub(p, standardScript(), { runId: 'fedcba9876543210' });
-    assert.deepEqual(s.calls.map(c => c.role), ['worker'], 'no reproduction for a ticket with a held change');
+    // The held change is not on main: this run cannot call AC-1 done.
+    s = await runStub(p, standardScript({ worker: opts => { p.write(opts.cwd, FIX_FILES); return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } }); } }), { runId: 'fedcba9876543210' });
+    assert.deepEqual(s.calls.map(c => c.role), ['worker'], 'no checklist extraction (nothing new) and no reproduction for a ticket with a held change');
     assert.match(s.calls[0].input, /already held for the owner/);
     assert.equal(s.facts.code_outcome, 'refused');
   } finally { r?.cleanup(); s?.cleanup(); p.cleanup(); }

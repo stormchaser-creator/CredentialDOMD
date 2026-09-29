@@ -253,7 +253,7 @@ test('--load and --record-and-reply run only inside the runner: a hand-made cont
     writeFileSync(`${ctx}.mac`, contextMac(randomBytes(32).toString('hex'), context));
     assert.match(node(['--record-and-reply', ctx, out, state.dir], { TICKET_RUN_KEY: key }).stderr, /was not loaded by this runner run/, 'signed with another key');
     writeFileSync(`${ctx}.mac`, contextMac(key, context));
-    assert.match(node(['--record-and-reply', ctx, out, state.dir], { TICKET_RUN_KEY: key }).stderr, /Existing runner database credential|unverified_claim|Invalid/, 'past the key check');
+    assert.match(node(['--record-and-reply', ctx, out, state.dir], { TICKET_RUN_KEY: key }).stderr, /Structured reply required; nothing was recorded/, 'past the key check, and a free-text reply is refused');
     assert.equal(logSafe(new ReplyRuleError([{ rule: 'device_not_tested', excerpt: 'Works on your iPhone.' }])), 'Reply breaks fixed reply rules: device_not_tested');
   } finally { state.cleanup(); }
 });
@@ -354,26 +354,34 @@ test('the migrations state the rollout order that keeps the live runner working,
 
 test('the prompt tells the model the rules the host now enforces', () => {
   const prompt = read('scripts/ticket-agent-prompt.md');
-  assert.match(prompt, /The reply reports no results/);
-  assert.match(prompt, /touches a file you cite in\s+`verification.checks`/);
   // Stage 2: branch only; the host commits, gates, reviews and holds merges.
   assert.match(prompt, /Do NOT commit, push, deploy or poll `version.json`/);
+  assert.match(prompt, /You never push, never deploy, never poll `version.json` or the CDN/);
   assert.match(prompt, /The only\s+commands allowed are `npm test`, `node --test tests\/<file>` and `npm run build:site`/);
   assert.match(prompt, /Those files are frozen/);
   assert.doesNotMatch(prompt, /push to main/i);
   assert.doesNotMatch(prompt, /Wait for the CDN/);
-  for (const text of ['scripts/ticket-fix/repro-prompt.md', 'scripts/ticket-fix/review-prompt.md']) {
+  for (const text of ['scripts/ticket-agent-prompt.md', 'scripts/ticket-fix/repro-prompt.md', 'scripts/ticket-fix/review-prompt.md', 'scripts/ticket-fix/extract-prompt.md', 'scripts/ticket-fix/confirm-prompt.md']) {
     assert.ok(!read(text).includes('\u2014'), `${text}: no em dashes`);
   }
   assert.match(prompt, /Never edit, create or delete anything under `scripts\/ticket-fix\/`/);
   assert.doesNotMatch(prompt, /Cite the fix commit/);
-  assert.match(prompt, /\{\{FIX_COMMIT\}\}/);
-  assert.match(prompt, /\{\{BUILD\}\}/);
+  // Stage 3: no ids at all; structured claims with evidence; the footer and
+  // every item's state are the host's; attachments are read, and proven read.
+  assert.doesNotMatch(prompt, /\{\{FIX_COMMIT\}\}|\{\{BUILD\}\}/);
+  assert.match(prompt, /No commit, build or ticket ids/);
+  assert.match(prompt, /Each claim is `\{ac_id, text, evidence\}`/);
+  assert.match(prompt, /"Where each part stands:", one line per checklist item, written by the host/);
+  assert.match(prompt, /The host decides the state the customer sees/);
+  assert.match(prompt, /Give exactly one entry per frozen item/);
+  assert.match(prompt, /The host watches your Read calls/);
+  assert.match(prompt, /Never ask the customer to send it again/);
   assert.match(prompt, /must say it was not tested there/);
   assert.match(prompt, /Never write "HIPAA" or "compliant"/);
   assert.match(prompt, /resumes\s+this session with the exact reason, at most twice/);
   assert.match(prompt, /never reopens a resolved or archived\s+ticket/);
   assert.doesNotMatch(prompt, /current open-status reply behavior/);
+  assert.doesNotMatch(prompt, /The reply reports no results/, 'the free-text reply rules are gone');
 });
 
 test('the owner notifier is shared, passes the message as an argument, and signup-notify uses it', () => {

@@ -31,6 +31,30 @@
 //                 node scripts/ticket-fix/merge.mjs <run-id>
 //  10. G7         after a merge, the release check (merge.mjs)
 //
+// Stage 3 (G1, G6, A3), around those steps:
+//   0. attachments  the runner downloaded every attachment on the ticket
+//                   before this process started (attachments.mjs fetch); the
+//                   host's manifest names each local file, and sessions of
+//                   this ticket may Read that directory and nothing next to it
+//   1b. checklist   an extraction session (claude-opus-5-5, no tools, the
+//                   screenshots inline) turns every customer message no
+//                   extraction has read into items; the host checks each quote
+//                   and freezes them (checklist.mjs); a second failure is
+//                   exit 7 with no reproduction or worker run
+//   2-3.            the reproduction and the fixer see the checklist and the
+//                   attachment paths; each test they write names the item it
+//                   pins; "reviewed" is set only by a successful Read in the
+//                   session's own tool events, and the fixer's result is
+//                   refused until it read every attachment on the ticket and
+//                   said what each shows
+//   8.              the reviewer rules per item, confirms each observation and
+//                   judges the non-asks; with no change to review, a read-only
+//                   confirm session does the last two
+//  11. decision     the host verifies every claim in the reply (stage3.mjs),
+//                   decides each item's state from its own artifacts
+//                   (checklist.mjs finalStates) and writes <run dir>/<ticket>-
+//                   stage3.json, which the reply step renders the reply from
+//
 // After every session and every gate run the host checks what a sandbox
 // escape would change outside the worktree: the shared git hooks and config,
 // the worktree's own .git link, and origin main (stage 2 review, finding 12).
@@ -41,8 +65,9 @@
 // Exit: 0 the result is ready to record; 2 the reply was still refused after
 // two repairs; 3 the worker session failed or timed out; 4 the run changed
 // the runner's own code; 5 the run changed files outside its scope; 6 the
-// run changed git state outside its worktree; 1 a host step failed. Log
-// lines carry ids, rule and check names, never ticket text.
+// run changed git state outside its worktree; 7 the checklist could not be
+// extracted; 1 a host step failed. Log lines carry ids, rule and check
+// names and attachment storage paths, never ticket text.
 import { createHash } from 'node:crypto';
 import { promises as fs, existsSync, readFileSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -50,12 +75,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareResult, refusalHead, RESULT_SCHEMA } from '../ticket-agent-context.mjs';
+import { readManifest, reviewedIds, modelView, selectAttachments } from './attachments.mjs';
+import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtraction, confirmPrompt, extendChecklist, writeChecklist, applyAskVerdicts,
+  coverageHints, finalStates, CHECKLIST_SCHEMA } from './checklist.mjs';
+import { runBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
 import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
   checkWorktreeLink, remoteMain, agentCommitsOnMain } from './worktree.mjs';
-import { sessionSettings, reviewSettings, runSession, gatesEnv, installSignalHandlers, removeSessionTemps } from './worker.mjs';
+import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps } from './worker.mjs';
 import { recordReproduction, runTestGates, suiteBaseline, gateFailures, validTestRef, readBaseline, DEFAULT_COMMANDS } from './gates/tests.mjs';
 import { protectedReport, blastRadius } from './gates/owner-rules.mjs';
-import { reviewDiff, reviseInput, REVIEW_SCHEMA, EVIDENCE_MARKER } from './review.mjs';
+import { reviewDiff, reviseInput, confirmChecklist, REVIEW_SCHEMA, CONFIRM_SCHEMA, EVIDENCE_MARKER } from './review.mjs';
 import { mergeRun, autoMergeEnabled, writeRun, writeRunFile, readRun, runDirectory, checkRunPaths, credentialValues, RUN_NAME, AUTO_MERGE_FLAG } from './merge.mjs';
 import { raise } from './alert.mjs';
 import { sandboxAvailable } from './sandbox.mjs';
@@ -64,10 +93,12 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const WORKER_PROMPT = path.join(HERE, '..', 'ticket-agent-prompt.md');
 export const REPRO_PROMPT = path.join(HERE, 'repro-prompt.md');
 export const REVIEW_PROMPT_FILE = path.join(HERE, 'review-prompt.md');
+export const EXTRACT_PROMPT = path.join(HERE, 'extract-prompt.md');
+export const CONFIRM_PROMPT = path.join(HERE, 'confirm-prompt.md');
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const SHA = /^[0-9a-f]{40}$/;
 const sha256 = text => createHash('sha256').update(text).digest('hex');
-export const EXIT = Object.freeze({ ok: 0, host: 1, refused: 2, model: 3, runnerCode: 4, scope: 5, hostState: 6 });
+export const EXIT = Object.freeze({ ok: 0, host: 1, refused: 2, model: 3, runnerCode: 4, scope: 5, hostState: 6, checklist: 7 });
 export const CASE_STATE = path.join(os.homedir(), 'Library', 'Application Support', 'CredentialDOMD', 'ticket-context');
 export const FIX_STATE = path.join(os.homedir(), 'Library', 'Application Support', 'CredentialDOMD', 'ticket-fix');
 
@@ -75,27 +106,32 @@ export const FIX_STATE = path.join(os.homedir(), 'Library', 'Application Support
 // credential stores): the runner's state, other runs' records, the base-count
 // cache and the run directory (other tickets' evidence), and the AUTO_MERGE
 // flag. profileDir holds the profiles and is written by the host only.
-export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state = [], runDir = null, profileDir }) {
+// attachments: this ticket's attachment directory (stage 3): its root is
+// denied like the run directory and only this directory re-opened, read only,
+// for model sessions (the gates never read it).
+export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state = [], runDir = null, profileDir, attachments = null }) {
   if (!enabled) return null;
   if (!sandboxAvailable()) throw Error('The ticket runner needs /usr/bin/sandbox-exec (macOS) to run model sessions and gates');
-  return { home, denyRead: [...state.filter(Boolean), path.join(work, 'runs'), path.join(work, 'baseline'), ...(runDir ? [runDir] : [])],
-    denyFiles: [path.join(work, AUTO_MERGE_FLAG)], profileDir };
+  return { home, denyRead: [...state.filter(Boolean), path.join(work, 'runs'), path.join(work, 'baseline'), ...(runDir ? [runDir] : []), ...(attachments ? [path.dirname(attachments)] : [])],
+    denyFiles: [path.join(work, AUTO_MERGE_FLAG)], profileDir, readable: attachments ? [attachments] : [] };
 }
 // Raised when the host sees git state outside the worktree change (exit 6).
 export class HostStateChanged extends Error {}
 
 const str = (max, min = 1) => ({ type: 'string', minLength: min, maxLength: max });
+// Each reproduction test names the checklist item it pins (stage 3).
 export const REPRO_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   kind: { enum: ['bug', 'change', 'no_code'] }, reason: str(1500),
   tests: { type: 'array', maxItems: 10, items: { type: 'object', additionalProperties: false,
-    properties: { file: str(200), name: str(300), requirement: str(300) }, required: ['file', 'name', 'requirement'] } },
+    properties: { file: str(200), name: str(300), requirement: str(300), ac_id: str(12) }, required: ['file', 'name', 'requirement', 'ac_id'] } },
 }, required: ['kind', 'reason', 'tests'] };
-export function checkRepro(value) {
+export function checkRepro(value, ids = null) {
   const ok = value && typeof value === 'object' && !Array.isArray(value) && ['bug', 'change', 'no_code'].includes(value.kind) &&
     typeof value.reason === 'string' && Array.isArray(value.tests) && value.tests.length <= 10 &&
     Object.keys(value).every(k => ['kind', 'reason', 'tests'].includes(k)) &&
-    value.tests.every(t => t && typeof t.requirement === 'string' && validTestRef(t) && Object.keys(t).every(k => ['file', 'name', 'requirement'].includes(k)));
+    value.tests.every(t => t && typeof t.requirement === 'string' && validTestRef(t) && Object.keys(t).every(k => ['file', 'name', 'requirement', 'ac_id'].includes(k)));
   if (!ok) throw Error('Unusable reproduction result');
+  if (ids && value.tests.some(t => !ids.includes(t.ac_id))) throw Error('A reproduction test names no checklist item');
   if (value.kind !== 'no_code' && !value.tests.length) throw Error('A bug or change needs at least one reproduction test');
   return value;
 }
@@ -132,21 +168,33 @@ export async function baselineFor({ repo, work, base, env, commands = DEFAULT_CO
   } finally { await scratch.remove(); }
 }
 
-function reproFacts({ worktree, base }) {
+// The checklist and attachments as a session sees them (host facts).
+export function checklistFacts({ items, bindings = {}, attachments = [] }) {
+  const lines = ['- The checklist, frozen by the host (every ask in the ticket; ids are the host\'s):', '```json',
+    JSON.stringify(items.map(i => ({ id: i.id, requirement: i.requirement, kind: i.kind, surface: i.surface, source_id: i.source_id })), null, 1), '```'];
+  if (Object.keys(bindings).length) lines.push('- Tests already bound to items (a reproduction or declared test, or one a released run bound):', '```json', JSON.stringify(bindings, null, 1), '```');
+  if (attachments.length) {
+    lines.push('- Attachments the host downloaded. Read every one with target true (Read tool, local_path) before you answer; the host checks your Read calls:', '```json',
+      JSON.stringify(attachments.map(a => ({ attachment: a.attachment, source_id: a.source_id, target: a.target, ...(a.local_path ? { local_path: a.local_path, media_type: a.media_type } : { unavailable: a.reason }) })), null, 1), '```');
+  }
+  return lines.join('\n');
+}
+function reproFacts({ worktree, base, stage3 }) {
   return ['## Host facts for this run (trusted, from the runner)', '',
     `- Working directory: a fresh git worktree at origin/main ${base.slice(0, 12)} (the base). Nothing you do here reaches main or the customer.`,
-    `- Worktree path: ${worktree}`].join('\n');
+    `- Worktree path: ${worktree}`, checklistFacts(stage3)].join('\n');
 }
-function hostFacts({ worktree, base, repro, held }) {
+function hostFacts({ worktree, base, repro, held, stage3 }) {
   const lines = ['## Host facts for this run (trusted, from the runner)', '',
     `- Working directory: a git worktree on its own branch, at origin/main ${base.slice(0, 12)}. Nothing you do here reaches main or the customer; the host commits, runs the gates and an independent review, and holds the merge for the owner.`];
   if (held) lines.push(`- A change for this ticket is already held for the owner (run ${held}). Do not change code in this run: answer from the current state and record the next action.`);
   if (repro?.recorded) {
     lines.push('- A reproduction was written before you and recorded FAILING on this base. These files are frozen (you cannot edit them) and these tests must pass once your fix is in:');
-    for (const t of repro.tests) lines.push(`  - ${t.file} :: ${t.name}`);
+    for (const t of repro.tests) lines.push(`  - ${t.file} :: ${t.name}${t.ac_id ? ` (pins ${t.ac_id})` : ''}`);
   } else if (repro?.kind === 'no_code') lines.push('- The reproduction step found no code change to make. A product change (src, public, landing) will be refused by the gates, because nothing failing was recorded on base first.');
   else lines.push('- No reproduction was recorded on base. A product change (src, public, landing) will be refused by the gates.');
   lines.push(`- Worktree path: ${worktree}`);
+  lines.push(checklistFacts(stage3));
   return lines.join('\n');
 }
 
@@ -157,11 +205,13 @@ export function defaultLauncher({ claude, stderrFile = null, sandbox = null }) {
 
 export async function runTicket(o) {
   const { ticket, contextFile, outputFile, runFile, runId, runDir, repo, work, state, fixState = null, committer, notify = null,
-    workerSeconds = 1500, reproSeconds = 900, reviewSeconds = 1200, repairSeconds = 600, commands = DEFAULT_COMMANDS, binary = 'git',
+    workerSeconds = 1500, reproSeconds = 900, reviewSeconds = 1200, repairSeconds = 600, extractSeconds = 600, commands = DEFAULT_COMMANDS, binary = 'git',
     env = process.env, home = os.homedir(), fetch = true, installNodeModules, releaseOptions = {}, runStarted = new Date().toISOString().slice(0, 19) + 'Z',
-    log = defaultLog, send = null, fetchBuild, autoMerge = false } = o;
+    log = defaultLog, send = null, fetchBuild, autoMerge = false, attachmentsDir = null, attachmentsManifest = null } = o;
   if (!UUID.test(ticket || '') || !/^[0-9a-f]{16}$/.test(runId || '')) throw Error('work needs --ticket UUID and --run-id <16 hex>');
   for (const p of [contextFile, outputFile, runFile, runDir, repo, work]) if (!p || !path.isAbsolute(p)) throw Error('Paths must be absolute');
+  if (!state || !path.isAbsolute(state)) throw Error('work needs --state DIR (the frozen checklists live there)');
+  for (const p of [attachmentsDir, attachmentsManifest]) if (p !== null && !path.isAbsolute(p)) throw Error('Attachment paths must be absolute');
   const id8 = ticket.slice(0, 8);
   const name = `${id8}-${runId}`;
   const context = JSON.parse(await fs.readFile(contextFile, 'utf8'));
@@ -173,10 +223,22 @@ export async function runTicket(o) {
   const profileDir = path.join(runDir, `${ticket}-sandbox`);
   await fs.mkdir(profileDir, { recursive: true, mode: 0o700 });
   const denyState = [state, fixState].filter(Boolean);
+  // G6: the host's manifest of this ticket's attachments. A missing manifest
+  // (the download step did not run) delivers nothing; each reference is then
+  // unavailable, never asked for again.
+  let manifest = null;
+  try { manifest = readManifest(attachmentsManifest, { ticketId: ticket, dir: attachmentsDir }); } catch (error) { log(`ATTACHMENT — ${ticket}: manifest refused (${error.message}); nothing delivered`); manifest = null; }
+  if (!manifest) {
+    manifest = { version: 1, ticket_id: ticket, dir: null, attachments: selectAttachments(context).map(a => ({ ...a, access: 'unavailable', local_path: null, reason: 'the host download did not run' })) };
+  }
+  const attachDir = manifest.dir && existsSync(manifest.dir) ? realpathSync(manifest.dir) : null;
+  const reviewed = new Set();
+  const seeReads = r => { for (const a of reviewedIds(manifest, r?.reads ?? [])) reviewed.add(a); };
+  const attachments = () => modelView(manifest, reviewed);
   // Every model session and every gate step runs sandboxed (finding 1).
-  const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir });
+  const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir, attachments: attachDir });
   const launchSession = o.launchSession ?? defaultLauncher({ claude: o.claude, stderrFile: o.stderrFile ?? null, sandbox: box });
-  const facts = { run: name, record_repo: repo, base: null, release_file: null, code_outcome: 'none' };
+  const facts = { run: name, record_repo: repo, base: null, release_file: null, code_outcome: 'none', stage3_file: null };
   const writeFacts = () => fs.writeFile(runFile, `${JSON.stringify(facts)}\n`, { mode: 0o600 });
   const alert = (kind, detail, message) => (state ? raise(state, kind, detail, message, { notify, send }).catch(() => false) : Promise.resolve(false));
   const run = { version: 1, id: name, ticket, run_id: runId, committer, repo, mode: context.run_mode, started_at: new Date().toISOString(), status: 'started', auto_merge: Boolean(autoMerge) };
@@ -191,7 +253,8 @@ export async function runTicket(o) {
   const originAtStart = remoteMain(repo, { binary, env });
   const wt = await createWorktree({ repo, work, ticketId: ticket, runId, binary, fetch, env, ...(installNodeModules ? { installNodeModules } : {}) });
   Object.assign(run, { worktree: wt.dir, gitdir: wt.gitdir, branch: wt.branch, base: wt.base, hooks_sha256: wt.hooks_sha256, node_modules: wt.node_modules,
-    modules_source: wt.modules_source, origin_at_start: originAtStart, held_earlier: held });
+    modules_source: wt.modules_source, origin_at_start: originAtStart, held_earlier: held,
+    attachments: manifest.attachments.map(a => ({ id: a.id, target: a.target, access: a.access })) });
   facts.base = wt.base; facts.record_repo = wt.dir;
   await writeRun(work, run);
   const cleanup = async ({ keepBranch = false } = {}) => {
@@ -223,16 +286,57 @@ export async function runTicket(o) {
   const session = async opts => { const r = await launchSession(opts); await hostCheck(`the ${opts.role} session`); return r; };
 
   try {
+    // 1b. The checklist (G1): every customer message no extraction has read.
+    let checklist = readChecklist(state, ticket) ?? emptyChecklist(context);
+    const sources = newSources(checklist, context);
+    if (sources.length) {
+      // The screenshots go to the extractor inline (it has no tools): the
+      // target's first, then related tickets', at most 12 and 20 MB.
+      const images = [], shown = [];
+      let bytes = 0;
+      for (const a of manifest.attachments.filter(x => x.access === 'delivered' && x.media_type?.startsWith('image/'))) {
+        if (images.length >= 12 || bytes + a.bytes > 20 * 1024 * 1024) break;
+        images.push({ media_type: a.media_type, data: readFileSync(a.local_path).toString('base64') }); shown.push(a.id); bytes += a.bytes;
+      }
+      const text = `${readFileSync(EXTRACT_PROMPT, 'utf8')}\n\n${extractionFacts({ record: checklist, sources, attachments: manifest.attachments, shown, ownerTicket: context.approval?.from_admin === true })}${EVIDENCE_MARKER}${evidence}`;
+      const call = (input, resume = null) => session({ role: 'extract', resume, cwd: wt.dir, input, schema: CHECKLIST_SCHEMA, settings: extractSettings(),
+        sessionDir: path.join(sessions, 'extract'), timeoutMs: extractSeconds * 1000, baseEnv: env });
+      let r = await call(streamMessage(text, images));
+      let accepted = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        if (!r.ok) { log(`CHECKLIST — ${id8}: extraction session ${r.reason}`); return await finishWith(EXIT.model, 'model_failed', { reason: `checklist extraction: ${r.reason}` }); }
+        const checked = checkExtraction(r.output.structured_output, { context, record: checklist, sources, confirmTriggers: attempt === 1 });
+        if (!checked.errors.length && !checked.confirm.length) { accepted = checked; break; }
+        if (attempt === 2 || !r.session_id) { log(`CHECKLIST — ${id8}: refused after a repair (${checked.errors.length} problem(s))`); break; }
+        log(`CHECKLIST — ${id8}: ${checked.errors.length} problem(s)${checked.confirm.length ? `, ${checked.confirm.length} item(s) to confirm` : ''}; resuming once`);
+        const reason = [...checked.errors, ...(checked.confirm.length ? [confirmPrompt(checked.confirm)] : [])].join('\n').slice(0, 6000);
+        r = await call(streamMessage(`The host checked your checklist and could not accept it yet:\n${reason}\nReturn the whole structured result again.`), r.session_id);
+      }
+      // The shell parks the ticket on exit 7 and alerts the owner (design G1).
+      if (!accepted) {
+        await cleanup();
+        return await finishWith(EXIT.checklist, 'checklist_failed');
+      }
+      checklist = await writeChecklist(state, extendChecklist(checklist, accepted, { runName: name, sources }));
+      log(`CHECKLIST — ${id8}: ${accepted.items.length} new item(s), ${checklist.items.length} in all, ${accepted.non_asks.length} sentence(s) judged not asks`);
+    }
+    if (!checklist.items.length) { log(`CHECKLIST — ${id8}: no items`); await cleanup(); return await finishWith(EXIT.checklist, 'checklist_failed'); }
+    const workerItems = checklist.items.slice();
+    const itemIds = workerItems.map(i => i.id);
+    const prior = priorBindings(work, ticket);
+    await writeRunFile(work, name, 'checklist.json', checklist);
+    run.checklist_sha256 = checklist.items_sha256;
+
     // 2. Reproduction, before any fix.
     let repro = null;
     if (!held) {
-      const settings = sessionSettings({ role: 'repro', worktree: wt.dir, home, work, state: denyState, runDir, tmp });
-      const input = `${readFileSync(REPRO_PROMPT, 'utf8')}\n\n${reproFacts({ worktree: wt.dir, base: wt.base })}${EVIDENCE_MARKER}${evidence}`;
+      const settings = sessionSettings({ role: 'repro', worktree: wt.dir, home, work, state: denyState, runDir, tmp, attachments: attachDir });
+      const input = `${readFileSync(REPRO_PROMPT, 'utf8')}\n\n${reproFacts({ worktree: wt.dir, base: wt.base, stage3: { items: workerItems, bindings: prior, attachments: attachments() } })}${EVIDENCE_MARKER}${evidence}`;
       let r = await session({ role: 'repro', cwd: wt.dir, input, schema: REPRO_SCHEMA, settings, sessionDir: path.join(sessions, 'repro'), timeoutMs: reproSeconds * 1000, baseEnv: env });
       for (let attempt = 1; attempt <= 2; attempt++) {
         if (!r.ok) { log(`REPRO — ${id8}: session ${r.reason}; no reproduction recorded`); run.repro = { status: 'failed', reason: r.reason }; break; }
         let out;
-        try { out = checkRepro(r.output.structured_output); } catch (error) { log(`REPRO — ${id8}: ${error.message}`); run.repro = { status: 'unusable' }; break; }
+        try { out = checkRepro(r.output.structured_output, itemIds); } catch (error) { log(`REPRO — ${id8}: ${error.message}`); run.repro = { status: 'unusable' }; break; }
         const changed = changedPaths(wt.dir, wt.base, { binary });
         const scope = classifyChanges(changed, { dir: wt.dir });
         if (scope.runner_code.length) { log(`PROTECTED — ${ticket} reproduction changed the runner's own code`); return finishWith(EXIT.runnerCode, 'runner_code_changed', { violating: scope.runner_code }); }
@@ -241,6 +345,7 @@ export async function runTicket(o) {
         if (out.kind === 'no_code') { repro = { kind: 'no_code', recorded: false, tests: [], frozen: {} }; break; }
         const recorded = await recordReproduction({ dir: wt.dir, repo, work, base: wt.base, tests: out.tests, changed, env: gEnv, sandbox: box, modules: wt.modules_source, binary });
         await hostCheck('the reproduction record');
+        recorded.tests = recorded.tests.map((t, i) => ({ ...t, ac_id: out.tests[i]?.ac_id ?? null }));
         repro = { kind: out.kind, ...recorded };
         if (recorded.recorded || attempt === 2 || !r.session_id) break;
         const verdicts = recorded.tests.filter(t => t.on_base !== 'red').map(t => `- ${t.file} :: ${t.name}: ${t.on_base.replace(/_/g, ' ')}`).join('\n');
@@ -255,10 +360,16 @@ export async function runTicket(o) {
 
     // 3. The worker (fixer), then the reply checks with up to two repairs.
     const frozen = Object.keys(repro?.frozen ?? {}).filter(f => repro.frozen[f] !== null);
-    const workerSettingsValue = sessionSettings({ role: 'worker', worktree: wt.dir, home, work, state: denyState, runDir, tmp, frozen });
-    const workerCall = (input, resume = null, seconds = workerSeconds) => session({ role: 'worker', resume, cwd: wt.dir, input, schema: o.resultSchema ?? RESULT_SCHEMA,
-      settings: workerSettingsValue, sessionDir: path.join(sessions, 'worker'), timeoutMs: seconds * 1000, baseEnv: env });
-    const prompt = `${readFileSync(o.workerPrompt ?? WORKER_PROMPT, 'utf8')}\n\n${hostFacts({ worktree: wt.dir, base: wt.base, repro, held })}${EVIDENCE_MARKER}${evidence}`;
+    const workerSettingsValue = sessionSettings({ role: 'worker', worktree: wt.dir, home, work, state: denyState, runDir, tmp, frozen, attachments: attachDir });
+    const workerCall = async (input, resume = null, seconds = workerSeconds) => {
+      const r = await session({ role: 'worker', resume, cwd: wt.dir, input, schema: o.resultSchema ?? RESULT_SCHEMA,
+        settings: workerSettingsValue, sessionDir: path.join(sessions, 'worker'), timeoutMs: seconds * 1000, baseEnv: env });
+      seeReads(r);
+      return r;
+    };
+    const bindingsFor = out => mergeBindings(prior, runBindings({ repro, declared: out?.structured_output?.change?.tests ?? [], items: workerItems }));
+    const facts3 = { items: workerItems, bindings: mergeBindings(prior, runBindings({ repro, items: workerItems })), attachments: attachments() };
+    const prompt = `${readFileSync(o.workerPrompt ?? WORKER_PROMPT, 'utf8')}\n\n${hostFacts({ worktree: wt.dir, base: wt.base, repro, held, stage3: facts3 })}${EVIDENCE_MARKER}${evidence}`;
     let first = await workerCall(prompt);
     if (!first.ok) {
       log(`MODEL — ${ticket} worker session ${first.reason}`);
@@ -268,19 +379,23 @@ export async function runTicket(o) {
     let output = first.output, sessionId = first.session_id;
     const saveOutput = () => fs.writeFile(outputFile, JSON.stringify(output), { mode: 0o600 });
     await saveOutput();
+    // What the host knows before it decides: the checklist the worker saw,
+    // the tests bound to its items, the attachments and whether each was read.
+    const stage3Pre = () => ({ ticket_id: ticket, checklist, worker_items: workerItems, bindings: bindingsFor(output), attachments: attachments() });
     // Returns true when the host's reply checks accept the current output.
     // The code outcome is not known yet: nothing this run did is released, so
     // a "verified_change" is refused here (finding 5).
     const replyChecks = async () => {
       for (let repairs = 0; ; repairs++) {
         try {
-          await prepareResult(context, output.structured_output, { repo: wt.dir, preHead: wt.base, runStarted, runCommitter: committer, runId, codeOutcome: 'pending', ...(fetchBuild ? { fetchBuild } : {}) });
+          await prepareResult(context, output.structured_output, { repo: wt.dir, preHead: wt.base, runStarted, runCommitter: committer, runId, codeOutcome: 'pending',
+            stage3: stage3Pre(), requireStructured: true, ...(fetchBuild ? { fetchBuild } : {}) });
           return true;
         } catch (error) {
           const rules = refusalHead(error);
           if (repairs >= 2 || !sessionId) { log(`REFUSED — ${ticket}: ${rules}`); return false; }
           log(`REPAIR — ${ticket} attempt ${repairs + 1}: ${rules}`);
-          const reason = [...String(error.message)].map(c => (c.charCodeAt(0) < 32 ? ' ' : c)).join('').slice(0, 1500);
+          const reason = [...String(error.message)].map(c => (c.charCodeAt(0) < 32 ? ' ' : c)).join('').slice(0, 3000);
           const next = await workerCall(`The trusted host refused the structured result you returned, so nothing was recorded or sent. The reason:\n${reason}\nReturn a corrected structured result for the same target_id. Change only what the reason names. Do not change code in this repair.`, sessionId, repairSeconds);
           if (!next.ok) { log(`REFUSED — ${ticket}: repair session ${next.reason}`); return false; }
           output = next.output; sessionId = next.session_id ?? sessionId; await saveOutput();
@@ -306,10 +421,61 @@ export async function runTicket(o) {
       const head = commitWork({ dir: wt.dir, base: wt.base, subject: change?.subject ?? '', ticketId: ticket, runId, committer, binary, env });
       return { head, subject: sanitizeSubject(change?.subject ?? '', ticket), declared: Array.isArray(change?.tests) ? change.tests : [] };
     };
+
+    // 11. The host's decision (stage 3): the confirmer when no review judged
+    // the observations and non-asks, the claims, each item's state, and the
+    // record the reply step renders the reply from.
+    let edges = null;
+    const reviewIn = async (head, fn) => {
+      const tree = await gateWorktree({ repo, work, commit: head, binary, label: 'review' });
+      try { return await fn(tree.dir); } finally { await tree.remove(); }
+    };
+    const stage3Review = () => ({ items: checklist.items, bound: runBindings({ repro, declared: output.structured_output?.change?.tests ?? [], items: workerItems }),
+      non_asks: checklist.non_asks, hints: coverageHints(context, checklist), attachments: attachments(), observations: output.structured_output?.attachment_observations ?? [] });
+    const decide = async ({ outcome, gates = null, review = null, headTests = null, released = false }) => {
+      const observations = output.structured_output?.attachment_observations ?? [];
+      const pendingNonAsks = checklist.non_asks.filter(n => n.verdict === null);
+      const hints = coverageHints(context, checklist);
+      if (!edges && (observations.length || pendingNonAsks.length || hints.length)) {
+        const confirm = await reviewIn(wt.base, dir => confirmChecklist({ context, stage3: stage3Review(), prompt: readFileSync(CONFIRM_PROMPT, 'utf8'),
+          launch: async (input, { attempt }) => session({ role: 'confirm', cwd: dir, input, schema: CONFIRM_SCHEMA,
+            settings: reviewSettings({ worktree: dir, home, work, state: denyState, runDir, tmp, attachments: attachDir }), sessionDir: path.join(sessions, `confirm-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env }) }));
+        await writeRunFile(work, name, 'confirm.json', confirm);
+        log(`CONFIRM — ${id8}: ${confirm.pass ? 'observations confirmed, non-asks judged' : `not confirmed (${confirm.reasons.join('; ').slice(0, 300)})`}`);
+        edges = confirm;
+      }
+      if (edges) {
+        const applied = applyAskVerdicts(checklist, { non_asks: edges.non_ask_verdicts, missed_asks: edges.missed_asks }, { context, runName: name });
+        if (applied.added.length || applied.record.non_asks.some((n, i) => n.verdict !== checklist.non_asks[i]?.verdict)) {
+          checklist = await writeChecklist(state, applied.record);
+          if (applied.added.length) log(`CHECKLIST — ${id8}: the reviewer added ${applied.added.join(', ')}`);
+        }
+      }
+      const green = new Set((gates?.green ?? []).filter(t => t.status === 'green').map(t => `${t.file}::${t.name}`));
+      const bindings = bindingsFor(output);
+      const claims = await verifyAgentClaims({ claims: output.structured_output?.reply?.claims ?? [], repo, base: wt.base, binary, code: { released, green },
+        runAtBase: baseTestRunner({ repo, work, commit: wt.base, modules: wt.modules_source, env: gEnv, sandbox: box, binary }), ...(fetchBuild ? { fetchBuild } : {}) })
+        .catch(error => (output.structured_output?.reply?.claims ?? []).map((c, index) => ({ index, ac_id: c.ac_id, verified: false, reason: `the host could not check it (${String(error.message).slice(0, 80)})` })));
+      const disputed = disputedItems(observations, edges?.observation_verdicts ?? {});
+      const code = { outcome, gates_pass: Boolean(gates?.pass), review_pass: Boolean(review?.pass), review_items: review?.item_verdicts ?? {}, green: headTests ?? green, release_verified: released };
+      const finals = finalStates({ items: checklist.items, entries: output.structured_output?.checklist ?? [], claims, code, bindings: new Map(Object.entries(bindings).map(([k, v]) => [k, new Set(v)])),
+        disputed, workerItems: itemIds });
+      const record = { version: 1, ticket_id: ticket, run: name, checklist, worker_items: workerItems, bindings, attachments: attachments(), observations,
+        observation_verdicts: edges?.observation_verdicts ?? {}, final: { items: finals, claims, follow_up: hostFollowUps({ attachments: attachments(), finals }), code_outcome: outcome } };
+      facts.stage3_file = await writeStage3(path.join(runDir, `${ticket}-stage3.json`), record);
+      // A released run's bindings are what a later run may cite (items met).
+      run.bindings_met = Object.fromEntries(Object.entries(runBindings({ repro, declared: output.structured_output?.change?.tests ?? [], items: workerItems }))
+        .filter(([ac]) => review?.item_verdicts?.[ac] === 'met'));
+      run.stage3 = { items: finals.map(f => ({ id: f.id, state: f.state, detail: f.detail })), claims_verified: claims.filter(c => c.verified).length, claims: claims.length,
+        attachments_reviewed: [...reviewed], observations_confirmed: Object.values(edges?.observation_verdicts ?? {}).filter(v => v === 'agree').length };
+      log(`DECIDED — ${id8}: ${finals.map(f => `${f.id} ${f.state}`).join(', ')}; ${claims.filter(c => c.verified).length}/${claims.length} claim(s) verified; ${reviewed.size} attachment(s) read`);
+    };
+
     let step = await afterWorker();
     if (step.stop !== undefined) return step.stop;
     if (!step.head) {
       log(`NO CODE — ${ticket}: the run changed no files`);
+      await decide({ outcome: 'none' });
       await cleanup();
       return finishWith(EXIT.ok, 'no_code');
     }
@@ -317,6 +483,7 @@ export async function runTicket(o) {
     if (held) {
       log(`CODE REFUSED — ${ticket}: a change for this ticket is already held (run ${held})`);
       facts.code_outcome = 'refused';
+      await decide({ outcome: 'refused' });
       await cleanup({ keepBranch: true });
       return finishWith(EXIT.ok, 'refused', { reason: `a change for this ticket is already held (run ${held})`, head: step.head });
     }
@@ -324,12 +491,8 @@ export async function runTicket(o) {
     // 6-8. Gates, owner rules and the independent review, with one gate repair
     // and one review revision. The reviewer works in a fresh worktree of the
     // commit, so it reads exactly what was committed.
-    const reviewIn = async (head, fn) => {
-      const tree = await gateWorktree({ repo, work, commit: head, binary, label: 'review' });
-      try { return await fn(tree.dir); } finally { await tree.remove(); }
-    };
     const reviewLaunch = reviewDir => async (input, { index, attempt }) => session({ role: 'review', cwd: reviewDir, input, schema: REVIEW_SCHEMA,
-      settings: reviewSettings({ worktree: reviewDir, home, work, state: denyState, runDir, tmp }), sessionDir: path.join(sessions, `review-${Date.now()}-${index}-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env });
+      settings: reviewSettings({ worktree: reviewDir, home, work, state: denyState, runDir, tmp, attachments: attachDir }), sessionDir: path.join(sessions, `review-${Date.now()}-${index}-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env });
     let gates, gatesText, owner, blast, review = null, round = 0, gateRepairs = 0, revisions = 0;
     for (;;) {
       round++;
@@ -353,12 +516,12 @@ export async function runTicket(o) {
         output = next.output; sessionId = next.session_id ?? sessionId; await saveOutput();
         step = await afterWorker();
         if (step.stop !== undefined) return step.stop;
-        if (!step.head) { log(`NO CODE — ${ticket}: the repair removed the change`); await cleanup(); return finishWith(EXIT.ok, 'no_code'); }
+        if (!step.head) { log(`NO CODE — ${ticket}: the repair removed the change`); await decide({ outcome: 'none' }); await cleanup(); return finishWith(EXIT.ok, 'no_code'); }
         continue;
       }
       const head = step.head;
       review = await reviewIn(head, reviewDir => reviewDiff({ dir: reviewDir, base: wt.base, head, context, gates, protectedReport: owner, blast, launch: reviewLaunch(reviewDir),
-        prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary }));
+        prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary, stage3: stage3Review() }));
       await writeRunFile(work, name, `review-${round}.json`, review);
       log(`REVIEW — ${id8} round ${round}: ${review.pass ? 'approve' : `not approved (${review.reviews.map(r => r.verdict).join(', ')})`}${review.count > 1 ? ' [two reviews]' : ''}`);
       if (!review.pass && review.revise && revisions < 1 && sessionId) {
@@ -368,14 +531,16 @@ export async function runTicket(o) {
         output = next.output; sessionId = next.session_id ?? sessionId; await saveOutput();
         step = await afterWorker();
         if (step.stop !== undefined) return step.stop;
-        if (!step.head) { log(`NO CODE — ${ticket}: the revision removed the change`); await cleanup(); return finishWith(EXIT.ok, 'no_code'); }
+        if (!step.head) { log(`NO CODE — ${ticket}: the revision removed the change`); await decide({ outcome: 'none' }); await cleanup(); return finishWith(EXIT.ok, 'no_code'); }
         continue;
       }
       break;
     }
+    // The review judged the observations and non-asks for this change.
+    if (review) edges = { observation_verdicts: review.observation_verdicts, non_ask_verdicts: review.non_ask_verdicts, missed_asks: review.missed_asks };
     Object.assign(run, { head: step.head, subject: step.subject, declared: step.declared, gates_pass: gates.pass,
       gates_failures: gates.checks.filter(c => !c.pass).map(c => c.name), protected: owner,
-      review: review ? { pass: review.pass, count: review.count, verdicts: review.reviews.map(r => r.verdict), reasons: review.reasons } : null,
+      review: review ? { pass: review.pass, count: review.count, verdicts: review.reviews.map(r => r.verdict), reasons: review.reasons, items: review.item_verdicts } : null,
       blast: { terms: blast.terms.length, untouched_sites: blast.terms.reduce((n, t) => n + t.untouched_count, 0), sibling_groups: blast.sibling_groups.map(g => g.name) } });
 
     // 9. The merge decision.
@@ -384,6 +549,7 @@ export async function runTicket(o) {
       facts.code_outcome = 'refused';
       log(`CODE REFUSED — ${ticket} run ${name}: ${!gates.pass ? `gates failed (${run.gates_failures.join(', ')})` : 'review did not approve'}; nothing merged, branch ${wt.branch} kept`);
       await alert('change_refused', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: the change for ticket ${id8} (run ${name}) was not merged: ${!gates.pass ? `its gates failed (${run.gates_failures.join(', ')})` : 'the independent review did not approve it'}. The branch is kept for inspection.`);
+      await decide({ outcome: 'refused', gates, review });
       return finishWith(EXIT.ok, 'refused', { reason });
     }
     run.gates_sha256 = sha256(gatesText);
@@ -392,9 +558,10 @@ export async function runTicket(o) {
     const holdReason = owner.protected ? `protected paths: ${[...new Set(owner.hits.map(h => h.path))].join(', ')}` : !autoMerge ? `${AUTO_MERGE_FLAG} is off` : null;
     if (holdReason) {
       run.status = 'held'; run.hold_reason = holdReason; run.held_at = new Date().toISOString();
+      facts.code_outcome = 'held';
+      await decide({ outcome: 'held', gates, review });
       await writeRun(work, run);
       await writeRunFile(work, name, 'HELD.txt', heldSummary(run, gates));
-      facts.code_outcome = 'held';
       log(`HELD — ticket ${id8} run ${name}: ${holdReason}. Merge it with: node scripts/ticket-fix/merge.mjs ${name}`);
       await alert('merge_held', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: a change for ticket ${id8} passed its gates and an independent review and is held for you (${holdReason}). Summary: ticket-work/runs/${name}/HELD.txt. Merge it with: node scripts/ticket-fix/merge.mjs ${name}`);
       await writeFacts();
@@ -413,6 +580,10 @@ export async function runTicket(o) {
       await alert('merge_held', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: the change for ticket ${id8} could not be merged automatically (${merged.reason}). Merge it with: node scripts/ticket-fix/merge.mjs ${name}`);
     } else if (merged.status === 'released') facts.release_file = path.join(runDirectory(work, name), 'release.json');
     else if (merged.status === 'release_failed') await alert('release_failed', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: the change for ticket ${id8} was merged but the release check failed (${after.release?.reason ?? 'unknown'}). No reply may say it is live.`);
+    // The decision reads the merged run record; its bindings go on the record.
+    Object.assign(run, after);
+    await decide({ outcome: facts.code_outcome, gates, review, released: merged.status === 'released' && after.release?.verified === true });
+    await writeRun(work, { ...(await readRun(work, name)), bindings_met: run.bindings_met, stage3: run.stage3 });
     await writeFacts();
     return EXIT.ok;
   } catch (error) {
@@ -487,10 +658,17 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
     reviewAgain: async ({ base, head }) => {
       const files = git(run.worktree, ['diff', '--name-only', base, head], { binary }).split('\n').filter(Boolean);
       const gates = JSON.parse(readFileSync(path.join(runDirectory(work, run.id), 'gates.json'), 'utf8'));
+      // The checklist the run was reviewed against (observations and
+      // non-asks were judged in that review; the attachments are gone).
+      let stage3 = null;
+      try {
+        const checklist = JSON.parse(readFileSync(path.join(runDirectory(work, run.id), 'checklist.json'), 'utf8'));
+        stage3 = { items: checklist.items, bound: runBindings({ repro: run.repro, declared: run.declared ?? [], items: checklist.items }), non_asks: [], observations: [], attachments: [] };
+      } catch { stage3 = null; }
       const tree = await gateWorktree({ repo: run.repo, work, commit: head, binary, label: 'review' });
       try {
         return await reviewDiff({ dir: tree.dir, base, head, context, gates, protectedReport: protectedReport({ dir: run.worktree, base, head, files, binary }),
-          blast: blastRadius({ dir: run.worktree, base, head, files, binary }), launch: factory(tree.dir), prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary });
+          blast: blastRadius({ dir: run.worktree, base, head, files, binary }), launch: factory(tree.dir), prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary, stage3 });
       } finally { await tree.remove(); }
     },
   };
@@ -498,6 +676,7 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
 
 // The shell's view of a run: validated single values only.
 const FIELDS = { record_repo: v => path.isAbsolute(v) && !/[\n\0]/.test(v), base: v => SHA.test(v), release_file: v => path.isAbsolute(v) && !/[\n\0]/.test(v),
+  stage3_file: v => path.isAbsolute(v) && !/[\n\0]/.test(v) && v.endsWith('-stage3.json'),
   code_outcome: v => /^(?:none|held|refused|merged|released|release_failed)$/.test(v), run: v => RUN_NAME.test(v) };
 export function readField(runFile, field) {
   if (!(field in FIELDS)) throw Error('Unknown field');
@@ -555,7 +734,8 @@ async function main([command, ...rest]) {
     return runTicket({ ticket: o.ticket, contextFile: o.context, outputFile: o.output, runFile: o.runFile, runId: o.runId, runDir: o.runDir, repo: o.repo,
       work: o.work, state: o.state, fixState: o.fixState, claude: o.claude, committer: o.committer, notify: o.notify ?? null, autoMerge: o.autoMerge === 'on',
       workerSeconds: seconds(o.workerSeconds), reproSeconds: seconds(o.reproSeconds), reviewSeconds: seconds(o.reviewSeconds),
-      stderrFile: o.runDir ? path.join(o.runDir, `${o.ticket}-model-stderr.log`) : null, runStarted: o.runStarted });
+      stderrFile: o.runDir ? path.join(o.runDir, `${o.ticket}-model-stderr.log`) : null, runStarted: o.runStarted,
+      attachmentsDir: o.attachmentsDir ?? null, attachmentsManifest: o.attachmentsManifest ?? null });
   }
   throw Error('Usage: run.mjs work|held-for|get|finish|auto-merge ...');
 }

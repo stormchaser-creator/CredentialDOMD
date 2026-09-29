@@ -140,12 +140,14 @@ export function namesDevice(text) { return DEVICE.test(foldForRules(text)); }
 //   claims: true     free prose with no evidence behind it (the agent's reply)
 //   isCommit(token)  host lookup: does a digits-only token name a commit here
 //   liveShort        the live build's short id
-export function checkFixedRules(text, { hex = true, claims = false, isCommit = null, liveShort = null } = {}) {
+//   max              the length limit (the agent's host-rendered reply, with
+//                    one footer line per checklist item, may be longer)
+export function checkFixedRules(text, { hex = true, claims = false, isCommit = null, liveShort = null, max = BODY_MAX } = {}) {
   const raw = String(text ?? '');
   const value = foldForRules(raw);
   const found = [];
   const add = (rule, detail = '') => found.push({ rule, excerpt: excerpt(detail) });
-  if (raw.length > BODY_MAX) add('too_long', String(raw.length));
+  if (raw.length > max) add('too_long', String(raw.length));
   if (hasControl(raw)) add('control_character');
   if (FORMAT.test(raw)) add('invisible_character');
   if (hex) {
@@ -259,6 +261,17 @@ function parseEvidence(evidence, problems, where) {
     problems.push(`${where}: file evidence is {"file": "<repo path>", "line": <n>, "text": "<at least 8 characters on that line>"}`); return null;
   }
   return { kind, ref: `${evidence.file}:${evidence.line}`, file: evidence.file, line: evidence.line, text: evidence.text.trim() };
+}
+
+// The agent's claims (stage 3): the same test and file evidence, never a
+// query (the worker has no database). Returns { evidence, problems }.
+export function parseClaimEvidence(evidence, where = 'evidence') {
+  const problems = [];
+  if (evidence && typeof evidence === 'object' && !Array.isArray(evidence) && 'query' in evidence) return { evidence: null, problems: [`${where}: the agent has no database; use test or file evidence`] };
+  // The worker's schema has no nulls; drop empty optional fields it filled.
+  const given = evidence && typeof evidence === 'object' && !Array.isArray(evidence) ? Object.fromEntries(Object.entries(evidence).filter(([, v]) => v !== '' && v !== null && v !== undefined)) : evidence;
+  const parsed = parseEvidence(given, problems, where);
+  return { evidence: parsed, problems };
 }
 
 // Throws with every problem at once, so a writer fixes the file in one pass.

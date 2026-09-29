@@ -213,7 +213,8 @@ const argv = process.argv.slice(2);
 writeFileSync(${JSON.stringify(seen)}, JSON.stringify({ settings: JSON.parse(readFileSync(argv[argv.indexOf('--settings') + 1], 'utf8')), cwd: process.cwd() }));
 for await (const _ of process.stdin) { /* drain */ }
 console.log(JSON.stringify({ type: 'result', is_error: false, session_id: '00000000-0000-4000-8000-0000000000cd', structured_output: {
-  items: [{ requirement: 'Summary lines are separated by line breaks', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\\\n');" }] }],
+  items: [{ ac_id: 'AC-1', requirement: 'Summary lines are separated by line breaks', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\\\n');" }] }],
+  observations: [], non_asks: [], missed_asks: [],
   regressions: [], missed_paths: [], test_changes: [], sibling_exclusions: [], verdict: 'approve', summary: 'Synthetic.' } }));
 `, { mode: 0o755 });
     const support = await mergeSupport({ run, work: p.work, claude: fake, sandbox: null });

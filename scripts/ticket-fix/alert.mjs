@@ -11,7 +11,7 @@
 // (scripts/notify-owner.sh, the iMessage path signup-notify.sh uses).
 // No ticket text is ever written or sent: ids and counts only.
 //
-//   alert.mjs park   --state DIR --ticket UUID --count N [--notify PATH]
+//   alert.mjs park   --state DIR --ticket UUID --count N [--why checklist] [--notify PATH]
 //   alert.mjs hold   --state DIR --ticket UUID [--why runner_code|host_state] [--notify PATH]
 //   alert.mjs lock   --state DIR --lock DIR [--notify PATH] [--max-hours 4]
 //   alert.mjs status --state DIR --rc N [--lock DIR]
@@ -140,9 +140,14 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
   const notify = options.notify || null;
   if (command === 'park') {
     if (!UUID.test(options.ticket || '') || !/^\d+$/.test(options.count || '')) throw Error('park needs --ticket UUID and --count N');
+    if (options.why !== undefined && options.why !== 'checklist') throw Error('park --why is checklist');
     const id8 = options.ticket.slice(0, 8);
-    await raise(options.state, 'parked', `ticket=${id8} rejected_runs=${options.count}`,
-      `CredentialDOMD ticket agent: ticket ${id8} is parked after ${options.count} rejected runs in a row. It is skipped until its count file under ticket-context/failed is removed; other tickets keep running.`,
+    // Stage 3 (design G1): a checklist that could not be extracted twice in
+    // one run parks the ticket at once; nothing was worked on.
+    const why = options.why === 'checklist' ? ': its checklist of asks could not be extracted (refused twice in one run), so nothing was worked on'
+      : ` after ${options.count} rejected runs in a row`;
+    await raise(options.state, 'parked', `ticket=${id8} ${options.why === 'checklist' ? 'checklist=refused' : `rejected_runs=${options.count}`}`,
+      `CredentialDOMD ticket agent: ticket ${id8} is parked${why}. It is skipped until its count file under ticket-context/failed is removed; other tickets keep running.`,
       { notify, now, send });
     await writeStatus(options.state, { now });
     return;

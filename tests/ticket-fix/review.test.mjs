@@ -8,7 +8,8 @@ import { project, context, COMMITTER, RUN_ID, TICKET } from './stage2-helpers.mj
 
 const FIXED = "// Synthetic module for the gate tests.\nexport const title = 'Synthetic summary line';\n\nexport function joinLines(lines) {\n  return lines.join('\\n');\n}\n";
 const good = (changes = {}) => ({
-  items: [{ requirement: 'Summary lines are separated by line breaks', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\n');" }] }],
+  items: [{ ac_id: 'AC-1', requirement: 'Summary lines are separated by line breaks', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\n');" }] }],
+  observations: [], non_asks: [], missed_asks: [],
   regressions: [], missed_paths: [], test_changes: [], sibling_exclusions: [], verdict: 'approve', summary: 'Synthetic review.', ...changes });
 const gates = (extra = {}) => ({ pass: true, diff: { files: ['src/format.js'], test_changes: [] }, persistence: { triggered: false }, ...extra });
 
@@ -39,7 +40,7 @@ test('the schema is strict and the stubbed approve passes', async () => {
 
 test('an invented citation gets one fresh rerun; invented twice fails', async () => {
   const { p, wt, head } = await fixed();
-  const invented = good({ items: [{ requirement: 'x', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: 'return lines.join("<br>") // not in the file' }] }] });
+  const invented = good({ items: [{ ac_id: 'AC-1', requirement: 'x', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: 'return lines.join("<br>") // not in the file' }] }] });
   const args = { dir: wt.dir, base: wt.base, head, context: context(), gates: gates(), protectedReport: {}, blast: { terms: [], sibling_groups: [] }, prompt: 'Review.' };
   try {
     const once = stub([invented, good()]);
@@ -86,7 +87,7 @@ test('finding 16: a met or partial item needs a verified citation into the chang
   const elsewhere = reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'met', citations: [{ file: 'src/other.js', line: 1, snippet: 'something else entirely' }] }] }), { gates });
   assert.match(elsewhere.reasons.join(), /item 1 is met without a verified citation/, 'a file the diff did not touch is not evidence of the change');
   const invented = [{ where: 'items[0]', file: 'src/format.js', line: 5, why: 'snippet not within 2 lines of the cited line' }];
-  assert.match(reviewVerdict(good(), { gates, invented }).reasons.join(), /item 1 is met without a verified citation/);
+  assert.match(reviewVerdict(good(), { gates, invented }).reasons.join(), /item AC-1 is met without a verified citation/);
   assert.equal(reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'met', citations: [{ file: 'tests/join.test.mjs', line: 5, snippet: 'assert.equal(joinLines' }] }] }), { gates }).pass, true, 'a reproduction test counts');
   assert.equal(reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'cannot_verify', citations: [] }] }), { gates }).pass, true, 'cannot_verify needs no citation');
   assert.equal(reviewVerdict(good(), { gates }).pass, true);

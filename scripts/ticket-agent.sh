@@ -5,8 +5,11 @@
 # worktree on its own branch, inside the macOS sandbox, the host commits,
 # runs the gates (sandboxed, no network) and an independent review, and holds
 # every merge for the owner unless $WORK_STATE/AUTO_MERGE existed when this
-# scheduled run started (read once, before any model runs). One instance at a
-# time.
+# scheduled run started (read once, before any model runs). Stage 3: the host
+# downloads every attachment on the ticket first (attachments.mjs, the only
+# step holding a storage credential), run.mjs freezes a checklist of every
+# ask before any work, and the reply is rendered from the host's decision per
+# item (<run dir>/<ticket>-stage3.json). One instance at a time.
 set -u
 umask 077
 
@@ -81,7 +84,13 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 printf 'pid=%s\nstarted=%s\n' "$$" "$(date +%s)" > "$LOCK/owner"
 RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-ticket-context.XXXXXX") || { /bin/rm -f "$LOCK/owner"; rmdir "$LOCK"; exit 1; }
-trap 'EXIT_RC=$?; node "$ALERT" status --state "$CASE_STATE" --rc "$EXIT_RC" >> "$LOG" 2>&1; /bin/rm -rf "$RUN_DIR" "$HOST_DIR"; /bin/rm -f "$LOCK/owner"; rmdir "$LOCK" 2>/dev/null' EXIT
+# Attachments (stage 3, G6) live next to the run directory, not in it: every
+# session is denied the run directory, and this ticket's sessions may read
+# their own attachment folder. Folders a killed run left behind hold another
+# ticket's files; the lock is ours, so nothing is using them.
+for STALE in "${TMPDIR:-/tmp}"/credentialdomd-attachments.*(N/); do /bin/rm -rf "$STALE"; done
+ATTACH_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-attachments.XXXXXX") || { /bin/rm -rf "$RUN_DIR"; /bin/rm -f "$LOCK/owner"; rmdir "$LOCK"; exit 1; }
+trap 'EXIT_RC=$?; node "$ALERT" status --state "$CASE_STATE" --rc "$EXIT_RC" >> "$LOG" 2>&1; /bin/rm -rf "$RUN_DIR" "$ATTACH_ROOT" "$HOST_DIR"; /bin/rm -f "$LOCK/owner"; rmdir "$LOCK" 2>/dev/null' EXIT
 HOST_FINGERPRINT=$(host_fingerprint)
 case "$HOST_FINGERPRINT" in *FAILED*) echo "$(date '+%F %T') ERROR — cannot read the state of the runner's own code" >> "$LOG"; exit 1 ;; esac
 # Unattended merges: read ONCE, here, before any model session, and passed to
@@ -213,20 +222,29 @@ for TARGET in ${(f)TARGETS}; do
   fi
   TICKET_RUN_KEY="$RUN_KEY" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --load "$TICKET_ID" "$CONTEXT" "$CASE_STATE" "$RUN_MODE" >> "$LOG" 2>&1 || { RC=1; break; }
+  # G6: every attachment on the ticket, downloaded before any session starts
+  # (the storage key never leaves that process). The log gets the ticket id
+  # and storage paths only. A failed download is "unavailable" in the
+  # manifest and internal work for the next run; it never stops this one.
+  ATTACHMENTS="$ATTACH_ROOT/$TICKET_ID"
+  MANIFEST="$RUN_DIR/$TICKET_ID-attachments.json"
+  TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-fix/attachments.mjs" fetch --context "$CONTEXT" --out "$ATTACHMENTS" --manifest "$MANIFEST" >> "$LOG" 2>&1 ||
+    echo "$(date '+%F %T') WARN — attachments for $TICKET_ID were not downloaded" >> "$LOG"
 
   # run.mjs (stage 2) runs the reproduction, the contained worker, the reply
   # checks and repair loop, the host commit, the gates, the independent review
   # and the merge decision. Customer evidence reaches the model through stdin
   # only. Its exit: 0 ready to record, 2 reply refused after two repairs, 3
   # model failed or timed out, 4 runner code changed, 5 files outside scope, 6
-  # git state outside the worktree changed.
+  # git state outside the worktree changed, 7 the checklist could not be
+  # extracted (the ticket is parked at once and the owner alerted: design G1).
   # The 3-hour alarm is a backstop; every session and gate has its own limit
   # and run.mjs kills whole process groups when it is signalled.
   RUN_STARTED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
   /usr/bin/perl -e 'alarm 10800; exec @ARGV' -- node "$HOST/ticket-fix/run.mjs" work --ticket "$TICKET_ID" --context "$CONTEXT" --output "$OUTPUT" --run-file "$RUN_FILE" \
     --run-id "$RUN_ID" --run-dir "$RUN_DIR" --repo "$REPO" --work "$WORK_STATE" --state "$CASE_STATE" --fix-state "$FIX_STATE" \
     --claude "$CLAUDE" --committer "$RUN_COMMITTER" --notify "$NOTIFY" --worker-seconds "$WORKER_SECONDS" --run-started "$RUN_STARTED" \
-    --auto-merge "$AUTO_MERGE" >> "$LOG" 2>&1
+    --attachments-dir "$ATTACHMENTS" --attachments-manifest "$MANIFEST" --auto-merge "$AUTO_MERGE" >> "$LOG" 2>&1
   WORK_RC=$?
   if host_code_changed || [ "$WORK_RC" -eq 4 ]; then hold_run runner_code; RC=1; break; fi
   if [ "$WORK_RC" -eq 6 ]; then hold_run host_state; RC=1; break; fi
@@ -235,15 +253,21 @@ for TARGET in ${(f)TARGETS}; do
     2) reject "review not recorded"; RC=1; break ;;
     3) reject "model run failed or timed out"; RC=1; break ;;
     5) reject "changed files outside its scope"; RC=1; break ;;
+    7) echo 3 > "$FAIL_COUNT"
+       echo "$(date '+%F %T') REJECTED — $TICKET_ID checklist not extracted; parked" >> "$LOG"
+       node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why checklist --notify "$NOTIFY" >> "$LOG" 2>&1
+       RC=1; break ;;
     *) reject "host step failed (exit $WORK_RC)"; RC=1; break ;;
   esac
-  RECORD_REPO=$(run_field record_repo) && BASE=$(run_field base) && RELEASE_FILE=$(run_field release_file) && CODE=$(run_field code_outcome) || {
-    reject "unreadable run record"; RC=1; break; }
+  RECORD_REPO=$(run_field record_repo) && BASE=$(run_field base) && RELEASE_FILE=$(run_field release_file) && CODE=$(run_field code_outcome) &&
+    STAGE3=$(run_field stage3_file) || { reject "unreadable run record"; RC=1; break; }
   # Rechecks target approval, freshness and actionability inside the write
   # transaction. No model-selected target/recipient/SQL is accepted. The code
   # outcome binds the record: an unreleased change completes no follow-up.
+  # The stage 3 record is the host's decision per checklist item and claim;
+  # the reply is rendered from it.
   if TICKET_RUN_KEY="$RUN_KEY" TICKET_REPO="$RECORD_REPO" TICKET_PRE_HEAD="$BASE" TICKET_RUN_STARTED="$RUN_STARTED" TICKET_RUN_COMMITTER="$RUN_COMMITTER" \
-    TICKET_RUN_ID="$RUN_ID" TICKET_RELEASE_FILE="$RELEASE_FILE" TICKET_CODE_OUTCOME="$CODE" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
+    TICKET_RUN_ID="$RUN_ID" TICKET_RELEASE_FILE="$RELEASE_FILE" TICKET_CODE_OUTCOME="$CODE" TICKET_STAGE3_FILE="$STAGE3" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1; then
     if [ "$CODE" = refused ]; then
       # The reply is recorded (it claims nothing), but a change the gates or
@@ -261,6 +285,8 @@ for TARGET in ${(f)TARGETS}; do
     RC=1; break
   fi
   node "$HOST/ticket-fix/run.mjs" finish --run-file "$RUN_FILE" --work "$WORK_STATE" --repo "$REPO" >> "$LOG" 2>&1
+  # The next target's sessions never see this ticket's files.
+  /bin/rm -rf "$ATTACHMENTS"
   # One code change per scheduled run: the gates and review take long enough.
   case "$CODE" in none) ;; *) break ;; esac
 done

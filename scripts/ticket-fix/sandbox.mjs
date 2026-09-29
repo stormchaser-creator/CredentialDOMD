@@ -80,7 +80,10 @@ export function shortTmpRoot() {
 // steps running worktree code: loopback only). writable: directories the
 // process tree may write. denyRead: further directories it may not read
 // (the run records, the baseline cache, the AUTO_MERGE flag, other state).
-export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead = [], denyFiles = [] }) {
+// readable: directories it may read (never write) even inside a denied one:
+// this ticket's downloaded attachments (stage 3, G6), whose parent holds no
+// other ticket's files but is denied as a whole anyway.
+export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead = [], denyFiles = [], readable = [] }) {
   if (!['session', 'gates'].includes(kind)) throw Error('Unknown sandbox kind');
   if (!Array.isArray(writable) || !writable.length) throw Error('A sandbox needs its writable directories');
   const h = real(home);
@@ -88,8 +91,12 @@ export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead =
   const dirs = [...SECRET_DIRS.map(d => path.join(h, d)), '/Library/Keychains', `/private/tmp/claude-${uid}`, ...denyRead.map(real)];
   const files = [...SECRET_FILES.map(f => path.join(h, f)), ...denyFiles.map(f => path.join(real(path.dirname(f)), path.basename(f)))];
   const open = writable.map(real);
+  const view = readable.map(real);
   for (const w of open) if (dirs.some(d => d === w || d.startsWith(`${w}/`))) throw Error('A writable sandbox directory may not contain a denied one');
-  const ancestors = [...new Set(open.flatMap(w => { const out = []; for (let d = path.dirname(w); d !== path.dirname(d); d = path.dirname(d)) out.push(d); return out; }))];
+  // A readable directory re-opens what a deny closed, so it may not hold a
+  // denied directory or a credential, and it is never writable.
+  for (const r of view) if (dirs.some(d => d.startsWith(`${r}/`)) || files.some(f => f.startsWith(`${r}/`)) || SECRET_DIRS.some(d => r === path.join(h, d) || r.startsWith(`${path.join(h, d)}/`))) throw Error('A readable sandbox directory may not contain or sit in a credential directory');
+  const ancestors = [...new Set([...open, ...view].flatMap(w => { const out = []; for (let d = path.dirname(w); d !== path.dirname(d); d = path.dirname(d)) out.push(d); return out; }))];
   const lines = [
     '(version 1)',
     '(allow default)',
@@ -100,6 +107,7 @@ export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead =
     ';; session directory lives inside the run directory), with their ancestors',
     ';; visible to stat only',
     `(allow file-read* file-write* ${open.map(w => `(subpath ${literal(w)})`).join(' ')})`,
+    ...(view.length ? [';; this ticket\'s attachments: read only', `(allow file-read* ${view.map(r => `(subpath ${literal(r)})`).join(' ')})`] : []),
     `(allow file-read-metadata ${ancestors.map(a => `(literal ${literal(a)})`).join(' ')})`,
     `(deny process-exec ${DENIED_PROGRAMS.map(p => `(literal ${literal(p)})`).join(' ')} (regex #"/git-credential-[^/]*$"))`,
     ';; writes: only these',

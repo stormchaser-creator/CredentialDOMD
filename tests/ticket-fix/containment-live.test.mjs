@@ -23,7 +23,9 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, realpathSync, mkdte
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { sessionSettings, reviewSettings, runSession, removeSessionTemps } from '../../scripts/ticket-fix/worker.mjs';
+import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, removeSessionTemps } from '../../scripts/ticket-fix/worker.mjs';
+import { CHECKLIST_SCHEMA } from '../../scripts/ticket-fix/checklist.mjs';
+import { REVIEW_SCHEMA } from '../../scripts/ticket-fix/review.mjs';
 import { sandboxAvailable } from '../../scripts/ticket-fix/sandbox.mjs';
 import { RESULT_SCHEMA } from '../../scripts/ticket-agent-context.mjs';
 import { project, sh, workerResult, TICKET, RUN_ID } from './stage2-helpers.mjs';
@@ -33,11 +35,13 @@ const CLI = process.env.CLAUDE_BIN || path.join(os.homedir(), '.local/share/fnm/
 const skip = process.env.LIVE_CLI !== '1' ? 'set LIVE_CLI=1 to run the installed CLI against the local mock API'
   : !existsSync(CLI) ? `no CLI at ${CLI}` : !sandboxAvailable() ? 'needs macOS sandbox-exec' : false;
 const KEY = 'synthetic-loopback-key-7f3a9c';
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
 // One scripted tool call per model turn, then the structured result.
 function mockApi(steps, final) {
   const seen = [];
   const keys = new Set();
+  const requests = [];
   let turn = 0;
   const server = http.createServer(async (req, res) => {
     let raw = '';
@@ -45,6 +49,7 @@ function mockApi(steps, final) {
     if (req.headers['x-api-key']) keys.add(req.headers['x-api-key']);
     if (!req.url.startsWith('/v1/messages') || req.url.includes('count_tokens')) { res.writeHead(404); res.end(); return; }
     const body = JSON.parse(raw);
+    requests.push({ tools: (body.tools || []).map(t => t.name), content: (body.messages?.[0]?.content ?? []).map?.(c => c.type) ?? [] });
     const hasStructured = (body.tools || []).some(t => t.name === 'StructuredOutput');
     for (const message of body.messages) {
       for (const block of Array.isArray(message?.content) ? message.content : []) {
@@ -67,11 +72,11 @@ function mockApi(steps, final) {
       res.end(events.map(([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join(''));
     } else { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(message)); }
   });
-  return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, seen, keys, close: () => new Promise(r => server.close(r)) })));
+  return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, seen, keys, requests, close: () => new Promise(r => server.close(r)) })));
 }
 
 // Runs the installed CLI once for a role through the runner's own launcher.
-async function liveRun({ f, role, settings, schema, steps, final }) {
+async function liveRun({ f, role, settings, schema, steps, final, input = 'Synthetic containment check.' }) {
   const api = await mockApi(steps, final);
   try {
     // The CLI looks up keychain items with `security` at start. A shim first
@@ -82,13 +87,13 @@ async function liveRun({ f, role, settings, schema, steps, final }) {
     writeFileSync(path.join(shims, 'security'), '#!/bin/sh\necho SHIM-RAN\nexit 44\n', { mode: 0o700 });
     const sessionDir = path.join(f.run, `${TICKET}-sessions`, role);
     const stderrFile = path.join(f.run, `${role}-stderr.log`);
-    const r = await runSession({ claude: CLI, role, cwd: f.wt, input: 'Synthetic containment check.', schema, settings, sessionDir, timeoutMs: 150000, stderrFile,
+    const r = await runSession({ claude: CLI, role, cwd: f.wt, input, schema, settings, sessionDir, timeoutMs: 150000, stderrFile,
       baseEnv: { PATH: `${shims}:${process.env.PATH}`, HOME: os.homedir(), TMPDIR: os.tmpdir(), SHELL: '/bin/zsh', ANTHROPIC_API_KEY: KEY },
       sandbox: f.sandbox, apiBaseUrl: `http://127.0.0.1:${api.port}` });
     assert.equal(r.ok, true, `${r.reason}\n${String(r.raw).slice(0, 2000)}\n${existsSync(stderrFile) ? readFileSync(stderrFile, 'utf8').split('\n').filter(l => l.trim() && l.length < 400).slice(-25).join('\n') : ''}`);
     const byStep = Object.fromEntries(api.seen.map(x => [Number(x.id.replace('toolu_live_', '')), x]));
     if (process.env.LIVE_CLI_DEBUG) for (const [step, x] of Object.entries(byStep)) console.log(role, step, x.is_error, x.text.slice(0, 300));
-    return { out: r.output, byStep, keys: api.keys, sessionDir };
+    return { out: r.output, byStep, keys: api.keys, sessionDir, reads: r.reads, requests: api.requests };
   } finally { await api.close(); }
 }
 async function fixture() {
@@ -105,10 +110,17 @@ async function fixture() {
   // Glob out of it (stage 2 review, finding 6).
   const outside = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'probe-outside-')));
   writeFileSync(path.join(outside, 'outside.txt'), 'OUTSIDE-MARKER synthetic\n');
-  const sandbox = { home: os.homedir(), denyRead: [p.state, path.join(p.work, 'runs'), path.join(p.work, 'baseline'), run], denyFiles: [path.join(p.work, 'AUTO_MERGE')], profileDir };
-  return { p, run, secret, outside, wt: wt.dir, sandbox, cleanup: () => { removeSessionTemps(); rmSync(run, { recursive: true, force: true }); rmSync(outside, { recursive: true, force: true }); p.cleanup(); } };
+  // Stage 3 (G6): this ticket's attachment folder, and another ticket's next to it.
+  const attachRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'credentialdomd-attachments.')));
+  const attach = path.join(attachRoot, TICKET);
+  const neighbour = path.join(attachRoot, '00000000-0000-4000-8000-000000000999');
+  mkdirSync(attach, { mode: 0o700 }); mkdirSync(neighbour, { mode: 0o700 });
+  writeFileSync(path.join(attach, 'att-1.png'), PNG, { mode: 0o600 });
+  writeFileSync(path.join(neighbour, 'att-1.png'), PNG, { mode: 0o600 });
+  const sandbox = { home: os.homedir(), denyRead: [p.state, path.join(p.work, 'runs'), path.join(p.work, 'baseline'), run, attachRoot], denyFiles: [path.join(p.work, 'AUTO_MERGE')], profileDir, readable: [attach] };
+  return { p, run, secret, outside, wt: wt.dir, sandbox, attach, neighbour, cleanup: () => { removeSessionTemps(); for (const d of [run, outside, attachRoot]) rmSync(d, { recursive: true, force: true }); p.cleanup(); } };
 }
-const common = f => ({ home: os.homedir(), work: f.p.work, state: [f.p.state], runDir: f.run, tmp: realpathSync(os.tmpdir()) });
+const common = f => ({ home: os.homedir(), work: f.p.work, state: [f.p.state], runDir: f.run, tmp: realpathSync(os.tmpdir()), attachments: f.attach });
 
 // The escape a test file can try once the worker has written it and run it
 // with `node --test`. It prints booleans and error codes only, never a value.
@@ -147,7 +159,7 @@ test('the installed CLI, started as the runner starts it, refuses every escape, 
   const { p, wt, secret, outside } = f;
   const originBefore = p.originHead();
   try {
-    const { out, byStep, keys } = await liveRun({ f, role: 'worker', schema: RESULT_SCHEMA, final: workerResult({ target: TICKET }),
+    const { out, byStep, keys, reads } = await liveRun({ f, role: 'worker', schema: RESULT_SCHEMA, final: workerResult({ target: TICKET }),
       settings: sessionSettings({ role: 'worker', worktree: wt, ...common(f), frozen: ['tests/frozen.test.mjs'] }), steps: [
         ['Bash', { command: 'git push origin HEAD:main', description: 'push' }],
         ['Bash', { command: 'security find-generic-password -s "Supabase CLI" -w', description: 'token' }],
@@ -172,6 +184,10 @@ test('the installed CLI, started as the runner starts it, refuses every escape, 
         // The two-step escape (finding 1): write a test, then run it.
         ['Write', { file_path: path.join(wt, 'tests', 'escape.test.mjs'), content: escapeTest(f) }],
         ['Bash', { command: 'node --test tests/escape.test.mjs', description: 'escape test' }],
+        // Stage 3 (G6): this ticket's screenshot is readable; the neighbour's is not.
+        ['Read', { file_path: path.join(f.attach, 'att-1.png') }],
+        ['Read', { file_path: path.join(f.neighbour, 'att-1.png') }],
+        ['Write', { file_path: path.join(f.attach, 'att-1.png'), content: 'overwritten' }],
       ] });
     assert.deepEqual(out.structured_output.reply, workerResult().reply);
     assert.deepEqual([...keys], [KEY], 'the CLI read the credential from its pipe');
@@ -202,6 +218,13 @@ test('the installed CLI, started as the runner starts it, refuses every escape, 
     assert.equal(existsSync(path.join(p.repo, '.git', 'hooks', 'pre-push')), false);
     // The session left nothing in the worktree but the allowed edits.
     assert.deepEqual(changedPaths(wt, sh(wt, ['rev-parse', 'HEAD'])), ['src/allowed.js', 'tests/escape.test.mjs']);
+    // G6 through the real CLI: the stream shows the successful Read of this
+    // ticket's screenshot, and the neighbour's and any write are refused.
+    assert.equal(byStep[20]?.is_error, false, `this ticket's attachment is readable: ${JSON.stringify(byStep[20])}`);
+    assert.equal(byStep[21]?.is_error, true, 'another ticket\'s attachment is not');
+    assert.equal(byStep[22]?.is_error, true, 'the attachment folder is read only');
+    assert.deepEqual(readFileSync(path.join(f.attach, 'att-1.png')), PNG);
+    assert.deepEqual(reads.filter(x => x.file_path.includes('att-1.png')).map(x => [x.file_path === path.join(f.attach, 'att-1.png'), x.ok]), [[true, true], [false, false]]);
     console.log(`live containment (worker): ${denied.length} tool calls refused; the escape test ran and the sandbox refused all ${Object.keys(report).length} probes (CLI ${spawnSync(CLI, ['--version'], { encoding: 'utf8' }).stdout.trim()})`);
   } finally { f.cleanup(); }
 });
@@ -236,5 +259,23 @@ test('the reproduction session writes tests only and runs node --test only; the 
     assert.match(review.byStep[0].text, /Synthetic summary line/);
     for (const n of [4, 5, 6]) assert.ok(!/OUTSIDE-MARKER|outside\.txt|"synthetic":"state"/.test(review.byStep[n].text), `step ${n}`);
     assert.equal(existsSync(path.join(wt, 'src/review.js')), false);
+  } finally { f.cleanup(); }
+});
+
+test('stage 3 roles through the installed CLI: the extractor has no tool and gets its image inline; the reviewer schema with the checklist edges is accepted', { skip, timeout: 240000 }, async () => {
+  const f = await fixture();
+  try {
+    const extraction = { items: [{ requirement: 'Separate the summary lines', kind: 'bug', source_id: TICKET, quote: 'Synthetic quote text', surface: 'summary', money_legal_or_coding: false }], non_asks: [] };
+    const extract = await liveRun({ f, role: 'extract', schema: CHECKLIST_SCHEMA, settings: extractSettings(), steps: [], final: extraction,
+      input: streamMessage('Synthetic extraction input.', [{ media_type: 'image/png', data: PNG.toString('base64') }]) });
+    assert.deepEqual(extract.out.structured_output, extraction);
+    assert.deepEqual(extract.requests[0].tools, ['StructuredOutput'], 'no tool but the structured result');
+    assert.ok(extract.requests[0].content.includes('image'), 'the image reached the API inline');
+    const verdict = { items: [{ ac_id: 'AC-1', requirement: 'Separate the summary lines', verdict: 'not_addressed', citations: [] }], observations: [{ attachment: 'att-1', verdict: 'agree', why: 'Synthetic.' }],
+      non_asks: [{ index: 0, verdict: 'not_ask', requirement: '', kind: 'none', why: 'Synthetic.' }], missed_asks: [], regressions: [], missed_paths: [], test_changes: [], sibling_exclusions: [], verdict: 'approve', summary: 'Synthetic.' };
+    const review = await liveRun({ f, role: 'review', schema: REVIEW_SCHEMA, settings: reviewSettings({ worktree: f.wt, ...common(f) }), final: verdict,
+      steps: [['Read', { file_path: path.join(f.attach, 'att-1.png') }], ['Read', { file_path: path.join(f.neighbour, 'att-1.png') }]] });
+    assert.deepEqual(review.out.structured_output, verdict);
+    assert.deepEqual([0, 1].map(n => review.byStep[n]?.is_error), [false, true]);
   } finally { f.cleanup(); }
 });

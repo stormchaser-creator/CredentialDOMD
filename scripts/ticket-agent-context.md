@@ -389,3 +389,87 @@ Node test runner's serialized events from inside a test file is not detected; an
 `sandbox-exec` is deprecated by Apple, though present on macOS 26. The container runner
 (`scripts/ticket-agent-isolated.mjs`) remains the stronger option and the owner's
 decision.
+
+## Stage 3: every ask tracked, and screenshots actually seen (2026-09-28)
+
+Design G1 and G6 with the critique's amendments (A3 for the reply, the G1 owner-decision and
+non-ask amendments). The runner keeps its lock, queue, breaker and reply recording; stage 3
+adds three host steps and changes what the worker returns.
+
+1. **Attachments (G6).** After `--load`, `ticket-agent.sh` runs
+   `scripts/ticket-fix/attachments.mjs fetch` with the management token, before any session.
+   It lists the project's API keys through the management API, keeps the service key in that
+   process's memory only, and downloads every attachment on the target ticket and its
+   messages, plus the newest six on related tickets, from the private `documents` bucket. A
+   path outside `tickets/<ticket>/` (or `tickets/<ticket>/replies/`) is never fetched. The
+   bytes decide the type (PNG, JPEG, GIF, WebP, HEIC/HEIF, PDF; anything else is refused),
+   HEIC becomes PNG and images over 2000 px are shrunk with `/usr/bin/sips`, files over 10 MB
+   are refused, and each file is written `att-<n>.<ext>` (0600) into
+   `$TMPDIR/credentialdomd-attachments.XXXXXX/<ticket>/`, next to the run directory and
+   removed with it (and after each ticket's run). The host's manifest goes to
+   `<run dir>/<ticket>-attachments.json`. The log carries the ticket id and storage path
+   only. A failed download is `unavailable` with a reason, internal work for the next run,
+   never a request to the customer.
+   - The attachment root is not inside the run directory because every session is denied
+     the run directory, and a deny rule beats an allow rule. Sessions of this ticket may Read
+     its folder (permission rule and a read-only `readable` entry in the macOS sandbox
+     profile) and are denied every folder next to it; the root is denied to the gates.
+   - "reviewed" is set only when the worker's own tool events show a successful Read of that
+     exact path. Every session now reports on `--output-format stream-json`; the host reads
+     the Read calls and their results from the CLI's stdout, which nothing the session runs
+     can write to (the on-disk transcript is in a directory the session can write, so it is
+     not used). Until every delivered attachment on the ticket is read, the worker's result is
+     refused and it is resumed with the paths. It gives one observation per attachment it
+     read (`attachment_observations`), and an item whose message carried a screenshot must be
+     in that observation's `supports`. The reviewer (or, with no change to review, a
+     read-only `confirm` session) opens the same files and agrees or disputes each
+     observation; a disputed or unjudged one is not an approval of a change, and the items it
+     supports are not shown as done.
+2. **Checklist (G1).** `run.mjs` runs an extraction session (`claude-opus-5-5`, no tools,
+   `--input-format stream-json` with the screenshots inline) over every customer message no
+   extraction has read. Each item is `{id AC-n, requirement, kind, source_id, quote,
+   surface}`; the host checks each quote word for word against that message (customer
+   sources on the target ticket only), the requirement against the fixed reply rules (it is
+   shown to the customer), and, on the owner's own ticket, that an `owner_decision` is about
+   price or money constants, legal copy or clinical coding (CPT, wRVU, modifiers,
+   bundling). A keyword for those topics makes the extractor confirm once; it never
+   reclassifies. Problems go back to the session once; a second refusal is exit 7, and the
+   shell parks the ticket and alerts the owner, with no reproduction or worker run. The
+   checklist is frozen in `ticket-context/checklists/<ticket>.json` (0600, digest-checked):
+   later runs only add items for new messages, and a rewrite or deletion is refused.
+   Sentences the extractor judged not to be asks go to the reviewer or the confirmer for a
+   verdict; one judged an ask, and any missed ask whose quote checks out, becomes a new item.
+   Sentences no item quotes are shown to them as hints.
+3. **The host's decision and the reply (A3).** The worker returns `reply: {opening, claims,
+   closing}` (claims `{ac_id, text, evidence: test | file}`), one `checklist` entry per
+   frozen item and its observations; it writes no free prose for the customer and no ids.
+   After the gates, the review and the merge decision, `run.mjs` verifies each claim itself
+   (`scripts/ticket-fix/stage3.mjs`: a test passing in this run's gates once the change is
+   released and verified, or run by the host at a base the live build contains; quoted text
+   at a cited line in the live build), and decides each item's state from its own artifacts
+   (`checklist.mjs finalStates`): an owner decision waits on the owner; a bug or change is
+   done only on a verified claim on a test bound to that item (a reproduction or declared
+   test, this run's or a released run's the reviewer found met); a change held for release
+   is "in progress"; a refused change is "not done"; any other unproven "done" is "partly
+   done, not confirmed yet". It writes `<run dir>/<ticket>-stage3.json`, which the shell
+   passes to `--record-and-reply` (`TICKET_STAGE3_FILE`). The reply is rendered from it: a
+   fixed opening, "What we confirmed:" with the verified claims only, the questions, "Where
+   each part stands:" with one line per item, and a fixed closing. The record step refuses a
+   free-text result and a result without a stage 3 record for that ticket. The case record
+   keeps the host's state per item and the host's own follow-ups (an attachment it could not
+   download, a change waiting for release, an item added after the worker ran).
+
+The staged isolated runner keeps its free-text result (`LEGACY_RESULT_SCHEMA`).
+
+Tests: `tests/ticket-fix/checklist.test.mjs`, `attachments.test.mjs`, `stage3-run.test.mjs`,
+`stage3-reply.test.mjs`, `stage3-runner.test.mjs`, the full-host shell test (an `attachment`
+scenario: download, inline image, a refused answer with no Read, the resume that reads it,
+the confirmer, the verification recording it as reviewed, the files gone), and
+`containment-live.test.mjs` (`LIVE_CLI=1`: the installed CLI reads this ticket's attachment
+and is refused the neighbour's and any write; the extractor gets no tool and its image inline).
+
+**Not done in this stage:** after the owner merges a held change, nothing tells the customer
+it is live; the continuation that confirms it is action-only and never publishes (the case
+record keeps it as pending work). The attachment download needs the service key from the
+management API's key listing; the endpoint's shape was not called against production while
+building this (only its documented forms, with a local stub).

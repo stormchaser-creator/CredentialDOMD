@@ -9,6 +9,7 @@ commit of its repository, so each scenario gets a throwaway git repository
 holding the current working-tree versions, with a local bare origin.
 No installed model CLI, Keychain command, HTTP client or production worker runs.
 """
+import base64
 import json
 import os
 import shutil
@@ -151,7 +152,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
 
     sql(PLATFORM)
 
-    def reset(two_owners=False, approved=True, status='open'):
+    def reset(two_owners=False, approved=True, status='open', payload='{}'):
         sql(f"""
           drop schema public cascade; create schema public;
           create table profiles(id uuid primary key,is_admin boolean default false);
@@ -162,7 +163,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
           create trigger bump after insert on support_messages for each row execute function bump_ticket();
           insert into profiles(id) values('{A}'),('{B}');
           insert into support_tickets values
-            ('{T}','{A}','Synthetic active report','Review existing answer','{status}','2026-09-01','{VERSION}',null,null,{'now()' if approved else 'null'},'{{}}'),
+            ('{T}','{A}','Synthetic active report','Review existing answer','{status}','2026-09-01','{VERSION}',null,null,{'now()' if approved else 'null'},'{payload}'),
             ('{R}','{A}','Synthetic resolved report','Earlier report','resolved','2026-09-02','{VERSION}',now(),now(),null,'{{}}'),
             ('{X}','{B}','Synthetic other customer','Private fixture body','open','2026-09-03','{VERSION}',null,null,{'now()' if two_owners else 'null'},'{{}}');
           insert into support_messages values
@@ -171,8 +172,8 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         sql(MIGRATION)
         sql(HARDENING)
 
-    def scenario(name, two_owners=False, approved=True, status='open', parked=None, extra=None):
-        reset(two_owners, approved, status)
+    def scenario(name, two_owners=False, approved=True, status='open', parked=None, extra=None, payload='{}'):
+        reset(two_owners, approved, status, payload)
         run = folder / name
         run.mkdir(mode=0o700)
         repo = run / 'repo'
@@ -274,7 +275,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         run, state, script, repo = scenario('normal', two_owners=True)
         owner_head, origin_head = git_out(repo, 'rev-parse', 'HEAD'), git_out(run / 'origin.git', 'rev-parse', 'main')
         result = execute(script)
-        check('full shell path replies successfully', result.returncode == 0 and count() == 1 and count(X) == 1)
+        check('full shell path replies successfully', result.returncode == 0 and count() == 1 and count(X) == 1, log(run)[-3000:])
         inputs = invocations(run)
         check('two targets use separate model sessions', len(inputs) == 2 and {v['owner_id'] for v in inputs} == {A, B})
         check('all model histories match that session owner', all(all(t['user_id'] == v['owner_id'] for t in v['tickets']) for v in inputs))
@@ -293,14 +294,22 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('the runner keeps a private ledger entry per stored reply', (state / 'replies' / T / f'{vid}.json').stat().st_mode & 0o777 == 0o600)
         check('reconcile finds every stored reply in a ledger and alerts nobody', notified(run) == [] and 'reconcile: 2 verifications, 0 without a ledger entry, 0 agent replies from no logged run' in log(run), (notified(run), log(run)[-3000:]))
         check('the stored result says it was not emailed', '"emailed":false' in log(run))
-        check('the verification records the run and that its prose is unbound', sql(f"select (report->>'claims') || '|' || length(report->>'run_id') from support_reply_verifications where ticket_id='{T}'") == 'unbound|16')
+        check('the verification records the run and that its claims are bound', sql(f"select (report->>'claims') || '|' || length(report->>'run_id') from support_reply_verifications where ticket_id='{T}'") == 'bound|16')
+        # Stage 3: the reply is the host's: a fixed opening, the footer with one
+        # line per frozen checklist item in the host's state, a fixed closing.
+        body = sql(f"select body from support_messages where ticket_id='{T}' and is_admin_reply")
+        check('the stored reply is rendered by the host with one footer line per checklist item', body.startswith('CredentialDOMD Support · Automated\n\nHere is where your request stands.') and
+              'Where each part stands:\n1. Review the existing answer: not done yet, next: look into the synthetic report\n' in body and body.endswith('We will post on this thread when the remaining work is done.'), body)
+        check('the frozen checklist is private host state', (state / 'checklists' / f'{T}.json').stat().st_mode & 0o777 == 0o600 and json.loads((state / 'checklists' / f'{T}.json').read_text())['items'][0]['id'] == 'AC-1')
+        check('the case record keeps the host decision per item', json.loads((state / f'{T}.json').read_text())['checklist_states'] == [{'id': 'AC-1', 'state': 'not_done', 'remaining': 'look into the synthetic report', 'detail': None}])
         # Stage 2: every session is contained and runs in a worktree; the
         # reproduction comes first; the owner's checkout and main are untouched.
         roles = [v['role'] for v in sessions(run)]
-        check('each ticket gets a reproduction session before its worker', roles[:2] == ['repro', 'worker'] and roles.count('repro') == 2 and roles.count('worker') == 2, roles)
+        check('each ticket gets a checklist, then a reproduction session, before its worker', roles[:3] == ['extract', 'repro', 'worker'] and roles.count('extract') == 2 and roles.count('repro') == 2 and roles.count('worker') == 2, roles)
         check('every session ran in a worktree under the work directory, never the owner checkout', all(v['cwd'].startswith(str(run / 'work' / 'worktrees')) for v in sessions(run)))
-        check('the worker has Read, Grep and Glob but no git or rg', all(v['tools'] == 'Read,Grep,Glob,Edit,Write,Bash' for v in sessions(run)))
-        check('every session ran inside the sandbox, with its credential on a pipe', len(sessions(run)) == 4 and all(v['sandboxed'] for v in sessions(run)), sessions(run))
+        check('the worker has Read, Grep and Glob but no git or rg', all(v['tools'] == 'Read,Grep,Glob,Edit,Write,Bash' for v in sessions(run) if v['role'] in ('repro', 'worker')))
+        check('the checklist extractor has no tools', all(v['tools'] == '' for v in sessions(run) if v['role'] == 'extract'))
+        check('every session ran inside the sandbox, with its credential on a pipe', len(sessions(run)) == 6 and all(v['sandboxed'] for v in sessions(run)), sessions(run))
         check('the owner checkout and origin main are untouched', git_out(repo, 'rev-parse', 'HEAD') == owner_head and git_out(repo, 'status', '--porcelain') == '' and git_out(run / 'origin.git', 'rev-parse', 'main') == origin_head)
         check('a run with no change leaves no worktree and no branch', not any((run / 'work' / 'worktrees').iterdir()) and git_out(repo, 'branch', '--list', 'agent/*') == '')
 
@@ -319,8 +328,9 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         inputs = invocations(run)
         check('one resume carried only the host reason', len(inputs) == 2 and inputs[1].get('resumed') and 'commit_or_build_id' in inputs[1]['repair_prompt'] and 'device_not_tested' in inputs[1]['repair_prompt'])
         check('the repair is logged and nothing counts as rejected', 'REPAIR' in log(run) and 'REJECTED' not in log(run) and not (state / 'failed' / f'{T}.count').exists())
-        check('the repaired reply is the one stored', sql(f"select body from support_messages where ticket_id='{T}' and is_admin_reply").endswith('Investigation remains in progress.'))
-        check('the log names the broken rules, never the refused reply text', 'REPAIR — ' + T + ' attempt 1: commit_or_build_id, device_not_tested, unverified_claim\n' in log(run) and 'c237149' not in log(run) and 'iPhone' not in log(run), log(run))
+        check('the repaired reply is the one stored', sql(f"select body from support_messages where ticket_id='{T}' and is_admin_reply").endswith('We will post on this thread when the remaining work is done.') and
+              'c237149' not in sql(f"select body from support_messages where ticket_id='{T}' and is_admin_reply"))
+        check('the log names the broken rules, never the refused reply text', 'REPAIR — ' + T + ' attempt 1: reply.claims[0] commit_or_build_id, device_not_tested\n' in log(run) and 'c237149' not in log(run) and 'iPhone' not in log(run), log(run))
 
         run, state, script, repo = scenario('repair_exhausted')
         check('two failed repairs then count as one rejection', execute(script).returncode != 0 and count() == 0 and len(invocations(run)) == 3 and log(run).count('REPAIR') == 2 and (state / 'failed' / f'{T}.count').read_text().strip() == '1')
@@ -403,6 +413,26 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('unapproved target never launches model', execute(script).returncode == 0 and not invocations(run) and count() == 0)
         run, state, script, repo = scenario('owner_race')
         check('related ownership race aborts before model launch', execute(script).returncode != 0 and not invocations(run) and count() == 0)
+
+        # Stage 3 (G6): a ticket with a screenshot. The host downloads it before
+        # any session, the extractor sees it inline, the worker's answer is
+        # refused until its own tool events show a Read of it, the confirmer
+        # agrees with what the worker says it shows, and the file is gone after.
+        run, state, script, repo = scenario('attachment', payload=json.dumps({'attachment_path': f'tickets/{T}/screenshot.png'}))
+        result = execute(script)
+        check('attachment: the reply is recorded', result.returncode == 0 and count() == 1, log(run)[-3000:])
+        check('attachment: downloaded by the host before any session, logged by ticket id and storage path only', f'ATTACHMENT — {T} tickets/{T}/screenshot.png: delivered as att-1' in log(run) and
+              [json.loads(line)['request'] for line in (run / 'storage.jsonl').read_text().splitlines()] == ['api-keys', 'object'])
+        service_key = '.'.join(base64.urlsafe_b64encode(part.encode()).decode().rstrip('=') for part in ('{"alg":"HS256"}', '{"role":"service_role"}', 'synthetic-signature'))
+        check('attachment: the storage key never reaches the log', service_key not in log(run) and service_key.split('.')[1] not in log(run))
+        check('attachment: the extractor saw the screenshot inline', [json.loads(line)['images'] for line in (run / 'extract-inputs.jsonl').read_text().splitlines()] == [1])
+        seen = [json.loads(line) for line in (run / 'worker-attachments.jsonl').read_text().splitlines()]
+        check('attachment: an answer with no Read of it was refused and the worker resumed', 'REPAIR — ' + T + ' attempt 1: attachments\n' in log(run) and [v['resumed'] for v in seen] == [False, True], log(run)[-2000:])
+        check('attachment: the session sandbox let this ticket\'s sessions read it', all(v['readable'] for v in seen) and
+              all(json.loads(line)['readable'] for line in (run / 'confirm-inputs.jsonl').read_text().splitlines()))
+        check('attachment: the confirmer judged the observation', [json.loads(line)['attachments'] for line in (run / 'confirm-inputs.jsonl').read_text().splitlines()] == [['att-1']])
+        check('attachment: the verification records it as reviewed', sql(f"select report->'attachments'->0->>'access' from support_reply_verifications where ticket_id='{T}'") == 'reviewed')
+        check('attachment: the downloaded files are gone after the run', not list(folder.glob('credentialdomd-attachments.*')))
 
         run, state, script, repo = scenario('continuation')
         check('initial promise stores one normal reply', execute(script).returncode == 0 and count() == 1)

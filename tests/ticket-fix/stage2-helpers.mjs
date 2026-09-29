@@ -80,31 +80,45 @@ export function project(extra = {}) {
   return { root, origin, repo, work, state, write: (dir, files) => write(dir, files), moveMain, originHead, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-// A structured result the worker stub returns (stage 1 schema + change).
-export function workerResult({ reply = 'Your report is recorded. The investigation continues and we will post here next.', change = null, target = TICKET } = {}) {
-  return { reply, summary: 'Synthetic run.', needs_owner_review: false, assessment: {
-    acceptance_criteria: [{ requirement: 'Synthetic ask', state: 'open', evidence_ids: [target] }], answered_questions: [], prior_fixes: [], questions: [],
-    follow_up: [{ work: 'Synthetic follow-up', owner: 'support_worker', next_action: 'Synthetic next step.' }], completed_follow_up: [],
-    verification: { kind: 'source_review', reproduction: 'Synthetic reproduction.', checks: 'Synthetic checks.', release: 'Not released.' } },
+// The reproduction test the standard script writes, as a test id.
+export const REPRO_TEST = 'tests/join.test.mjs::lines are joined with a line break';
+// A structured result the worker stub returns (stage 3: the reply is parts
+// the host renders, one checklist entry per frozen item). done: the item is
+// fixed by this change, with its bound test and a claim on it.
+export function workerResult({ claims = [], change = null, target = TICKET, done = false, checklist = null, observations = [], opening = 'update', closing = 'follow_up',
+  questions = [], remaining = 'look at how the summary lines are joined' } = {}) {
+  void target;
+  const entries = checklist ?? [done ? { ac_id: 'AC-1', state: 'done', remaining: '', tests: [REPRO_TEST] } : { ac_id: 'AC-1', state: 'not_done', remaining, tests: [] }];
+  const bound = done && !claims.length ? [{ ac_id: 'AC-1', text: 'Summary lines are separated by line breaks', evidence: { test: REPRO_TEST } }] : claims;
+  return { reply: { opening, claims: bound, closing }, summary: 'Synthetic run.', needs_owner_review: false, checklist: entries, attachment_observations: observations,
+    assessment: { answered_questions: [], prior_fixes: [], questions,
+      follow_up: [{ work: 'Synthetic follow-up', owner: 'support_worker', next_action: 'Synthetic next step.' }], completed_follow_up: [],
+      verification: { kind: 'source_review', reproduction: 'Synthetic reproduction.', checks: 'Synthetic checks.', release: 'Not released.' } },
     ...(change ? { change } : {}) };
 }
+// The checklist the extraction stub returns for the standard synthetic ticket.
+export const CHECKLIST_RESULT = Object.freeze({ items: [{ requirement: 'Separate the summary lines with line breaks', kind: 'bug', source_id: TICKET,
+  quote: 'the summary joins lines with spaces', surface: 'the summary text', money_legal_or_coding: false }], non_asks: [] });
 export const context = (target = TICKET) => ({ version: 1, target_id: target, run_mode: 'reply', owner_id: OWNER, history_complete: true, limitations: [],
   tickets: [{ id: target, user_id: OWNER, subject: 'Synthetic subject', body: 'Synthetic body: the summary joins lines with spaces.', messages: [] }],
   attachments: [], prior_reviews: [{ target_id: target, reply: 'PRIOR-DRAFT-MARKER' }], action_scope: [target] });
 
 let sessionCount = 0;
-// A stub model: script = { repro(opts) -> structured, worker(opts, call) -> structured, review(opts) -> structured }.
-// Each may write files into opts.cwd. Records every call.
+// A stub model: script = { extract, repro, worker(opts, call), review, confirm } each (opts, n) -> structured.
+// Each may write files into opts.cwd. Records every call. A result with a
+// $reads list reports those Read tool calls ({ file_path, ok }), as the CLI's
+// stream would; the key is removed from the structured result.
 export function stubModel(script) {
   const calls = [];
   const launch = async opts => {
-    calls.push({ role: opts.role, cwd: opts.cwd, input: opts.input, settings: opts.settings, resume: opts.resume ?? null, timeoutMs: opts.timeoutMs });
+    calls.push({ role: opts.role, cwd: opts.cwd, input: opts.input, settings: opts.settings, resume: opts.resume ?? null, timeoutMs: opts.timeoutMs, schema: opts.schema });
     const handler = script[opts.role];
     if (!handler) return { ok: false, reason: `no stub for ${opts.role}` };
-    const value = await handler(opts, calls.filter(c => c.role === opts.role).length);
-    if (value && value.fail) return { ok: false, reason: value.fail, timedOut: Boolean(value.timedOut) };
+    const given = await handler(opts, calls.filter(c => c.role === opts.role).length);
+    if (given && given.fail) return { ok: false, reason: given.fail, timedOut: Boolean(given.timedOut) };
+    const { $reads: reads = [], ...value } = given ?? {};
     const session = `00000000-0000-4000-8000-${String(++sessionCount).padStart(12, '0')}`;
-    return { ok: true, output: { type: 'result', is_error: false, session_id: session, total_cost_usd: 0, structured_output: value }, session_id: session };
+    return { ok: true, output: { type: 'result', is_error: false, session_id: session, total_cost_usd: 0, structured_output: value }, session_id: session, reads };
   };
   return { launch, calls };
 }
@@ -114,14 +128,18 @@ export function stubModel(script) {
 // the worker stub fixes it, the review stub approves with a real citation.
 export const REPRO_FILES = Object.freeze({ 'tests/join.test.mjs': "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { joinLines } from '../src/format.js';\n\ntest('lines are joined with a line break', () => {\n  assert.equal(joinLines(['first', 'second']), 'first\\nsecond');\n});\n" });
 export const FIX_FILES = Object.freeze({ 'src/format.js': "// Synthetic module for the gate tests.\nexport const title = 'Synthetic summary line';\n\nexport function joinLines(lines) {\n  return lines.join('\\n');\n}\n" });
-export const REPRO_RESULT = Object.freeze({ kind: 'bug', reason: 'Synthetic: lines are joined with spaces.', tests: [{ file: 'tests/join.test.mjs', name: 'lines are joined with a line break', requirement: 'Line breaks between summary lines' }] });
+export const REPRO_RESULT = Object.freeze({ kind: 'bug', reason: 'Synthetic: lines are joined with spaces.', tests: [{ file: 'tests/join.test.mjs', name: 'lines are joined with a line break', requirement: 'Line breaks between summary lines', ac_id: 'AC-1' }] });
 export const approve = (changes = {}) => ({
-  items: [{ requirement: 'Summary lines are separated by line breaks', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\n');" }] }],
+  items: [{ ac_id: 'AC-1', requirement: 'Summary lines are separated by line breaks', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\n');" }] }],
+  observations: [], non_asks: [], missed_asks: [],
   regressions: [], missed_paths: [], test_changes: [], sibling_exclusions: [], verdict: 'approve', summary: 'Synthetic review.', ...changes });
+export const confirmResult = (changes = {}) => ({ observations: [], non_asks: [], missed_asks: [], summary: 'Synthetic confirmation.', ...changes });
 export const standardScript = (overrides = {}) => ({
+  extract: () => CHECKLIST_RESULT,
   repro: opts => { write(opts.cwd, REPRO_FILES); return REPRO_RESULT; },
-  worker: opts => { write(opts.cwd, FIX_FILES); return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } }); },
+  worker: opts => { write(opts.cwd, FIX_FILES); return workerResult({ done: true, change: { subject: 'Join summary lines with line breaks', tests: [] } }); },
   review: () => approve(),
+  confirm: () => confirmResult(),
   ...overrides,
 });
 // Runs one ticket through run.mjs with a stubbed model.
@@ -138,11 +156,14 @@ export async function runStub(p, script, options = {}) {
   const code = await runTicket({ ticket: ctx.target_id, contextFile, outputFile: path.join(runDir, `${ctx.target_id}-output.json`), runFile: path.join(runDir, `${ctx.target_id}-run.json`),
     runId, runDir, repo: p.repo, work: p.work, state: p.state, committer: `ticket-agent+${runId}@credentialdomd.invalid`, launchSession: model.launch,
     commands: COMMANDS, log: line => logs.push(line), send: async m => { sent.push(m); return true; }, verify: options.verify, autoMerge: options.autoMerge ?? false,
-    sandbox: options.sandbox ?? SANDBOX, ...options.extra });
+    sandbox: options.sandbox ?? SANDBOX, fetchBuild: options.fetchBuild ?? offline, ...options.extra });
   const read = name => JSON.parse(readFileSync(path.join(runDir, `${ctx.target_id}-${name}.json`), 'utf8'));
   let facts = null; try { facts = read('run'); } catch { facts = null; }
-  return { code, facts, logs, sent, calls: model.calls, runDir, output: () => read('output'), cleanup: () => rmSync(runDir, { recursive: true, force: true }) };
+  let stage3 = null; try { stage3 = read('stage3'); } catch { stage3 = null; }
+  return { code, facts, stage3, logs, sent, calls: model.calls, runDir, output: () => read('output'), cleanup: () => rmSync(runDir, { recursive: true, force: true }) };
 }
+// No live build (tests never reach credentialdomd.com).
+export const offline = async () => { throw Error('offline'); };
 
 // A 10-digit number that passes the NPI check, built from a synthetic prefix
 // at run time, so no full NPI is ever written in the repository.

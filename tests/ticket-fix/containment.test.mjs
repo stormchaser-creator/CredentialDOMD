@@ -26,9 +26,21 @@ test('every session runs in dontAsk with no machine settings, no MCP, a fresh co
     assert.equal(flag('--mcp-config'), '{"mcpServers":{}}');
     assert.equal(flag('--effort'), 'high');
     assert.ok(Number(flag('--max-budget-usd')) > 0);
-    assert.equal(flag('--output-format'), 'json');
+    // Stage 3: the host reads each session's tool events from its stdout.
+    assert.equal(flag('--output-format'), 'stream-json');
+    assert.ok(args.includes('--verbose'));
     assert.deepEqual(JSON.parse(flag('--json-schema')), schema);
   }
+  // The checklist extractor has no tools and gets its images on stream-json
+  // stdin; the confirmer is read-only like the reviewer.
+  const extract = sessionArgs({ role: 'extract', settingsFile: 's', schema });
+  assert.equal(extract[extract.indexOf('--tools') + 1], '');
+  assert.equal(extract[extract.indexOf('--input-format') + 1], 'stream-json');
+  assert.equal(extract[extract.indexOf('--model') + 1], 'claude-opus-5-5');
+  const confirm = sessionArgs({ role: 'confirm', settingsFile: 's', schema });
+  assert.equal(confirm[confirm.indexOf('--tools') + 1], 'Read,Grep,Glob');
+  assert.equal(confirm[confirm.indexOf('--model') + 1], 'claude-opus-5-5');
+  assert.ok(!sessionArgs({ role: 'worker', settingsFile: 's', schema }).includes('--input-format'));
   assert.equal(sessionArgs({ role: 'worker', settingsFile: 's', schema }).at(sessionArgs({ role: 'worker', settingsFile: 's', schema }).indexOf('--model') + 1), WORKER_MODEL);
   const review = sessionArgs({ role: 'review', settingsFile: 's', schema });
   assert.equal(review[review.indexOf('--model') + 1], 'claude-opus-5-5');

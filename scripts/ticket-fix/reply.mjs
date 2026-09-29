@@ -24,8 +24,8 @@
 // of prepareAgentReply or prepareStructuredReply in this process, with no
 // rule violations, can be signed (signPreparedReply).
 //
-// Imports only claims.mjs and Node built-ins, so the agent modules can import
-// it without a cycle.
+// Imports only claims.mjs, checklist.mjs (pure: the stage 3 footer) and Node
+// built-ins, so the agent modules can import it without a cycle.
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -33,6 +33,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AUTOMATED_LABEL, BODY_MAX, ReplyRuleError, customerReplyText, checkFixedRules, placeholdersIn,
   fillPlaceholders, parseStructuredReply, writerViolations, verifyClaim, renderStructured, safeRepoPath, isTimestamp } from './claims.mjs';
+import { renderAgentReply, AGENT_REPLY_MAX } from './checklist.mjs';
 
 export { ReplyRuleError };
 export const VERIFICATION_KEY = 'support_reply_hmac_key';
@@ -281,6 +282,34 @@ export async function prepareAgentReply({ reply, ticketId = null, git = null, pr
   return sealPrepared({ ticketId, text: filled, body, report: { version: 2, path: 'agent', claims: 'unbound', rules: 'passed', verification_kind: verificationKind,
     pre_head: SHA.test(preHead || '') ? preHead : null, run_started: ISO.test(runStarted || '') ? runStarted : null,
     run_id: RUN_ID.test(runId || '') ? runId : null, head, host: host.facts } });
+}
+
+// The hourly agent's reply (stage 3, A3 and G1): rendered by the host from
+// the structured result and the host's own decision (stage3.final, written by
+// ticket-fix/run.mjs): a fixed opening, only the claims the host verified,
+// the questions, "Where each part stands:" with one line per frozen checklist
+// item in the state the host decided, and a fixed closing. No sentence of
+// the model's reaches the customer except a verified claim, a checked
+// question, a requirement the host quoted-checked at extraction and the
+// "remaining" text of an item that is not done (which may report no result).
+export function prepareRenderedReply({ result, ticketId, ownerTicket = false, stage3, runId = null, preHead = null, runStarted = null }) {
+  if (!UUID.test(ticketId || '') || stage3?.ticket_id !== ticketId) throw Error('The host decision is for another ticket');
+  const verdicts = new Map((stage3.final.claims ?? []).map(c => [c.index, c]));
+  const confirmed = result.reply.claims.filter((c, i) => verdicts.get(i)?.verified === true).map(c => c.text.trim());
+  const questions = result.assessment.questions.map(q => q.question.trim());
+  const pending = stage3.final.items.some(f => f.state !== 'done');
+  // "We will post when the rest is done" only when something is left.
+  const closing = result.reply.closing === 'follow_up' && !pending ? 'reply_here' : result.reply.closing;
+  const text = renderAgentReply({ opening: result.reply.opening, confirmed, questions, items: stage3.checklist.items, finals: stage3.final.items, closing, ownerTicket });
+  const violations = checkFixedRules(text, { max: AGENT_REPLY_MAX });
+  if (violations.length) throw new ReplyRuleError(violations);
+  const body = agentReplyBody(text);
+  if (body !== labeledBody(text)) throw new ReplyRuleError([{ rule: 'em_dash', excerpt: '' }]);
+  return sealPrepared({ ticketId, text, body, report: { version: 3, path: 'agent', claims: 'bound', rules: 'passed', rendered_sha256: sha256Hex(text),
+    checklist_sha256: stage3.checklist.items_sha256 ?? null, items: stage3.final.items.map(f => ({ id: f.id, state: f.state, detail: f.detail ?? null })),
+    claims_checked: (stage3.final.claims ?? []).map(c => ({ index: c.index, ac_id: c.ac_id, verified: c.verified === true, reason: String(c.reason ?? '').slice(0, 200) })),
+    attachments: (stage3.attachments ?? []).map(a => ({ id: a.attachment, access: a.access })), code_outcome: stage3.final.code_outcome ?? null,
+    pre_head: SHA.test(preHead || '') ? preHead : null, run_started: ISO.test(runStarted || '') ? runStarted : null, run_id: RUN_ID.test(runId || '') ? runId : null } });
 }
 
 // The post-reply path (A3): the reply is rendered by the host from claims.
