@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import * as app from '../../src/utils/welcomeEmail.js';
 import * as shared from '../../supabase/functions/_shared/app/utils/welcomeEmail.js';
 import { DEFAULT_SETTINGS } from '../../src/constants/defaults.js';
-import { reminderPreferences } from '../../supabase/functions/_shared/reminderRows.mjs';
+import { emailRemindersOn } from '../../src/utils/reminderPreferences.js';
 
 const { composeWelcomeEmail, welcomeEmailPreview, welcomeEmailFingerprint, welcomeEmailCanonical, welcomeFirstName, WELCOME_VARIANTS } = app;
 const body = (variant, name = 'Jordan') => composeWelcomeEmail({ name, variant }).text;
@@ -133,7 +133,7 @@ test('step 3 describes reminders as the app has them: already on, to the profile
   // Already on: the app's default, and the reminder sender reads an untouched
   // switch the same way (a null notify_email used to mean off there).
   assert.equal(DEFAULT_SETTINGS.notifyEmail, true);
-  assert.equal(reminderPreferences({ notify_email: null }).emailOn, true);
+  assert.equal(emailRemindersOn(null), true);
   // The names the step uses are the ones on screen.
   assert.match(src('src/App.jsx'), /\{ id: "more", label: "More"/);
   assert.match(src('src/App.jsx'), />Profile &amp; settings</);
