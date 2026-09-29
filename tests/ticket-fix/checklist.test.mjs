@@ -67,7 +67,9 @@ test('owner decisions: on the owner\'s own ticket only price, money constants, l
   const run = (context, items, confirmTriggers = true) => checkExtraction({ items, non_asks: [] }, { context, record: emptyChecklist(context), sources: askSources(context), confirmTriggers });
   // The owner filed "fix the total": the ask is his decision already.
   assert.match(run(owner, [item({ kind: 'owner_decision' })]).errors.join(), /on the owner's own ticket the ask is already the owner's decision/);
-  assert.deepEqual(run(owner, [item({ kind: 'owner_decision', money_legal_or_coding: true })]).errors, []);
+  assert.deepEqual(run(owner, [item({ kind: 'owner_decision', money_legal_or_coding: true, requirement: 'Set the weekend day rate on the invoice' })]).errors, []);
+  // The flag alone is not enough: the item must name a price, money, legal or coding term.
+  assert.match(run(owner, [item({ kind: 'owner_decision', money_legal_or_coding: true })]).errors.join(), /owner_decision is only for price or money constants, legal copy or clinical coding, named in the requirement or quote/);
   assert.deepEqual(run(member, [item({ kind: 'owner_decision' })]).errors, [], 'on a member ticket anything may wait for CredentialDOMD');
   // "total on the weekend invoice" is not a money constant, but a rate is: confirm once.
   const flagged = run(member, [item({ requirement: 'Use the weekend day rate on the invoice', quote: 'fix the total on the weekend invoice' })]);
@@ -151,8 +153,8 @@ test('the worker\'s checklist: every frozen item exactly once; done needs a boun
   assert.match(check(result([...all(), entry('AC-1', 'not_done')])), /AC-1 must appear exactly once \(found 2\)/);
   assert.match(check(result([...all(), entry('AC-9', 'not_done')])), /AC-9 is not a frozen item/);
   // Done without a passing test id, or with a test not bound to the item.
-  assert.match(check(result(all({ 'AC-1': entry('AC-1', 'done') }))), /AC-1: done needs the passing test that pins it/);
-  assert.match(check(result(all({ 'AC-1': entry('AC-1', 'done', { tests: ['tests/other.test.mjs::unrelated'] }) }))), /is not a reproduction or declared test bound to AC-1/);
+  assert.match(check(result(all({ 'AC-1': entry('AC-1', 'done') }))), /AC-1: done needs the test that pins it/);
+  assert.match(check(result(all({ 'AC-1': entry('AC-1', 'done', { tests: ['tests/other.test.mjs::unrelated'] }) }))), /tests\/other\.test\.mjs::unrelated is not bound to AC-1/);
   assert.match(check(result(all({ 'AC-1': entry('AC-1', 'done', { tests: [TEST] }) }))), /done needs a claim for AC-1 whose evidence is one of its tests/);
   assert.equal(check(result(all({ 'AC-1': entry('AC-1', 'done', { tests: [TEST] }) }), [{ ac_id: 'AC-1', text: 'The weekend total now adds the stipend', evidence: { test: TEST } }])), '');
   assert.match(check(result(all({ 'AC-2': entry('AC-2', 'done') }))), /an answered question needs a claim for AC-2/);
@@ -168,7 +170,7 @@ test('the worker\'s checklist: every frozen item exactly once; done needs a boun
   // On the owner's ticket, a decision item carries the question he must answer.
   assert.match(check(result(all({ 'AC-3': entry('AC-3', 'needs_owner', { remaining: 'decide the weekend policy' }) })), { ownerTicket: true }), /the question the owner must answer, ending with "\?"/);
   assert.equal(check(result(all({ 'AC-3': entry('AC-3', 'needs_owner', { remaining: 'Should weekends bill at the holiday rate?' }),
-    'AC-4': entry('AC-4', 'needs_owner', { remaining: 'May the stored invoice number be corrected?' }) })), { ownerTicket: true }), '');
+    'AC-4': entry('AC-4', 'needs_owner', { remaining: 'May we correct the stored invoice number?' }) })), { ownerTicket: true }), '');
   // Claims: known items, fixed rules, no query evidence for the agent.
   assert.match(check(result(all(), [{ ac_id: 'AC-1', text: 'Fixed in build c237149', evidence: { test: TEST } }])), /reply.claims\[0\]: commit_or_build_id/);
   assert.match(check(result(all(), [{ ac_id: 'AC-7', text: 'Checked', evidence: { test: TEST } }])), /reply.claims\[0\]: ac_id must be a frozen item/);
@@ -206,9 +208,10 @@ test('the host decides each state from its own artifacts: held is in progress, r
   assert.deepEqual(decide(released, [claim('AC-1', { source: 'this_change' })])['AC-1'], ['done', null]);
   assert.deepEqual(decide(released, [claim('AC-1', { source: 'this_change', verified: false })])['AC-1'], ['not_done', 'change_not_merged'], 'released, but the claim did not verify');
   assert.deepEqual(decide({ ...released, release_verified: false }, [claim('AC-1', { source: 'this_change' })])['AC-1'], ['not_done', 'change_not_merged'], 'release check failed');
-  // Already live: the bound test passed at a base the live build contains.
-  assert.deepEqual(decide({ outcome: 'none' }, [claim('AC-1', { source: 'base' })])['AC-1'], ['done', null]);
-  assert.deepEqual(decide({ outcome: 'none' }, [claim('AC-1', { source: 'base', test: 'tests/other.test.mjs::x' })])['AC-1'], ['partial', 'not_confirmed'], 'a test not bound to the item proves nothing about it');
+  // Already live: a test a released, reviewed run bound passed at a base the live build contains.
+  const prior = new Map([['AC-1', new Set([TEST])]]);
+  assert.deepEqual(decide({ outcome: 'none' }, [claim('AC-1', { source: 'base' })], { bindings: new Map(), prior })['AC-1'], ['done', null]);
+  assert.deepEqual(decide({ outcome: 'none' }, [claim('AC-1', { source: 'base', test: 'tests/other.test.mjs::x' })], { bindings: new Map(), prior })['AC-1'], ['partial', 'not_confirmed'], 'a test not bound to the item proves nothing about it');
   assert.deepEqual(decide({ outcome: 'none' }, [claim('AC-2', { kind: 'file', test: undefined })])['AC-2'], ['done', null], 'an answered question with a verified claim');
   // A disputed observation: what it supports is not confirmed.
   assert.deepEqual(decide({ outcome: 'none' }, [claim('AC-2', { kind: 'file' })], { disputed: new Set(['AC-2']) })['AC-2'], ['partial', 'not_confirmed']);

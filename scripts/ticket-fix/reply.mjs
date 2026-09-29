@@ -295,7 +295,11 @@ export async function prepareAgentReply({ reply, ticketId = null, git = null, pr
 export function prepareRenderedReply({ result, ticketId, ownerTicket = false, stage3, runId = null, preHead = null, runStarted = null }) {
   if (!UUID.test(ticketId || '') || stage3?.ticket_id !== ticketId) throw Error('The host decision is for another ticket');
   const verdicts = new Map((stage3.final.claims ?? []).map(c => [c.index, c]));
-  const confirmed = result.reply.claims.filter((c, i) => verdicts.get(i)?.verified === true).map(c => c.text.trim());
+  // A verified claim is shown only under an item the host decided done: a
+  // true sentence about an item left partly done (the wrong screen, a refused
+  // change) would contradict the footer below it (stage 3 review).
+  const doneItems = new Set(stage3.final.items.filter(f => f.state === 'done').map(f => f.id));
+  const confirmed = result.reply.claims.filter((c, i) => verdicts.get(i)?.verified === true && doneItems.has(c.ac_id)).map(c => c.text.trim());
   const questions = result.assessment.questions.map(q => q.question.trim());
   const pending = stage3.final.items.some(f => f.state !== 'done');
   // "We will post when the rest is done" only when something is left.

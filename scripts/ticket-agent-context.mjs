@@ -4,10 +4,10 @@ import { promises as fs, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
-import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentences } from './ticket-fix/claims.mjs';
+import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentences, questionReportsResult } from './ticket-fix/claims.mjs';
 import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
   MIGRATION, EMAIL_NOT_SENT, RUN_COMMITTER } from './ticket-fix/reply.mjs';
-import { checklistErrors, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
+import { checklistErrors, isSupportReply, hostItemWork, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
 export const AWAITING = `t.status IN ('open', 'in_progress', 'resolved')
@@ -88,13 +88,19 @@ export function messagesSQL(ticketId, ownerId, cursor = null) {
     length(m.body)>12000 AS body_truncated,m.is_admin_reply,
     public.is_admin(m.author_id) AS recorded_author_is_admin,
     to_jsonb(m)->>'support_actor_id' AS support_actor_id,to_jsonb(m)->>'support_job_id' AS support_job_id,
+    to_jsonb(m)->>'verification_id' AS verification_id,
     to_jsonb(m)->'attachment_path' AS attachment_path,to_jsonb(m)->'attachment_paths' AS attachment_paths
     FROM support_messages m WHERE m.ticket_id=t.id
     ${after} ORDER BY m.created_at,m.id LIMIT 50) page),'[]'::json) AS messages
     FROM support_tickets t WHERE t.id='${id(ticketId)}'::uuid AND t.user_id='${id(ownerId)}'::uuid`);
 }
-export function actorLabel(message, ownerId) {
+// ownerIsAdmin: the ticket's user is the owner (an owner ticket). Every
+// message he writes there is stored with is_admin_reply true, so that flag says
+// nothing about who wrote it: his own words are "owner_author" (his asks), a
+// support-signed or verified reply from his admin profile "owner_support_reply".
+export function actorLabel(message, ownerId, { ownerIsAdmin = false } = {}) {
   if (message.author_id === null && message.support_actor_id === '00000000-0000-4000-8000-000000000018' && UUID.test(message.support_job_id || '')) return 'recorded_service_actor';
+  if (ownerIsAdmin && message.author_id === ownerId) return isSupportReply(message) ? 'owner_support_reply' : 'owner_author';
   if (message.author_id === ownerId && message.is_admin_reply) return 'legacy_reply_with_customer_id';
   if (message.recorded_author_is_admin) return 'recorded_admin_author';
   if (message.author_id === ownerId) return 'recorded_customer_author';
@@ -153,7 +159,7 @@ export async function loadContext(query, ticketId, options = {}) {
           if (messageCount >= limits.messages) { note('message_limit'); break outer; }
           if (!collect(message)) { note('byte_limit'); break outer; }
           if (message.body_truncated) note('message_body_truncated');
-          ticket.messages.push({ ...message, actor_label: actorLabel(message, target.user_id) });
+          ticket.messages.push({ ...message, actor_label: actorLabel(message, target.user_id, { ownerIsAdmin: target.from_admin === true }) });
           context.attachments.push(...attachments(message, row.id)); messageCount++;
         }
         if (messages.length < 50) break;
@@ -316,13 +322,15 @@ export function validateAssessment(result, context, { isolated = false, codeOutc
     // host; each piece of it the model wrote passes the fixed rules here.
     if (!stage3?.checklist?.items?.length) throw Error('A structured result needs the frozen checklist (stage 3); nothing was recorded');
     const problems = checklistErrors(result, { items: stage3.worker_items ?? stage3.checklist.items, bindings: bindingMap(stage3.bindings),
-      attachments: stage3.attachments ?? [], ownerTicket: context.approval?.from_admin === true });
+      attachments: stage3.attachments ?? [], ownerTicket: context.approval?.from_admin === true, changed: typeof stage3.changed === 'boolean' ? stage3.changed : null });
     review.questions.forEach((q, i) => {
       const value = q.question.trim();
       if (!value.endsWith('?') || sentences(value).length !== 1 || value.length > 300) problems.push(`assessment.questions[${i}]: one question of at most 300 characters, ending with "?"`);
       const broken = checkFixedRules(value, { claims: false });
       if (broken.length) problems.push(`assessment.questions[${i}]: ${ruleNames(broken)}`);
-      if (COMPLETION_CLAIM.test(value)) problems.push(`assessment.questions[${i}]: a question may not report a result`);
+      // The host renders the question to the customer; ending in "?" does not
+      // let it state a result nothing verified (stage 3 review).
+      if (COMPLETION_CLAIM.test(value) || questionReportsResult(value)) problems.push(`assessment.questions[${i}]: unverified_claim: a question may not report a result (no "now", "fixed", "shows", "saved", "updated" and the like); ask about what the customer sees`);
     });
     // A decision waiting on CredentialDOMD reaches the owner as durable work.
     if (context.approval?.from_admin !== true && result.checklist.some(e => e.state === 'needs_owner') && !review.follow_up.some(f => f.owner === 'support_owner')) {
@@ -360,8 +368,13 @@ export function validateAssessment(result, context, { isolated = false, codeOutc
     if (review.follow_up.some(f => questionKey(f.work) === questionKey(completed.work))) throw Error('Work cannot be both pending and complete');
     if (review.verification.kind === 'not_run') throw Error('Completed work requires recorded verification');
   }
-  const open = structured ? result.checklist.some(e => e.state !== 'done') : review.acceptance_criteria.some(a => a.state === 'open');
-  if ((open || !context.history_complete) && !review.questions.length && !review.follow_up.length) throw Error('Unfinished work requires follow-through');
+  // Once the host has decided (stage 3), what is open is the host's decision,
+  // not the worker's: an item it marked done that the host did not is open,
+  // and the host's own follow-ups carry it (G1: each item not done has one).
+  const decided = structured && Array.isArray(stage3?.final?.items) ? stage3.final.items : null;
+  const open = structured ? (decided ?? result.checklist).some(e => e.state !== 'done') : review.acceptance_criteria.some(a => a.state === 'open');
+  const hostFollowUp = decided && Array.isArray(stage3.final.follow_up) ? stage3.final.follow_up.length : 0;
+  if ((open || !context.history_complete) && !review.questions.length && !review.follow_up.length && !hostFollowUp) throw Error('Unfinished work requires follow-through');
   if (isolated && review.verification.kind === 'verified_change') throw Error('Isolated source review cannot claim runtime verification');
   if (!structured && review.verification.kind !== 'verified_change' && COMPLETION_CLAIM.test(result.reply)) throw Error('Completion claim lacks runtime/release verification');
   if (review.verification.kind === 'verified_change' &&
@@ -499,6 +512,8 @@ export async function saveReview(directory, context, given, sourceRevision, { no
   const followUps = new Map([...(previous?.follow_up_history || []), ...result.assessment.follow_up].map(f => [questionKey(f.work), f]));
   const outstanding = new Map([...(previous?.pending_follow_up || []), ...result.assessment.follow_up].map(f => [questionKey(f.work), f]));
   for (const done of result.assessment.completed_follow_up) outstanding.delete(questionKey(done.work));
+  // The host closes its own per-item follow-up once it decides the item done.
+  for (const f of Array.isArray(stage3?.final?.items) ? stage3.final.items : []) if (f.state === 'done') for (const work of hostItemWork(f.id)) outstanding.delete(questionKey(work));
   const pendingWork = [...outstanding.values()];
   const workerPending = pendingWork.some(f => f.owner === 'support_worker');
   const ownerPending = pendingWork.some(f => f.owner === 'support_owner');

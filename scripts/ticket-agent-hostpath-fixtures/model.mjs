@@ -182,8 +182,10 @@ if (scenario === 'answered_question') {
 }
 // A claim citing a build id breaks a fixed rule: the host must refuse it and
 // resume the session with the reason. 'repair' corrects it on the first resume.
+// Its evidence is a source line, so the refusal names only the fixed rules (a
+// test would also be refused as bound to no item).
 if (scenario === 'repair_exhausted' || (scenario === 'repair' && !resumed)) {
-  result.reply.claims = [{ ac_id: ids[0], text: 'This was fixed in build c237149 and is live on your iPhone.', evidence: { test: 'tests/synthetic.test.mjs::synthetic' } }];
+  result.reply.claims = [{ ac_id: ids[0], text: 'This was fixed in build c237149 and is live on your iPhone.', evidence: { file: 'src/synthetic.js', line: 1, text: 'synthetic source line' } }];
 }
 // G6: the ticket carries a screenshot. The first answer did not read it and
 // is refused; on the resume the worker reads it (the CLI's Read events) and

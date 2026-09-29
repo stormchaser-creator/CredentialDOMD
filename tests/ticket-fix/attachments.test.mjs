@@ -32,11 +32,21 @@ function ctx(paths = [`tickets/${T}/screenshot.png`], related = []) {
 }
 // A PNG whose header says 3000 px wide (the host sizes images from their headers).
 const BIG_PNG = Buffer.from(PNG); BIG_PNG.writeUInt32BE(3000, 16);
-const stubConvert = (calls = []) => ({
-  toPng(input, output) { calls.push(['toPng', path.basename(input)]); writeFileSync(output, BIG_PNG); },
-  dimensions(file) { calls.push(['dimensions', path.basename(file)]); return { width: 3000, height: 1000 }; },
-  shrink(file, max) { calls.push(['shrink', path.basename(file), max]); },
-});
+// Its shrink really shrinks (the host measures again afterwards): a PNG's
+// header is rewritten, anything else is reported at the new size.
+const stubConvert = (calls = []) => {
+  const shrunk = new Set();
+  return {
+    toPng(input, output) { calls.push(['toPng', path.basename(input)]); writeFileSync(output, BIG_PNG); },
+    dimensions(file) { calls.push(['dimensions', path.basename(file)]); return shrunk.has(file) ? { width: 2000, height: 667 } : { width: 3000, height: 1000 }; },
+    shrink(file, max) {
+      calls.push(['shrink', path.basename(file), max]);
+      shrunk.add(file);
+      const bytes = readFileSync(file);
+      if (sniff(bytes)?.media_type === 'image/png') { bytes.writeUInt32BE(max, 16); writeFileSync(file, bytes); }
+    },
+  };
+};
 
 test('only paths in the ticket\'s own folder; the bytes decide the type, never the name', () => {
   assert.equal(validStoragePath(`tickets/${T}/screenshot.png`, T), true);
@@ -67,7 +77,7 @@ test('which files: every one on the ticket and its messages first, then the newe
   assert.equal(picked.length, 2 + MAX_RELATED);
 });
 
-test('the host downloads, checks and writes each file privately; anything wrong is unavailable with a reason, never asked for again; the log has id and path only', async () => {
+test('the host downloads, checks and writes each file privately; anything wrong is unavailable (retried) or unsupported (never retried) with a reason, never asked for again; the log has id and path only', async () => {
   const dir = privateDir('ticket-attach-');
   const logs = [], fetched = [], calls = [];
   const objects = { [`tickets/${T}/screenshot.png`]: PNG, [`tickets/${T}/replies/${M1}.jpg`]: JPEG, [`tickets/${T}/screenshot-2.png`]: Buffer.from('<html>not an image</html>'),
@@ -83,6 +93,8 @@ test('the host downloads, checks and writes each file privately; anything wrong 
     assert.equal(by[`tickets/${T}/replies/${M1}.jpg`].media_type, 'image/jpeg');
     assert.equal(by[`tickets/${T}/screenshot-2.png`].reason, 'not an image or a PDF');
     assert.equal(by[`tickets/${T}/screenshot-3.png`].reason, 'larger than 0 MB');
+    // The same bytes would fail the same way next run: never retried.
+    assert.deepEqual([by[`tickets/${T}/screenshot-2.png`].access, by[`tickets/${T}/screenshot-3.png`].access, by[`tickets/${T}/missing.png`].access], ['unsupported', 'unsupported', 'unavailable']);
     assert.equal(by[`tickets/${T}/doc.pdf`].media_type, 'application/pdf');
     assert.equal(by[`tickets/${T}/missing.png`].reason, 'download failed: storage returned 404');
     // HEIC becomes PNG; a large image (here the converted one) is shrunk to 2000 px.
@@ -102,7 +114,7 @@ test('the host downloads, checks and writes each file privately; anything wrong 
       assert.equal(path.dirname(a.local_path), realpathSync(path.join(dir.dir, T)));
     }
     assert.equal(logs.length, manifest.attachments.length);
-    for (const line of logs) assert.match(line, new RegExp(`^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d ATTACHMENT — ${T} tickets/[0-9a-f-]{36}/[\\w./-]+: (?:delivered as att-\\d+|unavailable \\([\\w :.-]+\\))$`), line);
+    for (const line of logs) assert.match(line, new RegExp(`^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d ATTACHMENT — ${T} tickets/[0-9a-f-]{36}/[\\w./-]+: (?:delivered as att-\\d+|(?:unavailable|unsupported) \\([\\w :.-]+\\))$`), line);
     // The manifest is read back only if nothing changed since.
     const file = path.join(dir.dir, 'manifest.json');
     writeFileSync(file, JSON.stringify(manifest), { mode: 0o600 });

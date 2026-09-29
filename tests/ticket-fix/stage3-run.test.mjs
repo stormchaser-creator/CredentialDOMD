@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync, realpathSync, chmodSync, mkdtempSync, rmSync,
 import os from 'node:os';
 import path from 'node:path';
 import { EXIT } from '../../scripts/ticket-fix/run.mjs';
-import { readRun } from '../../scripts/ticket-fix/merge.mjs';
+import { readRun, writeRun } from '../../scripts/ticket-fix/merge.mjs';
 import { deliverAttachments } from '../../scripts/ticket-fix/attachments.mjs';
 import { readChecklist } from '../../scripts/ticket-fix/checklist.mjs';
 import { project, sh, runStub, standardScript, workerResult, approve, confirmResult, context, CHECKLIST_RESULT, TICKET, OWNER, RUN_ID } from './stage2-helpers.mjs';
@@ -45,7 +45,7 @@ test('screenshots: the extractor sees them inline, the worker is refused until i
       // First answer: no Read of the screenshot. After the host's refusal: the Read, and an observation.
       worker: (opts, n) => (n === 1 ? workerResult({ remaining: 'answer where the title comes from' })
         : { ...workerResult({ remaining: 'answer where the title comes from', observations: [observation] }), $reads: [{ file_path: a.local, ok: true }] }),
-      confirm: () => confirmResult({ observations: [{ attachment: 'att-1', verdict: 'agree', why: 'The screenshot shows the two lines run together.' }] }),
+      confirm: () => ({ ...confirmResult({ observations: [{ attachment: 'att-1', verdict: 'agree', why: 'The screenshot shows the two lines run together.' }] }), $reads: [{ file_path: a.local, ok: true }] }),
     }), { context: a.ctx, extra: a.extra });
     assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
     assert.deepEqual(r.calls.map(c => c.role), ['extract', 'repro', 'worker', 'worker', 'confirm']);
@@ -70,7 +70,7 @@ test('screenshots: the extractor sees them inline, the worker is refused until i
   } finally { r?.cleanup(); a.cleanup(); p.cleanup(); }
 });
 
-test('an answered question is done only on a claim the host verified: quoted text in the live build, a test run at a live base; a disputed screenshot unconfirms it', async () => {
+test('an answered question is done only on a claim the host verified: quoted text in the live build, a released run\'s test run at a live base; a disputed screenshot unconfirms it', async () => {
   const p = project();
   const a = await withAttachments();
   const runs = [];
@@ -80,18 +80,24 @@ test('an answered question is done only on a claim the host verified: quoted tex
     const fileClaim = { ac_id: 'AC-1', text: 'The summary title reads "Synthetic summary line"', evidence: { file: 'src/format.js', line: 2, text: "export const title = 'Synthetic summary line';" } };
     const testClaim = { ac_id: 'AC-1', text: 'The summary title is set', evidence: { test: 'tests/format.test.mjs::the title is set' } };
     const answered = claims => ({ ...workerResult({ claims, checklist: [{ ac_id: 'AC-1', state: 'done', remaining: '', tests: [] }], observations: [observation], opening: 'answer', closing: 'reply_here' }), $reads: [{ file_path: a.local, ok: true }] });
-    const once = async (claims, { verdict = 'agree', fetchBuild = liveBuild(base), runId }) => {
+    const once = async (claims, { verdict = 'agree', fetchBuild = liveBuild(base), runId, code = EXIT.ok }) => {
       const r = await runStub(p, standardScript({ extract: () => question, repro: () => noCode, worker: () => answered(claims),
-        confirm: () => confirmResult({ observations: [{ attachment: 'att-1', verdict, why: 'Synthetic.' }] }) }), { context: a.ctx, extra: a.extra, fetchBuild, runId });
+        confirm: () => ({ ...confirmResult({ observations: [{ attachment: 'att-1', verdict, why: 'Synthetic.' }] }), $reads: [{ file_path: a.local, ok: true }] }) }), { context: a.ctx, extra: a.extra, fetchBuild, runId });
       runs.push(r);
-      assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+      assert.equal(r.code, code, r.logs.join('\n'));
       return r;
     };
     // Quoted text at the cited line in the live build.
     let r = await once([fileClaim], { runId: '0000000000000001' });
     assert.deepEqual(r.stage3.final.claims.map(c => [c.verified, c.kind]), [[true, 'file']]);
     assert.equal(r.stage3.final.items[0].state, 'done');
-    // A test the host runs itself at a base the live build contains.
+    // A passing test bound to nothing proves nothing: the worker is refused.
+    r = await once([testClaim], { runId: '0000000000000006', code: EXIT.refused });
+    assert.ok(r.logs.some(l => l.startsWith(`REFUSED — ${TICKET}`) && l.includes('reply.claims[0]')), r.logs.join('\n'));
+    // A test a released, reviewed run bound to the item: the host runs it at
+    // a base the live build contains.
+    await writeRun(p.work, { version: 1, id: `${TICKET.slice(0, 8)}-00000000000000aa`, ticket: TICKET, status: 'released', release: { verified: true },
+      bindings_met: { 'AC-1': ['tests/format.test.mjs::the title is set'] } });
     r = await once([testClaim], { runId: '0000000000000002' });
     assert.deepEqual(r.stage3.final.claims.map(c => [c.verified, c.source]), [[true, 'base']]);
     assert.equal(r.stage3.final.items[0].state, 'done');
@@ -166,7 +172,10 @@ test('a later run: only a new customer message is extracted, it adds items, and 
     assert.equal(s.code, EXIT.ok, s.logs.join('\n'));
     const text = JSON.parse(s.calls[0].input).message.content[0].text;
     assert.match(text, /Customer sources to extract from now \(quote only from these\): 00000000-0000-4000-8000-000000000777 \(message\)\./);
-    assert.match(text, /Items already frozen for this ticket[^\n]*\n  - AC-1 \[bug\] Separate the summary lines with line breaks/);
+    assert.match(text, /Items already frozen for this ticket[^\n]*: AC-1 \[bug\]\. Their wording is below/);
+    // The wording is the customer's, so it is not a host fact.
+    assert.match(text, /## Customer-derived text \(untrusted[^\n]*\n\n- AC-1: Separate the summary lines with line breaks/);
+    assert.ok(text.indexOf('Separate the summary lines') > text.indexOf('## Customer-derived text'));
     const after = readChecklist(p.state, TICKET).items;
     assert.deepEqual(after.slice(0, 1), before);
     assert.deepEqual(after.map(i => i.id), ['AC-1', 'AC-2']);

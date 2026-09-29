@@ -77,8 +77,8 @@ import { fileURLToPath } from 'node:url';
 import { prepareResult, refusalHead, RESULT_SCHEMA } from '../ticket-agent-context.mjs';
 import { readManifest, reviewedIds, modelView, selectAttachments } from './attachments.mjs';
 import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtraction, confirmPrompt, extendChecklist, writeChecklist, applyAskVerdicts,
-  coverageHints, finalStates, CHECKLIST_SCHEMA } from './checklist.mjs';
-import { runBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
+  coverageHints, finalStates, unseenItems, untrustedItems, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
+import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
 import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
   checkWorktreeLink, remoteMain, agentCommitsOnMain } from './worktree.mjs';
 import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps } from './worker.mjs';
@@ -168,21 +168,31 @@ export async function baselineFor({ repo, work, base, env, commands = DEFAULT_CO
   } finally { await scratch.remove(); }
 }
 
-// The checklist and attachments as a session sees them (host facts).
-export function checklistFacts({ items, bindings = {}, attachments = [] }) {
-  const lines = ['- The checklist, frozen by the host (every ask in the ticket; ids are the host\'s):', '```json',
-    JSON.stringify(items.map(i => ({ id: i.id, requirement: i.requirement, kind: i.kind, surface: i.surface, source_id: i.source_id })), null, 1), '```'];
-  if (Object.keys(bindings).length) lines.push('- Tests already bound to items (a reproduction or declared test, or one a released run bound):', '```json', JSON.stringify(bindings, null, 1), '```');
+// The checklist and attachments as a session sees them (host facts): ids,
+// kinds, sources, bindings and paths only. The wording of each item was
+// written from the customer's words, so it goes in checklistWording(), under
+// a heading that says it is data (stage 3 review).
+//   bindings  this run's reproduction tests, by item
+//   prior     tests a released, reviewed run bound, by item: the only tests
+//             that can show an item is already live
+export function checklistFacts({ items, bindings = {}, prior = {}, attachments = [] }) {
+  const lines = ['- The checklist, frozen by the host (every ask in the ticket; ids are the host\'s; each item\'s wording is under customer-derived text below):', '```json',
+    JSON.stringify(items.map(i => ({ id: i.id, kind: i.kind, source_id: i.source_id })), null, 1), '```'];
+  if (Object.keys(bindings).length) lines.push('- Reproduction tests recorded failing on this base, by item (they pass once the fix is in):', '```json', JSON.stringify(bindings, null, 1), '```');
+  if (Object.keys(prior).length) lines.push('- Tests a released, reviewed run bound to items. Only these can show an item is already live (they must pass at this base):', '```json', JSON.stringify(prior, null, 1), '```');
   if (attachments.length) {
     lines.push('- Attachments the host downloaded. Read every one with target true (Read tool, local_path) before you answer; the host checks your Read calls:', '```json',
-      JSON.stringify(attachments.map(a => ({ attachment: a.attachment, source_id: a.source_id, target: a.target, ...(a.local_path ? { local_path: a.local_path, media_type: a.media_type } : { unavailable: a.reason }) })), null, 1), '```');
+      JSON.stringify(attachments.map(a => ({ attachment: a.attachment, source_id: a.source_id, target: a.target, ...(a.local_path ? { local_path: a.local_path, media_type: a.media_type } : { [a.access === 'unsupported' ? 'unsupported' : 'unavailable']: a.reason }) })), null, 1), '```');
   }
   return lines.join('\n');
+}
+export function checklistWording(items) {
+  return `\n\n${UNTRUSTED_HEADING}\n\nEach checklist item\'s wording, by id:\n\`\`\`json\n${JSON.stringify(untrustedItems(items), null, 1)}\n\`\`\``;
 }
 function reproFacts({ worktree, base, stage3 }) {
   return ['## Host facts for this run (trusted, from the runner)', '',
     `- Working directory: a fresh git worktree at origin/main ${base.slice(0, 12)} (the base). Nothing you do here reaches main or the customer.`,
-    `- Worktree path: ${worktree}`, checklistFacts(stage3)].join('\n');
+    `- Worktree path: ${worktree}`, checklistFacts(stage3)].join('\n') + checklistWording(stage3.items);
 }
 function hostFacts({ worktree, base, repro, held, stage3 }) {
   const lines = ['## Host facts for this run (trusted, from the runner)', '',
@@ -195,7 +205,7 @@ function hostFacts({ worktree, base, repro, held, stage3 }) {
   else lines.push('- No reproduction was recorded on base. A product change (src, public, landing) will be refused by the gates.');
   lines.push(`- Worktree path: ${worktree}`);
   lines.push(checklistFacts(stage3));
-  return lines.join('\n');
+  return lines.join('\n') + checklistWording(stage3.items);
 }
 
 // The runner's default model session launcher; tests pass a stub.
@@ -321,9 +331,18 @@ export async function runTicket(o) {
       log(`CHECKLIST — ${id8}: ${accepted.items.length} new item(s), ${checklist.items.length} in all, ${accepted.non_asks.length} sentence(s) judged not asks`);
     }
     if (!checklist.items.length) { log(`CHECKLIST — ${id8}: no items`); await cleanup(); return await finishWith(EXIT.checklist, 'checklist_failed'); }
+    // G6: a ticket whose attachments could not be fetched is worked blind.
+    // Its items cannot be decided done (finalStates), and the owner is told.
+    const targetAttachments = manifest.attachments.filter(a => a.target);
+    if (targetAttachments.some(a => a.access === 'unavailable') && !targetAttachments.some(a => a.access === 'delivered')) {
+      const missing = targetAttachments.filter(a => a.access === 'unavailable').length;
+      log(`ATTACHMENT — ${id8}: none of the ${targetAttachments.length} attachment(s) on the ticket was delivered`);
+      await alert('attachments_unavailable', `ticket=${id8} missing=${missing}`, `CredentialDOMD ticket agent: none of the ${targetAttachments.length} attachment(s) on ticket ${id8} could be downloaded for run ${name}. No session saw them, so the items they came with cannot be marked done until a run delivers them.`);
+    }
     const workerItems = checklist.items.slice();
     const itemIds = workerItems.map(i => i.id);
     const prior = priorBindings(work, ticket);
+    const reproBound = () => runBindings({ repro, items: workerItems });
     await writeRunFile(work, name, 'checklist.json', checklist);
     run.checklist_sha256 = checklist.items_sha256;
 
@@ -331,7 +350,7 @@ export async function runTicket(o) {
     let repro = null;
     if (!held) {
       const settings = sessionSettings({ role: 'repro', worktree: wt.dir, home, work, state: denyState, runDir, tmp, attachments: attachDir });
-      const input = `${readFileSync(REPRO_PROMPT, 'utf8')}\n\n${reproFacts({ worktree: wt.dir, base: wt.base, stage3: { items: workerItems, bindings: prior, attachments: attachments() } })}${EVIDENCE_MARKER}${evidence}`;
+      const input = `${readFileSync(REPRO_PROMPT, 'utf8')}\n\n${reproFacts({ worktree: wt.dir, base: wt.base, stage3: { items: workerItems, prior, attachments: attachments() } })}${EVIDENCE_MARKER}${evidence}`;
       let r = await session({ role: 'repro', cwd: wt.dir, input, schema: REPRO_SCHEMA, settings, sessionDir: path.join(sessions, 'repro'), timeoutMs: reproSeconds * 1000, baseEnv: env });
       for (let attempt = 1; attempt <= 2; attempt++) {
         if (!r.ok) { log(`REPRO — ${id8}: session ${r.reason}; no reproduction recorded`); run.repro = { status: 'failed', reason: r.reason }; break; }
@@ -367,8 +386,14 @@ export async function runTicket(o) {
       seeReads(r);
       return r;
     };
-    const bindingsFor = out => mergeBindings(prior, runBindings({ repro, declared: out?.structured_output?.change?.tests ?? [], items: workerItems }));
-    const facts3 = { items: workerItems, bindings: mergeBindings(prior, runBindings({ repro, items: workerItems })), attachments: attachments() };
+    // Whether the worktree holds a change of the worker's (the frozen
+    // reproduction files are the reproduction session's).
+    const workerChanged = () => changedPaths(wt.dir, wt.base, { binary }).some(f => !Object.hasOwn(repro?.frozen ?? {}, f));
+    // What the worker may cite per item before the gates run: this run's
+    // reproduction, the tests it declares for a change it actually made, and
+    // what released runs bound. The host's decision uses hostBindings().
+    const provisional = (out, changed) => mergeBindings(prior, runBindings({ repro, declared: changed ? out?.structured_output?.change?.tests ?? [] : [], items: workerItems }));
+    const facts3 = { items: workerItems, bindings: reproBound(), prior, attachments: attachments() };
     const prompt = `${readFileSync(o.workerPrompt ?? WORKER_PROMPT, 'utf8')}\n\n${hostFacts({ worktree: wt.dir, base: wt.base, repro, held, stage3: facts3 })}${EVIDENCE_MARKER}${evidence}`;
     let first = await workerCall(prompt);
     if (!first.ok) {
@@ -381,7 +406,7 @@ export async function runTicket(o) {
     await saveOutput();
     // What the host knows before it decides: the checklist the worker saw,
     // the tests bound to its items, the attachments and whether each was read.
-    const stage3Pre = () => ({ ticket_id: ticket, checklist, worker_items: workerItems, bindings: bindingsFor(output), attachments: attachments() });
+    const stage3Pre = () => { const changed = workerChanged(); return { ticket_id: ticket, checklist, worker_items: workerItems, bindings: provisional(output, changed), attachments: attachments(), changed }; };
     // Returns true when the host's reply checks accept the current output.
     // The code outcome is not known yet: nothing this run did is released, so
     // a "verified_change" is refused here (finding 5).
@@ -430,14 +455,16 @@ export async function runTicket(o) {
       const tree = await gateWorktree({ repo, work, commit: head, binary, label: 'review' });
       try { return await fn(tree.dir); } finally { await tree.remove(); }
     };
-    const stage3Review = () => ({ items: checklist.items, bound: runBindings({ repro, declared: output.structured_output?.change?.tests ?? [], items: workerItems }),
+    // declared: the committed change's tests (none for the confirmer, which
+    // has no change to review).
+    const stage3Review = (declared = []) => ({ items: checklist.items, bound: runBindings({ repro, declared, items: workerItems }),
       non_asks: checklist.non_asks, hints: coverageHints(context, checklist), attachments: attachments(), observations: output.structured_output?.attachment_observations ?? [] });
     const decide = async ({ outcome, gates = null, review = null, headTests = null, released = false }) => {
       const observations = output.structured_output?.attachment_observations ?? [];
       const pendingNonAsks = checklist.non_asks.filter(n => n.verdict === null);
       const hints = coverageHints(context, checklist);
       if (!edges && (observations.length || pendingNonAsks.length || hints.length)) {
-        const confirm = await reviewIn(wt.base, dir => confirmChecklist({ context, stage3: stage3Review(), prompt: readFileSync(CONFIRM_PROMPT, 'utf8'),
+        const confirm = await reviewIn(wt.base, dir => confirmChecklist({ context, stage3: stage3Review([]), prompt: readFileSync(CONFIRM_PROMPT, 'utf8'),
           launch: async (input, { attempt }) => session({ role: 'confirm', cwd: dir, input, schema: CONFIRM_SCHEMA,
             settings: reviewSettings({ worktree: dir, home, work, state: denyState, runDir, tmp, attachments: attachDir }), sessionDir: path.join(sessions, `confirm-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env }) }));
         await writeRunFile(work, name, 'confirm.json', confirm);
@@ -450,22 +477,32 @@ export async function runTicket(o) {
           checklist = await writeChecklist(state, applied.record);
           if (applied.added.length) log(`CHECKLIST — ${id8}: the reviewer added ${applied.added.join(', ')}`);
         }
+        if (applied.dropped.length) log(`CHECKLIST — ${id8}: ${applied.dropped.length} ask verdict(s) could not become an item; left for the next review`);
       }
       const green = new Set((gates?.green ?? []).filter(t => t.status === 'green').map(t => `${t.file}::${t.name}`));
-      const bindings = bindingsFor(output);
-      const claims = await verifyAgentClaims({ claims: output.structured_output?.reply?.claims ?? [], repo, base: wt.base, binary, code: { released, green },
+      let changed;
+      try { changed = workerChanged(); } catch { changed = Boolean(step?.head); }
+      const bindings = provisional(output, changed);
+      // What the host trusts: the reproduction, and the declared tests of the
+      // committed change its gates ran green at head (none without gates).
+      const trusted = hostBindings({ repro, declared: step?.head && gates ? step.declared : [], gates: step?.head ? gates : null, items: workerItems });
+      const claims = await verifyAgentClaims({ claims: output.structured_output?.reply?.claims ?? [], repo, base: wt.base, binary, code: { released, green }, bindings: trusted, prior,
         runAtBase: baseTestRunner({ repo, work, commit: wt.base, modules: wt.modules_source, env: gEnv, sandbox: box, binary }), ...(fetchBuild ? { fetchBuild } : {}) })
         .catch(error => (output.structured_output?.reply?.claims ?? []).map((c, index) => ({ index, ac_id: c.ac_id, verified: false, reason: `the host could not check it (${String(error.message).slice(0, 80)})` })));
       const disputed = disputedItems(observations, edges?.observation_verdicts ?? {});
       const code = { outcome, gates_pass: Boolean(gates?.pass), review_pass: Boolean(review?.pass), review_items: review?.item_verdicts ?? {}, green: headTests ?? green, release_verified: released };
-      const finals = finalStates({ items: checklist.items, entries: output.structured_output?.checklist ?? [], claims, code, bindings: new Map(Object.entries(bindings).map(([k, v]) => [k, new Set(v)])),
-        disputed, workerItems: itemIds });
-      const record = { version: 1, ticket_id: ticket, run: name, checklist, worker_items: workerItems, bindings, attachments: attachments(), observations,
-        observation_verdicts: edges?.observation_verdicts ?? {}, final: { items: finals, claims, follow_up: hostFollowUps({ attachments: attachments(), finals }), code_outcome: outcome } };
+      const asMap = value => new Map(Object.entries(value).map(([k, v]) => [k, new Set(v)]));
+      const finals = finalStates({ items: checklist.items, entries: output.structured_output?.checklist ?? [], claims, code, bindings: asMap(trusted), prior: asMap(prior),
+        disputed, unseen: unseenItems(checklist.items, attachments()), workerItems: itemIds });
+      // The worker's open items wait on the customer's answer or the owner's
+      // decision when it asked one or recorded work for him.
+      const waiting = (output.structured_output?.assessment?.questions ?? []).length > 0 || (output.structured_output?.assessment?.follow_up ?? []).some(f => f.owner === 'support_owner');
+      const record = { version: 1, ticket_id: ticket, run: name, checklist, worker_items: workerItems, bindings, changed, trusted_bindings: trusted, prior_bindings: prior, attachments: attachments(), observations,
+        observation_verdicts: edges?.observation_verdicts ?? {}, final: { items: finals, claims, follow_up: hostFollowUps({ attachments: attachments(), finals, waiting, items: checklist.items }), code_outcome: outcome } };
       facts.stage3_file = await writeStage3(path.join(runDir, `${ticket}-stage3.json`), record);
-      // A released run's bindings are what a later run may cite (items met).
-      run.bindings_met = Object.fromEntries(Object.entries(runBindings({ repro, declared: output.structured_output?.change?.tests ?? [], items: workerItems }))
-        .filter(([ac]) => review?.item_verdicts?.[ac] === 'met'));
+      // A released run's bindings are what a later run may cite (items met):
+      // only tests the host trusts, never a declaration alone.
+      run.bindings_met = Object.fromEntries(Object.entries(trusted).filter(([ac]) => review?.item_verdicts?.[ac] === 'met'));
       run.stage3 = { items: finals.map(f => ({ id: f.id, state: f.state, detail: f.detail })), claims_verified: claims.filter(c => c.verified).length, claims: claims.length,
         attachments_reviewed: [...reviewed], observations_confirmed: Object.values(edges?.observation_verdicts ?? {}).filter(v => v === 'agree').length };
       log(`DECIDED — ${id8}: ${finals.map(f => `${f.id} ${f.state}`).join(', ')}; ${claims.filter(c => c.verified).length}/${claims.length} claim(s) verified; ${reviewed.size} attachment(s) read`);
@@ -521,7 +558,7 @@ export async function runTicket(o) {
       }
       const head = step.head;
       review = await reviewIn(head, reviewDir => reviewDiff({ dir: reviewDir, base: wt.base, head, context, gates, protectedReport: owner, blast, launch: reviewLaunch(reviewDir),
-        prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary, stage3: stage3Review() }));
+        prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary, stage3: stage3Review(step.declared) }));
       await writeRunFile(work, name, `review-${round}.json`, review);
       log(`REVIEW — ${id8} round ${round}: ${review.pass ? 'approve' : `not approved (${review.reviews.map(r => r.verdict).join(', ')})`}${review.count > 1 ? ' [two reviews]' : ''}`);
       if (!review.pass && review.revise && revisions < 1 && sessionId) {

@@ -173,6 +173,24 @@ export function checkFixedRules(text, { hex = true, claims = false, isCommit = n
   }
   return found;
 }
+// A question the host renders to the customer may not state a result either:
+// "With the lines now separated on every invoice, does it look right?" skips
+// the claim rule above only because it ends in "?" (stage 3 review).
+export function questionReportsResult(text) {
+  return sentences(foldForRules(text)).some(sentence => UNVERIFIED.test(sentence));
+}
+// What a unit test can never confirm on the agent path: a statement about the
+// customer's own stored records (one reply told a customer their records were
+// saved, in a table that did not exist) or that something is absent. Only a
+// query the host runs could, and the worker has no database. Returns why, or
+// null.
+const CUSTOMER_DATA = /\byour (?:\w+ ){0,2}(?:account|records?|entries|entry|data|history|profile|uploads?|documents?|files?|credentials?|licen[cs]es?|invoices?|contracts?|shifts?|hours|cases?|logs?|notes?|settings)\b|\b(?:still|all|already|safely) (?:saved|stored|kept|there)\b|\b(?:saved|stored|kept) (?:in|on) (?:your|the) (?:account|database|server|cloud)\b/i;
+export function testCannotConfirm(text) {
+  const value = unquoted(foldForRules(text));
+  if (CUSTOMER_DATA.test(value)) return 'a test cannot confirm what is stored in the customer\'s account';
+  if (ABSENCE.test(value)) return 'a test cannot confirm that something is absent; state what the code does';
+  return null;
+}
 export function describeViolations(violations) {
   return violations.map(v => `${v.rule}${v.excerpt ? ` (${JSON.stringify(v.excerpt)})` : ''}: ${RULE_TEXT[v.rule] || v.rule}`).join(' ');
 }

@@ -46,7 +46,7 @@ export function sandboxAvailable() {
 
 // An SBPL string literal. Paths come from the host, but a quote or a newline
 // in one would change the profile, so they are refused rather than escaped.
-function literal(value) {
+export function literal(value) {
   const text = String(value);
   if (!path.isAbsolute(text) || /["\\\n\r\0]/.test(text)) throw Error('A sandbox path must be absolute and plain');
   return `"${text}"`;

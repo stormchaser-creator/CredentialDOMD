@@ -34,7 +34,7 @@ import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SANDBOX_EXEC, sandboxAvailable, sandboxProfile } from './sandbox.mjs';
+import { SANDBOX_EXEC, sandboxAvailable, sandboxProfile, literal } from './sandbox.mjs';
 
 export const PROJECT = 'hkpnnsjcwprrwobmpqyy';
 export const BUCKET = 'documents';
@@ -131,13 +131,28 @@ export function imageSize(bytes) {
 // network, no credential, writes only the ticket's attachment folder) wherever
 // sandbox-exec exists. sips writes through a temporary file directly in the
 // user temporary directory and ignores TMPDIR, so files directly in that
-// directory are open to it, except the runner's own (credentialdomd-*).
+// directory are open to it, except the runner's own (credentialdomd-*). The
+// ticket's own folder is itself under a credentialdomd-attachments.* root in
+// that directory (ticket-agent.sh), so it is opened again after that denial:
+// in SBPL the later rule wins, and without it sips could neither read nor
+// write the folder and still exited 0 (stage 3 review: every HEIC upload was
+// "unavailable" and a 2800 px screenshot went out unshrunk).
 // Tests pass their own converter.
 export const SIPS = '/usr/bin/sips';
-function userTempDir() {
+export function userTempDir() {
   const r = spawnSync('/usr/bin/getconf', ['DARWIN_USER_TEMP_DIR'], { encoding: 'utf8', timeout: 10000 });
   if (r.status !== 0 || !r.stdout.trim()) return null;
   try { return realpathSync(r.stdout.trim()); } catch { return null; }
+}
+export function sipsProfile(dir, temp) {
+  const esc = temp.replace(/[.]/g, '\\.');
+  const own = literal(realpathSync(dir));
+  return `${sandboxProfile({ kind: 'gates', writable: [dir] })};; sips's own temporary file, directly in the user temporary directory
+(allow file-read* file-write* (regex #"^${esc}/[^/]+$"))
+(deny file-read* file-write* (regex #"^${esc}/credentialdomd-"))
+;; this ticket's attachment folder, which may sit under a credentialdomd-* root there
+(allow file-read* file-write* (subpath ${own}))
+`;
 }
 export function sipsIn(dir) {
   let profile = null;
@@ -148,11 +163,7 @@ export function sipsIn(dir) {
         if (!temp || !/^[\w/.-]+$/.test(temp)) return { status: 1, stdout: '' };
         const home = mkdtempSync(path.join(realpathSync(os.tmpdir()), 'credentialdomd-sips-'));
         profile = path.join(home, 'sips.sb');
-        const esc = temp.replace(/[.]/g, '\\.');
-        writeFileSync(profile, `${sandboxProfile({ kind: 'gates', writable: [dir] })};; sips's own temporary file, directly in the user temporary directory
-(allow file-read* file-write* (regex #"^${esc}/[^/]+$"))
-(deny file-read* file-write* (regex #"^${esc}/credentialdomd-"))
-`, { mode: 0o600 });
+        writeFileSync(profile, sipsProfile(dir, temp), { mode: 0o600 });
       }
       return spawnSync(SANDBOX_EXEC, ['-f', profile, SIPS, ...args], { encoding: 'utf8', timeout: 60000, cwd: dir, env: { PATH: '/usr/bin:/bin', HOME: os.homedir() } });
     }
@@ -171,6 +182,9 @@ export function sipsIn(dir) {
     done() { if (profile) rmSync(path.dirname(profile), { recursive: true, force: true }); profile = null; },
   };
 }
+// A reason goes into the manifest, the model's view and follow-up text: no
+// local path in it.
+export const withoutPaths = text => String(text).replace(/(^|[\s'"(=])\/[^\s'"),]+/g, '$1<path>');
 
 async function ownerDir(dir) {
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
@@ -192,24 +206,28 @@ export async function deliverAttachments({ context, outDir, fetchObject, convert
   try { return await deliverInto({ context, dir, fetchObject, convert, log, maxBytes, maxDimension, relatedLimit, targetLimit }); }
   finally { own?.done(); }
 }
+// access: delivered | unavailable (a failure the next run may not repeat: it
+// downloads again) | unsupported (bytes that are not an image or a PDF, such
+// as the Word, Excel, CSV and text files the app accepts: the next run would
+// fail the same way, so it is never retried; the owner is told once).
 async function deliverInto({ context, dir, fetchObject, convert, log, maxBytes, maxDimension, relatedLimit, targetLimit }) {
   const out = [];
   for (const entry of selectAttachments(context, { relatedLimit, targetLimit })) {
     const record = { ...entry, access: 'unavailable', local_path: null, media_type: null, bytes: null, sha256: null, original_sha256: null, converted: false, reason: null };
-    const done = (reason = null) => {
-      record.reason = reason;
-      if (!reason) record.access = 'delivered';
+    const done = (reason = null, access = 'unavailable') => {
+      record.reason = reason === null ? null : withoutPaths(reason);
+      record.access = reason ? access : 'delivered';
       out.push(record);
-      log(`${stamp()} ATTACHMENT — ${context.target_id} ${entry.storage_path}: ${reason ? `unavailable (${reason})` : `delivered as ${entry.id}`}`);
+      log(`${stamp()} ATTACHMENT — ${context.target_id} ${entry.storage_path}: ${reason ? `${record.access} (${record.reason})` : `delivered as ${entry.id}`}`);
     };
     if (entry.over_limit) { done(`more than ${targetLimit} attachments on the ticket`); continue; }
     if (!entry.path_valid) { done('the path is outside the ticket folder'); continue; }
     let bytes;
     try { bytes = await fetchObject(entry.storage_path); } catch (error) { done(`download failed: ${String(error?.message ?? error).slice(0, 120)}`); continue; }
     if (!Buffer.isBuffer(bytes) || !bytes.length) { done('the download was empty'); continue; }
-    if (bytes.length > maxBytes) { done(`larger than ${Math.round(maxBytes / 1048576)} MB`); continue; }
+    if (bytes.length > maxBytes) { done(`larger than ${Math.round(maxBytes / 1048576)} MB`, 'unsupported'); continue; }
     const kind = sniff(bytes);
-    if (!kind) { done('not an image or a PDF'); continue; }
+    if (!kind) { done('not an image or a PDF', 'unsupported'); continue; }
     record.original_sha256 = sha256(bytes);
     try {
       let file = path.join(dir, `${entry.id}.${kind.ext}`);
@@ -219,14 +237,24 @@ async function deliverInto({ context, dir, fetchObject, convert, log, maxBytes, 
         const png = path.join(dir, `${entry.id}.png`);
         convert.toPng(file, png);
         await fs.rm(file, { force: true });
+        // sips can exit 0 without writing anything (a sandbox denial).
+        if (!existsSync(png)) throw Error('the HEIC conversion wrote no file');
         file = png;
         type = sniff(readFileSync(file));
         if (type?.media_type !== 'image/png') throw Error('the HEIC conversion did not produce a PNG');
         record.converted = true;
       }
       if (type.image) {
-        const size = imageSize(readFileSync(file)) ?? convert.dimensions(file);
-        if (size && Math.max(size.width, size.height) > maxDimension) { convert.shrink(file, maxDimension); record.converted = true; }
+        const measure = () => imageSize(readFileSync(file)) ?? convert.dimensions(file);
+        const size = measure();
+        if (size && Math.max(size.width, size.height) > maxDimension) {
+          convert.shrink(file, maxDimension);
+          // Measured again: a shrink that did nothing is refused, never
+          // recorded as converted.
+          const after = existsSync(file) ? measure() : null;
+          if (!after || Math.max(after.width, after.height) > maxDimension) throw Error(`the image is still larger than ${maxDimension} px after shrinking`);
+          record.converted = true;
+        }
       }
       await fs.chmod(file, 0o600);
       const delivered = readFileSync(file);
@@ -292,7 +320,7 @@ export function readManifest(file, { ticketId, dir }) {
   if (manifest?.version !== 1 || manifest.ticket_id !== ticketId || !Array.isArray(manifest.attachments)) throw Error('The attachment manifest is for another ticket');
   const root = dir ? realpathSync(dir) : null;
   for (const a of manifest.attachments) {
-    if (!/^att-\d{1,3}$/.test(a.id || '') || typeof a.storage_path !== 'string' || !['delivered', 'unavailable'].includes(a.access)) throw Error('Unusable attachment manifest entry');
+    if (!/^att-\d{1,3}$/.test(a.id || '') || typeof a.storage_path !== 'string' || !['delivered', 'unavailable', 'unsupported'].includes(a.access)) throw Error('Unusable attachment manifest entry');
     if (a.access !== 'delivered') continue;
     if (!root || path.dirname(a.local_path) !== root || !existsSync(a.local_path) || sha256(readFileSync(a.local_path)) !== a.sha256) throw Error('A delivered attachment does not match its manifest');
   }
@@ -312,7 +340,8 @@ export function reviewedIds(manifest, reads) {
 // the local path to Read and what the host knows. Never the bytes.
 export function modelView(manifest, reviewed = new Set()) {
   return (manifest?.attachments ?? []).map(a => ({ attachment: a.id, ticket_id: a.ticket_id, source_id: a.source_id, storage_path: a.storage_path, target: a.target,
-    access: a.access === 'delivered' ? (reviewed.has(a.id) ? 'reviewed' : 'delivered') : 'unavailable', ...(a.access === 'delivered' ? { local_path: a.local_path, media_type: a.media_type } : { reason: a.reason }) }));
+    access: a.access === 'delivered' ? (reviewed.has(a.id) ? 'reviewed' : 'delivered') : a.access === 'unsupported' ? 'unsupported' : 'unavailable',
+    ...(a.access === 'delivered' ? { local_path: a.local_path, media_type: a.media_type } : { reason: a.reason }) }));
 }
 
 function parseArgs(argv) {
