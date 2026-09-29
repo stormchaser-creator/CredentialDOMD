@@ -52,11 +52,16 @@ test('seed.sql writes configuration tables only (never members, admins or secret
   assert.doesNotMatch(sql, /clerk\.credentialdomd\.com|clerk\.accounts\.dev/);
 });
 
+// Not people: the product's own public intake address the journeys mail to, and
+// placeholder text the app's forms show (the journeys find fields by it).
+const ROLE_AND_PLACEHOLDER_ADDRESSES = new Set(['docs@credentialdomd.com', 'you@hospital.org', 'billing@hospital.org']);
+
 test('no committed QA-lab file holds a secret or names a real mailbox', () => {
   for (const file of committedLabFiles()) {
     const text = readFileSync(file, 'utf8');
     for (const re of SECRET_SHAPES) assert.doesNotMatch(text, re, `${path.relative(ROOT, file)} matches ${re}`);
     for (const a of text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g) || []) {
+      if (ROLE_AND_PLACEHOLDER_ADDRESSES.has(a)) continue;
       assert.match(a, /@(?:qa\.credentialdomd\.test|example\.(?:com|test))$/, `${path.relative(ROOT, file)} names ${a}`);
     }
   }

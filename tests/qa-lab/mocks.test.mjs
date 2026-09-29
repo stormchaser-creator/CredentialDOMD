@@ -166,6 +166,9 @@ test('mock Stripe: the real SDK can run the limited checkout exactly as the func
   const done = await call(`/qa/stripe/checkout/${session.id}/complete`, { method: 'POST', body: {} });
   assert.equal(done.status, 200);
   assert.deepEqual(done.data.deliveries.map((d) => [d.type, d.status]), [['checkout.session.completed', 200], ['customer.subscription.created', 200], ['invoice.paid', 200]]);
+  // Each delivery names the object and customer it was about, so a journey can find its own events.
+  assert.deepEqual(done.data.deliveries.map((d) => d.object), [session.id, done.data.subscription.id, done.data.invoice.id]);
+  assert.ok(done.data.deliveries.every((d) => d.customer === session.customer), 'every delivery names the customer');
   const events = received.filter((r) => r.name === 'limited-stripe-webhook');
   assert.ok(events.every((r) => !r.error), 'every Stripe event verified with Stripe.webhooks.constructEvent');
   assert.deepEqual(events.map((r) => r.event.type), ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid']);
@@ -238,6 +241,18 @@ test('mock AI: canned or scripted answers in each provider\'s shape; nothing lea
   assert.equal(g.data.candidates[0].content.parts[0].text, '{"ok":1}');
   assert.equal((await call('/gemini/v1beta/models/gemini-3.8-flash:countTokens?key=placeholder', { method: 'POST', body: { contents: [] } })).status, 200);
   assert.equal((await call('/qa/ai')).data.mode, 'mock');
+});
+
+test('mock AI: a scripted answer with `match` goes only to the request that contains it', async () => {
+  const ask = (text) => call('/gemini/v1beta/models/gemini-3.8-flash:generateContent?key=placeholder', { method: 'POST', body: { contents: [{ parts: [{ text }] }], generationConfig: { responseMimeType: 'application/json' } } });
+  assert.equal((await call('/qa/ai/next', { method: 'POST', body: { provider: 'gemini', response: { json: { who: 'mine' } }, match: 'short' } })).status, 400, 'a match shorter than 8 characters is refused');
+  await call('/qa/ai/next', { method: 'POST', body: { provider: 'gemini', response: { json: { who: 'journey A' } }, match: 'MARKER-AAAA-1111' } });
+  await call('/qa/ai/next', { method: 'POST', body: { provider: 'gemini', response: { json: { who: 'anyone' } } } });
+  // An unrelated request takes the unmatched script, never journey A's.
+  assert.equal((await ask('some other journey')).data.candidates[0].content.parts[0].text, '{"who":"anyone"}');
+  assert.equal((await ask('again, unrelated')).data.candidates[0].content.parts[0].text, '{}', 'nothing left for it: the canned JSON answer');
+  assert.equal((await ask('this one carries MARKER-AAAA-1111 in its body')).data.candidates[0].content.parts[0].text, '{"who":"journey A"}');
+  assert.equal((await call('/qa/ai')).data.queued, 0);
 });
 
 test('mock AI: real mode needs its own key and stops at the daily cap before calling out', async () => {
