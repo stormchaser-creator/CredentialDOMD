@@ -119,9 +119,13 @@ const BUDGET_HARD_USD = budgetSecret("AI_BUDGET_HARD_USD", DEFAULT_BUDGET_HARD_U
 
 const SECRET_NAME = "gemini_shared_key";
 const ANTHROPIC_SECRET_NAME = "anthropic_shared_key";
-const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/";
-const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_COUNT_URL = "https://api.anthropic.com/v1/messages/count_tokens";
+// GEMINI_API_BASE and ANTHROPIC_API_BASE are unset in production, so these are
+// the real provider hosts; only the local QA lab points them at its mock.
+const GEMINI_API_BASE = (Deno.env.get("GEMINI_API_BASE") || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
+const ANTHROPIC_API_BASE = (Deno.env.get("ANTHROPIC_API_BASE") || "https://api.anthropic.com").replace(/\/+$/, "");
+const GEMINI_BASE = `${GEMINI_API_BASE}/v1beta/`;
+const ANTHROPIC_MESSAGES_URL = `${ANTHROPIC_API_BASE}/v1/messages`;
+const ANTHROPIC_COUNT_URL = `${ANTHROPIC_API_BASE}/v1/messages/count_tokens`;
 
 /**
  * Ask Anthropic what this request's input actually costs, in tokens.

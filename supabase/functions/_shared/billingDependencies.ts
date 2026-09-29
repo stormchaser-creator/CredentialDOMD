@@ -3,6 +3,16 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { clerkProfile } from './clerkAuth.ts';
 import { validateBillingRuntime } from './billingCatalog.mjs';
 
+// STRIPE_API_BASE is unset in production, so the SDK keeps its own default host
+// (api.stripe.com). Only the local QA lab sets it, to its mock Stripe.
+export function stripeHostOptions(base = Deno.env.get('STRIPE_API_BASE') || ''): { host?: string; port?: string; protocol?: 'http' | 'https' } {
+  if (!base) return {};
+  const url = new URL(base);
+  if (!['http:', 'https:'].includes(url.protocol) || url.pathname.replace(/\/+$/, '') !== '' || url.search || url.hash) throw new Error('STRIPE_API_BASE must be a bare http(s) origin');
+  const protocol = url.protocol === 'http:' ? 'http' : 'https';
+  return { host: url.hostname, port: url.port || (protocol === 'http' ? '80' : '443'), protocol };
+}
+
 export function billingDependencies() {
   const mode = Deno.env.get('CREDENTIALDOMD_BILLING_MODE') || 'disabled';
   let client: Stripe;
@@ -11,7 +21,7 @@ export function billingDependencies() {
     if (!client) {
       const key = Deno.env.get('STRIPE_SECRET_KEY') || '';
       if (!['test', 'live'].includes(mode) || !new RegExp(`^(sk|rk)_${mode}_`).test(key)) throw new Error('Billing key mode mismatch');
-      client = new Stripe(key, { apiVersion: '2024-04-10', httpClient: Stripe.createFetchHttpClient(), timeout: 20000, maxNetworkRetries: 1 });
+      client = new Stripe(key, { apiVersion: '2024-04-10', httpClient: Stripe.createFetchHttpClient(), timeout: 20000, maxNetworkRetries: 1, ...stripeHostOptions() });
     }
     return client;
   };

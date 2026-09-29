@@ -3,7 +3,7 @@
 // one row with one JSON column "r". They run with search_path = pg_catalog, so
 // every name that pg_get_*def() deparses comes back schema-qualified.
 //
-// Every query here must pass assertReadOnlySql (tests/qa-lab/catalog-sql.test.mjs).
+// Every query here must pass assertReadOnlySql (tests/qa-lab/read-only-guard.test.mjs).
 
 /** Schemas whose objects belong to the application (everything else is Supabase platform). */
 export const APP_SCHEMAS = ['public', 'supabase_migrations'];

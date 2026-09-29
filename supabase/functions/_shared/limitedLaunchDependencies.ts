@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { billingDependencies } from './billingDependencies.ts';
 import { LIMITED_LAUNCH } from './limitedLaunchCatalog.mjs';
+import { CLERK_API_BASE } from './clerkContinuity.ts';
 
 /** IDs are configuration, never inferred from names or shared with historical v1. */
 export function limitedLaunchConfig() {
@@ -23,7 +24,7 @@ export function limitedLaunchDependencies() {
       if (!/^user_[A-Za-z0-9]+$/.test(subject)) throw Error('Invalid Clerk subject');
       const key = Deno.env.get('CLERK_SECRET_KEY') || '';
       if (!/^sk_(test|live)_/.test(key)) throw Error('Clerk backend verification is not configured');
-      const response = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
+      const response = await fetch(`${CLERK_API_BASE}/v1/users/${encodeURIComponent(subject)}`, {
         headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000), redirect: 'error',
       });
       if (!response.ok) throw Error('Clerk mailbox verification unavailable');

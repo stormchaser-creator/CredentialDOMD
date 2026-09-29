@@ -4,7 +4,7 @@
 --
 -- THE REPOSITORY IS PUBLIC. This file holds configuration only: no profiles, no
 -- member data, no secrets. The only addresses are synthetic, on the reserved
--- test domain qa.credentialdomd.test (tests/qa-lab/seed.test.mjs enforces it).
+-- test domain qa.credentialdomd.test (tests/qa-lab/public-repo-safety.test.mjs enforces it).
 --
 -- Copied from production on 2026-09-29 (configuration tables only; parity.mjs
 -- compares these rows with production on every run, so drift is reported):
@@ -12,10 +12,16 @@
 --   public.vera_source_settings    (singleton)
 -- Synthetic, because production's rows hold member mailboxes:
 --   public.limited_beta_cohorts, public.limited_founding_programs,
---   public.limited_founding_slots  (a TEST-MODE founding program, livemode = false,
---   with two synthetic promised places, built by the same functions production uses)
+--   public.limited_founding_slots  (founding programs for BOTH modes, each with two
+--   synthetic promised places, built by the same functions production uses; the lab
+--   runs live mode like production, see qa-lab/lib/functions-env.mjs)
+--   public.clerk_continuity_runs / _accounts / _events  (an enabled continuity run
+--   for the lab's own Clerk issuers, as production has one for its issuers, with one
+--   synthetic legacy member; built by stage_clerk_continuity)
 -- Deliberately empty:
---   public.app_secrets (production AI keys), public.app_admins and every member table.
+--   public.app_secrets (production AI keys; `npm run qa:lab` later stores two random
+--   lab placeholders there so ai-proxy has a key to send to the mock AI),
+--   public.app_admins and every member table.
 
 set role postgres;
 
@@ -45,6 +51,36 @@ select public.prepare_founding_program(
   encode(sha256(convert_to('["qa-promised-1@qa.credentialdomd.test","qa-promised-2@qa.credentialdomd.test"]', 'UTF8')), 'hex'),
   2);
 
+-- The live-mode program (production's only program is livemode = true, and the lab
+-- runs CREDENTIALDOMD_BILLING_MODE=live against its mock Stripe).
+select public.prepare_founding_program(
+  true,
+  'qa_lab_founding_promises',
+  encode(sha256(convert_to('["qa-promised-1@qa.credentialdomd.test","qa-promised-2@qa.credentialdomd.test"]', 'UTF8')), 'hex'),
+  2);
+
+-- 2b. Clerk continuity for the lab's issuers. Production has an enabled run whose
+--     target is its Clerk issuer, so every sign-in goes through
+--     initialize-clerk-profile and a direct profile insert is refused
+--     (clerk_continuity_insert_lock). The lab mirrors that for its own issuers
+--     (qa-lab/lib/lab-config.mjs: LAB_ISSUER, LAB_LEGACY_ISSUER). One synthetic
+--     legacy member, never a real account: [profile, legacy subject, verified
+--     primary email, legacy updated ms, legacy created ms, lifetime eligible].
+with m(members) as (select '[[null, "user_qalegacy1", "qa-legacy-1@qa.credentialdomd.test", 1789000000000, 1788000000000, false]]'::jsonb)
+select public.stage_clerk_continuity(
+  'c1a0c1a0-0000-4000-8000-000000000001'::uuid,
+  'https://clerk-legacy.qa.credentialdomd.test',
+  'https://clerk.qa.credentialdomd.test',
+  '2026-09-29T00:00:00Z'::timestamptz,
+  (select encode(sha256(convert_to('[' || string_agg(value::text, ',' order by (value->>1) collate "C") || ']', 'UTF8')), 'hex') from jsonb_array_elements(members)),
+  members)
+from m;
+
+select public.set_clerk_continuity_enabled(
+  'c1a0c1a0-0000-4000-8000-000000000001'::uuid,
+  (select r.manifest_sha256 from public.clerk_continuity_runs r where r.id = 'c1a0c1a0-0000-4000-8000-000000000001'::uuid),
+  true);
+
 -- 3. Production's gate values (as of 2026-09-29): checkout and public founding on.
 update public.access_policy_settings
    set limited_checkout_enabled = true,
@@ -52,3 +88,8 @@ update public.access_policy_settings
  where singleton;
 
 reset role;
+
+-- 4. Which seed this database holds. qa-lab/apply-schema.mjs compares it with
+--    this file and refuses to run the lab on an older seed (rebuild instead).
+create table if not exists qa_lab.seed_version (version integer not null, applied_at timestamptz not null default now());
+insert into qa_lab.seed_version (version) values (2);

@@ -1,5 +1,20 @@
+// Where Clerk lives. Production sets none of CLERK_PRODUCTION_ISSUER,
+// CLERK_API_BASE or CLERK_JWKS_URL, so every value below is the real Clerk
+// location. Only the local QA lab sets them, to its mock Clerk
+// (qa-lab/README.md); tests/qa-lab/provider-overrides.test.mjs pins the
+// defaults. Read through globalThis so this file still loads where there is no
+// Deno global (the node tests run it inside a vm context).
+const clerkLocation = (name: string): string =>
+  ((globalThis as { Deno?: { env: { get(key: string): string | undefined } } }).Deno?.env.get(name) || "").trim().replace(/\/+$/, "");
+
 /** Production identity initialization. No editable profile field is proof. */
-export const PRODUCTION_CLERK_ISSUER = "https://clerk.credentialdomd.com";
+export const PRODUCTION_CLERK_ISSUER = clerkLocation("CLERK_PRODUCTION_ISSUER") || "https://clerk.credentialdomd.com";
+/** Clerk Backend API origin. */
+export const CLERK_API_BASE = clerkLocation("CLERK_API_BASE") || "https://api.clerk.com";
+/** An issuer's signing keys: its own JWKS, unless CLERK_JWKS_URL names another place. */
+export function clerkJwksUrl(issuer: string): URL {
+  return new URL(clerkLocation("CLERK_JWKS_URL") || `${issuer.replace(/\/+$/, "")}/.well-known/jwks.json`);
+}
 const SUBJECT = /^user_[A-Za-z0-9]+$/;
 
 export function verifiedPrimaryIdentity(user: unknown): { subject: string; email: string; updatedMs: number; createdMs: number } | null {
@@ -21,7 +36,7 @@ export function verifiedPrimaryIdentity(user: unknown): { subject: string; email
 export async function readProductionIdentity(subject: string, secret: string, transport = fetch, development = false) {
   if (!SUBJECT.test(subject) || !secret?.startsWith(development ? "sk_test_" : "sk_live_")) throw new Error("production_identity_unavailable");
   const checkedAt = new Date().toISOString();
-  const response = await transport(`https://api.clerk.com/v1/users/${subject}`, {
+  const response = await transport(`${CLERK_API_BASE}/v1/users/${subject}`, {
     headers: { Authorization: `Bearer ${secret}`, Accept: "application/json" },
     signal: AbortSignal.timeout(10000), redirect: "error",
   });

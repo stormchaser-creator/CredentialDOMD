@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { clerkProfile } from '../_shared/clerkAuth.ts';
 import { createSelfServiceSignupHandler } from '../_shared/selfServiceSignup.mjs';
+import { CLERK_API_BASE } from '../_shared/clerkContinuity.ts';
 
 const mode = Deno.env.get('CREDENTIALDOMD_BILLING_MODE') || 'disabled';
 let db: ReturnType<typeof createClient>;
@@ -17,7 +18,7 @@ serve(createSelfServiceSignupHandler({
   clerkUser: async (subject: string) => {
     const key = Deno.env.get('CLERK_SECRET_KEY') || '';
     if (!['test', 'live'].includes(mode) || !key.startsWith(`sk_${mode}_`)) throw Error('Clerk backend mode mismatch');
-    const response = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
+    const response = await fetch(`${CLERK_API_BASE}/v1/users/${encodeURIComponent(subject)}`, {
       headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000), redirect: 'error',
     });
     if (!response.ok) throw Error('Clerk identity unavailable');

@@ -1,5 +1,5 @@
 // Turns a catalog snapshot (lib/catalog-sql.mjs) into DDL for the local stack.
-// Pure: no I/O, so the rules below are unit-tested (tests/qa-lab/ddl.test.mjs).
+// Pure: no I/O, so the rules below are unit-tested (tests/qa-lab/schema-ddl.test.mjs).
 //
 // Order: extensions, schemas, sequences, tables (no defaults), functions,
 // defaults, sequence ownership, constraints (foreign keys last), indexes,

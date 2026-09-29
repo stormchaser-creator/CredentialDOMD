@@ -4,13 +4,14 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT } from './paths.mjs';
+import { stackWorkdir } from './stack.mjs';
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
 /** Status of the local stack as reported by the Supabase CLI (JSON), or null when it is not running. */
 export function supabaseStatus() {
-  const r = spawnSync('supabase', ['status', '-o', 'json', '--workdir', REPO_ROOT], { encoding: 'utf8' });
+  // The lab's own workdir once qa:up has written it (its keys are the running stack's).
+  const r = spawnSync('supabase', ['status', '-o', 'json', '--workdir', stackWorkdir()], { encoding: 'utf8' });
   if (r.status !== 0) return null;
   const start = r.stdout.indexOf('{');
   if (start < 0) return null;

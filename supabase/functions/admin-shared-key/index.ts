@@ -23,7 +23,8 @@ const SECRET_NAME = "gemini_shared_key";
 const KEY_RE = /^[A-Za-z0-9._~+/=-]{20,300}$/;
 // A cheap, model-agnostic-enough probe. Only 400/403 "invalid key" style
 // answers reject the save; anything else (404 model, 429, network) lets it through.
-const PROBE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:countTokens";
+// GEMINI_API_BASE is unset in production (the real host); only the local QA lab points it at its mock.
+const PROBE_URL = `${(Deno.env.get("GEMINI_API_BASE") || "https://generativelanguage.googleapis.com").replace(/\/+$/, "")}/v1beta/models/gemini-3.8-flash:countTokens`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

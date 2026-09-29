@@ -161,7 +161,8 @@ serve(async (req) => {
   }
 
   // Send the invitation.
-  const r = await fetch("https://api.resend.com/emails", {
+  // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
+  const r = await fetch(`${(Deno.env.get("RESEND_API_BASE") || "https://api.resend.com").replace(/\/+$/, "")}/emails`, {
     method: "POST",
     headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
     body: JSON.stringify({

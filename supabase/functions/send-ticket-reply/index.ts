@@ -101,7 +101,8 @@ Deno.serve(async (req) => {
   const hasAttachment = !!message.attachment_path || (Array.isArray(message.attachment_paths) && message.attachment_paths.length > 0);
   const subject = `Re: ${String(ticket.subject || "your ticket").slice(0, 150)} (CredentialDOMD)`;
   const mail = ticketReplyEmail(reply, hasAttachment);
-  const r = await fetch("https://api.resend.com/emails", {
+  // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
+  const r = await fetch(`${(Deno.env.get("RESEND_API_BASE") || "https://api.resend.com").replace(/\/+$/, "")}/emails`, {
     method: "POST",
     headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
     body: JSON.stringify({

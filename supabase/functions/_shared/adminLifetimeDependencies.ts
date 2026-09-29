@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { billingDependencies } from './billingDependencies.ts';
 import { verifiedPrimaryMailbox } from './selfServiceSignup.mjs';
+import { CLERK_API_BASE } from './clerkContinuity.ts';
 
 /** Only read-only provider methods are used by the gift handler. */
 export function adminLifetimeDependencies() {
@@ -22,7 +23,7 @@ export function adminLifetimeDependencies() {
       if (!/^user_[A-Za-z0-9]+$/.test(subject)) throw Error('Invalid target identity');
       const key = Deno.env.get('CLERK_SECRET_KEY') || '';
       if (!['test', 'live'].includes(base.mode) || !key.startsWith(`sk_${base.mode}_`)) throw Error('Clerk backend mode mismatch');
-      const response = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
+      const response = await fetch(`${CLERK_API_BASE}/v1/users/${encodeURIComponent(subject)}`, {
         headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000), redirect: 'error',
       });
       if (!response.ok) throw Error('Target identity unavailable');

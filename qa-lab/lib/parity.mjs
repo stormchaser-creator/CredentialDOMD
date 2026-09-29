@@ -1,5 +1,5 @@
 // Compares two catalog snapshots (production and local) category by category.
-// Pure, so tests/qa-lab/parity.test.mjs can check it on synthetic catalogs.
+// Pure, so tests/qa-lab/schema-ddl.test.mjs can check it on synthetic catalogs.
 import { createHash } from 'node:crypto';
 import { sanitize } from './ddl.mjs';
 import { APP_SCHEMAS } from './catalog-sql.mjs';

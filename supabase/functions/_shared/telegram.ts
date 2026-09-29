@@ -17,7 +17,8 @@ export async function notifyOperator(message: string): Promise<void> {
   }
 
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    // TELEGRAM_API_BASE is unset in production (api.telegram.org); only the local QA lab points it at its mock.
+    const res = await fetch(`${(Deno.env.get("TELEGRAM_API_BASE") || "https://api.telegram.org").replace(/\/+$/, "")}/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

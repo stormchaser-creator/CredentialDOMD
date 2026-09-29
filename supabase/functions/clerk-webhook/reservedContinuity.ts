@@ -2,7 +2,7 @@
  * This helper never initializes profiles, stamps mailbox routing or grants access.
  * It is exclusive to the signed webhook; browser initialization stays verified-only.
  */
-import { PRODUCTION_CLERK_ISSUER, readProductionIdentity } from "../_shared/clerkContinuity.ts";
+import { CLERK_API_BASE, PRODUCTION_CLERK_ISSUER, readProductionIdentity } from "../_shared/clerkContinuity.ts";
 
 const SUBJECT = /^user_[A-Za-z0-9]+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -33,7 +33,7 @@ export async function canDeferReservedContinuity(
   const fresh = () => Date.now() >= checkedAt - 10000 && Date.now() - checkedAt <= 300000;
   // Do not inspect the signed event's old marker/email: the authoritative current
   // provider record must still be reserved, unverified and owned by this subject.
-  const response = await transport(`https://api.clerk.com/v1/users/${subject}`, {
+  const response = await transport(`${CLERK_API_BASE}/v1/users/${subject}`, {
     headers: { Authorization: `Bearer ${options.productionSecret}`, Accept: "application/json" },
     signal: AbortSignal.timeout(10000), redirect: "error",
   });

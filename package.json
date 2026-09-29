@@ -19,7 +19,10 @@
     "qa:down": "bash qa-lab/down.sh",
     "qa:extract": "node qa-lab/extract-schema.mjs",
     "qa:apply": "node qa-lab/apply-schema.mjs",
-    "qa:parity": "node qa-lab/parity.mjs"
+    "qa:parity": "node qa-lab/parity.mjs",
+    "qa:lab": "node qa-lab/lab.mjs",
+    "qa:smoke": "node qa-lab/smoke.mjs",
+    "qa:stripe": "node qa-lab/stripe-cli.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -44,6 +47,10 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jose": "^5.10.0",
+    "playwright-core": "^1.63.0",
+    "stripe": "15.12.0",
+    "svix": "1.40.0",
     "vite": "^7.3.1"
   }
 }

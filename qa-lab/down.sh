@@ -6,8 +6,4 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-if [ "${1:-}" = "--wipe" ]; then
-  supabase stop --workdir "$ROOT" --no-backup
-else
-  supabase stop --workdir "$ROOT"
-fi
+node qa-lab/stack-cli.mjs stop "$@"
