@@ -27,8 +27,12 @@ export function createAiMock({ store, secrets, settings = aiSettings(), log = co
   const S = () => store.state.ai;
   const day = () => new Date().toISOString().slice(0, 10);
   const record = (entry) => store.update((s) => { s.ai.calls.unshift({ at: new Date().toISOString(), ...entry }); s.ai.calls.length = Math.min(s.ai.calls.length, 300); });
-  const nextScripted = (provider) => {
-    const i = S().script.findIndex((x) => x.provider === provider);
+  // The next scripted answer for this provider. A script with `match` is only used for a
+  // request whose body contains that text (so parallel journeys do not take each other's
+  // answers); scripts without one are used first in, first out.
+  const nextScripted = (provider, bodyText = '') => {
+    let i = S().script.findIndex((x) => x.provider === provider && x.match && bodyText.includes(x.match));
+    if (i < 0) i = S().script.findIndex((x) => x.provider === provider && !x.match);
     if (i < 0) return null;
     const [item] = S().script.splice(i, 1);
     store.save();
@@ -69,7 +73,7 @@ export function createAiMock({ store, secrets, settings = aiSettings(), log = co
       return json(res, up.status, JSON.parse(up.text || '{}'));
     }
     if (count) { record({ provider: 'anthropic', mode: 'mock', model: body.model, count: true }); return json(res, 200, { input_tokens: inputTokens }); }
-    const scripted = nextScripted('anthropic');
+    const scripted = nextScripted('anthropic', JSON.stringify(body));
     const content = scripted?.content || [{ type: 'text', text: scripted?.text || CANNED }];
     const out = { id: `msg_qalab${randomAlnum(20)}`, type: 'message', role: 'assistant', model: body.model || 'mock', content, stop_reason: scripted?.stop_reason || (content.some((c) => c.type === 'tool_use') ? 'tool_use' : 'end_turn'), stop_sequence: null,
       usage: { input_tokens: inputTokens, output_tokens: estimateTokens(JSON.stringify(content)), cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } };
@@ -95,7 +99,7 @@ export function createAiMock({ store, secrets, settings = aiSettings(), log = co
     }
     record({ provider: 'gemini', mode: 'mock', model, method });
     if (method === 'countTokens') return json(res, 200, { totalTokens: promptTokens });
-    const scripted = nextScripted('gemini');
+    const scripted = nextScripted('gemini', JSON.stringify(body));
     const wantsJson = body.generationConfig?.responseMimeType === 'application/json';
     const text = scripted?.text ?? (scripted?.json !== undefined ? JSON.stringify(scripted.json) : wantsJson ? '{}' : CANNED);
     const out = { candidates: [{ content: { role: 'model', parts: [{ text }] }, finishReason: 'STOP', index: 0 }],
@@ -123,7 +127,8 @@ export function createAiMock({ store, secrets, settings = aiSettings(), log = co
     router.add('POST', '/qa/ai/next', async (req, res) => {
       const body = await readJson(req);
       if (!['anthropic', 'gemini'].includes(body.provider) || !body.response || typeof body.response !== 'object') throw new HttpError(400, 'give { provider: "anthropic"|"gemini", response: { text } | { json } | { content } }');
-      store.update((s) => { s.ai.script.push({ provider: body.provider, response: body.response }); });
+      if (body.match !== undefined && (typeof body.match !== 'string' || body.match.length < 8)) throw new HttpError(400, 'match must be a string of at least 8 characters');
+      store.update((s) => { s.ai.script.push({ provider: body.provider, response: body.response, ...(body.match ? { match: body.match } : {}) }); });
       json(res, 201, { queued: S().script.length });
     });
     router.add('DELETE', '/qa/ai/next', (req, res) => { store.update((s) => { s.ai.script = []; }); json(res, 200, { queued: 0 }); });

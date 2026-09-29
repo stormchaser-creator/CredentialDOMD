@@ -357,3 +357,16 @@ export function recordButtons(page, text) {
   const all = group.locator('button');
   return { box, star: all.nth(0), share: all.nth(1), edit: all.nth(2), remove: all.nth(3) };
 }
+
+/**
+ * Queues the mock AI's next answer. With `match` (text the request must contain, e.g. a slice
+ * of the uploaded file's base64) only that request gets it, so parallel journeys cannot take it.
+ */
+export async function scriptAi(provider, response, match) {
+  return mockApi('/qa/ai/next', { method: 'POST', body: { provider, response, ...(match ? { match } : {}) } });
+}
+/** A slice of a file's base64 that identifies it inside an AI request. */
+export function base64Marker(buffer) {
+  const b64 = Buffer.from(buffer).toString('base64');
+  return b64.slice(Math.max(0, Math.floor(b64.length / 2 / 4) * 4 - 40), Math.floor(b64.length / 2 / 4) * 4 + 40);
+}
