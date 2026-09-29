@@ -20,6 +20,7 @@ import { loadAdminSupportThread } from "../../utils/adminSupportThread";
 import { ADMIN_TICKET_CATEGORIES, adminTicketDraftProblem } from "../../utils/adminTicketDraft";
 import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
+import AdminInviteToJoin from "./AdminInviteToJoin";
 import AdminMailboxRepair from "./AdminMailboxRepair";
 import AdminMemberView from "./AdminMemberView";
 import { readActiveGrants, memberViewAvailability } from "../../utils/memberViewClient.js";
@@ -493,15 +494,7 @@ function AdminDashboardContent() {
       )}
       {tab === "errors" && (!loading || hasSectionData) && !error && <AdminErrorReports rows={errors} users={users} T={T} onCleared={ids => { setErrors(rows => rows.filter(row => !ids.includes(row.id))); setCoverage(previous => { const old = previous.errors; return old ? { ...previous, errors: { ...old, rows: old.rows.filter(row => !ids.includes(row.id)), count: old.count === null ? null : Math.max(0, old.count - ids.length) } } : previous; }); }} />}
       {tab === "users" && (!loading || hasSectionData) && !error && <UsersPanel key={accountPreset} initialAccess={accountPreset} myProfileId={userIdRef.current} users={users} setUsers={setUsers} invites={invites} T={T} onRefresh={() => setReloadKey(k => k + 1)} />}
-      {tab === "waitlist" && (!loading || hasSectionData) && !error && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} onInvite={async (r) => {
-        const res = await sendInvite({ email: r.email, name: r.name, lead_id: r.id });
-        if (res.ok) {
-          setWaitlist(rs => rs.map(x => x.id === r.id ? { ...x, status: "invited", invited_at: new Date().toISOString() } : x));
-          const { data } = await supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500);
-          if (data) setInvites(data);
-        }
-        return res;
-      }} />}
+      {tab === "waitlist" && (!loading || hasSectionData) && !error && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} />}
       {tab === "fields" && (!loading || hasSectionData) && !error && <FieldProposals rows={fields} setRows={setFields} T={T} />}
       {tab === "ai" && (!loading || hasSectionData) && !error && <AiPanel users={users} ownKey={data?.settings?.apiKey || ""} T={T} />}
 
@@ -823,20 +816,6 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
   );
 }
 
-async function sendInvite(body) {
-  try {
-    const { data, error } = await supabase.functions.invoke("send-invite", { body });
-    if (error) {
-      let msg = error.message;
-      let held = false;
-      try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; held = j?.held === true; } catch { /* ignore */ }
-      return { ok: false, held, error: msg };
-    }
-    if (data?.held || data?.ok !== true) return { ok: false, held: data?.held === true, error: data?.error || "The server did not confirm an invitation send." };
-    return { ok: true, data };
-  } catch (e) { return { ok: false, error: e.message }; }
-}
-
 function timeAgo(iso) {
   if (!iso) return "never";
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -856,10 +835,9 @@ function accessColor(st) {
  * approved today; this is where that happens and where it can be undone.
  */
 function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invites, T, onRefresh }) {
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  // The invitation row "Invite to join" opened, prefilled in a dialog.
+  const [joinTarget, setJoinTarget] = useState(null);
   const [showTest, setShowTest] = useState(false);
   const [lifetimeTarget, setLifetimeTarget] = useState(null);
   const [accessChange, setAccessChange] = useState(null);
@@ -880,24 +858,6 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
 
   const refresh = async () => { onRefresh(); setGrantsRevision(n => n + 1); };
 
-  const invite = async () => {
-    const e = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { setMsg("Enter a valid email."); return; }
-    setBusy(true); setMsg("");
-    const r = await sendInvite({ email: e, name: name.trim() });
-    setBusy(false);
-    if (r.ok) { setMsg(`Invitation sent to ${e}.`); setEmail(""); setName(""); refresh(); }
-    else setMsg(r.held ? r.error : `Could not invite: ${r.error}`);
-  };
-
-  const resend = async (inv) => {
-    setBusy(true); setMsg("");
-    const r = await sendInvite({ email: inv.email, name: inv.name, resend: true });
-    setBusy(false);
-    setMsg(r.ok ? `Re-sent to ${inv.email}.` : r.held ? r.error : `Could not re-send: ${r.error}`);
-    if (r.ok) refresh();
-  };
-
   const setInviteStatus = (inv, status) => setAccessChange({ kind: "invite", row: inv, action: "set_status", status });
   const removeInvite = inv => setAccessChange({ kind: "invite", row: inv, action: "remove" });
   const setAccess = (u, status) => setAccessChange({ kind: "profile", row: u, status });
@@ -915,7 +875,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
 
   const card = { backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8 };
   const chip = (label, color, onClick, active) => (
-    <button key={label} onClick={onClick} disabled={busy} style={{ fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 10, cursor: "pointer", border: `1px solid ${active ? color : T.border}`, backgroundColor: active ? color : "transparent", color: active ? "#fff" : T.textDim }}>{label}</button>
+    <button key={label} onClick={onClick} style={{ fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 10, cursor: "pointer", border: `1px solid ${active ? color : T.border}`, backgroundColor: active ? color : "transparent", color: active ? "#fff" : T.textDim }}>{label}</button>
   );
 
   return (
@@ -925,16 +885,8 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
         <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 0" }}>Someone who already has an account: choose “Give free lifetime access” on their row below. It checks their billing first and records your reason. Someone who has not signed up yet: gift it to their email address here and it applies the moment they confirm that address. Neither sends an email.</p>
       </div>
       <AdminLifetimeGift />
-      <div style={{ ...card, marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 6 }}>Invite a physician</div>
-        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>Invitation emails are on hold for owner review of the exact message and recipient list. An invitation request will not send email or change access while held.</div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Name (optional)" style={{ flex: "1 1 120px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
-          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@domain.com" type="email" autoCapitalize="none" style={{ flex: "2 1 180px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
-          <button onClick={invite} disabled={busy} style={{ padding: "8px 14px", borderRadius: 8, border: "none", backgroundColor: T.accent, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{busy ? "..." : "Send invite"}</button>
-        </div>
-        <div role="status" aria-live="polite" style={{ fontSize: 12, color: msg.startsWith("Could not") ? "#ef4444" : T.textMuted, marginTop: 6 }}>{msg}</div>
-      </div>
+      <AdminInviteToJoin />
+      {msg && <div role="status" aria-live="polite" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>{msg}</div>}
 
       {/* Only invitations still waiting on someone. Once they sign in they
           are an account below, and listing them twice read as a duplicate. */}
@@ -957,7 +909,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
             <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(inv.status === "invited" ? "pending" : inv.status), flexShrink: 0 }}>{inv.status}</span>
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-            {inv.status !== "revoked" && chip("Re-send email", T.accent, () => resend(inv), false)}
+            {inv.status !== "revoked" && chip("Invite to join", T.accent, () => setJoinTarget({ name: inv.name || "", email: inv.email }), false)}
             {!inv.profile_id && !inv.activated_at ? <>
               {inv.status === "revoked" ? chip("Restore invitation", "#10b981", () => setInviteStatus(inv, "invited"), false) : chip("Pause invitation", "#ef4444", () => setInviteStatus(inv, "revoked"), false)}
               {chip("Remove", T.textDim, () => removeInvite(inv), false)}
@@ -1041,6 +993,9 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
       {memberViewTarget && <AdminMemberView target={memberViewTarget} grant={memberGrants.get(memberViewTarget.id) || null}
         onClose={() => { setMemberViewTarget(null); setGrantsRevision(n => n + 1); }} />}
       {accessChange && <AdminAccessChange key={`${accessChange.kind}:${accessChange.row.id}:${accessChange.status || accessChange.action}`} change={accessChange} T={T} onClose={() => setAccessChange(null)} onSaved={() => { setMsg("Access change saved in Control history."); refresh(); }} />}
+      {joinTarget && <Modal open onClose={() => setJoinTarget(null)} title="Invite to join">
+        <AdminInviteToJoin key={joinTarget.email} embedded initialName={joinTarget.name} initialEmail={joinTarget.email} />
+      </Modal>}
       {lifetimeTarget && <AdminLifetimeAccess target={lifetimeTarget} onClose={() => setLifetimeTarget(null)} onGranted={result => {
         setUsers(rows => rows.map(row => row.id === result.target.profileId && row.auth_user_id === result.target.clerkSubject ? { ...row, access_status: "active" } : row));
       }} />}
@@ -1056,7 +1011,7 @@ const badge = (color, bg) => ({
   whiteSpace: "nowrap", flexShrink: 0,
 });
 
-function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T, onInvite }) {
+function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T }) {
   // Full back-end control: see everyone, add someone by hand (a physician
   // whose network ate the form), remove test rows, and review attempts
   // that never became signups.
@@ -1072,7 +1027,8 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
     setBusy(false);
     if (!error && data) { setRows(rs => [data, ...rs]); setAddName(""); setAddEmail(""); }
   };
-  const [inviting, setInviting] = useState(null);
+  // The lead "Invite to join" opened, prefilled in a dialog.
+  const [joinTarget, setJoinTarget] = useState(null);
   const [inviteMsg, setInviteMsg] = useState("");
   // Remove a row only once the server confirms exactly one row deleted. A
   // delete that RLS refuses returns success with zero rows, so the count is
@@ -1190,16 +1146,10 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
                 {r.waitlist === true && <span style={badge(T.accent, T.accentGlow)}>{leadState(r, view)}</span>}
                 <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
-                {onInvite && r.waitlist === true && !activeEmails.has((r.email || "").trim().toLowerCase()) && (
-                  <button disabled={inviting === r.id} onClick={async () => {
-                    if (!window.confirm(`Request an invitation for ${r.email}? Email and access changes are held until the exact message and recipient list receive owner approval.`)) return;
-                    setInviting(r.id); setInviteMsg("");
-                    const res = await onInvite(r);
-                    setInviting(null);
-                    setInviteMsg(res.ok ? `Invitation sent to ${r.email}.` : res.held ? res.error : `Could not invite ${r.email}: ${res.error}`);
-                  }} style={{
+                {r.waitlist === true && !activeEmails.has((r.email || "").trim().toLowerCase()) && (
+                  <button type="button" onClick={() => { setInviteMsg(""); setJoinTarget({ name: r.name || "", email: r.email }); }} style={{
                     padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
-                  }}>{inviting === r.id ? "..." : leadState(r, view) === "invited" ? "Re-invite" : "Invite"}</button>
+                  }}>Invite to join</button>
                 )}
                 <button onClick={() => removeLead(r)} style={{
                   padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim || "rgba(239,68,68,0.12)",
@@ -1231,6 +1181,10 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
           ))}
         </>
       )}
+      {joinTarget && <Modal open onClose={() => setJoinTarget(null)} title="Invite to join">
+        <AdminInviteToJoin key={joinTarget.email} embedded initialName={joinTarget.name} initialEmail={joinTarget.email}
+          onSent={result => setInviteMsg(`Invitation to join sent to ${result.to}.`)} />
+      </Modal>}
     </div>
   );
 }

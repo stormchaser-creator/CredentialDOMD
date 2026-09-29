@@ -1,7 +1,8 @@
 // send-invite's access writes, with the owner-review hold stubbed out. The
 // real hold (tests/launch-email-review.test.mjs) stops every request before
-// these branches, so they are only reachable here; they go live the moment
-// the hold is replaced by an owner-approval release.
+// these branches, so they are only reachable here. send-invite is retired
+// (2026-09-29; the admin screens use invite-to-join), and even behind a lifted
+// hold it activates nothing: an invitation is an invite to join, not access.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -108,34 +109,29 @@ for (const [label, state, pattern] of [
   }
 }
 
-test('a pending account is let in, and only through a pending-guarded update', async () => {
+test('a pending account is never let in by an invitation: no profile write, the invitation stays unlinked', async () => {
   const h = handlerFor({ early_access_leads: [lead], profiles: [profile()] });
   const result = await h.call({ email: EMAIL, lead_id: 'lead' });
   assert.equal(result.status, 200);
-  assert.equal(h.state.profiles[0].access_status, 'active');
-  const activation = h.writes.find(w => w.table === 'profiles');
-  assert.deepEqual(activation.filters, [['id', PROFILE], ['access_status', 'pending']]);
-  assert.equal(h.state.beta_access[0].status, 'active');
-  assert.equal(h.state.beta_access[0].profile_id, PROFILE);
-  assert.equal(h.mail.length, 1);
+  assert.equal(h.state.profiles[0].access_status, 'pending');
+  assert.equal(h.writes.filter(w => w.table === 'profiles').length, 0);
+  assert.equal(h.state.beta_access[0].status, 'invited');
+  assert.equal(h.state.beta_access[0].profile_id, undefined);
 });
 
 test('a resend to a pending account applies the same rule', async () => {
   const h = handlerFor({ early_access_leads: [lead], profiles: [profile()], beta_access: [{ id: 'invite', email: EMAIL, status: 'invited', profile_id: null }] });
   assert.equal((await h.call({ email: EMAIL, resend: true })).status, 200);
-  assert.equal(h.state.profiles[0].access_status, 'active');
+  assert.equal(h.state.profiles[0].access_status, 'pending');
+  assert.equal(h.writes.filter(w => w.table === 'profiles').length, 0);
+  assert.equal(h.state.beta_access[0].profile_id, null);
 });
 
-test('a status that changed at the same moment is not overwritten and the invitation is not linked', async () => {
-  const h = handlerFor({ early_access_leads: [lead], profiles: [profile()] });
-  // An administrator pauses the account between the read and the update.
-  const original = h.state.profiles[0];
-  let reads = 0;
-  Object.defineProperty(original, 'access_status', { get() { return reads++ ? 'revoked' : 'pending'; }, set() { throw Error('must not write a changed status'); }, enumerable: true, configurable: true });
-  const result = await h.call({ email: EMAIL });
-  assert.equal(result.status, 200);
-  assert.equal(h.state.beta_access[0].status, 'invited');
-  assert.equal(h.state.beta_access[0].profile_id, undefined);
+test('send-invite has no code path that writes profiles', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../../supabase/functions/send-invite/index.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /from\("profiles"\)\s*\.update/);
+  assert.doesNotMatch(source, /access_status: "active"/);
 });
 
 test('an active account needs no access write, and its invitation is linked to it', async () => {
