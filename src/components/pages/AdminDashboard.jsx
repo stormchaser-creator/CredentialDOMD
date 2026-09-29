@@ -20,6 +20,7 @@ import { loadAdminSupportThread } from "../../utils/adminSupportThread";
 import { ADMIN_TICKET_CATEGORIES, adminTicketDraftProblem } from "../../utils/adminTicketDraft";
 import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
+import AdminMailboxRepair from "./AdminMailboxRepair";
 import AdminMemberView from "./AdminMemberView";
 import { readActiveGrants, memberViewAvailability } from "../../utils/memberViewClient.js";
 
@@ -965,6 +966,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
         </div>
       ))}
 
+      <AdminMailboxRepair />
       <div style={{ fontSize: 12, color: T.textMuted, margin: "14px 0 0" }}>
         Legacy founding badges: {foundingCount} (separate from paid founding memberships)
       </div>
