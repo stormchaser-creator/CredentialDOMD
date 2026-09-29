@@ -3,11 +3,11 @@
  *
  * Body: { rating: 1-5, message: string, context_page?: string, context_payload?: object }
  * Auth: Required (any authenticated user).
- * Side effect: Telegram ping to operator.
+ * No operator push here: the signup notifier on the owner's Mac
+ * (scripts/signup-notify.sh) reports new feedback rows every 10 minutes.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 
 const corsHeaders = {
@@ -58,14 +58,6 @@ serve(async (req) => {
       .single();
 
     if (error) throw error;
-
-    // Telegram operator alert (fire-and-forget)
-    notifyOperator(
-      `*New feedback* ${rating ? `(${rating}/5)` : ""}\n` +
-      `From: ${user.email}\n` +
-      (body.context_page ? `Page: ${body.context_page}\n` : "") +
-      `\n${body.message.slice(0, 500)}`
-    );
 
     return new Response(JSON.stringify({ id: data.id, ok: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,6 +1,6 @@
 # Tracking Backend Setup
 
-Code is shipped. To activate it on production, you need to (a) run the migration, (b) deploy the edge functions, (c) set Telegram secrets, (d) set up `admin@credentialdomd.com` email forwarding.
+Code is shipped. To activate it on production, you need to (a) run the migration, (b) deploy the edge functions, (c) run the owner notifier, (d) set up `admin@credentialdomd.com` email forwarding.
 
 ---
 
@@ -35,25 +35,13 @@ All four use Supabase auth (JWT from the browser). RLS handles authorization at 
 
 ---
 
-## 3. Set Telegram secrets (optional but recommended)
+## 3. Owner notifications
 
-For phone-pings when a customer submits feedback or a ticket:
-
-```bash
-# Create a bot via @BotFather on Telegram (one-time, ~2 min):
-#   /newbot → choose name → save the TOKEN it gives you
-
-# Get your operator chat_id by messaging the bot once, then visiting:
-#   https://api.telegram.org/bot<TOKEN>/getUpdates
-# Look for "chat":{"id":<NUMBER>} — that's your TELEGRAM_OPERATOR_ID.
-# (Per AutoAIBiz CLAUDE.md, your existing one is 5275581824.)
-
-supabase secrets set \
-  TELEGRAM_BOT_TOKEN="123456:ABC..." \
-  TELEGRAM_OPERATOR_ID="5275581824"
-```
-
-If you skip this, the edge functions still work — they just log to console instead of pinging. No errors.
+The edge functions push nothing themselves (the Telegram ping they used to
+make was removed on 2026-09-29: its secrets were never set, so it never ran).
+The signup notifier on the owner's Mac, `scripts/signup-notify.sh` under the
+launchd job `com.credentialdomd.signup-notify`, reads new feedback, tickets
+and member replies from the database every 10 minutes and sends one iMessage.
 
 ---
 
@@ -91,7 +79,7 @@ After steps 1 + 2 above:
 3. Tap **More** → **Get help** → submit a low-priority "test ticket"
 4. Tap **More** → **Admin** (only visible if your email is on the whitelist) → see the rows you just created
 
-If Telegram secrets are set, you'll get phone pings for both submissions.
+Within 10 minutes the signup notifier iMessages you both submissions (your own admin account is left out, so test from a member account).
 
 ---
 
@@ -109,8 +97,8 @@ If Telegram secrets are set, you'll get phone pings for both submissions.
 
 | Endpoint | Auth | Purpose |
 |---|---|---|
-| POST /functions/v1/submit-feedback | user JWT | Create feedback row + Telegram ping |
-| POST /functions/v1/create-ticket   | user JWT | Create support_tickets row + ping |
+| POST /functions/v1/submit-feedback | user JWT | Create feedback row (the owner notifier reports it) |
+| POST /functions/v1/create-ticket   | user JWT | Create support_tickets row (the owner notifier reports it) |
 | POST /functions/v1/reply-ticket    | user JWT (owner or admin) | Add support_messages row, optionally update status |
 | POST /functions/v1/track-event     | user JWT | Insert user_events row (service-role-bypasses-RLS) |
 

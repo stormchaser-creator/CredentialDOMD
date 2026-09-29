@@ -8,7 +8,12 @@
  * ticket is saved even when a file is not; attachments_failed says how many
  * the sender has to add again as a reply.
  * Auth: Required.
- * Side effect: Telegram ping with priority indicator + first reply to user via email.
+ * Nothing is emailed when a ticket is filed. The member is emailed when an
+ * administrator replies (trg_notify_ticket_reply -> send-ticket-reply). The
+ * owner hears of a new ticket from the signup notifier on his Mac
+ * (scripts/signup-notify.sh reads support_tickets every 10 minutes); this
+ * function pushes nothing itself. The push it used to make never ran (its
+ * secrets were never set) and was removed on 2026-09-29.
  * An attachment is uploaded to the private "documents" bucket under
  * tickets/<ticket_id>/ using the service-role client (bypasses the
  * documents_owner storage RLS, which otherwise requires the caller's own
@@ -24,7 +29,6 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import { admitActiveAccount } from "../_shared/admission.ts";
 import { parseAttachments, storeTicketAttachments, stripServerOnlyPayloadKeys } from "../_shared/ticketAttachment.ts";
@@ -37,13 +41,6 @@ const corsHeaders = {
 
 const VALID_CATEGORIES = ["bug", "billing", "feature_request", "data_issue", "compliance", "other"];
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
-
-const PRIORITY_EMOJI: Record<string, string> = {
-  urgent: "🚨",
-  high: "⚠️",
-  normal: "📩",
-  low: "💬",
-};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -145,16 +142,6 @@ serve(async (req) => {
     const files = attachments.length
       ? await storeTicketAttachments(user.db, data.id, attachments, contextPayload)
       : { stored: [], failed: 0 };
-
-    // Operator alert
-    const emoji = PRIORITY_EMOJI[priority] || "📩";
-    notifyOperator(
-      `${emoji} *New ${category} ticket* (${priority})\n` +
-      `From: ${user.email}\n` +
-      `Subject: ${subject.slice(0, 100)}\n\n` +
-      ticketBody.slice(0, 500) +
-      (ticketBody.length > 500 ? "..." : "")
-    );
 
     return new Response(JSON.stringify({
       id: data.id, ok: true,
