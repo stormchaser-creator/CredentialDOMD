@@ -48,9 +48,11 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /full refund of your most recent annual membership payment, including a renewal payment, at any time/);
     assert.match(html, /no request deadline or prorating/);
     assert.match(html, /not all payments from past years/);
-    assert.match(html, /separate 30-day Practice trial/);
-    assert.match(html, /Continuing Practice requires an explicit purchase/);
-    assert.match(html, /Existing Credential members should contact support@credentialdomd.com to review options for adding Practice/);
+    // Owner decision 2026-09-28: founding members keep Practice while members; later phases keep the trial.
+    assert.match(html, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
+    assert.match(html, /continuing Practice requires an explicit purchase/);
+    assert.match(html, /Early bird and standard members who want Practice after the trial can contact support@credentialdomd.com to review options/);
+    assert.doesNotMatch(html, /Existing Credential members should contact support/);
     assert.match(html, /no change or charge will occur without their agreement/);
     assert.match(html, /Practice records remain available to read and export/);
     assert.match(html, /keep Credential and Practice free for life/);
@@ -87,7 +89,7 @@ test('OFF help fixture is unchanged and production help presents verified beta a
   const active = renderPublicLaunch(renderHelp(activeHelp, videos), 'help');
   assert.match(activeHelp.articles.find(article => article.id === 'locum-contract').availability, /first activate their account with a verified email address/);
   assert.match(active, /href="\/app\/"/);
-  assert.match(active, /separate 30-day Practice trial/);
+  assert.match(active, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
   assert.match(active, /most recent annual membership payment, including a renewal payment, at any time/);
   assert.match(active, /Request through Get help in the app or support@credentialdomd.com/);
   assert.doesNotMatch(active, /An invited, signed-in account|new invited physicians/);

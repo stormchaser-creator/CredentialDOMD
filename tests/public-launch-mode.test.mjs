@@ -54,7 +54,7 @@ test('paid preview is navigation, and guide delivery cannot imply paid or waitli
   assert.match(view.guideCapture.note, /does not create an account/);
   assert.match(view.primaryAction.label, /Create your account/);
   assert.match(view.availability, /Founding Credential is \$99\/year for the first 100 paid founding members/);
-  assert.match(view.foundingRate, /first 100 paid founding members/);
+  assert.match(view.foundingRate, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/);
   assert.match(view.promisedBeta, /first activate their account with a verified email address/);
   assert.match(view.promisedBeta, /does not restart those 30 days/);
   assert.doesNotMatch(view.promisedBeta, /invitation will confirm/);
@@ -78,12 +78,13 @@ test('both views retain the active-membership rate condition and distinct earlie
     assert.match(view.foundingRate, /\$99\/year/);
     assert.match(view.foundingRate, /while (?:their )?membership remains (?:continuously )?active/);
     assert.match(view.fullPackage, /\$245\/year/);
-    assert.match(view.fullPackage, /no founding or early-bird discount/);
+    assert.match(view.fullPackage, /no founding or early bird discount/);
+    assert.match(view.fullPackage, /While founding places remain it is not offered at public signup, because founding Credential already includes Practice\./);
     assert.match(view.promisedBeta, /earlier free-beta wording/);
     assert.match(view.promisedBeta, /30 days free with no card/);
     assert.match(view.promisedBeta, /no automatic charge/);
     assert.match(view.lifetimeException, /keep Credential and Practice free for life/);
-    assert.match(view.practiceTrial, /separate 30-day Practice trial/);
+    assert.match(view.practiceTrial, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
     assert.match(view.practiceTrial, /explicit purchase/);
   }
 });

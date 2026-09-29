@@ -17,7 +17,9 @@ test('authoritative planned prices and product scopes never introduce automatic 
     const [core,full]=getPublicBillingOffers(phase);
     assert.equal(core.unitAmount,CREDENTIAL_PRICE_PHASES[phase]); assert.equal(core.annualCents,core.unitAmount);
     assert.equal(full.unitAmount,24500); assert.equal(full.annualCents,24500);assert.equal(full.priceLockedWhileActive,false);
-    assert.equal(core.practiceTrialDays,30);assert.equal(full.practiceTrialDays,0);assert.equal(core.trialAutoCharges,false);
+    // Founding Credential includes Practice while active (owner, 2026-09-28); later phases keep the 30-day trial.
+    assert.equal(core.practiceIncluded,phase==='founding');assert.equal(core.practiceTrialDays,phase==='founding'?0:30);
+    assert.equal(full.practiceIncluded,true);assert.equal(full.practiceTrialDays,0);assert.equal(core.trialAutoCharges,false);
     assert.equal(core.priceLockedWhileActive,phase!=='standard');
   }
   assert.equal(PUBLIC_BILLING_POLICY.billingEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.checkoutEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.enforcementEnabled,true);

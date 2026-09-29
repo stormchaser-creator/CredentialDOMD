@@ -12,7 +12,7 @@ const SAFE_ERROR_CODES = new Set([
   "invitation_unavailable", "invitation_required", "invitation_activation_disabled",
   "quote_expired", "quote_consent_required", "billing_account_unavailable", "billing_account_mismatch",
   "subscription_already_exists", "checkout_owner_mismatch", "checkout_offer_already_selected",
-  "checkout_unavailable", "checkout_pending", "founding_capacity_pending", "quote_mismatch", "catalog_unavailable",
+  "checkout_unavailable", "checkout_pending", "founding_capacity_pending", "bundle_unavailable", "quote_mismatch", "catalog_unavailable",
   "checkout_needs_reconciliation", "invalid_request", "request_too_large",
 ]);
 // Where a request stopped, for the failure report (ticket fe321c16). Never
@@ -39,12 +39,25 @@ const unsafeText = value => [...value].some(character => {
   return (code < 32 && ![9, 10, 13].includes(code)) || code === 127;
 });
 
+// Founding Credential includes Practice while active (practiceIncluded, no
+// trial days); the later Credential phases carry the 30-day trial. A function
+// deployed before 20260928190000 sends no practiceIncluded and a trial on every
+// Credential quote: that older shape is still read, with its own trial days,
+// so this build can ship first. Its consent text says which applies.
+function practiceTermsMatch(value, expected) {
+  if (value.practiceIncluded === undefined) {
+    return value.practiceTrialDays === (value.offerId === "core" ? PUBLIC_BILLING_POLICY.practiceTrialDays : 0);
+  }
+  return value.practiceIncluded === expected.practiceIncluded && value.practiceTrialDays === expected.practiceTrialDays;
+}
+
 function validateQuote(value, offerId) {
   if (!contract(value) || value.offerId !== offerId || !["founding", "earlybird", "standard"].includes(value.pricePhase)) throw unavailable();
   const expected = getPublicBillingOffer(offerId, value.pricePhase);
   if (!expected || value.name !== expected.name || value.annualCents !== expected.annualCents
     || value.currency !== "usd" || value.interval !== "year" || value.pricePhase !== expected.pricePhase
-    || value.priceLockedWhileActive !== expected.priceLockedWhileActive || value.practiceTrialDays !== expected.practiceTrialDays
+    || value.priceLockedWhileActive !== expected.priceLockedWhileActive
+    || !practiceTermsMatch(value, expected)
     || value.trialAutoCharges !== false || value.checkoutEnabled !== true
     || !uuid(value.quoteId) || !date(value.expiresAt) || !hash(value.consentHash)
     || typeof value.consentVersion !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.consentVersion)

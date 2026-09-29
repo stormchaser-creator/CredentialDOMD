@@ -65,8 +65,10 @@ test('matching sandbox bootstrap is repeatable and never modifies legacy objects
 test('quote price comes from protected eligibility; bundle is never discounted',async()=>{
   for(const [phase,cents]of[['founding',9900],['earlybird',14900],['standard',19900]]){
     const f=fixture('core',phase);const h=createLimitedLaunchHandlers(f.deps,config);
-    const quote=await (await h.quote(request())).json();assert.equal(quote.annualCents,cents);assert.equal(quote.trialAutoCharges,false);assert.equal(quote.practiceTrialDays,30);
-    const bundle=await(await h.quote(request({offerId:'core_locum'}))).json();assert.equal(bundle.annualCents,24500);assert.equal(bundle.practiceTrialDays,0);
+    // Founding Credential includes Practice while active (owner, 2026-09-28); early-bird and standard keep the 30-day trial.
+    const quote=await (await h.quote(request())).json();assert.equal(quote.annualCents,cents);assert.equal(quote.trialAutoCharges,false);
+    assert.equal(quote.practiceIncluded,phase==='founding');assert.equal(quote.practiceTrialDays,phase==='founding'?0:30);
+    const bundle=await(await h.quote(request({offerId:'core_locum'}))).json();assert.equal(bundle.annualCents,24500);assert.equal(bundle.practiceTrialDays,0);assert.equal(bundle.practiceIncluded,true);
   }
 });
 test('new pending invitee buys the first paid annual term with card and no Stripe trial',async()=>{
@@ -207,6 +209,34 @@ test('held public capacity blocks Core previews and cap races without changing c
   const raced=await h.checkout(paidRequest());assert.equal(raced.status,409);assert.deepEqual(await raced.json(),{error:'founding_capacity_pending'});
   assert.equal(f.calls.some(c=>['checkout','pin','save'].includes(c[0])),false);
   f.eligibility.founding_state='held';assert.equal((await h.quote(request())).status,200);
+});
+
+test('while a new self-service buyer\'s offer is founding the bundle is refused before any preview or provider call',async()=>{
+  // Founding Credential includes Practice while active (20260928190000), so $245 would cost more for the same thing.
+  const f=fixture();f.eligibility.bundle_available=false;const h=createLimitedLaunchHandlers(f.deps,config);
+  let previews=0;const createPreview=f.deps.store.createPreview;f.deps.store.createPreview=async(...args)=>{previews++;return createPreview(...args);};
+  const refused=await h.quote(request({offerId:'core_locum'}));assert.equal(refused.status,409);assert.deepEqual(await refused.json(),{error:'bundle_unavailable'});
+  assert.equal(previews,0);
+  const core=await(await h.quote(request())).json();assert.deepEqual([core.annualCents,core.practiceIncluded,core.practiceTrialDays],[9900,true,0]);
+  // A bundle preview made before the migration cannot reach Stripe either.
+  f.deps.store.previewById=async()=>({...f.preview,offer_id:'core_locum',price_phase:'standard',annual_cents:24500});
+  const blocked=await h.checkout(paidRequest());assert.equal(blocked.status,409);assert.deepEqual(await blocked.json(),{error:'bundle_unavailable'});
+  assert.deepEqual(f.calls,[],'no customer, claim, price pin or Checkout');
+  // And the database's own refusal is passed on the same way.
+  f.eligibility.bundle_available=true;f.deps.store.claimLimitedCheckout=async()=>({state:'bundle_unavailable'});
+  const raced=await h.checkout(paidRequest());assert.equal(raced.status,409);assert.deepEqual(await raced.json(),{error:'bundle_unavailable'});
+  assert.equal(f.calls.some(c=>['checkout','pin','save'].includes(c[0])),false);
+  // Reviewed invitations, beta holders and buyers after founding: the bundle is offered.
+  const offered=await h.quote(request({offerId:'core_locum'}));assert.equal(offered.status,200);assert.equal((await offered.json()).practiceIncluded,true);
+});
+test('access snapshot validates whether a paid membership includes Practice and whether the bundle is offered',async()=>{
+  const base={schemaVersion:1,policyVersion:PUBLIC_BILLING_POLICY.version,enforcementEnabled:true,billingEnabled:true,purchasedOfferId:'core',practiceIncluded:true,bundleAvailable:false};
+  let snapshot=base;const h=createAccessPolicyHandler({authenticate:async()=>({id:'profile',auth_user_id:'user_a'}),readOwnSnapshot:async()=>snapshot},{...PUBLIC_BILLING_POLICY,enforcementEnabled:true});
+  assert.deepEqual(await(await h(request())).json(),base);
+  for(const bad of [{practiceIncluded:'true'},{purchasedOfferId:null},{purchasedOfferId:'core_locum',practiceIncluded:false},{bundleAvailable:'no'}]){
+    snapshot={...base,...bad};assert.equal((await h(request())).status,503,JSON.stringify(bad));
+  }
+  snapshot={...base,practiceIncluded:undefined,bundleAvailable:undefined};assert.equal((await h(request())).status,200,'an older snapshot without the fields is still read');
 });
 
 function expiredFoundingFixture() {

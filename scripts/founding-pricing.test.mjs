@@ -18,7 +18,9 @@ test('only two canonical annual founding offers are ever public', () => {
     for (const offer of offers) {
       assert.equal(offer.annualCents, getPublicBillingOffer(offer.id).unitAmount);
       assert.equal(offer.membership, 'annual');
-      assert.equal(offer.practiceTrialDays, offer.id === 'core' ? 30 : 0);
+      // Founding Credential includes Practice while active (owner, 2026-09-28): no trial days.
+      assert.equal(offer.practiceIncluded, true);
+      assert.equal(offer.practiceTrialDays, 0);
       assert.equal(offer.trialAutoCharges, false);
       assert.equal(offer.billingCadence, 'annual_only');
       assert.equal(offer.features, TIERS[offer.tier].features);
@@ -27,6 +29,13 @@ test('only two canonical annual founding offers are ever public', () => {
   assert.deepEqual(getPublicTiers().map(o => o.annualCents), [9900, 24500]);
   assert.deepEqual(getPublicTiers('earlybird').map(o => o.annualCents), [14900, 24500]);
   assert.deepEqual(getPublicTiers('standard').map(o => o.annualCents), [19900, 24500]);
+  // Early-bird and standard Credential keep the one 30-day Practice trial.
+  for (const phase of ['earlybird', 'standard']) {
+    const [core, bundle] = getPublicTiers(phase);
+    assert.deepEqual([core.practiceIncluded, core.practiceTrialDays, bundle.practiceIncluded, bundle.practiceTrialDays], [false, 30, true, 0]);
+    assert.ok(core.bullets.includes('30-day Practice trial; no automatic charge'));
+  }
+  assert.ok(getPublicTiers()[0].bullets.includes('Practice included while you are a member'));
   for (const id of Object.keys(TIERS)) assert.equal(priceFor(id).display, 'Existing account');
 });
 test('canonical prices never become rounded monthly equivalents', () => {

@@ -77,11 +77,12 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     if (fallback.includes('<!-- public-launch:')) throw Error('Nested public launch slots are not allowed');
     if (slot === 'cta') return navigation(fallback, view);
     if (slot === 'form') return signupInsteadOfForm(fallback, view);
-    if (slot === 'hero-offer') return '<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">Founding offer: $99/year for the first 100 paid members</p><p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>';
+    if (slot === 'hero-offer') return `<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${escapeHtml(view.foundingOffer)}</p>`
+      + '<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>';
     // Same approved strings and data attributes as the home hero, so membership-offer.js
     // repaints this block when the live phase changes. No new claims, no new price.
     if (slot === 'guide-offer') return '<div class="guide-offer" style="margin:18px 0 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);max-width:600px;">'
-      + '<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">Founding offer: $99/year for the first 100 paid members</p>'
+      + `<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">${escapeHtml(view.foundingOffer)}</p>`
       + '<p style="font-size:14.5px;line-height:1.55;margin:0 0 6px;color:var(--text-secondary);">Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents.</p>'
       + '<p data-membership-hero-note style="font-size:13.5px;line-height:1.5;margin:0 0 14px;color:var(--text-secondary);">The founding annual rate stays locked for life while membership remains active.</p>'
       + `<a href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;background:var(--emerald);color:#0d0d1a;border-radius:10px;padding:12px 22px;font-weight:700;font-size:15px;text-decoration:none;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a>`

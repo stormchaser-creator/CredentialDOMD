@@ -51,6 +51,8 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
       <button type="button" style={button(true)} onClick={() => { void limitedLaunch.refresh(); }}>Try again</button>);
   }
   let title, copy;
+  // Founding Credential includes Practice while active: no trial notice, nothing to add.
+  const trialMembership = access.purchasedOfferId === "core" && access.practiceIncluded !== true;
   if (access.accessStatus === "pending" && !hasSavedRecords) {
     title = "Choose your membership";
     copy = "Review your eligible offer and its renewal terms before choosing to pay. Creating an account does not charge you.";
@@ -62,10 +64,10 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
   } else if (access.freeBeta?.state === "active") {
     title = "Your free beta";
     copy = `Full access until ${until(access.freeBeta.endsAt)}. No card is required, there is no automatic charge, and you do not need to cancel. ${canReviewBillingOffer(access, "core") || canReviewBillingOffer(access, "core_locum") ? "You can opt in now for your first annual charge and paid year to start at the original beta end, using this same account." : "Your original beta end date has not changed."}`;
-  } else if (access.practiceTrial.state === "active") {
+  } else if (access.practiceTrial.state === "active" && access.practiceIncluded !== true) {
     title = "Your Practice trial";
     copy = `Practice access until ${until(access.practiceTrial.endsAt)}. Practice does not charge automatically. Your Credential membership continues separately.`;
-  } else if (access.purchasedOfferId === "core" && !access.capabilities.practice.write) {
+  } else if (trialMembership && !access.capabilities.practice.write) {
     title = access.practiceTrial.state === "expired" ? "Your Practice trial has ended" : "Your Credential membership continues";
     copy = "Your Credential membership continues. Saved Practice records remain available to read and export. Contact support about adding Practice; we will review the available options and charges with you before any billing change.";
   } else if (!access.capabilities.credential.write || !access.capabilities.practice.write) {
@@ -77,7 +79,7 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
   const actions = [
     access.scheduledMembership && onReviewOffers && <button key="scheduled" type="button" style={button(true)} onClick={onReviewOffers}>Review scheduled membership</button>,
     canOffer && onReviewOffers && <button key="offers" type="button" style={button(true)} onClick={onReviewOffers}>Review membership options</button>,
-    access.purchasedOfferId === "core" && !access.capabilities.practice.write && <a key="support" href="mailto:support@credentialdomd.com" style={{ ...button(false), display: "inline-flex", alignItems: "center", textDecoration: "none", color: T.accent }}>Contact support about Practice</a>,
+    trialMembership && !access.capabilities.practice.write && <a key="support" href="mailto:support@credentialdomd.com" style={{ ...button(false), display: "inline-flex", alignItems: "center", textDecoration: "none", color: T.accent }}>Contact support about Practice</a>,
   ].filter(Boolean);
   return <aside style={box}>
     <strong>{title}</strong><p style={{ margin: "6px 0", color: T.textMuted, fontSize: 13, lineHeight: 1.5 }}>{copy}</p>

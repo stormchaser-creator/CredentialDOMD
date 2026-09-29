@@ -18,13 +18,16 @@ export function createAccessPolicyHandler(deps, policy = PUBLIC_BILLING_POLICY) 
       if (!policy.enforcementEnabled) {
         const access = profile.access_status === 'active';
         return response(200, { schemaVersion: 1, policyVersion: policy.version, evaluatedAt: new Date(deps.now?.() ?? Date.now()).toISOString(), enforcementEnabled: false, accessStatus: profile.access_status,
-          purchasedOfferId: null, lifetime: { credential: false, practice: false }, freeBeta: { state: 'none', startsAt: null, endsAt: null, autoCharges: false }, practiceTrial: { state: 'none', startsAt: null, endsAt: null, autoCharges: false },
+          purchasedOfferId: null, practiceIncluded: false, bundleAvailable: false, lifetime: { credential: false, practice: false }, freeBeta: { state: 'none', startsAt: null, endsAt: null, autoCharges: false }, practiceTrial: { state: 'none', startsAt: null, endsAt: null, autoCharges: false },
           checkoutEligible: false, checkoutResumeAvailable: false, checkoutResumeOfferId: null, pricePhase: null, invitationActivationEnabled: false,
           capabilities: { credential: { read: access, write: access, export: access }, practice: { read: access, write: access, export: access } }, billingEnabled: false });
       }
       const snapshot = await deps.readOwnSnapshot(req);
       if (snapshot?.schemaVersion !== 1 || snapshot.policyVersion !== policy.version || snapshot.enforcementEnabled !== true || typeof snapshot.billingEnabled !== 'boolean') throw Error('Policy cutover incomplete');
       if (snapshot.checkoutEligible != null && (typeof snapshot.checkoutEligible !== 'boolean' || (snapshot.checkoutEligible && (!snapshot.billingEnabled || !['founding','earlybird','standard'].includes(snapshot.pricePhase))))) throw Error('Checkout eligibility unavailable');
+      // A paid membership that includes Practice: the bundle, or founding Credential.
+      if (snapshot.practiceIncluded != null && (typeof snapshot.practiceIncluded !== 'boolean' || (snapshot.practiceIncluded && !['core','core_locum'].includes(snapshot.purchasedOfferId)) || (snapshot.purchasedOfferId === 'core_locum' && !snapshot.practiceIncluded))) throw Error('Practice membership unavailable');
+      if (snapshot.bundleAvailable != null && typeof snapshot.bundleAvailable !== 'boolean') throw Error('Bundle availability unavailable');
       if (snapshot.checkoutResumeAvailable != null && (typeof snapshot.checkoutResumeAvailable !== 'boolean' || (snapshot.checkoutResumeAvailable ? !snapshot.billingEnabled || !['core','core_locum'].includes(snapshot.checkoutResumeOfferId) : snapshot.checkoutResumeOfferId != null))) throw Error('Checkout resume unavailable');
       if (snapshot.freeBeta != null) {
         const beta = snapshot.freeBeta;

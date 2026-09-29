@@ -7,6 +7,8 @@ export const PUBLIC_BILLING_POLICY = Object.freeze({
   billingEnabled: false,
   checkoutEnabled: false,
   enforcementEnabled: true,
+  // Early-bird and standard Credential only. Founding Credential includes
+  // Practice for as long as the membership stays active (owner, 2026-09-28).
   practiceTrialDays: 30,
   trialAutoCharges: false,
   lifetimeScope: 'credential_and_practice',
@@ -17,13 +19,16 @@ export function getPublicBillingOffer(id, phase = PUBLIC_BILLING_POLICY.pricePha
   if (!['core', 'core_locum'].includes(id)) return null;
   const core = id === 'core';
   const amount = core ? CREDENTIAL_PRICE_PHASES[phase] : 24500;
+  // The bundle, and founding Credential, include Practice while active; the
+  // later Credential phases get one Practice trial instead.
+  const practiceIncluded = !core || phase === 'founding';
   return Object.freeze({
     id, offerId: id, name: core ? 'Credential' : 'Credential + Practice',
     tier: core ? 'founding' : 'locum', annualCents: amount, unitAmount: amount,
     currency: 'usd', interval: 'year', pricePhase: core ? phase : 'standard',
     priceLockedWhileActive: core && phase !== 'standard',
     eligibilityLabel: core && phase === 'founding' ? 'First 100 paid founding memberships' : core && phase === 'earlybird' ? 'Early-bird membership' : 'Standard annual membership',
-    practiceTrialDays: core ? PUBLIC_BILLING_POLICY.practiceTrialDays : 0,
+    practiceIncluded, practiceTrialDays: practiceIncluded ? 0 : PUBLIC_BILLING_POLICY.practiceTrialDays,
     trialAutoCharges: false, billingEnabled: false,
     productId: `prod_credentialdomd_${id}_v2`,
     lookupKey: `credentialdomd_${id}_${core ? phase : 'standard'}_annual_v2`,

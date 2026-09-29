@@ -65,10 +65,10 @@ test('paid home and locums expose static navigation and cannot submit a disguise
     assert.match(output, /less polished/);
     assert.match(output, /support tickets/);
     assert.match(output, /locked for life while membership remains continuously active/);
-    assert.match(output, /no founding or early-bird discount/);
+    assert.match(output, /no founding or early bird discount/);
     assert.match(output, /earlier free-beta wording/);
     assert.match(output, /30 days free with no card/);
-    assert.match(output, /separate 30-day Practice trial/);
+    assert.match(output, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
     assert.deepEqual(assets(output), assets(source), 'preserve physician photos and all runtime sources');
     assert.match(output, /href="\/app\/"/, 'existing sign-in remains available');
   }
@@ -82,7 +82,7 @@ test('home shows founding policy before sign-in and its offer buttons lead to pu
     assert.match(html, /href="#planned-pricing"[^>]*><span data-membership-review-action>/);
     assert.doesNotMatch(html, /Review membership offers|Check membership offers/);
   }
-  assert.match(hero, /Founding offer: \$99\/year for the first 100 paid members/);
+  assert.match(hero, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/);
   assert.match(hero, /locked for life while membership remains active/);
   assert.match(hero, /confirmed before payment/);
   const core = output.slice(output.indexOf('<h3 class="feature-title">Credential</h3>'), output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
@@ -160,7 +160,7 @@ test('all 51 guides keep four requested-guide forms and facts while removing wai
     // The guides carry most of the traffic: each must state the founding offer once,
     // above the guide form, and point locums physicians at the practice tools.
     assert.equal((output.match(/class="guide-offer"/g) || []).length, 1, file);
-    assert.match(output, /Founding offer: \$99\/year for the first 100 paid members/, file);
+    assert.match(output, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/, file);
     assert.ok(output.indexOf('class="guide-offer"') < output.indexOf('class="guide-form"'), `${file}: offer sits above the guide form`);
     assert.match(output, /href="\/locums"/, file);
     assert.match(output.slice(output.indexOf('class="guide-offer"'), output.indexOf('class="guide-form"')), /No-hassle 100% money-back guarantee/, `${file}: the offer button states the guarantee`);
@@ -236,7 +236,7 @@ test('help compilation adds refund request terms and updates Practice availabili
       assert.equal(article.notes.at(-1), publicLaunchPresentation(paid).rateComparison);
       assert.deepEqual({ ...article, notes: old.notes, availability: old.availability, audience: old.audience }, old);
     } else if (article.id === 'locum-contract') {
-      assert.match(article.availability, /separate 30-day Practice trial/);
+      assert.match(article.availability, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
       assert.deepEqual({ ...article, availability: old.availability }, old);
     } else if (article.id === 'get-help') {
       assert.deepEqual(article.notes.slice(0, -1), old.notes);
@@ -294,7 +294,7 @@ test('public and in-app legal documents use production defaults and retain an ex
   const on = getLegalDocuments(paid);
   assert.deepEqual(on, current, 'alternate reviewed signup route does not change legal terms');
   assert.equal(on.privacy.updated, 'September 25, 2026');
-  assert.equal(on.terms.updated, 'September 21, 2026');
+  assert.equal(on.terms.updated, 'September 28, 2026');
   const privacy = structuredClone(on.privacy);
   privacy.intro[1] = privacy.intro[1].replace('is in early release.', 'is in free beta.');
   privacy.updated = prior.privacy.updated;
@@ -315,7 +315,7 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.match(section.blocks[4], /at first purchase/);
       assert.equal(section.blocks[5], publicLaunchPresentation(paid).practiceTrial);
       assert.match(section.blocks[5], /first annual payment is confirmed/);
-      assert.match(section.blocks[5], /Existing Credential members should contact support@credentialdomd.com to review options for adding Practice/);
+      assert.match(section.blocks[5], /Early bird and standard members who want Practice after the trial can contact support@credentialdomd.com to review options/);
       assert.match(section.blocks[5], /no change or charge will occur without their agreement/);
       assert.match(section.blocks[5], /read and export/);
       assert.equal(section.blocks[6], old.blocks[5]);

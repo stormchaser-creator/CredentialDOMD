@@ -24,7 +24,7 @@ New copy uses **CredentialDOMD**, with plan names **Credential** and **Practice*
 - Participation: “Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.” This refers to in-app Vera; the public CME website search remains a website resource search.
 - Founding rate: **$99/year**, locked for life while membership remains continuously active. This replaces the previously planned $149 founding price; no previous selling price is claimed. Protected historical $99 offers remain honored within the total 100-place allocation. Reservations are not reported as paid members.
 - After 100 paid founding memberships: early-bird Credential is $149/year, also locked while continuously active, followed by standard Credential at $199/year. These are offer phases, not claims about a previously charged standard price.
-- Credential + Practice: $245/year total, with **no founding or early-bird discount** on the full package.
+- Credential + Practice: $245/year total, with **no founding or early-bird discount** on the full package. While a new public buyer's own offer is founding it is not offered (owner decision, September 28, 2026): founding Credential already includes Practice. It returns when founding is sold out or ended; reviewed invitations and historical no-card beta holders keep it.
 
 The owner approved the 100-paid-member cap on September 20, 2026. The copy does not invent a remaining-place count, offer deadline, unconditional rate after inactive membership, guaranteed implementation of suggestions, or reduced standards for medical/source accuracy. The existing physician-first dark layout, people imagery, resource facts and source dates remain.
 
@@ -40,7 +40,7 @@ Release requires the matching backend capacity migration and endpoint plus a coo
 
 1. People who signed up under earlier free-beta wording receive **30 days free without a card**. The clock starts at first verified account activation. They can opt into $99/year Credential during those 30 days, with the first charge and paid year at the original beta end. No opt-in means no automatic charge. Protected founding offers remain within the 100-place allocation.
 2. Existing eligible registered accounts retain **Credential and Practice free for life**. Waitlist entries alone are not lifetime accounts. This source change does not identify individual eligibility, change grants or introduce setup-related revocation.
-3. New paid Credential includes a **separate 30-day Practice trial**, ending without an added charge unless continued Practice is explicitly purchased. Paid Credential continues. Practice records remain readable/exportable under the existing legal policy.
+3. **Founding Credential ($99, first 100 paid) includes Practice for as long as the membership stays active** (owner decision, September 28, 2026; `20260928190000_founding_practice_included.sql`). Cancel, refund or an unpaid renewal ends Practice and Credential together. Early-bird and standard Credential include a **separate 30-day Practice trial**, ending without an added charge unless continued Practice is explicitly purchased. Paid Credential continues. Practice records remain readable/exportable under the existing legal policy.
 
 ## Surface inventory — implemented
 

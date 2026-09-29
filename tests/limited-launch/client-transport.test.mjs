@@ -230,7 +230,7 @@ function quoteFixture(offerId = 'core', phase = 'founding') {
     schemaVersion: 1, policyVersion: PUBLIC_BILLING_POLICY.version,
     offerId, name: offer.name, annualCents: offer.annualCents,
     currency: 'usd', interval: 'year', pricePhase: offer.pricePhase,
-    priceLockedWhileActive: offer.priceLockedWhileActive, practiceTrialDays: offer.practiceTrialDays,
+    priceLockedWhileActive: offer.priceLockedWhileActive, practiceIncluded: offer.practiceIncluded, practiceTrialDays: offer.practiceTrialDays,
     trialAutoCharges: false, paymentAtCheckout: true, checkoutEnabled: true,
     quoteId: syntheticUuid, expiresAt: '2026-09-19T12:10:00Z',
     consentVersion: '2026-09-19-explicit-annual-opt-in-v1', consentHash: consent.consentHash,
@@ -295,6 +295,8 @@ test('quote contracts reject changed prices, consent metadata, policy, and autom
     q => { q.annualCents = 1; }, q => { q.offerId = 'core_locum'; }, q => { q.name = 'Other'; },
     q => { q.currency = 'eur'; }, q => { q.interval = 'month'; }, q => { q.pricePhase = 'unknown'; },
     q => { q.priceLockedWhileActive = false; }, q => { q.practiceTrialDays++; },
+    // Founding Credential includes Practice while active: no trial days, never a missing inclusion.
+    q => { q.practiceIncluded = false; }, q => { q.practiceTrialDays = 30; }, q => { q.practiceIncluded = 'true'; },
     q => { q.trialAutoCharges = true; }, q => { q.paymentAtCheckout = false; }, q => { q.checkoutEnabled = false; },
     q => { q.policyVersion = 'unknown'; }, q => { q.schemaVersion = 2; }, q => { q.quoteId = 'bad'; },
     q => { q.expiresAt = null; }, q => { q.consentVersion = ''; }, q => { q.consentHash = 'bad'; },
@@ -304,6 +306,25 @@ test('quote contracts reject changed prices, consent metadata, policy, and autom
     const { client } = setup({ fetchImpl: async () => Response.json(value) });
     await assert.rejects(client.quote({ offerId: 'core' }), unavailable);
   }
+});
+
+test('practice terms follow the phase: founding includes Practice, early-bird and standard carry the trial, older functions still read', async () => {
+  const read = async value => { const { client } = setup({ fetchImpl: async () => Response.json(value) }); return client.quote({ offerId: value.offerId }); };
+  assert.deepEqual([(await read(quoteFixture('core', 'founding'))).practiceIncluded, (await read(quoteFixture('core', 'founding'))).practiceTrialDays], [true, 0]);
+  for (const phase of ['earlybird', 'standard']) {
+    const value = await read(quoteFixture('core', phase));
+    assert.deepEqual([value.practiceIncluded, value.practiceTrialDays], [false, 30]);
+    await assert.rejects(read({ ...quoteFixture('core', phase), practiceIncluded: true, practiceTrialDays: 0 }), unavailable);
+  }
+  // A function deployed before 20260928190000 sends no practiceIncluded and
+  // puts the trial on every Credential quote; that shape is still read.
+  for (const phase of ['founding', 'earlybird', 'standard']) {
+    const older = { ...quoteFixture('core', phase), practiceTrialDays: 30 }; delete older.practiceIncluded;
+    assert.equal((await read(older)).practiceIncluded, undefined);
+    await assert.rejects(read({ ...older, practiceTrialDays: 0 }), unavailable);
+  }
+  const olderBundle = quoteFixture('core_locum', 'standard'); delete olderBundle.practiceIncluded;
+  assert.equal((await read(olderBundle)).practiceTrialDays, 0);
 });
 
 test('invitation activation uses the server beta window without assuming its duration', async () => {
