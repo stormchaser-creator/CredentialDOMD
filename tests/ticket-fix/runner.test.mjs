@@ -402,7 +402,9 @@ test('sessions are told to post support replies only through post-reply.mjs', ()
     assert.match(text, /one ticket per call/i, file);
     for (const ban of ['Never read the vault secret `support_reply_hmac_key`', 'never write `support_reply_verifications` directly',
       'never write `support_messages` with a service-role key', 'never call `send-ticket-reply` directly', '`--record-and-reply` by hand']) assert.ok(text.includes(ban), `${file}: ${ban}`);
-    assert.match(text, /not emailed to members/, file);
+    // Owner decision 2026-09-29: a verified reply on a member's ticket is emailed once.
+    assert.match(text, /on a member's ticket is emailed to that member once/, file);
+    assert.match(text, /A reply on an admin's own ticket is never emailed/, file);
     assert.match(text, /node scripts\/ticket-fix\/merge\.mjs <run-id>/, file);
     assert.match(text, /never create `ticket-work\/AUTO_MERGE` unless the owner says so/, file);
   }

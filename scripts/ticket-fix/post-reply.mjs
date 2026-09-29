@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { describeViolations } from './claims.mjs';
 import { prepareStructuredReply, gitRunner, loadGates, readQueryRecord, stateDirectory, ensurePrivateDir, writePrivate, sha256Hex, readOnly,
-  readVerificationKey, signPreparedReply, postReplySQL, ticketSQL, duplicateReplySQL, managementQuery, databaseToken, fetchLiveBuild, EMAIL_NOT_SENT } from './reply.mjs';
+  readVerificationKey, signPreparedReply, postReplySQL, ticketSQL, duplicateReplySQL, managementQuery, databaseToken, fetchLiveBuild, emailStatus } from './reply.mjs';
 import { checkSelect, MAX_ROWS } from './record-query.mjs';
 import { runTestsNow } from './run-tests.mjs';
 import { isMain } from './is-main.mjs';
@@ -122,6 +122,7 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   const tickets = await query(ticketSQL(args.ticket));
   if (tickets.length !== 1 || tickets[0].id !== args.ticket) { log('ERROR: ticket not found'); return 1; }
   const ticket = tickets[0];
+  if (typeof ticket.owner_is_admin !== 'boolean') { log('ERROR: could not tell whether the ticket owner is an admin'); return 1; }
   let prepared;
   try {
     // Evidence is produced now, by the host: the cited tests run on a clean
@@ -143,7 +144,7 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   if (rows.length !== 1) { log('WITHHELD: the ticket changed after the version in ticket_version was read; nothing was stored. Read the new messages, update the reply and its ticket_version, and run again.'); return 4; }
   const posted = { kind: 'reply_stored', ticket_id: ticket.id, message_id: rows[0].id, verification_id: verification.id,
     body_sha256: verification.body_sha256, confirmed: prepared.confirmed, not_done: prepared.pending, status_kept: ticket.status,
-    emailed: false, email: EMAIL_NOT_SENT };
+    emailed: false, email: emailStatus(ticket.owner_is_admin) };
   const ledger = path.join(state, 'replies', ticket.id);
   await ensurePrivateDir(ledger);
   await writePrivate(path.join(ledger, `${verification.id}.json`), JSON.stringify({ ...posted, path: 'post-reply', posted_at: new Date().toISOString(), report: prepared.report }, null, 2));

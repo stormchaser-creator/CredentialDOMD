@@ -64,7 +64,9 @@ function timeAgo(iso) {
  *   Your tickets -> the user's own support_tickets + ticket_thread (RLS scopes both
  *                   to owner-or-admin), reply box -> reply-ticket edge function
  *                   (owner-or-admin, verified in the function).
- * Admin replies also go out by email (trg_notify_ticket_reply -> send-ticket-reply).
+ * Admin replies, and verified support replies on a member's ticket, also go out
+ * by email (trg_notify_ticket_reply -> send-ticket-reply); each email links to
+ * /app/#support/<ticket id>, which opens here with initialTicketId set.
  * Either side can attach up to five files (screenshots, photos, PDFs, Office
  * documents, CSV or text) to a ticket or to a reply; the thread renders them
  * through signed links from ticket-attachment-url. create-ticket says how many
@@ -87,7 +89,7 @@ export function SupportMessage({ message: m, theme: T, ownProfileId, urls }) {
   </div>;
 }
 
-function SupportModalContent({ open, onClose, contextPage, initialTab = "new" }) {
+function SupportModalContent({ open, onClose, contextPage, initialTab = "new", initialTicketId = null }) {
   const { theme: T, user, isDesktop } = useApp();
   const operations = useMemo(() => createSupportOperationsClient({ accountId: user?.id }), [user?.id]);
   const drafts = useMemo(() => createSupportTextDrafts({ accountId: user?.id }), [user?.id]);
@@ -97,6 +99,8 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
   const threadRequest = useRef(0);
   const actionRequest = useRef(0);
   const closeTimer = useRef(null);
+  // The ticket a reply email linked to: opened once, when the list first loads.
+  const pendingTicket = useRef(null);
   const [ownProfileId, setOwnProfileId] = useState(null);
   const [tab, setTab] = useState(initialTab);
   const [subject, setSubject] = useState("");
@@ -143,7 +147,8 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
   }, [operations, drafts]);
   useEffect(() => {
     if (open) { setTab(initialTab); restoreCreateDraft(); }
-  }, [open, initialTab, restoreCreateDraft]);
+    pendingTicket.current = open ? initialTicketId : null;
+  }, [open, initialTab, initialTicketId, restoreCreateDraft]);
   useEffect(() => () => {
     listRequest.current++; threadRequest.current++; actionRequest.current++;
     clearTimeout(closeTimer.current);
@@ -173,6 +178,16 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     setReplyDraftSaved(null); setReply(""); setReplyMsg("");
   };
 
+  // A ticket that is not in the member's list (not theirs, or past the first
+  // 100) leaves the list showing.
+  const openLinkedTicket = (rows) => {
+    const wanted = pendingTicket.current;
+    if (!wanted) return;
+    pendingTicket.current = null;
+    const linked = (rows || []).find((t) => t.id === wanted);
+    if (linked) openThread(linked);
+  };
+
   const loadTickets = async () => {
     if (!supabase || !user?.id) return;
     const requestId = ++listRequest.current;
@@ -185,6 +200,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
         if (current()) {
           setTickets(rows);
           if (pendingBefore && !operations.createDraft()) { setSubject(""); setBody(""); setCategory("other"); setPriority("normal"); }
+          openLinkedTicket(rows);
         }
         return;
       }
@@ -224,7 +240,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
         if (grp) return grp;
         return new Date(b.last_message_at) - new Date(a.last_message_at);
       });
-      if (current()) setTickets(withMeta);
+      if (current()) { setTickets(withMeta); openLinkedTicket(withMeta); }
     } catch (e) {
       if (current()) setTicketsError(e.message || "Could not load your tickets.");
     } finally {

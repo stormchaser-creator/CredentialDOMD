@@ -13,7 +13,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
-import { readVerificationKey, agentReplyBody, labeledBody, sha256Hex, EMAIL_NOT_SENT } from '../../scripts/ticket-fix/reply.mjs';
+import { readVerificationKey, agentReplyBody, labeledBody, sha256Hex, EMAIL_QUEUED } from '../../scripts/ticket-fix/reply.mjs';
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
 import { main as postReply } from '../../scripts/ticket-fix/post-reply.mjs';
 import { main as verifyClaims } from '../../scripts/ticket-fix/verify-claims.mjs';
@@ -276,7 +276,7 @@ test('support reply verification: the database refuses unverified support replie
     assert.deepEqual(await query(replySQL(ticket, replyText, { verification: buildVerification({ ticketId: RESOLVED_TICKET, body: agentReplyBody(replyText), report: {}, secret: key }) })), [], 'a stale version is withheld');
   });
 
-  await t.test('post-reply.mjs end to end: one ticket, host-produced evidence, status kept, not emailed, a rerun refused', async () => {
+  await t.test('post-reply.mjs end to end: one ticket, host-produced evidence, status kept, says how it is emailed, a rerun refused', async () => {
     const repo = tempRepo({ 'src/export.js': 'export const options = {\n  label: "Export expired licences",\n};\n',
       'tests/export.test.mjs': "import test from 'node:test';\ntest('export label', () => {});\n" });
     const state = privateDir('ticket-fix-post-');
@@ -298,9 +298,11 @@ test('support reply verification: the database refuses unverified support replie
       const before = pg.sql('select count(*) from public.support_messages');
       assert.equal(await postReply(['--ticket', MEMBER_TICKET, '--reply', replyFile], { ...deps, query }), 0, lines.join('\n'));
       const posted = JSON.parse(lines.at(-1));
-      // Review: a stored reply here is never emailed; say so instead of "stored".
+      // post-reply sends nothing itself; on a member's ticket the trigger hands
+      // the reply to send-ticket-reply (20260929134100, tested with the real
+      // notify_ticket_reply in reply-email-sql.test.mjs), and it says so.
       assert.equal(posted.emailed, false);
-      assert.equal(posted.email, EMAIL_NOT_SENT);
+      assert.equal(posted.email, EMAIL_QUEUED);
       assert.equal(pg.sql('select count(*) from public.support_messages'), String(Number(before) + 1));
       const stored = JSON.parse(pg.sql(`select row_to_json(m) from (select body, author_id, is_admin_reply, verification_id from public.support_messages where id = '${posted.message_id}') m`));
       assert.equal(stored.verification_id, posted.verification_id);
@@ -317,7 +319,7 @@ test('support reply verification: the database refuses unverified support replie
       assert.equal(fs.statSync(ledger).mode & 0o777, 0o600);
       assert.equal(JSON.parse(fs.readFileSync(ledger, 'utf8')).emailed, false);
       assert.ok(!fs.readFileSync(ledger, 'utf8').includes(key));
-      assert.equal(pg.sql('select count(*) from public.sent_emails where message_id = ' + `'${posted.message_id}'`), '0', 'and it indeed was not');
+      assert.equal(pg.sql('select count(*) from public.sent_emails where message_id = ' + `'${posted.message_id}'`), '0', 'the pre-20260929134100 rule here emails admin authors only');
       writeReply({ ticket_version: version() });
       assert.equal(await postReply(['--ticket', MEMBER_TICKET, '--reply', replyFile], { ...deps, query }), 2, 'the same reply twice is refused');
       assert.match(lines.at(-1), /already stored/);

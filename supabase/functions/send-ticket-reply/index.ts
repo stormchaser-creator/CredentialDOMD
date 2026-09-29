@@ -1,6 +1,17 @@
-// send-ticket-reply: fires from trg_notify_ticket_reply on every admin reply in
-// support_messages and emails the ticket owner via Resend, so an answer given in
-// Admin > Tickets reaches the physician's inbox instead of an invisible thread.
+// send-ticket-reply: fires from trg_notify_ticket_reply and emails the ticket
+// owner via Resend, so an answer reaches the physician's inbox instead of an
+// invisible thread. Two kinds of reply are emailed, each re-checked here on the
+// stored row:
+//   * an admin's reply in Admin > Tickets on someone else's ticket;
+//   * a VERIFIED support reply on a member's ticket (the ticket agent and
+//     scripts/ticket-fix/post-reply.mjs, owner decision 2026-09-29). Those are
+//     stored with the ticket owner as author, is_admin_reply and a
+//     verification_id; public.verified_support_reply_to_member (20260929134100)
+//     says whether the verification the database consumed still matches the
+//     stored body and HMAC, and whether the ticket's owner is a member. The
+//     email is from and signed "CredentialDOMD Support".
+// Never emailed: a member's own message, a reply on an admin's own ticket, a
+// row without a valid verification. Every email links to its ticket in the app.
 //
 // Deploy with --no-verify-jwt (the caller is pg_net, not a user). Auth is the
 // x-hook-secret header, compared against WELCOME_HOOK_SECRET, the same secret and
@@ -33,8 +44,8 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-// Body and signature live in _shared/ticketReplyEmail.ts: an automated reply is
-// from and signed "CredentialDOMD Support", a reply the owner typed is his.
+// Body, signature and link live in _shared/ticketReplyEmail.ts: a support reply
+// is from and signed "CredentialDOMD Support", a reply the owner typed is his.
 
 const MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const json = (body: unknown, status = 200) =>
@@ -58,7 +69,7 @@ Deno.serve(async (req) => {
   if (!messageId) return new Response("bad record", { status: 400 });
 
   const { data: message } = await supabase
-    .from("support_messages").select("id, ticket_id, author_id, body, attachment_path, attachment_paths")
+    .from("support_messages").select("id, ticket_id, author_id, body, is_admin_reply, verification_id, attachment_path, attachment_paths")
     .eq("id", messageId).maybeSingle();
   if (!message) return json({ sent: false, reason: "message not found" }, 404);
   const ticketId = String(message.ticket_id || "");
@@ -66,17 +77,32 @@ Deno.serve(async (req) => {
   const reply = String(message.body || "").trim();
   if (!ticketId || !authorId || !reply) return json({ sent: false, reason: "unusable message" });
 
-  // The trigger already filtered to admin authors on someone else's ticket; re-check
-  // here, on the stored row, so a replayed or hand-built request cannot email on a
-  // customer's behalf.
+  // The trigger already filtered; re-check here, on the stored row, so a replayed
+  // or hand-built request cannot email on a customer's behalf.
   const { data: admin } = await supabase
     .from("app_admins").select("profile_id").eq("profile_id", authorId).maybeSingle();
-  if (!admin) return json({ sent: false, reason: "author not admin" });
+  let supportReply = false;
+  if (!admin) {
+    // Not an admin author: only a verified support reply on a member's ticket.
+    // The function checks the verification against the stored body, the author
+    // (the ticket owner) and that the owner is not an admin.
+    if (message.is_admin_reply !== true || !message.verification_id) return json({ sent: false, reason: "author not admin" });
+    const { data: verified, error: verifyError } = await supabase
+      .rpc("verified_support_reply_to_member", { p_message_id: messageId });
+    if (verifyError) {
+      console.error(`reply ${messageId}: verification check failed (${verifyError.code || "error"}); not emailed`);
+      return json({ sent: false, reason: "verification check failed" }, 500);
+    }
+    if (verified !== true) return json({ sent: false, reason: "not a verified reply to a member" });
+    supportReply = true;
+  }
 
   const { data: ticket } = await supabase
     .from("support_tickets").select("id, subject, user_id").eq("id", ticketId).maybeSingle();
   if (!ticket) return json({ sent: false, reason: "ticket not found" }, 404);
-  if (ticket.user_id === authorId) return json({ sent: false, reason: "own ticket" });
+  // An admin's reply on their own ticket. (A support reply is stored with the
+  // ticket owner as author; the function above has checked that owner.)
+  if (!supportReply && ticket.user_id === authorId) return json({ sent: false, reason: "own ticket" });
 
   const { data: owner } = await supabase
     .from("profiles").select("email").eq("id", ticket.user_id).maybeSingle();
@@ -100,7 +126,7 @@ Deno.serve(async (req) => {
 
   const hasAttachment = !!message.attachment_path || (Array.isArray(message.attachment_paths) && message.attachment_paths.length > 0);
   const subject = `Re: ${String(ticket.subject || "your ticket").slice(0, 150)} (CredentialDOMD)`;
-  const mail = ticketReplyEmail(reply, hasAttachment);
+  const mail = ticketReplyEmail(reply, hasAttachment, { support: supportReply, ticketId });
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentences, questionReportsResult } from './ticket-fix/claims.mjs';
 import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
-  MIGRATION, EMAIL_NOT_SENT, RUN_COMMITTER } from './ticket-fix/reply.mjs';
+  MIGRATION, emailStatus, RUN_COMMITTER } from './ticket-fix/reply.mjs';
 import { checklistErrors, isSupportReply, hostItemWork, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
 
@@ -590,7 +590,7 @@ export async function finishRun(query, directory, context, result, { sourceRevis
   await writePrivate(path.join(ledger, `${verification.id}.json`), JSON.stringify({ kind: 'reply_stored', path: 'agent', ticket_id: context.target_id,
     message_id: rows[0].id, verification_id: verification.id, body_sha256: verification.body_sha256, run_id: prepared.report.run_id,
     recorded_at: new Date().toISOString() }, null, 2));
-  return { kind: 'reply_stored', verification_id: verification.id, emailed: false, email: EMAIL_NOT_SENT };
+  return { kind: 'reply_stored', verification_id: verification.id, emailed: false, email: emailStatus(context.approval.from_admin) };
 }
 // Set by ticket-agent.sh for this run: HEAD before the model ran, the start
 // time, the committer identity the model's git used, and a run id.

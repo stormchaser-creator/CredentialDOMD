@@ -39,10 +39,18 @@ export { ReplyRuleError };
 export const VERIFICATION_KEY = 'support_reply_hmac_key';
 export const VERSION_URL = 'https://credentialdomd.com/app/version.json';
 export const MIGRATION = 'supabase/migrations/20260928150000_support_reply_verifications.sql';
-// Both writers store the ticket owner as author_id with is_admin_reply, and
-// notify_ticket_reply emails only an admin author on someone else's ticket.
-// Until the owner decides how these reach members (design 9.3), say so.
-export const EMAIL_NOT_SENT = 'not emailed: the reply is stored with the ticket owner as author, and notify_ticket_reply emails only an admin author on someone else\'s ticket. It shows in the app thread. How member replies are emailed is an owner decision (design 9.3).';
+// Both writers store the ticket owner as author_id with is_admin_reply and a
+// verification. From 20260929134100 (owner decision 2026-09-29),
+// notify_ticket_reply hands such a reply on a member's ticket to
+// send-ticket-reply, which emails it once, after this process has stored it.
+// A reply on an admin's own ticket is never emailed. Nothing here sends mail,
+// so the stored result says emailed: false and which of the two applies.
+export const EMAIL_QUEUED = 'queued: a verified reply on a member\'s ticket is emailed to the member once by send-ticket-reply (notify_ticket_reply, 20260929134100), from CredentialDOMD Support with a link to the ticket; support_messages.emailed_at records the send.';
+export const EMAIL_OWN_TICKET = 'not emailed: the ticket belongs to an admin, and a reply on an admin\'s own ticket is never emailed. It shows in the app thread.';
+export function emailStatus(ownerIsAdmin) {
+  if (typeof ownerIsAdmin !== 'boolean') throw Error('Whether the ticket owner is an admin is unknown');
+  return ownerIsAdmin ? EMAIL_OWN_TICKET : EMAIL_QUEUED;
+}
 const PROJECT = 'hkpnnsjcwprrwobmpqyy';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const SHA = /^[0-9a-f]{40}$/;
@@ -110,7 +118,7 @@ export function duplicateReplySQL(ticketId, body) {
 }
 export function ticketSQL(ticketId) {
   if (!UUID.test(ticketId || '')) throw Error('Invalid ticket id');
-  return readOnly(`SELECT t.id, t.user_id, t.status, t.updated_at, t.archived_at FROM support_tickets t WHERE t.id = '${ticketId}'::uuid`);
+  return readOnly(`SELECT t.id, t.user_id, t.status, t.updated_at, t.archived_at, public.is_admin(t.user_id) AS owner_is_admin FROM support_tickets t WHERE t.id = '${ticketId}'::uuid`);
 }
 
 // Operator path: one ticket, at the version the AUTHOR read (the reply file's

@@ -107,9 +107,11 @@ the agent path cannot be driven by hand. The model's commits carry a per-run com
 and `{{FIX_COMMIT}}` is the one such commit that touches a file cited in `verification.checks`.
 The free-text reply may not report a result (`unverified_claim`); its verification records
 `claims: "unbound"`. A model that fails or is killed by the alarm counts toward the breaker. The
-log carries rule names only; the full refusal stays in the private run directory. Stored
-replies are not emailed to members (author is the ticket owner); `--record-and-reply` prints
-`"emailed": false`.
+log carries rule names only; the full refusal stays in the private run directory. A stored
+reply on a member's ticket is emailed to the member once after it is stored (notify_ticket_reply
+and send-ticket-reply, 20260929134100); one on an admin's own ticket never is.
+`--record-and-reply` prints `"emailed": false` (nothing in the runner sends mail) and an
+`email` line saying which applies.
 `publication: not_confirmed` intentionally prevents treating a saved draft as proof of
 successful delivery. Customer publication is not an exactly-once queue; the separate internal continuation
 queue below never retries a reply.
