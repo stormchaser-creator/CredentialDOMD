@@ -18,11 +18,14 @@ export function mailboxRepairDependencies() {
     origin: 'https://credentialdomd.com',
     authenticate: clerkProfile,
     issuer: Deno.env.get('CLERK_ISSUER') || '',
+    // The same switch clerk-webhook reads before it routes any user event.
+    continuityEnabled: () => Deno.env.get('CLERK_CONTINUITY_ENABLED') === 'true',
     clerkSecret: () => Deno.env.get('CLERK_SECRET_KEY') || '',
     fetch: (url: string, init: RequestInit) => fetch(url, init),
-    repair: async (actor: Actor, users: Row[], apply: boolean) => {
+    repair: async (actor: Actor, users: Row[], apply: boolean, continuityIssuer: string | null) => {
       const { data, error } = await db().rpc('repair_account_mailboxes', {
         p_actor: actor.profileId, p_actor_subject: actor.clerkSubject, p_users: users, p_apply: apply,
+        p_continuity_issuer: continuityIssuer,
       });
       // The message may quote the input, which carries addresses: never passed on.
       if (error) throw Error('Mailbox repair unavailable');

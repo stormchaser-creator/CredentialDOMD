@@ -14,6 +14,9 @@
 //      webhook would, and a second run writes nothing, not even updated_at;
 //      and the admin-mailbox-repair handler drives it end to end against a
 //      stub Clerk API;
+//   3b. it holds back exactly the users the production webhook's identity
+//      continuity step (the REAL 20260920120000 functions, loaded here in
+//      production order) refuses, and routes nothing while the run is off;
 //   4. the rollback restores 20260918a's body and keeps the grants closed.
 //
 // Unix socket only. Every identity and address is synthetic: the repository
@@ -35,6 +38,12 @@ const read = (rel) => fs.readFileSync(new URL(rel, root), 'utf8');
 const MIGRATION = read('supabase/migrations/20260928190000_mailbox_repair.sql');
 const ROLLBACK = read('docs/rollback/20260928190000_mailbox_repair.rollback.sql');
 const EVENTS = read('supabase/migrations/20260918a_mailbox_account_events.sql');
+// Identity continuity. Not part of DOMAIN (its storage policies are meant for
+// authenticated), but loaded between 20260918a and 20260921015000, where
+// production applied it, because the repair must refuse what it refuses.
+const CONTINUITY = '20260920120000_clerk_identity_continuity.sql';
+const LIVE = 'https://clerk.credentialdomd.com';
+const DEV = 'https://synthetic.clerk.accounts.dev';
 
 // Everything the mailbox and forwarding work created, in the order production
 // applied it. The grant scan below reads its function list from these files,
@@ -68,6 +77,11 @@ create table public.profiles (
   access_status text default 'pending', deleted_at timestamptz,
   created_at timestamptz default now(), updated_at timestamptz default now());
 create table public.app_admins (profile_id uuid primary key references public.profiles(id));
+-- What 20260920120000 touches besides profiles.
+create schema storage;
+create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text unique);
+create table public.documents (id uuid primary key, user_id uuid references public.profiles(id), storage_path text);
+create table public.subscriptions (id uuid primary key default gen_random_uuid(), auth_user_id text);
 `;
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -133,7 +147,9 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
   pg = await start();
   try {
     await pg.sql(SETUP);
-    for (const m of DOMAIN) {
+    const order = [...DOMAIN.slice(0, DOMAIN.indexOf('20260918a_mailbox_account_events.sql') + 1), CONTINUITY,
+      ...DOMAIN.slice(DOMAIN.indexOf('20260918a_mailbox_account_events.sql') + 1)];
+    for (const m of order) {
       const r = await pg.file(read(`supabase/migrations/${m}`));
       assert.ok(r.ok, `${m}: ${r.out}`);
     }
@@ -367,8 +383,40 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       { subject: 'user_SynthNobody', email: 'nobody@example.invalid', updated_ms: T + 700 },
       { subject: 'user_SynthTiny', email: 'a@bc', updated_ms: T + 800 },
     ];
-    const repair = (users, applyIt, actor = ADM, subject = 'user_SynthAdmin') => pg.json(asService(
-      `select public.repair_account_mailboxes(${q(actor)}, ${q(subject)}, ${q(JSON.stringify(users))}::jsonb, ${applyIt})`));
+    const repair = (users, applyIt, actor = ADM, subject = 'user_SynthAdmin', issuer = LIVE) => pg.json(asService(
+      `select public.repair_account_mailboxes(${q(actor)}, ${q(subject)}, ${q(JSON.stringify(users))}::jsonb, ${applyIt}, ${q(issuer)})`));
+
+    // The production continuity run, staged and enabled through its own
+    // functions, before any repair runs. Its reservations cover the shapes
+    // claim_clerk_continuity answers differently; none of them is in USERS.
+    const PH = id(0x301), PB = id(0x302), PR = id(0x303), PP = id(0x304), PN = id(0x305), PS = id(0x306);
+    await addProfile(PH, 'user_SynthProdHeld');          // a production user; its verified primary is reserved for another
+    await addProfile(PB, 'user_SynthDevBound');          // bound below
+    await addProfile(PR, 'user_SynthDevRevoked');        // bound below, then revoked
+    await addProfile(PP, 'user_SynthDevPrepared');       // reserved, never bound
+    await addProfile(PN, 'user_SynthProdPlain', { status: 'revoked' }); // revoked, no reservation at all
+    await addProfile(PS, 'user_SynthProdSpace');         // no reservation, an address claim would refuse
+    const RUN = '00000000-0000-4000-8000-000000000999';
+    const MEMBERS = JSON.stringify([
+      [PB, 'user_SynthDevBound', 'bound@example.invalid', T + 50, T - 5000, false],
+      [PR, 'user_SynthDevRevoked', 'revoked@example.invalid', T + 50, T - 5000, false],
+      [PP, 'user_SynthDevPrepared', 'prepared@example.invalid', T + 50, T - 5000, false],
+      [null, 'user_SynthDevHeld', 'held@example.invalid', T + 50, T - 5000, false],
+    ]);
+    const HASH = `(select encode(sha256(convert_to('['||string_agg(e.value::text, ',' order by (e.value->>1) collate "C")||']', 'UTF8')), 'hex')
+                     from jsonb_array_elements(${q(MEMBERS)}::jsonb) e)`;
+    const enable = (on) => pg.sql(`select public.set_clerk_continuity_enabled('${RUN}', ${HASH}, ${on})`);
+    assert.equal((await pg.json(`select public.stage_clerk_continuity('${RUN}', ${q(DEV)}, ${q(LIVE)}, '2026-09-19', ${HASH}, ${q(MEMBERS)}::jsonb)`)).state, 'staged');
+    await enable(true);
+    const sourceProof = (subject, email) => `jsonb_build_object('subject', ${q(subject)}, 'email', ${q(email)}, 'issuer', ${q(DEV)},
+      'createdMs', ${T - 5000}, 'updatedMs', ${T + 50}, 'checkedAt', clock_timestamp())`;
+    // clerk-webhook's continuity step, exactly as it calls it in production.
+    const webhookContinuity = (subject, email, proof = 'null') => pg.json(
+      `select public.initialize_clerk_profile(${q(subject)}, ${q(email)}, ${q(LIVE)}, ${T + 60}, clock_timestamp(), ${proof})`);
+    assert.equal((await webhookContinuity('user_SynthProdBound', 'bound@example.invalid', sourceProof('user_SynthDevBound', 'bound@example.invalid'))).state, 'bound');
+    assert.equal((await webhookContinuity('user_SynthProdRevoked', 'revoked@example.invalid', sourceProof('user_SynthDevRevoked', 'revoked@example.invalid'))).state, 'bound');
+    await pg.sql(`update public.profiles set access_status = 'revoked' where id = '${PR}'`);
+
     const world = () => pg.rows(`
       select p.id::text, p.verified_email, p.verified_email_event_ms::text as wm, p.verified_email_at::text as at, p.updated_at::text,
              (select json_agg(json_build_array(c.address, c.proof, c.event_ms::text, c.updated_at::text) order by c.address)
@@ -393,9 +441,12 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       }
       assert.deepEqual(await world(), before);
       for (const role of ['anon', 'authenticated']) {
-        const r = await pg.file(`begin; set local role ${role}; select public.repair_account_mailboxes('${ADM}', 'user_SynthAdmin', '[]', false); rollback;`);
+        const r = await pg.file(`begin; set local role ${role}; select public.repair_account_mailboxes('${ADM}', 'user_SynthAdmin', '[]', false, '${LIVE}'); rollback;`);
         assert.match(r.out, /permission denied for function repair_account_mailboxes/);
       }
+      // No ungated form: the continuity issuer has no default.
+      const bare = await pg.file(`begin; set local role service_role; select public.repair_account_mailboxes('${ADM}', 'user_SynthAdmin', '[]', false); rollback;`);
+      assert.match(bare.out, /function public\.repair_account_mailboxes\(unknown, unknown, unknown, boolean\) does not exist/);
     });
 
     let previewed;
@@ -404,7 +455,7 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       previewed = await repair(USERS, false);
       assert.deepEqual(previewed, {
         state: 'ready', applied: false, total: 8, change: 4, current: 1,
-        skipped: { noAccount: 1, closed: 1, unusable: 1 },
+        skipped: { noAccount: 1, closed: 1, continuity: 0, unusable: 1 },
         outcomes: { claimed: 3, stale_address: 1 },
       });
       assert.deepEqual(await world(), before);
@@ -431,7 +482,7 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       const before = await world();
       const again = await repair(USERS, true);
       assert.deepEqual(again, { state: 'ready', applied: true, total: 8, change: 0, current: 5,
-        skipped: { noAccount: 1, closed: 1, unusable: 1 }, outcomes: {} });
+        skipped: { noAccount: 1, closed: 1, continuity: 0, unusable: 1 }, outcomes: {} });
       assert.deepEqual(await world(), before);
     });
 
@@ -455,9 +506,10 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       const handler = createMailboxRepairHandler({
         issuer: 'https://clerk.credentialdomd.com',
         clerkSecret: () => SECRET,
+        continuityEnabled: () => true,
         authenticate: async () => ({ profileId: ADM, clerkSubject: 'user_SynthAdmin', isAdmin: true }),
         fetch: async (url, init) => { requests.push({ url, auth: init.headers.Authorization }); return new Response(JSON.stringify(clerk), { status: 200 }); },
-        repair: (actor, users, applyIt) => repair(users, applyIt, actor.profileId, actor.clerkSubject),
+        repair: (actor, users, applyIt, issuer) => repair(users, applyIt, actor.profileId, actor.clerkSubject, issuer),
         log: (line) => lines.push(line),
       });
       const post = (body) => handler(new Request('https://x.test/f', { method: 'POST', headers: { origin: 'https://credentialdomd.com' }, body }));
@@ -468,7 +520,7 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       assert.equal(preview.status, 200, text);
       assert.doesNotMatch(text, /@|user_|sk_live|0000/, 'counts only');
       assert.deepEqual(JSON.parse(text), { schemaVersion: 1, applied: false, users: 10, change: 1, current: 5, skipped: 4,
-        skippedBy: { noAccount: 0, closed: 1, banned: 1, locked: 1, unverified: 1, unusable: 0 }, outcomes: { claimed: 1 } });
+        skippedBy: { noAccount: 0, closed: 1, continuity: 0, banned: 1, locked: 1, unverified: 1, unusable: 0 }, outcomes: { claimed: 1 } });
       assert.deepEqual(await world(), before, 'the preview wrote nothing');
       assert.equal(requests.length, 1);
       assert.match(requests[0].url, /^https:\/\/api\.clerk\.com\/v1\/users\?limit=500&offset=0&order_by=%2Bcreated_at$/);
@@ -490,6 +542,75 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       assert.deepEqual(await world(), after, 'idempotent through the handler too');
     });
 
+    await t.test('repair: holds exactly the users the production webhook\'s continuity step refuses', async () => {
+      const CUSERS = [
+        { subject: 'user_SynthProdHeld', email: 'held@example.invalid', updated_ms: T + 1000 },
+        { subject: 'user_SynthProdBound', email: 'bound@example.invalid', updated_ms: T + 1001 },
+        { subject: 'user_SynthProdRevoked', email: 'revoked@example.invalid', updated_ms: T + 1002 },
+        { subject: 'user_SynthProdPrepared', email: 'prepared@example.invalid', updated_ms: T + 1003 },
+        { subject: 'user_SynthProdPlain', email: 'plain@example.invalid', updated_ms: T + 1004 },
+        { subject: 'user_SynthProdSpace', email: 'sp ace@example.invalid', updated_ms: T + 1005 },
+      ];
+      // What the webhook's own continuity step answers for each, with a good
+      // development proof wherever one could be offered. Only bound and
+      // current go on to the mailbox write.
+      assert.deepEqual([
+        (await webhookContinuity('user_SynthProdHeld', 'held@example.invalid', sourceProof('user_SynthDevHeld', 'held@example.invalid'))).state,
+        (await webhookContinuity('user_SynthProdBound', 'bound@example.invalid')).state,
+        (await webhookContinuity('user_SynthProdRevoked', 'revoked@example.invalid')).state,
+        (await webhookContinuity('user_SynthProdPrepared', 'prepared@example.invalid')).state,
+        (await webhookContinuity('user_SynthProdPlain', 'plain@example.invalid')).state,
+        (await webhookContinuity('user_SynthProdSpace', 'sp ace@example.invalid')).state,
+      ], ['identity_conflict', 'bound', 'account_unavailable', 'source_identity_unavailable', 'current', 'verified_primary_required']);
+
+      const HELD = ['held@example.invalid', 'revoked@example.invalid', 'prepared@example.invalid', 'sp ace@example.invalid'];
+      const ledger = () => pg.rows(`select address, profile_id, proof, event_ms::text, updated_at::text from public.mailbox_claims
+        where address = any(array[${HELD.map(q).join(',')}]) or profile_id = any(array['${PH}','${PR}','${PP}','${PS}']::uuid[]) order by address`);
+      const mirrors = () => pg.rows(`select id, verified_email, verified_email_event_ms::text as wm, updated_at::text from public.profiles
+        where id = any(array['${PH}','${PR}','${PP}','${PS}']::uuid[]) order by id`);
+      const before = await world();
+      const heldBefore = { ledger: await ledger(), mirrors: await mirrors() };
+      assert.deepEqual(heldBefore.ledger, []);
+
+      // Where the webhook runs no continuity step, the same users would be
+      // routed: the gate is what holds them. (Preview only.)
+      assert.deepEqual(await repair(CUSERS, false, ADM, 'user_SynthAdmin', null), {
+        state: 'ready', applied: false, total: 6, change: 5, current: 0,
+        skipped: { noAccount: 1, closed: 0, continuity: 0, unusable: 0 }, outcomes: { claimed: 5 } });
+
+      // A run that is off, missing, or named badly: nothing at all, as the webhook.
+      await enable(false);
+      assert.equal((await webhookContinuity('user_SynthProdPlain', 'plain@example.invalid')).state, 'disabled');
+      assert.deepEqual(await repair(CUSERS, true), { state: 'continuity_disabled' });
+      await enable(true);
+      assert.deepEqual(await repair(CUSERS, true, ADM, 'user_SynthAdmin', 'https://other.clerk.invalid'), { state: 'continuity_disabled' });
+      assert.deepEqual(await repair(CUSERS, true, ADM, 'user_SynthAdmin', 'http://clerk.credentialdomd.com'), { state: 'invalid_request' });
+      assert.deepEqual(await world(), before);
+
+      // The subject's own account wins over a reservation on the address, as
+      // in claim_clerk_continuity: this one the webhook routes.
+      assert.equal((await webhookContinuity('user_SynthProdBound', 'prepared@example.invalid')).state, 'bound');
+      assert.deepEqual((await repair([{ subject: 'user_SynthProdBound', email: 'prepared@example.invalid', updated_ms: T + 1001 }], false)).outcomes, { claimed: 1 });
+
+      const expected = { state: 'ready', total: 6, change: 2, current: 0,
+        skipped: { noAccount: 0, closed: 0, continuity: 4, unusable: 0 }, outcomes: { claimed: 2 } };
+      assert.deepEqual(await repair(CUSERS, false), { ...expected, applied: false });
+      assert.deepEqual(await world(), before, 'the preview wrote nothing');
+      assert.deepEqual(await repair(CUSERS, true), { ...expected, applied: true });
+
+      // The reservation the operator has not resolved: no claim, no mirror.
+      assert.deepEqual({ ledger: await ledger(), mirrors: await mirrors() }, heldBefore);
+      assert.equal((await claim('held@example.invalid')), null);
+      assert.equal((await profile(PH)).verified_email, null);
+      // The two the webhook routes are routed, the bound one on its own profile.
+      assert.equal((await claim('bound@example.invalid')).profile_id, PB);
+      assert.equal((await profile(PB)).verified_email, 'bound@example.invalid');
+      assert.equal((await claim('plain@example.invalid')).profile_id, PN);
+
+      const again = await repair(CUSERS, true);
+      assert.deepEqual(again, { ...expected, applied: true, change: 0, current: 2, outcomes: {} });
+    });
+
     await t.test('rollback restores the 20260918a body, keeps the grants closed, and runs twice', async () => {
       const r1 = await pg.file(ROLLBACK);
       assert.ok(r1.ok, r1.out);
@@ -498,7 +619,8 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       const body = await pg.sql(`select prosrc from pg_proc where oid = 'public.apply_account_mailbox(uuid,bigint,text,boolean)'::regprocedure`);
       const original = EVENTS.match(/create or replace function public\.apply_account_mailbox\([\s\S]*?as \$\$\n([\s\S]*?)\$\$;/)[1];
       assert.equal(body + '\n', original);
-      assert.equal(await pg.sql(`select to_regprocedure('public.repair_account_mailboxes(uuid,text,jsonb,boolean)') is null`), 't');
+      assert.equal(await pg.sql(`select to_regprocedure('public.repair_account_mailboxes(uuid,text,jsonb,boolean,text)') is null`), 't');
+      assert.equal(await pg.sql(`select count(*) from pg_proc where proname = 'repair_account_mailboxes'`), '0');
       assert.equal(await pg.sql(`select has_table_privilege('authenticated', 'public.forwarding_addresses', 'delete')`), 't');
       assert.equal(await pg.sql(`select count(*) from pg_policies where tablename = 'forwarding_addresses' and cmd = 'DELETE'`), '1');
       assert.equal(await pg.sql(`select has_function_privilege('anon', 'public.mailbox_domain_lock()', 'execute')`), 'f');
@@ -508,7 +630,7 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       // And forward again.
       const again = await pg.file(MIGRATION);
       assert.ok(again.ok, again.out);
-      assert.equal(await pg.sql(`select to_regprocedure('public.repair_account_mailboxes(uuid,text,jsonb,boolean)') is not null`), 't');
+      assert.equal(await pg.sql(`select to_regprocedure('public.repair_account_mailboxes(uuid,text,jsonb,boolean,text)') is not null`), 't');
     });
   } finally {
     await pg.stop();

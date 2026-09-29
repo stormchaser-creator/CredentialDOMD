@@ -1,6 +1,6 @@
 const ENV = import.meta.env || {};
 const OUTCOME = /^[a-z_]{1,40}$/;
-const SKIPS = ["noAccount", "closed", "banned", "locked", "unverified", "unusable"];
+const SKIPS = ["noAccount", "closed", "continuity", "banned", "locked", "unverified", "unusable"];
 const count = value => Number.isSafeInteger(value) && value >= 0;
 const messages = {
   admin_required: "Only an authorized administrator can repair sign-in emails.",
@@ -8,6 +8,7 @@ const messages = {
   session_changed: "Your sign-in changed. Reopen Admin and try again.",
   clerk_unavailable: "Clerk could not be read, so nothing was checked or changed. Try again in a minute.",
   too_many_users: "There are more Clerk users than one run can read. Nothing was changed.",
+  continuity_disabled: "Sign-in continuity is switched off, so the sign-in webhook is not recording anyone's email either. Nothing was checked or changed.",
   invalid_request: "The request was not understood. Nothing was changed.",
 };
 function failure(code) {
@@ -71,6 +72,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const SKIP_WORDS = {
   noAccount: n => `${plural(n, "Clerk user has", "Clerk users have")} no account here`,
   closed: n => `${plural(n, "account is", "accounts are")} closed`,
+  continuity: n => `${plural(n, "account is", "accounts are")} held by the continuity check the sign-in webhook runs first (a move from the old sign-in is not finished, or access was revoked)`,
   banned: n => `${plural(n, "user is", "users are")} banned in Clerk`,
   locked: n => `${plural(n, "user is", "users are")} locked in Clerk`,
   unverified: n => `${plural(n, "user has", "users have")} no verified sign-in email`,

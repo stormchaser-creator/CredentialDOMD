@@ -71,6 +71,15 @@
 --    account whose call would change nothing material is rolled back even on
 --    apply, so a second run writes nothing at all, not even updated_at.
 --
+--    In production the webhook routes nothing until the identity continuity
+--    step (initialize_clerk_profile -> claim_clerk_continuity, 20260920120000)
+--    has answered bound or current. The repair holds back exactly the users
+--    that step refuses, under the same continuity lock: none at all while the
+--    run is missing or disabled, and, per user, any continuity account that
+--    matches the subject (or, failing that, the address) and is not bound to
+--    that user's own profile, or whose profile is revoked. A reservation that
+--    an operator has not resolved gets no route from the repair either.
+--
 -- Idempotent: every statement can run twice. No data is changed by applying
 -- this file; it reports, without changing, any confirmed forwarding row
 -- whose address does not route to its own account (0 on 2026-09-28).
@@ -324,20 +333,43 @@ $$;
 -- Anything else in the array refuses the whole request; so does one Clerk
 -- user listed twice (the input was stitched from more than one read).
 --
+-- p_continuity_issuer is the issuer whose continuity run gates the repair:
+-- the production issuer in production, where clerk-webhook runs
+-- initialize_clerk_profile before any mailbox write, and null where the
+-- webhook runs no continuity step (a development instance). It has no
+-- default, so a caller that forgets it gets an error, not an ungated run.
+-- When it is given:
+--   * the run for that issuer must exist and be enabled, or the whole request
+--     answers {"state": "continuity_disabled"} and changes nothing, as
+--     claim_clerk_continuity answers 'disabled' and the webhook routes no one;
+--   * a user is held ('continuity') when claim_clerk_continuity would not
+--     answer bound or no_match for them: the account it picks (by subject,
+--     else by address, the same order) is prepared, is bound to another
+--     subject or another profile, or its profile is revoked; or no account
+--     matches the subject and the address is not one claim accepts.
+--
 -- Answers counts only. No address leaves this function.
 --   change    accounts whose routing or mirror the call changes (on a preview:
 --             would change)
 --   current   accounts the call would leave exactly as they are
---   skipped   noAccount: no profile carries that Clerk subject
---             closed:    the account is closed (apply_account_mailbox would
---                        refuse it too)
---             unusable:  the address is one the claims ledger cannot hold
+--   skipped   noAccount:  no profile carries that Clerk subject
+--             closed:     the account is closed (apply_account_mailbox would
+--                         refuse it too)
+--             continuity: the production webhook's continuity step refuses
+--                         this user, so it routes nothing for them either
+--             unusable:   the address is one the claims ledger cannot hold
 --   outcomes  apply_account_mailbox's own outcome names, for the changed ones
+--
+-- The four-argument form never reached production; it is dropped so a
+-- database that ran an earlier draft of this file keeps no ungated overload.
+drop function if exists public.repair_account_mailboxes(uuid, text, jsonb, boolean);
+
 create or replace function public.repair_account_mailboxes(
   p_actor uuid,
   p_actor_subject text,
   p_users jsonb,
-  p_apply boolean
+  p_apply boolean,
+  p_continuity_issuer text
 )
 returns jsonb
 language plpgsql
@@ -356,7 +388,14 @@ declare
   n_distinct int;
   n_no_account int := 0;
   n_closed int := 0;
+  n_continuity int := 0;
   n_unusable int := 0;
+  v_access text;
+  v_run uuid;
+  v_acct uuid;
+  v_acct_state text;
+  v_acct_profile uuid;
+  v_acct_target text;
   n_current int := 0;
   n_change int := 0;
   tally jsonb := '{}'::jsonb;
@@ -373,7 +412,8 @@ begin
   end if;
 
   if p_apply is null or p_users is null or jsonb_typeof(p_users) <> 'array'
-     or jsonb_array_length(p_users) > 10000 then
+     or jsonb_array_length(p_users) > 10000
+     or (p_continuity_issuer is not null and p_continuity_issuer !~ '^https://[a-z0-9.-]+$') then
     return jsonb_build_object('state', 'invalid_request');
   end if;
   -- CASE, not OR: the key count must not be asked of a non-object.
@@ -399,6 +439,20 @@ begin
     return jsonb_build_object('state', 'invalid_request');
   end if;
 
+  -- The continuity gate, under the lock every continuity writer takes
+  -- (claim, staging, enabling, and every profile INSERT), so no binding or
+  -- run change lands between the check and the write. Taken before the
+  -- mailbox domain lock: nothing that holds the mailbox lock inserts a
+  -- profile, so this order has no reverse anywhere.
+  if p_continuity_issuer is not null then
+    perform pg_advisory_xact_lock(8220, 1);
+    select id into v_run from public.clerk_continuity_runs
+     where target_issuer = p_continuity_issuer and enabled;
+    if v_run is null then
+      return jsonb_build_object('state', 'continuity_disabled');
+    end if;
+  end if;
+
   -- The whole run holds the mailbox domain, so no webhook event interleaves
   -- with it and a preview's counts are the apply's counts.
   perform public.mailbox_domain_lock();
@@ -409,8 +463,43 @@ begin
         from jsonb_to_recordset(p_users) as x(subject text, email text, updated_ms bigint)
        order by x.subject
     loop
-      select id into v_profile from public.profiles where auth_user_id = r.subject;
-      if not found then
+      select id, access_status into v_profile, v_access from public.profiles where auth_user_id = r.subject;
+
+      -- claim_clerk_continuity's choice of account, and its refusals, for a
+      -- subject whose verified primary is r.email. Asked before the profile
+      -- is required: a reservation for a user with no profile here is one
+      -- the webhook would bind, which this repair never does.
+      if v_run is not null then
+        select a.id, a.state, a.profile_id, a.target_subject
+          into v_acct, v_acct_state, v_acct_profile, v_acct_target
+          from public.clerk_continuity_accounts a
+         where a.run_id = v_run and a.target_subject = r.subject;
+        if v_acct is null then
+          if r.email !~ '^[^[:space:]@]+@[^[:space:]@]+$' then
+            -- claim answers verified_primary_required.
+            n_continuity := n_continuity + 1;
+            continue;
+          end if;
+          select a.id, a.state, a.profile_id, a.target_subject
+            into v_acct, v_acct_state, v_acct_profile, v_acct_target
+            from public.clerk_continuity_accounts a
+           where a.run_id = v_run and a.verified_primary_email = r.email;
+        end if;
+        -- No account: claim answers no_match and the webhook goes on with
+        -- the ordinary profile, as below. An account: only one already bound
+        -- to this subject AND this profile, and not revoked, is 'bound'.
+        -- Prepared answers source_identity_unavailable or binds;
+        -- anything else is identity_conflict or account_unavailable.
+        if v_acct is not null and not (
+             v_acct_state = 'bound' and v_acct_target = r.subject
+             and v_profile is not null and v_acct_profile = v_profile
+             and coalesce(v_access, '') <> 'revoked') then
+          n_continuity := n_continuity + 1;
+          continue;
+        end if;
+      end if;
+
+      if v_profile is null then
         n_no_account := n_no_account + 1;
         continue;
       end if;
@@ -475,14 +564,15 @@ begin
     'total', n_total,
     'change', n_change,
     'current', n_current,
-    'skipped', jsonb_build_object('noAccount', n_no_account, 'closed', n_closed, 'unusable', n_unusable),
+    'skipped', jsonb_build_object('noAccount', n_no_account, 'closed', n_closed,
+                                  'continuity', n_continuity, 'unusable', n_unusable),
     'outcomes', tally);
 end;
 $$;
 
-revoke all on function public.repair_account_mailboxes(uuid, text, jsonb, boolean)
+revoke all on function public.repair_account_mailboxes(uuid, text, jsonb, boolean, text)
   from public, anon, authenticated, service_role;
-grant execute on function public.repair_account_mailboxes(uuid, text, jsonb, boolean) to service_role;
+grant execute on function public.repair_account_mailboxes(uuid, text, jsonb, boolean, text) to service_role;
 
 -- ── Report, change nothing ──────────────────────────────────────────────────
 -- A confirmed forwarding row whose address routes nowhere, or elsewhere, is

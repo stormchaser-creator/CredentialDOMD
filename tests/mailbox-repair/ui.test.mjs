@@ -14,7 +14,7 @@ import { createMailboxRepairClient, repairSummary } from '../../src/utils/mailbo
 const require = createRequire(import.meta.url);
 const ACCOUNT = 'user_SynthAdmin';
 const counts = (over = {}) => ({ schemaVersion: 1, applied: false, users: 12, change: 3, current: 7, skipped: 2,
-  skippedBy: { noAccount: 1, closed: 0, banned: 0, locked: 0, unverified: 1, unusable: 0 }, outcomes: { claimed: 3 }, ...over });
+  skippedBy: { noAccount: 1, closed: 0, continuity: 0, banned: 0, locked: 0, unverified: 1, unusable: 0 }, outcomes: { claimed: 3 }, ...over });
 
 function clientWith(reply, { status = 200, session = { user: { id: ACCOUNT }, getToken: async () => 'synthetic-token' } } = {}) {
   const sent = [];
@@ -43,6 +43,8 @@ test('client: an answer that does not add up, or answers the other mode, is refu
     counts({ change: 4 }),
     counts({ skipped: 3 }),
     counts({ skippedBy: { noAccount: 1, closed: 0, banned: 0, locked: 0, unverified: 1 } }),
+    counts({ skippedBy: { noAccount: 1, closed: 0, banned: 0, locked: 0, unverified: 1, unusable: 0 } }),
+    counts({ skippedBy: { noAccount: 1, closed: 0, continuity: 1, banned: 0, locked: 0, unverified: 1, unusable: 0 } }),
     counts({ outcomes: { 'someone@example.invalid': 3 } }),
     counts({ schemaVersion: 2 }),
     { ...counts(), users: -1 },
@@ -55,7 +57,8 @@ test('client: an answer that does not add up, or answers the other mode, is refu
 
 test('client: server refusals read plainly, and a changed session sends nothing', async () => {
   const cases = { admin_required: /Only an authorized administrator/, clerk_unavailable: /Clerk could not be read, so nothing was checked or changed/,
-    too_many_users: /more Clerk users than one run/, unauthorized: /could not be verified/ };
+    too_many_users: /more Clerk users than one run/, unauthorized: /could not be verified/,
+    continuity_disabled: /Sign-in continuity is switched off.*Nothing was checked or changed/ };
   for (const [code, message] of Object.entries(cases)) {
     await assert.rejects(clientWith({ error: code }, { status: 503 }).client.apply(), error => error.code === code && message.test(error.message));
   }
@@ -75,7 +78,11 @@ test('summary sentences: counts in plain words, never an address, no em dash', (
     '1 account did not get the address because another account holds the same address.']);
   const nothing = repairSummary({ ...counts({ change: 0, current: 10, skipped: 2, outcomes: {} }), applied: false });
   assert.equal(nothing[0], 'Nothing to repair.');
-  for (const line of [...preview, ...done, ...nothing]) { assert.doesNotMatch(line, /\u2014|@/); }
+  const held = repairSummary({ ...counts({ current: 6, skipped: 3,
+    skippedBy: { noAccount: 1, closed: 0, continuity: 1, banned: 0, locked: 0, unverified: 1, unusable: 0 } }), applied: false });
+  assert.equal(held[2], 'Skipped 3: 1 Clerk user has no account here; 1 account is held by the continuity check the sign-in webhook runs first'
+    + ' (a move from the old sign-in is not finished, or access was revoked); 1 user has no verified sign-in email.');
+  for (const line of [...preview, ...done, ...nothing, ...held]) { assert.doesNotMatch(line, /\u2014|@/); }
 });
 
 // ── The card ────────────────────────────────────────────────────────────────

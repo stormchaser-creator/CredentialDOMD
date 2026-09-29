@@ -6,11 +6,17 @@
 --
 -- PREFER THE ADMIN TOOL. Since 20260928190000, Admin > Users > "Repair sign-in
 -- emails" (the admin-mailbox-repair function, calling
--- public.repair_account_mailboxes) does exactly what this file does, reading
--- Clerk itself with the function's CLERK_SECRET_KEY: same users, same
--- address, same clock, same apply_account_mailbox call. It previews first,
--- answers counts only, and a second run writes nothing. This file stays as
--- the by-hand path if the function cannot be deployed.
+-- public.repair_account_mailboxes) does what this file does, reading Clerk
+-- itself with the function's CLERK_SECRET_KEY: same users, same address,
+-- same clock, same apply_account_mailbox call. It previews first, answers
+-- counts only, and a second run writes nothing. It ALSO runs the identity
+-- continuity check the production webhook runs before any mailbox write
+-- (claim_clerk_continuity, 20260920120000), which this file does not: it
+-- holds back a user whose subject or address matches a continuity
+-- reservation that is not bound to that user's own profile, or whose bound
+-- profile is revoked, and refuses everything while the run is disabled.
+-- This file stays as the by-hand path if the function cannot be deployed;
+-- then remove every such user from `pairs` before running it.
 --
 -- Why it is needed. From 2026-09-20 19:39Z to the fix, clerk-webhook threw
 -- `ReferenceError: CONSOLE_LOG is not defined` on every user.created and
@@ -46,8 +52,8 @@
 -- Which address: the PRIMARY address, and only when Clerk shows it verified.
 -- In production clerk-webhook refuses an identity whose primary is not
 -- verified (readProductionIdentity, before the mailbox step), and it refuses
--- banned or locked users the same way, so this takes exactly what the fixed
--- webhook would take.
+-- banned or locked users the same way. The one step of the webhook this file
+-- does not repeat is the continuity check above.
 --
 -- Getting `pairs`, read-only, with the PRODUCTION Clerk secret key (Clerk
 -- dashboard > API keys, sk_live_...). Up to 500 users per page; there are

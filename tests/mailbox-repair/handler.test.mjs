@@ -37,16 +37,16 @@ function clerkApi(users, { status = 200, body } = {}) {
 /** The database's answer for these rows, computed the way repair_account_mailboxes counts. */
 const dbAnswer = (rows, applied, over = {}) => ({
   state: 'ready', applied, total: rows.length, change: rows.length, current: 0,
-  skipped: { noAccount: 0, closed: 0, unusable: 0 }, outcomes: rows.length ? { claimed: rows.length } : {}, ...over,
+  skipped: { noAccount: 0, closed: 0, continuity: 0, unusable: 0 }, outcomes: rows.length ? { claimed: rows.length } : {}, ...over,
 });
 
 function make({ users = [user(1), user(2)], clerk, deps = {}, answer } = {}) {
   const api = clerk ?? clerkApi(users);
   const calls = [], lines = [];
   const handler = createMailboxRepairHandler({
-    issuer: LIVE, clerkSecret: () => SECRET, fetch: api.fetch,
+    issuer: LIVE, clerkSecret: () => SECRET, fetch: api.fetch, continuityEnabled: () => true,
     authenticate: async () => ADMIN,
-    repair: async (actor, rows, apply) => { calls.push({ actor, rows, apply }); return answer ? answer(rows, apply) : dbAnswer(rows, apply); },
+    repair: async (actor, rows, apply, continuityIssuer) => { calls.push({ actor, rows, apply, continuityIssuer }); return answer ? answer(rows, apply) : dbAnswer(rows, apply); },
     log: (line) => lines.push(line),
     ...deps,
   });
@@ -62,10 +62,11 @@ test('a preview is the default: it reads Clerk, asks the database with apply=fal
     const out = await read(await f.handler(post(body)));
     assert.equal(out.status, 200, out.text);
     assert.deepEqual(JSON.parse(out.text), { schemaVersion: 1, applied: false, users: 2, change: 2, current: 0, skipped: 0,
-      skippedBy: { noAccount: 0, closed: 0, banned: 0, locked: 0, unverified: 0, unusable: 0 }, outcomes: { claimed: 2 } });
+      skippedBy: { noAccount: 0, closed: 0, continuity: 0, banned: 0, locked: 0, unverified: 0, unusable: 0 }, outcomes: { claimed: 2 } });
     assert.doesNotMatch(out.text, /@|user_|sk_/);
     assert.equal(f.calls.length, 1);
     assert.equal(f.calls[0].apply, false);
+    assert.equal(f.calls[0].continuityIssuer, LIVE, 'production asks the database for the continuity check');
     assert.deepEqual(f.calls[0].actor, { profileId: ADMIN.profileId, clerkSubject: ADMIN.clerkSubject });
     assert.deepEqual(f.calls[0].rows, [
       { subject: 'user_Synth1', email: 'member.1@example.invalid', updated_ms: T + 1 },
@@ -110,6 +111,10 @@ test('refused before Clerk or the database is touched', async () => {
     [{ clerkSecret: () => 'sk_test_SYNTHETIC' }, 503, 'clerk_unavailable'],
     [{ issuer: 'https://synthetic.clerk.accounts.dev' }, 503, 'clerk_unavailable'],
     [{ issuer: '' }, 503, 'clerk_unavailable'],
+    // clerk-webhook answers 503 to every user event unless continuity is on.
+    [{ continuityEnabled: () => false }, 503, 'continuity_disabled'],
+    [{ continuityEnabled: () => 'true' }, 503, 'continuity_disabled'],
+    [{ continuityEnabled: undefined }, 503, 'continuity_disabled'],
   ]) {
     const f = make({ deps });
     const out = await read(await f.handler(post({ action: 'apply' })));
@@ -118,9 +123,18 @@ test('refused before Clerk or the database is touched', async () => {
     assert.equal(f.calls.length, 0);
     assert.doesNotMatch(out.text, /sk_/);
   }
-  // A development instance with its own test key is allowed.
-  const dev = make({ deps: { issuer: 'https://synthetic.clerk.accounts.dev', clerkSecret: () => 'sk_test_SYNTHETIC' } });
+  // A development instance with its own test key is allowed. Its webhook runs
+  // no continuity step, so none is asked of the database either.
+  const dev = make({ deps: { issuer: 'https://synthetic.clerk.accounts.dev', clerkSecret: () => 'sk_test_SYNTHETIC', continuityEnabled: undefined } });
   assert.equal((await dev.handler(post({}))).status, 200);
+  assert.equal(dev.calls[0].continuityIssuer, null);
+});
+
+test('the database refusing for continuity is relayed as the same refusal, and nothing is applied', async () => {
+  const f = make({ answer: () => ({ state: 'continuity_disabled' }) });
+  const out = await read(await f.handler(post({ action: 'apply' })));
+  assert.deepEqual({ status: out.status, body: JSON.parse(out.text) }, { status: 503, body: { error: 'continuity_disabled' } });
+  assert.deepEqual(f.lines, [], 'no apply is logged');
 });
 
 test('malformed requests, other methods and other origins never reach Clerk', async () => {
@@ -220,6 +234,9 @@ test('the database answer is checked before anything is relayed', async () => {
     (rows, apply) => ({ ...dbAnswer(rows, apply), change: 1 }),
     (rows, apply) => ({ ...dbAnswer(rows, apply), change: -1, current: rows.length + 1 }),
     (rows, apply) => ({ ...dbAnswer(rows, apply), skipped: { noAccount: 0, closed: 0 } }),
+    (rows, apply) => ({ ...dbAnswer(rows, apply), skipped: { noAccount: 0, closed: 0, unusable: 0 } }),
+    // The held count is part of the sum: one too many held does not add up.
+    (rows, apply) => ({ ...dbAnswer(rows, apply), skipped: { noAccount: 0, closed: 0, continuity: 1, unusable: 0 } }),
     (rows, apply) => ({ ...dbAnswer(rows, apply), outcomes: { claimed: 1 } }),
     (rows, apply) => ({ ...dbAnswer(rows, apply), outcomes: { 'member@example.invalid': rows.length } }),
   ];
@@ -231,7 +248,7 @@ test('the database answer is checked before anything is relayed', async () => {
   }
   // Extra fields in a good answer are dropped, not relayed.
   const extra = make({ answer: (rows, apply) => ({ ...dbAnswer(rows, apply), leaked: 'member.1@example.invalid',
-    skipped: { noAccount: 0, closed: 0, unusable: 0, who: 'member.2@example.invalid' } }) });
+    skipped: { noAccount: 0, closed: 0, continuity: 0, unusable: 0, who: 'member.2@example.invalid' } }) });
   const relayed = await read(await extra.handler(post({})));
   assert.equal(relayed.status, 200);
   assert.doesNotMatch(relayed.text, /@|leaked|who/);
@@ -246,9 +263,9 @@ test('the database answer is checked before anything is relayed', async () => {
 test('skips from both sides add up to the Clerk users read', async () => {
   const users = [user(1), user(2), user(3), user(4, { banned: true }), user(5, { locked: true }),
     user(6, { email_addresses: [{ id: 'idn_6', email_address: 'x@example.invalid', verification: { status: 'unverified' } }] })];
-  const f = make({ users, answer: (rows, apply) => ({ state: 'ready', applied: apply, total: rows.length, change: 1, current: 0,
-    skipped: { noAccount: 1, closed: 0, unusable: 1 }, outcomes: { stale_address: 1 } }) });
+  const f = make({ users, answer: (rows, apply) => ({ state: 'ready', applied: apply, total: rows.length, change: 0, current: 0,
+    skipped: { noAccount: 1, closed: 0, continuity: 1, unusable: 1 }, outcomes: {} }) });
   const out = JSON.parse((await read(await f.handler(post({})))).text);
-  assert.deepEqual(out, { schemaVersion: 1, applied: false, users: 6, change: 1, current: 0, skipped: 5,
-    skippedBy: { noAccount: 1, closed: 0, banned: 1, locked: 1, unverified: 1, unusable: 1 }, outcomes: { stale_address: 1 } });
+  assert.deepEqual(out, { schemaVersion: 1, applied: false, users: 6, change: 0, current: 0, skipped: 6,
+    skippedBy: { noAccount: 1, closed: 0, continuity: 1, banned: 1, locked: 1, unverified: 1, unusable: 1 }, outcomes: {} });
 });

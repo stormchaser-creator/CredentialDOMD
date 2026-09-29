@@ -10,7 +10,8 @@
 --   * apply_account_mailbox goes back to the 20260918a body, byte for byte.
 --     Claims the new body put back to 'confirmed' stay confirmed: that is a
 --     state the old body reads and keeps (it releases only provider claims).
---   * repair_account_mailboxes is dropped.
+--   * repair_account_mailboxes is dropped (the five-argument form, and the
+--     four-argument draft if a database ever ran it).
 --   * The owner's direct DELETE grant and policy on forwarding_addresses come
 --     back as 20260903c wrote them.
 --
@@ -21,6 +22,7 @@
 -- closed. 20260921015000, the same fix for account_is_closed, has no
 -- rollback for the same reason.
 
+drop function if exists public.repair_account_mailboxes(uuid, text, jsonb, boolean, text);
 drop function if exists public.repair_account_mailboxes(uuid, text, jsonb, boolean);
 
 create or replace function public.apply_account_mailbox(

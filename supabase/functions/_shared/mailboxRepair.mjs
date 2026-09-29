@@ -10,8 +10,14 @@
 //
 // Which users: verifiedPrimaryIdentity, the same test the production webhook
 // runs before it writes a mailbox (not banned, not locked, primary address
-// verified). The database decides everything else in
-// repair_account_mailboxes(), including authorization a second time.
+// verified). In production the webhook then runs the identity continuity step
+// and routes nothing unless it answers bound or current; so does this. With
+// CLERK_CONTINUITY_ENABLED not 'true' the webhook answers 503 to every user
+// event, and this refuses the same way before Clerk is read. Otherwise the
+// production issuer goes to the database, which holds back every user the
+// continuity step refuses (repair_account_mailboxes, p_continuity_issuer).
+// The database decides everything else too, including authorization a second
+// time.
 //
 // A preview is the default and changes nothing; { "action": "apply" } applies.
 // The answer is counts only. No address, subject or profile id leaves this
@@ -115,11 +121,12 @@ export function repairInput(users) {
 function settle(result, apply, sent) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) refuse(503, 'mailbox_repair_unavailable');
   if (result.state === 'admin_required') refuse(403, 'admin_required');
+  if (result.state === 'continuity_disabled') refuse(503, 'continuity_disabled');
   if (result.state !== 'ready' || result.applied !== apply || result.total !== sent) refuse(503, 'mailbox_repair_unavailable');
   const s = result.skipped;
   if (!count(result.change) || !count(result.current) || !s || typeof s !== 'object'
-    || !count(s.noAccount) || !count(s.closed) || !count(s.unusable)
-    || result.change + result.current + s.noAccount + s.closed + s.unusable !== sent) refuse(503, 'mailbox_repair_unavailable');
+    || !count(s.noAccount) || !count(s.closed) || !count(s.continuity) || !count(s.unusable)
+    || result.change + result.current + s.noAccount + s.closed + s.continuity + s.unusable !== sent) refuse(503, 'mailbox_repair_unavailable');
   const outcomes = result.outcomes;
   if (!outcomes || typeof outcomes !== 'object' || Array.isArray(outcomes)) refuse(503, 'mailbox_repair_unavailable');
   const entries = Object.entries(outcomes);
@@ -145,14 +152,19 @@ export function createMailboxRepairHandler(deps) {
       const actor = await deps.authenticate(req);
       if (!actor || actor.errorResponse || !UUID.test(actor.profileId || '') || !SUBJECT.test(actor.clerkSubject || '')) refuse(401, 'unauthorized');
       if (actor.isAdmin !== true) refuse(403, 'admin_required');
+      // clerk-webhook's own gate: in production, no continuity, no routing.
+      const production = deps.issuer === PRODUCTION_CLERK_ISSUER;
+      if (production && deps.continuityEnabled?.() !== true) refuse(503, 'continuity_disabled');
       const users = await readClerkUsers({ fetch: deps.fetch, secret: deps.clerkSecret(), issuer: deps.issuer });
       const { eligible, skipped, users: seen } = repairInput(users);
       let result;
       try {
-        result = await deps.repair({ profileId: actor.profileId, clerkSubject: actor.clerkSubject }, eligible, body.apply);
+        result = await deps.repair({ profileId: actor.profileId, clerkSubject: actor.clerkSubject }, eligible, body.apply,
+          production ? PRODUCTION_CLERK_ISSUER : null);
       } catch { refuse(503, 'mailbox_repair_unavailable'); }
       const settled = settle(result, body.apply, eligible.length);
-      const skippedBy = { noAccount: settled.skipped.noAccount, closed: settled.skipped.closed, banned: skipped.banned,
+      const skippedBy = { noAccount: settled.skipped.noAccount, closed: settled.skipped.closed,
+        continuity: settled.skipped.continuity, banned: skipped.banned,
         locked: skipped.locked, unverified: skipped.unverified, unusable: skipped.unusable + settled.skipped.unusable };
       const out = { schemaVersion: 1, applied: body.apply, users: seen, change: settled.change, current: settled.current,
         skipped: Object.values(skippedBy).reduce((sum, n) => sum + n, 0), skippedBy, outcomes: settled.outcomes };
