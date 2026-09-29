@@ -78,6 +78,9 @@ if (import.meta.env.PROD) {
     // d45e857c). Only same-origin script can create a blob URL.
     "frame-src blob: https://*.clerk.accounts.dev https://*.clerk.com https://clerk.credentialdomd.com https://accounts.credentialdomd.com https://challenges.cloudflare.com",
     "worker-src 'self' blob:",
+    // index.html switches plain http://credentialdomd.com/app/ to https before
+    // this runs; any http:// request the app still makes is upgraded too.
+    "upgrade-insecure-requests",
   ].join("; ");
   document.head.prepend(csp);
 }

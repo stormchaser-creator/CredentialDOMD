@@ -2,6 +2,7 @@
 // No publication timestamp is inferred from a video's review timestamp.
 import { escapeHtml, renderVideo, validateHelp } from './build-help.mjs';
 import { validateVideoCatalog, WATCH_PAGES, watchHref } from './help-videos.mjs';
+import { HTTPS_REDIRECT_SCRIPT } from './https-redirect.mjs';
 
 export function renderWatchPages(help, catalog) {
   validateHelp(help);
@@ -19,6 +20,7 @@ export function renderWatchPages(help, catalog) {
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  ${HTTPS_REDIRECT_SCRIPT}
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${e(page.title)} | CredentialDOMD</title>
   <meta name="description" content="${e(article.summary)} Watch the short CredentialDOMD tutorial, with captions, transcript and written steps.">
