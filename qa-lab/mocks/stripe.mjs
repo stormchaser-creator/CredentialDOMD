@@ -218,7 +218,9 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
       const r = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8', 'Stripe-Signature': stripeSignature(secrets.stripe.webhookSecret, payload), 'User-Agent': 'Stripe/1.0 (+https://stripe.com/docs/webhooks)' }, body: payload, signal: AbortSignal.timeout(120000) });
       status = r.status; text = (await r.text()).slice(0, 1000);
     } catch (err) { text = `network: ${err.message}`; }
-    const record = { event: e.id, type: e.type, endpoint, status, response: text, at: new Date().toISOString() };
+    // Which object and customer the event was about, so a journey can find its own events.
+    const obj = e.data?.object || {};
+    const record = { event: e.id, type: e.type, endpoint, status, response: text, at: new Date().toISOString(), object: obj.id || null, customer: typeof obj.customer === 'string' ? obj.customer : null };
     store.update((s) => { s.stripe.deliveries.unshift(record); s.stripe.deliveries.length = Math.min(s.stripe.deliveries.length, 500); });
     log(`stripe: ${e.type} -> ${endpoint} ${status || 'no response'} ${text.slice(0, 120)}`);
     return record;

@@ -22,7 +22,8 @@
     "qa:parity": "node qa-lab/parity.mjs",
     "qa:lab": "node qa-lab/lab.mjs",
     "qa:smoke": "node qa-lab/smoke.mjs",
-    "qa:stripe": "node qa-lab/stripe-cli.mjs"
+    "qa:stripe": "node qa-lab/stripe-cli.mjs",
+    "qa:e2e": "node qa-lab/e2e/run.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.63.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",

@@ -131,7 +131,13 @@ function createQaClerk() {
           clerk.loaded = true;
           setSignedIn(session, user);
           return;
-        } catch { writeCookie(null); }
+        } catch (error) {
+          // No answer at all (the device is offline): real Clerk never reaches
+          // its loaded state then, and the app's offline fallback takes over
+          // (src/utils/offlineSession.js). Stay unloaded and keep the session.
+          if (!error.status) { clerk._loading = null; return; }
+          writeCookie(null);
+        }
       }
       clerk.loaded = true;
       emit();

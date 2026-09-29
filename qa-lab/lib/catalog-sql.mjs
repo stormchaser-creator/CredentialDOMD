@@ -182,5 +182,6 @@ from pg_policies where schemaname = any(${list(POLICY_SCHEMAS)})`,
 export const CONFIG_ROWS_QUERY = `select jsonb_build_object(
   'access_policy_settings', (select coalesce(jsonb_agg(to_jsonb(a) order by a.singleton), '[]'::jsonb) from public.access_policy_settings a),
   'vera_source_settings', (select coalesce(jsonb_agg(to_jsonb(v) order by v.singleton), '[]'::jsonb) from public.vera_source_settings v),
+  'welcome_email_settings', (select coalesce(jsonb_agg(jsonb_build_object('singleton', w.singleton, 'enabled', w.enabled) order by w.singleton), '[]'::jsonb) from public.welcome_email_settings w),
   'app_secret_names', (select coalesce(jsonb_agg(s.name order by s.name), '[]'::jsonb) from public.app_secrets s)
 ) as r`;

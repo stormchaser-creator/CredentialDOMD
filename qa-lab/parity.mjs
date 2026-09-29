@@ -21,13 +21,13 @@ import { localGatewayOrigin } from './lib/config.mjs';
 
 function configDiffs(prod, local) {
   const diffs = [];
-  for (const table of ['access_policy_settings', 'vera_source_settings']) {
+  for (const table of ['access_policy_settings', 'vera_source_settings', 'welcome_email_settings']) {
     const a = JSON.stringify(prod[table]); const b = JSON.stringify(local[table]);
     if (a !== b) diffs.push({ category: 'config rows', key: table, kind: 'differs', prod: a, local: b });
   }
   const a = JSON.stringify(prod.app_secret_names); const b = JSON.stringify(local.app_secret_names);
   if (a !== b) diffs.push({ category: 'config rows', key: 'app_secrets names', kind: 'differs', prod: a, local: b });
-  return { category: 'config rows', prod: 3, local: 3, diffs };
+  return { category: 'config rows', prod: 4, local: 4, diffs };
 }
 
 async function main() {

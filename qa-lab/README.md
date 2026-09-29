@@ -179,7 +179,7 @@ Configuration only, applied after the schema:
   `https://clerk-legacy.qa.credentialdomd.test` (source), with one synthetic
   legacy member, `user_qalegacy1` / `qa-legacy-1@qa.credentialdomd.test`, who
   also exists in the mock Clerk's legacy instance.
-- `qa_lab.seed_version` (currently 2). `qa:apply` refuses to go on over a
+- `qa_lab.seed_version` (currently 3). `qa:apply` refuses to go on over a
   database seeded by an older `seed.sql` and says to rebuild
   (`npm run qa:down -- --wipe && npm run qa:up`).
 - Deliberately empty: `app_secrets` (production AI keys; `npm run qa:lab` stores

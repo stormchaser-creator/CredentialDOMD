@@ -37,7 +37,7 @@ test('seed.sql addresses are synthetic, on the reserved qa.credentialdomd.test d
 test('seed.sql writes configuration tables only (never members, admins or secrets)', () => {
   const sql = read('qa-lab/seed.sql').replace(/--[^\n]*/g, '');
   const written = [...sql.matchAll(/\b(?:insert\s+into|update|delete\s+from)\s+([a-z_.]+)/gi)].map((m) => m[1]);
-  const allowed = new Set(['public.access_policy_settings', 'public.vera_source_settings', 'qa_lab.seed_version']);
+  const allowed = new Set(['public.access_policy_settings', 'public.vera_source_settings', 'public.welcome_email_settings', 'qa_lab.seed_version']);
   for (const t of written) assert.ok(allowed.has(t), `seed writes ${t}`);
   const calls = [...sql.matchAll(/select\s+(public\.[a-z_]+)\(/gi)].map((m) => m[1]);
   assert.deepEqual(calls, ['public.seal_limited_free_beta_cohort', 'public.prepare_founding_program', 'public.prepare_founding_program',

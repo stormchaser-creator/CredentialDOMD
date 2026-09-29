@@ -10,6 +10,10 @@
 -- compares these rows with production on every run, so drift is reported):
 --   public.access_policy_settings  (singleton: launch gates and price phase)
 --   public.vera_source_settings    (singleton)
+--   public.welcome_email_settings  (singleton, OFF: the paid-member welcome email
+--                                   sends nothing until the owner approves it in
+--                                   Admin > Emails; the migration inserts this row,
+--                                   and without it that screen says "settings missing")
 -- Synthetic, because production's rows hold member mailboxes:
 --   public.limited_beta_cohorts, public.limited_founding_programs,
 --   public.limited_founding_slots  (founding programs for BOTH modes, each with two
@@ -37,6 +41,8 @@ values
    false);
 
 insert into public.vera_source_settings (singleton, enabled) values (true, false);
+
+insert into public.welcome_email_settings (singleton, enabled) values (true, false);
 
 -- 2. A sealed synthetic cohort and the test-mode founding program (capacity 100).
 select public.seal_limited_free_beta_cohort(
@@ -92,4 +98,4 @@ reset role;
 -- 4. Which seed this database holds. qa-lab/apply-schema.mjs compares it with
 --    this file and refuses to run the lab on an older seed (rebuild instead).
 create table if not exists qa_lab.seed_version (version integer not null, applied_at timestamptz not null default now());
-insert into qa_lab.seed_version (version) values (2);
+insert into qa_lab.seed_version (version) values (3);
