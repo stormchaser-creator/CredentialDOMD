@@ -17,6 +17,12 @@ const when = (value) => {
  * approval to the fingerprint of every version shown here; the server
  * refuses anyone who is not an administrator and sends only content whose
  * fingerprint matches (20260929130000_welcome_email.sql).
+ *
+ * The fingerprint here comes from this browser's bundle, which can be a
+ * cached one, and the webhook that sends is deployed separately. So the page
+ * never says "On." from the browser alone: the server reports the fingerprint
+ * the deployed webhook last presented (a purchase, or its 10-minute sweep),
+ * and when that is not the approved one the page says nothing is sending.
  */
 export default function AdminWelcomeEmail({ T }) {
   const [status, setStatus] = useState(null);
@@ -52,6 +58,10 @@ export default function AdminWelcomeEmail({ T }) {
   }, [revision]);
 
   const approvedHere = Boolean(status?.enabled && fingerprint && status.approvedFingerprint === fingerprint && status.approvedVersion === WELCOME_EMAIL_VERSION);
+  // What the deployed webhook holds, as it last told the server.
+  const sender = typeof status?.senderFingerprint === "string" ? status.senderFingerprint : "";
+  const senderRefused = Boolean(status?.enabled && sender && sender !== status.approvedFingerprint);
+  const short = (value) => String(value || "").slice(0, 12);
 
   const change = async (enabled) => {
     if (busy || (enabled && (!reviewed || !fingerprint))) return;
@@ -78,24 +88,41 @@ export default function AdminWelcomeEmail({ T }) {
   return <section aria-label="Welcome email" style={{ color: T.text }}>
     <h3>Welcome email after a paid purchase</h3>
     <p style={{ fontSize: 13, color: T.textMuted }}>
-      Sent once per purchase, after the first payment is verified, to the address the member verified at sign-in. Only purchases paid after you approve it, and only within 72 hours of payment. Never for gifts, free betas or unpaid checkouts. Changing any word of it needs a new approval here before it sends again.
+      Sent once per purchase, after the first payment is verified, to the address the member verified at sign-in. Only purchases paid while it is on, and only within 72 hours of payment. Never for gifts, free betas or unpaid checkouts. One that could not go out is tried again every 10 minutes, up to 5 times within 23 hours. Changing any word of it needs a new approval here before it sends again.
     </p>
 
     <div role="status" style={card}>
       {!status && !error && <span>Loading status…</span>}
       {status && (status.enabled
         ? <>
-          <strong>{approvedHere ? "On." : "On, but not for the email shown here."}</strong>{" "}
-          {approvedHere
-            ? `Approved ${when(status.approvedAt)} by ${status.approvedBy || "an administrator"}.`
-            : "The approved email is a different version. Nothing sends until the server's copy matches an approved email; approve the one below if it is right."}
+          {senderRefused
+            ? <>
+              <strong>On, but nothing is sending.</strong>{" "}
+              {`The deployed webhook holds a different email (fingerprint ${short(sender)}, last checked ${when(status.senderCheckedAt)}) from the approved one (${short(status.approvedFingerprint)}), so every purchase is refused. `}
+              {sender === fingerprint
+                ? "It holds the email shown here; approve it below if it is right."
+                : "Deploy limited-stripe-webhook from the same commit as the app, then reload this page."}
+              {" Purchases paid while it is on are still sent once the two match, up to 72 hours after payment."}
+            </>
+            : <>
+              <strong>{approvedHere ? "On." : "On, but not for the email shown here."}</strong>{" "}
+              {approvedHere
+                ? `Approved ${when(status.approvedAt)} by ${status.approvedBy || "an administrator"}.`
+                : "The approved email is a different version. Nothing sends until the server's copy matches an approved email; approve the one below if it is right."}
+              {sender
+                ? ` The deployed webhook holds the approved email (last checked ${when(status.senderCheckedAt)}).`
+                : " The deployed webhook has not reported which email it holds yet; it checks in every 10 minutes."}
+            </>}
           <div style={{ marginTop: 6, fontSize: 13, color: T.textMuted }}>
-            Paid purchases since approval: {status.purchasesSinceApproval}. Sent: {status.sent}. Not sent: {status.notSent}.
+            Paid purchases since it was turned on: {status.purchasesSinceOn}. Sent: {status.sent}. Not sent: {status.notSent}.
           </div>
         </>
         : <>
           <strong>Off.</strong> No welcome email is sent.
           {status.approvedAt && ` Last approved ${when(status.approvedAt)} by ${status.approvedBy || "an administrator"}.`}
+          {sender && fingerprint && (sender === fingerprint
+            ? " The deployed webhook holds the email shown here."
+            : ` The deployed webhook holds a different email (fingerprint ${short(sender)}); deploy limited-stripe-webhook from the same commit as the app before approving.`)}
         </>)}
     </div>
     {error && <p role="alert" style={{ color: T.danger }}>{error}</p>}

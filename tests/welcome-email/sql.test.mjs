@@ -22,7 +22,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
 import { welcomeEmailFingerprint, WELCOME_EMAIL_VERSION } from '../../src/utils/welcomeEmail.js';
-import { createWelcomeEmailSender, welcomeIdempotencyKey } from '../../supabase/functions/_shared/welcomeEmailSender.mjs';
+import { createWelcomeEmailSender, createWelcomeEmailSweep, welcomeIdempotencyKey } from '../../supabase/functions/_shared/welcomeEmailSender.mjs';
 
 // Own port: node --test runs files in parallel and the other suites hold theirs.
 const PORT = '58961';
@@ -38,8 +38,19 @@ const CHAIN = ['20260918_founding_billing_readiness.sql', '20260919183000_access
   '20260921020000_beta_deferred_billing.sql', '20260922010000_public_founding_capacity.sql',
   '20260923010000_lifetime_gift_reservations.sql', '20260928180000_checkout_offer_switch.sql',
   '20260928190000_founding_practice_included.sql'];
-const FUNCTIONS = ['welcome_email_claim(text,boolean,text)', 'welcome_email_finish(text,boolean,integer,text,text,text)',
-  'admin_welcome_email_status()', 'admin_set_welcome_email(boolean,text,text)'];
+// Who may execute each function: the webhook's service role, administrators
+// (authenticated, checked inside), or nobody but the owner and cron.
+const FUNCTIONS = {
+  'welcome_email_claim(text,boolean,text)': 'service_role',
+  'welcome_email_finish(text,boolean,integer,text,text,text)': 'service_role',
+  'welcome_email_pending(boolean,text)': 'service_role',
+  'dispatch_welcome_email_sweep()': 'service_role',
+  'welcome_email_sender_seen(text)': 'owner',
+  'admin_welcome_email_status()': 'authenticated',
+  'admin_set_welcome_email(boolean,text,text)': 'authenticated',
+};
+const SWEEP_JOB = 'welcome-email-sweep';
+const HOOK = 'synthetic-welcome-sweep-secret-0123456789';
 
 const DAY = 86400000;
 const text = value => `'${String(value).replaceAll("'", "''")}'`;
@@ -85,6 +96,16 @@ test('the welcome email: off until the owner approves the exact content, then on
   const db = await startPostgres();
   const { sql, as, value } = db;
   try {
+    // Vault, pg_net and pg_cron reduced to what the migration touches;
+    // net.http_post records the call instead of sending it.
+    await sql(`create schema vault;create table vault.secrets(name text primary key,secret text not null);
+      create view vault.decrypted_secrets as select name,secret as decrypted_secret from vault.secrets;
+      create schema net;create table net.calls(id bigserial primary key,url text,body jsonb,headers jsonb,timeout_milliseconds integer);
+      create function net.http_post(url text,body jsonb default '{}'::jsonb,params jsonb default '{}'::jsonb,headers jsonb default '{}'::jsonb,timeout_milliseconds integer default 5000)
+        returns bigint language sql as $$insert into net.calls(url,body,headers,timeout_milliseconds) values(url,body,headers,timeout_milliseconds) returning id$$;
+      create schema cron;create table cron.job(jobid bigserial primary key,jobname text,schedule text not null,command text not null);
+      create function cron.schedule(job_name text,schedule text,command text) returns bigint language sql as $$insert into cron.job(jobname,schedule,command) values(job_name,schedule,command) returning jobid$$;
+      create function cron.unschedule(job_id bigint) returns boolean language sql as $$delete from cron.job where jobid=job_id returning true$$;`);
     await sql(`create role anon nologin;create role authenticated nologin;create role service_role nologin bypassrls;
       create schema auth;grant usage on schema auth to authenticated,service_role;
       create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;
@@ -127,7 +148,7 @@ test('the welcome email: off until the owner approves the exact content, then on
     await sql("update access_policy_settings set limited_self_service_enabled=true,limited_checkout_enabled=true,enforcement_enabled=true,public_founding_enabled=true,limited_self_service_price_phase='founding'");
 
     await sql(MIGRATION);
-    const definitions = async () => sql(`select string_agg(pg_get_functiondef(oid),'' order by oid) from pg_proc where proname in ('welcome_email_claim','welcome_email_finish','admin_welcome_email_status','admin_set_welcome_email')`);
+    const definitions = async () => sql(`select string_agg(pg_get_functiondef(oid),'' order by oid) from pg_proc where proname in ('welcome_email_claim','welcome_email_finish','welcome_email_pending','welcome_email_sender_seen','dispatch_welcome_email_sweep','admin_welcome_email_status','admin_set_welcome_email')`);
     const once = await definitions();
     await sql(MIGRATION);
 
@@ -169,18 +190,26 @@ test('the welcome email: off until the owner approves the exact content, then on
     const sends = () => sql('select count(*) from welcome_email_sends').then(Number);
     const approve = (on, fp = fingerprint, who = ADMIN.sub) => as('authenticated', `select admin_set_welcome_email(${on},${fp ? `'${fp}'` : 'null'},'${WELCOME_EMAIL_VERSION}')`, who);
     const status = async () => { const r = await as('authenticated', 'select admin_welcome_email_status()', ADMIN.sub); assert.equal(r.code, 0, r.stderr); return JSON.parse(r.stdout); };
+    const pending = (live, fp = fingerprint) => value(`welcome_email_pending(${live},'${fp}')`);
+    const counts = s => ({ purchasesSinceOn: s.purchasesSinceOn, sent: s.sent, notSent: s.notSent });
 
     await t.test('applies twice; off by default; only the service role claims and only administrators approve', async () => {
       assert.equal(await definitions(), once, 'stable on a second apply');
       assert.deepEqual(JSON.parse(await sql("select to_jsonb(s)-'updated_at' from welcome_email_settings s")),
-        { enabled: false, singleton: true, approved_at: null, approved_by: null, approved_version: null, approved_fingerprint: null });
+        { enabled: false, singleton: true, enabled_at: null, approved_at: null, approved_by: null, approved_version: null, approved_fingerprint: null });
+      assert.equal(await sql(`select count(*)||' '||min(schedule)||' '||min(command) from cron.job where jobname='${SWEEP_JOB}'`),
+        '1 */10 * * * * select public.dispatch_welcome_email_sweep()', 'one sweep job every 10 minutes, after two applies');
       assert.equal(await sql('select count(*) from welcome_email_settings'), '1');
       const denied = async (who, call, sub) => { const r = await as(who, call, sub); return r.code !== 0 && /permission denied/.test(r.stderr); };
       for (const who of ['anon', 'authenticated']) {
         assert.ok(await denied(who, `select welcome_email_claim('sub_X',true,'${fingerprint}')`, ADMIN.sub), `${who} cannot claim`);
         assert.ok(await denied(who, "select welcome_email_finish('sub_X',true,1,'sent','re_1',null)", ADMIN.sub), `${who} cannot finish`);
+        assert.ok(await denied(who, `select welcome_email_pending(true,'${fingerprint}')`, ADMIN.sub), `${who} cannot list the sweep`);
+        assert.ok(await denied(who, 'select dispatch_welcome_email_sweep()', ADMIN.sub), `${who} cannot fire the sweep`);
+        assert.ok(await denied(who, `select welcome_email_sender_seen('${fingerprint}')`, ADMIN.sub), `${who} cannot write what the webhook presented`);
         for (const [table, write] of [['welcome_email_settings', 'update welcome_email_settings set enabled=true'],
-          ['welcome_email_sends', "delete from welcome_email_sends"], ['welcome_email_approvals', "insert into welcome_email_approvals(actor_profile_id,action) values(gen_random_uuid(),'turn_off')"]]) {
+          ['welcome_email_sends', "delete from welcome_email_sends"], ['welcome_email_approvals', "insert into welcome_email_approvals(actor_profile_id,action) values(gen_random_uuid(),'turn_off')"],
+          ['welcome_email_sender_checks', `insert into welcome_email_sender_checks(fingerprint) values('${other}')`]]) {
           assert.ok(await denied(who, `select * from ${table}`, ADMIN.sub), `${who} cannot read ${table}`);
           assert.ok(await denied(who, write, ADMIN.sub), `${who} cannot write ${table}`);
         }
@@ -196,11 +225,12 @@ test('the welcome email: off until the owner approves the exact content, then on
       assert.match(memberStatus.stderr, /Administrator access required/);
       assert.equal(await sql('select enabled from welcome_email_settings'), 'f');
       assert.equal(await sql('select count(*) from welcome_email_approvals'), '0');
-      for (const fn of FUNCTIONS) {
+      assert.ok(await denied('service_role', `select welcome_email_sender_seen('${fingerprint}')`), 'only the claim and the sweep list record what was presented');
+      for (const [fn, who] of Object.entries(FUNCTIONS)) {
         const acl = await sql(`select proacl::text from pg_proc where oid='public.${fn}'::regprocedure`);
         assert.ok(!/(^|[{,])(anon|=)/.test(acl), `${fn} is not executable by PUBLIC or anon: ${acl}`);
-        assert.equal(/authenticated=/.test(acl), fn.startsWith('admin_'), `${fn}: ${acl}`);
-        assert.equal(/service_role=/.test(acl), !fn.startsWith('admin_'), `${fn}: ${acl}`);
+        assert.equal(/authenticated=/.test(acl), who === 'authenticated', `${fn}: ${acl}`);
+        assert.equal(/service_role=/.test(acl), who === 'service_role', `${fn}: ${acl}`);
       }
     });
 
@@ -209,7 +239,9 @@ test('the welcome email: off until the owner approves the exact content, then on
       await buy(1, 'core');
       assert.equal(await sql(`select count(*) from limited_paid_purchase_history where subscription_id='sub_Welcome1'`), '1');
       assert.deepEqual(await claim(1), { state: 'disabled' });
+      assert.deepEqual(await pending(true), { state: 'disabled', purchases: [] }, 'the sweep lists nothing while off');
       assert.equal(await sends(), 0);
+      assert.equal(await sql('select fingerprint from welcome_email_sender_checks'), fingerprint, 'which wording the webhook holds is known before any approval');
     });
 
     await t.test('an administrator approves the exact content; approving again records nothing new', async () => {
@@ -225,6 +257,8 @@ test('the welcome email: off until the owner approves the exact content, then on
       assert.equal(s.approvedFingerprint, fingerprint);
       assert.equal(s.approvedVersion, WELCOME_EMAIL_VERSION);
       assert.equal(s.approvedBy, 'Synthetic Owner');
+      assert.equal(s.enabledAt, s.approvedAt, 'on since this approval');
+      assert.equal(s.senderFingerprint, fingerprint, 'the deployed webhook presented this wording');
       const at = s.approvedAt;
       assert.equal((await approve(true)).code, 0);
       const again = await status();
@@ -243,6 +277,12 @@ test('the welcome email: off until the owner approves the exact content, then on
       await buy(2, 'core');
       assert.deepEqual(await claim(2, other), { state: 'not_approved' });
       assert.equal(await sends(), 0);
+      // The refusal writes no ledger row, so the status must say it instead.
+      const s = await status();
+      assert.equal(s.enabled, true);
+      assert.equal(s.senderFingerprint, other, 'the fingerprint the deployed webhook presented');
+      assert.ok(Date.parse(s.senderCheckedAt) >= Date.parse(s.approvedAt), 'presented after the approval: nothing is sending');
+      assert.deepEqual(await pending(true, other), { state: 'not_approved', purchases: [] });
     });
 
     await t.test('sends once on settlement when enabled: claimed once, in flight, sent, then never again', async () => {
@@ -250,6 +290,7 @@ test('the welcome email: off until the owner approves the exact content, then on
       assert.deepEqual(first, { state: 'claimed', attempt: 1, variant: 'founding', profile_id: pid(2), clerk_subject: subject(2),
         name: 'Dr. Jordan Rivera, MD', verified_email: 'welcome2@example.invalid' });
       assert.equal(await ledger(2), 'sending:1:founding', 'recorded before anything is mailed');
+      assert.equal((await status()).senderFingerprint, fingerprint, 'the webhook holds the approved wording again');
       assert.deepEqual(await claim(2), { state: 'in_progress' }, 'a second webhook event meanwhile does not send');
       assert.equal(await finish(2, 1, 'sent', 're_synthetic_2'), 'recorded');
       assert.equal(await ledger(2), 'sent:1:founding');
@@ -346,7 +387,7 @@ test('the welcome email: off until the owner approves the exact content, then on
       await sql(`update profiles set access_status='revoked' where id='${pid(11)}'`);
       assert.deepEqual(await claim(11), { state: 'account_unavailable' });
       // Paid more than 72 hours ago, though after the approval.
-      await sql("update welcome_email_settings set approved_at=clock_timestamp()-interval '10 days'");
+      await sql("update welcome_email_settings set approved_at=clock_timestamp()-interval '10 days',enabled_at=clock_timestamp()-interval '10 days'");
       await sql(`update limited_paid_purchase_history set first_verified_paid_at=clock_timestamp()-interval '73 hours' where profile_id='${pid(12)}'`);
       assert.deepEqual(await claim(12), { state: 'too_late' });
       assert.equal(await sql(`select count(*) from welcome_email_sends where profile_id in ('${pid(8)}','${pid(9)}','${pid(10)}','${pid(11)}','${pid(12)}','${pid(20)}','${MEMBER.id}')`), '0');
@@ -366,22 +407,114 @@ test('the welcome email: off until the owner approves the exact content, then on
       assert.deepEqual(s.history.map(h => h.action), ['turn_off', 'approve'], 'turning off twice records once');
       assert.equal(s.approvedFingerprint, fingerprint, 'the last approval stays on record');
       assert.equal((await approve(true)).code, 0);
-      assert.deepEqual(await claim(13), { state: 'before_approval' }, 'paid while it was off');
+      assert.deepEqual(await claim(13), { state: 'before_approval' }, 'paid before it was turned back on');
       const on = await status();
       assert.deepEqual(on.history.map(h => h.action), ['approve', 'turn_off', 'approve']);
-      assert.equal(on.sent, 2);
-      assert.ok(on.notSent >= 4);
+      assert.ok(Date.parse(on.enabledAt) > Date.parse(s.enabledAt), 'turning it on again starts a new period');
+      assert.deepEqual(counts(on), { purchasesSinceOn: 0, sent: 0, notSent: 0 }, 'the sends before this period are not counted in it');
+    });
+
+    await t.test('the status counts one population: purchases since it was turned on = sent + not sent', async () => {
+      await enroll(30); await buy(30, 'core');
+      await enroll(31); await buy(31, 'core');
+      assert.deepEqual(counts(await status()), { purchasesSinceOn: 2, sent: 0, notSent: 2 });
+      const c = await claim(30);
+      assert.equal(await finish(30, c.attempt, 'sent', 're_synthetic_30'), 'recorded');
+      // Earlier periods sent two; only this period's purchase is counted.
+      assert.equal(await sql("select count(*) from welcome_email_sends where livemode and status='sent'"), '3');
+      assert.deepEqual(counts(await status()), { purchasesSinceOn: 2, sent: 1, notSent: 1 });
+    });
+
+    await t.test('a deployed webhook holding other wording is reported; approving it while on still welcomes the purchases it refused', async () => {
+      const before = await status();
+      assert.deepEqual(await claim(31, other), { state: 'not_approved' });
+      const refused = await status();
+      assert.equal(refused.senderFingerprint, other);
+      assert.deepEqual(counts(refused), { purchasesSinceOn: 2, sent: 1, notSent: 1 }, 'the refused purchase is counted as not sent');
+      // The owner approves the wording the webhook holds, without turning it off.
+      assert.equal((await approve(true, other)).code, 0);
+      const approved = await status();
+      assert.equal(approved.approvedFingerprint, other);
+      assert.equal(approved.enabledAt, before.enabledAt, 'new wording approved while on keeps the period');
+      assert.ok(Date.parse(approved.approvedAt) > Date.parse(before.approvedAt));
+      const c = await claim(31, other);
+      assert.equal(c.state, 'claimed', 'paid while on, refused only for the wording: welcomed now');
+      assert.equal(await finish(31, c.attempt, 'sent', 're_synthetic_31'), 'recorded');
+      assert.deepEqual(counts(await status()), { purchasesSinceOn: 2, sent: 2, notSent: 0 });
+      assert.equal((await approve(true, fingerprint)).code, 0);
+      assert.deepEqual(await claim(31), { state: 'already_sent' });
+      assert.equal((await status()).senderFingerprint, fingerprint);
+    });
+
+    await t.test('the sweep lists what to try now, and the real sweep sends it once', async () => {
+      const mine = [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50];
+      for (const n of mine) { await enroll(n); await buy(n, 'core'); }
+      // Every other purchase is long past its 72 hours; the period began two days ago.
+      await sql(`update limited_paid_purchase_history set first_verified_paid_at=clock_timestamp()-interval '10 days' where subscription_id not in (${mine.map(n => `'sub_Welcome${n}'`).join(',')})`);
+      await sql("update welcome_email_settings set enabled_at=clock_timestamp()-interval '2 days'");
+      const paid = (n, ago) => sql(`update limited_paid_purchase_history set first_verified_paid_at=clock_timestamp()-interval '${ago}' where subscription_id='sub_Welcome${n}'`);
+      const row = (n, status, attempts, updated, created = updated) => sql(`insert into welcome_email_sends(subscription_id,livemode,profile_id,variant,fingerprint,status,attempts,error_code,provider_id,sent_at,created_at,updated_at)
+        values('sub_Welcome${n}',true,'${pid(n)}','founding','${fingerprint}','${status}',${attempts},${status === 'failed' || status === 'unknown' ? "'provider_500'" : 'null'},${status === 'sent' ? "'re_x'" : 'null'},${status === 'sent' ? 'clock_timestamp()' : 'null'},
+          clock_timestamp()-interval '${created}',clock_timestamp()-interval '${updated}')`);
+      for (const n of mine) await paid(n, '1 hour');
+      await paid(40, '6 minutes');                       // never tried: listed
+      await paid(41, '1 minute');                        // never tried, the webhook's turn: not yet
+      await row(42, 'failed', 1, '16 minutes');          // first retry after 15 minutes: listed
+      await row(43, 'failed', 1, '10 minutes');          // not yet
+      await row(44, 'unknown', 2, '25 minutes');         // second retry after 30 minutes: not yet
+      await row(45, 'sending', 1, '20 minutes');         // died mid-send: listed
+      await row(46, 'failed', 5, '5 hours');             // gave up
+      await row(47, 'failed', 1, '2 hours', '24 hours'); // past the provider key
+      await row(48, 'sent', 1, '30 minutes');            // sent
+      await paid(49, '73 hours');                        // too late
+      await paid(50, '2 days 1 minute');                 // paid before it was turned on
+      const listed = await pending(true);
+      assert.equal(listed.state, 'ready');
+      assert.deepEqual([...listed.purchases].sort(), ['sub_Welcome40', 'sub_Welcome42', 'sub_Welcome45']);
+      assert.deepEqual(await pending(false), { state: 'ready', purchases: [] }, 'test-mode purchases only for a test-mode webhook');
+      assert.deepEqual(await pending(true, other), { state: 'not_approved', purchases: [] });
+
+      const deliveries = [];
+      const store = {
+        claimWelcome: (s, l, f) => value(`welcome_email_claim(${text(s)},${l},${text(f)})`),
+        finishWelcome: (s, l, a, st, p, c) => value(`welcome_email_finish(${text(s)},${l},${a},${text(st)},${p ? text(p) : 'null'},${c ? text(c) : 'null'})`),
+        pendingWelcomes: (l, f) => value(`welcome_email_pending(${l},${text(f)})`),
+      };
+      const send = createWelcomeEmailSender({ store, recipient: async claimed => claimed.verified_email,
+        deliver: async message => { deliveries.push(message); return { status: 'sent', providerId: `re_sweep_${deliveries.length}` }; } });
+      const sweep = createWelcomeEmailSweep({ secret: () => HOOK, mode: () => 'live', store, send });
+      const call = () => sweep(new Request('https://functions.example/limited-stripe-webhook', { method: 'POST', headers: { 'x-hook-secret': HOOK }, body: '{}' }));
+      const first = await call();
+      assert.equal(first.status, 200);
+      assert.deepEqual(await first.json(), { state: 'ready', purchases: 3, outcomes: { sent: 3 }, deferred: 0 });
+      assert.deepEqual(deliveries.map(d => d.idempotencyKey).sort(), ['sub_Welcome40', 'sub_Welcome42', 'sub_Welcome45'].map(s => welcomeIdempotencyKey(s, true)));
+      assert.deepEqual(await Promise.all([40, 42, 45].map(ledger)), ['sent:1:founding', 'sent:2:founding', 'sent:2:founding']);
+      assert.deepEqual(await (await call()).json(), { state: 'ready', purchases: 0, outcomes: {}, deferred: 0 }, 'nothing twice');
+      assert.equal(deliveries.length, 3);
+    });
+
+    await t.test('the dispatcher posts the vault hook secret to limited-stripe-webhook; nobody else may fire it', async () => {
+      const missing = await as('service_role', 'select dispatch_welcome_email_sweep()');
+      assert.match(missing.stderr, /vault secret welcome_hook_secret is missing/);
+      await sql(`insert into vault.secrets values('welcome_hook_secret','${HOOK}')`);
+      assert.equal((await as('service_role', 'select dispatch_welcome_email_sweep()')).code, 0);
+      assert.equal(await sql("select url||' '||(headers->>'x-hook-secret')||' '||timeout_milliseconds from net.calls order by id desc limit 1"),
+        `https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/limited-stripe-webhook ${HOOK} 60000`);
+      assert.doesNotMatch(await sql("select prosrc from pg_proc where proname='dispatch_welcome_email_sweep'"), new RegExp(HOOK), 'read at call time, never written into the body');
     });
 
     await t.test('rollback removes the switch and the functions, keeps the record, and re-applying starts off', async () => {
       const kept = await sql('select count(*) from welcome_email_sends');
       await sql(`begin;${ROLLBACK};commit;`);
       await sql(ROLLBACK);
-      for (const fn of FUNCTIONS) assert.equal(await sql(`select to_regprocedure('public.${fn}') is null`), 't', fn);
+      for (const fn of Object.keys(FUNCTIONS)) assert.equal(await sql(`select to_regprocedure('public.${fn}') is null`), 't', fn);
       assert.equal(await sql("select to_regclass('public.welcome_email_settings') is null"), 't');
+      assert.equal(await sql("select to_regclass('public.welcome_email_sender_checks') is null"), 't');
+      assert.equal(await sql(`select count(*) from cron.job where jobname='${SWEEP_JOB}'`), '0', 'the sweep stops');
       assert.equal(await sql('select count(*) from welcome_email_sends'), kept);
       await sql(MIGRATION);
       assert.equal(await sql('select enabled from welcome_email_settings'), 'f');
+      assert.equal(await sql(`select count(*) from cron.job where jobname='${SWEEP_JOB}'`), '1');
       assert.deepEqual(await claim(13), { state: 'disabled' });
     });
   } finally { await db.close(); }

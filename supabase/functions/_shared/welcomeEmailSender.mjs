@@ -5,7 +5,8 @@ import { composeWelcomeEmail, welcomeEmailFingerprint } from './app/utils/welcom
  * (owner decision, 2026-09-29; 20260929130000_welcome_email.sql).
  *
  * limited-stripe-webhook calls this after a settlement that carried a
- * verified first payment. Every decision about WHETHER to send belongs to the
+ * verified first payment, and its retry sweep (createWelcomeEmailSweep below)
+ * calls it again for a purchase not yet sent. Every decision about WHETHER to send belongs to the
  * database, in welcome_email_claim, under the purchase's own row lock:
  *   - the owner turned it on in Admin > Emails (off by default), and the
  *     fingerprint of the content deployed here equals the one approved;
@@ -69,3 +70,74 @@ export function createWelcomeEmailSender({ store, recipient, deliver, configured
     return finish(outcome?.status === 'failed' ? 'failed' : 'unknown', null, CODE.test(outcome?.code || '') ? outcome.code : 'provider_refused');
   };
 }
+
+/**
+ * The retry sweep (20260929130000_welcome_email.sql, item 7). A purchase's
+ * Stripe events all arrive within seconds of checkout, so a send that failed,
+ * an attempt whose function died, or a purchase refused while the deployed
+ * wording did not match the approval would otherwise never be tried again.
+ * pg_cron's welcome-email-sweep posts here every 10 minutes with the hook
+ * secret; this asks the database which purchases to try (reporting the
+ * fingerprint of the email this deployment holds) and sends each through the
+ * same sendWelcome, whose claim decides everything again.
+ *
+ * The answer carries counts and fixed words only: pg_net keeps response
+ * bodies, so never an id or an address.
+ *
+ * deps:
+ *   secret() -> the expected x-hook-secret (WELCOME_HOOK_SECRET)
+ *   mode() -> 'test' | 'live' (the billing mode this deployment runs in)
+ *   store.pendingWelcomes(livemode, fingerprint) -> { state, purchases: [subscriptionId] }
+ *   send({ subscriptionId, livemode }) -> sendWelcome's answer
+ *   now() and budgetMs: no new send starts after the budget is spent
+ *   log(entry)
+ */
+const SUBSCRIPTION = /^sub_[A-Za-z0-9]+$/;
+
+/** Constant-time string comparison; an empty expected value never matches. */
+export function sameHookSecret(presented, expected) {
+  if (typeof presented !== 'string' || typeof expected !== 'string' || !expected) return false;
+  let diff = presented.length ^ expected.length;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ (presented.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+export function createWelcomeEmailSweep({ secret, mode, store, send, now = () => Date.now(), budgetMs = 45000, log = () => {} }) {
+  const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const note = (entry) => { try { log({ event: 'welcome_email_sweep', ...entry }); } catch { /* A log never changes the outcome. */ } };
+  return async function sweep(req) {
+    if (req.method !== 'POST') return reply(405, { error: 'POST only' });
+    if (!sameHookSecret(req.headers.get('x-hook-secret'), secret())) return reply(401, { error: 'Not authorized' });
+    const billing = mode();
+    if (!['test', 'live'].includes(billing)) { note({ state: 'billing_not_configured' }); return reply(503, { state: 'billing_not_configured' }); }
+    const livemode = billing === 'live';
+    const started = now();
+    let pending;
+    try { pending = await store.pendingWelcomes(livemode, await welcomeEmailFingerprint()); }
+    catch { note({ state: 'unavailable' }); return reply(503, { state: 'unavailable' }); }
+    const state = typeof pending?.state === 'string' && CODE.test(pending.state) ? pending.state : 'unavailable';
+    const purchases = Array.isArray(pending?.purchases) ? pending.purchases.filter((id) => typeof id === 'string' && SUBSCRIPTION.test(id)) : [];
+    const outcomes = {};
+    let deferred = 0;
+    for (const subscriptionId of purchases) {
+      // The next run picks up whatever this one had no time for.
+      if (now() - started >= budgetMs) { deferred += 1; continue; }
+      let outcome;
+      try { outcome = (await send({ subscriptionId, livemode }))?.state; } catch { outcome = 'unavailable'; }
+      outcome = typeof outcome === 'string' && CODE.test(outcome) ? outcome : 'unavailable';
+      outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+    }
+    const result = { state, purchases: purchases.length, outcomes, deferred };
+    // A quiet run (nothing to try, on or off) every 10 minutes is not news;
+    // anything tried, and a refused wording, is.
+    if (purchases.length || !['ready', 'disabled'].includes(state)) note(result);
+    return reply(200, result);
+  };
+}
+
+/**
+ * limited-stripe-webhook's entry: the sweep arrives with an x-hook-secret
+ * header (Stripe never sends one), everything else is a Stripe event. One
+ * deployment, so the retry sends that deployment's own copy of the email.
+ */
+export const withWelcomeSweep = (webhook, sweep) => (req) => (req.headers.has('x-hook-secret') ? sweep(req) : webhook(req));

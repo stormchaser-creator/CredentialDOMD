@@ -12,8 +12,10 @@
 -- welcome_email_claim; it catches that and still answers Stripe 200, so
 -- billing is unaffected either way. Only the welcome email stops.
 --
--- What it undoes: the four functions and the on/off setting (with it, the
--- approval). Nothing can send once they are gone.
+-- What it undoes: the welcome-email-sweep cron job and its dispatcher, the
+-- claim, finish, pending and admin functions, the on/off setting (with it,
+-- the approval) and the record of which wording the deployed webhook
+-- presented. Nothing can send once they are gone.
 --
 -- What it deliberately keeps: welcome_email_sends and welcome_email_approvals,
 -- the record of what was mailed and who approved it. They hold no address or
@@ -21,8 +23,20 @@
 -- and brings the setting back OFF, so the owner approves again before
 -- anything sends. Drop them by hand only once that record is no longer wanted.
 
+do $cron$
+begin
+  if to_regclass('cron.job') is not null then
+    perform cron.unschedule(jobid) from cron.job where jobname = 'welcome-email-sweep';
+  end if;
+end
+$cron$;
+
+drop function if exists public.dispatch_welcome_email_sweep();
 drop function if exists public.admin_set_welcome_email(boolean, text, text);
 drop function if exists public.admin_welcome_email_status();
+drop function if exists public.welcome_email_pending(boolean, text);
 drop function if exists public.welcome_email_finish(text, boolean, integer, text, text, text);
 drop function if exists public.welcome_email_claim(text, boolean, text);
+drop function if exists public.welcome_email_sender_seen(text);
+drop table if exists public.welcome_email_sender_checks;
 drop table if exists public.welcome_email_settings;

@@ -8,6 +8,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import * as app from '../../src/utils/welcomeEmail.js';
 import * as shared from '../../supabase/functions/_shared/app/utils/welcomeEmail.js';
+import { DEFAULT_SETTINGS } from '../../src/constants/defaults.js';
+import { reminderPreferences } from '../../supabase/functions/_shared/reminderRows.mjs';
 
 const { composeWelcomeEmail, welcomeEmailPreview, welcomeEmailFingerprint, welcomeEmailCanonical, welcomeFirstName, WELCOME_VARIANTS } = app;
 const body = (variant, name = 'Jordan') => composeWelcomeEmail({ name, variant }).text;
@@ -47,7 +49,7 @@ test('content per offer: each version says exactly what that membership includes
 test('the three first steps, help, the guarantee and the app link, in that order', () => {
   for (const variant of WELCOME_VARIANTS) {
     const text = body(variant);
-    const order = ['Three good first steps:', '1. Add a license.', '2. Upload a document', 'docs@credentialdomd.com', '3. Set your renewal reminders.',
+    const order = ['Three good first steps:', '1. Add a license.', '2. Upload a document', 'docs@credentialdomd.com', '3. Check your renewal reminders.',
       'Need help? Use Get help in the app, or write to support@credentialdomd.com.', app.WELCOME_MONEY_BACK, 'Open the app: https://credentialdomd.com/app/', 'CredentialDOMD'];
     let at = -1;
     for (const part of order) { const next = text.indexOf(part, at + 1); assert.ok(next > at, `${variant}: "${part}" in order`); at = next; }
@@ -113,4 +115,32 @@ test('the fingerprint covers every version with and without a name, and the func
   assert.equal(await shared.welcomeEmailFingerprint(), fingerprint);
   assert.equal(shared.welcomeEmailCanonical(), welcomeEmailCanonical());
   assert.match(app.WELCOME_EMAIL_VERSION, /^[0-9a-z-]{1,64}$/, 'the version the database accepts');
+});
+
+// Email reminders are on from the start. Step 3 used to say "turn on Email
+// reminders": a member who followed it tapped the switch and turned them OFF.
+// Every claim the step makes is checked against the app and the sender here.
+test('step 3 describes reminders as the app has them: already on, to the profile Email, with the lead time', () => {
+  const src = rel => fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
+  for (const variant of WELCOME_VARIANTS) {
+    const step = body(variant).split('\n\n').find(p => p.startsWith('3. '));
+    assert.doesNotMatch(step, /turn on/i, 'the switch is already on; tapping it turns reminders off');
+    assert.match(step, /Email reminders are already on/);
+    assert.match(step, /they go to the Email in your profile/, 'not to the address this welcome reached');
+    assert.match(step, /Open More, then Profile & settings\./);
+    assert.match(step, /Under Reminders, set Lead time \(days\)/);
+  }
+  // Already on: the app's default, and the reminder sender reads an untouched
+  // switch the same way (a null notify_email used to mean off there).
+  assert.equal(DEFAULT_SETTINGS.notifyEmail, true);
+  assert.equal(reminderPreferences({ notify_email: null }).emailOn, true);
+  // The names the step uses are the ones on screen.
+  assert.match(src('src/App.jsx'), /\{ id: "more", label: "More"/);
+  assert.match(src('src/App.jsx'), />Profile &amp; settings</);
+  const settings = src('src/components/pages/SettingsSection.jsx');
+  assert.match(settings, /<ToggleRow label="Email reminders" sub=\{s\.email \? `Daily check, sent to \$\{s\.email\}/, 'sent to the profile Email');
+  assert.match(settings, /<Field label="Email" hint=/);
+  assert.match(settings, />Reminders<\/h3>[\s\S]{0,200}<Field label="Lead time \(days\)"/);
+  // And the sender mails the profile Email.
+  assert.match(src('supabase/functions/send-reminders/index.ts'), /to: \[p\.email\]/);
 });

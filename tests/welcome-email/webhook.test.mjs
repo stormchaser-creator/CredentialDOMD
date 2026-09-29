@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LIMITED_LAUNCH, limitedOffer } from '../../supabase/functions/_shared/limitedLaunchCatalog.mjs';
 import { createLimitedLaunchHandlers } from '../../supabase/functions/_shared/limitedLaunchHandlers.mjs';
-import { createWelcomeEmailSender, welcomeIdempotencyKey } from '../../supabase/functions/_shared/welcomeEmailSender.mjs';
+import { createWelcomeEmailSender, createWelcomeEmailSweep, sameHookSecret, welcomeIdempotencyKey, withWelcomeSweep } from '../../supabase/functions/_shared/welcomeEmailSender.mjs';
 import { composeWelcomeEmail, welcomeEmailFingerprint, WELCOME_EMAIL_FROM, WELCOME_EMAIL_REPLY_TO, WELCOME_EMAIL_SUBJECT } from '../../supabase/functions/_shared/app/utils/welcomeEmail.js';
 
 const config = { ...LIMITED_LAUNCH, billingEnabled: true, checkoutEnabled: true, invitationEnabled: true, productIds: { core: 'prod_Credential', core_locum: 'prod_Bundle' } };
@@ -202,4 +202,111 @@ test('sender: a store failure is thrown for the webhook to catch', async () => {
   const noAttempt = sender({ claim: { state: 'claimed', variant: 'founding' } });
   await assert.rejects(noAttempt.send(purchase), /no attempt/);
   assert.deepEqual(noAttempt.calls.map(c => c[0]), ['claim']);
+});
+
+// ── The retry sweep ────────────────────────────────────────────────────────
+// A purchase's Stripe events all arrive within seconds of checkout. Without
+// the sweep, an attempt that failed after the others answered in_progress, or
+// one refused while the deployed wording differed, was never tried again.
+
+const HOOK = 'synthetic-welcome-sweep-secret-0123456789';
+const sweepRequest = (headers = { 'x-hook-secret': HOOK }, method = 'POST') => new Request('https://functions.example/limited-stripe-webhook', { method, headers, ...(method === 'POST' ? { body: '{}' } : {}) });
+
+function sweeper({ pending = { state: 'ready', purchases: ['sub_A', 'sub_B'] }, send, mode = 'live', secret = HOOK, clock } = {}) {
+  const calls = [], logs = [];
+  const sweep = createWelcomeEmailSweep({
+    secret: () => secret, mode: () => mode, log: entry => logs.push(entry),
+    store: { pendingWelcomes: async (...args) => { calls.push(['pending', ...args]); return typeof pending === 'function' ? pending() : pending; } },
+    send: send || (async args => { calls.push(['send', args]); return { state: 'sent' }; }),
+    ...(clock ? { now: clock, budgetMs: 1000 } : {}),
+  });
+  return { sweep, calls, logs };
+}
+
+test('sweep: retries every listed purchase through the sender, with this deployment\'s fingerprint and billing mode', async () => {
+  const s = sweeper();
+  const response = await s.sweep(sweepRequest());
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { state: 'ready', purchases: 2, outcomes: { sent: 2 }, deferred: 0 });
+  assert.deepEqual(s.calls, [['pending', true, await welcomeEmailFingerprint()], ['send', { subscriptionId: 'sub_A', livemode: true }], ['send', { subscriptionId: 'sub_B', livemode: true }]]);
+  const test = sweeper({ mode: 'test' });
+  await test.sweep(sweepRequest());
+  assert.equal(test.calls[0][1], false, 'a test-mode deployment sweeps test-mode purchases');
+});
+
+test('sweep: refuses without the hook secret, and when none is configured', async () => {
+  for (const [headers, secret] of [[{}, HOOK], [{ 'x-hook-secret': 'wrong' }, HOOK], [{ 'x-hook-secret': `${HOOK}x` }, HOOK], [{ 'x-hook-secret': HOOK.slice(0, -1) }, HOOK], [{ 'x-hook-secret': '' }, ''], [{ 'x-hook-secret': 'anything' }, '']]) {
+    const s = sweeper({ secret });
+    assert.equal((await s.sweep(sweepRequest(headers))).status, 401, JSON.stringify(headers));
+    assert.deepEqual(s.calls, []);
+  }
+  const get = sweeper();
+  assert.equal((await get.sweep(sweepRequest({ 'x-hook-secret': HOOK }, 'GET'))).status, 405);
+  assert.deepEqual(get.calls, []);
+  assert.equal(sameHookSecret(HOOK, HOOK), true);
+  assert.equal(sameHookSecret(null, HOOK), false);
+});
+
+test('sweep: billing not configured, or the database unavailable, sends nothing and says so', async () => {
+  const off = sweeper({ mode: 'disabled' });
+  assert.equal((await off.sweep(sweepRequest())).status, 503);
+  assert.deepEqual(off.calls, []);
+  const down = sweeper({ pending: () => { throw Error('database unavailable for sub_A'); } });
+  const response = await down.sweep(sweepRequest());
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { state: 'unavailable' });
+  assert.deepEqual(down.calls.map(c => c[0]), ['pending']);
+});
+
+test('sweep: one failure does not stop the rest; the answer and the log carry counts and fixed words only', async () => {
+  const sends = [];
+  const s = sweeper({
+    pending: { state: 'ready', purchases: ['sub_A', 'not a subscription', 'sub_B', 'sub_C', 42] },
+    send: async ({ subscriptionId }) => {
+      sends.push(subscriptionId);
+      if (subscriptionId === 'sub_A') throw Error('Resend refused member@example.invalid');
+      if (subscriptionId === 'sub_B') return { state: 'Sent to member@example.invalid' };
+      return { state: 'in_progress' };
+    },
+  });
+  const response = await s.sweep(sweepRequest());
+  const body = await response.json();
+  assert.deepEqual(sends, ['sub_A', 'sub_B', 'sub_C'], 'only well-formed ids are tried');
+  assert.deepEqual(body, { state: 'ready', purchases: 3, outcomes: { unavailable: 2, in_progress: 1 }, deferred: 0 });
+  assert.doesNotMatch(JSON.stringify([body, s.logs]), /sub_|member@|Resend/);
+  assert.deepEqual(s.logs, [{ event: 'welcome_email_sweep', ...body }]);
+});
+
+test('sweep: nothing new starts once the time budget is spent; the next run picks it up', async () => {
+  let t = 0;
+  const s = sweeper({ pending: { state: 'ready', purchases: ['sub_A', 'sub_B', 'sub_C'] }, clock: () => t,
+    send: async () => { t += 600; return { state: 'sent' }; } });
+  assert.deepEqual(await (await s.sweep(sweepRequest())).json(), { state: 'ready', purchases: 3, outcomes: { sent: 2 }, deferred: 1 });
+});
+
+test('sweep: off, or a deployment holding other wording, lists nothing and mails nothing; only the refusal is logged', async () => {
+  for (const state of ['disabled', 'not_approved', 'ready']) {
+    const s = sweeper({ pending: { state, purchases: [] } });
+    assert.deepEqual(await (await s.sweep(sweepRequest())).json(), { state, purchases: 0, outcomes: {}, deferred: 0 });
+    assert.deepEqual(s.calls.map(c => c[0]), ['pending']);
+    assert.deepEqual(s.logs, state === 'not_approved' ? [{ event: 'welcome_email_sweep', state, purchases: 0, outcomes: {}, deferred: 0 }] : [], `${state}: a quiet run every 10 minutes logs nothing`);
+  }
+});
+
+test('limited-stripe-webhook entry: the hook secret header goes to the sweep, a Stripe event to the webhook', async () => {
+  const seen = [];
+  const route = withWelcomeSweep(async () => { seen.push('webhook'); return new Response('w'); }, async () => { seen.push('sweep'); return new Response('s'); });
+  await route(webhookRequest());
+  await route(sweepRequest());
+  await route(sweepRequest({ 'x-hook-secret': 'wrong' }));
+  assert.deepEqual(seen, ['webhook', 'sweep', 'sweep'], 'a wrong secret still reaches the sweep, which refuses it');
+});
+
+test('the webhook deployment serves the sweep from its own copy of the email', async () => {
+  const fs = await import('node:fs');
+  const entry = fs.readFileSync(new URL('../../supabase/functions/limited-stripe-webhook/index.ts', import.meta.url), 'utf8');
+  assert.match(entry, /serve\(withWelcomeSweep\(createLimitedLaunchHandlers\(deps, limitedLaunchConfig\(\)\)\.webhook, deps\.welcomeSweep\)\)/);
+  const deps = fs.readFileSync(new URL('../../supabase/functions/_shared/limitedLaunchDependencies.ts', import.meta.url), 'utf8');
+  assert.match(deps, /createWelcomeEmailSweep\(\{\s*secret: \(\) => Deno\.env\.get\('WELCOME_HOOK_SECRET'\)/);
+  assert.match(deps, /pendingWelcomes: .*rpc\('welcome_email_pending', \{ p_livemode: live, p_fingerprint: fingerprint \}\)/);
 });

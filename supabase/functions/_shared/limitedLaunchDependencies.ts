@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { billingDependencies } from './billingDependencies.ts';
 import { LIMITED_LAUNCH } from './limitedLaunchCatalog.mjs';
-import { createWelcomeEmailSender } from './welcomeEmailSender.mjs';
+import { createWelcomeEmailSender, createWelcomeEmailSweep } from './welcomeEmailSender.mjs';
 
 /** IDs are configuration, never inferred from names or shared with historical v1. */
 export function limitedLaunchConfig() {
@@ -36,6 +36,8 @@ export function limitedLaunchDependencies() {
     // decides and records the attempt, the finish records the outcome.
     claimWelcome: (subscription: string, live: boolean, fingerprint: string) => checked(db().rpc('welcome_email_claim', { p_subscription_id: subscription, p_livemode: live, p_fingerprint: fingerprint })),
     finishWelcome: (subscription: string, live: boolean, attempt: number, status: string, providerId: string | null, code: string | null) => checked(db().rpc('welcome_email_finish', { p_subscription_id: subscription, p_livemode: live, p_attempt: attempt, p_status: status, p_provider_id: providerId, p_error_code: code })),
+    // The retry sweep's list; it also records which wording this deployment holds.
+    pendingWelcomes: (live: boolean, fingerprint: string) => checked(db().rpc('welcome_email_pending', { p_livemode: live, p_fingerprint: fingerprint })),
   };
   const resendKey = () => Deno.env.get('RESEND_API_KEY') || '';
   const welcome = createWelcomeEmailSender({
@@ -66,7 +68,17 @@ export function limitedLaunchDependencies() {
     },
     log: (entry: unknown) => console.error(JSON.stringify(entry)),
   });
-  return { ...base, welcome,
+  // pg_cron's welcome-email-sweep (every 10 minutes) retries what did not go
+  // out; it authenticates with the same vault hook secret as the other
+  // database callers (WELCOME_HOOK_SECRET, project-wide).
+  const welcomeSweep = createWelcomeEmailSweep({
+    secret: () => Deno.env.get('WELCOME_HOOK_SECRET') || '',
+    mode: () => base.mode,
+    store,
+    send: welcome,
+    log: (entry: unknown) => console.error(JSON.stringify(entry)),
+  });
+  return { ...base, welcome, welcomeSweep,
     verifiedEmails: async (subject: string) => {
       const user = await clerkUser(subject);
       return (user.email_addresses || []).filter((a: { verification?: { status?: string }; email_address?: string }) => a.verification?.status === 'verified' && typeof a.email_address === 'string')

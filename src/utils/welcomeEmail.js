@@ -22,7 +22,7 @@
 //
 // Plain text only. No em dashes (a test enforces it).
 
-export const WELCOME_EMAIL_VERSION = "2026-09-29-v1";
+export const WELCOME_EMAIL_VERSION = "2026-09-29-v2";
 // The product's Resend sender (send-reminders, build-backup and ticket replies
 // use the same address). Replies go to support, where help requests belong.
 export const WELCOME_EMAIL_FROM = "CredentialDOMD <whit@credentialdomd.com>";
@@ -65,8 +65,11 @@ export const welcomeVariantLabel = (variant) => MEMBERSHIP[variant]?.label || ""
 const STEPS = [
   "Three good first steps:",
   "1. Add a license. Open Credentials and add your state medical license with its expiration date.",
-  "2. Upload a document in the app, or email it to docs@credentialdomd.com from the address you sign in with. To send from a different address, confirm it first in Settings, under Email.",
-  "3. Set your renewal reminders. Open More, then Settings, turn on Email reminders, and choose how many days ahead you want to hear about an expiration.",
+  "2. Upload a document in the app, or email it to docs@credentialdomd.com from the address you sign in with. To send from a different address, confirm it first in Profile & settings, under Email.",
+  // Email reminders are on from the start (notifyEmail in defaults.js), so
+  // "turn on" sent members to switch them off. They go to the Email on the
+  // profile, which can differ from the address this welcome reached.
+  "3. Check your renewal reminders. Open More, then Profile & settings. Email reminders are already on, and they go to the Email in your profile, so make sure that address is one you check. Under Reminders, set Lead time (days) to how far ahead you want to hear about an expiration.",
 ];
 
 const TITLES = /^(dr\.?|doctor|mr\.?|mrs\.?|ms\.?|mx\.?|prof\.?)$/i;

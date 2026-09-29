@@ -2,16 +2,18 @@
 # Rotate the pg_net hook secret: the edge functions' WELCOME_HOOK_SECRET and
 # vault secret welcome_hook_secret, back to back, then prove they agree.
 #
-# Six edge functions compare the x-hook-secret header against
+# Seven edge functions compare the x-hook-secret header against
 # WELCOME_HOOK_SECRET (send-welcome, send-ticket-reply, send-guide,
-# send-reminders, build-backup, delete-account). Supabase secrets are
-# project-wide, so this rotates it for all six at once. Every database caller
+# send-reminders, build-backup, delete-account, and limited-stripe-webhook for
+# the welcome email retry sweep). Supabase secrets are project-wide, so this
+# rotates it for all of them at once. Every database caller
 # reads the vault at call time (20260925140000_hook_secret_vault.sql), so no
 # function is rewritten.
 #
 # Between the two writes (about a second) a database call carries a value the
-# functions reject with 401. The send-guide sweep retries every 10 minutes; a
-# ticket reply or a welcome sent in that second is not retried.
+# functions reject with 401. The send-guide and welcome-email sweeps run again
+# 10 minutes later; a ticket reply or a lead welcome sent in that second is not
+# retried.
 #
 # No value is printed, written to disk, or passed on a command line: headers
 # and bodies reach curl through file descriptors. Checks, in order:
