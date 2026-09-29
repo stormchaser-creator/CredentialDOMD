@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { collectQueue, loadContext, loadQueuedContext } from './ticket-agent-context.mjs';
 import { replySQL } from './ticket-agent-isolated.mjs';
+import { agentReplyBody } from './ticket-fix/reply.mjs';
+import { signForTest } from '../tests/ticket-fix/helpers.mjs';
 
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const owner = uuid(9000), otherOwner = uuid(9001), targetId = uuid(1);
@@ -68,7 +70,8 @@ test('input arriving after queue selection promotes continuation before model la
 });
 test('reply publication binds captured approval separately from the unchanged ticket version', () => {
   const sql = replySQL({ id: targetId, owner_id: owner, updated_at: ticket(1).updated_at,
-    approval: { from_admin: false, approved_at: ticket(1).agent_approved_at } }, 'Synthetic reply');
+    approval: { from_admin: false, approved_at: ticket(1).agent_approved_at } }, 'Synthetic reply',
+    { verification: signForTest({ ticketId: targetId, body: agentReplyBody('Synthetic reply'), report: {}, secret: 'synthetic-key-0123456789abcdef0123456789abcdef' }) });
   assert.match(sql, /t.agent_approved_at\s*=\s*convert_from/);
   assert.ok(sql.includes(Buffer.from(ticket(1).agent_approved_at).toString('hex')));
 });

@@ -23,7 +23,26 @@ export function sql(statement) {
 export function newInput() {
   sql(`INSERT INTO support_messages VALUES ('30000000-0000-4000-8000-000000000099','${target}','${owner}','Synthetic new input',false,now(),null,null)`);
 }
+// A 1x1 PNG: the synthetic screenshot the 'attachment' scenario's ticket carries.
+export const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+// Built at run time (no token-shaped literal in the public repository): a
+// synthetic JWT shape, not a key to anything.
+const b64 = value => Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64url');
+const SERVICE_KEY = [b64({ alg: 'HS256' }), b64({ role: 'service_role' }), b64('synthetic-signature')].join('.');
+const ANON_KEY = [b64({ alg: 'HS256' }), b64({ role: 'anon' }), b64('synthetic')].join('.');
 globalThis.fetch = async (url, options) => {
+  // Stage 3 (G6): the key listing and the storage download, for the
+  // attachment scenario only, and only with the synthetic credentials.
+  if (scenario === 'attachment' && url === 'https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/api-keys?reveal=true' &&
+      options?.headers?.Authorization === 'Bearer synthetic-database-token') {
+    appendFileSync(path.join(directory, 'storage.jsonl'), JSON.stringify({ request: 'api-keys' }) + '\n', { mode: 0o600 });
+    return new Response(JSON.stringify([{ name: 'anon', api_key: ANON_KEY }, { name: 'service_role', api_key: SERVICE_KEY }]), { status: 200 });
+  }
+  if (scenario === 'attachment' && url === `https://hkpnnsjcwprrwobmpqyy.supabase.co/storage/v1/object/documents/tickets/${target}/screenshot.png` &&
+      options?.headers?.apikey === SERVICE_KEY && options?.headers?.Authorization === `Bearer ${SERVICE_KEY}`) {
+    appendFileSync(path.join(directory, 'storage.jsonl'), JSON.stringify({ request: 'object' }) + '\n', { mode: 0o600 });
+    return new Response(PNG, { status: 200, headers: { 'Content-Type': 'image/png', 'Content-Length': String(PNG.length) } });
+  }
   if (url !== 'https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query' ||
       options?.method !== 'POST' || options.headers.Authorization !== 'Bearer synthetic-database-token') {
     throw Error('Unexpected request: synthetic fixture refuses all network');

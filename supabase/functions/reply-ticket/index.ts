@@ -25,9 +25,19 @@
  * physician twice, and no second status change. The unique index
  * support_messages_client_request_uniq (20260925112000) settles two racing
  * requests on one row. A request without a key behaves as before.
+ *
+ * An ADMIN's reply is inserted as the admin: through PostgREST with the
+ * caller's own token, not the service role. trg_require_verified_support_reply
+ * (20260928160000) accepts an unverified support reply only that way, with
+ * author_id equal to the token's profile, because the service-role key can be
+ * fetched by anyone holding the management token and would otherwise be a way
+ * around the verified reply path. messages_thread_insert already lets an
+ * admin sign a reply (is_admin_reply) on any thread. A customer's reply is not
+ * a support reply and is still written with the service role.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import { admitActiveAccount } from "../_shared/admission.ts";
@@ -43,6 +53,14 @@ const VALID_STATUSES = ["open", "in_progress", "waiting_user", "resolved", "clos
 const ATTACHMENT_ONLY_BODY = "File attached.";
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PG_UNIQUE_VIOLATION = "23505";
+
+// PostgREST as the caller: their verified token, the anon key, no session.
+function asCaller(req: Request) {
+  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: req.headers.get("Authorization") || "" } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
 
 // Deployed before 20260925112000 reached the database: answer without the
 // key rather than refuse every reply. Retries are then unprotected, as they
@@ -174,7 +192,8 @@ serve(async (req) => {
     }
     const attachmentPath: string | null = attachmentPaths[0] ?? null;
 
-    const { data: msg, error: msgErr } = await user.db
+    const writer = isAdmin ? asCaller(req) : user.db;
+    const { data: msg, error: msgErr } = await writer
       .from("support_messages")
       .insert({
         id: messageId,

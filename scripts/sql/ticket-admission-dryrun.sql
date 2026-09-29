@@ -15,6 +15,14 @@
 -- The AFTER INSERT trigger on support_messages posts to send-ticket-reply, so
 -- it is disabled for the transaction and restored by the rollback.
 --
+-- So is trg_require_verified_support_reply (20260928150000/160000) when it
+-- exists. This file runs as postgres through the management API, and that
+-- trigger refuses an unverified support reply from such a session before RLS
+-- is asked, so with it on, "blocked" would measure the trigger and "allowed"
+-- probes would fail. Every probe also records the SQLSTATE and message of
+-- whatever refused it, so an RLS refusal (42501, row-level security) can be
+-- told from any other.
+--
 -- Run:
 --   TOKEN=$(security find-generic-password -l "Supabase CLI" -w)
 --   python3 -c 'import json,sys; print(json.dumps({"query": open(sys.argv[1]).read()}))' \
@@ -31,8 +39,16 @@ begin;
 -- side effect a support_messages insert would have is the AFTER INSERT
 -- trigger that posts to send-ticket-reply, so it is off for the duration.
 alter table public.support_messages disable trigger trg_notify_ticket_reply;
+do $off$
+begin
+  if exists (select 1 from pg_trigger where tgrelid = 'public.support_messages'::regclass
+               and tgname = 'trg_require_verified_support_reply' and not tgisinternal) then
+    execute 'alter table public.support_messages disable trigger trg_require_verified_support_reply';
+  end if;
+end
+$off$;
 
-create temp table probe_out(name text, expected text, actual text, verdict text) on commit drop;
+create temp table probe_out(name text, expected text, actual text, verdict text, detail text) on commit drop;
 
 -- Synthetic accounts. The AFTER INSERT founding trigger does fire on the two
 -- active rows and returns without doing anything: assign_founding_number
@@ -53,7 +69,7 @@ insert into public.support_tickets (id, user_id, subject, body, category) values
 
 create function pg_temp.probe(p_name text, p_sub text, p_sql text, p_expect text)
 returns void language plpgsql as $f$
-declare n int; got text;
+declare n int; got text; why text;
 begin
   begin
     execute 'set local role authenticated';
@@ -61,11 +77,13 @@ begin
     execute p_sql;
     get diagnostics n = row_count;
     got := case when n > 0 then 'allowed' else 'blocked' end;
+    why := case when n > 0 then null else 'no rows matched (RLS USING)' end;
   exception when others then
     got := 'blocked';
+    why := sqlstate || ' ' || left(sqlerrm, 160);
   end;
   execute 'set local role postgres';
-  insert into pg_temp.probe_out values (p_name, p_expect, got, case when got = p_expect then 'PASS' else 'FAIL' end);
+  insert into pg_temp.probe_out values (p_name, p_expect, got, case when got = p_expect then 'PASS' else 'FAIL' end, why);
 end $f$;
 -- ===== migration 20260915c =====
 -- The create-ticket eligibility gate could be walked around by writing to the
@@ -345,6 +363,6 @@ select pg_temp.probe('insert: an active account still files normally', 'probe_su
      values ('aaaa0000-0000-4000-8000-000000000001','new','probe body','bug')$q$,
   'allowed');
 
-select name, expected, actual, verdict from pg_temp.probe_out;
+select name, expected, actual, verdict, detail from pg_temp.probe_out;
 
 rollback;

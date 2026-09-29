@@ -48,6 +48,9 @@ function server({ missingColumn = false, raceWinner = null, profileId = ADMIN } 
   const context = {
     Request, Response, Headers, URL, console: { ...console, warn() {} }, crypto,
     serve: fn => { handler = fn; },
+    // Admin replies are written as the caller (20260928160000); here the
+    // caller's PostgREST client is the same synthetic store.
+    createClient: () => db, Deno: { env: { get: () => 'synthetic' } },
     clerkProfile: async () => ({ profileId, isAdmin: true, email: 'admin@example.invalid', db }),
     admitActiveAccount: async () => ({ allowed: true }),
     notifyOperator() {},

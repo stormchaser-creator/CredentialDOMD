@@ -87,7 +87,29 @@ The approval timestamp is compared separately from `updated_at`: withdrawing and
 reapproving a ticket cannot authorize a reply begun under the previous approval.
 An originally admin-filed target must still belong to the same, still-admin profile.
 New input or changed approval withholds the reply; the saved draft remains available. Related
-context is never a publication target. Existing status-open behavior is preserved.
+context is never a publication target. Since 2026-09-28 a reply keeps the ticket's status
+(it never reopens a resolved or archived ticket) and is stored only with a
+`support_reply_verifications` row written in the same statement: the reply passed the fixed
+reply rules in `scripts/ticket-fix/claims.mjs`, and the row carries the body's sha256 and an
+HMAC keyed with the vault secret `support_reply_hmac_key`, which the database trigger from
+migration 20260928150000 checks. Interactive sessions use the same path through
+`scripts/ticket-fix/post-reply.mjs`. A result the host refuses is fed back to the same model
+session, at most twice (`--validate`, `--session`), before the run counts as rejected; parked
+tickets are left out of the queue; parking and a lock held over 4 h alert the owner.
+
+Review fixes (2026-09-28): every host step (`--schema`, `--load`, `--validate`, `--session`,
+`--record-and-reply`, `alert.mjs`, `reconcile.mjs`) runs from a copy of the host code taken
+from HEAD before any model runs (`TICKET_REPO` names the real checkout), and a run that changes
+the reply checks, the runner, the notifier, the support reply migrations or `send-ticket-reply`
+records nothing and holds every later run (`HOLD-host-code-changed`). `--load` and
+`--record-and-reply` need the per-run `TICKET_RUN_KEY`; the context file is signed with it, so
+the agent path cannot be driven by hand. The model's commits carry a per-run committer identity
+and `{{FIX_COMMIT}}` is the one such commit that touches a file cited in `verification.checks`.
+The free-text reply may not report a result (`unverified_claim`); its verification records
+`claims: "unbound"`. A model that fails or is killed by the alarm counts toward the breaker. The
+log carries rule names only; the full refusal stays in the private run directory. Stored
+replies are not emailed to members (author is the ticket owner); `--record-and-reply` prints
+`"emailed": false`.
 `publication: not_confirmed` intentionally prevents treating a saved draft as proof of
 successful delivery. Customer publication is not an exactly-once queue; the separate internal continuation
 queue below never retries a reply.
@@ -255,3 +277,199 @@ the private case records: the previous worker ignores them, and removing them
 would discard follow-through history. Do not replay messages or delete published
 replies. The application release and staged isolated runner need no separate
 database migration for this support-context change.
+
+## Stage 2: branch-only work, runner-owned gates, held merges (2026-09-28)
+
+`ticket-agent.sh` still owns the lock, the queue, the circuit breaker and the reply
+recording. Before any model runs it reads `ticket-work/AUTO_MERGE` once
+(`run.mjs auto-merge`), alerts the owner when that value changed since the last run, and
+passes it on. For each loaded ticket it runs `scripts/ticket-fix/run.mjs work`:
+
+1. **Worktree.** `git fetch origin main` in the owner's checkout (refs only), then a
+   worktree on a new branch `agent/<id8>-<runid>` under
+   `~/Library/Application Support/CredentialDOMD/ticket-work/worktrees/`. The owner's
+   checkout and branch are never touched. `node_modules` is an APFS clone (`cp -c`) of
+   the owner's when the lockfiles match, otherwise of `ticket-work/modules/<lock sha>`,
+   installed once with `npm ci --ignore-scripts`. It is never a link into the owner's.
+2. **Reproduction.** A separate session (`repro-prompt.md`) sees the ticket and the base
+   code and may write only under `tests/`. The host snapshots those tests onto base and
+   runs them in a fresh worktree of the snapshot; each must fail with `ERR_ASSERTION`
+   (a TypeError, a missing module or a pass is refused; one resume with the verdicts).
+   The files are hash-frozen.
+3. **Worker.** The fixer runs contained (`worker.mjs`): `--permission-mode dontAsk`,
+   `--setting-sources ""`, explicit allow and deny rules, `--strict-mcp-config`, a fresh
+   `CLAUDE_CONFIG_DIR` per session, an allowlisted environment (no database or GitHub
+   token; git cannot push; hooks off) and the model credential on a pipe
+   (`CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR`), not in the environment. It may edit
+   `src/`, `tests/` (not `tests/ticket-fix/`, not the frozen files), `public/` and
+   `landing/`, and run exactly `npm test`, `node --test tests/<file>` and
+   `npm run build:site`; it reads with Read, Grep and Glob, which only the worktree's
+   Read rule allows. The reply checks and their two repairs run as before; a
+   `verified_change` is refused while nothing the run changed is released.
+4. **G0 and commit.** A change to the runner's own code holds every later run (exit 4);
+   anything else outside the editable paths, a `.gitattributes`, `.gitignore` or
+   `.gitmodules`, a symbolic link, a nested repository or a NUL byte in a source file
+   refuses the run (exit 5). The host makes one commit (hooks off, author "CredentialDOMD
+   Ticket Agent", committer the run identity, trailers `Ticket:`, `Ticket-Agent-Run:`,
+   and `Gates:` once the gates pass).
+5. **G2 and G10.** `gates/tests.mjs` records `gates.json`, running every step in a fresh
+   detached worktree of the commit: the reproduction frozen and green, the declared tests
+   in the diff and green, every test failing when one product hunk is reverted, no
+   product line that reads the test runner or patches a global, `npm test` passing no
+   fewer tests than base (less removed, plus added declarations) and no untouched test
+   file passing fewer, counted from the gates reporter on the runner's own stdout (a
+   test's printed "pass" line counts for nothing), `npm run build:site`, eslint errors
+   per changed file not rising and `npm run lint:hooks`, the save-and-reload rule, no
+   git-ignored file left behind, and G10 (`gates/personal-data.mjs`: addresses, phone
+   numbers, NPI, DEA, SSN, images and base64 in tests, copied ticket text, the runner's
+   credential and token shapes; rule and file names only). Every host diff reads
+   attributes from base and forces text. Every existing test file the diff modifies or
+   deletes is listed for the reviewer. One resume of the worker with the failing check
+   names.
+6. **G11.** `protected-paths.json` (database, scripts, CI, dependencies, legal pages,
+   auth, admin and pricing code, and numeric literals in money modules) holds the merge
+   for the owner. `gates/owner-rules.mjs` builds the blast radius from `git grep` at the
+   commit and `sibling-paths.json`.
+7. **G4.** `review.mjs`: a fresh `claude-opus-5-5` session at effort high with Read, Grep
+   and Glob only, in a fresh worktree of the commit, given the thread, the diff,
+   `gates.json`, the protected report and the blast radius, never the worker's reply or
+   summary. Citations are checked against the commit (one fresh rerun for an invented
+   one); every met or partial item needs one into the change; any missed path, or a
+   member both excluded and missed, is not an approval. Billing, pay, invoice and sync
+   diffs get two reviews that must agree. A "revise" or a missed path resumes the worker
+   once.
+8. **G3.** With every gate passed and the review approving, the change merges only if
+   AUTO_MERGE was on when the scheduled run started (off by default). Otherwise the run is
+   HELD: `ticket-work/runs/<id8>-<runid>/HELD.txt` (with the commit's tree and the gates
+   digest), an owner alert and one command, `node scripts/ticket-fix/merge.mjs <run-id>`,
+   which prints the same tree and digest before it pushes. The merge is fast-forward
+   only; if main moved it rebases, re-runs the gates, and re-runs the review when
+   `git patch-id --stable` changed; it re-runs G10; a conflict, or a changed `.git/hooks`,
+   repository git config, `info/attributes` or global git config, holds it. It acts only
+   on `ticket-work/worktrees/<run id>` and the configured repository.
+9. **G7.** After a merge, `release.mjs` waits for `version.json` to name a build that
+   descends from the fix and checks, in the live bundle, the strings the gates found in
+   the head build (added, present) and the removed ones the head build no longer has.
+   `{{FIX_COMMIT}}` in an agent reply needs that record.
+
+A refused change still records the reply (it claims nothing) but counts toward the
+breaker, and the record step (`TICKET_CODE_OUTCOME`) keeps its follow-up pending: a
+change that is refused, held, merged but not verified, or failed its release completes
+no follow-up and marks no criterion `claimed_fixed`. A continuation for a ticket with a
+held change waits without a model run. One code change per scheduled run.
+
+**Containment (stage 2 review, 2026-09-28).** The permission rules bind only the
+model's own tool calls; a test file the worker writes runs whenever `npm test` or
+`node --test` runs it. So every session and every gate step runs under
+`/usr/bin/sandbox-exec` (`scripts/ticket-fix/sandbox.mjs`):
+
+- no read of the keychains, `~/.ssh`, `~/.config` (gh), `~/.gitconfig`, `~/.netrc`,
+  `~/.npmrc`, `~/.claude`, `.env` files, iCloud, Mail or Messages, the runner's state
+  (case records, ledgers, run records, the base-count cache, the run directory) or the
+  AUTO_MERGE flag;
+- no exec of `security`, `osascript`, `gh` or any git credential helper, and no lookup
+  of the security daemon;
+- writes only to the worktree, the session's own directory and its temporary directory
+  (so never the owner's checkout, its `.git`, its `node_modules`, `ticket-work` or the
+  global git config);
+- sessions keep outbound network for the API (not the launchd sockets that serve
+  ssh-agent); gates get loopback only and no DNS resolver.
+
+After every session and gate run the host also checks the shared git hooks and config,
+the worktree's `.git` link and origin main: a change, or an agent commit on main, holds
+every later run (exit 6, `HOLD-host-code-changed`); main moving for another reason alerts
+the owner. `tests/ticket-fix/containment-live.test.mjs` (`LIVE_CLI=1`) runs the installed
+CLI through the runner's own launcher, with no outer sandbox, and includes the two-step
+escape (write a test, run it with `node --test`).
+
+**What this still does not contain:** the macOS sandbox is the whole boundary. A session
+can still send what it can read (the worktree, the public code, anything the profile does
+not name) to any host, since it needs the network for the API; a test that forges the
+Node test runner's serialized events from inside a test file is not detected; and
+`sandbox-exec` is deprecated by Apple, though present on macOS 26. The container runner
+(`scripts/ticket-agent-isolated.mjs`) remains the stronger option and the owner's
+decision.
+
+## Stage 3: every ask tracked, and screenshots actually seen (2026-09-28)
+
+Design G1 and G6 with the critique's amendments (A3 for the reply, the G1 owner-decision and
+non-ask amendments). The runner keeps its lock, queue, breaker and reply recording; stage 3
+adds three host steps and changes what the worker returns.
+
+1. **Attachments (G6).** After `--load`, `ticket-agent.sh` runs
+   `scripts/ticket-fix/attachments.mjs fetch` with the management token, before any session.
+   It lists the project's API keys through the management API, keeps the service key in that
+   process's memory only, and downloads every attachment on the target ticket and its
+   messages, plus the newest six on related tickets, from the private `documents` bucket. A
+   path outside `tickets/<ticket>/` (or `tickets/<ticket>/replies/`) is never fetched. The
+   bytes decide the type (PNG, JPEG, GIF, WebP, HEIC/HEIF, PDF; anything else is refused),
+   HEIC becomes PNG and images over 2000 px are shrunk with `/usr/bin/sips`, files over 10 MB
+   are refused, and each file is written `att-<n>.<ext>` (0600) into
+   `$TMPDIR/credentialdomd-attachments.XXXXXX/<ticket>/`, next to the run directory and
+   removed with it (and after each ticket's run). The host's manifest goes to
+   `<run dir>/<ticket>-attachments.json`. The log carries the ticket id and storage path
+   only. A failed download is `unavailable` with a reason, internal work for the next run,
+   never a request to the customer.
+   - The attachment root is not inside the run directory because every session is denied
+     the run directory, and a deny rule beats an allow rule. Sessions of this ticket may Read
+     its folder (permission rule and a read-only `readable` entry in the macOS sandbox
+     profile) and are denied every folder next to it; the root is denied to the gates.
+   - "reviewed" is set only when the worker's own tool events show a successful Read of that
+     exact path. Every session now reports on `--output-format stream-json`; the host reads
+     the Read calls and their results from the CLI's stdout, which nothing the session runs
+     can write to (the on-disk transcript is in a directory the session can write, so it is
+     not used). Until every delivered attachment on the ticket is read, the worker's result is
+     refused and it is resumed with the paths. It gives one observation per attachment it
+     read (`attachment_observations`), and an item whose message carried a screenshot must be
+     in that observation's `supports`. The reviewer (or, with no change to review, a
+     read-only `confirm` session) opens the same files and agrees or disputes each
+     observation; a disputed or unjudged one is not an approval of a change, and the items it
+     supports are not shown as done.
+2. **Checklist (G1).** `run.mjs` runs an extraction session (`claude-opus-5-5`, no tools,
+   `--input-format stream-json` with the screenshots inline) over every customer message no
+   extraction has read. Each item is `{id AC-n, requirement, kind, source_id, quote,
+   surface}`; the host checks each quote word for word against that message (customer
+   sources on the target ticket only), the requirement against the fixed reply rules (it is
+   shown to the customer), and, on the owner's own ticket, that an `owner_decision` is about
+   price or money constants, legal copy or clinical coding (CPT, wRVU, modifiers,
+   bundling). A keyword for those topics makes the extractor confirm once; it never
+   reclassifies. Problems go back to the session once; a second refusal is exit 7, and the
+   shell parks the ticket and alerts the owner, with no reproduction or worker run. The
+   checklist is frozen in `ticket-context/checklists/<ticket>.json` (0600, digest-checked):
+   later runs only add items for new messages, and a rewrite or deletion is refused.
+   Sentences the extractor judged not to be asks go to the reviewer or the confirmer for a
+   verdict; one judged an ask, and any missed ask whose quote checks out, becomes a new item.
+   Sentences no item quotes are shown to them as hints.
+3. **The host's decision and the reply (A3).** The worker returns `reply: {opening, claims,
+   closing}` (claims `{ac_id, text, evidence: test | file}`), one `checklist` entry per
+   frozen item and its observations; it writes no free prose for the customer and no ids.
+   After the gates, the review and the merge decision, `run.mjs` verifies each claim itself
+   (`scripts/ticket-fix/stage3.mjs`: a test passing in this run's gates once the change is
+   released and verified, or run by the host at a base the live build contains; quoted text
+   at a cited line in the live build), and decides each item's state from its own artifacts
+   (`checklist.mjs finalStates`): an owner decision waits on the owner; a bug or change is
+   done only on a verified claim on a test bound to that item (a reproduction or declared
+   test, this run's or a released run's the reviewer found met); a change held for release
+   is "in progress"; a refused change is "not done"; any other unproven "done" is "partly
+   done, not confirmed yet". It writes `<run dir>/<ticket>-stage3.json`, which the shell
+   passes to `--record-and-reply` (`TICKET_STAGE3_FILE`). The reply is rendered from it: a
+   fixed opening, "What we confirmed:" with the verified claims only, the questions, "Where
+   each part stands:" with one line per item, and a fixed closing. The record step refuses a
+   free-text result and a result without a stage 3 record for that ticket. The case record
+   keeps the host's state per item and the host's own follow-ups (an attachment it could not
+   download, a change waiting for release, an item added after the worker ran).
+
+The staged isolated runner keeps its free-text result (`LEGACY_RESULT_SCHEMA`).
+
+Tests: `tests/ticket-fix/checklist.test.mjs`, `attachments.test.mjs`, `stage3-run.test.mjs`,
+`stage3-reply.test.mjs`, `stage3-runner.test.mjs`, the full-host shell test (an `attachment`
+scenario: download, inline image, a refused answer with no Read, the resume that reads it,
+the confirmer, the verification recording it as reviewed, the files gone), and
+`containment-live.test.mjs` (`LIVE_CLI=1`: the installed CLI reads this ticket's attachment
+and is refused the neighbour's and any write; the extractor gets no tool and its image inline).
+
+**Not done in this stage:** after the owner merges a held change, nothing tells the customer
+it is live; the continuation that confirms it is action-only and never publishes (the case
+record keeps it as pending work). The attachment download needs the service key from the
+management API's key listing; the endpoint's shape was not called against production while
+building this (only its documented forms, with a local stub).

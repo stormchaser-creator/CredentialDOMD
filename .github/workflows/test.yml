@@ -1,0 +1,52 @@
+name: Tests
+
+# Runs the whole suite on every push and every pull request, on any branch and
+# any path. Deploys nothing: deploy-gh-pages.yml still owns the release.
+#
+# Before 2026-09-28 the suite ran only inside the deploy, whose path filter
+# leaves out scripts/ticket-agent*, so runner and validator changes shipped
+# with no CI at all (d3296be0), and nothing ran on a pull request.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Same layout as the deploy (checked out into a directory named src), so
+      # a path assumption that passes here passes there.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: src
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install deps
+        working-directory: src
+        run: npm ci --legacy-peer-deps
+
+      # PG_BIN points the PostgreSQL integration tests at the runner's server;
+      # if it is missing they skip with a message. LC_ALL=C matches the local
+      # run (the macOS postmaster needs it; it is harmless on Linux).
+      - name: Run tests
+        working-directory: src
+        run: |
+          PG_BIN="$(pg_config --bindir 2>/dev/null || true)"
+          echo "PG_BIN=${PG_BIN:-<not found, PostgreSQL tests will skip>}"
+          LC_ALL=C PG_BIN="$PG_BIN" npm test

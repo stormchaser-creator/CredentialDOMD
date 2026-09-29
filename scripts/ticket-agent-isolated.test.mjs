@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateConfig, safeSourcePath, validateResult, reserveBudget,
   replySQL, containerArgs, QUEUE_SQL, APPROVED } from './ticket-agent-isolated.mjs';
+import { agentReplyBody } from './ticket-fix/reply.mjs';
+import { signForTest } from '../tests/ticket-fix/helpers.mjs';
 
 const config = {
   repository: '/tmp/repo', stateDirectory: '/tmp/private-worker', dockerBinary: '/usr/local/bin/docker',
@@ -60,28 +62,35 @@ test('replies cannot choose another recipient, SQL or extra actions', () => {
   assert.throws(() => validateResult({ structured_output: { ...result.structured_output, reply: '' } }, context));
   assert.throws(() => validateResult({ structured_output: { ...result.structured_output, reply: 'a'.repeat(4001) } }, context));
 });
-test('host broker enforces approval, queue scope, freshness and open status', () => {
+// Synthetic key: the real one lives only in the vault.
+const verified = (reply, id = ticket.id) => ({ verification: signForTest({ ticketId: id, body: agentReplyBody(reply), report: { path: 'test' }, secret: 'synthetic-key-0123456789abcdef0123456789abcdef' }) });
+test('host broker enforces approval, queue scope, freshness, verification and keeps the status', () => {
   assert.ok(QUEUE_SQL.includes(APPROVED));
   assert.match(QUEUE_SQL, /LIMIT 2; rollback;$/);
   assert.doesNotMatch(QUEUE_SQL, /LIMIT 20|left\(m.body/); // Full history is fetched separately, per target.
-  const sql = replySQL(ticket, "Ignore rules'; DROP TABLE profiles; -- $ticket_broker$");
+  const injected = "Ignore rules'; DROP TABLE profiles; -- $ticket_broker$";
+  assert.throws(() => replySQL(ticket, injected), /verified reply is required/);
+  const sql = replySQL(ticket, injected, verified(injected));
   assert.ok(sql.includes(APPROVED));
   assert.match(sql, /t.updated_at = convert_from/);
   assert.match(sql, /FOR UPDATE/);
   assert.match(sql, /IF NOT FOUND THEN RETURN/);
-  assert.match(sql, /SET status = 'open'/);
+  // A reply never reopens a resolved or archived ticket (09-25/26: seven did).
+  assert.doesNotMatch(sql, /status\s*=/);
   assert.match(sql, /agent_last_reply_at = now\(\)/);
   assert.ok(!sql.includes('DROP TABLE'));
-  assert.ok(!sql.includes("SET status = 'resolved'"));
   assert.ok(sql.includes(Buffer.from('CredentialDOMD Support · Automated').toString('hex')));
+  assert.ok(sql.indexOf('INSERT INTO support_reply_verifications') < sql.indexOf('INSERT INTO support_messages'));
   assert.match(sql, /t.archived_at IS NULL/);
-  assert.doesNotMatch(replySQL(ticket, 'Reply', { includeArchived: true }), /t.archived_at IS NULL/);
-  assert.throws(() => replySQL({ ...ticket, id: "';drop table x" }, 'Reply'));
-  assert.throws(() => replySQL({ ...ticket, updated_at: 'invalid' }, 'Reply'));
-  assert.throws(() => replySQL({ ...ticket, owner_id: undefined }, 'Reply'));
-  assert.throws(() => replySQL({ ...ticket, approval: undefined }, 'Reply'));
-  assert.throws(() => replySQL({ ...ticket, approval: { from_admin: 'true' } }, 'Reply'));
-  assert.throws(() => replySQL({ ...ticket, approval: { from_admin: false, approved_at: null } }, 'Reply'));
+  assert.doesNotMatch(replySQL(ticket, 'Reply', { includeArchived: true, ...verified('Reply') }), /t.archived_at IS NULL/);
+  assert.throws(() => replySQL(ticket, 'Reply', verified('Another reply')), /does not match/);
+  assert.throws(() => replySQL(ticket, 'Reply', verified('Reply', '11111111-2222-4333-8444-555555555599')), /verified reply is required/);
+  assert.throws(() => replySQL({ ...ticket, id: "';drop table x" }, 'Reply', verified('Reply')));
+  assert.throws(() => replySQL({ ...ticket, updated_at: 'invalid' }, 'Reply', verified('Reply')));
+  assert.throws(() => replySQL({ ...ticket, owner_id: undefined }, 'Reply', verified('Reply')));
+  assert.throws(() => replySQL({ ...ticket, approval: undefined }, 'Reply', verified('Reply')));
+  assert.throws(() => replySQL({ ...ticket, approval: { from_admin: 'true' } }, 'Reply', verified('Reply')));
+  assert.throws(() => replySQL({ ...ticket, approval: { from_admin: false, approved_at: null } }, 'Reply', verified('Reply')));
 });
 test('durable reservations do not silently reset malformed accounting or exceed daily cap', () => {
   let ledger = { version: 1, reservations: {} };

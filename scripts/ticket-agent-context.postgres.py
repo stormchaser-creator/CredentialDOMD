@@ -4,8 +4,21 @@ import json, os, subprocess, tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BIN = Path('/opt/homebrew/opt/postgresql@17/bin')
-ENV = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
+BIN = Path(os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
+# LC_ALL: on macOS the postmaster aborts at startup without a valid locale.
+ENV = {**{k: v for k, v in os.environ.items() if not k.startswith('PG')}, 'LC_ALL': 'C'}
+MIGRATION = (ROOT / 'supabase/migrations/20260928150000_support_reply_verifications.sql').read_text()
+HARDENING = (ROOT / 'supabase/migrations/20260928160000_support_reply_hardening.sql').read_text()
+# Supabase's Vault and pgcrypto, reduced to what the migration and trigger use.
+PLATFORM = '''
+create role anon nologin; create role authenticated nologin; create role service_role nologin;
+create schema extensions; create extension pgcrypto with schema extensions;
+create schema vault;
+create table vault.secrets(id uuid primary key default gen_random_uuid(),name text unique,description text not null default '',secret text not null);
+create view vault.decrypted_secrets as select id,name,description,secret,secret as decrypted_secret from vault.secrets;
+create function vault.create_secret(new_secret text,new_name text default null,new_description text default '',new_key_id uuid default null)
+  returns uuid language sql as $$insert into vault.secrets(secret,name,description) values(new_secret,new_name,new_description) returning id$$;
+'''
 A = '10000000-0000-4000-8000-000000000001'
 B = '10000000-0000-4000-8000-000000000002'
 T = '20000000-0000-4000-8000-000000000001'
@@ -18,7 +31,7 @@ def check(name, okay):
     if not okay: raise AssertionError(name)
     checks.append(name)
 def js(expression):
-    source = "import {targetSQL,historySQL,messagesSQL,continuationSQL,queueSQL} from './scripts/ticket-agent-context.mjs';import {replySQL} from './scripts/ticket-agent-isolated.mjs';console.log(JSON.stringify(" + expression + "));"
+    source = "import {targetSQL,historySQL,messagesSQL,continuationSQL,queueSQL} from './scripts/ticket-agent-context.mjs';import {replySQL} from './scripts/ticket-agent-isolated.mjs';import {agentReplyBody} from './scripts/ticket-fix/reply.mjs';import {signForTest} from './tests/ticket-fix/helpers.mjs';console.log(JSON.stringify(" + expression + "));"
     return json.loads(subprocess.check_output(['node','--input-type=module','-e',source],cwd=ROOT,text=True,env=ENV))
 with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
     folder=Path(tmp);sock=folder/'sock';sock.mkdir()
@@ -35,8 +48,10 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         assert query.startswith('begin read only; ') and query.endswith('; rollback;')
         inner=query[len('begin read only; '):-len('; rollback;')]
         return json.loads(sql("begin read only; select coalesce(json_agg(x),'[]'::json) from ("+inner+") x; rollback;"))
-    def reply(version=VERSION):return js(f"replySQL({{id:'{T}',owner_id:'{A}',updated_at:'{version}',approval:{{from_admin:false,approved_at:'{approved_at}'}}}},'Your earlier answer is recorded.')")
+    def verified(ticket,text):return f"{{verification:signForTest({{ticketId:'{ticket}',body:agentReplyBody('{text}'),report:{{path:'test'}},secret:'{key}'}})}}"
+    def reply(version=VERSION):return js(f"replySQL({{id:'{T}',owner_id:'{A}',updated_at:'{version}',approval:{{from_admin:false,approved_at:'{approved_at}'}}}},'Your earlier answer is recorded.',{verified(T,'Your earlier answer is recorded.')})")
     try:
+        sql(PLATFORM)
         sql(f"""
         create table profiles(id uuid primary key,is_admin boolean default false);
         create table support_tickets(id uuid primary key,user_id uuid references profiles(id),subject text,body text,status text,created_at timestamptz,updated_at timestamptz,archived_at timestamptz,agent_last_reply_at timestamptz,agent_approved_at timestamptz,context_payload jsonb);
@@ -54,6 +69,11 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
           ('30000000-0000-4000-8000-000000000001','{R}','{A}','Yes the Add button works',false,'2026-09-18',null,null),
           ('30000000-0000-4000-8000-000000000002','{R}','{A}','Claimed fixed by legacy support',true,'2026-09-18','tickets/{R}/proof.pdf',null);
         """)
+        # The legacy rows above predate the rule; everything after it is enforced.
+        sql(MIGRATION)
+        sql(HARDENING)
+        key=sql("select decrypted_secret from vault.decrypted_secrets where name='support_reply_hmac_key'")
+        check('migration creates a random verification key',len(key)==64)
         target=rows(js(f"targetSQL('{T}')"));check('approved target selected',len(target)==1 and target[0]['id']==T)
         check('unapproved ticket cannot become action target',rows(js(f"targetSQL('{U}')"))==[])
         history=rows(js(f"historySQL('{A}')"))
@@ -103,17 +123,21 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         check('newer target input prevents stale reply',sql(reply())=='')
         sql(f"update support_tickets set updated_at='{VERSION}',agent_approved_at='{approved_at}' where id='{T}'")
         result=sql(reply());check('current approved target can receive exactly one reply',len(result)==36)
-        stored=json.loads(sql(f"select row_to_json(x) from (select body,author_id from support_messages where id='{result}')x"))
+        stored=json.loads(sql(f"select row_to_json(x) from (select body,author_id,verification_id from support_messages where id='{result}')x"))
+        check('the stored reply carries its verification',stored['verification_id'] is not None and sql(f"select count(*) from support_reply_verifications where id='{stored['verification_id']}' and used_by_message_id='{result}'")=='1')
         check('legacy-compatible reply explicitly labels automation',stored['body'].startswith('CredentialDOMD Support · Automated\n\n'))
         check('no fabricated actor identity or new schema dependency',stored['author_id']==A)
         check('after-insert bump and host stamp coexist',sql(f"select status||'|'||(agent_last_reply_at is not null)::text from support_tickets where id='{T}'")=='open|true')
         check('same stale envelope cannot duplicate reply',sql(reply())=='')
         check('related context never gets a new reply',sql(f"select count(*) from support_messages where ticket_id='{R}'")=='2')
         check('no other customer changed',sql(f"select count(*) from support_messages where ticket_id='{X}'")=='0')
-        admin_reply=js(f"replySQL({{id:'{X}',owner_id:'{B}',updated_at:'{VERSION}',approval:{{from_admin:true,approved_at:null}}}},'Synthetic admin-owned reply.')")
+        unverified=run(BIN/'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-h',sock,'-p','56431','-U','postgres','-d','postgres',input=f"insert into support_messages values(gen_random_uuid(),'{T}','{A}','Hand-written operator reply',true,now(),null,null)")
+        check('an operator insert without a verification is refused by the database',unverified.returncode!=0 and 'need a verified reply' in unverified.stderr)
+        admin_reply=js(f"replySQL({{id:'{X}',owner_id:'{B}',updated_at:'{VERSION}',approval:{{from_admin:true,approved_at:null}}}},'Synthetic admin-owned reply.',{verified(X,'Synthetic admin-owned reply.')})")
         check('lost admin status cannot fall back to an unrelated nonnull approval',sql(admin_reply)=='')
-        sql(f"update profiles set is_admin=true where id='{B}';update support_tickets set agent_approved_at=null where id='{X}'")
+        sql(f"update profiles set is_admin=true where id='{B}';update support_tickets set agent_approved_at=null,status='resolved' where id='{X}'")
         check('still-admin filing can receive a normal reply without explicit approval',len(sql(admin_reply))==36)
+        check('a reply never reopens a resolved ticket',sql(f"select status from support_tickets where id='{X}'")=='resolved')
         print(f'{len(checks)} synthetic PostgreSQL checks passed')
         for name in checks:print('  ok '+name)
     finally:

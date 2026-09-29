@@ -33,8 +33,9 @@ the usual subscription path. No key was created, rotated, or copied for this cha
   integration and MCP are disabled. The CLI uses `dontAsk`, never permission bypass.
 - The model cannot send a reply directly. The host broker validates its JSON and
   can post only to the captured ticket, after rechecking approval and `updated_at`.
-  SQL text is encoded, never interpolated as executable model output. It leaves
-  the ticket open; Eric resolves it.
+  SQL text is encoded, never interpolated as executable model output. It keeps
+  the ticket's status (a reply never reopens it) and stores the reply only with a
+  verification row (scripts/ticket-fix/reply.mjs, migration 20260928150000).
 - Original and modified source snapshots plus a private review summary are retained
   outside the checkout. The runner never executes model-edited code, installs its
   dependencies, merges it, or pushes it. A person or independent reviewer verifies
@@ -79,7 +80,8 @@ the usual subscription path. No key was created, rotated, or copied for this cha
    support-message trigger coexist. No live SQL was executed for this change.
 7. After those checks, enable replies and update the one scheduled entry point to
    invoke the new runner. Preserve both existing schedule times and shared lock.
-   Observe an approved test reply landing with status open. Only then retire the
+   Observe an approved test reply landing with its status unchanged and a
+   verification_id. Only then retire the
    old entry point. Do not leave the old runner active as a failure fallback.
 
 A failed canary means the old working service is still in place and the replacement

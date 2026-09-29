@@ -19,12 +19,15 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = Path('/Users/ew/.local/share/fnm/node-versions/v24.15.0/installation/bin/claude')
 NODE = Path(shutil.which('node')).resolve()
 TARGET = '20000000-0000-4000-8000-000000000001'
+# The hourly runner's structured result (stage 3): reply parts the host
+# renders, one checklist entry per frozen item, attachment observations.
 result = {
-    'reply': 'Your existing answer is recorded. Investigation remains in progress.',
+    'reply': {'opening': 'update', 'claims': [], 'closing': 'follow_up'},
     'summary': 'Wholly synthetic CLI compatibility fixture.',
     'needs_owner_review': False,
+    'checklist': [{'ac_id': 'AC-1', 'state': 'not_done', 'remaining': 'look into the synthetic report', 'tests': []}],
+    'attachment_observations': [],
     'assessment': {
-        'acceptance_criteria': [{'requirement': 'Review the synthetic report', 'state': 'open', 'evidence_ids': [TARGET]}],
         'answered_questions': [], 'prior_fixes': [], 'questions': [],
         'follow_up': [{'work': 'Investigate synthetic issue', 'owner': 'support_worker', 'next_action': 'Review synthetic fixture'}],
         'completed_follow_up': [],
@@ -124,8 +127,10 @@ with tempfile.TemporaryDirectory(prefix='support-cli-contract-', dir='/private/t
     try:
         env = {**base_env, 'ANTHROPIC_BASE_URL': f'http://127.0.0.1:{port}'}
         version = subprocess.check_output(prefix + [str(CLI), '--version'], env=env, cwd=folder, text=True, timeout=10).strip()
+        # The runner's containment flags (scripts/ticket-fix/worker.mjs): dontAsk,
+        # never a skipped permission check.
         command = prefix + [str(CLI), '--bare', '-p', '--model', 'claude-sonnet-5',
-                            '--dangerously-skip-permissions', '--output-format', 'json', '--json-schema', json.dumps(schema),
+                            '--permission-mode', 'dontAsk', '--output-format', 'json', '--json-schema', json.dumps(schema),
                             '--setting-sources', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
                             '--tools', '', '--disable-slash-commands', '--no-chrome', '--no-session-persistence',
                             '--system-prompt', 'This is an offline synthetic structured output test. Use StructuredOutput only.']
@@ -142,7 +147,8 @@ with tempfile.TemporaryDirectory(prefix='support-cli-contract-', dir='/private/t
             "let raw='';for await(const chunk of process.stdin)raw+=chunk;const output=JSON.parse(raw);"
             "validateAssessment(output.structured_output,{target_id:" + json.dumps(TARGET) +
             ",run_mode:'reply',history_complete:true,tickets:[{id:" + json.dumps(TARGET) +
-            ",messages:[]}],prior_reviews:[],attachments:[]});"],
+            ",messages:[]}],prior_reviews:[],attachments:[]},{stage3:{checklist:{items:[{id:'AC-1',requirement:'Review the synthetic report',kind:'question',source_id:" + json.dumps(TARGET) +
+            ",quote:'Synthetic report',surface:'support thread'}]},attachments:[]}});"],
             input=completed.stdout, env=base_env, cwd=folder, capture_output=True, text=True, timeout=10)
         assert validation.returncode == 0, 'Actual installed CLI output failed trusted host validation'
         print('Installed CLI structured output exercised successfully with an OS-confined loopback mock API')
