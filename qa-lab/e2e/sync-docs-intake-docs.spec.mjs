@@ -171,7 +171,7 @@ test('receipts: one filed as an agency expense, one as a deduction, each with it
   const fee = syntheticPdf('QA synthetic license fee receipt 150.00');
   let expense, deduction;
 
-  await qa.feature('DOCS-006', 'A rideshare receipt billed to an agency (Work > Expenses)', async () => {
+  await qa.feature('DOCS-006', 'A rideshare receipt billed to an agency (Practice > Expenses)', async () => {
     await scanAs(ride, { documentType: 'receipt', confidence: 'high', extracted: { merchant: 'QA Rideshare Co', date: '2026-09-20', total: 42.5, currency: 'USD', category: 'Rideshare / Taxi', description: 'QA ride to the hospital' } });
     await openDocuments(page);
     await chooseFiles(page, upload(page), [{ name: 'qa-ride-receipt.pdf', mimeType: 'application/pdf', buffer: ride }]);
@@ -186,7 +186,8 @@ test('receipts: one filed as an agency expense, one as a deduction, each with it
     const linked = await waitFor('the receipt link', async () => docRow(profile.id, 'qa-ride-receipt.pdf')?.linked_to === `travelExpenses:${expense?.id}` || null, { timeoutMs: 15000 }).catch(() => false);
     qa.check('the receipt is linked to the expense', !!linked, docRow(profile.id, 'qa-ride-receipt.pdf')?.linked_to);
     const said = await pageText(page);
-    qa.check('the app says where it went ("Work > Expenses, billable to QA Locum Agency")', /to Work > Expenses, billable to QA Locum Agency/.test(said));
+    // The notice names Practice > Expenses since 2dc41002 (receipt and statement copy).
+    qa.check('the app says where it went ("Practice > Expenses, billable to QA Locum Agency")', /to Practice > Expenses, billable to QA Locum Agency/.test(said), said.match(/Saved .{0,160}/)?.[0] || said.slice(0, 200));
     await page.getByRole('button', { name: 'Open Expenses' }).click().catch(() => {});
     await sleep(1500);
     const exText = await pageText(page);

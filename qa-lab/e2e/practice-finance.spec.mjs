@@ -227,18 +227,21 @@ test('practice deductions and card statements: manual lines, year filter, CSV an
     let text = (await m.innerText()).replace(/\s+/g, ' ');
     await qa.shot('statement review');
     qa.check('three charges selected, the payment left out: 3 of 4, $225.00', /3 of 4 lines selected · \$225\.00/.test(text), text.slice(0, 200));
-    const hotel = m.locator('div').filter({ hasText: /^QA SUITES HOTEL DENVER/ }).filter({ has: page.getByText('Bill to agency instead (Work Expenses)') }).last();
-    await hotel.locator('label', { hasText: 'Bill to agency instead (Work Expenses)' }).locator('input').check();
+    // The row option and the done line name Practice > Expenses since 2dc41002.
+    const BILL = 'Bill to agency instead (Practice > Expenses)';
+    const hotel = m.locator('div').filter({ hasText: /^QA SUITES HOTEL DENVER/ }).filter({ has: page.getByText(BILL) }).last();
+    await hotel.locator('label', { hasText: BILL }).locator('input').check();
     const agency = await hotel.getByPlaceholder('Agency name').inputValue();
     qa.check('billing to the agency fills the agency of the agreement in force that day', agency === 'QA Import Agency', agency);
     await m.getByRole('button', { name: /^Save 3 lines, \$225\.00$/ }).click();
     const done = await m.getByText(/Added 2 deduction lines to the ledger/).waitFor({ timeout: 10000 }).then(() => true, () => false);
-    qa.check('the import says 2 deduction lines and 1 row to Work Expenses', done && /1 row was sent to Work Expenses/.test((await m.innerText()).replace(/\s+/g, ' ')));
+    const doneText = (await m.innerText()).replace(/\s+/g, ' ');
+    qa.check('the import says 2 deduction lines and 1 row to Practice > Expenses', done && /1 row was sent to Practice > Expenses/.test(doneText), doneText.match(/Added \d+ deduction[^]{0,240}/)?.[0]);
     await page.keyboard.press('Escape');
     const imported = await waitFor('the imported lines', async () => { const r = ledger().filter((x) => x.source === 'card import'); return r.length >= before + 2 ? r : null; }, { timeoutMs: 15000 }).catch(() => ledger().filter((x) => x.source === 'card import'));
     qa.check('deductibles rows with source "card import": the code hosting and the parking', imported.length === before + 2 && imported.some((x) => /GITHUB/.test(x.description) && Number(x.amount) === 12) && imported.some((x) => /PARKING/.test(x.description) && Number(x.amount) === 24), imported);
     const exp = rows(`select vendor, amount, agency, notes from public.travel_expenses where user_id = '${profile.id}'`);
-    qa.check('the hotel became a Work expense billable to the agency, not a deduction', exp.length === 1 && Number(exp[0].amount) === 189 && exp[0].agency === 'QA Import Agency' && !imported.some((x) => /HOTEL/.test(x.description)), exp);
+    qa.check('the hotel became an expense (Practice > Expenses) billable to the agency, not a deduction', exp.length === 1 && Number(exp[0].amount) === 189 && exp[0].agency === 'QA Import Agency' && !imported.some((x) => /HOTEL/.test(x.description)), exp);
 
     // The same file again.
     m = await importFile('qa-card-statement.csv', statement);

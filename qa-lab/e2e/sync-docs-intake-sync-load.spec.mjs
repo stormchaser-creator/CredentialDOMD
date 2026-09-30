@@ -51,7 +51,12 @@ test('records that fail to load: a clear screen with Try again, never an empty a
     const again = await screen.waitFor({ timeout: 60000 }).then(() => true, () => false);
     qa.check('Try again while it still fails shows the same screen', again);
     qa.check('nothing was deleted on the server meanwhile', !!row(`select id from public.publications where user_id = '${profile.id}'`));
-    const report = row(`select count(*)::int as n from public.client_errors where (auth_user_id = '${user.id}' or profile_id = '${profile.id}') and message like '%DATA-LOAD-UNAVAILABLE%'`);
+    // The stop is reported about a second later (reportUnlessLeaving, src/lib/errorReport.js,
+    // bc131c48): a report still held when the page unloads is dropped, since a reload's own aborts
+    // are not failures. Try again is a reload, so wait for this screen's report to arrive while
+    // the page stays open, and only then tap Try again.
+    const reportsSql = `select count(*)::int as n from public.client_errors where (auth_user_id = '${user.id}' or profile_id = '${profile.id}') and message like '%DATA-LOAD-UNAVAILABLE%'`;
+    const report = await waitFor('the DATA-LOAD-UNAVAILABLE report', async () => { const r = row(reportsSql); return r?.n > 0 ? r : null; }, { timeoutMs: 8000, intervalMs: 500 }).catch(() => row(reportsSql));
     qa.check('the app reports the stop with its fixed reference (client_errors)', (report?.n || 0) > 0, `${report?.n} report(s)`);
     await unblock();
     await page.getByRole('button', { name: 'Try again' }).click();

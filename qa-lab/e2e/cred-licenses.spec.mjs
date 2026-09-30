@@ -246,8 +246,12 @@ test('licenses: matrix, renewal info, NPI import, filter tabs, desk sorting, sca
     await waitForMemberApp(page);
     await openCredentials(page, 'Licenses');
     let t = await deskTable(page);
-    const cols = t.headers.slice(1, 8); // after the status cell: Type, State, Number, Issued, Expires, Status, Cost
-    qa.check('columns Type, State, Number, Issued, Expires, Status, Cost', cols.join(',') === 'Type,State,Number,Issued,Expires,Status,Cost', t.headers);
+    // The lab's desk is 1280 x 900 at text size M. There the table fits its columns to its width
+    // (35c8fd16, 382df87f; pinned by tests/desk-table-fit.test.mjs): Cost and Issued step aside,
+    // and State and Status are kept by making the actions compact. The Licenses table is capped
+    // at about 800px, so no wider screen brings Issued and Cost back; the row's detail view has them.
+    const cols = t.headers.slice(1); // after the status cell
+    qa.check('columns Type, State, Number, Expires, Status, then Actions (Issued and Cost step aside at 1280, text size M)', cols.join(',') === 'Type,State,Number,Expires,Status,Actions', t.headers);
     const col = (name) => t.headers.indexOf(name);
     const active = (tb) => tb.rows.filter((r) => r.group === 0);
     const exp = active(t).map((r) => sortKey('Expires', r.cells[col('Expires')]));
@@ -255,7 +259,7 @@ test('licenses: matrix, renewal info, NPI import, filter tabs, desk sorting, sca
     const colourOf = (n) => hue(t.rows.find((r) => r.cells[col('Number')] === n)?.colors[col('Expires')]);
     qa.check('expired shows red, due within 30 days amber, far off green, historical grey', colourOf('QA-ACLS-9') === 'red' && colourOf('QA-DEA-CO77') === 'amber' && colourOf('QA-AZ-3001') === 'green' && colourOf('QA-TX-OLD') === 'grey',
       { expired: colourOf('QA-ACLS-9'), soon: colourOf('QA-DEA-CO77'), far: colourOf('QA-AZ-3001'), historical: colourOf('QA-TX-OLD'), raw: t.rows.map((r) => `${r.cells[col('Number')]}:${r.colors[col('Expires')]}`) });
-    for (const name of ['Expires', 'Type', 'State', 'Number', 'Issued', 'Status', 'Cost']) {
+    for (const name of ['Expires', 'Type', 'State', 'Number', 'Status']) {
       const header = page.locator('table thead th').filter({ hasText: new RegExp(`^${name}`, 'i') }).first();
       const results = [];
       for (const dir of name === 'Expires' ? ['desc', 'asc'] : ['asc', 'desc']) {

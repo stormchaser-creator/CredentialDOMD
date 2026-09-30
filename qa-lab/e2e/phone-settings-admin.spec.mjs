@@ -152,14 +152,23 @@ for (const width of [375, 390]) {
       }, { soft: true });
 
       await qa.feature('SETTINGS-007', 'A phone network that delivers one keystroke\'s save late: the field must still keep the whole word', async () => {
-        // Mobile networks do not keep requests in order. Here the save of the next-to-last
-        // keystroke is held 1.5 s (the others go straight through), as a slow cell hop would.
+        // Mobile networks do not keep requests in order. Here the first keystroke's save is held
+        // 1.5 s (the others go straight through), as a slow cell hop would. Since 5f4290ef one
+        // profile's saves go out one at a time and a waiting save whose fields a later save also
+        // carries is skipped, so the partial values in between may never be sent at all: the hold
+        // is on whichever cv_highlights PATCH goes out first. Were the saves still sent side by side,
+        // that held first letter would land last and overwrite the whole line.
         const final = 'QA phone highlight';
-        const partial = final.slice(0, -1);
         let held = 0;
+        const sent = [];
         const handler = async (route) => {
           const r = route.request();
-          if (r.method() === 'PATCH' && (r.postData() || '').includes(`"cv_highlights":"${partial}"`)) { held += 1; await sleep(1500); }
+          let body = null;
+          if (r.method() === 'PATCH') { try { body = JSON.parse(r.postData() || 'null'); } catch { body = null; } }
+          if (body && typeof body === 'object' && Object.hasOwn(body, 'cv_highlights')) {
+            sent.push(body.cv_highlights);
+            if (sent.length === 1) { held += 1; await sleep(1500); }
+          }
           return route.fallback();
         };
         await page.route('**/rest/v1/profiles*', handler);
@@ -177,16 +186,19 @@ for (const width of [375, 390]) {
         await phoneMore(page, 'Profile & settings');
         await sleep(800);
         const shown = await page.getByPlaceholder('e.g. Author of two books').first().inputValue();
-        qa.check('one keystroke\'s save was delivered late', held === 1, `${held} held`);
-        qa.check('profiles.cv_highlights keeps the whole typed text', stored === final, `typed "${final}", stored "${stored}", shown after reload "${shown}"`);
-        if (held === 1 && stored === partial) {
+        const saves = `${sent.length} save(s) sent: ${JSON.stringify(sent.length > 4 ? [...sent.slice(0, 2), '...', ...sent.slice(-2)] : sent)}`;
+        qa.check('the first keystroke\'s save was delivered late', held >= 1, `${held} held; ${saves}`);
+        qa.check('the last save sent carries the whole typed text', sent.at(-1) === final, saves);
+        qa.check('profiles.cv_highlights keeps the whole typed text', stored === final, `typed "${final}", stored "${stored}"; ${saves}`);
+        qa.check('the field reads the whole typed text after a reload', shown === final, `shown after reload "${shown}"`);
+        if (held >= 1 && (stored !== final || shown !== final)) {
           await qa.shot('highlight after reload');
           fileBugOnce(qa, 'settings-keystroke-race', {
             feature: 'SETTINGS-007', severity: 'medium',
-            title: 'Profile & settings: a field typed on the keyboard is saved without its last letter when one keystroke\'s save arrives late (one unordered save per keystroke)',
-            step: `Phone ${P.name}: More > Profile & settings > CV Highlight Line, type "${final}" on the keyboard (the save of the next-to-last keystroke held 1.5 s, as a slow mobile network would), reload`,
+            title: 'Profile & settings: a field typed on the keyboard loses letters when an earlier keystroke\'s save arrives late',
+            step: `Phone ${P.name}: More > Profile & settings > CV Highlight Line, type "${final}" on the keyboard (the first keystroke's save held 1.5 s, as a slow mobile network would), reload`,
             expected: `profiles.cv_highlights is "${final}" and the field reads so after the reload`,
-            actual: `profiles.cv_highlights holds "${stored}" and the field reads "${shown}" after the reload. SettingsSection.jsx:420 (CV Highlight Line), like Name (:260), NPI (:283), phone (:407), address (:411), website (:414), Languages (:418) and Professional Summary (:419), calls update(key, value) on every keystroke; updateSettings (AppContext.jsx:666-676) fires sbSaveSettings for each without waiting or ordering; saveSettings (supabase.js:956-980) sends each as its own PATCH of profiles with updated_at = now(), so whichever request lands last wins. Without any added delay the same loss happened on its own in most lab runs of this journey (Languages "Spanish" stored as "Spanis", the address stored without its last one or two digits, the phone number without its last digit). Only Email (2e6d3ec8) and lead time (ea6e5e58) save once on the fix branches; these fields are not fixed there.`,
+            actual: `profiles.cv_highlights holds "${stored}" and the field reads "${shown}" after the reload (${saves}). SettingsSection calls update(key, value) on every keystroke; saveSettings (src/lib/supabase.js, inProfileOrder since 5f4290ef) is meant to send one profile's saves one at a time, in order, so a late earlier save can never land after a later one.`,
           }, P.name);
         }
       }, { soft: true });

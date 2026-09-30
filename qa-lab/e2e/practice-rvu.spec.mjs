@@ -3,9 +3,10 @@
 // work and let the coder turn it into CPT codes (the mock AI answers with a
 // scripted coding for exactly that description), adjust, save, see the
 // operative codes reach the case log, edit and delete; then slice the RVU log
-// by agreement, period and code. A member with Credential only is refused.
+// by agreement, period and code. A member with Credential only is told billing
+// is part of Practice and gets no Bill it.
 import { test } from './support/fixtures.mjs';
-import { goTab, newMember, openMore, row, rows, scriptAi, sleep, stamp, tombstones, waitFor } from './support/lab.mjs';
+import { accessSnapshot, goTab, newMember, openMore, row, rows, scriptAi, sleep, stamp, tombstones, waitFor } from './support/lab.mjs';
 import { addAgreement, credentialOnlyMember, localDay, subTab, watchAiRequests } from './support/practice-helpers.mjs';
 
 const bodyText = async (page) => (await page.locator('body').innerText()).replace(/[ \t]+/g, ' ');
@@ -66,28 +67,44 @@ test('practice CPT lookup: search, copy, ask the AI, bill it; a Credential-only 
       });
     }
 
-    // A member whose membership is Credential only.
+    // A member whose membership is Credential only. Since b00393fa the page does not offer
+    // "+ Bill it" where Practice is read-only (CPTLookup.jsx billingClosed); a note says why. A
+    // bought Credential membership is told Practice is not part of it and offered support
+    // (credentialOnlyMembership: purchasedOfferId "core"); the lab's member holds Credential as a
+    // lifetime grant, not a purchase, and is told Practice is read-only on this account. The note
+    // appears once the membership check has answered, so it is waited on first.
     const { page: b } = await secondBrowser();
     const other = await credentialOnlyMember(b, { firstName: 'Cleo', lastName: 'Credential' });
     const dialogsBefore = qa.report.dialogs.length;
     await openMore(b, 'CPT Lookup');
+    const note = b.getByRole('note').filter({ hasText: /part of Practice/ });
+    const noteShown = await note.waitFor({ timeout: 30000 }).then(() => true, () => false);
+    const noteText = noteShown ? (await note.innerText()).replace(/\s+/g, ' ') : '';
     await b.getByPlaceholder("e.g. 'suboccipital crani' or '61343'").fill('61343');
     const bHit = b.getByRole('button', { name: /^61343\b/ }).first();
     await bHit.waitFor({ timeout: 15000 });
-    await bHit.getByRole('button', { name: '+ Bill it' }).click();
-    await sleep(1500);
-    const said = qa.report.dialogs.slice(dialogsBefore).join(' | ');
-    const bLogged = await bHit.getByText('✓ Logged').isVisible().catch(() => false);
-    qa.check('a Credential-only member is told why, and nothing says "Logged"', !!said && !bLogged, said || 'no message');
-    if (!qa.check('the refusal says why: Practice is not part of this membership', /practice/i.test(said), said)) {
+    const bHitText = (await bHit.innerText()).replace(/\s+/g, ' ');
+    await sleep(500);
+    const billButtons = await b.getByRole('button', { name: '+ Bill it', exact: true }).count();
+    qa.check('the Credential-only member can still search: 61343 is listed with its wRVU', /31\.06 wRVU/.test(bHitText), bHitText);
+    if (!qa.check('there is no "+ Bill it" for a Credential-only member', billButtons === 0, `${billButtons} "+ Bill it" button(s)`)) {
       qa.bug({
-        title: 'CPT Lookup offers "+ Bill it" to a Credential-only member and refuses it with "This record is read-only"',
-        step: 'As a member whose membership is Credential only (no Practice): More > CPT Lookup, search 61343, tap "+ Bill it"',
-        expected: 'A clear refusal: billing codes to the RVU log is part of Practice, which this membership does not include, and how to add it (or no Bill it button)',
-        actual: `The alert reads "${said.replace(/^alert: /, '')}", about a record that does not exist; nothing says Practice is not included. CPTLookup.jsx shows Bill it to every member (LogButton, line 101) and the refusal is the generic membershipWriteError text (src/utils/limitedLaunchAccess.js:322 via writeRefusalMessage, line 362)`,
+        title: 'CPT Lookup offers "+ Bill it" to a Credential-only member',
+        step: 'As a member whose membership is Credential only (no Practice): More > CPT Lookup, search 61343',
+        expected: 'No "+ Bill it" on the result, and a note that billing is part of Practice, which a Credential membership does not include',
+        actual: `${billButtons} "+ Bill it" button(s) shown; the note ${noteShown ? `reads "${noteText}"` : 'is not shown'}. CPTLookup.jsx hides the button when billingClosed (limitedLaunch enabled and practiceReadOnly)`,
         severity: 'low',
       });
     }
+    const snap = accessSnapshot(other.user.id);
+    qa.check('the member holds Credential without Practice (server snapshot: Credential writable, Practice read-only)', snap?.capabilities?.credential?.write === true && snap?.capabilities?.practice?.write === false,
+      JSON.stringify({ purchased: snap?.purchasedOfferId, lifetime: snap?.lifetime, practiceIncluded: snap?.practiceIncluded, capabilities: snap?.capabilities }));
+    const bought = snap?.purchasedOfferId === 'core' && snap.practiceIncluded !== true && snap.lifetime?.practice !== true;
+    const why = bought ? /part of Practice, and your Credential membership does not include it/ : /part of Practice, which is read-only on this account/;
+    qa.check(`the page says why billing is closed: ${bought ? 'the Credential membership does not include Practice' : 'Practice is read-only on this account'}`, noteShown && why.test(noteText), noteText || (await bodyText(b)).slice(0, 300));
+    if (bought) qa.check('it offers "Contact support about adding Practice"', await b.getByRole('link', { name: 'Contact support about adding Practice' }).isVisible().catch(() => false));
+    const said = qa.report.dialogs.slice(dialogsBefore).join(' | ');
+    qa.check('no refusal alert is raised (there is nothing to refuse)', !said, said);
     qa.check('no encounter is written for that member', rows(`select id from public.encounters where user_id = '${other.profile.id}'`).length === 0);
   }, { soft: true });
 });

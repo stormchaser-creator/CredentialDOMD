@@ -27,6 +27,10 @@ const needsLine = (page, text) => page.getByRole('button').filter({ hasText: tex
 /** A Home card or banner: the parent of its title line. */
 const cardByTitle = (page, title) => page.getByText(title).first().locator('xpath=..');
 
+/** The two fields of "Log a follow-up", by their labels (the placeholders are example text). */
+const followUpTo = (dlg) => dlg.getByRole('textbox', { name: 'To (name or email, optional)', exact: true });
+const followUpNote = (dlg) => dlg.getByRole('textbox', { name: 'What happened (optional)', exact: true });
+
 /** A valid synthetic NPI (Luhn over 80840 + the first nine digits), never a real provider's lookup. */
 function syntheticNpi(base9 = '199000731') {
   const digits = `80840${base9}`.split('').map(Number);
@@ -187,8 +191,8 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     await actionCard(page, 'State Medical License, TX').getByRole('button', { name: 'Follow up' }).click();
     let dlg = page.getByRole('dialog', { name: 'Log a follow-up' });
     await dlg.waitFor({ timeout: 10000 });
-    await dlg.getByPlaceholder('e.g. Kyle, credentialing office').fill('QA credentialing office');
-    await dlg.getByPlaceholder('e.g. reminded him to update these privileges').fill('QA called about the renewal');
+    await followUpTo(dlg).fill('QA credentialing office');
+    await followUpNote(dlg).fill('QA called about the renewal');
     await dlg.getByRole('button', { name: 'Log it' }).click();
     await dlg.waitFor({ state: 'detached', timeout: 5000 });
     await sleep(1500);
@@ -196,8 +200,8 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     dlg = page.getByRole('dialog', { name: 'Log a follow-up' });
     await dlg.waitFor({ timeout: 10000 });
     qa.check('reopening shows the logged note in History', /History.*Note · QA credentialing office.*QA called about the renewal/.test((await dlg.innerText()).replace(/\s+/g, ' ')));
-    await dlg.getByPlaceholder('e.g. Kyle, credentialing office').fill(office);
-    await dlg.getByPlaceholder('e.g. reminded him to update these privileges').fill('QA emailed the office');
+    await followUpTo(dlg).fill(office);
+    await followUpNote(dlg).fill('QA emailed the office');
     await dlg.getByRole('button', { name: 'Email & log' }).click();
     await dlg.waitFor({ state: 'detached', timeout: 5000 });
     await sleep(2000);
@@ -229,8 +233,8 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     await actionCard(page, 'QA TB annual').getByRole('button', { name: 'Follow up' }).click();
     dlg = page.getByRole('dialog', { name: 'Log a follow-up' });
     await dlg.waitFor({ timeout: 10000 });
-    await dlg.getByPlaceholder('e.g. Kyle, credentialing office').fill('QA employee health');
-    await dlg.getByPlaceholder('e.g. reminded him to update these privileges').fill('QA booked the TB test');
+    await followUpTo(dlg).fill('QA employee health');
+    await followUpNote(dlg).fill('QA booked the TB test');
     await dlg.getByRole('button', { name: 'Log it' }).click();
     await dlg.waitFor({ state: 'detached', timeout: 5000 });
     await sleep(2000);

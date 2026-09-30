@@ -195,8 +195,9 @@ test('CV: read my CV, tick and save, read it again; generate the CV; the setup p
     qa.check('it lists education, work, publications and memberships', /QA University School of Medicine/.test(academic) && /Attending Neurosurgeon/.test(academic) && academic.includes(`QA spine outcomes ${tag}`) && academic.includes(`QA Congress of Neurosurgeons ${tag}`), academic.slice(0, 600));
     const iTumor = academic.indexOf(`QA tumor series ${tag}`), iSpine = academic.indexOf(`QA spine outcomes ${tag}`);
     if (twoPapers) qa.check('publications follow the set order (Order on CV 1 first)', iTumor >= 0 && iSpine >= 0 && iTumor < iSpine, `tumor at ${iTumor}, spine at ${iSpine}`);
-    // Academic adds CME and Clinical adds insurance and references (none on file here), so all three
-    // read the same for this record; Locum Tenens has no format of its own at all.
+    // Academic adds CME and Clinical adds insurance and references (none on file here), so those two
+    // read the same for this record. Locum Tenens is a compact format of its own (f09af0be, b586ee46):
+    // licences, experience and training first; publications and organizations stay on the full CV.
     const base = (t) => t.replace(/Clinical CV.*?Locum Tenens Compact format for locum assignments/, '');
     qa.check('each template renders the CV (header and sections)', Object.values(previews).every((t) => /Casey Curriculum/.test(t) && /Education|Training/i.test(t)));
     const locumSame = base(previews['Locum Tenens']) === base(previews['Clinical CV']);
@@ -210,13 +211,22 @@ test('CV: read my CV, tick and save, read it again; generate the CV; the setup p
         severity: 'low',
       });
     }
+    const locum = previews['Locum Tenens'];
+    qa.check('the Locum Tenens CV keeps the experience and leaves out publications and organizations', /Attending Neurosurgeon/.test(locum) && !locum.includes(`QA spine outcomes ${tag}`) && !locum.includes(`QA Congress of Neurosurgeons ${tag}`), locum.slice(0, 600));
+    // The loop ends on Locum Tenens; Copy and Save PDF below are checked on the full CV, so pick
+    // Academic CV again and wait for its publications to be in the preview.
+    const academicCard = page.getByRole('button', { name: /^Academic CV/ });
+    await academicCard.click();
+    const spine = page.getByText(`QA spine outcomes ${tag}`).first();
+    const spineShown = await spine.waitFor({ timeout: 10000 }).then(() => true, () => false);
+    qa.check('Academic CV is picked again and its preview lists the publications', spineShown && (await academicCard.getAttribute('aria-pressed')) === 'true');
     await page.getByRole('button', { name: /Hide Preview/ }).click();
-    qa.check('the preview can be hidden', !(await page.getByText(`QA tumor series ${tag}`).isVisible().catch(() => false)));
+    qa.check('the preview can be hidden', spineShown && !(await spine.isVisible().catch(() => false)));
     await page.getByRole('button', { name: /Show Preview/ }).click();
     await page.getByRole('button', { name: 'Copy to Clipboard' }).click();
     const copyNote = await page.getByText(/Copied\. Paste it anywhere\./).waitFor({ timeout: 5000 }).then(() => true, () => false);
     const clip = (await deviceLog(page)).clipboard.at(-1) || '';
-    qa.check('Copy confirms and the clipboard holds the CV text', copyNote && clip.includes('Casey Curriculum') && clip.includes(`QA spine outcomes ${tag}`), clip.slice(0, 200));
+    qa.check('Copy confirms and the clipboard holds the Academic CV text (with its publications)', copyNote && clip.includes('Casey Curriculum') && clip.includes(`QA spine outcomes ${tag}`), clip.slice(0, 200));
     await page.getByRole('button', { name: 'Save PDF' }).click();
     const pdfNote = await page.getByText(/PDF ready in the share sheet\.|PDF downloaded\./).waitFor({ timeout: 20000 }).then(() => true, () => false);
     const shared = (await deviceLog(page)).shared.at(-1);
