@@ -1,5 +1,6 @@
 import LimitedLaunchMembership from "./LimitedLaunchMembership.jsx";
 import { useState, useEffect, useRef } from "react";
+import { TAP_MIN } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { FREE_BETA_LABEL, FREE_BETA_BLURB } from "../../constants/beta";
@@ -35,7 +36,7 @@ export default function PricingModal({ open, onClose }) {
   if (!open) return null;
   if (limitedLaunch.enabled) return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", padding: 16 }}>
     <div role="dialog" aria-modal="true" aria-label="Membership options" onClick={event => event.stopPropagation()} style={{ background: T.card, borderRadius: 16, padding: 24, width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto" }}>
-      <button onClick={onClose} style={{ float: "right" }} aria-label="Close membership options">Close</button>
+      <button onClick={onClose} style={{ float: "right", minHeight: TAP_MIN }} aria-label="Close membership options">Close</button>
       <LimitedLaunchMembership />
     </div>
   </div>;

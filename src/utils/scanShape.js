@@ -23,6 +23,15 @@ const SHAPED_STATE = new Set(["license", "privilege"]);
 const SHAPED_TYPE = new Set(["license"]);
 // Type is a NOT NULL column on these tables: a blank one rejects the whole row.
 const TYPE_REQUIRED = new Set(["license", "privilege", "insurance"]);
+// The other NOT NULL pick a reclassified scan can arrive without: remapEdited
+// deliberately carries no type or category across kinds, so a certificate
+// read as a licence and switched to CME had a blank category, and Save went
+// through to a record the database refused whole (23502).
+const REQUIRED_FIELD = Object.freeze({
+  cme: ["category", "Select the CME category above before saving."],
+  healthRecord: ["category", "Select the category above before saving."],
+  education: ["type", "Select the type above before saving."],
+});
 
 /** The scan's values with State and Type snapped onto the form's options (`typeOptions`). */
 export function canonicalForDocType(docType, fields, typeOptions) {
@@ -33,6 +42,11 @@ export function canonicalForDocType(docType, fields, typeOptions) {
 /** What still stops Save: { typeIssue, stateIssue }, each null or the sentence the card shows. */
 export function scanShapeIssues(docType, edited, typeOptions) {
   const out = { typeIssue: null, stateIssue: null };
+  if (REQUIRED_FIELD[docType]) {
+    const [key, sentence] = REQUIRED_FIELD[docType];
+    if (!String(edited?.[key] ?? "").trim()) out.typeIssue = sentence;
+    return out;
+  }
   if (!TYPE_REQUIRED.has(docType)) return out;
   const type = String(edited?.type ?? "").trim();
   if (!type) out.typeIssue = "Select the type above before saving.";

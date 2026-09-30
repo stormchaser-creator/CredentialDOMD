@@ -23,6 +23,8 @@ import {
 } from "../src/components/features/RequestPacket.js";
 import { staleRequests, buildClientProposals, withProposals, documentSetKey, modelReading } from "../src/utils/requestProposals.js";
 import { DOCS, RECORDS, PHYSICIAN, NOW, REQUEST_1 } from "./request-packet.test.mjs";
+import * as requestPacketModule from "../src/utils/requestPacket.js";
+import { mountComponent, settle } from "../tests/component-harness.mjs";
 
 let pass = 0, fail = 0;
 const eq = (n, got, want) => {
@@ -46,7 +48,7 @@ const boardCert = {
   id: "11111111-1111-4111-8111-111111111111",
   from_name: "Casey Example", from_addr: "casey.example@osterly-health.example", subject: "BOARD CERTIFICATE",
   proposal: {
-    v: 2, method: "rules", source: "model", confidence: "high",
+    v: 2, method: "rules", source: "model", confidence: "high", verified: true,
     items: [{ ask: "a copy of your board certificate", kind: "board_cert", status: "found", docIds: ["d1"], labels: ["Board Certification (AOA)"], confidence: "high", ruleKind: "board_cert" }],
     docIds: ["d1"], missing: [],
     coverNote: "Hello Casey,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)\n\nRegards,\nRowan Testa, DO",
@@ -56,9 +58,9 @@ const fourItems = {
   id: "22222222-2222-4222-8222-222222222222",
   from_name: "Jordan Sample", from_addr: "jordan.sample@quillfeather.example", subject: "RE: Requested docs",
   proposal: {
-    v: 2, method: "rules", source: "model", confidence: "high",
+    v: 2, method: "rules", source: "model", confidence: "high", verified: true,
     items: [
-      { ask: "MPLT COI", kind: "coi_malpractice", status: "found", docIds: ["d2"], labels: ["Professional Liability COI, ProAssurance Specialty Insurance"], confidence: "high", ruleKind: "coi_malpractice" },
+      { ask: "Ridgeway COI", kind: "coi_malpractice", status: "found", docIds: ["d2"], labels: ["Professional Liability COI, Harborline Specialty Insurance"], confidence: "high", ruleKind: "coi_malpractice" },
       { ask: "MMR dose #2", kind: "mmr", status: "found", docIds: ["d3", "d4"], labels: ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination"], confidence: "high", ruleKind: "mmr" },
       { ask: "TB form", kind: "tb", status: "found", docIds: ["d5"], labels: ["QuantiFERON-TB Gold, Negative"], confidence: "high", ruleKind: "tb" },
       { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [], confidence: "high", ruleKind: "case_logs" },
@@ -79,15 +81,15 @@ const nothingFound = {
 };
 const twoDocs = {
   id: "44444444-4444-4444-8444-444444444444",
-  from_name: "Kyle Sample", from_addr: "kyle.sample@brackwater.example", subject: "DEA and license",
+  from_name: "Jordan Sample", from_addr: "jordan.sample@brackwater.example", subject: "DEA and license",
   proposal: {
-    v: 2, method: "rules", source: "model", confidence: "high",
+    v: 2, method: "rules", source: "model", confidence: "high", verified: true,
     items: [
       { ask: "DEA", kind: "dea", status: "found", docIds: ["d6"], labels: ["DEA Registration, CO"], confidence: "high", ruleKind: "dea" },
       { ask: "Colorado license", kind: "state_license", status: "found", docIds: ["d7"], labels: ["State Medical License (DO), CO"], confidence: "high", ruleKind: "state_license" },
     ],
     docIds: ["d6", "d7"], missing: [],
-    coverNote: "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CO\n- State Medical License (DO), CO\n\nRegards,\nRowan Testa, DO",
+    coverNote: "Hello Jordan,\n\nAttached are the documents you asked for:\n- DEA Registration, CO\n- State Medical License (DO), CO\n\nRegards,\nRowan Testa, DO",
   },
 };
 const noProposal = { id: "55555555-5555-4555-8555-555555555555", from_name: null, from_addr: "cred@somewhere.org", subject: "Docs please", proposal: null };
@@ -120,10 +122,23 @@ const ME_FWD = { id: "66666666-6666-4666-8666-666666666666", from_name: null, fr
 eq("requester equal to the forwarding sender is 'Requester not found'", requesterLine(ME_FWD), "Requester not found");
 eq("requester equal to a confirmed address is 'Requester not found'", requesterLine({ ...ME_FWD, forwarded_by: null }, ["rowan.testa@clinic.example", "Rowan@Hospital.example"]), "Requester not found");
 eq("a real requester with no name is still their address", requesterLine({ ...ME_FWD, from_addr: "cred@x.org" }, ["rowan@hospital.example"]), "cred@x.org");
+// A forward of the physician's own message (or a thread whose top message is
+// their own reply): the first From: line is "Their Name <their address>", so
+// from_name is the physician's. It must not print as who asked (INTAKE-004).
+const SELF_NAMED = { ...ME_FWD, from_name: "Rowan Testa", forwarded_by: "rowan@hospital.example" };
+eq("the physician's own name on their own address is 'Requester not found'", requesterLine(SELF_NAMED), "Requester not found");
+eq("...also when the address is a confirmed one and not the forwarder", requesterLine({ ...SELF_NAMED, forwarded_by: "rowan.testa@clinic.example" }, ["Rowan@Hospital.example"]), "Requester not found");
+eq("...and the Approve reason agrees", approveBlockedReason(SELF_NAMED, "rowan@hospital.example", ["rowan@hospital.example"], ["d1"]), REQUESTER_NOT_FOUND_REASON);
+eq("a real requester's name still prints", requesterLine({ ...SELF_NAMED, from_addr: "casey@osterly-health.example", from_name: "Casey Example" }, ["rowan@hospital.example"]), "Casey Example, osterly-health.example");
+eq("a name with no address is still the requester's name", requesterLine({ ...SELF_NAMED, from_addr: "", from_name: "Casey Example" }), "Casey Example");
+ok("the Home banner summary never names the physician as the requester", (() => {
+  const html = render(RequestPacketSummary, { request: SELF_NAMED, T, compact: true, ownAddresses: ["rowan@hospital.example"] });
+  return html.includes("Requester not found") && !html.includes("Rowan Testa");
+})());
 eq("requesterMissing: empty, forwarder, own address, or neither", [
   requesterMissing({ from_addr: "" }), requesterMissing(ME_FWD), requesterMissing({ from_addr: "a@b.c" }, ["A@B.C"]), requesterMissing({ from_addr: "a@b.c" }, ["x@y.z"]),
 ], [true, true, true, false]);
-eq("first two asks, then how many more", askLine(fourItems), "MPLT COI, MMR dose #2 and 2 more");
+eq("first two asks, then how many more", askLine(fourItems), "Ridgeway COI, MMR dose #2 and 2 more");
 eq("two asks need no 'more'", askLine(twoDocs), "DEA, Colorado license");
 eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
 
@@ -144,10 +159,10 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
 {
   const all = new Set(fourItems.proposal.docIds);
   const html = render(ProposalChecklist, { proposal: fourItems.proposal, T, selected: all, onToggle: () => {} });
-  ok("every ask is listed", ["MPLT COI", "MMR dose #2", "TB form", "Logs 12-months"].every((a) => html.includes(a)));
+  ok("every ask is listed", ["Ridgeway COI", "MMR dose #2", "TB form", "Logs 12-months"].every((a) => html.includes(a)));
   ok("every found document gets a checkbox", (html.match(/type="checkbox"/g) || []).length === 4);
   ok("all four are checked when all are selected", (html.match(/checked=""/g) || []).length === 4);
-  ok("labels are printed beside the boxes", html.includes("QuantiFERON-TB Gold, Negative") && html.includes("Professional Liability COI, ProAssurance Specialty Insurance"));
+  ok("labels are printed beside the boxes", html.includes("QuantiFERON-TB Gold, Negative") && html.includes("Professional Liability COI, Harborline Specialty Insurance"));
   ok("a report item says it follows separately", html.includes("Follows separately"));
   const one = render(ProposalChecklist, { proposal: fourItems.proposal, T, selected: new Set(["d2"]), onToggle: () => {} });
   ok("only the selected box is checked", (one.match(/checked=""/g) || []).length === 1);
@@ -267,13 +282,42 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   ok("no em dash in any of it", ![away, inReview, review, note].some((x) => x.includes("\u2014")));
 }
 
+// ── An unverified forward always leads with Review (INTAKE-004) ─────────
+{
+  const send = async () => ({ ok: true });
+  const unverified = { ...boardCert, id: "88888888-8888-4888-8888-888888888888", proposal: { ...boardCert.proposal, verified: false } };
+  ok("an unverified forward's model/high packet may not go on one tap", !canSendOnOneTap(unverified));
+  const away = render(ApproveSendButton, { request: unverified, T, accountEmail: ME, send });
+  ok("away from the request its button is disabled and says to review first", away.includes("disabled") && away.includes(REVIEW_FIRST_REASON));
+  const note = render(UnclearNote, { request: unverified, T });
+  ok("UnclearNote says the forward could not be verified", note.includes("This forward could not be verified as coming from you. Check who is asking before you send anything."), note);
+  ok("ReviewButton says it too", render(ReviewButton, { request: unverified, T, onReview: () => {} }).includes("could not be verified"));
+  eq("approveBody marks a send made with the draft in view", approveBody(unverified, { reviewed: true }).reviewed, true);
+  ok("approveBody leaves reviewed off otherwise", !("reviewed" in approveBody(unverified)));
+  // The detail view's button tells send-packet-email the draft was in view,
+  // which is what lets the server refuse an unreviewed approve of an
+  // unverified forward from an older installed app.
+  const bodies = [];
+  for (const reviewed of [true, false]) {
+    const request = reviewed ? unverified : { ...unverified, proposal: { ...unverified.proposal, verified: true } };
+    const ui = await mountComponent("src/components/features/RequestPacket.js", {
+      exportName: "ApproveSendButton", modules: { requestPacket: requestPacketModule },
+      props: { request, T, accountEmail: ME, reviewed, send: async (b) => { bodies.push(b); return { ok: true, to: "x" }; } },
+    });
+    const button = ui.nodes().find((n) => n.type === "button");
+    await button.props.onClick({ stopPropagation() {} });
+    await settle();
+  }
+  eq("the reviewed send carries reviewed: true; the one-tap send does not", bodies.map((b) => b.reviewed === true), [true, false]);
+}
+
 // ── A client rebuild keeps a model's reading (2026-09-28) ────────────────
 {
   const data = { documents: DOCS, ...RECORDS, settings: { name: "Rowan Testa", degreeType: "DO" } };
   const modelRow = {
     id: "r-model", status: "new", subject: "Docs", from_name: "Sam", from_addr: "s@x.example", proposal_at: "2020-01-01T00:00:00Z",
     body_text: "Proof of malpractice coverage is required for every provider. Please send your board certificate.",
-    proposal: { v: 2, method: "rules", source: "model", confidence: "high", docIds: [], missing: [], coverNote: "",
+    proposal: { v: 2, method: "rules", source: "model", confidence: "high", verified: true, docIds: [], missing: [], coverNote: "",
       items: [{ ask: "board certificate", quote: "your board certificate", kind: "board_cert", status: "missing", docIds: [], labels: [], confidence: "high" }] },
   };
   const built = buildClientProposals([modelRow], data, { now: NOW });
@@ -281,6 +325,14 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   eq("a stale model proposal is rebuilt from the model's asks, not the email's words", [p.method, p.source, p.confidence, p.items.map((i) => [i.ask, i.kind, i.status, i.quote])],
     ["rules-client", "model", "high", [["board certificate", "board_cert", "found", "your board certificate"]]]);
   ok("and, every ask now matched, it may go on one tap", canSendOnOneTap({ proposal: p }));
+  // INTAKE-004: the rebuild keeps what the server recorded about the forward.
+  eq("the rebuild keeps the forward's verification", p.verified, true);
+  const unverifiedRow = { ...modelRow, id: "r-unverified", proposal: { ...modelRow.proposal, verified: false } };
+  const rebuiltUnverified = buildClientProposals([unverifiedRow], data, { now: NOW })["r-unverified"];
+  ok("a rebuilt unverified proposal stays unverified and is never one tap", rebuiltUnverified.verified === false && !canSendOnOneTap({ proposal: rebuiltUnverified }), JSON.stringify(rebuiltUnverified));
+  const legacyRow = { ...modelRow, id: "r-legacy", proposal: (({ verified: _v, ...rest }) => rest)(modelRow.proposal) };
+  const rebuiltLegacy = buildClientProposals([legacyRow], data, { now: NOW })["r-legacy"];
+  ok("a rebuilt row with no verification recorded does not gain one", !("verified" in rebuiltLegacy) && !canSendOnOneTap({ proposal: rebuiltLegacy }));
   eq("modelReading is null for a rules proposal", modelReading(boardCert.proposal === null ? null : { ...boardCert.proposal, source: "rules" }), null);
   // The rebuild disagrees where the server did (the model's kind, not the
   // words' kind, goes back in), and an unclear email stays unclear.
@@ -332,12 +384,12 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   eq("no proposal still blocks", approveBlockedReason(noProposal, ME), NOTHING_MATCHED_REASON);
   eq("a proposal with no items and nothing to attach still blocks",
     approveBlockedReason({ ...noProposal, proposal: { v: 1, method: "rules", items: [], docIds: [], missing: [], coverNote: "" } }, ME), NOTHING_MATCHED_REASON);
-  const unticked = render(ApproveSendButton, { request: twoDocs, T, accountEmail: ME, send, docIds: [], text: "Hi Kyle" });
+  const unticked = render(ApproveSendButton, { request: twoDocs, T, accountEmail: ME, send, docIds: [], text: "Hi Jordan" });
   ok("an emptied selection relabels the button and keeps it live", unticked.includes("Send reply (nothing to attach)") && !unticked.includes("disabled"));
   ok("the relabelled button is still the green one, not the grey", unticked.includes("linear-gradient(135deg, #10b981, #059669)"));
   ok("a caller's label still wins", render(ApproveSendButton, { request: twoDocs, T, accountEmail: ME, send, docIds: [], label: "Send it" }).includes(">Send it<"));
   eq("approveBody sends an empty doc list with the note", approveBody(nothingFound), { request_id: nothingFound.id, approve: true, cc_self: true, doc_ids: [], text: nothingFound.proposal.coverNote });
-  eq("approveBody with an emptied selection sends [] and the edited note", approveBody(twoDocs, { docIds: [], text: "Hi Kyle" }).doc_ids.length === 0 && approveBody(twoDocs, { docIds: [], text: "Hi Kyle" }).text, "Hi Kyle");
+  eq("approveBody with an emptied selection sends [] and the edited note", approveBody(twoDocs, { docIds: [], text: "Hi Jordan" }).doc_ids.length === 0 && approveBody(twoDocs, { docIds: [], text: "Hi Jordan" }).text, "Hi Jordan");
   const noItems = render(ApproveSendButton, { request: { ...noProposal, proposal: { v: 1, items: [], docIds: [], missing: [] } }, T, accountEmail: ME, send });
   ok("no items renders disabled with the reason, not the nothing-to-attach label", noItems.includes("No documents could be matched from this email") && noItems.includes("disabled") && !noItems.includes("nothing to attach"));
   ok("a ready packet is unchanged by the rule", render(ApproveSendButton, { request: twoDocs, T, accountEmail: ME, send }).includes("Approve and send 2 documents"));

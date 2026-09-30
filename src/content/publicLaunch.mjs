@@ -45,6 +45,15 @@ export function assertPublicLaunchReady(mode = PUBLIC_LAUNCH_MODE, wired = WIRED
  * draft paid preview without satisfying the production build gate; it cannot
  * issue a request, record consent, send mail, open checkout, or change access.
  */
+// The one sentence of `availability` that states the founding offer, and the
+// rate-lock sentence the home FAQ adds after it. The static pages print them
+// as written; public/membership-offer.js swaps each for the live phase's
+// (its FOUNDING_AVAILABILITY and FOUNDING_RATE_LOCK, pinned equal by
+// tests/public-offer-availability.test.mjs), so a page past the founding cap
+// no longer offers $99 in a sentence the hero repaint does not reach.
+export const FOUNDING_AVAILABILITY = 'Founding Credential is $99/year for the first 100 paid founding members.';
+export const FOUNDING_RATE_LOCK = 'That founding annual rate stays locked for life while membership remains continuously active.';
+
 export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
   if (typeof mode.enabled !== 'boolean') throw new Error('Public launch enabled must be a boolean');
   const enabled = mode.enabled;
@@ -56,7 +65,7 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
       ? { kind: 'navigation', label: 'Create your account', shortLabel: 'Create your account', href: signupHref, collectEmail: false }
       : { kind: 'waitlist-request', label: 'Join the waitlist', shortLabel: 'Join the waitlist', href: '/#join', collectEmail: true }),
     availability: enabled
-      ? 'Compare the plans here, then create your account. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed before payment; creating an account does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.'
+      ? `Compare the plans here, then create your account. ${FOUNDING_AVAILABILITY} Availability is confirmed before payment; creating an account does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.`
       : 'Checkout is not open. Join the waitlist for your invitation and membership details. A waitlist request does not create a paid account or charge you; future paid access requires a card at checkout.',
     earlyRelease: 'CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.',
     teamAvailability: 'Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',

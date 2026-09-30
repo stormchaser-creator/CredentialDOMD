@@ -1,6 +1,18 @@
 // CredentialDOMD Design System — Theme Tokens
 // Palette matched to landing page: deep navy + emerald green primary
 
+/**
+ * The theme a stored value renders as. Only "light" is light: anything else,
+ * including the old 'arctic' column default most profiles still hold, is the
+ * app's default, dark. Every indicator and the toggle read this, so the moon,
+ * the sidebar label and the Settings switch can never disagree with the
+ * screen, and the first tap always changes it (SETTINGS-014).
+ */
+export const themeNameOf = (value) => (value === "light" ? "light" : "dark");
+/** The same reading under the name Settings and its tests use. */
+export const effectiveThemeName = themeNameOf;
+/** What one tap of the theme toggle stores. */
+export const nextThemeName = (value) => (themeNameOf(value) === "light" ? "dark" : "light");
 export const THEMES = {
   light: {
     // ─── Surfaces ──────────────────────────────────────────

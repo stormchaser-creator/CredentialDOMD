@@ -85,8 +85,8 @@ const LOWER_WORDS = new Set(["and", "of", "the", "at", "for", "in", "on", "to", 
 const KEEP_UPPER = new Set(["LLC", "LLP", "PC", "PA", "MD", "DO", "II", "III", "IV", "USA", "US"]);
 
 /**
- * Registers shout. "EISENHOWER MEDICAL CENTER" is the same fact as
- * "Eisenhower Medical Center"; only the casing changes, never a word.
+ * Registers shout. "OSTERLY MEDICAL CENTER" is the same fact as
+ * "Osterly Medical Center"; only the casing changes, never a word.
  * Anything already mixed case is left exactly as the register wrote it.
  */
 export function titleCase(v: unknown): string {
@@ -103,8 +103,8 @@ export function titleCase(v: unknown): string {
   return s.split(" ").map(word).join(" ");
 }
 
-/** Ten digits read as a phone number: "9095803353" and "(909) 580-1000"
- * both come back as 909-580-3353 style. Anything else is left as written. */
+/** Ten digits read as a phone number: "5305550133" and "(530) 555-0100"
+ * both come back as 530-555-0133 style. Anything else is left as written. */
 export function formatPhone(v: unknown): string {
   const s = clean(v);
   const d = s.replace(/\D/g, "");
@@ -112,7 +112,7 @@ export function formatPhone(v: unknown): string {
   return s;
 }
 
-/** ZIP+4 arrives unpunctuated: "922703221" is 92270-3221. */
+/** ZIP+4 arrives unpunctuated: "900014410" is 90001-4410. */
 export function formatZip(v: unknown): string {
   const d = clean(v).replace(/\D/g, "");
   if (d.length === 9) return `${d.slice(0, 5)}-${d.slice(5)}`;

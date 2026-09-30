@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readAdminSource, filterAdminTickets, filterAdminUsers, ADMIN_TAB_SOURCES } from '../../src/utils/adminData.js';
-import { adminControlRequest, submitAdminControl } from '../../src/utils/adminControls.js';
+import { accessStateLabel, adminControlRequest, submitAdminControl } from '../../src/utils/adminControls.js';
 
 function database(total, failAt = -1, cap = 500) {
   const calls = [];
@@ -147,4 +147,33 @@ test('the oldest open ticket stays loaded however much newer archived activity t
   assert.deepEqual(adminTabSources('tickets'), ['tickets', 'feedback']);
   assert.deepEqual(adminTabSources('tickets', { showArchived: true }), ['tickets', 'feedback', 'archivedTickets']);
   assert.deepEqual(adminTabSources('users', { showArchived: true }), ['users', 'invites']);
+});
+
+// QA ADMIN-001: a stale-row refusal is PT409 (20260930030000). Only that code
+// marks the failure stale, so the dialog offers Refresh instead of Retry.
+test('a PT409 refusal is marked stale with the server message; other errors are not', async () => {
+  const stale = await submitAdminControl({ rpc: async () => ({ error: { code: 'PT409', message: 'Account changed. Refresh and review it again' } }) }, change, 'Synthetic reason', 'key').catch(e => e);
+  assert.equal(stale.stale, true); assert.equal(stale.message, 'Account changed. Refresh and review it again');
+  for (const error of [{ code: '40001', message: 'Account changed. Refresh and review it again' }, { code: '22023', message: 'Account already has that status' }, { message: 'Failed to fetch' }, {}]) {
+    const failure = await submitAdminControl({ rpc: async () => ({ error }) }, change, 'Synthetic reason', 'key').catch(e => e);
+    assert.ok(failure instanceof Error); assert.ok(!failure.stale, JSON.stringify(error)); assert.ok(failure.message);
+  }
+});
+
+test('access states read as the admin screens word them', () => {
+  assert.deepEqual(['active', 'pending', 'revoked'].map(s => accessStateLabel('profile', s)), ['Active', 'Pending', 'Paused']);
+  assert.deepEqual(['invited', 'active', 'revoked'].map(s => accessStateLabel('invite', s)), ['Invited', 'Active', 'Paused']);
+  assert.equal(accessStateLabel('profile', 'unexpected'), 'unexpected');
+  assert.equal(accessStateLabel('profile', null), 'Unknown');
+  assert.equal(accessStateLabel('profile', 'toString'), 'toString', 'no prototype keys');
+});
+
+test('Accounts wires Refresh into the access dialog and prints state labels, not stored values', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const dashboard = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
+  const dialog = dashboard.slice(dashboard.indexOf('<AdminAccessChange '), dashboard.indexOf('/>}', dashboard.indexOf('<AdminAccessChange ')));
+  assert.match(dialog, /onRefresh=\{\(\) => \{ setAccessChange\(null\);[^}]*refresh\(\); \}\}/);
+  assert.doesNotMatch(dashboard, />\{u\.access_status\}<|>\{inv\.status\}</);
+  assert.match(dashboard, /accessStateLabel\("profile", u\.access_status\)/);
+  assert.match(dashboard, /accessStateLabel\("invite", inv\.status\)/);
 });

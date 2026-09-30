@@ -4,21 +4,21 @@ import { loadScreens, mount, nodes, textOf, pinClock } from './harness/component
 import { LAYOUT_LINE_FIELDS } from '../src/utils/billing.js';
 import { NORTHFIELD, NORTHFIELD_CONTRACT, northfieldEntries } from './billing/fixtures/northfield.mjs';
 
-// The owner's Northfield invoice built through the real Work Log (pick the
+// The synthetic Northfield invoice built through the real Work Log (pick the
 // days, preview, Copy) and opened again from the Invoices tab: the preview,
 // the saved text and the stored invoice all read as day blocks with a total
 // per day (src/utils/invoiceLayout.js). Synthetic contract and settings; the
 // entries are rebuilt from the fixture (tests/billing/fixtures/northfield.mjs).
 
-pinClock(test, 'America/Chicago', '2026-09-28T12:00:00-05:00');
+pinClock(test, 'America/Chicago', '2026-10-19T12:00:00-05:00');
 const screens = await loadScreens('export {default as WorkLog} from "./src/components/features/locum/WorkLog.jsx"; export {default as Invoices} from "./src/components/features/locum/Invoices.jsx";');
 
 const settings = { name: 'Synthetic Physician', degreeType: 'DO', npi: '9999999999', email: 'doc@example.test' };
 const buttonText = (tree, pred) => nodes(tree).find(n => n.type === 'button' && pred(textOf(n)));
 const strip = (line) => Object.fromEntries(Object.entries(line).filter(([k]) => !LAYOUT_LINE_FIELDS.includes(k)));
-const DAY_TOTALS = ['Total for Fri, Sep 25, 2026', '$5,250.00', 'Total for Sat, Sep 26, 2026', '$6,450.00', 'Total for Sun, Sep 27, 2026', '$6,525.00', 'Total for Mon, Sep 28, 2026', '$3,000.00'];
+const DAY_TOTALS = ['Total for Fri, Oct 16, 2026', '$4,800.00', 'Total for Sat, Oct 17, 2026', '$6,150.00', 'Total for Sun, Oct 18, 2026', '$6,300.00', 'Total for Mon, Oct 19, 2026', '$3,000.00'];
 
-test('Work Log: the invoice preview and the saved text show every day with its total, and the saved lines are the real invoice plus its numbers', async () => {
+test('Work Log: the invoice preview and the saved text show every day with its total, and the saved lines are the stored invoice plus its numbers', async () => {
   const m = mount(screens.WorkLog, { data: { settings, locumContracts: [NORTHFIELD_CONTRACT], workLog: northfieldEntries() } });
   buttonText(m.render(), t => /Invoice \d+ unbilled entries/.test(t)).props.onClick();
   const build = buttonText(m.render(), t => t.startsWith('Invoice 4 days'));
@@ -28,7 +28,7 @@ test('Work Log: the invoice preview and the saved text show every day with its t
   // real document; so the Copy button is taken from the tree first.
   const copy = buttonText(m.render(), t => t === 'Copy');
   const html = m.html();
-  for (const want of [...DAY_TOTALS, 'in $3,000.00 stipend', 'Callback beyond 4 h', '24-hour call stipend', 'call day 7:00 AM Sep 25 to 7:00 AM Sep 26', '$21,225.00']) {
+  for (const want of [...DAY_TOTALS, 'in $3,000.00 stipend', 'Callback beyond 4 h', '24-hour call stipend', 'call day 7:00 AM Oct 16 to 7:00 AM Oct 17', '$20,250.00']) {
     assert.ok(html.includes(want.replace(/&/g, '&amp;')), `preview: ${want}`);
   }
 
@@ -42,25 +42,25 @@ test('Work Log: the invoice preview and the saved text show every day with its t
     if (saved) Object.defineProperty(globalThis, 'navigator', saved);
   }
   const invoice = m.calls.find(c => c[0] === 'add' && c[1] === 'invoices')[2];
-  assert.equal(invoice.totalAmount, 21225);
+  assert.equal(invoice.totalAmount, 20250);
   assert.equal(copied[0], invoice.text);
-  for (const t of ['Total for Fri, Sep 25, 2026: $5,250.00', 'Total for Sat, Sep 26, 2026: $6,450.00', 'Total for Sun, Sep 27, 2026: $6,525.00', 'Total for Mon, Sep 28, 2026: $3,000.00', 'TOTAL DUE: $21,225.00']) {
+  for (const t of ['Total for Fri, Oct 16, 2026: $4,800.00', 'Total for Sat, Oct 17, 2026: $6,150.00', 'Total for Sun, Oct 18, 2026: $6,300.00', 'Total for Mon, Oct 19, 2026: $3,000.00', 'TOTAL DUE: $20,250.00']) {
     assert.ok(invoice.text.split('\n').includes(t), `text: ${t}`);
   }
-  assert.match(invoice.text, /^ {5}Rounding: Consults and family meetings\. OR planning \u{b7} 3:30 PM\u{2013}7:30 PM \u{b7} 4\.00 h \u{b7} in \$3,000\.00 stipend$/mu);
+  assert.match(invoice.text, /^ {5}Rounding: Ward list and handoff notes \u{b7} 3:30 PM\u{2013}7:30 PM \u{b7} 4\.00 h \u{b7} in \$3,000\.00 stipend$/mu);
   assert.ok(!invoice.text.includes(String.fromCodePoint(0x2014)), 'no em dash');
-  assert.equal(JSON.stringify(invoice.lines.map(strip)), JSON.stringify(NORTHFIELD.lines), 'the same lines the real invoice stored');
+  assert.equal(JSON.stringify(invoice.lines.map(strip)), JSON.stringify(NORTHFIELD.lines), 'the same lines the stored invoice holds');
   assert.equal(invoice.lines[0].kind, 'stipendDay');
   assert.equal(invoice.lines[0].dayStartHour, 7);
 });
 
 test('Invoices tab: a stored invoice from before the layout opens as day blocks with day totals', () => {
-  const stored = { id: 'inv-northfield', number: 'INV-20260928-01', contractId: NORTHFIELD_CONTRACT.id, periodStart: '2026-09-25', periodEnd: '2026-09-28', entryIds: [], totalAmount: NORTHFIELD.total, totalMinutes: NORTHFIELD.totalMin, dayOverMin: NORTHFIELD.dayOverMin, sentAt: '2026-09-28T17:00:00Z', lines: NORTHFIELD.lines, text: 'stored text', terms: 'Synthetic terms' };
+  const stored = { id: 'inv-northfield', number: 'INV-20261019-01', contractId: NORTHFIELD_CONTRACT.id, periodStart: '2026-10-16', periodEnd: '2026-10-19', entryIds: [], totalAmount: NORTHFIELD.total, totalMinutes: NORTHFIELD.totalMin, dayOverMin: NORTHFIELD.dayOverMin, sentAt: '2026-10-19T17:00:00Z', lines: NORTHFIELD.lines, text: 'stored text', terms: 'Synthetic terms' };
   const m = mount(screens.Invoices, { data: { settings, locumContracts: [NORTHFIELD_CONTRACT], invoices: [stored] } });
   const card = nodes(m.render()).find(n => n.key === stored.id && typeof n.props?.onClick === 'function');
   card.props.onClick({ stopPropagation() {} });
   const html = m.html();
-  for (const want of [...DAY_TOTALS, 'in $3,000.00 stipend', 'Callback beyond 4 h', 'call day 7:00 AM Sep 28 to 7:00 AM Sep 29']) {
+  for (const want of [...DAY_TOTALS, 'in $3,000.00 stipend', 'Callback beyond 4 h', 'call day 7:00 AM Oct 19 to 7:00 AM Oct 20']) {
     assert.ok(html.includes(want), `view: ${want}`);
   }
 });

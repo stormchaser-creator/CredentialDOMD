@@ -7,9 +7,11 @@ import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, fi
 import AdminOperationsReport from "./AdminOperationsReport";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
+import { accessStateLabel } from "../../utils/adminControls";
 import AdminControlHistory from "./AdminControlHistory";
 import { AdminPreviewPicker } from "./AdminPreview";
 import { Modal, ScreenshotAttach } from "../shared";
+import { adminButtonStyle } from "../shared/adminButton";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
 import { leadNoteLabel } from "../../utils/adminLabels";
@@ -321,12 +323,16 @@ function AdminDashboardContent() {
   // The stamp from before Messages was opened, so the rows that brought a new
   // reply can still be marked after opening the tab moves the stamp to now.
   const [repliesSince, setRepliesSince] = useState(null);
+  // A Waitlist or Fields action changes a count without changing the tab:
+  // re-read only the counts, not the whole section.
+  const [countsKey, setCountsKey] = useState(0);
+  const refreshCounts = () => setCountsKey(k => k + 1);
   useEffect(() => {
     if (!isAdmin || !supabase) return;
     let cancelled = false;
     readAdminAttention(supabase, { messagesSeenAt, errorsSeenAt }).then(result => { if (!cancelled) setAttention(result); });
     return () => { cancelled = true; };
-  }, [isAdmin, reloadKey, messagesSeenAt, errorsSeenAt]);
+  }, [isAdmin, reloadKey, countsKey, messagesSeenAt, errorsSeenAt]);
 
   if (!isAdmin) {
     return (
@@ -380,8 +386,10 @@ function AdminDashboardContent() {
     { id: "preview", label: "Preview as" },
   ];
 
+  // .cdomd-admin: every control below is a 32 px tap target on a phone
+  // (src/styles/base.css; QA ADMIN-001 to ADMIN-004 and ADMIN-008).
   return (
-    <div>
+    <div className="cdomd-admin">
       <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: T.text }}>Admin</h2>
       <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textMuted }}>
         Support, accounts, waitlist signups, and traffic for credentialdomd.com
@@ -420,7 +428,7 @@ function AdminDashboardContent() {
         }}>
           {error}
           <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>This section could not refresh. Its lists are hidden until the read succeeds.</div>
-          <button onClick={() => setReloadKey(k => k + 1)}>Retry section</button>
+          <button onClick={() => setReloadKey(k => k + 1)} style={{ ...adminButtonStyle(T), display: "block", marginTop: 8 }}>Retry section</button>
         </div>
       )}
 
@@ -431,10 +439,10 @@ function AdminDashboardContent() {
             const item = coverage[key]; if (!item || item.error) return null;
             return <div key={key} style={{ marginTop: 5 }}>
               {ADMIN_SOURCES[key].label}: {item.rows.length} loaded{item.count !== null ? ` of ${item.count}` : " (total unavailable)"}
-              {(item.count === null ? item.rows.length >= item.limit : item.rows.length < item.count) && <button style={{ marginLeft: 8 }} onClick={() => setRowLimits(previous => ({ ...previous, [key]: (previous[key] || ADMIN_SOURCES[key].size) + ADMIN_SOURCES[key].size }))}>Load more {ADMIN_SOURCES[key].label.toLowerCase()}</button>}
+              {(item.count === null ? item.rows.length >= item.limit : item.rows.length < item.count) && <button style={{ ...adminButtonStyle(T), marginLeft: 8 }} onClick={() => setRowLimits(previous => ({ ...previous, [key]: (previous[key] || ADMIN_SOURCES[key].size) + ADMIN_SOURCES[key].size }))}>Load more {ADMIN_SOURCES[key].label.toLowerCase()}</button>}
             </div>;
           })}
-          <button style={{ marginTop: 8 }} onClick={() => setReloadKey(k => k + 1)}>Refresh section</button>
+          <button style={{ ...adminButtonStyle(T), marginTop: 8 }} onClick={() => setReloadKey(k => k + 1)}>Refresh section</button>
           {reloadedAt && <span style={{ marginLeft: 8 }}>Read {reloadedAt.toLocaleTimeString()}</span>}
         </div>
       )}
@@ -472,7 +480,7 @@ function AdminDashboardContent() {
           </div>
           {visits.length === 0 ? (
             <div style={{ padding: "12px 14px", borderRadius: 10, backgroundColor: T.card, border: `1px solid ${T.border}`, fontSize: 13, color: T.textMuted, marginBottom: 16 }}>
-              No visits recorded yet — first-party tracking went live Aug 10, 2026. Every landing-page load (home + all 50 state pages) now logs here.
+              No visits recorded yet. First-party tracking went live Aug 10, 2026. Every landing-page load (home + all 50 state pages) now logs here.
             </div>
           ) : (
             <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
@@ -497,8 +505,8 @@ function AdminDashboardContent() {
       )}
       {tab === "errors" && (!loading || hasSectionData) && !error && <AdminErrorReports rows={errors} users={users} T={T} onCleared={ids => { setErrors(rows => rows.filter(row => !ids.includes(row.id))); setCoverage(previous => { const old = previous.errors; return old ? { ...previous, errors: { ...old, rows: old.rows.filter(row => !ids.includes(row.id)), count: old.count === null ? null : Math.max(0, old.count - ids.length) } } : previous; }); }} />}
       {tab === "users" && (!loading || hasSectionData) && !error && <UsersPanel key={accountPreset} initialAccess={accountPreset} myProfileId={userIdRef.current} users={users} setUsers={setUsers} invites={invites} T={T} onRefresh={() => setReloadKey(k => k + 1)} />}
-      {tab === "waitlist" && (!loading || hasSectionData) && !error && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} />}
-      {tab === "fields" && (!loading || hasSectionData) && !error && <FieldProposals rows={fields} setRows={setFields} T={T} />}
+      {tab === "waitlist" && (!loading || hasSectionData) && !error && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} onChanged={refreshCounts} />}
+      {tab === "fields" && (!loading || hasSectionData) && !error && <FieldProposals rows={fields} setRows={setFields} T={T} onChanged={refreshCounts} />}
       {tab === "ai" && (!loading || hasSectionData) && !error && <AiPanel users={users} ownKey={data?.settings?.apiKey || ""} T={T} />}
 
       {/* Tap a ticket → read it, answer it, close it */}
@@ -544,8 +552,8 @@ function AdminDashboardContent() {
               </div>
             )}
 
-            <textarea value={reply} onChange={(e) => setReply(e.target.value)}
-              placeholder="Reply to the physician — they see this in their ticket."
+            <textarea aria-label="Reply to the physician" value={reply} onChange={(e) => setReply(e.target.value)}
+              placeholder="Reply to the physician. They see this in their ticket."
               style={{
                 width: "100%", minHeight: 90, marginTop: 12, padding: "10px 12px", borderRadius: 10,
                 backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
@@ -591,7 +599,7 @@ function AdminDashboardContent() {
 
       {/* Manual ticket entry — the direct road when the assistant fumbles */}
       <Modal open={newOpen} onClose={() => { setNewOpen(false); setNewAttachment([]); }} title="New ticket">
-        <input value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
+        <input aria-label="One-line summary" value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
           placeholder="One-line summary"
           style={{
             width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10,
@@ -607,8 +615,8 @@ function AdminDashboardContent() {
             }}>{l}</button>
           ))}
         </div>
-        <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)}
-          placeholder="What should change, and why. The hourly agent reads this verbatim — the more concrete, the better."
+        <textarea aria-label="What should change, and why" value={newBody} onChange={(e) => setNewBody(e.target.value)}
+          placeholder="What should change, and why. The hourly agent reads this verbatim, so the more concrete, the better."
           style={{
             width: "100%", minHeight: 110, marginTop: 10, padding: "12px 14px", borderRadius: 10,
             backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
@@ -714,7 +722,7 @@ function TicketsList({ rows, T, onOpen, initialFilters = {} }) {
                   <span style={{
                     fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
                     color: "#fff", backgroundColor: "#7C3AED", marginRight: 6,
-                  }}>AGENT REPLIED — NEEDS YOUR ANSWER</span>
+                  }}>AGENT REPLIED: NEEDS YOUR ANSWER</span>
                 )}
                 <div style={{
                   fontSize: 12, color: T.textMuted, marginTop: 3, lineHeight: 1.4,
@@ -909,7 +917,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
                 invited {timeAgo(inv.invited_at)}{inv.invite_sent_at ? ` · email sent ${timeAgo(inv.invite_sent_at)}` : " · email not sent"}{inv.activated_at ? ` · joined ${timeAgo(inv.activated_at)}` : " · not joined yet"}
               </div>
             </div>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(inv.status === "invited" ? "pending" : inv.status), flexShrink: 0 }}>{inv.status}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(inv.status === "invited" ? "pending" : inv.status), flexShrink: 0 }}>{accessStateLabel("invite", inv.status)}</span>
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
             {inv.status !== "revoked" && chip("Invite to join", T.accent, () => setJoinTarget({ name: inv.name || "", email: inv.email }), false)}
@@ -967,7 +975,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
                 {u.founding_number != null && (
                   <span title="Signed up and activated" style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#6ee7b7", backgroundColor: "#065f46", border: "1px solid #10b981", whiteSpace: "nowrap" }}>{foundingText(u.founding_number)}</span>
                 )}
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(u.access_status) }}>{u.access_status}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(u.access_status) }}>{accessStateLabel("profile", u.access_status)}</span>
               </div>
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
@@ -995,7 +1003,8 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
       {grantsError && <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 6 }}>Support access grants could not be loaded, so View as member is off. Refresh to try again.</div>}
       {memberViewTarget && <AdminMemberView target={memberViewTarget} grant={memberGrants.get(memberViewTarget.id) || null}
         onClose={() => { setMemberViewTarget(null); setGrantsRevision(n => n + 1); }} />}
-      {accessChange && <AdminAccessChange key={`${accessChange.kind}:${accessChange.row.id}:${accessChange.status || accessChange.action}`} change={accessChange} T={T} onClose={() => setAccessChange(null)} onSaved={() => { setMsg("Access change saved in Control history."); refresh(); }} />}
+      {accessChange && <AdminAccessChange key={`${accessChange.kind}:${accessChange.row.id}:${accessChange.status || accessChange.action}`} change={accessChange} T={T} onClose={() => setAccessChange(null)} onSaved={() => { setMsg("Access change saved in Control history."); refresh(); }}
+        onRefresh={() => { setAccessChange(null); setMsg("Refreshed. Review the latest details before you choose again."); refresh(); }} />}
       {joinTarget && <Modal open onClose={() => setJoinTarget(null)} title="Invite to join">
         <AdminInviteToJoin key={joinTarget.email} embedded initialName={joinTarget.name} initialEmail={joinTarget.email} />
       </Modal>}
@@ -1014,7 +1023,14 @@ const badge = (color, bg) => ({
   whiteSpace: "nowrap", flexShrink: 0,
 });
 
-function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T }) {
+// Why an Add was refused, in words the owner can act on.
+function addLeadProblem(error) {
+  if (error?.code === "23505") return "that address is already on the list (check the already-joined or guide-only requests)";
+  if (error?.code === "23514") return "the email address or name is not valid";
+  return error?.message || "the server did not confirm it";
+}
+
+function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T, onChanged = () => {} }) {
   // Full back-end control: see everyone, add someone by hand (a physician
   // whose network ate the form), remove test rows, and review attempts
   // that never became signups.
@@ -1024,11 +1040,15 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T 
   const addLead = async () => {
     const email = addEmail.trim(), name = addName.trim();
     if (!email || !name) return;
-    setBusy(true);
+    setBusy(true); setInviteMsg("");
     const { data, error } = await supabase.from("early_access_leads")
       .insert({ name, email, source: "admin-manual", waitlist: true }).select().single();
     setBusy(false);
-    if (!error && data) { setRows(rs => [data, ...rs]); setAddName(""); setAddEmail(""); }
+    // Refused (already on the list, malformed) or unconfirmed: say why and
+    // keep what was typed. "Could not" picks up the red status styling.
+    if (error || !data) { setInviteMsg(`Could not add ${email}: ${addLeadProblem(error)}.`); return; }
+    setRows(rs => [data, ...rs]); setAddName(""); setAddEmail("");
+    onChanged();
   };
   // The lead "Invite to join" opened, prefilled in a dialog.
   const [joinTarget, setJoinTarget] = useState(null);
@@ -1043,6 +1063,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T 
     const { data, error } = await supabase.from("early_access_leads").delete().eq("id", r.id).select("id");
     if (error || data?.length !== 1) { setInviteMsg(`Could not remove ${r.email}: ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
     setRows(rs => rs.filter(x => x.id !== r.id));
+    onChanged();
   };
   const removeAttempt = async (a) => {
     setInviteMsg("");
@@ -1099,13 +1120,13 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T 
 
       {/* Manual add — for signups that arrive by text, call, or hallway */}
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-        <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Name"
-          style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
-        <input value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="email@domain.com" type="email"
-          style={{ flex: 1.2, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
+        <input aria-label="Name" value={addName} onChange={e => setAddName(e.target.value)} placeholder="Name"
+          style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />
+        <input aria-label="Email" value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="email@domain.com" type="email"
+          style={{ flex: 1.2, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />
         <button onClick={addLead} disabled={busy || !addName.trim() || !addEmail.trim()} style={{
           padding: "9px 14px", borderRadius: 9, border: "none", backgroundColor: T.accent, color: "#fff",
-          fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1, flexShrink: 0,
+          fontSize: 16, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1, flexShrink: 0,
         }}>Add</button>
       </div>
 
@@ -1192,7 +1213,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T 
   );
 }
 
-function FieldProposals({ rows, setRows, T }) {
+function FieldProposals({ rows, setRows, T, onChanged = () => {} }) {
   // New fields/categories the assistant created on the fly — the schema
   // evolves under founder review. Approve = keep an eye on it as a candidate
   // for a first-class field; dismiss = noise.
@@ -1203,6 +1224,7 @@ function FieldProposals({ rows, setRows, T }) {
     const { data, error } = await supabase.from("field_proposals").update({ status }).eq("id", row.id).select("id");
     if (error || data?.length !== 1) { setMsg(`Could not ${status === "approved" ? "approve" : "dismiss"} "${row.label}": ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
     setRows(rs => rs.map(r => r.id === row.id ? { ...r, status } : r));
+    onChanged();
   };
   if (!rows.length) return <Empty T={T} text="No new fields proposed yet. When the assistant invents a field to avoid dropping data, it lands here for your review." />;
   return (
@@ -1403,7 +1425,7 @@ function AiPanel({ users, ownKey, T }) {
           Paste a Google AI Studio key. It is stored on the server only (app_secrets, service role) and is never sent to a browser. Google is asked to confirm the key before it is saved.
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <input value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="AIza... or AQ...." type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
+          <input aria-label="Google AI Studio key" value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="AIza... or AQ...." type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
             style={{ flex: "1 1 220px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13, fontFamily: "ui-monospace, monospace" }} />
           {btn(busy ? "..." : "Save shared key", () => saveKey(keyInput), { primary: true, disabled: !keyInput.trim() })}
         </div>
@@ -1540,7 +1562,7 @@ function MessagesPanel({ messages, users, myProfileId, repliesSince, T, onRefres
     const text = replyBody.trim();
     if (!text || !openMsg) return;
     const targetUserId = openMsg.recipient_id || viewingUser?.user_id;
-    if (!targetUserId) { setDetailMsg("Pick a physician's thread first — this is a broadcast."); return; }
+    if (!targetUserId) { setDetailMsg("Pick a physician's thread first. This is a broadcast."); return; }
     setBusy(true); setDetailMsg("");
     const { error } = await supabase.from("admin_message_replies").insert({
       message_id: openMsg.id, user_id: targetUserId, author_id: myProfileId, body: text, is_admin_reply: true,
@@ -1604,16 +1626,16 @@ function MessagesPanel({ messages, users, myProfileId, repliesSince, T, onRefres
       )}
 
       <Modal open={composeOpen} onClose={() => setComposeOpen(false)} title="New message">
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Send to</div>
-        <select value={recipient} onChange={e => setRecipient(e.target.value)} style={{ ...inputStyle, marginBottom: 10 }}>
+        <div id="admin-message-to-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Send to</div>
+        <select aria-labelledby="admin-message-to-label" value={recipient} onChange={e => setRecipient(e.target.value)} style={{ ...inputStyle, marginBottom: 10 }}>
           <option value="">Everyone (broadcast)</option>
           {activeUsers.map(u => (
             <option key={u.id} value={u.id}>{u.name || u.email}</option>
           ))}
         </select>
-        <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject (optional)"
+        <input aria-label="Subject (optional)" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject (optional)"
           style={{ ...inputStyle, marginBottom: 10 }} />
-        <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="What do you want to say?"
+        <textarea aria-label="Message" value={body} onChange={e => setBody(e.target.value)} placeholder="What do you want to say?"
           style={{ ...inputStyle, minHeight: 110, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
         {composeMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{composeMsg}</div>}
         <button onClick={send} disabled={sending} style={{
@@ -1682,8 +1704,8 @@ function MessagesPanel({ messages, users, myProfileId, repliesSince, T, onRefres
                     ))}
                   </div>
                 )}
-                <textarea value={replyBody} onChange={e => setReplyBody(e.target.value)}
-                  placeholder="Reply — they see this on their dashboard."
+                <textarea aria-label="Reply" value={replyBody} onChange={e => setReplyBody(e.target.value)}
+                  placeholder="Reply. They see this on their dashboard."
                   style={{ ...inputStyle, minHeight: 80, marginTop: 12, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
                 {detailMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{detailMsg}</div>}
                 <button onClick={sendReply} disabled={busy} style={{

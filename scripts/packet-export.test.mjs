@@ -35,15 +35,15 @@ const data = {
     { id: "l3", type: "Board Certification (AOA)", name: "Neurological Surgery" },
     { id: "l4", type: "Certification", name: "ACLS", expirationDate: "2027-02-02" },
   ],
-  privileges: [{ id: "p1", facility: "Arrowhead", expirationDate: "2027-03-03" }],
+  privileges: [{ id: "p1", facility: "Cedar Ridge", expirationDate: "2027-03-03" }],
   insurance: [{ id: "i1", type: "Malpractice", expirationDate: "2027-04-04" }],
   cme: [{ id: "c1", title: "Stroke update", hours: 2 }],
   education: [{ id: "e1", type: "Doctor of Osteopathic Medicine (DO)", institution: "PCOM" }],
   healthRecords: [{ id: "h1", name: "TB test" }],
   travelDocs: [{ id: "t1", type: "Passport", number: "X1" }],
-  screenings: [{ id: "s1", type: "Background", agency: "ScoutLogic" }],
+  screenings: [{ id: "s1", type: "Background", agency: "Brightline Screening" }],
   professionalPhotos: [{ id: "ph1", name: "Headshot" }],
-  workHistory: [{ id: "w1", employer: "ANMG", startDate: "2020-01-01" }],
+  workHistory: [{ id: "w1", employer: "Cedar Ridge Neurosurgical Medical Group", startDate: "2020-01-01" }],
   peerReferences: [{ id: "r1", name: "Jane Smith, MD", email: "j@x.com" }],
   malpracticeHistory: [{ id: "m1", description: "None" }],
   documents: [
@@ -63,7 +63,7 @@ const data = {
     { id: "d14", name: "letter.pdf", type: "application/pdf", data: b64("n"), linkedTo: "peerReferences:r1" },
     { id: "d15", name: "closure.pdf", type: "application/pdf", data: b64("o"), linkedTo: "malpracticeHistory:m1" },
   ],
-  settings: { name: "Eric Whitney", degreeType: "DO", apiKey: "SECRET" },
+  settings: { name: "Rowan Testa", degreeType: "DO", apiKey: "SECRET" },
 };
 
 // ── The six sections that had no folder ──

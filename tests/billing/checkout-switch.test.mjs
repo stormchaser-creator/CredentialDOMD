@@ -226,3 +226,35 @@ test('a log that throws never changes the answer', async () => {
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), { error: 'checkout_offer_already_selected' });
 });
+
+// BILL-003: a member whose earlier Checkout completed, and whose subscription
+// has since ended, chooses the same terms again. The claim hands back that
+// attempt ('existing'); its session is complete and no subscription is live.
+// The handler closed the attempt and still refused ("You already have a
+// subscription"); only a second request worked.
+test('a completed earlier Checkout whose subscription ended: the same-terms rejoin opens a new Checkout on the first request', async () => {
+  const f = fixture();
+  const quote = { ...f.q, attempt_id: PRIOR, price_id: 'price_Bundle', product_id: 'prod_Bundle', subscription_id: 'sub_Ended' };
+  Object.assign(f.sessions.get('cs_Prior'), { status: 'complete', payment_status: 'paid', subscription: 'sub_Ended' });
+  f.claims.splice(0, 2, { state: 'existing', attempt_id: PRIOR, offer_id: 'core_locum', session_id: 'cs_Prior', quote }, { state: 'claimed', attempt_id: NEW, token: 'lease', quote: f.q });
+  f.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_Ended', status: 'canceled' }], has_more: false });
+  const response = await createLimitedLaunchHandlers(f.deps, config).checkout(paidRequest());
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { url: 'https://checkout.stripe.com/c/cs_New' });
+  assert.deepEqual(names(f.calls), ['claim', 'retrieve', 'close', 'claim', 'pin', 'create', 'save']);
+  assert.deepEqual(f.calls.find(c => c[0] === 'close').slice(1), [PROFILE, false, PRIOR, 'complete']);
+});
+
+test('a completed earlier Checkout whose subscription is still live is refused and opens nothing', async () => {
+  for (const status of ['active', 'past_due', 'incomplete', 'trialing']) {
+    const f = fixture();
+    const quote = { ...f.q, attempt_id: PRIOR, price_id: 'price_Bundle', product_id: 'prod_Bundle' };
+    Object.assign(f.sessions.get('cs_Prior'), { status: 'complete', subscription: 'sub_Live' });
+    f.claims.splice(0, 2, { state: 'existing', attempt_id: PRIOR, offer_id: 'core_locum', session_id: 'cs_Prior', quote });
+    f.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_Live', status }], has_more: false });
+    const response = await createLimitedLaunchHandlers(f.deps, config).checkout(paidRequest());
+    assert.equal(response.status, 409, status);
+    assert.deepEqual(await response.json(), { error: 'subscription_already_exists' });
+    assert.equal(f.calls.some(c => ['create', 'pin', 'save'].includes(c[0])), false, status);
+  }
+});

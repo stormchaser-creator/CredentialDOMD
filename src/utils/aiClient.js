@@ -90,6 +90,12 @@ export const AI_MESSAGES = {
 };
 
 const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
+// A dollar figure the proxy may not send (an older deploy): null, not $0.00.
+const optionalUsd = (v) => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
 
 /** Thrown by anthropicClientFor() when no Opus route exists before any request is made. */
 export class AiProxyError extends Error {
@@ -134,6 +140,8 @@ function readCachedStatus() {
       anthropicLimit: Number(parsed.anthropicLimit) || Number(parsed.limit) || SHARED_DAILY_LIMIT,
       unlimited: !!parsed.unlimited,
       monthSpentUsd: Number(parsed.monthSpentUsd) || 0,
+      monthCappedUsd: optionalUsd(parsed.monthCappedUsd),
+      monthGeminiUsd: optionalUsd(parsed.monthGeminiUsd),
       budgetSoftUsd: Number(parsed.budgetSoftUsd) || 0,
       budgetHardUsd: Number(parsed.budgetHardUsd) || 0,
       overSoft: !!parsed.overSoft,
@@ -146,7 +154,8 @@ function readCachedStatus() {
 }
 
 // { shared, used, limit, reason, anthropicShared, anthropicUsed, anthropicLimit, unlimited,
-//   monthSpentUsd, budgetSoftUsd, budgetHardUsd, overSoft, overHard, checkedAt }
+//   monthSpentUsd, monthCappedUsd, monthGeminiUsd, budgetSoftUsd, budgetHardUsd,
+//   overSoft, overHard, checkedAt }
 //   shared: the shared Gemini key is configured AND this user may use it
 //   reason: why not, when shared is false. "pending" (beta gate),
 //     "not_configured", "signed_out", "offline", or null
@@ -157,17 +166,23 @@ function readCachedStatus() {
 //   monthSpentUsd: dollars spent on the shared keys this UTC month, both
 //     providers; budgetSoftUsd warns, budgetHardUsd stops Opus (Gemini goes
 //     on). 0 when the proxy deploy predates budgets.
+//   monthCappedUsd: the part of it the budget counts (shared Opus), the
+//     figure overSoft / overHard are decided on; monthGeminiUsd: the Gemini
+//     part, which no budget counts. Both null when the proxy does not send
+//     them (a deploy before QA OPS-005's split, whose monthSpentUsd is the
+//     budget's figure alone; Gemini then unknown).
 //   overSoft / overHard: the proxy's own verdict on those lines
 export let sharedAiStatus = readCachedStatus() || {
   shared: false, used: 0, limit: SHARED_DAILY_LIMIT, reason: null,
   anthropicShared: false, anthropicUsed: 0, anthropicLimit: SHARED_DAILY_LIMIT, unlimited: false,
-  monthSpentUsd: 0, budgetSoftUsd: 0, budgetHardUsd: 0, overSoft: false, overHard: false,
+  monthSpentUsd: 0, monthCappedUsd: null, monthGeminiUsd: null,
+  budgetSoftUsd: 0, budgetHardUsd: 0, overSoft: false, overHard: false,
   checkedAt: 0,
 };
 
 const STATUS_KEYS = [
   "shared", "used", "limit", "reason", "anthropicShared", "anthropicUsed", "anthropicLimit", "unlimited",
-  "monthSpentUsd", "budgetSoftUsd", "budgetHardUsd", "overSoft", "overHard",
+  "monthSpentUsd", "monthCappedUsd", "monthGeminiUsd", "budgetSoftUsd", "budgetHardUsd", "overSoft", "overHard",
 ];
 
 function setSharedAiStatus(next) {
@@ -238,6 +253,8 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
         anthropicLimit: Number(body?.anthropic_limit) || limit,
         unlimited: !!body?.unlimited,
         monthSpentUsd: Number(body?.month_spent_usd) || 0,
+        monthCappedUsd: optionalUsd(body?.month_capped_usd),
+        monthGeminiUsd: optionalUsd(body?.month_gemini_usd),
         budgetSoftUsd: Number(body?.budget_soft_usd) || 0,
         budgetHardUsd: Number(body?.budget_hard_usd) || 0,
         overSoft: !!body?.over_soft,
@@ -285,13 +302,42 @@ function scheduleStatusRetry(delay = 2500) {
   }, wait);
 }
 
+// ai-proxy lets an account use the shared keys once profiles.access_status is
+// active (admins always), and the membership answer the app keeps
+// (useLimitedLaunchAccess) carries that same status as accessStatus. A status
+// asked while the membership was still pending goes stale when it turns
+// active: back from Checkout before Stripe's events land, the page asked once,
+// was told "pending", and Smart Scan said "AI is not on yet" to the confirmed
+// member until a reload (BILL-003). Whether the last membership answer was
+// active, so only the change to active asks again.
+let membershipActive = null;
+
+/**
+ * Note each fresh membership answer's accessStatus. The first active one
+ * after anything else asks ai-proxy again when the status this page holds
+ * still says "pending" (waiting for a check already in flight first), once.
+ * Nothing is asked before this page's own first check, which is current
+ * anyway. Returns the re-check's promise, or null when none was needed.
+ */
+export function noteMembershipStatus(accessStatus) {
+  const active = accessStatus === "active";
+  const becameActive = active && membershipActive !== true;
+  if (typeof accessStatus === "string") membershipActive = active;
+  if (!becameActive || (!statusFetchedThisLoad && !statusInflight)) return null;
+  const settled = statusInflight || Promise.resolve(sharedAiStatus);
+  return settled.then(() => (sharedAiStatus.reason === "pending" ? fetchSharedAiStatus({ force: true }) : sharedAiStatus))
+    .catch(() => sharedAiStatus);
+}
+
 /** Forget the fetched status (call on sign-out so the next user re-checks). */
 export function resetSharedAiStatus() {
   statusFetchedThisLoad = false;
   statusRetries = 0;
+  membershipActive = null;
   setSharedAiStatus({
     shared: false, used: 0, reason: null, anthropicShared: false, anthropicUsed: 0, unlimited: false,
-    monthSpentUsd: 0, budgetSoftUsd: 0, budgetHardUsd: 0, overSoft: false, overHard: false, checkedAt: 0,
+    monthSpentUsd: 0, monthCappedUsd: null, monthGeminiUsd: null,
+    budgetSoftUsd: 0, budgetHardUsd: 0, overSoft: false, overHard: false, checkedAt: 0,
   });
   try { if (typeof localStorage !== "undefined") localStorage.removeItem(SHARED_AI_STORAGE_KEY); } catch { /* ignore */ }
 }
@@ -372,7 +418,7 @@ function displayedAiStatus() {
  * when the Gemini line already says why AI is off for this account.
  */
 export function describeOpusStatus(settings) {
-  if (settings?.anthropicApiKey) return "Your own Anthropic key is in use on this device. The shared Opus daily limit does not apply.";
+  if (settings?.anthropicApiKey) return "Your own Anthropic key is in use on this device for the Opus coder, and for Vera when Vera answers with is set to Claude Opus. The shared Opus daily limit does not apply.";
   const s = displayedAiStatus();
   if (s.anthropicShared) {
     if (s.unlimited) return `Shared Opus: on, ${s.anthropicUsed} call${s.anthropicUsed === 1 ? "" : "s"} today (no cap on admin accounts)`;
@@ -390,6 +436,12 @@ export function describeOpusStatus(settings) {
  * reported a budget, or the shared keys are off for this account). The line
  * is informational; the warning appears past the soft line and hardens past
  * the hard line.
+ *
+ * The budget is set against the figure it counts (shared Opus), the one the
+ * proxy's overSoft / overHard are decided on, and Gemini is named beside it
+ * (QA OPS-005: both providers "of $15.00" read "About $15.40 of $15.00" with
+ * no warning while Opus kept answering). A proxy that does not send the
+ * split sends the budget's figure alone as monthSpentUsd.
  */
 export function describeAiBudget(settings) {
   const s = displayedAiStatus();
@@ -399,7 +451,10 @@ export function describeAiBudget(settings) {
   if (s.unlimited) {
     return { line: `About ${usd(s.monthSpentUsd)} this month on the shared keys (no budget on admin accounts).`, warning: null };
   }
-  const line = `About ${usd(s.monthSpentUsd)} of ${usd(s.budgetHardUsd)} this month on the shared keys.`;
+  const capped = s.monthCappedUsd ?? s.monthSpentUsd;
+  const gemini = s.monthCappedUsd == null ? null : s.monthGeminiUsd;
+  const line = `About ${usd(capped)} of ${usd(s.budgetHardUsd)} this month on shared Opus`
+    + (gemini != null && gemini >= 0.005 ? `, plus ${usd(gemini)} on Gemini, which the budget does not cap.` : ".");
   let warning = null;
   if (s.overHard) {
     warning = "The monthly AI budget is used up. Vera, the RVU coder and case dictation answer on Gemini until the first of next month; document scanning, CME import and work-log dictation keep working.";
@@ -618,10 +673,17 @@ function noteOpusRefusal(status, body) {
       anthropicLimit: Number(body.limit) || sharedAiStatus.anthropicLimit,
     });
   } else if (status === 429 && code === "budget") {
+    // spent_usd is what the budget counts (the Opus holds), not the month's
+    // total: it replaces that part, and the total keeps the last Gemini figure
+    // (QA OPS-005) instead of dropping by it until the next status read.
+    const capped = optionalUsd(body.spent_usd);
     setSharedAiStatus({
       overSoft: true,
       overHard: true,
-      monthSpentUsd: Number(body.spent_usd) || sharedAiStatus.monthSpentUsd,
+      ...(capped ? {
+        monthCappedUsd: capped,
+        monthSpentUsd: Math.round((capped + (sharedAiStatus.monthGeminiUsd ?? 0)) * 1e6) / 1e6,
+      } : {}),
       budgetHardUsd: Number(body.budget_usd) || sharedAiStatus.budgetHardUsd,
     });
   } else if (status === 503) {

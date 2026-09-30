@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { describeItem } from "../../utils/helpers";
 import { LIFECYCLE_SECTIONS, lifecycleNote } from "../../utils/lifecycle";
+import { categoryLabelFor } from "../../utils/customCategories.js";
 
 /**
  * HomeSearch: one box at the top of Home that finds anything you have
@@ -35,7 +36,7 @@ export const SECTIONS = [
   { key: "workLog", label: "Work log", tab: "locum", sub: "work" },
   { key: "encounters", label: "RVU entries", tab: "locum", sub: "rvus" },
   { key: "travelExpenses", label: "Expenses", tab: "locum", sub: "expenses" },
-  { key: "deductibles", label: "Deductions", tab: "more", sub: "finance" },
+  { key: "deductibles", label: "Deductions", tab: "more", sub: "finance:deductions" },
   { key: "taskNotes", label: "To-do", tab: "locum", sub: "todo" },
   // Records in the physician's own categories. Each opens in its own
   // category, so the hit carries its destination (see searchRecords).
@@ -49,7 +50,7 @@ const TEXT_FIELDS = ["name", "type", "title", "facility", "state", "city", "prov
   "subject", "text", "label", "degree", "school", "employer", "position", "journal", "authors", "location", "billTo", "billToLabel",
   "categoryName", "fieldValues", "customFields"];
 
-// "RUHS" should find "Riverside University Health System": add the
+// "UHS" should find "University Health System": add the
 // initials of every multi-word value (with and without small words) to
 // the haystack, and let a query token match either the text or an acronym.
 const SMALL = new Set(["of", "the", "and", "for", "at", "in", "on", "de", "la", "&"]);
@@ -100,14 +101,18 @@ export function searchRecords(data, q, { limitPerSection = 6 } = {}) {
     const hits = [];
     for (const it of items) {
       if (!it || typeof it !== "object" || it.deleted) continue;
-      const { label, hay } = hayFor(it, sec, data.settings?.name);
+      const { label, hay: saved } = hayFor(it, sec, data.settings?.name);
+      // A record in a renamed category is found by the category's current
+      // name, not only the one it was saved under (read live, never cached).
+      const liveCat = sec.key === "customRecords" ? categoryLabelFor(data, it) : "";
+      const hay = liveCat ? `${saved} ${liveCat.toLowerCase()}` : saved;
       if (toks.every(t => hay.includes(t))) {
         // Historical and superseded records stay searchable, and say what they are.
         const sub = [it.state, it.facility, it.provider, it.expirationDate && `exp ${it.expirationDate}`, it.date, it.total != null && `$${it.total}`,
           LIFECYCLE_SECTIONS.includes(sec.key) && lifecycleNote(it)]
           .filter(Boolean).join(" · ");
         hits.push({ id: it.id, label: label || "(untitled)", sub,
-          ...(sec.key === "customRecords" ? { dest: `custom:${it.categoryId || "unsorted"}`, sub: [it.categoryName, sub].filter(Boolean).join(" \u00b7 ") } : {}) });
+          ...(sec.key === "customRecords" ? { dest: `custom:${it.categoryId || "unsorted"}`, sub: [liveCat, sub].filter(Boolean).join(" \u00b7 ") } : {}) });
       }
       if (hits.length >= limitPerSection) break;
     }
@@ -154,9 +159,10 @@ export default function HomeSearch({ onOpen, onAskVera }) {
 
   return (
     <div ref={boxRef} style={{ position: "relative", marginBottom: 14, zIndex: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, backgroundColor: T.card, border: `1px solid ${focus ? T.accent : T.border}`, borderRadius: 14, padding: "10px 12px", boxShadow: T.shadow1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, backgroundColor: T.card, border: `1px solid ${focus ? T.accent : T.border}`, borderRadius: 14, padding: "0 12px", boxShadow: T.shadow1 }}>
         <span style={{ fontSize: 16, color: T.textMuted }}>{"\u{1F50D}"}</span>
         <input
+          aria-label="Search everything, or ask Vera"
           value={q}
           onChange={e => setQ(e.target.value)}
           onFocus={() => setFocus(true)}
@@ -172,10 +178,12 @@ export default function HomeSearch({ onOpen, onAskVera }) {
           data-desk-search=""
           autoCapitalize="none"
           autoCorrect="off"
-          style={{ flex: 1, border: "none", outline: "none", background: "transparent", color: T.text, fontSize: 16, minWidth: 0 }}
+          // The box's height is the input's own (HOME-003): a tap anywhere
+          // on the box lands in the field, not on padding around a 20 px line.
+          style={{ flex: 1, border: "none", outline: "none", background: "transparent", color: T.text, fontSize: 16, minWidth: 0, padding: "10px 0", minHeight: 40, boxSizing: "border-box" }}
         />
         {q && (
-          <button onClick={() => { setQ(""); }} style={{ border: "none", background: "transparent", color: T.textDim, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>{"×"}</button>
+          <button aria-label="Clear search" onClick={() => { setQ(""); }} style={{ border: "none", background: "transparent", color: T.textDim, fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 32, minHeight: 32, padding: 0 }}>{"×"}</button>
         )}
       </div>
 

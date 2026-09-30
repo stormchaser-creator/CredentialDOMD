@@ -33,6 +33,13 @@ export async function readProductionIdentity(subject: string, secret: string, tr
   return { ...identity, checkedAt };
 }
 
+/** A timestamp the database wrote, as Postgres renders a timestamptz in JSON. */
+export function isDeletionStamp(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 40
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}(:\d{2})?)$/.test(value)
+    && Number.isFinite(Date.parse(value));
+}
+
 export async function initializeProductionProfile(
   db: { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }> },
   identity: { subject: string; email: string; updatedMs: number; checkedAt: string },
@@ -72,7 +79,47 @@ export async function initializeProductionProfile(
   }
   if (result.schemaVersion !== 1 || result.subject !== identity.subject || result.issuer !== issuer
     || typeof result.profileId !== "string" || !/^[0-9a-f-]{36}$/.test(result.profileId)) throw new Error("continuity_unavailable");
+  // When this account's data was deleted (migration 20260930020000). Present
+  // only after a deletion; the app purges any device copy older than it.
+  if ("dataDeletedAt" in result && !isDeletionStamp(result.dataDeletedAt)) throw new Error("continuity_unavailable");
   return result;
+}
+
+/**
+ * The body of an initialize-clerk-profile request, or null when it is not one.
+ * Builds before release/qa1 send {} (or nothing). The app that honors a
+ * receipt's dataDeletedAt, dropping its device copy before it replays a
+ * queued write or pushes a cached record (src/lib/supabase.js ensureProfile,
+ * src/utils/dataDeletion.js), says so with exactly {"honorsDataDeletion":true}.
+ */
+export function initializeRequest(body: string): { honorsDataDeletion: boolean } | null {
+  if (typeof body !== "string" || body.length > 128) return null;
+  const text = body.trim();
+  if (!text) return { honorsDataDeletion: false };
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { return null; }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const keys = Object.keys(value);
+  if (keys.length === 0) return { honorsDataDeletion: false };
+  if (keys.length === 1 && keys[0] === "honorsDataDeletion" && (value as Record<string, unknown>).honorsDataDeletion === true) {
+    return { honorsDataDeletion: true };
+  }
+  return null;
+}
+
+/**
+ * Whether the app that asked may load the account this receipt describes.
+ * Once the account's data has been deleted (the receipt carries
+ * dataDeletedAt, migration 20260930020000), only an app that honors that
+ * stamp may. A build before release/qa1 purges its copy only while
+ * profiles.deleted_at is set, and the reopen clears deleted_at on the owner's
+ * next sign-in (on any device, or through clerk-webhook), so that build would
+ * replay its queue and push its whole pre-deletion cache back into the empty
+ * account. It is refused until it updates; its own update check then loads the
+ * current app, which purges and goes on.
+ */
+export function mayLoadAccount(receipt: Record<string, unknown>, request: { honorsDataDeletion: boolean }): boolean {
+  return request.honorsDataDeletion === true || !("dataDeletedAt" in receipt);
 }
 
 /** Service-role consumers resolve file prefixes from the protected journal. */

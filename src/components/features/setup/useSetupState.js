@@ -59,6 +59,20 @@ function queueSetupWrite(next, updateSettings, userId) {
   emit();
 }
 
+/**
+ * Apply a change to settings.setupState through the queue. It folds into
+ * whatever is already queued (the queued state, not the stored one, is the
+ * base), so two writers never overwrite each other. `now` writes at once
+ * rather than after the debounce: for a writer outside the Setup board (the
+ * CV review) that has no flush of its own on the way out of the app.
+ */
+export function commitSetupState(mutate, { stored, updateSettings, userId, now = false }) {
+  if (owner && owner !== (userId || null)) flushSetupWrites();
+  const base = pending || normalizeSetupState(stored);
+  queueSetupWrite(mutate(base), updateSettings, userId);
+  if (now) flushSetupWrites();
+}
+
 const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); };
 const snapshot = () => pending;
 
@@ -93,8 +107,7 @@ export function useSetupState() {
   }), [setup]);
 
   const commit = useCallback((mutate) => {
-    const base = pending || normalizeSetupState(effective);
-    queueSetupWrite(mutate(base), updateSettings, userId);
+    commitSetupState(mutate, { stored: effective, updateSettings, userId });
   }, [effective, updateSettings, userId]);
 
   const skip = useCallback((id) => commit((st) => withTask(st, id, "skipped", {}, pruneArgs)), [commit, pruneArgs]);

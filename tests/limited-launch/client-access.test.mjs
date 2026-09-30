@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accessAt, validateAccessSnapshot, createAccessAuthority, ACCESS_REFRESH_MS, allowsDataChange, canReviewBillingOffer, membershipReadOnly, accessVerifying, writeRefusalMessage, alertWriteRefused, RECONNECTING_MESSAGE, NOT_CONNECTED_MESSAGE, OUTDATED_MESSAGE, membershipWriteError, scopesForWrite, writeAllowedNow } from '../../src/utils/limitedLaunchAccess.js';
+import { accessAt, validateAccessSnapshot, createAccessAuthority, ACCESS_REFRESH_MS, allowsDataChange, canReviewBillingOffer, membershipReadOnly, accessVerifying, writeRefusalMessage, alertWriteRefused, RECONNECTING_MESSAGE, NOT_CONNECTED_MESSAGE, OUTDATED_MESSAGE, membershipWriteError, scopesForWrite, confirmWriteAllowed, prepareWriteCheck, WRITE_GRACE_MS, GRACE_EXPIRED_MESSAGE } from '../../src/utils/limitedLaunchAccess.js';
 import { BASE_KEYS } from '../../src/utils/storageScope.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 
@@ -363,33 +363,110 @@ test('an unreadable answer (an out-of-date build) is refused as such, not as rec
   assert.equal(authority.outdated(), false);
 });
 
-test('an invoice is only sent when its record would be saved: writeAllowedNow refuses first, with the refusal message', () => {
+test('an invoice is only sent when its record would be saved: confirmWriteAllowed refuses first, with the refusal message', async () => {
   let now = 0;
   const authority = createAccessAuthority({ enabled: true, currentAccount: () => 'user_a', now: () => now, memory: null });
   authority.reset('user_a');
   const checks = [];
-  authority.setRecheck(() => checks.push('check'));
-  const shown = [];
   const snapshot = fixture(); snapshot.practiceTrial = { state: 'none', startsAt: null, endsAt: null, autoCharges: false };
+  // The access hook's check, answered at once with the same active membership.
+  authority.setRecheck(() => { checks.push('check'); authority.accept('user_a', snapshot); return Promise.resolve(); });
+  const shown = [];
   authority.accept('user_a', snapshot);
-  assert.equal(writeAllowedNow('practice', { authority, alert: m => shown.push(m), now: () => 1e13 }), true);
+  assert.equal(await confirmWriteAllowed('practice', { authority, alert: m => shown.push(m), now: () => 1e13 }), true);
+  assert.deepEqual(checks, [], 'a fresh answer needs no check');
+  // Back from the share sheet with an answer that is only old: the check
+  // answers first, and only then does the invoice go out.
   now = ACCESS_REFRESH_MS + 1;
-  assert.equal(writeAllowedNow('practice', { authority, alert: m => shown.push(m), now: () => 2e13 }), false);
-  assert.deepEqual(shown, [RECONNECTING_MESSAGE]);
-  assert.deepEqual(checks, ['check'], 'and a check starts at once');
+  assert.equal(prepareWriteCheck('practice', authority), true, 'opening the preview asks already');
+  assert.equal(await confirmWriteAllowed('practice', { authority, alert: m => shown.push(m), now: () => 2e13 }), true);
+  assert.deepEqual(shown, []);
+  assert.deepEqual(checks, ['check'], 'one check, shared by the preview and the tap');
+  // No active answer for over a day: refused first, and says why.
+  now += WRITE_GRACE_MS + 1;
+  authority.setRecheck(() => { checks.push('check'); return Promise.resolve(); });
+  assert.equal(await confirmWriteAllowed('practice', { authority, alert: m => shown.push(m), now: () => 3e13 }), false);
+  assert.deepEqual(shown, [GRACE_EXPIRED_MESSAGE]);
+  // No answer at all this session: refused as reconnecting.
+  authority.reset('user_a');
+  assert.equal(await confirmWriteAllowed('practice', { authority, alert: m => shown.push(m), now: () => 4e13 }), false);
+  assert.deepEqual(shown, [GRACE_EXPIRED_MESSAGE, RECONNECTING_MESSAGE]);
 });
 
 test('the share-sheet invoice sends ask first, and record the invoice before marking anything billed', async () => {
   const { readFile } = await import('node:fs/promises');
   const read = path => readFile(new URL(`../../src/components/features/locum/${path}`, import.meta.url), 'utf8');
   const work = await read('WorkLog.jsx'), duty = await read('DutyLog.jsx'), expenses = await read('Expenses.jsx');
-  assert.match(work, /const sendInvoice = useCallback\(async \(format\) => \{\n(?:\s*\/\/.*\n)*\s*if \(!writeAllowedNow\("practice"\)\) return;/);
-  assert.match(work, /if \(!writeAllowedNow\("practice"\)\) return; await copyToClipboard\(invoicePreview\.text\); markBilledAndLog\("clipboard"\);/);
-  assert.match(duty, /const sendDutyInvoice = async \(format\) => \{\n(?:\s*\/\/.*\n)*\s*if \(!writeAllowedNow\("practice"\)\) return;/);
-  assert.match(duty, /if \(!writeAllowedNow\("practice"\)\) return; copyToClipboard\(invoicePreview\.text\); markDutyBilled\("copy"\);/);
-  assert.match(expenses, /if \(!writeAllowedNow\("practice"\)\) return;\n\s*setBusy\(true\);/);
-  for (const [name, source, marker] of [['WorkLog', work, 'editItem("workLog", { ...e, invoiceId: invId })'], ['DutyLog', duty, 'editItem("dutyDays", { ...d, invoiceId: invId })'], ['Expenses', expenses, 'editItem("travelExpenses", { ...e, invoiceId })']]) {
+  // The access check comes before anything goes out: only comments and a
+  // silent return for an invoice already recorded (PRAC-002), still waiting
+  // for its number (PRAC-030), or with a Send or Copy already in progress may
+  // precede it.
+  const guard = '(?:\\s*//.*\\n|\\s*if \\((?:sent \\|\\| )?(?:sending \\|\\| )?recordedRef\\.current[^\\n]*\\) return;[^\\n]*\\n)*';
+  // Awaited: an answer that is only old is settled before anything goes out
+  // (QA3). While it is, Send, Copy and Mark as sent wait; once it is back,
+  // nothing goes out if the invoice was recorded meanwhile or the preview closed.
+  const check = 'if \\(!\\(await confirmWriteAllowed\\("practice"\\)\\)\\) return;';
+  const gate = (open) => new RegExp(`const whenWriteAllowed = ${open}\\n\\s*const opened = previewSeqRef\\.current;\\n\\s*setSending\\("checking"\\);\\n\\s*try \\{\\n\\s*${check}\\n\\s*if \\(recordedRef\\.current \\|\\| previewSeqRef\\.current !== opened\\) return;\\n\\s*setSending\\("out"\\);\\n\\s*await go\\(\\);`);
+  assert.match(work, gate('useCallback\\(async \\(go\\) => \\{'));
+  assert.match(duty, gate('async \\(go\\) => \\{'));
+  assert.match(work, new RegExp(`const sendInvoice = useCallback\\(async \\(format\\) => \\{\\n${guard}\\s*await whenWriteAllowed\\(async \\(\\) => \\{`));
+  assert.match(duty, new RegExp(`const sendDutyInvoice = async \\(format\\) => \\{\\n${guard}\\s*await whenWriteAllowed\\(\\(\\) => sendDutyFile\\(format\\)\\);`));
+  // Copy: the access check, then the copy, and only a copy that worked is marked billed (PRAC-002).
+  const copy = (start, mark) => new RegExp(`${start}\\n${guard}\\s*await whenWriteAllowed\\(async \\(\\) => \\{\\s*let ok = false;\\s*try \\{ ok = await copyToClipboard\\(invoicePreview\\.text\\); \\} catch \\{ ok = false; \\}\\s*if \\(!ok\\) \\{[^\\n]*return; \\}\\s*${mark}`);
+  assert.match(work, copy('const copyInvoice = useCallback\\(async \\(\\) => \\{', 'markBilledAndLog\\("clipboard"\\);'));
+  assert.match(work, /onClick=\{copyInvoice\}/);
+  assert.match(duty, copy('const copyDutyInvoice = async \\(\\) => \\{', 'markDutyBilled\\("copy"\\);'));
+  assert.match(duty, /onClick=\{copyDutyInvoice\}/);
+  assert.match(expenses, new RegExp(`setBusy\\("checking"\\);\\n\\s*try \\{\\n(?:\\s*//.*\\n)*\\s*${check}\\n(?:\\s*//.*\\n)*\\s*if \\(recordedRef\\.current \\|\\| sheetRef\\.current !== opened\\) return;\\n\\s*setBusy\\("building"\\);`));
+  for (const [name, source] of [['WorkLog', work], ['DutyLog', duty], ['Expenses', expenses]]) {
+    assert.doesNotMatch(source, /writeAllowedNow/, `${name} has no unawaited access check left`);
+    // The check is asked for when the invoice is opened, so the tap finds it answered.
+    const asked = source.indexOf('prepareWriteCheck("practice");');
+    assert.ok(asked > 0 && asked < source.indexOf('confirmWriteAllowed("practice")'), `${name} starts the check when the invoice opens`);
+  }
+  for (const [name, source, marker] of [['WorkLog', work, 'editItem("workLog", { ...e, invoiceId: invId }, SENT_WORK)'], ['DutyLog', duty, 'editItem("dutyDays", { ...d, invoiceId: invId }, SENT_WORK)'], ['Expenses', expenses, 'editItem("travelExpenses", { ...e, invoiceId }, SENT_WORK)']]) {
     const recorded = source.indexOf('recorded === false');
     assert.ok(recorded > 0 && recorded < source.indexOf(marker), `${name} checks the invoice record before marking entries billed`);
+  }
+});
+
+test('QA3 review: an invoice that went out records itself and everything it billed as sent work, which a later read-only answer does not take back', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { SENT_WORK } = await import('../../src/utils/limitedLaunchAccess.js');
+  assert.deepEqual({ ...SENT_WORK }, { keepOnRefusal: true });
+  const read = path => readFile(new URL(`../../src/components/features/locum/${path}`, import.meta.url), 'utf8');
+  // The body of each function that records an invoice once it has gone out.
+  const body = (source, start) => {
+    const at = source.indexOf(start);
+    assert.ok(at >= 0, `${start} is where the invoice is recorded`);
+    let depth = 0, i = source.indexOf('{', at + start.length - 1);
+    for (let j = i; j < source.length; j++) {
+      if (source[j] === '{') depth++;
+      else if (source[j] === '}' && --depth === 0) return source.slice(i, j + 1);
+    }
+    throw new Error(`${start} never closes`);
+  };
+  // Every save in it, with its arguments (balanced parentheses).
+  const saves = code => [...code.matchAll(/\b(addItem|editItem)\(/g)].map(m => {
+    let depth = 0;
+    for (let j = m.index + m[0].length - 1; j < code.length; j++) {
+      if (code[j] === '(') depth++;
+      else if (code[j] === ')' && --depth === 0) return code.slice(m.index, j + 1);
+    }
+    throw new Error('unbalanced save');
+  });
+  // fix/qa3-invoice-sent gave the two recorders a second argument (Record as
+  // sent and Mark as sent pass the number and moment the invoice went out
+  // under), and moved the expense sheet's saves out of its send into
+  // recordExpenseInvoice, which the send, Record as sent and Mark as sent share.
+  const cases = [
+    ['WorkLog.jsx', 'const markBilledAndLog = useCallback((method, { number: asNumber, sentAt: asSentAt, retry = false } = {}) => {', 4],
+    ['DutyLog.jsx', 'const markDutyBilled = (method, { number: asNumber, sentAt: asSentAt, retry = false } = {}) => {', 2],
+    ['Expenses.jsx', 'const recordExpenseInvoice = (record, { retry = false, outcome = null } = {}) => {', 2],
+  ];
+  for (const [file, start, count] of cases) {
+    const found = saves(body(await read(file), start));
+    assert.equal(found.length, count, `${file}: ${found.join(' | ')}`);
+    for (const call of found) assert.match(call, /, SENT_WORK\)$/, `${file}: ${call.slice(0, 60)} keeps what it records`);
   }
 });

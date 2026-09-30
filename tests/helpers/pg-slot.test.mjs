@@ -535,15 +535,53 @@ test('every test that takes a slot, itself or through a python fixture, has the 
   const all = [...walk(path.join(root, 'tests')), ...walk(path.join(root, 'scripts'))];
   const python = all.filter(f => f.endsWith('.py') && path.basename(f) !== 'pg_slot.py' && /pg_slot\.acquire\(/.test(fs.readFileSync(f, 'utf8'))).map(f => path.basename(f));
   assert.ok(python.length >= 15, `python fixtures found: ${python.length}`);
+  // A shared fixture module that takes the slot for its callers (tests/ops/pg.mjs,
+  // tests/billing/billingChainFixture.mjs): every test file importing one takes
+  // a slot. postgresFixture.mjs is matched by its postgresFixture( call instead,
+  // since the other fixtures import it only for pgBin, pgSkip and the helpers.
+  const modules = all.filter(f => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && path.dirname(f) !== HERE &&
+    path.basename(f) !== 'postgresFixture.mjs' && /acquirePgSlot(?:Sync)?\(/.test(fs.readFileSync(f, 'utf8')));
+  assert.ok(modules.length >= 2, `shared fixture modules found: ${modules.length}`);
+  const importsModule = (f, text) => [...text.matchAll(/from\s+['"](\.{1,2}\/[^'"]+)['"]/g)].some(m => modules.includes(path.resolve(path.dirname(f), m[1])));
   const takers = [], bad = [];
   for (const f of all.filter(f => f.endsWith('.test.mjs') && path.dirname(f) !== HERE)) {
     const text = fs.readFileSync(f, 'utf8');
-    if (!/acquirePgSlot(?:Sync)?\(|postgresFixture\(/.test(text) && !python.some(p => text.includes(p))) continue;
+    if (!/acquirePgSlot(?:Sync)?\(|postgresFixture\(/.test(text) && !python.some(p => text.includes(p)) && !importsModule(f, text)) continue;
     takers.push(f);
     text.split('\n').forEach((line, i) => { if (/\btest\(/.test(line) && /\btimeout:\s*\d/.test(line)) bad.push(`${path.relative(root, f)}:${i + 1}`); });
   }
   assert.ok(takers.length >= 22, `tests that take a slot found: ${takers.length}`);
   assert.deepEqual(bad, [], 'a literal timeout counts the slot wait against the test: use withSlotWait');
+});
+
+// The 2026-09-30 release added nine fixtures that ran initdb with no slot
+// (two of them shared modules other tests start clusters through), and the
+// check above could not see them: it only knew the tests that took one.
+test('every file that runs initdb takes a slot before it', () => {
+  const root = path.resolve(HERE, '../..');
+  const walk = (d, out = []) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name.startsWith('.') || e.name === '__pycache__') continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p, out); else if (/\.(?:mjs|js|py)$/.test(e.name)) out.push(p);
+    }
+    return out;
+  };
+  // initdb given a data directory: exec('initdb', ['-D', ...), `${bin}/initdb`, ['-D', ...,
+  // run(BIN/'initdb','-D', ...), not an existsSync(join(bin, 'initdb')) probe.
+  const RUNS = /initdb['"`]\s*,\s*\[?\s*['"]-D['"]/;
+  const TAKES = /acquirePgSlot(?:Sync)?\(|pg_slot\.acquire\(/;
+  const runners = [], missing = [];
+  for (const f of [...walk(path.join(root, 'tests')), ...walk(path.join(root, 'scripts'))]) {
+    const text = fs.readFileSync(f, 'utf8');
+    const first = text.search(RUNS);
+    if (first < 0) continue;
+    runners.push(f);
+    const took = text.search(TAKES);
+    if (took < 0 || took > first) missing.push(path.relative(root, f));
+  }
+  assert.ok(runners.length >= 45, `files that run initdb found: ${runners.length}`);
+  assert.deepEqual(missing, [], 'take a slot (acquirePgSlot / pg_slot.acquire) before initdb and release it after the cluster stops');
 });
 
 // Review of 2026-09-29: the profile resolved a shared directory's own name,

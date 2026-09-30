@@ -84,7 +84,7 @@ export function normalizeBirthday(input) {
   return `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-/** "07-25" to "July 25". Anything unreadable comes back as "". */
+/** "07-14" to "July 14". Anything unreadable comes back as "". */
 export function formatBirthday(mmdd) {
   const norm = normalizeBirthday(mmdd);
   if (!norm) return "";

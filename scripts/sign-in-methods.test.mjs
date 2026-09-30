@@ -32,16 +32,52 @@ const fixture = (user = { id: 'user_existing', phoneNumbers: [] }) => {
 };
 const render = variant => renderToStaticMarkup(React.createElement(variant.Card, { theme: {} }));
 
-test('missing, false or non-exact flags preserve email-only copy and mount no account UI', () => {
+test('missing, false or non-exact flags preserve email-only copy and offer no text-message sign-in', () => {
   for (const flag of [undefined, 'false', 'TRUE']) {
     const module = variants.get(flag), f = fixture();
     assert.equal(module.SMS_SIGN_IN_ENABLED, false);
-    assert.equal(render(module), '');
-    assert.equal(globalThis.__smsFixture.reads, 0);
+    assert.doesNotMatch(render(module), /text-message|mobile number|Manage sign-in methods/);
     module.openSignInMethods(f.clerk, 'user_existing');
     assert.deepEqual(f.calls, []);
     assert.equal(module.SIGN_IN_LOCALIZATION.signIn.password.actionLink, 'Email me a sign-in code instead');
     assert.equal(module.SIGN_IN_LOCALIZATION.signIn.alternativeMethods.blockButton__phoneCode, undefined);
+  }
+});
+
+// AUTH-012: with text-message sign-in off (the live build), the card rendered
+// nothing, so a member had no way in the app to change a password or the
+// email they sign in with. The password and sign-in email card is not an SMS
+// feature: it shows for every signed-in member and opens Clerk's own verified
+// account screen, with the delete and username sections still hidden.
+test('flag off: every signed-in member gets a Password and sign-in email card that opens account security', () => {
+  for (const flag of [undefined, 'false', 'TRUE']) {
+    const module = variants.get(flag), f = fixture();
+    const html = render(module);
+    assert.match(html, /Password and sign-in email/);
+    assert.match(html, /Change password or sign-in email/);
+    assert.match(html, /make it primary/, 'says how a sign-in email change works');
+    assert.match(html, /Email field .* contact address/, 'says the profile Email field is not the sign-in email');
+    assert.doesNotMatch(html, /\u2014/, 'no em dash');
+    assert.equal((html.match(/<button/g) || []).length, 1);
+    module.openAccountSecurity(f.clerk, 'user_existing');
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].appearance.elements.profileSection__danger.display, 'none');
+    assert.equal(f.calls[0].appearance.elements.profileSection__username.display, 'none');
+  }
+});
+
+test('flag off: signed-out or unloaded sessions show no account card', () => {
+  for (const patch of [{ isLoaded: false }, { isSignedIn: false }, { user: null }]) {
+    fixture(); Object.assign(globalThis.__smsFixture.userState, patch);
+    assert.equal(render(variants.get(undefined)), '');
+  }
+});
+
+test('account security refuses a switched session whatever the SMS flag', () => {
+  for (const flag of [undefined, 'true']) {
+    const module = variants.get(flag), f = fixture(); f.clerk.user = { id: 'user_other' };
+    assert.throws(() => module.openAccountSecurity(f.clerk, 'user_existing'), /Your sign-in changed/);
+    assert.deepEqual(f.calls, []);
   }
 });
 

@@ -32,7 +32,7 @@ that entry are the whole recovery.
 | Layer | What | Where it lives | Retention | Who holds it |
 | --- | --- | --- | --- | --- |
 | Supabase daily snapshot | Whole Postgres database, physical backup | Supabase, us-east-2 | 7 days, PITR off | Supabase only |
-| App monthly ZIP (`build-backup`) | Per-user JSON, CSV and documents, emailed link | Bucket `backups` in the same project | Never pruned yet, link 35 days | Supabase only |
+| App monthly ZIP (`build-backup`) | Per-user JSON, CSV and documents, emailed link | Bucket `backups` in the same project | 3 newest months kept (`prune-backups` edge function, Storage API), link 35 days | Supabase only |
 | This job, nightly 03:10 | Every table in `public` and `storage` plus `cron.job` as row data, public schema DDL, every object in buckets `documents` and `backups`, one encrypted archive | `/Users/ew/Backups/credentialdomd/<date>.tar.enc` | 30 days | The Studio |
 | Second copy of the same archive | Copied by the job after each run | `~/Library/Mobile Documents/com~apple~CloudDocs/Backups/CredentialDOMD/<date>.tar.enc` | 14 days | Apple iCloud, off site |
 | Device mirror | Each physician's own records in their browser storage | Their phone or laptop | Live | The physician |
@@ -190,7 +190,12 @@ Step by step:
    then `cron.schedule()` for each job; then every object. It prints a line
    per phase and a list of failures. Expect the `user_events -> auth.users`
    foreign key to fail on a fresh project (no Clerk users in `auth.users`
-   yet); the rows still load.
+   yet); the rows still load. Nothing else should fail. Functions are created
+   with `check_function_bodies` off (they are archived by name, not by what
+   they call), identity tables such as `clerk_continuity_events` load with
+   `OVERRIDING SYSTEM VALUE`, and each identity sequence is set from the
+   loaded ids. A failed function, policy or `data/<table>` line is a
+   restore bug, not an expected gap (QA OPS-003, 2026-09-30).
 3. Patch the old project URL out of the database. Five functions
    (`dispatch_account_deletions`, `dispatch_guide_emails`,
    `dispatch_monthly_backups`, `notify_ticket_reply`, `welcome_new_lead`) and
@@ -307,9 +312,11 @@ node scripts/offsite-restore.mjs "$A" --via-psql "postgresql:///credentialdomd_r
 
 A bare Postgres lacks the Supabase roles (`anon`, `authenticated`,
 `service_role`), the `auth.uid()` family, and the `pg_cron`, `pg_net` and
-`supabase_vault` extensions. Grants, policies and those three extension
-statements fail and are reported; tables, data, functions and views still
-load. The uploaded documents are plain files under `objects/` in the
+`supabase_vault` extensions. Grants, policies that name those roles and
+those three extension statements fail and are reported; tables, data,
+functions and views still load. Check two numbers after a `--via-psql` load:
+every function in the archive's `schema/ddl.json` exists on the target, and
+every policy that names only `public` does too. The uploaded documents are plain files under `objects/` in the
 `--keep-temp` directory.
 
 ## 4. Quarterly restore test
@@ -322,7 +329,10 @@ October. About one hour, one Supabase project's prorated cost for a day.
    than us-east-2.
 3. Dry run, then `--apply` with `--target <testref>` from the newest archive.
    Read the failure list: only the `user_events -> auth.users` foreign key
-   should be there.
+   should be there. Then compare `select count(*) from pg_proc where
+   pronamespace = 'public'::regnamespace` and `select count(*) from
+   pg_policies where schemaname = 'public'` on the test project with the
+   live project; they must match.
 4. In the test project's SQL editor: `select count(*) from public.case_logs`
    and a few other tables; compare with `manifest.json` (the dry run prints
    the counts). In Storage, open one object from `documents` and confirm it

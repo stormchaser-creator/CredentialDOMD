@@ -159,7 +159,7 @@ const FAQ_DATA = [
       },
       {
         q: "Can I permanently delete all my data?",
-        a: "Yes. Go to More > Data Rights > Delete All My Data. You'll need to type DELETE to confirm. This permanently removes all credentials, settings, documents, and history from this device, the cloud database, and file storage. We recommend exporting a backup first. This action cannot be undone. To close the sign-in account itself, email support@credentialdomd.com.",
+        a: "Yes. Go to More > Data Rights > Delete All My Data. You'll need to type DELETE to confirm. This permanently removes all credentials, settings, documents, and history from this device, the cloud database, and file storage. Your other devices clear their copy, private notes included, the next time they open online. Your account stays open, so you can sign in again and start over with an empty account. We recommend exporting a backup first. This action cannot be undone. To close the sign-in account itself, email support@credentialdomd.com.",
       },
       {
         q: "Where can I find the Privacy Policy and Terms of Service?",
@@ -218,13 +218,14 @@ const FAQ_DATA = [
 
 function FAQSection() {
   const { theme: T } = useApp();
-  const [openIdx, setOpenIdx] = useState(null);
+  // The open answer is keyed by its category and question, not by its place
+  // in the filtered list: searching moves questions into other slots, and an
+  // index key opened whichever one landed there (QA SUPPORT-004).
+  const [openKey, setOpenKey] = useState(null);
   const [searchQ, setSearchQ] = useState("");
+  const itemKey = (cat, item) => `${cat.category}\n${item.q}`;
 
-  const toggle = (catIdx, itemIdx) => {
-    const key = `${catIdx}-${itemIdx}`;
-    setOpenIdx(openIdx === key ? null : key);
-  };
+  const toggle = (key) => setOpenKey(openKey === key ? null : key);
 
   const filteredFAQ = searchQ.trim()
     ? FAQ_DATA.map(cat => ({
@@ -254,6 +255,7 @@ function FAQSection() {
       {/* Search */}
       <div style={{ position: "relative", marginBottom: 14 }}>
         <input
+          aria-label="Search FAQ"
           value={searchQ}
           onChange={e => setSearchQ(e.target.value)}
           placeholder="Search FAQ..."
@@ -261,7 +263,7 @@ function FAQSection() {
           style={{
             width: "100%", padding: "12px 16px", backgroundColor: T.input,
             border: `1px solid ${T.inputBorder}`, borderRadius: 10, color: T.text,
-            fontSize: 14, outline: "none", boxSizing: "border-box",
+            fontSize: 16, outline: "none", boxSizing: "border-box",
           }}
         />
       </div>
@@ -272,7 +274,7 @@ function FAQSection() {
         </div>
       )}
 
-      {filteredFAQ.map((cat, catIdx) => (
+      {filteredFAQ.map((cat) => (
         <div key={cat.category} style={{ marginBottom: 16 }}>
           <div style={{
             fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase",
@@ -281,17 +283,17 @@ function FAQSection() {
             {cat.category}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {cat.items.map((item, itemIdx) => {
-              const key = `${catIdx}-${itemIdx}`;
-              const isOpen = openIdx === key;
+            {cat.items.map((item) => {
+              const key = itemKey(cat, item);
+              const isOpen = openKey === key;
               return (
-                <div key={itemIdx} style={{
+                <div key={key} style={{
                   backgroundColor: T.card, border: `1px solid ${isOpen ? T.accent : T.border}`,
                   borderRadius: 12, overflow: "hidden",
                   transition: "border-color 0.2s",
                 }}>
                   <button
-                    onClick={() => toggle(catIdx, itemIdx)}
+                    onClick={() => toggle(key)}
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
                       width: "100%", padding: "14px 16px", background: "none", border: "none",

@@ -154,7 +154,12 @@ export function buildClientProposals(rows, data, { now } = {}) {
         { subject: r.subject || "", body: r.body_text || "", fromName: r.from_name || "", fromAddr: r.from_addr || "" },
         catalogue, physician, now, modelReading(r.proposal),
       );
-      out[r.id] = { ...proposal, method: "rules-client" };
+      // Whether the forward was authenticated is a fact about the email, not
+      // the file: the rebuild keeps what the server recorded (and records
+      // nothing when it recorded nothing), so a rebuild can never make an
+      // unverified forward one tap (requestPacket.js oneTapReady).
+      const verified = r.proposal && typeof r.proposal.verified === "boolean" ? { verified: r.proposal.verified } : {};
+      out[r.id] = { ...proposal, method: "rules-client", ...verified };
     } catch (e) {
       console.warn(`request packet: proposal failed for ${r.id}`, e?.message || e);
     }

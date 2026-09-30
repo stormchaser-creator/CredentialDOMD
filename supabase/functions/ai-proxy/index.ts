@@ -57,7 +57,8 @@
  *   GET  /functions/v1/ai-proxy      Authorization: Bearer <Clerk JWT>
  *     -> { shared: boolean, used_today, limit, unlimited: boolean (admins),
  *          anthropic_shared: boolean, anthropic_used_today, anthropic_limit,
- *          month_spent_usd, budget_soft_usd, budget_hard_usd, over_soft, over_hard }
+ *          month_spent_usd, month_capped_usd, month_gemini_usd,
+ *          budget_soft_usd, budget_hard_usd, over_soft, over_hard }
  *        shared = key configured AND this account may use it
  *
  * The shared keys are app_secrets.gemini_shared_key and
@@ -72,6 +73,12 @@
  * Dollar budgets are per user, per UTC calendar month, both providers summed:
  *   AI_BUDGET_SOFT_USD secret, default DEFAULT_BUDGET_SOFT_USD (warn in Settings)
  *   AI_BUDGET_HARD_USD secret, default DEFAULT_BUDGET_HARD_USD (Anthropic refused)
+ * The month_spent_usd a member sees is both providers: the Anthropic cap's
+ * holds plus metered Gemini cost (monthSpendFigures). The cap itself counts
+ * the holds, and over_soft / over_hard say what the cap will do. The two
+ * parts come separately too (month_capped_usd, the figure the budget lines
+ * apply to, and month_gemini_usd, null when unknown), so Settings sets the
+ * budget against its own figure and names Gemini beside it.
  * Admins are unlimited on all of them. The counts stay as a backstop under
  * the dollars.
  *
@@ -353,6 +360,32 @@ function msSinceUtcMidnight(now: number = Date.now()): number {
   return now - Date.parse(startOfTodayUtc());
 }
 
+/** The month for the status answer; gemini is null when it could not be read. */
+export type MonthSpend = { spent: number; capped: number; gemini: number | null };
+
+/**
+ * The status answer's month figures (QA OPS-005), from public.ai_month_spend_usd:
+ *   spent   both providers, the month's total. A member's Anthropic spend is
+ *           the cap's holds (a hold counts at its worst case until it
+ *           settles, as the cap counts it); an administrator takes no holds,
+ *           so theirs is the metered Anthropic cost. Gemini is never held
+ *           (it is never refused), so its metered cost is added from ai_usage.
+ *   capped  what the Anthropic cap counts, which decides over_soft / over_hard;
+ *           a member's Settings line sets the budget against this figure.
+ *           An administrator is never capped (their verdicts are always
+ *           false), so theirs is the Anthropic part of spent, which is what
+ *           an administrator previewing a member's Settings reads as Opus.
+ *   gemini  the metered Gemini part of spent, which no budget counts.
+ * A missing, negative or non-numeric sum reads as 0: display only.
+ */
+export function monthSpendFigures(isAdmin: boolean, sums: Record<string, unknown> | null | undefined): MonthSpend {
+  const usd = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+  const round = (n: number) => Math.round(n * 1e6) / 1e6;
+  const held = usd(sums?.held_usd), gemini = usd(sums?.gemini_usd), anthropic = usd(sums?.anthropic_usd);
+  const opus = isAdmin ? anthropic : held;
+  return { spent: round(opus + gemini), capped: round(opus), gemini: round(gemini) };
+}
+
 function startOfMonthUtc(): string {
   const d = new Date();
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
@@ -552,6 +585,13 @@ serve(async (req) => {
   // cap counts, so the figure a physician sees is the one that will refuse
   // them. This is display only and refuses nothing, so a read error reading as
   // 0 costs nothing here; the CAP no longer consults this function at all.
+  //
+  // The holds alone leave out Gemini, which is never held, and an
+  // administrator, who holds nothing (QA OPS-005). So the month is read from
+  // public.ai_month_spend_usd (held, Gemini and Anthropic metered cost,
+  // summed in SQL past PostgREST's row limit) and monthSpendFigures shows
+  // both providers while over_soft / over_hard stay on the holds. Before that
+  // migration has run, or on a read error, the holds alone, as before.
   const monthSpentUsd = async (): Promise<number> => {
     try {
       const { data } = await db.from("ai_spend_holds")
@@ -564,6 +604,15 @@ serve(async (req) => {
     } catch {
       return 0;
     }
+  };
+  const monthSpend = async (): Promise<MonthSpend> => {
+    try {
+      const { data, error } = await db.rpc("ai_month_spend_usd", { p_user: user.profileId });
+      if (!error && data && typeof data === "object" && !Array.isArray(data)) return monthSpendFigures(user.isAdmin, data as Record<string, unknown>);
+    } catch { /* the earlier read below */ }
+    // Gemini unknown here: null, so Settings names no Gemini figure rather than $0.00.
+    const held = await monthSpentUsd();
+    return { spent: held, capped: held, gemini: null };
   };
 
   // One ai_usage row per forwarded call. Never let a logging hiccup break
@@ -895,7 +944,7 @@ serve(async (req) => {
   }
 
   if (req.method === "GET") {
-    const [used, anthropicUsed, spent] = await Promise.all([
+    const [used, anthropicUsed, month] = await Promise.all([
       // Gemini has no daily cap, so its number is pure visibility and comes
       // from the cost ledger.
       usedToday("gemini"),
@@ -909,7 +958,7 @@ serve(async (req) => {
       // operator is the one account with no cap and the only person watching
       // that spend, so it reads the forwarded-call ledger instead.
       user.isAdmin ? usedToday("anthropic") : reservedIn(ANTHROPIC_SCOPE, msSinceUtcMidnight()),
-      monthSpentUsd(),
+      monthSpend(),
     ]);
     return json(200, {
       shared: allowed && !!sharedKey,
@@ -922,11 +971,19 @@ serve(async (req) => {
       anthropic_configured: !!anthropicKey,
       anthropic_used_today: anthropicUsed,
       anthropic_limit: ANTHROPIC_DAILY_LIMIT,
-      month_spent_usd: spent,
+      // Both providers (QA OPS-005); the verdicts stay on what the cap counts.
+      month_spent_usd: month.spent,
+      // Its two parts. A line of both providers "of $15.00" over a verdict on
+      // the holds alone read "About $15.40 of $15.00" with no warning while
+      // Opus kept answering; Settings now sets the budget against
+      // month_capped_usd, the figure over_soft / over_hard are decided on,
+      // and names Gemini (which no budget counts) beside it.
+      month_capped_usd: month.capped,
+      month_gemini_usd: month.gemini,
       budget_soft_usd: BUDGET_SOFT_USD,
       budget_hard_usd: BUDGET_HARD_USD,
-      over_soft: !user.isAdmin && spent >= BUDGET_SOFT_USD,
-      over_hard: !user.isAdmin && spent >= BUDGET_HARD_USD,
+      over_soft: !user.isAdmin && month.capped >= BUDGET_SOFT_USD,
+      over_hard: !user.isAdmin && month.capped >= BUDGET_HARD_USD,
     });
   }
 

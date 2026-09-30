@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { billingDependencies } from './billingDependencies.ts';
 import { LIMITED_LAUNCH } from './limitedLaunchCatalog.mjs';
-import { createWelcomeEmailSender, createWelcomeEmailSweep } from './welcomeEmailSender.mjs';
+import { createWelcomeEmailSender, createWelcomeEmailSweep, welcomeConsoleLog } from './welcomeEmailSender.mjs';
 
 /** IDs are configuration, never inferred from names or shared with historical v1. */
 export function limitedLaunchConfig() {
@@ -66,7 +66,9 @@ export function limitedLaunchDependencies() {
       // was refused.
       return { status: response.status >= 500 || [409, 429].includes(response.status) ? 'unknown' : 'failed', code: `provider_${response.status}` };
     },
-    log: (entry: unknown) => console.error(JSON.stringify(entry)),
+    // Each outcome at its level: off, not eligible or already sent is info,
+    // not an error (welcomeLogLevel).
+    log: welcomeConsoleLog,
   });
   // pg_cron's welcome-email-sweep (every 10 minutes) retries what did not go
   // out; it authenticates with the same vault hook secret as the other
@@ -76,7 +78,7 @@ export function limitedLaunchDependencies() {
     mode: () => base.mode,
     store,
     send: welcome,
-    log: (entry: unknown) => console.error(JSON.stringify(entry)),
+    log: welcomeConsoleLog,
   });
   return { ...base, welcome, welcomeSweep,
     verifiedEmails: async (subject: string) => {

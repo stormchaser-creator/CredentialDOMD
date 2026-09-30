@@ -27,6 +27,17 @@
  * support_messages_client_request_uniq (20260925112000) settles two racing
  * requests on one row. A request without a key behaves as before.
  *
+ * A member's reply on a resolved, closed, archived or waiting_user ticket
+ * reopens it (status open, resolved_at and archived_at cleared). The reopen is
+ * not done here: trg_reopen_ticket_on_member_message (20260930010200) does it
+ * in the same statement as the insert, so a saved reply can never be left on
+ * a ticket that stayed closed, and a retry has no step left to skip. This
+ * function reads the ticket back afterwards, on the duplicate path too, and
+ * answers with `ticket` ({ status, resolved_at, archived_at }) so the sheet
+ * shows the state the database holds. A first answer also carries
+ * reopened: true and status: "open" when this reply reopened the ticket. An
+ * admin's reply (is_admin_reply) never reopens.
+ *
  * An ADMIN's reply is inserted as the admin: through PostgREST with the
  * caller's own token, not the service role. trg_require_verified_support_reply
  * (20260928161000) accepts an unverified support reply only that way, with
@@ -135,7 +146,7 @@ serve(async (req) => {
     // Service-role client bypasses RLS, so the owner-or-admin check lives here.
     const { data: ticketRow } = await user.db
       .from("support_tickets")
-      .select("id, subject, user_id")
+      .select("id, subject, user_id, status, archived_at")
       .eq("id", ticketId)
       .maybeSingle();
     if (!ticketRow || (ticketRow.user_id !== user.profileId && !isAdmin)) {
@@ -143,6 +154,23 @@ serve(async (req) => {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // The ticket as the database holds it after a member's message: the
+    // trigger has already reopened it if it needed to. A failed read is
+    // logged and answered without it; the reply is saved either way.
+    const ticketNow = async (): Promise<{ status: string; resolved_at: string | null; archived_at: string | null } | null> => {
+      if (isAdmin) return null;
+      try {
+        const { data, error } = await user.db.from("support_tickets")
+          .select("status, resolved_at, archived_at").eq("id", ticketId).maybeSingle();
+        if (error) throw error;
+        if (!data || !VALID_STATUSES.includes(data.status)) return null;
+        return { status: data.status, resolved_at: data.resolved_at ?? null, archived_at: data.archived_at ?? null };
+      } catch (e) {
+        console.error(`reply-ticket: could not read ${ticketId} back: ${(e as Error).message}`);
+        return null;
+      }
+    };
 
     // A retry of a reply that already landed: answer with that row and stop.
     let keyed = !!requestKey;
@@ -152,13 +180,13 @@ serve(async (req) => {
         .eq("ticket_id", ticketId).eq("client_request_id", requestKey).maybeSingle();
       return { data, error };
     };
-    const duplicateResponse = (row: { id: string; author_id: string; attachment_path: string | null; attachment_paths: string[] | null }) => {
+    const duplicateResponse = async (row: { id: string; author_id: string; attachment_path: string | null; attachment_paths: string[] | null }) => {
       if (row.author_id !== user.profileId) {
         return new Response(JSON.stringify({ error: "That request ID belongs to another reply." }), {
           status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      return new Response(JSON.stringify({ id: row.id, ok: true, duplicate: true, attachment_path: row.attachment_path ?? null, attachment_paths: row.attachment_paths ?? [] }), {
+      return new Response(JSON.stringify({ id: row.id, ok: true, duplicate: true, attachment_path: row.attachment_path ?? null, attachment_paths: row.attachment_paths ?? [], ticket: await ticketNow() }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     };
@@ -169,7 +197,7 @@ serve(async (req) => {
         console.warn("reply-ticket: support_messages.client_request_id is missing; apply 20260925112000. Replying without retry protection.");
         keyed = false;
       } else if (prior) {
-        return duplicateResponse(prior);
+        return await duplicateResponse(prior);
       }
     }
 
@@ -216,7 +244,7 @@ serve(async (req) => {
       // Two copies of the same retry raced and the other one won.
       if (keyed && msgErr.code === PG_UNIQUE_VIOLATION) {
         const { data: winner } = await savedReply();
-        if (winner) return duplicateResponse(winner);
+        if (winner) return await duplicateResponse(winner);
       }
       throw msgErr;
     }
@@ -230,7 +258,15 @@ serve(async (req) => {
       await user.db.from("support_tickets").update(updates).eq("id", ticketId);
     }
 
-    return new Response(JSON.stringify({ id: msg.id, ok: true, attachment_path: attachmentPath, attachment_paths: attachmentPaths }), {
+    // A member writing back on a ticket that was resolved, closed, archived
+    // or waiting on them means it needs support again. The insert above has
+    // already put it back in the open queue (trg_reopen_ticket_on_member_message),
+    // or failed with it; this only reads the result for the sheet.
+    const ticket = await ticketNow();
+    const wasSettled = ["resolved", "closed", "waiting_user"].includes(ticketRow.status) || !!ticketRow.archived_at;
+    const reopened = !isAdmin && wasSettled && ticket?.status === "open" && !ticket.archived_at;
+
+    return new Response(JSON.stringify({ id: msg.id, ok: true, attachment_path: attachmentPath, attachment_paths: attachmentPaths, reopened, ...(reopened ? { status: "open" } : {}), ticket }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

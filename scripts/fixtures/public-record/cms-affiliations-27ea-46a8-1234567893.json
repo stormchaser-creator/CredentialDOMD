@@ -1,0 +1,38 @@
+{
+ "results": [
+  {
+   "npi": "1234567893",
+   "ind_pac_id": "0000000001",
+   "provider_last_name": "TESTA",
+   "provider_first_name": "ROWAN",
+   "provider_middle_name": "E",
+   "suff": "",
+   "facility_type": "Hospital",
+   "facility_affiliations_certification_number": "059901",
+   "facility_type_certification_number": ""
+  },
+  {
+   "npi": "1234567893",
+   "ind_pac_id": "0000000001",
+   "provider_last_name": "TESTA",
+   "provider_first_name": "ROWAN",
+   "provider_middle_name": "E",
+   "suff": "",
+   "facility_type": "Hospital",
+   "facility_affiliations_certification_number": "059902",
+   "facility_type_certification_number": ""
+  },
+  {
+   "npi": "1234567893",
+   "ind_pac_id": "0000000001",
+   "provider_last_name": "TESTA",
+   "provider_first_name": "ROWAN",
+   "provider_middle_name": "E",
+   "suff": "",
+   "facility_type": "Hospital",
+   "facility_affiliations_certification_number": "059903",
+   "facility_type_certification_number": ""
+  }
+ ],
+ "count": 3
+}

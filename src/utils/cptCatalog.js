@@ -8,7 +8,7 @@
  * block is built from.
  */
 
-import { CURATED_BY_CODE } from "../constants/cpt/index.js";
+import { CPT_BY_CODE, CURATED_BY_CODE } from "../constants/cpt/index.js";
 import { mergeCatalog } from "./cptCandidates.js";
 
 let cached = null;
@@ -33,4 +33,20 @@ export async function loadFullCatalog() {
 /** What is loaded right now, without waiting. Empty before the first load. */
 export function loadedCatalog() {
   return cached;
+}
+
+/**
+ * The work RVU a code bills at, as CPT Lookup's search shows it: the search
+ * catalog's figure first (it carries the published wRVU for codes the full
+ * schedule lists at 0, such as the 9924x consults), then the full CMS
+ * schedule for a code the search catalog does not hold. Null when neither
+ * lists the code: never a guess.
+ */
+export async function catalogWRVU(code) {
+  const key = String(code ?? "").trim();
+  if (!key) return null;
+  const listed = CPT_BY_CODE[key];
+  if (typeof listed?.wRVU === "number") return listed.wRVU;
+  const full = await loadFullCatalog();
+  return typeof full[key]?.wRVU === "number" ? full[key].wRVU : null;
 }

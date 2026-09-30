@@ -8,6 +8,7 @@ import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiMode
  */
 
 import { geminiCall, proxyErrorMessage } from "./aiClient";
+import { localISODate } from "./helpers.js";
 
 
 const PROMPT = (transcript, todayISO, workTypes) => `You convert a physician's spoken description of
@@ -51,7 +52,7 @@ SPOKEN: ${transcript}`;
 // apiKey = the user's own Gemini key (optional). Without one the call rides
 // the shared key through the ai-proxy edge function.
 export async function parseWorkDictation(transcript, apiKey, workTypes) {
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = localISODate(new Date());
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
     contents: [{ role: "user", parts: [{ text: PROMPT(transcript, todayISO, workTypes) }] }],
     generationConfig: geminiJsonConfig(8192),
@@ -59,7 +60,7 @@ export async function parseWorkDictation(transcript, apiKey, workTypes) {
   if (!response.ok) {
     const why = proxyErrorMessage(response);
     if (why) throw new Error(`${why} The words were kept.`);
-    throw new Error(`Couldn't reach the AI (error ${response.status}) — the words were kept, check your connection and try again.`);
+    throw new Error(`Couldn't reach the AI (error ${response.status}). The words were kept; check your connection and try again.`);
   }
   const json = await response.json();
   let raw = geminiResponseText(json);

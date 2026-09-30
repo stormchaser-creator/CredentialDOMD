@@ -52,7 +52,7 @@ Return ONLY this object, with no prose and no code fence:
 {
   "settings": { "name": "", "degreeType": "MD"|"DO", "npi": "", "email": "", "phone": "", "address": "", "website": "", "languages": "", "specialties": [], "professionalSummary": "", "cvHighlights": "" },
   "education": [ { "type": "", "name": "", "institution": "", "startDate": "", "graduationDate": "", "fieldOfStudy": "", "honors": "" } ],
-  "workHistory": [ { "type": "", "position": "", "employer": "", "city": "", "state": "", "startDate": "", "endDate": "", "current": "Yes"|"No", "description": "" } ],
+  "workHistory": [ { "type": "", "position": "", "employer": "", "city": "", "state": "", "startDate": "", "endDate": "", "current": true|false, "description": "" } ],
   "licenses": [ { "type": "", "name": "", "state": "", "licenseNumber": "", "issuedDate": "", "expirationDate": "" } ],
   "privileges": [ { "type": "", "name": "", "facility": "", "city": "", "state": "", "appointmentDate": "", "expirationDate": "" } ],
   "publications": [ { "name": "", "citation": "", "year": "", "doi": "", "pmid": "", "url": "" } ],
@@ -65,7 +65,7 @@ RULES, all of them hard:
 
 2. DATES CARRY THEIR OWN PRECISION. Write "2006" for a year, "June 2006" for a month and year, and "2006-07-25" only when the day is printed. Never invent a day or a month.
 
-3. "name" IS A DISPLAY LABEL FOR THE CREDENTIAL, never the physician. Write "DO Diploma - PCOM" or "CO Medical License", never "Daniel Logsdon". The physician's own name goes in settings.name and nowhere else.
+3. "name" IS A DISPLAY LABEL FOR THE CREDENTIAL, never the physician. Write "DO Diploma - PCOM" or "CO Medical License", never "Daniel Marchetti". The physician's own name goes in settings.name and nowhere else.
 
 4. USE THESE EXACT VALUES for the type fields, or omit the field:
    education.type: ${list(EDUCATION_TYPES)}

@@ -13,13 +13,16 @@ import tempfile
 import threading
 import uuid
 
-BIN = Path('/opt/homebrew/opt/postgresql@17/bin')
+BIN = Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 MIGRATION = Path(__file__).resolve().parents[2] / 'supabase/migrations/20260918090000_autonomous_support_foundation.sql'
 READ_MIGRATION = Path(__file__).resolve().parents[2] / 'supabase/migrations/20260918092000_support_customer_read.sql'
-NOTIFIER = Path(__file__).resolve().parents[2] / 'scripts/signup-notify.sh'
-# Parse only the exact reply-selection predicate; never execute the notifier,
-# which has production credential and outbound messaging access.
-NOTIFY_REPLY = re.search(r"union all select 'TICKET REPLY'.*?\n  (where .*?)(?=\nunion all)", NOTIFIER.read_text(), re.S)
+NOTIFIER = Path(__file__).resolve().parents[2] / 'scripts/signup-notify.py'
+# The exact reply-selection predicate the notifier sends. Its SQL lives in
+# signup-notify.py since 2026-09-29; `query` only prints the statement (no
+# keychain, no network, no message), so this never runs the notifier itself.
+NOTIFIER_SQL = subprocess.run(['python3', str(NOTIFIER), 'query', '--since', '2026-09-17T00:00:00Z', '--present', ''],
+                              text=True, capture_output=True, check=True).stdout
+NOTIFY_REPLY = re.search(r"union all select 'TICKET REPLY'.*?\n  (where .*?)(?=\nunion all)", NOTIFIER_SQL, re.S)
 if not NOTIFY_REPLY: raise AssertionError('Notifier reply predicate was not found')
 NOTIFY_REPLY = NOTIFY_REPLY.group(1).replace('$SINCE', '2026-09-17T00:00:00Z')
 ENV = {k:v for k,v in os.environ.items() if not k.startswith('PG')}
@@ -104,20 +107,20 @@ with tempfile.TemporaryDirectory(prefix='support-foundation-') as temporary:
         """)
         legacy=ticket();message(legacy)
         check('live-shaped legacy notify preflight requires is_admin null to be false',sql('select public.is_admin(null::uuid) is false').stdout.strip()=='t')
-        notify_legacy=sql(f"""with m(label,author_id,created_at) as (values
-          ('customer',{q(A)}::uuid,'2026-09-18T01:00:00Z'::timestamptz),
-          ('old customer',{q(A)}::uuid,'2026-09-16T01:00:00Z'::timestamptz),
-          ('admin',{q(OWNER)}::uuid,'2026-09-18T01:00:00Z'::timestamptz),
-          ('null author',null::uuid,'2026-09-18T01:00:00Z'::timestamptz))
+        notify_legacy=sql(f"""with m(label,author_id,created_at,body) as (values
+          ('customer',{q(A)}::uuid,'2026-09-18T01:00:00Z'::timestamptz,'Synthetic customer reply'::text),
+          ('old customer',{q(A)}::uuid,'2026-09-16T01:00:00Z'::timestamptz,'Synthetic customer reply'::text),
+          ('admin',{q(OWNER)}::uuid,'2026-09-18T01:00:00Z'::timestamptz,'Synthetic customer reply'::text),
+          ('null author',null::uuid,'2026-09-18T01:00:00Z'::timestamptz,'Synthetic customer reply'::text))
           select label from m {NOTIFY_REPLY} order by label""").stdout.strip()
         check('exact notifier predicate preserves customer replies before service columns exist',notify_legacy=='customer')
-        notify_new=sql(f"""with m(label,author_id,created_at,support_actor_id) as (values
-          ('customer',{q(A)}::uuid,'2026-09-18T01:00:00Z'::timestamptz,null::uuid),
-          ('old customer',{q(A)}::uuid,'2026-09-16T01:00:00Z'::timestamptz,null::uuid),
-          ('admin',{q(OWNER)}::uuid,'2026-09-18T01:00:00Z'::timestamptz,null::uuid),
-          ('service',null::uuid,'2026-09-18T01:00:00Z'::timestamptz,{q(ACTOR)}::uuid),
-          ('malformed service',{q(A)}::uuid,'2026-09-18T01:00:00Z'::timestamptz,{q(ACTOR)}::uuid),
-          ('null author',null::uuid,'2026-09-18T01:00:00Z'::timestamptz,null::uuid))
+        notify_new=sql(f"""with m(label,author_id,created_at,support_actor_id,body) as (values
+          ('customer',{q(A)}::uuid,'2026-09-18T01:00:00Z'::timestamptz,null::uuid,'Synthetic customer reply'::text),
+          ('old customer',{q(A)}::uuid,'2026-09-16T01:00:00Z'::timestamptz,null::uuid,'Synthetic customer reply'::text),
+          ('admin',{q(OWNER)}::uuid,'2026-09-18T01:00:00Z'::timestamptz,null::uuid,'Synthetic customer reply'::text),
+          ('service',null::uuid,'2026-09-18T01:00:00Z'::timestamptz,{q(ACTOR)}::uuid,'Synthetic customer reply'::text),
+          ('malformed service',{q(A)}::uuid,'2026-09-18T01:00:00Z'::timestamptz,{q(ACTOR)}::uuid,'Synthetic customer reply'::text),
+          ('null author',null::uuid,'2026-09-18T01:00:00Z'::timestamptz,null::uuid,'Synthetic customer reply'::text))
           select label from m {NOTIFY_REPLY} order by label""").stdout.strip()
         check('exact notifier predicate excludes service and null authors after service columns exist',notify_new=='customer')
         sql(MIGRATION.read_text());sql(MIGRATION.read_text())

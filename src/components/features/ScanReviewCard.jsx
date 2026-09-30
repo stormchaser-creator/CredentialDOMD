@@ -1,4 +1,5 @@
 import { useState, useMemo, memo } from "react";
+import { cardActionSize } from "../shared/actionButton";
 import OtherDocumentReview from "./OtherDocumentReview";
 import { identifierReason } from "../../utils/customCategories";
 import { useApp } from "../../context/AppContext";
@@ -148,7 +149,14 @@ function hasReadings(extracted) {
   return Object.entries(extracted).some(([k, v]) => k !== "suggestedCategory" && (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== ""));
 }
 
-function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
+/**
+ * onDiscard leaves the file in Documents, unfiled ("Keep as plain
+ * document"): nothing here deletes a file silently. onDeleteFile, when
+ * given, is the separate, asked-for removal of the stored file.
+ */
+function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard, onDeleteFile, reviewId = "review" }) {
+  // Ids for the field labels, unique per card (Documents lists one per scan).
+  const labelId = (key) => `scan-${reviewId}-${key}-label`;
   const { theme: T, data, allTrackedStates } = useApp();
   const iS = useInputStyle();
   // Topics a tracked state mandates, including ones not in the general
@@ -175,7 +183,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
   const typeBlocked = !!typeIssue;
   const stateBlocked = !!stateIssue;
 
-  // Receipts: where the money row goes. Billing an agency (Work > Expenses)
+  // Receipts: where the money row goes. Billing an agency (Practice > Expenses)
   // and deducting are exclusive, the same rule the statement importer
   // applies: a reimbursed expense is not also a deduction, and the ledger
   // picks up the unreimbursed share on its own once the invoice settles.
@@ -233,11 +241,12 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
       )}
 
       {/* Reclassify */}
-      <div style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: 4, rowGap: 6, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}>
+      {/* Each type chip is a phone tap target: at least 32 px each way. */}
+      <div style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: 6, rowGap: 6, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}>
         <span style={{ fontSize: 12, color: T.textDim, marginRight: 6 }}>Not right?</span>
         {Object.keys(SECTION_META).filter(k => k !== "unknown").map(dt => (
-          <button key={dt} onClick={() => { setEdited(prev => { const next = remapEdited(docType, dt, prev); return canonicalForDocType(dt, next, TYPE_OPTIONS[dt]?.(data.settings.degreeType, next)); }); setDocType(dt); }} style={{
-            padding: "4px 10px", borderRadius: 6, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
+          <button key={dt} aria-pressed={dt === docType} onClick={() => { setEdited(prev => { const next = remapEdited(docType, dt, prev); return canonicalForDocType(dt, next, TYPE_OPTIONS[dt]?.(data.settings.degreeType, next)); }); setDocType(dt); }} style={{
+            padding: "6px 10px", minHeight: 32, minWidth: 36, borderRadius: 6, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
             backgroundColor: dt === docType ? meta.color : T.input,
             color: dt === docType ? "#fff" : T.textMuted,
           }}>
@@ -250,6 +259,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
           one of the physician's own categories instead of discarding it. */}
       {(docType === "other" || (docType === "unknown" && hasReadings(edited))) ? (
         <OtherDocumentReview
+          idPrefix={`scan-${reviewId}`}
           extracted={edited}
           onFile={(payload) => onSave("other", payload, imageData, fileName)}
           onDiscard={onDiscard}
@@ -267,9 +277,10 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {fields.map(f => (
               <div key={f.key}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 2 }}>{f.label}</div>
+                <div id={labelId(f.key)} style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 2 }}>{f.label}</div>
                 {f.key === "category" && docType === "cme" ? (
                   <select
+                    aria-labelledby={labelId(f.key)}
                     value={edited[f.key] || ""}
                     onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
                     style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
@@ -279,6 +290,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   </select>
                 ) : f.key === "category" && docType === "healthRecord" ? (
                   <select
+                    aria-labelledby={labelId(f.key)}
                     value={edited[f.key] || ""}
                     onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value, type: "" }))}
                     style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
@@ -288,6 +300,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   </select>
                 ) : f.key === "category" && isReceipt ? (
                   <select
+                    aria-labelledby={labelId(f.key)}
                     value={edited[f.key] || ""}
                     onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
                     style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
@@ -297,6 +310,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   </select>
                 ) : f.key === "result" && docType === "healthRecord" ? (
                   <select
+                    aria-labelledby={labelId(f.key)}
                     value={edited[f.key] || ""}
                     onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
                     style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
@@ -306,6 +320,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   </select>
                 ) : f.key === "type" && typeOpts ? (
                   <select
+                    aria-labelledby={labelId(f.key)}
                     value={edited[f.key] || ""}
                     onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
                     style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
@@ -320,6 +335,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   </select>
                 ) : f.key === "state" && f.type === "select" ? (
                   <select
+                    aria-labelledby={labelId(f.key)}
                     value={STATES.includes(edited[f.key]) ? edited[f.key] : ""}
                     onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
                     style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
@@ -329,6 +345,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   </select>
                 ) : (
                   <input
+                    aria-labelledby={labelId(f.key)}
                     type={f.type || "text"}
                     value={edited[f.key] || ""}
                     onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
@@ -346,7 +363,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   {cmeTopicOptions.map(t => {
                     const on = (edited.topics || []).includes(t);
                     return (
-                      <button key={t} onClick={() => setEdited(p => ({
+                      <button key={t} aria-pressed={on} onClick={() => setEdited(p => ({
                         ...p,
                         topics: on ? (p.topics || []).filter(x => x !== t) : [...(p.topics || []), t],
                       }))} style={{
@@ -385,10 +402,10 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   {(edited.coveragePeriods || []).map((p, i) => (
                     <div key={i}>
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        <input type="date" value={p.start || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
+                        <input type="date" aria-label={`Block ${i + 1} start date`} value={p.start || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
                         <span style={{ color: T.textDim, flexShrink: 0 }}>–</span>
-                        <input type="date" value={p.end || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
-                        <button onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>&times;</button>
+                        <input type="date" aria-label={`Block ${i + 1} end date`} value={p.end || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
+                        <button aria-label={`Remove block ${i + 1}`} onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 14, fontWeight: 700, flexShrink: 0, ...cardActionSize }}>&times;</button>
                       </div>
                       {/* Times the agreement states ride along with the block; they are edited on the Contracts form. A block they make end before it starts is refused at save, so it says so here. */}
                       {timedBlock(p)?.valid === false
@@ -410,11 +427,11 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {billable && (
-                    <button onClick={() => setDestChoice("expense")} style={chip(destination === "expense")}>
-                      Bill to agency (Work &gt; Expenses)
+                    <button aria-pressed={destination === "expense"} onClick={() => setDestChoice("expense")} style={chip(destination === "expense")}>
+                      Bill to agency (Practice &gt; Expenses)
                     </button>
                   )}
-                  <button onClick={() => setDestChoice("deduction")} style={chip(destination === "deduction")}>
+                  <button aria-pressed={destination === "deduction"} onClick={() => setDestChoice("deduction")} style={chip(destination === "deduction")}>
                     Tax deduction (ledger)
                   </button>
                 </div>
@@ -423,11 +440,11 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                     {agencies.length > 0 && (
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
                         {agencies.map(a => (
-                          <button key={a} onClick={() => setAgency(a)} style={{ ...chip(sameAgency(agency, a)), padding: "7px 11px", fontSize: 12 }}>{a}</button>
+                          <button key={a} aria-pressed={sameAgency(agency, a)} onClick={() => setAgency(a)} style={{ ...chip(sameAgency(agency, a)), padding: "7px 11px", fontSize: 12 }}>{a}</button>
                         ))}
                       </div>
                     )}
-                    <input placeholder="Bill to agency (e.g. MPLT Healthcare)" value={agency}
+                    <input aria-label="Bill to agency" placeholder="Bill to agency (e.g. CompHealth)" value={agency}
                       onChange={e => setAgency(e.target.value)}
                       style={{ ...iS, borderColor: agency ? T.success + "60" : T.inputBorder }} />
                     <div style={{ fontSize: 12, color: T.textDim, marginTop: 6, lineHeight: 1.45 }}>
@@ -485,7 +502,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
           <button onClick={onDiscard} style={{
             padding: "12px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent",
             color: T.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer",
-          }}>Discard</button>
+          }}>Keep as plain document</button>
           </div>
         </div>
       ) : (
@@ -497,6 +514,14 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
         </div>
       )}
       </>)}
+      {onDeleteFile && (
+        <div style={{ padding: "0 18px 14px" }}>
+          <button type="button" onClick={onDeleteFile} style={{
+            padding: "6px 0", border: "none", background: "none", color: T.danger,
+            fontSize: 16, fontWeight: 700, cursor: "pointer", textDecoration: "underline",
+          }}>Delete this file</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -22,6 +22,22 @@ export const UPLOAD_ACCEPT = [
   ".heic", ".heif",
 ].join(",");
 
+// The MIME type a file's name says, for a picker that hands over none or a
+// generic application/octet-stream (Android, Drive, Windows).
+const NAME_MIME = {
+  pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+  heic: "image/heic", heif: "image/heif", tif: "image/tiff", tiff: "image/tiff", bmp: "image/bmp",
+  doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  csv: "text/csv", txt: "text/plain", rtf: "application/rtf",
+};
+
+/** "application/pdf" for "license.PDF"; "" when the name says nothing this app reads. */
+export function mimeFromName(name = "") {
+  const ext = String(name || "").toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  return (ext && NAME_MIME[ext]) || "";
+}
+
 export function officeKind(name = "", mime = "") {
   const n = (name || "").toLowerCase();
   const m = (mime || "").toLowerCase();
@@ -53,7 +69,7 @@ async function toArrayBuffer({ arrayBuffer, dataUrl, file }) {
 export async function extractOfficeText(src) {
   const kind = officeKind(src.name, src.type);
   if (kind === "doc") {
-    throw new Error("Old-format .doc files can't be read — save it as PDF or .docx and upload that.");
+    throw new Error("Old-format .doc files can't be read. Save it as PDF or .docx and upload that.");
   }
   const buf = await toArrayBuffer(src);
   if (kind === "docx") {

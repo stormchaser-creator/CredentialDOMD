@@ -25,6 +25,11 @@ export function describeAccessRefreshFailure(error) {
  * The reporter the refresh loop calls on every failure; it sends each code
  * once. Enrollment (bootstrap-launch-access) has its own reporter, named so,
  * with its own set of codes already sent.
+ *
+ * A code counts as sent only if its report was: `report` gets an onDropped
+ * callback, and reportUnlessLeaving calls it when it drops the report because
+ * the page was being left. The code is then forgotten, so the next failure
+ * with it (a real one, on a page that came back) is reported (OPS-008).
  */
 export function createAccessRefreshReporter(report, { label = "Membership check failed", event = "access_refresh_failed" } = {}) {
   const sent = new Set();
@@ -34,7 +39,7 @@ export function createAccessRefreshReporter(report, { label = "Membership check 
     if (sent.has(key)) return false;
     sent.add(key);
     try {
-      report(`${label} (${key})`, "error", { event, ...failure });
+      report(`${label} (${key})`, "error", { event, ...failure }, { onDropped: () => { sent.delete(key); } });
     } catch { /* Reporting must never stop the retry. */ }
     return true;
   };

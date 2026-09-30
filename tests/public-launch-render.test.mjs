@@ -111,7 +111,9 @@ test('home signup and team FAQs use current offers in visible answers and struct
   const output = renderPublicLaunch(source, 'home');
   const faq = jsonLd(output).find(item => item['@type'] === 'FAQPage');
   assert.equal(faq.mainEntity.length, 2);
-  const visible = output.replace(/<script\b[\s\S]*?<\/script>/g, '');
+  // The founding offer sentences sit in spans membership-offer.js repaints
+  // for the live phase (BILL-004); the words are the JSON-LD's.
+  const visible = output.replace(/<script\b[\s\S]*?<\/script>/g, '').replace(/<span data-membership-[a-z-]+>|<\/span>/g, '');
   for (const answer of faq.mainEntity) {
     assert.ok(visible.includes(answer.name));
     assert.ok(visible.includes(answer.acceptedAnswer.text), `${answer.name}: same answer in HTML and JSON-LD`);

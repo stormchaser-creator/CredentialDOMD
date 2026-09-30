@@ -1,12 +1,13 @@
 import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
 import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE } from "../../utils/cmePresentation";
-import { useState, useMemo, useCallback, memo } from "react";
-import { supabase } from "../../lib/supabase";
+import { useState, useMemo, useCallback, useEffect, useRef, memo } from "react";
+import { supabase, downloadDocumentBlob } from "../../lib/supabase";
 import { useApp } from "../../context/AppContext";
 import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
+import { TAP_MIN, CARD_ACTION_GAP, cardActionSize } from "../shared/actionButton.js";
 import EmptyState from "../shared/EmptyState";
 import ComplianceBar from "../shared/ComplianceBar";
 import Cat1Bucket from "../shared/Cat1Bucket";
@@ -15,6 +16,8 @@ import SmallSpecialtyNote from "../shared/SmallSpecialtyNote";
 import CMEImport from "./CMEImport";
 import CmePassportPanel from "./CmePassportPanel";
 import DocAttach from "./DocAttach";
+import { SECTION_FIELDS } from "../../utils/sectionFields.js";
+import FollowUpHistory from "../shared/FollowUpHistory";
 import { attachExistingDoc } from "../../utils/docPrefill";
 import RuleProvenance from "../shared/RuleProvenance";
 import TopicProvenance from "../shared/TopicProvenance";
@@ -26,10 +29,10 @@ import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
-import { complianceFor, windowNotes, cycleBucket } from "../../utils/compliance";
-import { computeBoardCompliance, boardIdsFromLicenses, aoaNationalEntry } from "../../utils/boardCompliance";
-import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf } from "../../utils/cmeTranscriptPdf";
-import { CME_INBOX_ADDRESS } from "../../utils/inboxDocs";
+import { complianceFor, windowNotes, cycleBucket, round2 } from "../../utils/compliance";
+import { boardComplianceFor, effectiveBoardSpecialties, aoaNationalEntry } from "../../utils/boardCompliance";
+import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateSummary, certificatesNotIncludedMessage } from "../../utils/cmeTranscriptPdf";
+import { CME_INBOX_ADDRESS, docMime } from "../../utils/inboxDocs";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
 import { routableSenders, joinAddresses, accountMailboxVerified, CONFIRM_FIRST_SENTENCE } from "../../utils/forwardingAddresses";
 
@@ -37,6 +40,15 @@ import { routableSenders, joinAddresses, accountMailboxVerified, CONFIRM_FIRST_S
 // the desk table alike so the two can never label the same record differently.
 const cmeTitle = (item) => item.title || item.category || "CME Activity";
 const cmeOrigin = (item) => item.source || item.customFields?.["Imported from"];
+// Opening a CME entry's certificate (openSourceDoc) when its file is not on
+// this device and cannot be fetched.
+const CERTIFICATE_MISSING = "The file for this certificate is missing from your account, so it cannot be opened. Upload it again from Documents.";
+const CERTIFICATE_NOT_DOWNLOADED = "Could not download this certificate from your account. Check your connection and try again.";
+// An error's message when it says something a physician can read; never "{}".
+const readableError = (e) => {
+  const text = String(e?.message || (typeof e === "string" ? e : "")).trim();
+  return text && !/^[[{]/.test(text) ? text : "";
+};
 const DELETE_CONFIRM = "Delete this CME entry? Its attached certificate (if any) will be deleted too. This cannot be undone.";
 
 // Desk table group order: rows after the cycle window (dated past the license
@@ -48,7 +60,7 @@ const CYCLE_ORDER = { after: "0", in: "1", before: "2", undated: "3" };
 // would rebuild the grouping on every keystroke.
 const IN_CYCLE_FIRST = [CYCLE_ORDER.in];
 
-function CMESection({ onShare }) {
+function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoViewId, onAutoViewDone, autoEditId, onAutoEditDone }) {
   const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop, toggleFavorite } = useApp();
   const iS = useInputStyle();
   // The addresses cme@ actually accepts mail from, the same list the Requests
@@ -72,7 +84,15 @@ function CMESection({ onShare }) {
   const [showTranscript, setShowTranscript] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [transcriptBusy, setTranscriptBusy] = useState(false);
+  // Certificate bytes fetched when the picker opens (doc id -> { data } or
+  // { reason }), never inside the tap: an awaited download there would cost
+  // the share sheet its user gesture. Held here, not written to documents.
+  const [certFiles, setCertFiles] = useState(null);
+  const [certsPreparing, setCertsPreparing] = useState(false);
   const [note, setNote] = useState("");
+  // cme.category is NOT NULL in the database: an entry saved on "Select
+  // category..." was refused whole and lived on this device only.
+  const [reqError, setReqError] = useState(null);
 
   const deg = data.settings.degreeType;
   const categories = getCMECategories(deg);
@@ -88,12 +108,47 @@ function CMESection({ onShare }) {
     [allTrackedStates, deg]
   );
 
-  const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, []);
-  const openEdit = useCallback((item) => { setForm({ ...item, topics: item.topics || [] }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
+  const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setAttachedDocs([]); setReqError(null); setShowForm(true); }, []);
+  const openEdit = useCallback((item) => { setForm({ ...item, topics: item.topics || [] }); setEditItem(item); setAttachedDocs([]); setReqError(null); setShowForm(true); }, []);
+  // Set when a deep link opened the form (an "add one" link, or an edit link
+  // from Setup): closing it owes the member the trip back (closeForm).
+  const arrivedByLink = useRef(false);
+  // A CME entry named by id (Vera's open_record, Home search, Favorites)
+  // opens in its form: CME has no separate detail view. The target is
+  // cleared either way, found or not (or deleted), so a stale one never
+  // opens later.
+  const cmeItems = data.cme;
+  useEffect(() => {
+    const id = autoViewId || autoEditId;
+    if (!id) return;
+    const it = (cmeItems || []).find(x => x && x.id === id && !x.deleted);
+    if (it) {
+      if (autoEditId) arrivedByLink.current = true;
+      openEdit(it);
+    }
+    if (autoViewId) onAutoViewDone?.(); else onAutoEditDone?.();
+  }, [autoViewId, autoEditId, cmeItems, openEdit, onAutoViewDone, onAutoEditDone]);
   useDeskAddShortcut(openAdd);
-  const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
+  // An "add one" deep link (Setup > CME > Add one by hand) opens the form and
+  // is consumed at once; closing the form, saved or not, takes the member back
+  // where they came from, as CrudSection does for every other section.
+  useEffect(() => {
+    if (!autoOpen) return;
+    arrivedByLink.current = true;
+    openAdd();
+    onAutoOpenDone?.();
+  }, [autoOpen, openAdd, onAutoOpenDone]);
+  const closeForm = useCallback(() => {
+    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setReqError(null);
+    if (arrivedByLink.current) { arrivedByLink.current = false; onAutoEditClosed?.(); }
+  }, [onAutoEditClosed]);
 
   const handleSave = useCallback(() => {
+    if (!String(form.category || "").trim()) {
+      setReqError("Choose a credit category so this entry can be saved to your account.");
+      return;
+    }
+    setReqError(null);
     const itemId = editItem ? editItem.id : generateId();
     const entry = { ...form, id: itemId };
     // Refused (membership being re-checked): the form stays open with what
@@ -120,7 +175,9 @@ function CMESection({ onShare }) {
 
   const handleDelete = useCallback((id) => deleteItem("cme", id), [deleteItem]);
   // Same star control as every other Credentials section. CME renders its own
-  // rows rather than going through CrudSection, so it needs its own copy.
+  // rows rather than going through CrudSection, so it needs its own copy. On
+  // a phone every star is at least 32 x 32 (cardActionSize); the desk row
+  // keeps its own size.
   const starButton = (item, compact = false) => {
     const on = item?.favorite === true;
     const pad = compact ? "5px 7px" : "6px 8px";
@@ -129,6 +186,7 @@ function CMESection({ onShare }) {
         aria-label={on ? "Remove from Favorites" : "Add to Favorites"}
         onClick={(ev) => { ev.stopPropagation(); toggleFavorite("cme", item.id); }}
         style={{ padding: pad, borderRadius: compact ? 6 : 8, border: "none", cursor: "pointer", display: "flex",
+          ...(compact || !isDesktop ? cardActionSize : null),
           backgroundColor: on ? T.accentDim : "transparent", color: on ? T.accent : T.textDim }}>
         <StarIcon filled={on} size={compact ? 15 : 16} />
       </button>
@@ -150,7 +208,7 @@ function CMESection({ onShare }) {
     }));
   }, [showCompliance, allTrackedStates, data]);
 
-  const totalHours = useMemo(() => data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0), [data.cme]);
+  const totalHours = useMemo(() => round2(data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0)), [data.cme]);
 
   // ── Transcript PDF: one per state (or board), built from the same
   //    compliance engine the cards use, with linked certificates embedded.
@@ -159,19 +217,23 @@ function CMESection({ onShare }) {
   const transcriptOptions = useMemo(() => {
     if (!showTranscript) return { states: [], boards: [] };
     return {
-      states: allTrackedStates.map(st => ({ st, model: stateTranscriptModel(data, st) })),
-      boards: boardTranscriptOptions(data).map(b => ({ board: b, model: boardTranscriptModel(data, b) })),
+      states: allTrackedStates.map(st => ({ st, model: stateTranscriptModel(data, st, { certFiles }) })),
+      boards: boardTranscriptOptions(data).map(b => ({ board: b, model: boardTranscriptModel(data, b, { certFiles }) })),
     };
-  }, [showTranscript, allTrackedStates, data]);
+  }, [showTranscript, allTrackedStates, data, certFiles]);
 
   const runTranscript = useCallback(async (model) => {
     if (!model || model.error) { flash(model?.error || "Nothing to put in a transcript yet."); return; }
     setTranscriptBusy(true);
     try {
-      const result = await shareTranscriptPdf(model);
-      if (result === "download") flash(`${model.fileName} downloaded.`);
-      else if (result === "share") flash("Transcript PDF is in the share sheet.");
-      if (result) setShowTranscript(false);
+      // The message comes from what was actually sent: a photo this device
+      // could not convert, or PDFs the share sheet could not carry, are only
+      // known once the transcript is built and shared.
+      const sent = await shareTranscriptPdf(model);
+      const missing = sent ? certificatesNotIncludedMessage(sent.model) : "";
+      if (sent?.method === "download") flash(`${model.fileName} downloaded.${missing ? ` ${missing}` : ""}`);
+      else if (sent?.method === "share") flash(`Transcript PDF is in the share sheet.${missing ? ` ${missing}` : ""}`);
+      if (sent) setShowTranscript(false);
     } catch (err) {
       flash(`Couldn't build the transcript: ${err.message}`);
     } finally {
@@ -185,19 +247,34 @@ function CMESection({ onShare }) {
       flash("Add a state medical license or set your primary state in Settings, then come back for a transcript.");
       return;
     }
-    // One state, no boards: no picker needed, go straight to the PDF.
-    if (allTrackedStates.length === 1 && boards.length === 0) {
-      runTranscript(stateTranscriptModel(data, allTrackedStates[0]));
-      return;
-    }
+    // Always through the picker, even for one state: the certificates are
+    // fetched while it is open, so the tap that builds the PDF only builds
+    // it and the share sheet keeps its user gesture. Only the certificates
+    // of entries inside the windows on offer are fetched, not every CME
+    // certificate ever saved; one already fetched is not fetched again.
     setShowTranscript(true);
-  }, [data, allTrackedStates, flash, runTranscript]);
+    const docs = certificateDocsForModels([
+      ...allTrackedStates.map(st => stateTranscriptModel(data, st, { certFiles })),
+      ...boards.map(b => boardTranscriptModel(data, b, { certFiles })),
+    ]);
+    if (!docs.length) return;
+    setCertsPreparing(true);
+    prefetchCertificates(docs, { download: downloadDocumentBlob, budgetMs: 10000 })
+      .then(fetched => setCertFiles(prev => new Map([...(prev || []), ...fetched])))
+      .catch(() => {})
+      .finally(() => setCertsPreparing(false));
+  }, [data, allTrackedStates, flash, certFiles]);
 
   const optionSummary = (model) => {
     if (model.error) return model.error;
-    const certs = model.certs.length;
-    const embeddable = model.certs.filter(c => c.mode === "image" || c.mode === "convert").length;
-    return `${model.rows.length} entr${model.rows.length === 1 ? "y" : "ies"} in window, ${certs} certificate${certs === 1 ? "" : "s"}${certs && embeddable < certs ? ` (${certs - embeddable} listed, not embedded)` : ""}`;
+    const entries = `${model.rows.length} entr${model.rows.length === 1 ? "y" : "ies"} in window`;
+    const { total, pages, mayNotConvert, files, missing } = certificateSummary(model);
+    // Still arriving: a tap now builds with what is here, and the index and
+    // the message name the rest as not finished downloading.
+    if (certsPreparing && model.certs.some(c => c.mode === "remote" && c.doc?.storagePath)) return `${entries}, getting the certificates ready`;
+    if (!total) return `${entries}, no certificates linked`;
+    const parts = [pages && `${pages} as pages`, mayNotConvert && `${mayNotConvert} may not convert to a page`, files && `${files} as separate PDF files`, missing.length && `${missing.length} not included`].filter(Boolean);
+    return `${entries}, ${total} certificate${total === 1 ? "" : "s"} (${parts.join(", ")})`;
   };
 
   const optionButton = (key, title, model, meta) => (
@@ -217,10 +294,10 @@ function CMESection({ onShare }) {
   // through the same cycle-windowed engine Home uses.
   const boardComps = useMemo(() => {
     if (!showCompliance) return [];
-    const fromLicenses = boardIdsFromLicenses(data.licenses);
-    const specialties = [...new Set([...(data.settings.specialties || []), ...fromLicenses])];
-    if (specialties.length === 0) return [];
-    return computeBoardCompliance({ ...data, settings: { ...data.settings, specialties } });
+    // The same list Home and the transcript read (Settings picks plus the
+    // boards Board Certification records imply).
+    if (effectiveBoardSpecialties(data).length === 0) return [];
+    return boardComplianceFor(data);
   }, [showCompliance, data]);
 
   // Newest first by when it was added, so a transcript imported today sits at
@@ -246,19 +323,25 @@ function CMESection({ onShare }) {
         const bin = atob(b64);
         const arr = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        blob = new Blob([arr], { type: doc.type || doc.mimeType || "application/pdf" });
+        blob = new Blob([arr], { type: docMime(doc) || "application/pdf" });
       } else if (doc.storagePath && supabase) {
-        // Not on this device: pull the bytes from the account's storage.
-        const { data: file, error } = await supabase.storage.from("documents").download(doc.storagePath);
-        if (error) throw error;
-        blob = file;
+        // Not on this device: pull the bytes from the account's storage. A
+        // file Storage does not have (fileMissing, noted at load by
+        // AppContext reconcileDocumentFiles, or the download's own answer)
+        // is said in words; the raw error of a failed download read "{}".
+        if (doc.fileMissing) { window.alert(CERTIFICATE_MISSING); return; }
+        const got = await downloadDocumentBlob(doc.storagePath, { detail: true });
+        if (got?.missing) { window.alert(CERTIFICATE_MISSING); return; }
+        if (!got?.blob) { window.alert(CERTIFICATE_NOT_DOWNLOADED); return; }
+        blob = got.blob;
       }
       if (!blob) { window.alert("That file has not finished syncing to this device yet. Open Files once and try again."); return; }
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     } catch (e) {
-      window.alert(`Could not open that document: ${e.message || e}`);
+      const why = readableError(e);
+      window.alert(why ? `Could not open that document: ${why}` : "Could not open that document. Try again.");
     } finally { setDocBusy(null); }
   }, []);
 
@@ -288,7 +371,6 @@ function CMESection({ onShare }) {
     display: "inline-flex", alignItems: "center", justifyContent: "center",
   };
   const deskGhostBtn = { ...deskBtn, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted };
-  const round2 = (n) => Math.round(n * 100) / 100;
 
   return (
     <div>
@@ -346,7 +428,7 @@ function CMESection({ onShare }) {
       {/* Transcript picker: which state renewal or board the PDF is for */}
       <Modal open={showTranscript} onClose={() => setShowTranscript(false)} title="Transcript PDF" width={460}>
         <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12 }}>
-          One PDF per renewal: physician and license details, the cycle window, each requirement with hours earned, every CME entry in the window, and the linked certificates as pages. Boards audit renewals; hospital reappointment asks for the same summary.
+          One PDF per renewal: physician and license details, the cycle window, each requirement with hours earned, and every CME entry in the window. Certificate images are added as pages and PDF certificates go as separate files in the same share. Boards audit renewals; hospital reappointment asks for the same summary.
         </div>
         {transcriptOptions.states.length > 0 && (
           <div style={{ marginBottom: 14 }}>
@@ -557,9 +639,11 @@ function CMESection({ onShare }) {
 
       {/* Add/Edit Modal */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit CME" : "Add CME"}>
+        {/* CME has no separate detail view: its form is where the record is read. */}
+        {editItem && <FollowUpHistory item={editItem} />}
         <Field label="Activity / Title"><input value={form.title || ""} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} style={iS} placeholder="e.g. Annual Pain Management Conference" /></Field>
-        <Field label="Credit Category" hint={deg === "DO" ? "Dually accredited activity (AOA 1-A and AMA PRA 1)? File it as AOA Category 1-A: for a DO it counts toward AOA, osteopathic boards, and AMA-rule states alike." : undefined}>
-          <select value={form.category || ""} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
+        <Field label="Credit Category *" hint={deg === "DO" ? "Dually accredited activity (AOA 1-A and AMA PRA 1)? File it as AOA Category 1-A: for a DO it counts toward AOA, osteopathic boards, and AMA-rule states alike." : undefined}>
+          <select required aria-required="true" value={form.category || ""} onChange={e => { setReqError(null); setForm(f => ({ ...f, category: e.target.value })); }} style={{ ...iS, appearance: "auto" }}>
             <option value="">Select category...</option>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -570,7 +654,9 @@ function CMESection({ onShare }) {
             which for a DO is AOA Category 2 and can never satisfy California's
             20-hour AOA Category 1-A/1-B minimum. */}
         <CreditEquivalenceNote category={form.category} degreeType={deg} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        {/* minmax(0, 1fr): a 1fr track cannot shrink below the date input's
+            own minimum width, which pushes a phone form past its edge. */}
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8 }}>
           <Field label="Hours"><input type="number" step="0.5" value={form.hours || ""} onChange={e => setForm(f => ({ ...f, hours: e.target.value }))} style={iS} placeholder="0" /></Field>
           <Field label="Date Completed"><input type="date" value={form.date || ""} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={iS} /></Field>
         </div>
@@ -581,12 +667,12 @@ function CMESection({ onShare }) {
           {requiredTopics.length > 0 && (
             <div style={{ marginBottom: 6 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", marginBottom: 4 }}>Required by your states</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {requiredTopics.map(topic => {
                   const sel = (form.topics || []).includes(topic);
                   return (
                     <button key={topic} type="button" onClick={() => toggleTopic(topic)} style={{
-                      padding: "6px 12px", fontSize: 13, fontWeight: 600, borderRadius: 18,
+                      padding: "6px 12px", fontSize: 13, fontWeight: 600, borderRadius: 18, minHeight: TAP_MIN,
                       border: sel ? "none" : `1px solid ${T.accent}`,
                       backgroundColor: sel ? T.accent : "transparent",
                       color: sel ? "#fff" : T.accent, cursor: "pointer",
@@ -596,12 +682,12 @@ function CMESection({ onShare }) {
               </div>
             </div>
           )}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {CME_TOPICS.filter(t => !requiredTopics.includes(t)).map(topic => {
               const sel = (form.topics || []).includes(topic);
               return (
                 <button key={topic} type="button" onClick={() => toggleTopic(topic)} style={{
-                  padding: "6px 12px", fontSize: 13, fontWeight: 600, borderRadius: 18,
+                  padding: "6px 12px", fontSize: 13, fontWeight: 600, borderRadius: 18, minHeight: TAP_MIN,
                   border: sel ? "none" : `1px solid ${T.border}`,
                   backgroundColor: sel ? T.accent : "transparent",
                   color: sel ? "#fff" : T.textMuted, cursor: "pointer",
@@ -612,7 +698,10 @@ function CMESection({ onShare }) {
         </Field>
 
         <Field label="Notes"><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 50, resize: "vertical" }} /></Field>
-        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} />
+        {/* Only cme's own columns fill the form: a certificate the scanner
+            calls a licence would otherwise add keys the table lacks. */}
+        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} allowedKeys={SECTION_FIELDS.cme} />
+        {reqError && <div role="alert" style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{reqError}</div>}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button onClick={closeForm} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
           <button onClick={handleSave} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{editItem ? "Save" : "Add"}</button>
@@ -824,11 +913,11 @@ function CMESection({ onShare }) {
                     </div>
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 3, flexShrink: 0, paddingTop: 2 }}>
+                <div style={{ display: "flex", gap: CARD_ACTION_GAP, flexShrink: 0, paddingTop: 2 }}>
                   {starButton(item, true)}
-                  <button onClick={() => onShare(item, "cme")} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
-                  <button onClick={() => openEdit(item)} style={{ padding: "5px 7px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                  <button onClick={() => { if (window.confirm(DELETE_CONFIRM)) handleDelete(item.id); }} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  <button aria-label="Share" onClick={() => onShare(item, "cme")} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", ...cardActionSize }}><SendIcon /></button>
+                  <button aria-label="Edit" onClick={() => openEdit(item)} style={{ padding: "5px 7px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", ...cardActionSize }}><EditIcon /></button>
+                  <button aria-label="Delete" onClick={() => { if (window.confirm(DELETE_CONFIRM)) handleDelete(item.id); }} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", ...cardActionSize }}><TrashIcon /></button>
                 </div>
               </div>
             </div>

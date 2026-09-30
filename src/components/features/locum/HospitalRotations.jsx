@@ -6,14 +6,20 @@
  * General next week" matters for credential prep, mileage tracking, and tax purposes.
  *
  * Stored at data.rotations[]: { id, hospital, city, state, startDate, endDate, role, notes, agency }
+ *
+ * Not mounted anywhere today (CURRENT-STATE.md, "Dormant code"). Its writes
+ * go through addItem, editItem and deleteItem with uuid ids, like every other
+ * collection: rotations.id is a uuid column, and a setData write reaches only
+ * the device cache until the load-time self-heal upserts it (QA OPS-010).
  */
 
 import { useState } from "react";
+import { TAP_MIN, cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
+// A real uuid: every synced table keys rows by one, and the old
+// "ded-<ms>-<random>" id was refused (22P02) on every save and replay.
+import { generateId } from "../../../utils/helpers";
 
-function makeId() {
-  return `rot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function formatRange(start, end) {
   if (!start) return "—";
@@ -49,7 +55,7 @@ const BLANK_FORM = {
 };
 
 export default function HospitalRotations() {
-  const { data, setData, theme: T } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState(BLANK_FORM);
@@ -90,27 +96,15 @@ export default function HospitalRotations() {
   const save = () => {
     if (!form.hospital.trim()) return;
     if (editId) {
-      setData((d) => ({
-        ...d,
-        rotations: (d.rotations || []).map((r) =>
-          r.id === editId ? { ...r, ...form } : r
-        ),
-      }));
-    } else {
-      setData((d) => ({
-        ...d,
-        rotations: [...(d.rotations || []), { id: makeId(), ...form }],
-      }));
-    }
+      const previous = rotations.find((r) => r.id === editId);
+      if (previous && editItem("rotations", { ...previous, ...form }) === false) return;
+    } else if (addItem("rotations", { id: generateId(), ...form }) === false) return;
     cancelEdit();
   };
 
   const remove = (id) => {
     if (!window.confirm("Remove this rotation?")) return;
-    setData((d) => ({
-      ...d,
-      rotations: (d.rotations || []).filter((r) => r.id !== id),
-    }));
+    deleteItem("rotations", id);
   };
 
   return (
@@ -217,7 +211,7 @@ function Section({ title, rows, T, onEdit, onRemove, accent }) {
                 <button
                   onClick={() => onEdit(r)}
                   style={{
-                    padding: "4px 8px", borderRadius: 6, border: "none",
+                    padding: "4px 8px", borderRadius: 6, border: "none", minHeight: TAP_MIN,
                     backgroundColor: T.input, color: T.text,
                     fontSize: 11, fontWeight: 600, cursor: "pointer",
                   }}
@@ -225,9 +219,10 @@ function Section({ title, rows, T, onEdit, onRemove, accent }) {
                   Edit
                 </button>
                 <button
+                  aria-label={`Remove ${r.hospital || "rotation"}`}
                   onClick={() => onRemove(r.id)}
                   style={{
-                    padding: "4px 8px", borderRadius: 6, border: "none",
+                    padding: "4px 8px", borderRadius: 6, border: "none", ...cardActionSize,
                     backgroundColor: T.input, color: "#ef4444",
                     fontSize: 11, fontWeight: 600, cursor: "pointer",
                   }}
@@ -248,7 +243,7 @@ function RotationForm({ form, setForm, onSave, onCancel, editId, T }) {
   const inputStyle = {
     width: "100%", padding: "8px 10px",
     backgroundColor: T.input, border: `1px solid ${T.inputBorder || T.border}`,
-    borderRadius: 8, color: T.text, fontSize: 13, outline: "none", boxSizing: "border-box",
+    borderRadius: 8, color: T.text, fontSize: 16, outline: "none", boxSizing: "border-box",
   };
 
   return (
@@ -260,19 +255,20 @@ function RotationForm({ form, setForm, onSave, onCancel, editId, T }) {
         {editId ? "Edit Rotation" : "New Rotation"}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <input style={inputStyle} placeholder="Hospital name *" value={form.hospital} onChange={update("hospital")} />
+        <input style={inputStyle} aria-label="Hospital name (required)" placeholder="Hospital name *" value={form.hospital} onChange={update("hospital")} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 100px", gap: 8 }}>
-          <input style={inputStyle} placeholder="City" value={form.city} onChange={update("city")} />
-          <input style={inputStyle} placeholder="State" maxLength={2} value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} />
+          <input style={inputStyle} aria-label="City" placeholder="City" value={form.city} onChange={update("city")} />
+          <input style={inputStyle} aria-label="State" placeholder="State" maxLength={2} value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <input style={inputStyle} type="date" value={form.startDate} onChange={update("startDate")} />
-          <input style={inputStyle} type="date" value={form.endDate} onChange={update("endDate")} placeholder="End (optional)" />
+          <input style={inputStyle} type="date" aria-label="Start date" value={form.startDate} onChange={update("startDate")} />
+          <input style={inputStyle} type="date" aria-label="End date (optional)" value={form.endDate} onChange={update("endDate")} placeholder="End (optional)" />
         </div>
-        <input style={inputStyle} placeholder="Role / specialty (e.g. Hospitalist, GenSurg call)" value={form.role} onChange={update("role")} />
-        <input style={inputStyle} placeholder="Agency (e.g. Weatherby, CompHealth)" value={form.agency} onChange={update("agency")} />
+        <input style={inputStyle} aria-label="Role or specialty" placeholder="Role / specialty (e.g. Hospitalist, GenSurg call)" value={form.role} onChange={update("role")} />
+        <input style={inputStyle} aria-label="Agency" placeholder="Agency (e.g. CompHealth)" value={form.agency} onChange={update("agency")} />
         <textarea
           style={{ ...inputStyle, fontFamily: "inherit", resize: "vertical", minHeight: 50 }}
+          aria-label="Notes (optional)"
           placeholder="Notes (optional)"
           value={form.notes}
           onChange={update("notes")}

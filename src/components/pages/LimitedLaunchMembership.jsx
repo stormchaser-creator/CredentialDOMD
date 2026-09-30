@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { createLimitedLaunchClient } from "../../utils/limitedLaunchClient.js";
 import { readLaunchInvitation, clearLaunchInvitation } from "../../utils/launchInvitation.js";
-import { accessAuthority, canReviewBillingOffer } from "../../utils/limitedLaunchAccess.js";
-import { membershipDate, membershipPrice, quoteMatchesBetaWindow, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
+import { accessAuthority, canReviewBillingOffer, renewalPaymentFailed } from "../../utils/limitedLaunchAccess.js";
+import { membershipDate, membershipPrice, membershipRenewalCopy, quoteMatchesBetaWindow, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 import { reportError } from "../../lib/errorReport.js";
 import { createCheckoutFailureReporter } from "../../utils/checkoutFailure.js";
@@ -171,6 +171,9 @@ function MembershipForAccount({ accountId, onActivated }) {
   const lifetime = access?.lifetime.credential || access?.lifetime.practice;
   // Founding Credential includes Practice while active: no trial and nothing to add.
   const foundingPractice = access?.purchasedOfferId === "core" && access.practiceIncluded === true;
+  // Renews, or ends on its paid period's end after a cancellation in the
+  // billing portal (BILL-005). Never beside lifetime access.
+  const renewalLine = membershipRenewalCopy(access);
   // While this account's offer is founding, the $245 bundle is not offered.
   const bundleOffered = shown?.bundleAvailable !== false;
   // The package sentence follows the same answer as its button: the $245
@@ -203,7 +206,7 @@ function MembershipForAccount({ accountId, onActivated }) {
       <p>{messageFor({ code: limitedLaunch.enrollmentError })}</p>
       <button style={button} disabled={busy} onClick={limitedLaunch.refresh}>Check membership again</button>
     </div>}
-    {lifetime ? <p>Your lifetime access is protected. No payment is required for those features.</p>
+    {lifetime ? <p>{MEMBERSHIP_COPY.lifetimeProtected}</p>
       : scheduled ? <div>
         <p>{scheduledMembershipCopy(scheduled)}</p>
         {beta && <p>Your original free beta still ends on {membershipDate(access.freeBeta.endsAt)}. Your account and saved records stay the same.</p>}
@@ -211,11 +214,16 @@ function MembershipForAccount({ accountId, onActivated }) {
       </div>
         : access?.purchasedOfferId ? <div>
           <p>Your {access.purchasedOfferId === "core" ? "Credential" : "Credential + Practice"} membership is active. Your saved records and exports remain available.</p>
+          {renewalLine && <p>{renewalLine}</p>}
           {foundingPractice && <p>{MEMBERSHIP_COPY.foundingPracticeIncluded}</p>}
           {access.purchasedOfferId === "core" && !foundingPractice && access.practiceTrial.state === "active" && <p>Your Practice trial runs until {membershipDate(access.practiceTrial.endsAt)}. It does not charge automatically. Your Credential membership continues separately.</p>}
-          {access.purchasedOfferId === "core" && !foundingPractice && !access.capabilities.practice.write && <p>{access.practiceTrial.state === "expired" ? "Your Practice trial has ended. " : ""}Saved Practice records remain available to read and export. <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>; we will review the options and charges with you before any billing change.</p>}
+          {access.purchasedOfferId === "core" && !foundingPractice && !access.capabilities.practice.write && <p>{access.practiceTrial.state === "expired" ? "Your Practice trial has ended. " : ""}Saved Practice records remain available to read and export. <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}</p>}
           <button style={button} onClick={manage}>Manage paid subscription</button>
         </div>
+          : renewalPaymentFailed(access) ? <div>
+            <p>{MEMBERSHIP_COPY.renewalPaymentFailed}</p>
+            <button style={button} onClick={manage}>Update payment method</button>
+          </div>
           : returning ? <p role="status">{BILLING_RETURN_COPY.membershipPending}</p>
           : <>
             {beta && <p>Your free beta is active until {membershipDate(access.freeBeta.endsAt)}. No card is required to keep this beta, and it will not charge automatically. {betaCanReview ? "You may choose a paid membership now with no charge before your original beta ends; its paid year starts at that original end date. Review the exact date and terms below. Keep using this account; your saved records stay in place." : "Your original beta end date has not changed. A paid offer is not available right now."}</p>}

@@ -117,8 +117,8 @@ export function yearOutlook(scheduleDays, actuals, year, todayIso) {
 
 /**
  * Per-contract averages split by day type: call days (the "On-call" daily
- * totals) vs non-call days (orientation, sign-out, hourly work). A Penrose
- * call day is stipend + overage money; blending it with a $300 sign-out
+ * totals) vs non-call days (orientation, sign-out, hourly work). A stipend
+ * contract's call day is stipend + overage money; blending it with a $300 sign-out
  * produced estimates that matched nothing real.
  */
 export function contractDayKindAverages(data, contractId) {

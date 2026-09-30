@@ -37,6 +37,9 @@ const root = new URL('../../', import.meta.url);
 const read = (rel) => fs.readFileSync(new URL(rel, root), 'utf8');
 const MIGRATION = read('supabase/migrations/20260928191000_mailbox_repair.sql');
 const ROLLBACK = read('docs/rollback/20260928191000_mailbox_repair.rollback.sql');
+// 20260930000000 (AUTH-008): continuity binds a paused (revoked) account, and
+// the repair holds back exactly what that step refuses, so both change together.
+const PAUSED = read('supabase/migrations/20260930000000_continuity_binds_paused_accounts.sql');
 const EVENTS = read('supabase/migrations/20260918a_mailbox_account_events.sql');
 // Identity continuity. Not part of DOMAIN (its storage policies are meant for
 // authenticated), but loaded between 20260918a and 20260921015000, where
@@ -543,6 +546,12 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       assert.deepEqual(await world(), after, 'idempotent through the handler too');
     });
 
+    await t.test('20260930000000 applies on top, twice', async () => {
+      for (let i = 0; i < 2; i++) { const r = await pg.file(PAUSED); assert.ok(r.ok, r.out); }
+      assert.equal(await pg.sql(`select has_function_privilege('authenticated', 'public.repair_account_mailboxes(uuid,text,jsonb,boolean,text)', 'execute')`), 'f');
+      assert.equal(await pg.sql(`select has_function_privilege('anon', 'public.claim_clerk_continuity(text,text,text,bigint,timestamptz,jsonb)', 'execute')`), 'f');
+    });
+
     await t.test('repair: holds exactly the users the production webhook\'s continuity step refuses', async () => {
       const CUSERS = [
         { subject: 'user_SynthProdHeld', email: 'held@example.invalid', updated_ms: T + 1000 },
@@ -562,13 +571,15 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
         (await webhookContinuity('user_SynthProdPrepared', 'prepared@example.invalid')).state,
         (await webhookContinuity('user_SynthProdPlain', 'plain@example.invalid')).state,
         (await webhookContinuity('user_SynthProdSpace', 'sp ace@example.invalid')).state,
-      ], ['identity_conflict', 'bound', 'account_unavailable', 'source_identity_unavailable', 'current', 'verified_primary_required']);
+      ], ['identity_conflict', 'bound', 'bound', 'source_identity_unavailable', 'current', 'verified_primary_required']);
 
-      const HELD = ['held@example.invalid', 'revoked@example.invalid', 'prepared@example.invalid', 'sp ace@example.invalid'];
+      // A paused (revoked) account binds (20260930000000), so it is routed
+      // like the bound one; access stays with its own access_status checks.
+      const HELD = ['held@example.invalid', 'prepared@example.invalid', 'sp ace@example.invalid'];
       const ledger = () => pg.rows(`select address, profile_id, proof, event_ms::text, updated_at::text from public.mailbox_claims
-        where address = any(array[${HELD.map(q).join(',')}]) or profile_id = any(array['${PH}','${PR}','${PP}','${PS}']::uuid[]) order by address`);
+        where address = any(array[${HELD.map(q).join(',')}]) or profile_id = any(array['${PH}','${PP}','${PS}']::uuid[]) order by address`);
       const mirrors = () => pg.rows(`select id, verified_email, verified_email_event_ms::text as wm, updated_at::text from public.profiles
-        where id = any(array['${PH}','${PR}','${PP}','${PS}']::uuid[]) order by id`);
+        where id = any(array['${PH}','${PP}','${PS}']::uuid[]) order by id`);
       const before = await world();
       const heldBefore = { ledger: await ledger(), mirrors: await mirrors() };
       assert.deepEqual(heldBefore.ledger, []);
@@ -593,8 +604,8 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       assert.equal((await webhookContinuity('user_SynthProdBound', 'prepared@example.invalid')).state, 'bound');
       assert.deepEqual((await repair([{ subject: 'user_SynthProdBound', email: 'prepared@example.invalid', updated_ms: T + 1001 }], false)).outcomes, { claimed: 1 });
 
-      const expected = { state: 'ready', total: 6, change: 2, current: 0,
-        skipped: { noAccount: 0, closed: 0, continuity: 4, unusable: 0 }, outcomes: { claimed: 2 } };
+      const expected = { state: 'ready', total: 6, change: 3, current: 0,
+        skipped: { noAccount: 0, closed: 0, continuity: 3, unusable: 0 }, outcomes: { claimed: 3 } };
       assert.deepEqual(await repair(CUSERS, false), { ...expected, applied: false });
       assert.deepEqual(await world(), before, 'the preview wrote nothing');
       assert.deepEqual(await repair(CUSERS, true), { ...expected, applied: true });
@@ -603,13 +614,16 @@ test('mailbox repair migration against the real mailbox functions', { skip: pgSk
       assert.deepEqual({ ledger: await ledger(), mirrors: await mirrors() }, heldBefore);
       assert.equal((await claim('held@example.invalid')), null);
       assert.equal((await profile(PH)).verified_email, null);
-      // The two the webhook routes are routed, the bound one on its own profile.
+      // The three the webhook routes are routed, each bound one on its own profile.
       assert.equal((await claim('bound@example.invalid')).profile_id, PB);
       assert.equal((await profile(PB)).verified_email, 'bound@example.invalid');
+      assert.equal((await claim('revoked@example.invalid')).profile_id, PR);
+      assert.equal((await profile(PR)).verified_email, 'revoked@example.invalid');
+      assert.equal(await pg.sql(`select access_status from public.profiles where id = '${PR}'`), 'revoked', 'routing grants no access');
       assert.equal((await claim('plain@example.invalid')).profile_id, PN);
 
       const again = await repair(CUSERS, true);
-      assert.deepEqual(again, { ...expected, applied: true, change: 0, current: 2, outcomes: {} });
+      assert.deepEqual(again, { ...expected, applied: true, change: 0, current: 3, outcomes: {} });
     });
 
     await t.test('rollback restores the 20260918a body, keeps the grants closed, and runs twice', async () => {

@@ -1,8 +1,10 @@
 import { useState, useMemo, memo } from "react";
+import { TAP_MIN } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { generateCredentialZip, downloadBlob } from "../../utils/credentialExport";
 import { supabase } from "../../lib/supabase";
-import { scheduledMembershipCopy } from "../../utils/membershipTiming.js";
+import { membershipRenewalCopy, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
+import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 
 function CancellationPage() {
   const { data, theme: T, userIdRef, navigate, hasSubscription, isFreeBeta, limitedLaunch, manage } = useApp();
@@ -66,18 +68,26 @@ function CancellationPage() {
   };
 
   const countdownColor = daysLeft <= 2 ? "#ef4444" : daysLeft <= 4 ? "#f59e0b" : "#10b981";
+  // A paid membership says whether it renews, or when it ends after renewal
+  // was cancelled in the billing portal (BILL-005). Lifetime access says so
+  // instead, as the membership card does: an admin grants it only after
+  // renewal is cancelled, so "will not renew ... after it ends" is false there.
+  const lifetime = limitedLaunch.access?.lifetime?.credential || limitedLaunch.access?.lifetime?.practice;
+  const renewalLine = membershipRenewalCopy(limitedLaunch.access);
 
   if (limitedLaunch.enabled) return <section style={{ color: T.text, maxWidth: 520, margin: "0 auto" }}>
     <h1 style={{ fontSize: 22 }}>Membership and cancellation</h1>
     <p style={{ color: T.textMuted, lineHeight: 1.6 }}>A free beta does not enroll you in payment automatically. If you explicitly chose a scheduled paid membership, manage that purchase below. A Practice trial never adds a charge automatically, and founding Credential includes Practice only while that membership stays active. Your saved records remain available to view and export.</p>
+    {lifetime && <p>{MEMBERSHIP_COPY.lifetimeProtected}</p>}
     {limitedLaunch.access?.scheduledMembership ? <>
       <p>{scheduledMembershipCopy(limitedLaunch.access.scheduledMembership)}</p>
-      <button onClick={manage}>Manage scheduled membership</button>
+      <button style={{ minHeight: TAP_MIN }} onClick={manage}>Manage scheduled membership</button>
     </> : hasSubscription ? <>
+      {renewalLine && <p>{renewalLine}</p>}
       <p>Manage renewal or cancel your paid subscription in the secure billing portal. Your saved records remain available for viewing and export after membership ends.</p>
-      <button onClick={manage}>Manage paid subscription</button>
+      <button style={{ minHeight: TAP_MIN }} onClick={manage}>Manage paid subscription</button>
     </> : <p>No active paid subscription was found.</p>}
-    <button style={{ marginLeft: 10 }} onClick={() => navigate("more", "export")}>Export saved records</button>
+    <button style={{ marginLeft: 10, minHeight: TAP_MIN }} onClick={() => navigate("more", "export")}>Export saved records</button>
   </section>;
 
   if (nothingToCancel) {

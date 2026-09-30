@@ -38,28 +38,28 @@ GET https://data.cms.gov/provider-data/api/1/datastore/query/<dataset>/0
       &limit=<n>
 ```
 
-### Verified live against NPI 1518456078
+### Verified live (2026-09-03, one practising physician's NPI)
 
-- `mj5m-pzi6` returns 3 rows: `cred` `DO`, `grd_yr` `2018`, `med_sch` `OTHER`,
-  `pri_spec` `NEUROSURGERY`, facilities `EISENHOWER MEDICAL CENTER` (twice) and
-  `CAL MED PHYSICIANS AND SURGEONS INC`.
-- `27ea-46a8` returns 3 rows, all `facility_type` `Hospital`, CCNs `050573`,
-  `050245`, `050292`.
-- `xubh-q36u` names those three: Eisenhower Medical Center (Rancho Mirage CA),
-  Arrowhead Regional Medical Center (Colton CA), Riverside University Health
-  System-Medical Center (Moreno Valley CA).
-- PubMed, measured 2026-09-03. The term the code builds is `"Whitney E"[Author]`
-  (surname plus first initial). It returns **118 matches**; the 25 most recent
-  are shown. Of those 25, roughly 8 are his (three StatPearls chapters, five
-  Cureus reviews on deep brain stimulation, arachnoid cysts, cerebral aneurysms
-  and two others) and roughly 17 belong to at least four other people: a
-  seismologist in Nature Communications, an HPV epidemiologist in MMWR and
-  Cancer Epidemiology, a dental educator, and an adolescent addiction group.
+- `mj5m-pzi6` returned one row per enrolled practice location: `cred`, `grd_yr`,
+  `med_sch` `OTHER`, `pri_spec`, and a `facility_name` per row (the same
+  facility can appear twice, once per address).
+- `27ea-46a8` returned one row per hospital, all `facility_type` `Hospital`,
+  each with a CCN.
+- `xubh-q36u` named every one of those CCNs with its city and state.
+- PubMed, measured the same day. The term the code builds is
+  `"<Surname> <first initial>"[Author]`. For that physician it returned **118
+  matches**; the 25 most recent are shown. Of those 25, roughly 8 were theirs
+  and roughly 17 belonged to at least four other people in unrelated fields.
   That is the fuzzy-match problem measured rather than asserted, and it is why
   every publication starts unticked and shows its venue, year and co-authors.
-- Do not "improve" the term to `"Whitney EE"[Author]`. That returns **0**. The
-  first initial alone is the only form that finds his papers at all, and
-  carrying the false positives is the price of not silently finding nothing.
+- Do not "improve" the term to two initials (`"<Surname> <two initials>"[Author]`).
+  That returned **0**. The first initial alone is the only form that found the
+  physician's papers at all, and carrying the false positives is the price of
+  not silently finding nothing.
+
+The committed fixtures in `scripts/fixtures/public-record/` keep those
+response shapes with every value synthetic (NPI 1234567893, the CMS
+documentation example).
 
 ### `med_sch` is not a medical school
 

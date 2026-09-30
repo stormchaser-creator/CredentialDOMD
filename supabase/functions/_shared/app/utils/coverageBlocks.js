@@ -4,9 +4,9 @@
 /**
  * Coverage blocks with times.
  *
- * A locum agreement states each coverage block with times: "September 25,
- * 2026 (4pm) to September 28, 2026 (7am)", "November 5, 2026 (6am) to
- * November 12, 2026 (6am)". contract.coveragePeriods (the jsonb column
+ * A locum agreement states each coverage block with times: "October 16,
+ * 2026 (4pm) to October 19, 2026 (7am)", "November 12, 2026 (6am) to
+ * November 19, 2026 (6am)". contract.coveragePeriods (the jsonb column
  * locum_contracts.coverage_periods; no column of its own) holds one object
  * per block:
  *
@@ -28,10 +28,10 @@
  *    (the Contracts form refuses one): read as a block starting at 4:00 PM
  *    it turned every call day over at 4:00 PM and kept the end date as a
  *    call day of its own.
- *  - An end time: `end` is the literal date coverage ends, at endTime. "Sep
- *    25 (4pm) to Sep 28 (7am)" is { start: "2026-09-25", startTime: "16:00",
- *    end: "2026-09-28", endTime: "07:00" }: three call days (Sep 25, 26 and
- *    27), not four. Without a start time the block starts on its start date
+ *  - An end time: `end` is the literal date coverage ends, at endTime. "Oct
+ *    16 (4pm) to Oct 19 (7am)" is { start: "2026-10-16", startTime: "16:00",
+ *    end: "2026-10-19", endTime: "07:00" }: three call days (Oct 16, 17 and
+ *    18), not four. Without a start time the block starts on its start date
  *    at the end time.
  *
  * Inside a timed block the call day turns over at the block's end time: a 6
@@ -170,7 +170,7 @@ export function clockLabel(v, tz = "") {
   return `${h % 12 === 0 ? 12 : h % 12}:${pad(m)} ${h < 12 ? "AM" : "PM"}`;
 }
 
-/** "Sep 25" for a moment, on a zone's calendar ("" = this device). */
+/** "Oct 16" for a moment, on a zone's calendar ("" = this device). */
 export const monthDay = (ms, tz = "") => {
   const zone = validZone(tz);
   return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", ...(zone ? { timeZone: zone } : {}) });
@@ -270,7 +270,7 @@ export function callDayWindow(b, dayKey) {
   };
 }
 
-/** "call 4:00 PM Sep 25 to 7:00 AM Sep 26": the window a timed call day covers, for the invoice. */
+/** "call 4:00 PM Oct 16 to 7:00 AM Oct 17": the window a timed call day covers, for the invoice. */
 export function callDayWindowText(b, dayKey) {
   const w = callDayWindow(b, dayKey);
   return `call ${clockLabel(w.startMs, b.tz)} ${monthDay(w.startMs, b.tz)} to ${clockLabel(w.endMs, b.tz)} ${monthDay(w.endMs, b.tz)}`;
@@ -286,7 +286,7 @@ export function periodHasCallDay(p, dayKey) {
 
 /**
  * The call day for a moment on a timed block's start date, before the block
- * begins (5:30 AM on Nov 5 before a 6:00 AM start): the block's first call
+ * begins (5:30 AM on Nov 12 before a 6:00 AM start): the block's first call
  * day. `fallbackDay` is the call day the contract's own start hour gives the
  * moment; when that is itself a call day of some block (the block before
  * this one), it stands and this returns null, as it does for any moment not
@@ -326,8 +326,8 @@ export function blockTurnoversWithin(contract, s, en) {
 
 /**
  * The calendar dates a timed block touches, { start, end }, for "is this
- * contract in force on this date" (the pickers and the schedule guard): Sep
- * 25 4:00 PM to Sep 28 7:00 AM touches Sep 25 through Sep 28; a block ending
+ * contract in force on this date" (the pickers and the schedule guard): Oct
+ * 16 4:00 PM to Oct 19 7:00 AM touches Oct 16 through Oct 19; a block ending
  * at midnight does not touch the day it ends on. null for a block without
  * times (callers keep their own reading of it).
  */
@@ -338,7 +338,7 @@ export function timedSpan(p) {
   return { start: wallAt(b.startMs, b.tz).key, end: wallAt(b.endMs - 1, b.tz).key };
 }
 
-/** "Sep 25, 4:00 PM to Sep 28, 7:00 AM" for a timed block (on its own zone's clock), or null for one without times. */
+/** "Oct 16, 4:00 PM to Oct 19, 7:00 AM" for a timed block (on its own zone's clock), or null for one without times. */
 export function timedBlockLabel(p) {
   const b = timedBlock(p);
   if (!b) return null;
@@ -349,8 +349,8 @@ const shortDay = (key) => { const [y, m, d] = parts(key); return new Date(y, m -
 
 /**
  * What a block bills as, said the way the Contracts form shows it under the
- * block: "Sep 25, 4:00 PM to Sep 28, 7:00 AM · 3 call days: Sep 25 to Sep
- * 27" with times; without, "3 call days: Sep 25 to Sep 27" (the end date is
+ * block: "Oct 16, 4:00 PM to Oct 19, 7:00 AM · 3 call days: Oct 16 to Oct
+ * 18" with times; without, "3 call days: Oct 16 to Oct 18" (the end date is
  * the last call day). "" for a block with no start date yet or one that
  * covers nothing (periodProblem says why).
  */
@@ -372,7 +372,7 @@ export function blockSummary(p) {
 }
 
 /**
- * How a block reads in a list: "Sep 25, 4:00 PM to Sep 28, 7:00 AM" with
+ * How a block reads in a list: "Oct 16, 4:00 PM to Oct 19, 7:00 AM" with
  * times; without, "<start> – <end>" through formatDate (helpers.js), the way
  * the lists have always written it.
  */

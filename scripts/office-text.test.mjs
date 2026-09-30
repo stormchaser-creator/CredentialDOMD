@@ -26,9 +26,9 @@ test("kinds are read from the name or the type, like the app's officeKind", () =
 });
 
 test("a .docx is read through its zip, paragraphs and entities intact", async () => {
-  const r = await officeText(makeDocx(["Eric Whitney, DO", "Curriculum Vitae", "Board certified & licensed in CO"]), "Whitney CV.docx", DOCX);
+  const r = await officeText(makeDocx(["Rowan Testa, DO", "Curriculum Vitae", "Board certified & licensed in CO"]), "Testa CV.docx", DOCX);
   assert.equal(r.kind, "docx");
-  assert.match(r.text, /Eric Whitney, DO\nCurriculum Vitae\nBoard certified & licensed in CO/);
+  assert.match(r.text, /Rowan Testa, DO\nCurriculum Vitae\nBoard certified & licensed in CO/);
 });
 
 test("an .xlsx is read from its shared strings and cells", async () => {

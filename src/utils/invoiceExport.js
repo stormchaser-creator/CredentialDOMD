@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { formatDate } from "./helpers.js";
+import { formatDate, localDay } from "./helpers.js";
 import { shareInvoicePdf } from "./invoicePdf.js";
 import { invoiceLayout } from "./invoiceLayout.js";
 import { money, invoicePayment, invoiceCoverEmail, invoiceCoverBlurb } from "./invoiceCover.js";
@@ -76,7 +76,7 @@ export function invoiceXlsxFile(inv) {
   };
   const top = [
     [`INVOICE ${inv.number || ""}`],
-    [`Issued ${formatDate(inv.issuedDate || new Date().toISOString().slice(0, 10))}`],
+    [`Issued ${formatDate(inv.issuedDate || localDay())}`],
     inv.periodStart ? [`Service period ${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? " – " + formatDate(inv.periodEnd) : ""}`] : [],
     [],
     ["FROM", "", "BILL TO"],
@@ -196,7 +196,7 @@ export async function invoiceDocxFile(inv) {
     sections: [{
       children: [
         new Paragraph({ children: [new TextRun({ text: `INVOICE ${inv.number || ""}`, bold: true, size: 40, color: "0A2540" })] }),
-        p(`Issued ${formatDate(inv.issuedDate || new Date().toISOString().slice(0, 10))}`, { size: 18, color: "666666" }),
+        p(`Issued ${formatDate(inv.issuedDate || localDay())}`, { size: 18, color: "666666" }),
         ...(inv.periodStart ? [p(`Service period ${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? " – " + formatDate(inv.periodEnd) : ""}`, { size: 18, color: "666666" })] : []),
         p(""),
         p("FROM", { bold: true, size: 16, color: "10B981" }),

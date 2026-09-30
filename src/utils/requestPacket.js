@@ -763,10 +763,10 @@ const NAME_LINE_RE = /^[A-Z][a-z'-]+(?: [A-Z][a-z'-]+){0,2}(?:, ?[A-Z][A-Za-z.]{
 
 // A line that is somebody's name with a degree after it, a header copied into
 // the body, or a bare sign-off. None of them is an ask, wherever it sits.
-// "E. Whitney, DO" at the top of a forwarded letter (the tail of a wrapped
-// Subject: line) read as the lettered list item "E." asking for "Whitney, DO",
+// "E. Testa, DO" at the top of a forwarded letter (the tail of a wrapped
+// Subject: line) read as the lettered list item "E." asking for "Testa, DO",
 // and the physician was emailed "I could not tell from your email what you
-// meant by: Whitney, DO". A name line is dropped only when the rules cannot
+// meant by: Testa, DO". A name line is dropped only when the rules cannot
 // name a kind in it, so "State license, MD" (Maryland) is still an ask.
 const DEGREE_SUFFIX = "(?:DO|MD|D\\.O\\.|M\\.D\\.|PhD|Ph\\.D\\.|MBA|MHA|MPH|MS|MSN|BSN|RN|NP|PA|PA-C|APRN|FNP|CRNA|CPCS|CPMSM|CPMS|CPC|CPHQ|FACS|FAANS|FACOS|FACP|FAAFP|FACEP|JD|DDS|DMD|DPM)";
 const PERSON_SIGNATURE_RE = new RegExp(`^(?:[Dd]r\\.?\\s+)?(?:[A-Z]\\.\\s*){0,3}[A-Z][A-Za-z'-]+(?:\\s+(?:[A-Z]\\.|[A-Z][A-Za-z'-]+)){0,3}\\s*,\\s*${DEGREE_SUFFIX}(?:\\s*,\\s*${DEGREE_SUFFIX})*[.,]?$`);
@@ -788,7 +788,7 @@ function isSignatureLine(line) {
  * note all named "for credentialing" (the subject with its lead words
  * stripped) instead of the thing asked for. It is now an unknown item, which
  * the note asks about by name. The one unknown line still dropped is a bare
- * name (tested after the greeting words come off, so "Hi Dr. Whitney," goes
+ * name (tested after the greeting words come off, so "Hi Dr. Testa," goes
  * too), which the kind filter used to catch by accident.
  */
 function shortLineAsks(lines) {
@@ -1023,7 +1023,7 @@ export function catalogueFromRows(docs, records) {
  * The line a document gets in the cover note and on the card:
  * "Board Certification (AOA)", "DEA Registration, ND",
  * "MMR (Measles, Mumps, Rubella) vaccination", "QuantiFERON-TB Gold, Negative",
- * "Professional Liability COI, ProAssurance Specialty Insurance".
+ * "Professional Liability COI, Harborline Specialty Insurance".
  */
 export function describeEntry(entry) {
   if (!entry) return "";
@@ -1212,7 +1212,7 @@ function firstName(fromName) {
   return w === w.toUpperCase() ? w[0] + w.slice(1).toLowerCase() : w;
 }
 
-/** "Eric Whitney, DO" from the profile; "" with no name, since a degree on its own is not a signature. */
+/** "Rowan Testa, DO" from the profile; "" with no name, since a degree on its own is not a signature. */
 function signOff(physician) {
   const name = pick(physician || {}, "name") || "";
   const degree = pick(physician || {}, "degree", "degree_type", "degreeType") || "";
@@ -1462,9 +1462,16 @@ const EXPIRED_LABEL_RE = /, expired \d{4}-\d{2}-\d{2}$/;
  * agency's statement about its own malpractice policy as an ask for the
  * physician's malpractice certificate, the app offered Approve and send, and
  * the owner tapped it.
+ *
+ * And only when the forward itself was positively authenticated
+ * (proposal.verified, which email-inbound stamps from mayFileFrom). A forward
+ * from a domain with no DMARC can be forged: the attacker writes the
+ * physician's address in From: and the "requester" in the forwarded text, and
+ * the packet goes to whoever the forger named. Absent reads as unverified.
  */
 export function oneTapReady(proposal) {
   const p = proposal || {};
+  if (p.verified !== true) return false;
   if (p.source !== "model" || p.confidence !== "high") return false;
   if (p.unclear) return false;
   const items = Array.isArray(p.items) ? p.items : [];
@@ -1481,6 +1488,10 @@ export function oneTapReady(proposal) {
     return labels.some((l) => !EXPIRED_LABEL_RE.test(String(l ?? "")));
   });
 }
+
+// Why a forward that could not be authenticated leads with Review. Shown in
+// the app (reviewReason, UnclearNote) and in the physician's summary email.
+const UNVERIFIED_FORWARD_LINE = "This forward could not be verified as coming from you. Check who is asking before you send anything.";
 
 const quoted = (xs) => xs.map((x) => `"${x}"`).join(", ");
 
@@ -1504,6 +1515,8 @@ export function reviewReason(proposal) {
   const lapsed = items.filter((it) => it.status === "found" && Array.isArray(it.labels) && it.labels.length > 0
     && it.labels.every((l) => EXPIRED_LABEL_RE.test(String(l ?? "")))).map((it) => String(it.ask ?? ""));
   const parts = [];
+  // Said first: who is asking may not be who the forward says it is.
+  if (p.verified === false) parts.push(UNVERIFIED_FORWARD_LINE);
   if (unclear.length) parts.push(`Not recognised: ${quoted(unclear)}. What did they mean?`);
   if (missing.length) parts.push(`Not on file: ${quoted(missing)}.`);
   if (lapsed.length) parts.push(`Only an expired copy on file: ${quoted(lapsed)}.`);

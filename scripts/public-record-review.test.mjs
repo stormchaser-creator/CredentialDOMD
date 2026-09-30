@@ -5,9 +5,9 @@
 //
 // The envelope under test is not hand-written. It is built here by the real
 // buildEnvelope from supabase/functions/public-record/normalize.ts over the
-// raw register captures in scripts/fixtures/public-record/, so the screen is
-// tested against the findings the function actually returns for Eric Whitney's
-// NPI 1518456078. If the two halves ever disagree, this suite is where it
+// register captures in scripts/fixtures/public-record/ (live shapes, synthetic
+// values), so the screen is tested against the findings the function actually
+// returns. If the two halves ever disagree, this suite is where it
 // shows. The live lookup returns 25 papers; the committed esummary capture
 // holds 5 of them, which is why the counts here are 15 and not 35.
 //
@@ -32,16 +32,16 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const fx = (f) => JSON.parse(readFileSync(path.join(here, "fixtures/public-record", f), "utf8"));
 
 const FETCHED = "2026-09-03T00:00:00.000Z";
-const NPI = "1518456078";
+const NPI = "1234567893";
 const report = (id, name, status = "ok", count = 1) => ({ id, name, url: "", fetchedAt: FETCHED, status, count });
 
 const ENVELOPE = buildEnvelope({
-  nppes: fx("nppes-1518456078.json"),
-  cmsClinician: fx("cms-clinicians-mj5m-pzi6-1518456078.json"),
-  cmsAffiliation: fx("cms-affiliations-27ea-46a8-1518456078.json"),
+  nppes: fx("nppes-1234567893.json"),
+  cmsClinician: fx("cms-clinicians-mj5m-pzi6-1234567893.json"),
+  cmsAffiliation: fx("cms-affiliations-27ea-46a8-1234567893.json"),
   hospitals: fx("cms-hospitals-xubh-q36u.json"),
-  pubmedSummary: fx("pubmed-esummary-whitney-e.json"),
-  pubmedTerm: '"Whitney E"[Author]',
+  pubmedSummary: fx("pubmed-esummary-testa-r.json"),
+  pubmedTerm: '"Testa R"[Author]',
   sources: [
     report("nppes", "NPPES NPI Registry"),
     report("cmsClinician", "Medicare Care Compare (Doctors and Clinicians)", "ok", 3),
@@ -72,27 +72,27 @@ eq("one license, one school, two employers, three hospitals, five papers",
 
 // ── Already on file ─────────────────────────────────────────────────────────
 eq("clean drops the registry's dashes", clean("--"), "");
-eq("license key ignores typing", dedupeKey("licenses", { state: "CA", licenseNumber: "20A-17841" }),
-  dedupeKey("licenses", { state: "ca", licenseNumber: "20a17841" }));
+eq("license key ignores typing", dedupeKey("licenses", { state: "CA", licenseNumber: "20A-00000" }),
+  dedupeKey("licenses", { state: "ca", licenseNumber: "20a00000" }));
 eq("a license with no number has no key", dedupeKey("licenses", {}), "");
-eq("publication keys on the pmid", dedupeKey("publications", { pmid: "42350380" }), "publications:pmid:42350380");
+eq("publication keys on the pmid", dedupeKey("publications", { pmid: "99000101" }), "publications:pmid:99000101");
 
 const ON_FILE = {
-  licenses: [{ state: "CA", licenseNumber: "20A-17841", type: "State Medical License (DO)" }],
-  privileges: [{ facility: "Eisenhower Medical Center" }],
-  publications: [{ pmid: "42350380" }],
+  licenses: [{ state: "CA", licenseNumber: "20A-00000", type: "State Medical License (DO)" }],
+  privileges: [{ facility: "Osterly Medical Center" }],
+  publications: [{ pmid: "99000101" }],
   workHistory: [],
 };
 // Only the name is on file, so the degree the registry states is still a
 // proposal and the name is not.
-const SETTINGS = { name: "Eric Whitney" };
+const SETTINGS = { name: "Rowan Testa" };
 const marked = markAlreadyOnFile(ALL, ON_FILE, SETTINGS);
 
 eq("a license already typed is flagged, not proposed again",
-  byId(marked, "nppes:license:CA|20A17841").alreadyOnFile, true);
-eq("a privilege already on file is flagged", byId(marked, "cms:privilege:050573").alreadyOnFile, true);
-eq("a hospital not on file is still proposed", byId(marked, "cms:privilege:050245").alreadyOnFile, false);
-eq("a paper already saved is flagged", byId(marked, "pubmed:publication:42350380").alreadyOnFile, true);
+  byId(marked, "nppes:license:CA|20A00000").alreadyOnFile, true);
+eq("a privilege already on file is flagged", byId(marked, "cms:privilege:059901").alreadyOnFile, true);
+eq("a hospital not on file is still proposed", byId(marked, "cms:privilege:059902").alreadyOnFile, false);
+eq("a paper already saved is flagged", byId(marked, "pubmed:publication:99000101").alreadyOnFile, true);
 eq("a profile value already set is flagged", byId(marked, "nppes:profile:name").alreadyOnFile, true);
 eq("a profile value not set is proposed", byId(marked, "nppes:profile:practiceAddress").alreadyOnFile, false);
 eq("nothing is dropped by the dedupe", marked.length, ALL.length);
@@ -102,8 +102,10 @@ eq("nothing is dropped by the dedupe", marked.length, ALL.length);
 eq("education keys on the degree when there is no school",
   dedupeKey("education", { type: "Doctor of Osteopathic Medicine (DO)" }),
   "education:type:DOCTOROFOSTEOPATHICMEDICINEDO");
-eq("education still keys on the school when there is one",
-  dedupeKey("education", { type: "Doctor of Osteopathic Medicine (DO)", institution: "PCOM" }), "education:PCOM");
+eq("education keys on the school and the program when it has both",
+  dedupeKey("education", { type: "Doctor of Osteopathic Medicine (DO)", institution: "PCOM" }), "education:PCOM|DOCTOROFOSTEOPATHICMEDICINEDO");
+eq("and on the school alone when it states no program",
+  dedupeKey("education", { institution: "PCOM" }), "education:PCOM");
 const school = ALL.filter(f => f.section === "education");
 eq("a degree already on file is flagged even when Medicare has no school",
   markAlreadyOnFile(school, { education: [{ type: "Doctor of Osteopathic Medicine (DO)", institution: "PCOM" }] })[0].alreadyOnFile, true);
@@ -139,10 +141,10 @@ eq("the plain records that are new start ticked", defaults.sort(), [
 ].sort());
 eq("no hospital and no paper is ticked",
   defaults.some(id => id.startsWith("cms:privilege:") || id.startsWith("pubmed:")), false);
-eq("a row already on file cannot be ticked", isSelectable(byId(marked, "cms:privilege:050573")), false);
-eq("a row not on file can be", isSelectable(byId(marked, "cms:privilege:050245")), true);
+eq("a row already on file cannot be ticked", isSelectable(byId(marked, "cms:privilege:059901")), false);
+eq("a row not on file can be", isSelectable(byId(marked, "cms:privilege:059902")), true);
 eq("counting ignores rows on file",
-  countSelected(marked, ["cms:privilege:050573", "cms:privilege:050245"]), 1);
+  countSelected(marked, ["cms:privilege:059901", "cms:privilege:059902"]), 1);
 
 // ── A profile row that would overwrite what the physician typed ─────────────
 // The profile is the one section whose findings write a patch of several
@@ -150,7 +152,7 @@ eq("counting ignores rows on file",
 // reminders, the CME state and the setup gate are all read from. A ticked
 // box must never be the only warning that it is about to change.
 const FILLED = {
-  name: "Eric E. Whitney",
+  name: "Rowan E. Testa",
   address: "Barrow Neurological Institute, 350 W Thomas Rd, Phoenix, AZ 85013",
   phone: "602-406-3000",
   primaryState: "AZ",
@@ -190,7 +192,7 @@ eq("a blank profile replaces nothing",
 // a field the physician never filled in is not one either. Only a value that
 // exists and disagrees counts.
 const sameAddress = markAlreadyOnFile(ALL, {}, {
-  address: "26520 Cactus Ave Ste A2006, Moreno Valley, CA 92555-3927",
+  address: "4815 Orchard Ave Ste B310, Vista Hills, CA 90487-6032",
   primaryState: "AZ",
 });
 eq("only the field that exists and disagrees counts",
@@ -208,14 +210,14 @@ eq("a profile row entirely on file is flagged and replaces nothing",
 eq("every lead carries a sentence",
   marked.filter(f => f.confidence === "lead").every(f => leadNote(f).length > 0), true);
 eq("a record carries none", leadNote(byId(marked, "nppes:profile:degree")), "");
-eq("the hospital sentence", leadNote(byId(marked, "cms:privilege:050245")),
+eq("the hospital sentence", leadNote(byId(marked, "cms:privilege:059902")),
   "Medicare claims show you working here. Confirm before treating it as a privilege.");
-eq("the paper sentence", leadNote(byId(marked, "pubmed:publication:42350380")),
+eq("the paper sentence", leadNote(byId(marked, "pubmed:publication:99000101")),
   "Matched by name; check it is yours.");
 // mj5m-pzi6 is Medicare enrolment, not claims. The hospital sentence above may
 // say claims because 27ea-46a8 is claims-derived; this one may not.
 eq("the work-history sentence names enrolment, not claims",
-  leadNote(byId(marked, "cms:workHistory:5890689657")),
+  leadNote(byId(marked, "cms:workHistory:0000000003")),
   "Medicare lists this as a practice location enrolled under your NPI. Confirm your title and dates.");
 eq("no work-history sentence calls it a claim",
   marked.filter(f => f.section === "workHistory").some(f => /claim/i.test(leadNote(f))), false);
@@ -233,23 +235,23 @@ eq("nothing failed, nothing said", joinWords([]), "");
 // A name match is judged on its co-authors, journal and year, so the row
 // shows the citation the function already assembled rather than the bare title.
 eq("a paper shows the line that identifies it",
-  evidenceLine(byId(ALL, "pubmed:publication:31424740")),
-  "Whitney E, Munakomi S. Hoffmann Sign. StatPearls. 2026.");
+  evidenceLine(byId(ALL, "pubmed:publication:99000105")),
+  "Testa R, Okafor P. Babinski Sign. StatPearls. 2026.");
 eq("a hospital carries its city in the label already, so it adds nothing",
-  evidenceLine(byId(ALL, "cms:privilege:050245")), "");
+  evidenceLine(byId(ALL, "cms:privilege:059902")), "");
 eq("a profile row adds nothing", evidenceLine(byId(ALL, "nppes:profile:degree")), "");
 eq("no finding at all is safe", evidenceLine(null), "");
 
 eq("the license finding still asks for its expiration date",
-  needsLabel(byId(marked, "nppes:license:CA|20A17841").needs), "expiration date");
+  needsLabel(byId(marked, "nppes:license:CA|20A00000").needs), "expiration date");
 
 // ── Retrying one dead register ──────────────────────────────────────────────
 eq("a hospital finding came from the affiliations call",
-  requestSourceFor(byId(ALL, "cms:privilege:050245")), "affiliations");
+  requestSourceFor(byId(ALL, "cms:privilege:059902")), "affiliations");
 eq("a work-history finding came from the clinicians call",
-  requestSourceFor("cms:workHistory:5890689657"), "cms");
-eq("a license came from NPPES", requestSourceFor("nppes:license:CA|20A17841"), "nppes");
-eq("a paper came from PubMed", requestSourceFor("pubmed:publication:42350380"), "pubmed");
+  requestSourceFor("cms:workHistory:0000000003"), "cms");
+eq("a license came from NPPES", requestSourceFor("nppes:license:CA|20A00000"), "nppes");
+eq("a paper came from PubMed", requestSourceFor("pubmed:publication:99000101"), "pubmed");
 eq("an id from nowhere maps to nothing", requestSourceFor("who:knows"), "");
 eq("the hospital-name call retries with the affiliations", requestSourceForReport("cmsHospital"), "affiliations");
 eq("retry asks each register once",
@@ -297,41 +299,41 @@ const plan = buildSavePlan(marked, [
   "nppes:profile:degree",
   "nppes:profile:practiceAddress",
   "nppes:profile:name",        // already on file: must not be written
-  "cms:privilege:050573",      // already on file: must not be written
-  "cms:privilege:050245",
+  "cms:privilege:059901",      // already on file: must not be written
+  "cms:privilege:059902",
   "cms:education:medicalSchool",
-  "pubmed:publication:42089801",
+  "pubmed:publication:99000102",
 ], makeId);
 
 eq("the profile is one patch", plan.settings, {
   degreeType: "DO",
-  address: "26520 Cactus Ave Ste A2006, Moreno Valley, CA 92555-3927",
-  phone: "951-486-4460",
+  address: "4815 Orchard Ave Ste B310, Vista Hills, CA 90487-6032",
+  phone: "707-555-0146",
   primaryState: "CA",
 });
 eq("a profile value already set is not rewritten", "name" in plan.settings, false);
 eq("the sections written", plan.items.map(i => i.section), ["education", "privileges", "publications"]);
 eq("a privilege already on file is not written a second time",
-  plan.items.some(i => i.item.notes && i.item.notes.includes("050573")), false);
+  plan.items.some(i => i.item.notes && i.item.notes.includes("059901")), false);
 eq("every written record carries an id", plan.items.every(i => !!i.item.id), true);
 eq("ids are not shared", new Set(plan.items.map(i => i.item.id)).size, plan.items.length);
 eq("the count is what the footer shows", plan.count, 5);
 eq("the count matches the selection count",
   plan.count, countSelected(marked, [
     "nppes:profile:degree", "nppes:profile:practiceAddress", "nppes:profile:name",
-    "cms:privilege:050573", "cms:privilege:050245", "cms:education:medicalSchool",
-    "pubmed:publication:42089801",
+    "cms:privilege:059901", "cms:privilege:059902", "cms:education:medicalSchool",
+    "pubmed:publication:99000102",
   ]));
 
 const privilege = plan.items.find(i => i.section === "privileges").item;
-eq("an accepted hospital carries the facility the form asks for", privilege.facility, "Arrowhead Regional Medical Center");
+eq("an accepted hospital carries the facility the form asks for", privilege.facility, "Cedar Ridge Regional Medical Center");
 eq("and no status", "status" in privilege, false);
 eq("and no expiration date invented for it", "expirationDate" in privilege, false);
 eq("and no appointment date invented for it", "appointmentDate" in privilege, false);
 ok("its note says what the affiliation is", /claims activity, not a credentialing verification/i.test(privilege.notes), privilege.notes);
 
 const publication = plan.items.find(i => i.section === "publications").item;
-eq("an accepted paper keeps its pmid", publication.pmid, "42089801");
+eq("an accepted paper keeps its pmid", publication.pmid, "99000102");
 ok("and says it was matched by name", /by author name/i.test(publication.notes), publication.notes);
 
 const education = plan.items.find(i => i.section === "education").item;
@@ -353,25 +355,25 @@ const free = markPlanLocks(marked, { isPro: false });
 const pro = markPlanLocks(marked, { isPro: true });
 
 eq("privileges is the section a plan closes", PLAN_LOCKED_SECTIONS, ["privileges"]);
-eq("a hospital is locked on a free plan", byId(free, "cms:privilege:050245").planLocked, true);
-eq("and open on Pro", byId(pro, "cms:privilege:050245").planLocked, false);
+eq("a hospital is locked on a free plan", byId(free, "cms:privilege:059902").planLocked, true);
+eq("and open on Pro", byId(pro, "cms:privilege:059902").planLocked, false);
 eq("nothing else is touched", free.filter(f => f.planLocked).length,
   ALL.filter(f => f.section === "privileges").length - 1); // the one already on file
 eq("a hospital already on file is on file, not locked",
-  [byId(free, "cms:privilege:050573").alreadyOnFile, byId(free, "cms:privilege:050573").planLocked],
+  [byId(free, "cms:privilege:059901").alreadyOnFile, byId(free, "cms:privilege:059901").planLocked],
   [true, false]);
-eq("a locked row cannot be ticked", isSelectable(byId(free, "cms:privilege:050245")), false);
+eq("a locked row cannot be ticked", isSelectable(byId(free, "cms:privilege:059902")), false);
 eq("and is not in the default selection", defaultSelectedIds(free).some(id => id.startsWith("cms:privilege:")), false);
-ok("it says why", /Pro section/.test(planLockNote(byId(free, "cms:privilege:050245"))));
-eq("an unlocked row says nothing", planLockNote(byId(pro, "cms:privilege:050245")), "");
+ok("it says why", /Pro section/.test(planLockNote(byId(free, "cms:privilege:059902"))));
+eq("an unlocked row says nothing", planLockNote(byId(pro, "cms:privilege:059902")), "");
 eq("no finding is dropped by the lock pass", free.length, ALL.length);
 
 // The rule that matters: a locked id in the selection still writes nothing.
-const sneaky = buildSavePlan(free, ["cms:privilege:050245", "cms:education:medicalSchool"], () => "x");
+const sneaky = buildSavePlan(free, ["cms:privilege:059902", "cms:education:medicalSchool"], () => "x");
 eq("a locked row in the selection is not written", sneaky.items.map(i => i.section), ["education"]);
 eq("and the count agrees", sneaky.count, 1);
 eq("the same tick on Pro does write the hospital",
-  buildSavePlan(pro, ["cms:privilege:050245"], () => "x").items.map(i => i.section), ["privileges"]);
+  buildSavePlan(pro, ["cms:privilege:059902"], () => "x").items.map(i => i.section), ["privileges"]);
 
 // ── Opening on one section ──────────────────────────────────────────────────
 eq("the four sections a Setup row can fill",

@@ -16,6 +16,8 @@ import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import { isReadableDoc } from "../../utils/docPrefill";
 import { CV_FILENAME_RE } from "../../utils/cvImport";
 import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
+import { withCvImported } from "../../utils/setupTasks";
+import { commitSetupState } from "./setup/useSetupState";
 
 /**
  * Start from your CV.
@@ -38,7 +40,7 @@ import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 function CvImportReview({ source = null, onSaved, onClose }) {
-  const { data, addItem, updateSettings, theme: T, isDesktop, isPro } = useApp();
+  const { data, addItem, updateSettings, theme: T, isDesktop, isPro, user } = useApp();
   const aiOn = useAiAvailable(data.settings);
   const apiKey = data.settings.apiKey;
   const deg = data.settings.degreeType;
@@ -141,6 +143,7 @@ function CvImportReview({ source = null, onSaved, onClose }) {
       : prev.filter((x) => !ids.includes(x))));
   }, []);
 
+  const setupState = data.settings?.setupState;
   const save = useCallback(() => {
     const plan = buildSavePlan(findings, selected, generateId);
     if (!plan.count) return;
@@ -156,10 +159,18 @@ function CvImportReview({ source = null, onSaved, onClose }) {
     // The saved screen lists only what was written.
     const done = written === plan.items.length ? plan
       : { ...plan, items: plan.items.slice(0, written), count: plan.settingsFindings.length + written };
+    // A CV that saved anything closes setup's "Start from your CV", from
+    // every entry point (Setup, the CV page, Documents): the file itself is
+    // read, not kept, so the task cannot see it otherwise. Through the setup
+    // queue, folded into anything the board has queued, and written now.
+    if (done.count > 0) {
+      commitSetupState((st) => withCvImported(st, new Date().toISOString()),
+        { stored: setupState, updateSettings, userId: user?.id, now: true });
+    }
     setSaved(done);
     setPhase("saved");
     onSaved?.(done.count);
-  }, [findings, selected, updateSettings, addItem, onSaved]);
+  }, [findings, selected, updateSettings, addItem, onSaved, setupState, user?.id]);
 
   // ── styles, matching PublicRecordReview so the two screens read as one ────
   const card = {
@@ -236,6 +247,7 @@ function CvImportReview({ source = null, onSaved, onClose }) {
           )}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
             {f.alreadyOnFile && chip("already on file", T.textDim, T.neutralDim)}
+            {f.sameOrgOnFile && chip("you have another entry here", T.info, T.infoDim)}
             {f.planLocked && chip("not on your plan", T.textDim, T.neutralDim)}
             {!locked && replaces && chip("replaces what you have", T.warning, T.warningDim)}
             {!locked && needs && chip(`you add the ${needs}`, T.info, T.infoDim)}

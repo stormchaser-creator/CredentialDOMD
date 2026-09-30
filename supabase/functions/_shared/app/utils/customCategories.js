@@ -14,7 +14,7 @@
 // This module is pure and imports nothing that touches the network, so every
 // rule in it is unit tested under plain node. Keep it that way.
 
-import { SECTION_FIELDS, BUILT_IN_SECTIONS } from "./sectionFields.js";
+import { SECTION_FIELDS, BUILT_IN_SECTIONS, isValidIsoDate } from "./sectionFields.js";
 import { identifierReason } from "./identifierGate.js";
 
 // ── Limits ────────────────────────────────────────────────────────────────
@@ -142,6 +142,22 @@ export function liveCategories(data) {
     .sort((a, b) => (Date.parse(a.createdAt || "") || 0) - (Date.parse(b.createdAt || "") || 0) || a.name.localeCompare(b.name));
 }
 
+/**
+ * The name to show for a record's category: the category's current name,
+ * read when shown. A record carries the name it was saved under
+ * (categoryName, written by packRecord), and a rename never rewrites the
+ * records: doing so would stamp updatedAt on each and let them beat real
+ * edits made elsewhere. So a renamed category kept its old name in Favorites,
+ * Home's alerts and search until each record was edited. Searches every
+ * category, archived ones too, and falls back to the saved name for a
+ * category that no longer exists.
+ */
+export function categoryLabelFor(data, record) {
+  const id = record?.categoryId;
+  const cat = id ? (Array.isArray(data?.customCategories) ? data.customCategories : []).find(c => c?.id === id) : null;
+  return (typeof cat?.name === "string" && cat.name.trim()) || record?.categoryName || "";
+}
+
 export function recordsIn(data, categoryId) {
   return (Array.isArray(data?.customRecords) ? data.customRecords : [])
     .map(normalizeRecord).filter(Boolean)
@@ -235,15 +251,11 @@ export function buildCategory(input = {}, { id, now, origin } = {}) {
 }
 
 // ── Packing a record ──────────────────────────────────────────────────────
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 // Round-trip, not Date.parse alone: JavaScript quietly rolls "2026-02-30" into
 // March, while Postgres rejects it, and a rejected date column rejects the
 // whole record. Only a date that survives the round trip is sent as a date.
-const validDate = (s) => {
-  if (!ISO_DATE.test(s)) return false;
-  const t = Date.parse(s + "T00:00:00Z");
-  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
-};
+// The same rule Vera's known sections use (sectionFields.isValidIsoDate).
+const validDate = isValidIsoDate;
 
 /**
  * Turn whatever a scan, Vera or a form produced into a custom record that the

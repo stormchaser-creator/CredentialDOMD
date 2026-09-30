@@ -1,9 +1,10 @@
-import { memo, useEffect, useLayoutEffect, useRef } from "react";
+import { memo, useEffect, useInsertionEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "../../context/AppContext";
 import { CloseIcon } from "./Icons";
 import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { lockModalDocument, watchModalViewport } from "../../utils/modalViewport";
+import { takeDialogFocus } from "../../utils/dialogFocus";
 
 const FONT_ZOOM = { S: 0.88, M: 1, L: 1.1, XL: 1.2, XXL: 1.35 };
 
@@ -15,6 +16,14 @@ function Modal({ open, onClose, title, children, width, footer }) {
   const overlayRef = useRef(null);
   const cardRef = useRef(null);
   const bodyRef = useRef(null);
+  const openerRef = useRef(null);
+
+  // What had focus when the dialog opened, read before its content commits:
+  // a field inside with autoFocus takes focus before the layout effect below
+  // runs (children commit first), and read there it would pass for the opener.
+  useInsertionEffect(() => {
+    if (open) openerRef.current = document.activeElement;
+  }, [open]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -25,7 +34,10 @@ function Modal({ open, onClose, title, children, width, footer }) {
       win: window, overlay: overlayRef.current, body: bodyRef.current, card: cardRef.current,
       isTop: () => isTopModal(t),
     });
-    return () => { unwatch(); popModal(t); unlock(); };
+    // Focus starts in the dialog and goes back to its opener on close,
+    // after the page is unlocked so nothing scrolls.
+    const giveBackFocus = takeDialogFocus(document, cardRef.current, openerRef.current);
+    return () => { unwatch(); popModal(t); unlock(); giveBackFocus(); };
   }, [open]);
 
   useEffect(() => {
@@ -57,7 +69,7 @@ function Modal({ open, onClose, title, children, width, footer }) {
     >
       <div
         ref={cardRef}
-        role="dialog" aria-modal="true" aria-label={title}
+        role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
         onClick={e => e.stopPropagation()}
         className="cmd-fade-in"
         style={{
@@ -68,7 +80,7 @@ function Modal({ open, onClose, title, children, width, footer }) {
           maxHeight: `calc((var(--modal-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px) / ${zoom})`,
           minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden",
           boxShadow: T.shadow3 || "0 12px 24px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04)",
-          border: `1px solid ${T.border}`,
+          border: `1px solid ${T.border}`, outline: "none",
         }}
       >
         <div style={{

@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useId } from "react";
+import { TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../../constants/states";
@@ -28,6 +29,8 @@ export default function NpiPanel({ onImported, dense = false }) {
   const iS = useInputStyle();
   const s = data.settings || {};
 
+  // Two panels can be on screen at once (Licenses and Public records), so the label ids are per panel.
+  const npiId = useId();
   const [npi, setNpi] = useState(s.npi || "");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -111,9 +114,10 @@ export default function NpiPanel({ onImported, dense = false }) {
           Your NPI record carries your name, your degree, and every state license number the federal registry has on file. If you do not know the number, leave it blank and search by name.
         </div>
       )}
-      <label style={label}>NPI (10 digits, optional)</label>
+      <label htmlFor={npiId} style={label}>NPI (10 digits, optional)</label>
       <div style={{ display: "flex", gap: 8, margin: "4px 0 6px" }}>
         <input
+          id={npiId}
           value={npi}
           onChange={(e) => { setNpi(e.target.value.replace(/\D/g, "").slice(0, 10)); setMatches(null); }}
           placeholder="Blank searches by name"
@@ -122,7 +126,7 @@ export default function NpiPanel({ onImported, dense = false }) {
           style={{ ...iS, flex: 1 }}
         />
         <button onClick={lookup} disabled={busy} style={{
-          padding: "0 16px", borderRadius: 10, border: "none", backgroundColor: T.accent,
+          padding: "0 16px", minHeight: TAP_MIN, borderRadius: 10, border: "none", backgroundColor: T.accent,
           color: "#fff", fontWeight: 800, cursor: busy ? "wait" : "pointer",
           opacity: busy ? 0.7 : 1, whiteSpace: "nowrap",
         }}>{busy ? "Looking up..." : "Look up"}</button>
@@ -130,8 +134,8 @@ export default function NpiPanel({ onImported, dense = false }) {
 
       {npi.length !== 10 && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: T.textMuted, marginBottom: 8 }}>
-          <span style={{ whiteSpace: "nowrap" }}>Search by name in</span>
-          <select value={searchState} onChange={(e) => setSearchState(e.target.value)} style={{ ...iS, flex: 1, padding: "6px 10px", fontSize: 13, appearance: "auto" }}>
+          <span id={`${npiId}-state`} style={{ whiteSpace: "nowrap" }}>Search by name in</span>
+          <select aria-labelledby={`${npiId}-state`} value={searchState} onChange={(e) => setSearchState(e.target.value)} style={{ ...iS, flex: 1, padding: "6px 10px", fontSize: 13, appearance: "auto" }}>
             <option value="">any state</option>
             {STATES.map((st) => <option key={st} value={st}>{STATE_NAMES?.[st] || st} ({st})</option>)}
           </select>

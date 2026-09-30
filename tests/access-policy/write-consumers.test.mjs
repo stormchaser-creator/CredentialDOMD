@@ -63,7 +63,8 @@ for(const suffix of ['','/v1/messages'])test('real AI handler denies paid POST b
 test('real AI GET status remains available without membership RPC',async()=>{
   const {context,state}=await harness('ai-proxy');
   const response=await context.handler(new Request('https://synthetic.invalid/ai-proxy'));
-  assert.equal(response.status,200);assert.equal(state.rpcs.length,0);assert.equal(state.fetches.length,0);
+  // The only RPC is the display-only month spend read (OPS-005), never the membership one.
+  assert.equal(response.status,200);assert.deepEqual(state.rpcs.map(r=>r.name),['ai_month_spend_usd']);assert.equal(state.fetches.length,0);
 });
 test('real CallSync handler requires Practice before upstream',async()=>{
   const {context,state}=await harness('callsync-feed',{enforcementEnabled:true,credential:true,practice:false});

@@ -1,19 +1,22 @@
 import { useState, useRef, useEffect, memo, useCallback } from "react";
 import { snapToOption, canonicalizeSelectValue } from "../../utils/snapOption";
 import { useApp } from "../../context/AppContext";
-import { CPT_DESCS } from "../../constants/cptDescs";
-import { CPT_BY_CODE } from "../../constants/cpt";
+import { billedCodes } from "../../utils/caseBilling.js";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
+import { TAP_MIN, CARD_ACTION_GAP, cardActionSize } from "../shared/actionButton.js";
 import DeskTable from "../shared/DeskTable";
 import { formRows } from "../../utils/formLayout";
 import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { pushModal, popModal } from "../../utils/deskKeys";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
+import FollowUpHistory from "../shared/FollowUpHistory";
+import { membershipEnded } from "../../utils/alertItems.js";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon, StarIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate, namesOnlyThePhysician, clearsPersonName, PERSON_NAME_SECTIONS } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate, namesOnlyThePhysician, clearsPersonName, PERSON_NAME_SECTIONS, isTicked, deleteConfirmText } from "../../utils/helpers";
+import { docMime } from "../../utils/inboxDocs";
 import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, withFormField } from "../../utils/lifecycle";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { splitScanned } from "../../utils/docPrefill";
@@ -28,29 +31,6 @@ import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
 // Every billed code, spelled out — number, what it entails, units, value.
 // Structured detail from the import wins; a hand-typed code string still
 // resolves through the description catalogs.
-function billedCodes(item) {
-  const detail = item.customFields?.cptDetail;
-  if (Array.isArray(detail) && detail.length) {
-    return detail.map(c => ({
-      code: c.code, units: c.units || 1, mod: c.mod || null,
-      desc: c.desc || CPT_DESCS[c.code]?.d || CPT_BY_CODE[c.code]?.shortDesc || "",
-      wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? CPT_BY_CODE[c.code]?.wRVU ?? 0,
-      inferred: !!c.inferred,
-    }));
-  }
-  if (!item.cptCodes) return [];
-  return String(item.cptCodes).split(",").map(t => t.trim()).filter(Boolean).map(tok => {
-    const m = tok.match(/^(\w+?)(?:-(\d\d))?(?:\s*x(\d+))?$/i) || [];
-    const code = m[1] || tok;
-    return {
-      code, units: m[3] ? parseInt(m[3], 10) : 1, mod: m[2] || null,
-      desc: CPT_DESCS[code]?.d || CPT_BY_CODE[code]?.shortDesc || "",
-      wRVU: CPT_DESCS[code]?.w ?? CPT_BY_CODE[code]?.wRVU ?? 0,
-      inferred: false,
-    };
-  });
-}
-
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
 
 // label/placeholder can vary by the record being edited (e.g. Certification
@@ -83,8 +63,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const iS = useInputStyle();
   // One star control, shared by the desktop row, the phone card and the detail
   // view. stopPropagation matters: the whole card is a click target, so without
-  // it every star tap would also open the record.
-  const starButton = (item) => {
+  // it every star tap would also open the record. On a phone it takes the
+  // card actions' 32 px floor (cardActionSize); the desk row keeps its own.
+  const starButton = (item, { card = false } = {}) => {
     if (!favoritable) return null;
     const on = item?.favorite === true;
     return (
@@ -96,6 +77,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         onClick={(e) => { e.stopPropagation(); toggleFavorite(sectionKey, item.id); }}
         style={{
           padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex",
+          ...(card || !isDesktop ? cardActionSize : null),
           backgroundColor: on ? T.accentDim : "transparent",
           color: on ? T.accent : T.textDim,
         }}
@@ -130,29 +112,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   // Follow-ups are logged from the Home dashboard's "Action Required" cards,
   // but this is the item's own screen — wherever you land (view or edit),
   // that history needs to be visible or it reads as untracked.
-  const followUpHistory = (item) => (data.followUps || [])
-    .filter(f => f.itemId === item?.id)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  const renderFollowUps = (item) => {
-    const history = followUpHistory(item);
-    if (!history.length) return null;
-    return (
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-          Follow-up history
-        </div>
-        {history.map(f => (
-          <div key={f.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6 }}>
-            <div style={{ fontSize: 12.5, color: T.text, fontWeight: 600 }}>
-              {f.emailed ? "Emailed" : "Note"}{f.recipient ? ` · ${f.recipient}` : ""} · {formatDate(f.createdAt)}
-            </div>
-            {f.note && <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>{f.note}</div>}
-          </div>
-        ))}
-      </div>
-    );
-  };
+  // The follow-up history block is shared with the sections that have their
+  // own screens (Health Records, CME): src/components/shared/FollowUpHistory.
+  const renderFollowUps = (item) => <FollowUpHistory item={item} />;
 
   // Auto-open add form when triggered from outside (e.g., home page "Add Your License" card)
   // Deep-link: open a specific record's edit form (e.g. from the Home
@@ -478,7 +440,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const lifecycled = LIFECYCLE_SECTIONS.includes(sectionKey);
   const rowStatus = (item) => {
     const nonExpiring = isNonExpiring(item, sectionKey);
-    const alertable = isAlertable(item);
+    // An ended membership is not renewed: its old renewal date is grey, not red.
+    const alertable = isAlertable(item) && !(sectionKey === "memberships" && membershipEnded(item));
     const inactive = isInactive(item);
     const color = !alertable ? "gray" : nonExpiring ? "green" : getStatusColor(item.expirationDate);
     // A field required today (e.g. State on a license/DEA entry) can still be
@@ -531,6 +494,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     (item) => (data.documents || []).filter(d => d.linkedTo === `${sectionKey}:${item.id}`),
     [data.documents, sectionKey]
   );
+  // Deleting a record deletes the files linked to it (AppContext
+  // deleteItemFn), so the question names them, as an agreement's does.
+  const confirmDelete = (item) => {
+    const files = linkedDocs(item);
+    return window.confirm(deleteConfirmText("item", files.length, { names: files.map(d => d.name || "file") }));
+  };
 
   // Data URLs don't open directly in iOS Safari — convert to a blob URL
   const openPdfDoc = useCallback((doc) => {
@@ -538,7 +507,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     const byteStr = atob(doc.data.split(",")[1]);
     const arr = new Uint8Array(byteStr.length);
     for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" }));
+    const url = URL.createObjectURL(new Blob([arr], { type: docMime(doc) || "application/pdf" }));
     window.open(url, "_blank");
   }, []);
 
@@ -548,7 +517,18 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     const isRequired = (f) => typeof f.required === "function" ? f.required(form) : f.required;
     const missing = fields.filter(f => isShown(f, form) && isRequired(f) && !form[f.key]);
     if (missing.length > 0) {
-      setRequiredError(`Required: ${missing.map(f => resolveFieldProp(f, "label", form)).join(", ")}. Expiration dates are how the app warns you before anything lapses.`);
+      // The reason about dates only when a date is what is missing: a blank
+      // Type or Category is required because the database refuses the whole
+      // record without it, not because of alerts.
+      const dateMissing = missing.some(f => f.type === "date");
+      setRequiredError(`Required: ${missing.map(f => resolveFieldProp(f, "label", form)).join(", ")}.${dateMissing ? " Expiration dates are how the app warns you before anything lapses." : ""}`);
+      return;
+    }
+    // A "number" field here is a whole number (the CV order is an integer
+    // column): "1.5" was refused by the database with the whole record.
+    const notWhole = fields.filter(f => f.type === "number" && isShown(f, form) && String(form[f.key] ?? "").trim() !== "" && !Number.isInteger(Number(form[f.key])));
+    if (notWhole.length > 0) {
+      setRequiredError(`${notWhole.map(f => resolveFieldProp(f, "label", form)).join(", ")} must be a whole number.`);
       return;
     }
     setRequiredError(null);
@@ -694,6 +674,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             {pasteOpen && (
               <div style={{ marginTop: 8 }}>
                 <textarea
+                  aria-label="Contact card or email signature"
                   value={pasteText}
                   onChange={e => setPasteText(e.target.value)}
                   placeholder={"Paste the contact card or the signature here.\n\nJane Smith, MD\nMemorial Hospital\njsmith@hospital.org\n(555) 123-4567"}
@@ -799,7 +780,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               }}>
                 <input
                   type="checkbox"
-                  checked={form[f.key] === true}
+                  checked={isTicked(form[f.key])}
                   onChange={e => setField(f.key, e.target.checked)}
                   style={{ width: 18, height: 18, flexShrink: 0 }}
                 />
@@ -815,7 +796,10 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             ) : f.type === "secret" ? (
               <div>
                 <div style={{ display: "flex", gap: 6 }}>
+                  {/* Named on its own: while the lock code box shows, this row
+                      holds two fields and Field makes it a group. */}
                   <input
+                    aria-label={resolveFieldProp(f, "label", form)}
                     data-fkey={f.key}
                     type={showSecret[f.key] ? "text" : "password"}
                     autoComplete="off"
@@ -824,13 +808,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                     placeholder={isEncrypted(form[f.key]) ? "Saved (encrypted). Type to replace." : (resolveFieldProp(f, "placeholder", form) || "")}
                     style={{ ...iS, flex: 1 }}
                   />
-                  <button type="button" onClick={() => setShowSecret(v => ({ ...v, [f.key]: !v[f.key] }))} style={{ padding: "0 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{showSecret[f.key] ? "Hide" : "Show"}</button>
+                  <button type="button" onClick={() => setShowSecret(v => ({ ...v, [f.key]: !v[f.key] }))} style={{ padding: "0 12px", minHeight: TAP_MIN, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{showSecret[f.key] ? "Hide" : "Show"}</button>
                 </div>
                 {needsLockCode && (
                   <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, backgroundColor: T.accentDim, border: `1px solid ${T.accent}` }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>Set a lock code for saved passwords</div>
                     <div style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 8px" }}>Passwords are encrypted with it before they sync. The code stays on this device; enter it once on any other device. Nobody, including us, can read them without it.</div>
-                    <input type="password" autoComplete="new-password" value={lockCodeDraft} onChange={e => { setLockCodeDraft(e.target.value); setLockMsg(""); }} placeholder="Lock code (4+ characters)" style={iS} />
+                    <input type="password" aria-label="Lock code" autoComplete="new-password" value={lockCodeDraft} onChange={e => { setLockCodeDraft(e.target.value); setLockMsg(""); }} placeholder="Lock code (4+ characters)" style={iS} />
                     {lockMsg && <div style={{ fontSize: 12, color: T.danger, marginTop: 4 }}>{lockMsg}</div>}
                   </div>
                 )}
@@ -848,10 +832,10 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               <input
                 data-fkey={f.key}
                 type={f.type === "currency" ? "number" : f.type || "text"}
-                inputMode={f.type === "currency" ? "decimal" : undefined}
-                step={f.type === "currency" ? "0.01" : undefined}
+                inputMode={f.type === "currency" ? "decimal" : f.type === "number" ? "numeric" : undefined}
+                step={f.type === "currency" ? "0.01" : f.type === "number" ? "1" : undefined}
                 min={f.type === "currency" ? "0" : undefined}
-                value={form[f.key] || ""}
+                value={form[f.key] ?? ""}
                 onChange={e => setField(f.key, e.target.value)}
                 placeholder={resolveFieldProp(f, "placeholder", form)}
                 maxLength={f.maxLength}
@@ -903,7 +887,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             </div>
           )}
           <div style={{ fontSize: 13, color: T.textDim, marginTop: 8 }}>
-            {scanningDoc ? "Analyzing document and extracting fields..." : "Upload or photograph — AI will auto-fill the form"}
+            {scanningDoc ? "Analyzing document and extracting fields..." : "Upload or photograph it and AI will auto-fill the form"}
           </div>
           {scanningDoc && (
             <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, backgroundColor: T.accentGlow || "rgba(59,130,246,0.1)", border: `1px solid ${T.accent}`, fontSize: 14, color: T.accent, fontWeight: 600, textAlign: "center" }}>
@@ -920,9 +904,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
               {linkedDocs(editItem).map(doc => (
                 <div key={doc.id}
-                  onClick={() => { if (!doc.data) return; if (doc.type?.startsWith("image/")) setLightbox(doc); else openPdfDoc(doc); }}
+                  onClick={() => { if (!doc.data) return; if (docMime(doc).startsWith("image/")) setLightbox(doc); else openPdfDoc(doc); }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, backgroundColor: T.card, border: `1px solid ${T.border}`, cursor: doc.data ? "pointer" : "default" }}>
-                  {doc.type?.startsWith("image/") && doc.data
+                  {docMime(doc).startsWith("image/") && doc.data
                     ? <img src={doc.data} alt={doc.name} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
                     : <span style={{ fontSize: 20 }}>{doc.data ? "📕" : "⏳"}</span>}
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
@@ -936,11 +920,11 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               {attachedDocs.map((doc, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, backgroundColor: T.card, border: `1px solid ${T.border}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    <span style={{ fontSize: 14 }}>{doc.type?.includes("pdf") ? "\ud83d\udcd5" : "\ud83d\uddbc"}</span>
+                    <span style={{ fontSize: 14 }}>{docMime(doc).includes("pdf") ? "\ud83d\udcd5" : "\ud83d\uddbc"}</span>
                     <span style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
                     <span style={{ fontSize: 10, color: T.textDim, flexShrink: 0 }}>{(doc.size / 1024).toFixed(0)} KB</span>
                   </div>
-                  <button onClick={() => setAttachedDocs(prev => prev.filter((_, j) => j !== i))} style={{ padding: "2px 6px", borderRadius: 4, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>&times;</button>
+                  <button aria-label={`Remove ${doc.name}`} onClick={() => setAttachedDocs(prev => prev.filter((_, j) => j !== i))} style={{ padding: "2px 6px", borderRadius: 4, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 11, fontWeight: 700, ...cardActionSize }}>&times;</button>
                 </div>
               ))}
             </div>
@@ -968,6 +952,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           <>
             {renderFollowUps(viewItem)}
             {fields.filter(f => viewItem[f.key]
+              // A checkbox shows only when ticked: a cached "No" is a truthy string.
+              && !(f.type === "checkbox" && !isTicked(viewItem[f.key]))
               && !(f.key === "name" && clearsPersonName(sectionKey, viewItem, data.settings.name))
               && !(f.type === "choice" && f.defaultValue && viewItem[f.key] === f.defaultValue)).map(f => (
               <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
@@ -1077,9 +1063,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                       color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8,
                     }}>
                       <span style={{ fontSize: 16 }}>{"⏳"}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} — downloading from cloud, check back shortly</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} is downloading from the cloud; check back shortly</span>
                     </div>
-                  ) : doc.type?.startsWith("image/") ? (
+                  ) : docMime(doc).startsWith("image/") ? (
                     <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
                       style={{ width: "100%", borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 8, cursor: "zoom-in", display: "block" }} />
                   ) : (
@@ -1094,6 +1080,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   )
                 ))}
               </div>
+            )}
+            {/* The desk table has no room for a row's extra block (for
+                Licenses, the renewal portal and state guide), so at desk
+                width it lives here. Phone cards already show it. */}
+            {isDesktop && deskColumns && renderExtra && (
+              <div style={{ marginTop: 14 }} onClick={(e) => e.stopPropagation()}>{renderExtra(viewItem)}</div>
             )}
             <div style={{ display: "flex", gap: 8, justifyContent: favoritable ? "space-between" : "flex-end", marginTop: 16, alignItems: "center" }}>
               {favoritable && (() => {
@@ -1131,7 +1123,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
       {/* Full-screen picture viewer */}
       {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{
+        <div role="dialog" aria-modal="true" aria-label={lightbox.name || "Picture"} onClick={() => setLightbox(null)} style={{
           position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
           display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
         }}>
@@ -1145,8 +1137,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             const count = t.key === "all" ? items.length : items.filter(i => categorize(i) === t.key).length;
             if (t.key === "other" && count === 0) return null;
             return (
-              <button key={t.key} onClick={() => setCatFilter(t.key)} style={{
-                padding: "6px 14px", fontSize: 13, borderRadius: 22,
+              <button key={t.key} aria-pressed={catFilter === t.key} onClick={() => setCatFilter(t.key)} style={{
+                padding: "6px 14px", fontSize: 13, borderRadius: 22, minHeight: TAP_MIN,
                 border: `1px solid ${catFilter === t.key ? T.accent : T.border}`,
                 backgroundColor: catFilter === t.key ? T.accent : "transparent",
                 color: catFilter === t.key ? "#fff" : T.textMuted,
@@ -1164,7 +1156,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
            the existing view modal; the quick actions are the card buttons'
            own handlers. Phone (the branch below) is untouched. */
         <DeskTable
-          actionsWidth={favoritable ? 156 : 122}
+          // Four icon buttons need 155px; 160 keeps them on one line. When the
+          // table is narrow (large text on a laptop) the cell may drop to 92
+          // and its buttons wrap two by two, sooner when a column that
+          // outranks one-line actions would go (DeskTable fitting, SETTINGS-013).
+          actionsWidth={favoritable ? 160 : 122}
+          compactActionsWidth={92}
           columns={deskColumns}
           items={filteredItems}
           defaultSort={deskDefaultSort}
@@ -1178,11 +1175,11 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           groupBy={lifecycled && inactiveCount > 0 ? (item => (isInactive(item) ? "1" : "0")) : undefined}
           groupHeader={(key, list) => (key === "1" ? `Historical and superseded (${list.length}) \u{B7} no renewal alerts` : null)}
           actions={(item) => (
-            <div style={{ display: "inline-flex", gap: 3 }}>
+            <div style={{ display: "inline-flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
               {starButton(item)}
-              <button onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
-              <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-              <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+              <button aria-label="Share" onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
+              <button aria-label="Edit" onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
+              <button aria-label="Delete" onClick={(e) => { e.stopPropagation(); if (confirmDelete(item)) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
             </div>
           )}
         />
@@ -1212,9 +1209,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               <div onClick={() => selectMode ? toggleSelected(item.id) : setViewItem(item)} style={{
                 backgroundColor: T.card, border: `1px solid ${needsReview ? T.danger : T.border}`,
                 borderRadius: 14, padding: "14px 16px",
-                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
                 boxShadow: T.shadow1, cursor: "pointer",
               }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
                   {selectMode && (
                     <div style={{
@@ -1279,21 +1276,28 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                     {needsReview && (
                       <div style={{ fontSize: 12, fontWeight: 600, color: T.danger, marginTop: 3 }}>
                         {missingRequired.length > 0
-                          ? `Needs review — tap edit to add ${missingRequired.map(f => resolveFieldProp(f, "label", item)).join(", ")}`
-                          : "Needs review — tap edit to add expiration date, issued date, and verify details"}
+                          ? `Needs review: tap edit to add ${missingRequired.map(f => resolveFieldProp(f, "label", item)).join(", ")}`
+                          : "Needs review: tap edit to add the expiration and issued dates, and verify details"}
                       </div>
                     )}
-                    {!selectMode && renderExtra && <div onClick={(e) => e.stopPropagation()}>{renderExtra(item)}</div>}
                   </div>
                 </div>
                 {!selectMode && (
-                  <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-                    {starButton(item)}
-                    <button onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
-                    <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  <div style={{ display: "flex", gap: CARD_ACTION_GAP, flexShrink: 0 }}>
+                    {starButton(item, { card: true })}
+                    <button aria-label="Share" onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", ...cardActionSize }}><SendIcon /></button>
+                    <button aria-label="Edit" onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", ...cardActionSize }}><EditIcon /></button>
+                    <button aria-label="Delete" onClick={(e) => { e.stopPropagation(); if (confirmDelete(item)) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", ...cardActionSize }}><TrashIcon /></button>
                   </div>
                 )}
+                </div>
+                {/* The extra line (How to renew, a reference's notify, Move to
+                    another category) runs the card's full width under the
+                    header row, as the dose history does on a health record.
+                    Inside the text column it shared the width left over by
+                    the four actions: about 130 px on a phone, so "How to
+                    renew" read "Ho...". */}
+                {!selectMode && renderExtra && <div onClick={(e) => e.stopPropagation()}>{renderExtra(item)}</div>}
               </div>
               </div>
             );

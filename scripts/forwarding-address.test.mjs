@@ -34,7 +34,7 @@ eq("10 sends per account per day", MAX_SENDS_PER_DAY, 10);
 eq("one send per address per 10 minutes", SEND_COOLDOWN_MINUTES, 10);
 
 // ── Normalization ───────────────────────────────────────────────────────────
-eq("display name is stripped", normalizeEmail("Eric Whitney <Eric@Hospital.ORG>"), "eric@hospital.org");
+eq("display name is stripped", normalizeEmail("Rowan Testa <Rowan@Hospital.ORG>"), "rowan@hospital.org");
 eq("whitespace and case", normalizeEmail("  NAME@Hospital.org \n"), "name@hospital.org");
 eq("null is empty", normalizeEmail(null), "");
 eq("angle brackets only", normalizeEmail("<a@b.co>"), "a@b.co");

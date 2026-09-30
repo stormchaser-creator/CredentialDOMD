@@ -12,7 +12,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
  *  - One auto-attempt per build id per session (sessionStorage guard). If
  *    the page still isn't current after an auto-reload (e.g. the CDN cache
  *    hasn't caught up yet), we don't loop — we fall back to a tappable
- *    "New version — tap to update" pill.
+ *    "New version: tap to update" pill.
  *  - Updates found by the 15-minute background timer also show the pill
  *    instead of yanking the page out from under the user mid-task.
  *  - Authentication keeps this component's cache wipe and reload as a manual
@@ -199,7 +199,7 @@ function UpdatePrompt({ allowAutomaticUpdates = true } = {}) {
         <polyline points="23 4 23 10 17 10" />
         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
       </svg>
-      <span>{updating ? "Updating…" : "New version — tap to update"}</span>
+      <span>{updating ? "Updating…" : "New version: tap to update"}</span>
       <style>{`@keyframes cmd-upd-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </button>
   );

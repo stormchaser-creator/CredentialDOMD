@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { billedWRVU } from "./caseBilling.js";
 
 /**
  * Career case-log engine. A surgeon's year runs July 1 – June 30 (the
@@ -7,14 +8,24 @@ import autoTable from "jspdf-autotable";
  * by that year — "2018-19" is Jul 1 2018 through Jun 30 2019.
  */
 
-// Training-year label: PGY 1 began Jul 1 2018, so the year starting Jul 1
-// of (2017 + N) is PGY N. The medicine year always runs Jul 1 – Jun 30.
-const PGY_ANCHOR = 2018; // start year of PGY 1
-export function pgyLabelOf(academicYear) {
+// Training-year label. `startYear` is the July the physician's residency
+// began (Settings, profiles.training_start_year): the year starting Jul 1 of
+// startYear is PGY 1. With no start year, or for a year before it, the label
+// is the plain academic year ("2019-20"). The anchor used to be a hard-coded
+// 2018, one physician's residency, so every account's chips and report PDFs
+// were labelled from it. The medicine year always runs Jul 1 - Jun 30.
+export function pgyLabelOf(academicYear, startYear) {
   const start = parseInt(String(academicYear).slice(0, 4), 10);
-  if (!start) return academicYear;
-  const n = start - PGY_ANCHOR + 1;
+  const anchor = parseInt(startYear, 10);
+  if (!start || !anchor) return academicYear;
+  const n = start - anchor + 1;
   return n >= 1 ? `PGY ${n}` : academicYear;
+}
+
+/** "PGY 2 (2019-20)", or just "2019-20" when the year has no PGY label. */
+export function yearLabel(academicYear, startYear) {
+  const pgy = pgyLabelOf(academicYear, startYear);
+  return pgy === academicYear ? String(academicYear) : `${pgy} (${academicYear})`;
 }
 
 export function currentAcademicYear(now = new Date()) {
@@ -37,10 +48,12 @@ const parseCodes = (c) => {
   return String(c).split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
 };
 
-// A case's wRVU: the stored value from import wins; nothing is invented here.
+// A case's wRVU: the stored value (from import, or saved with the case)
+// wins; a case without one is priced from its codes, the same lines its
+// detail view lists as billed, so the card, the totals and Vera agree with it.
 export function caseWRVU(item) {
-  const v = parseFloat(item.wRvu ?? item.w_rvu);
-  return Number.isFinite(v) ? v : 0;
+  const v = parseFloat(item?.wRvu ?? item?.w_rvu);
+  return Number.isFinite(v) ? v : billedWRVU(item);
 }
 
 // Rolling window ending today, independent of the Jul-Jun academic year —
@@ -51,6 +64,49 @@ export function filterLastMonths(cases, months, now = new Date()) {
   start.setMonth(start.getMonth() - months);
   const startStr = start.toISOString().slice(0, 10);
   return (cases || []).filter(c => c.date && c.date >= startStr && c.date <= end);
+}
+
+/**
+ * The year filter a link to `record` should land on: the current filter when
+ * it already lists the case, otherwise the case's own academic year
+ * ("Undated" for a case with no date, which has its own chip). A link that
+ * landed on a year without its case opened nothing, then popped the case
+ * open later when the physician changed years.
+ */
+export function yearShowing(record, year, now = new Date()) {
+  if (!record || year === "all") return year;
+  if (year === "last12") return filterLastMonths([record], 12, now).length ? year : academicYearOf(record.date);
+  return academicYearOf(record.date);
+}
+
+/**
+ * The year Case Logs opens on: this academic year when it has cases, else the
+ * newest year that does (a member whose imported cases all predate this year
+ * used to open on "0 cases" and "No cases logged"), else Career when only
+ * undated cases exist. With no cases at all, this year.
+ */
+export function defaultCaseLogYear(cases, now = new Date()) {
+  const current = currentAcademicYear(now);
+  const years = summarizeByYear(cases).map(y => y.year);
+  if (years.length === 0 || years.includes(current)) return current;
+  return years.find(y => y !== "Undated") || "all";
+}
+
+/**
+ * The date line under one year's summary: its Jul 1 - Jun 30 span, or, for
+ * the Undated chip (where a link to a case with no date lands), what it holds.
+ */
+export function academicYearSpanLabel(year) {
+  const start = parseInt(String(year).slice(0, 4), 10);
+  if (!Number.isFinite(start)) return "Cases with no date";
+  return `Jul 1 ${start} - Jun 30 ${start + 1}`;
+}
+
+/** Career's date line: from the July the earliest dated case's year began. */
+export function careerSpanLabel(cases) {
+  const dated = summarizeByYear(cases).map(y => y.year).filter(y => y !== "Undated");
+  const first = dated[dated.length - 1];
+  return first ? `Jul ${first.slice(0, 4)} - present` : "All cases";
 }
 
 export function summarizeByYear(cases) {
@@ -83,9 +139,9 @@ export function buildCaseLogCsv(cases) {
   return lines.join("\n");
 }
 
-export function buildCaseLogPdf(cases, { physician = "Physician", year = null } = {}) {
+export function buildCaseLogPdf(cases, { physician = "Physician", year = null, startYear = null } = {}) {
   const doc = new jsPDF({ unit: "pt", format: "letter", orientation: "landscape" });
-  const title = year ? `Surgical Case Log — ${year}` : "Surgical Case Log — Career";
+  const title = year ? `Surgical Case Log, ${year}` : "Surgical Case Log, Career";
   const sorted = [...cases].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   const totals = summarizeByYear(sorted);
   const grand = totals.reduce((s, t) => ({ cases: s.cases + t.cases, wRVU: s.wRVU + t.wRVU }), { cases: 0, wRVU: 0 });
@@ -99,7 +155,7 @@ export function buildCaseLogPdf(cases, { physician = "Physician", year = null } 
   autoTable(doc, {
     startY: 74,
     head: [["Academic Year", "Cases", "wRVU"]],
-    body: totals.map(t => [`${pgyLabelOf(t.year)} (${t.year})`, String(t.cases), t.wRVU.toFixed(2)]),
+    body: totals.map(t => [yearLabel(t.year, startYear), String(t.cases), t.wRVU.toFixed(2)]),
     foot: [["Total", String(grand.cases), grand.wRVU.toFixed(2)]],
     styles: { fontSize: 9, cellPadding: 3 },
     headStyles: { fillColor: [13, 110, 253], fontSize: 9 },
@@ -126,12 +182,12 @@ export function buildCaseLogPdf(cases, { physician = "Physician", year = null } 
     margin: { left: 40, right: 40 },
     didDrawPage: () => {
       doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(160, 165, 172);
-      doc.text(`${physician} — ${title} · page ${doc.getNumberOfPages()}`, 40, doc.internal.pageSize.getHeight() - 20);
+      doc.text(`${physician} · ${title} · page ${doc.getNumberOfPages()}`, 40, doc.internal.pageSize.getHeight() - 20);
     },
   });
 
   const blob = doc.output("blob");
-  return new File([blob], `Case Log — ${physician}${year ? " " + year : ""}.pdf`, { type: "application/pdf" });
+  return new File([blob], `Case Log, ${physician}${year ? " " + year : ""}.pdf`, { type: "application/pdf" });
 }
 
 export async function shareCaseLogFile(file) {

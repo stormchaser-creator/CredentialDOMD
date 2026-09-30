@@ -1,0 +1,15 @@
+-- New profiles start on the theme the app actually renders: dark.
+--
+-- profiles.theme defaulted to 'arctic', a theme the app no longer has. The
+-- app rendered an unknown value as dark, but every indicator (the top bar
+-- icon, the sidebar label, the Settings switch) compared the value with
+-- 'dark' and read light, and the first tap of the toggle stored 'dark' and
+-- changed nothing on screen. The client now reads anything but 'light' as
+-- dark (src/constants/themes.js themeNameOf), so existing 'arctic' rows
+-- behave correctly without being rewritten; this makes a new row say 'dark'.
+--
+-- Existing rows are NOT rewritten: rewriting would bump updated_at on
+-- accounts nobody edited, and the client already reads 'arctic' as dark.
+--
+-- Idempotent. Rollback: docs/rollback/20260929220000_profiles_theme_default_dark.rollback.sql
+alter table public.profiles alter column theme set default 'dark';

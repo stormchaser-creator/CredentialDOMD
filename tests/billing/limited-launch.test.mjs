@@ -354,6 +354,32 @@ test('no-payment-required completion is recorded without a paid membership, rece
   const f=deferredFixture();assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,200);
   const [,args,,proof]=f.calls.find(c=>c[0]==='settle');assert.equal(proof,null);assert.equal(args.p_billing_anchor,f.anchor);assert.equal(args.p_period_end,f.q.billing_start_at);assert.equal(args.p_cancel_at_period_end,false);
 });
+// BILL-011: Stripe finalizes a deferred subscription's first invoice at $0 and
+// marks it paid at once (billing_cycle_anchor in the future, proration none).
+function markDeferredOpening(f) {
+  const start=f.sub.current_period_start;
+  f.sub.latest_invoice='in_A';
+  Object.assign(f.invoice,{billing_reason:'subscription_create',amount_paid:0,amount_due:0,amount_remaining:0,total:0,subtotal:0,status_transitions:{paid_at:start}});
+  f.invoice.lines.data[0]={price:f.price.id,quantity:1,amount:0,period:{start,end:f.anchor},proration:false};
+}
+test('deferred purchase: every Checkout event with the paid $0 opening invoice settles as the scheduled membership',async()=>{
+  for(const [type,object] of[['checkout.session.completed',{mode:'subscription',subscription:'sub_A',payment_status:'no_payment_required'}],['customer.subscription.created',{id:'sub_A'}],['invoice.paid',{id:'in_A',subscription:'sub_A'}]])for(const offerId of['core','core_locum']) {
+    const f=deferredFixture(20*86400000,offerId);markDeferredOpening(f);f.event.type=type;f.event.data.object=object;
+    const res=await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true));
+    assert.equal(res.status,200,`${type} ${offerId}`);
+    const settle=f.calls.find(c=>c[0]==='settle');assert.ok(settle,`${type} settles`);
+    const [,args,,proof]=settle;assert.equal(proof,null);assert.equal(args.p_status,'active');assert.equal(args.p_billing_anchor,f.anchor);assert.equal(args.p_period_end,f.q.billing_start_at);
+  }
+});
+test('deferred purchase: a $0 opening invoice never passes as a paid year, and anything else about it still refuses',async()=>{
+  for(const alter of[f=>f.invoice.amount_paid=1,f=>f.invoice.amount_due=1,f=>f.invoice.total=1,f=>f.invoice.customer='cus_Other',f=>f.invoice.subscription='sub_Other',f=>f.invoice.livemode=true,f=>f.invoice.total_discount_amounts=[{amount:9900}],f=>f.sub.current_period_end=f.anchor+31536000,f=>f.sub.billing_cycle_anchor++]) {
+    const f=deferredFixture();markDeferredOpening(f);alter(f);
+    assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,503);assert.equal(f.calls.some(c=>c[0]==='settle'),false);
+  }
+  // Not deferred: a $0 opening invoice on an immediate purchase is still no exact paid membership.
+  const f=fixture();Object.assign(f.invoice,{amount_paid:0,amount_due:0,total:0});
+  assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,503);assert.equal(f.calls.some(c=>c[0]==='settle'),false);
+});
 test('first full invoice starts annual period at original anchor even when card payment completes later',async()=>{
   for(const delay of[0,3600,86400*3])for(const offer of['core','core_locum']) {
     const f=deferredFixture(60000,offer);markDeferredPaid(f,{delay});
@@ -407,7 +433,9 @@ test('expired beta can resume only the already-owned open deferred Checkout unde
     f.deps.store.closeCheckout=async(...args)=>f.calls.push(['close',...args]);
     const response=await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest());
     if(providerState==='open') {assert.equal(response.status,200);assert.equal((await response.json()).url,'https://checkout.stripe.com/c/original');assert.equal(f.calls.some(c=>c[0]==='close'),false);}
-    else {assert.equal(response.status,409);assert.equal((await response.json()).error,providerState==='complete'?'subscription_already_exists':'quote_expired');assert.equal(f.calls.filter(c=>c[0]==='close').length,1);}
+    // A completed session with no live subscription is closed and claimed
+    // again (BILL-003); the database then refuses the past-anchor terms.
+    else {assert.equal(response.status,409);assert.equal((await response.json()).error,'quote_expired');assert.equal(f.calls.filter(c=>c[0]==='close').length,1);}
     assert.equal(f.calls.some(c=>c[0]==='checkout'),false,'past-anchor receipt must never create a fresh Stripe session');
   }
 });

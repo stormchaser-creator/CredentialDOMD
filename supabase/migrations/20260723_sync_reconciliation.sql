@@ -223,7 +223,7 @@ DROP POLICY IF EXISTS deleted_items_owner ON deleted_items;
 CREATE POLICY deleted_items_owner ON deleted_items FOR ALL TO authenticated
   USING (user_id = public.current_profile_id()) WITH CHECK (user_id = public.current_profile_id());
 
--- Hourly orientation pay (Eric's Penrose agreement: orientation @ $150/hr)
+-- Hourly orientation pay (for agreements that pay orientation by the hour)
 -- + missing timestamp columns that silently failed every documents /
 -- share_log / notification_log insert (applied live 2026-07-23).
 ALTER TABLE locum_contracts ADD COLUMN IF NOT EXISTS orientation_hourly_rate NUMERIC(10,2) DEFAULT 0;

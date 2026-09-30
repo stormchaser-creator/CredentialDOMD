@@ -40,12 +40,12 @@ export const expenseInvoice = () => ({
 
 /** A work (physician services) invoice: no receipts. */
 export const workInvoice = () => ({
-  id: IDS.workInvoice, number: "INV-20260920-01", contractId: IDS.contract,
-  periodStart: "2026-09-14", periodEnd: "2026-09-20", entryIds: [], totalAmount: 12500.5, totalMinutes: 600,
-  sentAt: "2026-09-21T12:00:00Z", terms: "$3,000.00 per on-call day covering the first 4 hours of logged work",
+  id: IDS.workInvoice, number: "INV-20260922-04", contractId: IDS.contract,
+  periodStart: "2026-08-24", periodEnd: "2026-08-30", entryIds: [], totalAmount: 12500.5, totalMinutes: 600,
+  sentAt: "2026-08-31T12:00:00Z", terms: "$1,500.00 per on-call day covering the first 4 hours of logged work",
   lines: [
-    { date: "2026-09-14", label: "Call coverage day", detail: "stipend", amount: 3000 },
-    { date: "2026-09-15", label: "Call", detail: "10:00 PM to 1:00 AM = 3h", amount: 9500.5 },
+    { date: "2026-08-24", label: "Call coverage day", detail: "stipend", amount: 1500 },
+    { date: "2026-08-25", label: "Call", detail: "10:00 PM to 1:00 AM = 3h", amount: 11000.5 },
   ],
 });
 
@@ -62,7 +62,7 @@ export function fakeWorld(opts = {}) {
       { id: IDS.invoice, user_id: IDS.profile, number: "EXP-0007", kind: "expenses", entry_ids: [IDS.expAir, IDS.expHotel],
         contract_id: null, bill_to_label: "Synthetic Locums", total_amount: 700, terms: "Reimbursable travel expenses per agreement.",
         updated_at: "2026-09-01T00:00:00.000Z", last_emailed_at: null, last_emailed_to: null },
-      { id: IDS.workInvoice, user_id: IDS.profile, number: "INV-20260920-01", kind: null, entry_ids: [],
+      { id: IDS.workInvoice, user_id: IDS.profile, number: "INV-20260922-04", kind: null, entry_ids: [],
         contract_id: IDS.contract, bill_to_label: null, total_amount: 12500.5, updated_at: "2026-09-21T00:00:00.000Z", last_emailed_at: null, last_emailed_to: null },
     ],
     expenses: [

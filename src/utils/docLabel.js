@@ -1,4 +1,4 @@
-import { describeItem } from "./helpers";
+import { describeItem } from "./helpers.js";
 
 // A document's identity comes from the record it is attached to, not from
 // its filename (IMG_0269.jpeg says nothing). This is the same idea Vera's

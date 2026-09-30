@@ -72,7 +72,7 @@ const BASE = `
   revoke all on function public.admin_operations_can_read() from public, anon, authenticated, service_role;
   grant execute on function public.admin_operations_can_read() to authenticated;
   insert into public.profiles (id, auth_user_id, name, degree_type) values
-    ('${ADMIN}', 'user_Admin', 'Eric Whitney', 'DO'), ('${A}', 'user_MemberA', 'Dana Reyes', 'MD'), ('${B}', 'user_MemberB', 'Sam Ortiz', 'DO');
+    ('${ADMIN}', 'user_Admin', 'Morgan Hale', 'DO'), ('${A}', 'user_MemberA', 'Dana Reyes', 'MD'), ('${B}', 'user_MemberB', 'Sam Ortiz', 'DO');
   insert into public.app_admins values ('${ADMIN}');
   insert into public.documents values ('${DOC_A}', '${A}', 'DEA certificate.pdf'), ('${DOC_B}', '${B}', 'Other member.pdf');
 `;
@@ -174,7 +174,7 @@ test('member support view: grants, visits, refusals and the member log', { skip:
     const minutes = await pg.sql(`select extract(epoch from expires_at - started_at) / 60 from public.member_view_sessions where id = '${session}'`);
     assert.equal(Number(minutes), 15);
     const events = await pg.sql(`select event || '|' || actor_name || '|' || reason from public.member_view_events where session_id = '${session}'`);
-    assert.equal(events, `view_started|Eric Whitney|${REASON}`);
+    assert.equal(events, `view_started|Morgan Hale|${REASON}`);
     assert.equal((await check(pg, session)).state, 'active');
   });
 
@@ -208,7 +208,7 @@ test('member support view: grants, visits, refusals and the member log', { skip:
     const status = json(await pg.sql(as(A, 'select public.member_view_status()')));
     assert.deepEqual(status.events.map(e => e.event), ['file_opened', 'view_started', 'view_started']);
     assert.equal(status.events[0].document_name, 'DEA certificate.pdf');
-    assert.equal(status.events[0].actor_name, 'Eric Whitney');
+    assert.equal(status.events[0].actor_name, 'Morgan Hale');
     assert.equal(status.events[0].reason, REASON);
     const adminOwn = json(await pg.sql(as(ADMIN, 'select public.member_view_status()')));
     assert.deepEqual(adminOwn.events, [], 'an admin\'s own Settings shows only views of the admin\'s own account');

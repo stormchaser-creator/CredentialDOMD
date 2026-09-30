@@ -322,6 +322,18 @@ send-packet-email, so the function reads the row it just wrote. The modal is not
 path for that case: its Send never enables with zero documents, and the summary email
 for a not-found request with nothing on file pointed exactly there.
 
+One tap also needs the forward to have been positively authenticated. email-inbound
+stamps `proposal.verified` from `mayFileFrom` (dmarc=pass, or aligned SPF and DKIM
+pass), `oneTapReady` returns false unless it is `true` (absent reads as unverified),
+and the client rebuild keeps whatever the server recorded. A forward from a domain with
+no DMARC can be forged, forger's "requester" included, so its packet always leads with
+Review, the request says "This forward could not be verified as coming from you", and
+the physician's summary drops its "Got it." opening and any Approve and send line. The
+request's own screen sends `reviewed: true`; send-packet-email refuses (403,
+`unverified_forward`) an approve without it when the stored proposal is not verified
+but would otherwise have been one tap, which is what an app built before this change
+would still offer.
+
 Two guards on the client-side rebuild, both found the hard way. The write-back lands
 only on a row still `status = 'new'` whose `proposal_at` is the one the rebuild replaced
 (a zero-row result drops the row from the written set; a rebuild on one device once
@@ -524,6 +536,16 @@ and a second tap (or a second device) to get 409 "Already sent on ...".
    supabase functions deploy email-inbound --no-verify-jwt --project-ref hkpnnsjcwprrwobmpqyy
    ```
    `RESEND_API_KEY` is already set for the send-* functions and is reused.
+
+   Every later redeploy of `email-inbound`: apply the pending migrations
+   first. Since 2026-09-29 it stamps `documents.origin = 'email'` on each file
+   it keeps (migration `20260929230000_documents_origin.sql`), which is how the
+   app tells a forward from its own upload when recording intake corrections.
+   A migration-only push runs no CI and nothing checks this order. Deployed
+   ahead of the column (or left in place after its rollback), the function
+   logs `documents.origin is missing` and keeps each file without origin, so
+   no forward is lost, but a moved forward records no correction until the
+   migration is applied.
 4. Enable receiving on the domain (dashboard toggle on the credentialdomd.com domain
    page, or `PATCH https://api.resend.com/domains/b176dbb8-c8c8-44a5-85a5-5feca530ee38`
    with `{"capabilities":{"receiving":"enabled"}}`). Read the MX host and priority from
@@ -560,6 +582,6 @@ cme route. All in `supabase/functions/email-inbound/index.ts`.
 
 ## Sender authentication (cme@ and docs@ routes)
 
-The function trusts the From address for FILING only after checking the inbound path's `Authentication-Results` header: `dmarc=fail`, or `spf` and `dkim` both failing, drops the message with no upload and no reply (ledger status `failed`, detail starts with "sender authentication failed"). If the header is absent the message is treated as authenticated for that purpose; the residual risk is bounded by the per-sender cap (20 messages/hour per route, 10 files each) and by the fact that dropped files land only in the matched physician's own inbox list, unfiled, where they are obvious. On cme@ and contacts@ the header is read from Resend's collapsed header map; on docs@ it is read from the raw message (top-most occurrence), because that route sends to a third party.
+The function trusts the From address for FILING only after checking the inbound path's `Authentication-Results` header: `dmarc=fail`, or `spf` and `dkim` both failing, drops the message with no upload and no reply (ledger status `failed`, detail starts with "sender authentication failed"). If the header is absent the message is treated as authenticated for that purpose; the residual risk is bounded by the per-sender cap (20 messages/hour per route, 10 files each) and by the fact that dropped files land only in the matched physician's own inbox list, unfiled, where they are obvious. On cme@ the header is read from Resend's collapsed header map; on docs@ and contacts@ both the raw message (top-most occurrence) and the map are read, as the docs@ step below describes. Writing into the physician's records needs more than no failure: docs@ and cme@ file only on a positive pass (`mayFileFrom`: dmarc=pass, or aligned SPF and DKIM pass), and contacts@ writes `peer_references` only on the same pass. A contacts@ card from any other forward (a domain with no DMARC, where a forged From: fails nothing) is staged as an `intake_proposals` note with one proposed `peerReferences` record per card, which the physician adds from More > Requests; the reply says the cards are waiting and why. A card for someone already in `peer_references` (the same name, and the same email or phone digits when the card carries either; `sameReference` in `src/utils/intakeRecords.js`) is neither written nor staged again, and the reply names them as already on file.
 
 Two things leave our domain on the docs@ route without the physician pressing anything: the acknowledgement to the requester, and nothing else. The packet itself goes only when the physician taps Approve and send. The acknowledgement is mail from docs@ to an address the forwarded text chose, with the physician's name on it, so it is held to a stricter standard than filing: it needs POSITIVE authentication (dmarc=pass, or spf=pass with an aligned dkim=pass) read from the top-most `Authentication-Results` of the raw message, optionally pinned to a trusted authserv-id; the requester must have been found in the forwarded text, must not be our domain, the physician's own addresses or a machine mailbox; `ack_requests` must be on; and it goes at most once per message (stamped before the send), at most 10 per account per day counted on the service-role ledger, and never in answer to an automated sender. A forged forward that clears the positive-authentication bar would still only cause one short "your request was received" note to an address the forger chose, promising nothing, from a named physician's account, capped at ten a day; everything that carries a document waits for the tap.

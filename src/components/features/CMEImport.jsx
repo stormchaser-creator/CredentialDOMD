@@ -199,13 +199,27 @@ function CMEImport({ open, onClose }) {
   const dupCount = rows.filter(r => r.duplicate).length;
   const assumedCount = included.filter(r => r.categoryAssumed).length;
 
+  // addItem returns false when it refuses a write (membership being
+  // re-checked, read-only access), and a refusal applies to every row, so the
+  // batch stops there. Only the rows actually saved leave the review list;
+  // the rest stay to add again. The done screen used to count every row as
+  // added and clear the list, so refused rows were lost from the import.
   const saveBatch = useCallback(() => {
-    let count = 0;
+    const saved = new Set();
+    let refused = false;
     for (const r of included) {
-      addItem("cme", { id: generateId(), ...toCmeEntry(r) });
-      count++;
+      if (addItem("cme", { id: generateId(), ...toCmeEntry(r) }) === false) { refused = true; break; }
+      saved.add(r.key);
     }
-    setDone({ count, skipped: rows.length - count });
+    if (refused) {
+      setRows(rs => rs.filter(r => !saved.has(r.key)));
+      setError(saved.size
+        ? `${saved.size} added. Nothing more was saved; the rest are still here to add again.`
+        : "Nothing was saved. The rows are still here to add again.");
+      return;
+    }
+    setError("");
+    setDone({ count: saved.size, skipped: rows.length - saved.size });
     setStep("done");
   }, [included, rows.length, addItem]);
 
@@ -244,7 +258,7 @@ function CMEImport({ open, onClose }) {
           </div>
           {pasteOpen && (
             <div style={{ marginTop: 10 }}>
-              <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} placeholder={"Paste rows copied from a course history or transcript, one activity per line, for example:\n3/11/2024   Prevention of Medical Errors   Florida Medical Association   2 credits"}
+              <textarea aria-label="Transcript rows to read" value={pasteText} onChange={e => setPasteText(e.target.value)} placeholder={"Paste rows copied from a course history or transcript, one activity per line, for example:\n3/11/2024   Prevention of Medical Errors   Florida Medical Association   2 credits"}
                 style={{ ...small, minHeight: 120, fontSize: 13, resize: "vertical", fontFamily: "inherit" }} />
               <button onClick={handlePaste} disabled={busy || !pasteText.trim()} style={{ ...primaryBtn(!!pasteText.trim()), width: "100%", marginTop: 6 }}>Read pasted text</button>
             </div>
@@ -274,7 +288,7 @@ function CMEImport({ open, onClose }) {
           <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 8, lineHeight: 1.5 }}>
             {textWhy} Edit the text if needed, then choose how to read it: as columns (when each line has the same fields separated by tabs or wide gaps, you map them next) or line by line (any line with a date becomes a row).
           </div>
-          <textarea value={text} onChange={e => setText(e.target.value)} style={{ ...small, minHeight: 220, fontSize: 12.5, resize: "vertical", fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "pre", overflowX: "auto" }} />
+          <textarea aria-label="Transcript text" value={text} onChange={e => setText(e.target.value)} style={{ ...small, minHeight: 220, fontSize: 12.5, resize: "vertical", fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "pre", overflowX: "auto" }} />
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
             <button onClick={() => { setStep("pick"); setError(""); }} style={secondaryBtn}>Back</button>
             <button onClick={textAsColumns} disabled={busy} style={{ ...primaryBtn(), flex: 1 }}>Read as columns</button>
@@ -333,30 +347,31 @@ function CMEImport({ open, onClose }) {
             {rows.map(r => (
               <div key={r.key} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${r.duplicate ? T.warning : T.border}`, backgroundColor: r.include ? T.input : "transparent", opacity: r.include ? 1 : 0.6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="checkbox" checked={r.include} onChange={e => setRow(r.key, { include: e.target.checked })} style={{ width: 17, height: 17, flexShrink: 0 }} />
-                  <input value={r.title} onChange={e => setRow(r.key, { title: e.target.value })} placeholder="Activity title" style={{ ...small, fontWeight: 700, flex: 1 }} />
-                  <input type="number" step="0.25" min="0" value={r.hours == null ? "" : r.hours} onChange={e => setRow(r.key, { hours: e.target.value === "" ? null : parseFloat(e.target.value) })} placeholder="hrs" style={{ ...small, width: 72, textAlign: "right", fontVariantNumeric: "tabular-nums" }} />
+                  <input type="checkbox" aria-label={`Add ${r.title || "this activity"}`} checked={r.include} onChange={e => setRow(r.key, { include: e.target.checked })} style={{ width: 17, height: 17, flexShrink: 0 }} />
+                  <input aria-label="Activity title" value={r.title} onChange={e => setRow(r.key, { title: e.target.value })} placeholder="Activity title" style={{ ...small, fontWeight: 700, flex: 1 }} />
+                  <input type="number" aria-label="Hours" step="0.25" min="0" value={r.hours == null ? "" : r.hours} onChange={e => setRow(r.key, { hours: e.target.value === "" ? null : parseFloat(e.target.value) })} placeholder="hrs" style={{ ...small, width: 72, textAlign: "right", fontVariantNumeric: "tabular-nums" }} />
                 </div>
                 {r.include && (
                   <>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 6, marginTop: 6 }}>
-                      <input type="date" value={r.date} onChange={e => setRow(r.key, { date: e.target.value })} style={small} />
-                      <input value={r.provider} onChange={e => setRow(r.key, { provider: e.target.value })} placeholder="Provider" style={small} />
-                      <select value={r.category} onChange={e => setRow(r.key, { category: e.target.value, categoryAssumed: false })} style={{ ...small, appearance: "auto", borderColor: r.categoryAssumed ? T.warning : T.inputBorder }}>
-                        <option value="">Credit type...</option>
+                      <input type="date" aria-label="Date" value={r.date} onChange={e => setRow(r.key, { date: e.target.value })} style={small} />
+                      <input aria-label="Provider" value={r.provider} onChange={e => setRow(r.key, { provider: e.target.value })} placeholder="Provider" style={small} />
+                      <select aria-label="Credit type" value={r.category} onChange={e => setRow(r.key, { category: e.target.value, categoryAssumed: false })} style={{ ...small, appearance: "auto", borderColor: r.categoryAssumed ? T.warning : T.inputBorder }}>
+                        {/* No blank choice: cme.category is NOT NULL, and a blank
+                            credit type made the cloud reject the row. */}
                         {categories.map(c => <option key={c} value={c}>{c}</option>)}
                         {r.category && !categories.includes(r.category) && <option value={r.category}>{r.category}</option>}
                       </select>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                       {(r.topics || []).map(t => (
-                        <button key={t} type="button" onClick={() => setRow(r.key, { topics: r.topics.filter(x => x !== t) })} title="Remove topic" style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 12, border: "none", backgroundColor: T.accent, color: "#fff", cursor: "pointer" }}>{t} &times;</button>
+                        <button key={t} type="button" aria-label={`Remove topic ${t}`} onClick={() => setRow(r.key, { topics: r.topics.filter(x => x !== t) })} title="Remove topic" style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 12, border: "none", backgroundColor: T.accent, color: "#fff", cursor: "pointer" }}>{t} &times;</button>
                       ))}
-                      <select value="" onChange={e => { const t = e.target.value; if (t && !(r.topics || []).includes(t)) setRow(r.key, { topics: [...(r.topics || []), t] }); }} style={{ ...small, width: "auto", fontSize: 11.5, padding: "3px 6px", appearance: "auto" }}>
+                      <select aria-label="Add a topic" value="" onChange={e => { const t = e.target.value; if (t && !(r.topics || []).includes(t)) setRow(r.key, { topics: [...(r.topics || []), t] }); }} style={{ ...small, width: "auto", fontSize: 11.5, padding: "3px 6px", appearance: "auto" }}>
                         <option value="">+ topic</option>
                         {CME_TOPICS.filter(t => !(r.topics || []).includes(t)).map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
-                      <input value={r.certificateNumber} onChange={e => setRow(r.key, { certificateNumber: e.target.value })} placeholder="Certificate #" style={{ ...small, width: 140, fontSize: 11.5, padding: "3px 8px", marginLeft: "auto" }} />
+                      <input aria-label="Certificate number" value={r.certificateNumber} onChange={e => setRow(r.key, { certificateNumber: e.target.value })} placeholder="Certificate #" style={{ ...small, width: 140, fontSize: 11.5, padding: "3px 8px", marginLeft: "auto" }} />
                     </div>
                   </>
                 )}
@@ -375,6 +390,7 @@ function CMEImport({ open, onClose }) {
               </div>
             ))}
           </div>
+          {error && <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={() => { setStep(table ? "map" : "pick"); setError(""); }} style={secondaryBtn}>{table ? "Columns" : "Back"}</button>
             <button onClick={saveBatch} disabled={!included.length} style={{ ...primaryBtn(included.length > 0), flex: 1 }}>

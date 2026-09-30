@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import * as guard from '../src/utils/spreadsheetGuard.js';
 import * as photoOrPdf from '../src/utils/photoOrPdf.js';
+import * as inboxDocs from '../src/utils/inboxDocs.js';
 import { mountComponent } from './component-harness.mjs';
 
 const caseLog = () => new File(['Date,CPT,MRN\n2025-01-06,61510,000000\n'], 'caselog.csv', { type: 'text/csv' });
@@ -31,7 +32,8 @@ const scanner = rec => ({
   analyzeStatement: async (...a) => { rec.calls.push(['analyzeStatement', ...a]); return []; },
 });
 const common = rec => ({
-  spreadsheetGuard: guard, photoOrPdf,
+  // Pure: the record viewers read a document's MIME type through it.
+  spreadsheetGuard: guard, photoOrPdf, inboxDocs,
   aiClient: { useAiAvailable: () => true, describeAiStatus: () => 'AI is off.', aiAvailable: () => false },
   storageQuota: { checkStorageQuota: () => ({ ok: true }) },
   officeText: { isOfficeFile: f => /\.(docx?|xlsx?|csv|txt)$/i.test(f?.name || ''), UPLOAD_ACCEPT: '*' },
@@ -121,6 +123,102 @@ test('a statement spreadsheet that would go to the AI reader still passes the gu
   await s.pick(s.fileInputs()[0], [new File(['Date\tPatient Name\tAmount\n2026-09-02\tSynthetic\t10\n'], 'statement.tsv', { type: '' })]);
   assert.ok(s.pageText().includes(guard.spreadsheetRefusal('Patient Name')));
   assert.ok(!rec.names().includes('analyzeStatement'), 'the file never reached the AI');
+});
+
+// PRAC-029: a CSV or Excel statement whose table header names a patient
+// identifier is refused before a row is read; the name column never becomes
+// a merchant. Only the header the parser uses is judged, so the card's own
+// "Account #" column and the bank's lines above the table still import.
+test('a statement CSV or workbook with a patient-identifier header is refused, and nothing is saved', async () => {
+  const rec = recorder();
+  const s = await statementImport(rec);
+  const csv = 'Patient Name,MRN,Date,Amount\nSynthetic Patient,000000,09/02/2026,120.00\n';
+  await s.pick(s.fileInputs()[0], [new File([csv], 'export.csv', { type: 'text/csv' })]);
+  let page = s.pageText();
+  assert.ok(page.includes(guard.spreadsheetRefusal('Patient Name')), page);
+  assert.doesNotMatch(page, /Synthetic Patient/);
+  assert.ok(!rec.names().includes('addItem'));
+
+  const s2 = await statementImport(rec);
+  const ws = XLSX.utils.aoa_to_sheet([['Date', 'Description', 'Account #', 'Patient Last Name', 'Amount'], ['09/02/2026', 'HERTZ DENVER', '-00000', 'Synthetic', '88.10']]);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Activity');
+  await s2.pick(s2.fileInputs()[0], [new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], 'activity.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]);
+  page = s2.pageText();
+  assert.ok(page.includes(guard.spreadsheetRefusal('Patient Last Name')), 'an Account # column does not hide a later patient column');
+  assert.doesNotMatch(page, /HERTZ DENVER/);
+  assert.ok(!rec.names().includes('addItem'));
+});
+
+// PRAC-029: a header the parser does not recognise ("Service Date,Patient,
+// Charge" has no description or amount column) is still the table's header.
+// The rows were read by position, so the patient column became the merchant.
+// The row the transactions sit under is judged whether or not it was
+// recognised, in a CSV and in a workbook, with or without a title above it.
+test('a statement whose unrecognised header names a patient column is refused, CSV and workbook', async () => {
+  const rec = recorder();
+  const rows = [['Service Date', 'Patient', 'Charge'], ['09/02/2026', 'Synthetic Patient', '120.00'], ['09/03/2026', 'Other Person', '80.00']];
+  const refusal = guard.spreadsheetRefusal('Patient');
+  const csvs = {
+    'export.csv': rows.map(r => r.join(',')).join('\n') + '\n',
+    'titled.csv': 'Synthetic Clinic charges\n' + rows.map(r => r.join(',')).join('\n') + '\n',
+  };
+  for (const [name, csv] of Object.entries(csvs)) {
+    const s = await statementImport(rec);
+    await s.pick(s.fileInputs()[0], [new File([csv], name, { type: 'text/csv' })]);
+    const page = s.pageText();
+    assert.ok(page.includes(refusal), `${name}: ${page}`);
+    assert.doesNotMatch(page, /Synthetic Patient|Other Person/, name);
+  }
+  for (const [name, grid] of Object.entries({ 'export.xlsx': rows, 'titled.xlsx': [['Synthetic Clinic charges'], [], ...rows] })) {
+    const s = await statementImport(rec);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(grid), 'Charges');
+    await s.pick(s.fileInputs()[0], [new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]);
+    const page = s.pageText();
+    assert.ok(page.includes(refusal), `${name}: ${page}`);
+    assert.doesNotMatch(page, /Synthetic Patient|Other Person/, name);
+  }
+  assert.ok(!rec.names().includes('addItem'), 'nothing was saved');
+  assert.ok(!rec.names().includes('analyzeStatement'), 'nothing went to the AI');
+
+  // Must still import: an unrecognised header with no identifier column (with
+  // the bank's account line above it in the workbook) and a headerless workbook.
+  const ok = await statementImport(rec);
+  await ok.pick(ok.fileInputs()[0], [new File(['Posted,Vendor,Charge\n09/02/2026,MARRIOTT DENVER,212.40\n09/03/2026,UNITED AIRLINES,389.00\n'], 'posted.csv', { type: 'text/csv' })]);
+  let page = ok.pageText();
+  assert.doesNotMatch(page, /This spreadsheet has/, page);
+  assert.match(page, /MARRIOTT DENVER/);
+  const sheets = {
+    'posted.xlsx': [['Account Number:', 'XXXX0000'], ['Posted', 'Vendor', 'Charge'], ['09/02/2026', 'HERTZ DENVER', '88.10'], ['09/03/2026', 'HYATT DENVER', '180.00']],
+    'headerless.xlsx': [['09/02/2026', 'HERTZ DENVER', '88.10'], ['09/03/2026', 'HYATT DENVER', '180.00']],
+  };
+  for (const [name, grid] of Object.entries(sheets)) {
+    const s = await statementImport(rec);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(grid), 'Activity');
+    await s.pick(s.fileInputs()[0], [new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]);
+    page = s.pageText();
+    assert.doesNotMatch(page, /This spreadsheet has/, `${name}: ${page}`);
+    assert.match(page, /HERTZ DENVER/, name);
+    assert.match(page, /HYATT DENVER/, name);
+  }
+});
+
+// PRAC-029: a row already saved as a work expense billed to an agency is a
+// duplicate on re-import too; ticking it again would deduct a reimbursed charge.
+test('re-importing a statement flags a row already billed to an agency as a duplicate', async () => {
+  const rec = recorder();
+  const s = await mountComponent('src/components/features/locum/StatementImport.jsx', {
+    app: account(rec, { data: { settings: {}, documents: [], locumContracts: [], deductibles: [], travelExpenses: [{ id: 'x1', date: '2026-09-02', amount: 212.4, vendor: 'MARRIOTT DENVER', agency: 'Synthetic Staffing' }] } }),
+    props: { open: true, onClose() {} },
+    modules: { ...common(rec), xlsx: XLSX, helpers: { generateId: () => 'synthetic-id' } },
+  });
+  const csv = 'Date,Description,Amount\n09/02/2026,MARRIOTT DENVER,-212.40\n09/03/2026,UNITED AIRLINES,-389.00\n';
+  await s.pick(s.fileInputs()[0], [new File([csv], 'statement.csv', { type: 'text/csv' })]);
+  // Each row's include box is the one wider than 15px (the bill-to box is 15).
+  const include = s.nodes().filter(n => n.type === 'input' && n.props.type === 'checkbox' && n.props.style?.width === 17);
+  const page = s.pageText();
+  assert.match(page, /MARRIOTT DENVER.*already recorded/s);
+  assert.match(page, /1 of 2 lines selected · \$389\.00/);
+  assert.deepEqual(include.map(n => n.props.checked), [false, true], 'the Marriott row starts unticked, the new one ticked');
 });
 
 // -- Setup capture: a photo or a PDF only --

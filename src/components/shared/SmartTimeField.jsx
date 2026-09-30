@@ -21,7 +21,7 @@ export default function SmartTimeField({ label, value, onCommit, iS, T }) {
           style={{ ...iS, minWidth: 0, flex: 1 }}
         />
         {["a", "p"].map(mer => (
-          <button key={mer} onClick={() => { setAp(mer); commit(raw, mer); }} style={{
+          <button key={mer} aria-pressed={ap === mer} onClick={() => { setAp(mer); commit(raw, mer); }} style={{
             padding: "10px 12px", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer",
             border: `1px solid ${ap === mer ? T.accent : T.border}`,
             backgroundColor: ap === mer ? T.accent : "transparent",
@@ -30,7 +30,7 @@ export default function SmartTimeField({ label, value, onCommit, iS, T }) {
         ))}
       </div>
       <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: parsed ? (T.success || T.accent) : raw ? T.warning : T.textDim }}>
-        {parsed ? `= ${fmt12(parsed)}` : raw ? "Add AM or PM (or type 8:08p / 20:08)" : "Type it — 808 + AM/PM, 8:08p, or 24-hour 2008"}
+        {parsed ? `= ${fmt12(parsed)}` : raw ? "Add AM or PM (or type 8:08p / 20:08)" : "Type it: 808 + AM/PM, 8:08p, or 24-hour 2008"}
       </div>
     </Field>
   );

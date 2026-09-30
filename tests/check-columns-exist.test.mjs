@@ -64,9 +64,10 @@ test("every required column is created by a migration in this repo", () => {
 test("the lifecycle columns are required exactly as src/utils/lifecycle.js lists them", async () => {
   const { LIFECYCLE_COLUMNS } = await import("../src/utils/lifecycle.js");
   for (const [table, cols] of Object.entries(LIFECYCLE_COLUMNS)) assert.deepEqual(REQUIRED_COLUMNS[table], cols, table);
-  // 13 lifecycle + 3 call-day split. The invoice email stamp is server-owned
-  // and never written by the client, so it is not a client-written column.
-  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 16);
+  // 13 lifecycle + 3 call-day split + profiles.training_start_year. The
+  // invoice email stamp is server-owned and never written by the client, so
+  // it is not a client-written column.
+  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 17);
 });
 
 test("the client keys these columns stand for are the ones it writes", () => {

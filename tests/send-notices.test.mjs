@@ -44,7 +44,7 @@ const built = await build({
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({
       contents: path === 'context' ? 'export const useApp = () => globalThis.__send.context;'
         : path === 'admin' ? 'export const useIsAdmin = () => false; export const isAdminUser = () => false;'
-          : 'export const supabase = null; export const downloadDocumentBlob = (p) => globalThis.__send.download(p);',
+          : 'export const supabase = null; export const downloadDocumentBlob = (p) => globalThis.__send.download(p); export const allocateInvoiceNumberRpc = () => null;',
       loader: 'js',
     }));
   } }],

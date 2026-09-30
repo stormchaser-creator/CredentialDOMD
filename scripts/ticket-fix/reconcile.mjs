@@ -25,7 +25,14 @@
 // out (or is not running). Until then a failed send was lost silently: the
 // only record was a function log or net._http_response, kept about 6 hours
 // (review 2026-09-29). Skipped until that migration is applied.
-// Ids are shown as 8-character prefixes; no reply text is read or sent.
+// And it reports, once per message, a reply send-ticket-reply recorded as
+// emailed on Resend's 409 invalid_idempotent_request
+// (ticket_reply_emails.refusal, 20260930031500): an earlier try under the
+// reply's key went out with other bytes, so that email may have gone to an
+// older address or under an older subject, and nothing else would say so
+// (review 2026-09-29, second pass). Skipped until that migration is applied.
+// Ids are shown as 8-character prefixes; no reply text or address is read or
+// sent.
 //
 //   TICKET_DATABASE_TOKEN=... node scripts/ticket-fix/reconcile.mjs --state DIR --ledger DIR [--ledger DIR] [--runs FILE] [--notify PATH]
 import { promises as fs } from 'node:fs';
@@ -41,7 +48,9 @@ export const SHARED_TICKETS = 3;
 export const reconcileSQL = (days = RECONCILE_DAYS) => readOnly(`SELECT v.id, v.ticket_id, v.body_sha256, v.report->>'path' AS path, v.report->>'run_id' AS run_id, v.created_at
   FROM support_reply_verifications v WHERE v.created_at > now() - interval '${Number(days)} days' ORDER BY v.created_at, v.id LIMIT 1000`);
 export const UNSENT_AFTER_MINUTES = 60;
-export const unsentInstalledSQL = () => readOnly(`SELECT to_regclass('public.ticket_reply_emails') IS NOT NULL AS installed`);
+// installed: 20260929150000's table; marked: 20260930031500's refusal column.
+export const unsentInstalledSQL = () => readOnly(`SELECT to_regclass('public.ticket_reply_emails') IS NOT NULL AS installed,
+    EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('public.ticket_reply_emails') AND attname = 'refusal' AND NOT attisdropped) AS marked`);
 // The same two rules notify_ticket_reply and retry_ticket_reply_emails apply:
 // a reply that stopped qualifying (its verification no longer matches, the
 // owner became an admin) is correctly not emailed and is not reported.
@@ -53,14 +62,32 @@ export const unsentSQL = (minutes = UNSENT_AFTER_MINUTES, days = RECONCILE_DAYS)
       OR (NOT public.is_admin(m.author_id) AND m.verification_id IS NOT NULL AND public.verified_support_reply_to_member(m.id)))
   ORDER BY e.queued_at, e.message_id LIMIT 200`);
 
+// Every mark, whether the reply still qualifies or not: the email it stands
+// for may have gone out either way.
+export const unconfirmedSQL = (days = RECONCILE_DAYS) => readOnly(`SELECT e.message_id AS id, m.ticket_id, e.attempts
+  FROM ticket_reply_emails e JOIN support_messages m ON m.id = e.message_id
+  WHERE e.refusal = 'invalid_idempotent_request' AND e.refused_at > now() - interval '${Number(days)} days'
+  ORDER BY e.refused_at, e.message_id LIMIT 200`);
+
+async function replyEmailSchema(query) {
+  const installed = await query(unsentInstalledSQL());
+  if (!Array.isArray(installed) || installed.length !== 1 || typeof installed[0].installed !== 'boolean' || typeof installed[0].marked !== 'boolean') throw Error('Unusable installation check');
+  return installed[0];
+}
 // Replies handed to send-ticket-reply and still not emailed; [] before
 // 20260929150000 exists.
 export async function unsentReplies(query) {
-  const installed = await query(unsentInstalledSQL());
-  if (!Array.isArray(installed) || installed.length !== 1 || typeof installed[0].installed !== 'boolean') throw Error('Unusable installation check');
-  if (!installed[0].installed) return [];
+  if (!(await replyEmailSchema(query)).installed) return [];
   const rows = await query(unsentSQL());
   if (!Array.isArray(rows) || rows.some(r => !UUID.test(r.id || '') || !UUID.test(r.ticket_id || '') || !Number.isInteger(r.attempts) || !Number.isInteger(r.minutes))) throw Error('Unusable unsent reply rows');
+  return rows;
+}
+// Replies recorded as emailed on a 409 invalid_idempotent_request; [] before
+// 20260930031500 exists.
+export async function unconfirmedReplies(query) {
+  if (!(await replyEmailSchema(query)).marked) return [];
+  const rows = await query(unconfirmedSQL());
+  if (!Array.isArray(rows) || rows.some(r => !UUID.test(r.id || '') || !UUID.test(r.ticket_id || '') || !Number.isInteger(r.attempts))) throw Error('Unusable unconfirmed reply rows');
   return rows;
 }
 const age = minutes => (minutes < 120 ? `${minutes} minutes` : minutes < 2880 ? `${Math.floor(minutes / 60)} hours` : `${Math.floor(minutes / 1440)} days`);
@@ -130,8 +157,16 @@ export async function reconcile({ query, state, ledgers, runsLog = null, notify 
       { notify, now, send });
     alerts++;
   }
+  const unconfirmed = await unconfirmedReplies(query);
+  for (const row of unconfirmed) {
+    if (!(await firstTime(state, `unconfirmed-${row.id}`))) continue;
+    await raise(state, 'reply_email_unconfirmed', `message=${row.id.slice(0, 8)} ticket=${row.ticket_id.slice(0, 8)} attempts=${row.attempts}`,
+      `CredentialDOMD support: a reply on ticket ${row.ticket_id.slice(0, 8)} (message ${row.id.slice(0, 8)}) is recorded as emailed, but Resend did not send its last try: an earlier try under the same key reached Resend with other content (the ticket owner's address or the ticket subject changed in between). That earlier email may have gone to an old address, or not at all. Check Resend's log for it, and resend by hand if it did not reach the ticket owner's current address.`,
+      { notify, now, send });
+    alerts++;
+  }
   await writeStatus(state, { now });
-  return { checked: rows.length, unledgered: unledgered.length, unlogged: unlogged.length, shared: shared.length, unemailed: unemailed.length, alerts };
+  return { checked: rows.length, unledgered: unledgered.length, unlogged: unlogged.length, shared: shared.length, unemailed: unemailed.length, unconfirmed: unconfirmed.length, alerts };
 }
 
 function parse(argv) {
@@ -150,6 +185,6 @@ if (isMain(import.meta.url)) {
   (async () => {
     const options = parse(process.argv.slice(2));
     const result = await reconcile({ query: managementQuery(databaseToken()), state: options.state, ledgers: options.ledger, runsLog: options.runs ?? null, notify: options.notify ?? null });
-    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} reconcile: ${result.checked} verifications, ${result.unledgered} without a ledger entry, ${result.unlogged} agent replies from no logged run, ${result.shared} shared texts, ${result.unemailed} replies not emailed, ${result.alerts} new alerts`);
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} reconcile: ${result.checked} verifications, ${result.unledgered} without a ledger entry, ${result.unlogged} agent replies from no logged run, ${result.shared} shared texts, ${result.unemailed} replies not emailed, ${result.unconfirmed} emailed replies to confirm, ${result.alerts} new alerts`);
   })().catch(error => { console.error(`ERROR: reconcile: ${error.message}`); process.exitCode = 1; });
 }

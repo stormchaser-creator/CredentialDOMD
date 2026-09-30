@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { localToday } from "../src/utils/dateDays.js";
 import {
   credentialLetter, credentialSharePayload, bundleShareText, veraPacketShareText, veraCoverNote, referencesShareTitle,
   followUpEmail, peerHeadsUp, cvPlainText, smsBody, smsCutNotice, SMS_BODY_MAX,
@@ -222,7 +223,9 @@ test("the plain-text CV uses the phone-safe rule and no em dash", () => {
 
 // -- Alerts --
 test("the alert message lists items without an em dash", () => {
-  const soonDate = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
+  // A local calendar date: expirations count local days (src/utils/dateDays.js),
+  // and a UTC date is a day ahead every evening in the US.
+  const soonDate = localToday(new Date(Date.now() + 10 * 86400000));
   const msg = notifications.buildNotificationMessage({ settings: { name: "Synthetic Physician", degreeType: "DO", notifyFreqDays: 7 } }, {
     expired: [{ id: "a", type: "Medical License", state: "CA", expirationDate: "2026-01-01" }],
     soon: [{ id: "b", type: "DEA Registration", expirationDate: soonDate }],

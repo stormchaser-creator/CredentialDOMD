@@ -95,9 +95,11 @@ function TaskNotes({ onBill }) {
   const submitFinish = () => {
     if (!finishing) return;
     if (!form.start || !form.end) return; // the button is disabled until both exist
-    // Refused: the finish form stays open with its times, and nothing is billed.
-    if (editItem("taskNotes", { ...finishing, completedAt: new Date().toISOString() }) === false) return;
+    // The task is NOT marked done here. The Work tab marks it done, with its
+    // work entry's id, once that entry is saved: cancelled there, or refused,
+    // the task stays open with its Finish button.
     onBill?.({
+      taskId: finishing.id,
       date: form.date,
       type: form.type,
       start: form.start,
@@ -122,14 +124,20 @@ function TaskNotes({ onBill }) {
           tabIndex={isDone ? undefined : 0}
           onClick={isDone ? undefined : () => { setEditTask(t); setEditText(t.text || ""); }}
           onKeyDown={isDone ? undefined : (e) => { if (e.key === "Enter") { setEditTask(t); setEditText(t.text || ""); } }}
-          style={{ fontSize: 14.5, fontWeight: 600, color: T.text, lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none", opacity: isDone ? 0.6 : 1, cursor: isDone ? "default" : "pointer" }}>
+          style={{
+            fontSize: 14.5, fontWeight: 600, color: T.text, lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none", opacity: isDone ? 0.6 : 1, cursor: isDone ? "default" : "pointer",
+            // The tap-to-edit target takes in the card's top and side padding
+            // (negative margin, equal padding, so nothing moves): a one-line
+            // task was a 20 px strip with dead card around it; now 34 px.
+            margin: "-11px -13px -3px", padding: "11px 13px 3px", borderRadius: 11,
+          }}>
           {t.text}
         </div>
         <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 3 }}>
           Came in {fmtDay(t.capturedAt)} at {fmtClock(t.capturedAt)}
           {t.startedAt && !isDone && <span style={{ color: T.accent, fontWeight: 700 }}> · working {elapsed}m</span>}
           {isDone && t.notes === "closed without billing" && " · closed, not billed"}
-          {isDone && t.notes !== "closed without billing" && " · billed"}
+          {isDone && t.notes !== "closed without billing" && (t.workLogId ? " · billed" : " · finished")}
         </div>
         {!isDone && (
           <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
@@ -168,12 +176,12 @@ function TaskNotes({ onBill }) {
       <div style={{ marginBottom: 10 }}>
         <h3 style={{ margin: "0 0 3px", fontSize: 17, fontWeight: 800, color: T.text }}>To do</h3>
         <div style={{ fontSize: 12, color: T.textMuted }}>
-          Catch it now, finish it later — you enter the times when you close it out.
+          Catch it now, finish it later: you enter the times when you close it out.
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <input ref={captureRef} value={text} onChange={e => setText(e.target.value)}
+        <input ref={captureRef} aria-label="New to-do" value={text} onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") capture(); }}
           placeholder="e.g. call back Dr. Nguyen about the ICU consult"
           style={{ ...iS, flex: 1 }} />
@@ -199,7 +207,7 @@ function TaskNotes({ onBill }) {
       <Modal open={!!editTask} onClose={() => setEditTask(null)} title="Edit note">
         {editTask && (
           <>
-            <textarea value={editText} onChange={e => setEditText(e.target.value)} autoFocus
+            <textarea aria-label="Note" value={editText} onChange={e => setEditText(e.target.value)} autoFocus
               style={{ ...iS, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} />
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button
@@ -231,7 +239,7 @@ function TaskNotes({ onBill }) {
               {finishing.startedAt && ` · timing started ${fmtClock(finishing.startedAt)}`}
             </div>
 
-            <Field label="What you did"><input value={form.description || ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={iS} /></Field>
+            <Field label="Billing note (shows on the invoice)"><input value={form.description || ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={iS} /></Field>
 
             <Field label="Type">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -256,14 +264,16 @@ function TaskNotes({ onBill }) {
             {contracts.length > 1 && (
               <Field label="Contract">
                 <select value={form.contractId || ""} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : setForm(f => ({ ...f, contractId: e.target.value || null })))} style={{ ...iS, appearance: "auto" }}>
-                  <option value="">— none —</option>
+                  <option value="">None</option>
                   {pickableContracts(contracts, form.contractId, { showEnded, date: form.date }).map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
                   {hiddenEndedCount(contracts, form.contractId, { showEnded, date: form.date }) > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEndedCount(contracts, form.contractId, { showEnded, date: form.date }))}</option>}
                 </select>
               </Field>
             )}
 
-            <Field label="Notes (for the invoice)"><textarea value={form.privateNote || ""} onChange={e => setForm(f => ({ ...f, privateNote: e.target.value }))} style={{ ...iS, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} placeholder="Anything worth recording about this one" /></Field>
+            <Field label="Private note (this device only)" hint="Never uploaded, never on invoices. What the agency sees goes in the billing note above.">
+              <textarea value={form.privateNote || ""} onChange={e => setForm(f => ({ ...f, privateNote: e.target.value }))} style={{ ...iS, minHeight: 70, resize: "vertical", fontFamily: "inherit", borderStyle: "dashed" }} placeholder="e.g. patient name / MRN reminder" />
+            </Field>
 
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button onClick={submitFinish} disabled={!form.start || !form.end} style={{

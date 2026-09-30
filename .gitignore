@@ -55,3 +55,6 @@ AI-APP-BUILDING-INSTRUCTIONS.md
 
 # Local Supabase CLI connection metadata
 /supabase/.temp/
+
+# Python bytecode (the notifier and runner scripts compile on every run)
+__pycache__/

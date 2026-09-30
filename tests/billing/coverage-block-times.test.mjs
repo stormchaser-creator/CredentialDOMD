@@ -16,7 +16,7 @@ import { NORTHFIELD_CONTRACT, northfieldEntries } from "./fixtures/northfield.mj
 import { TIMED_CONTRACT, UNTIMED_CONTRACT, TIMED_PERIOD, timedBlockEntries } from "./fixtures/timed-block.mjs";
 
 // Coverage blocks with times (src/utils/coverageBlocks.js): the agreement's
-// "September 25 (4pm) to September 28 (7am)" bills three call days, work
+// "October 16 (4pm) to October 19 (7am)" bills three call days, work
 // outside the block bills hourly on its own line, and a contract whose blocks
 // carry no times bills exactly as it did before (the frozen engine at
 // 4b65234a is the reference). Synthetic data only. Wall clock on Central time.
@@ -67,23 +67,23 @@ test("times read the way agreements and models write them, as 24-hour HH:MM", ()
   for (const v of ["", null, undefined, "7", "25:00", "13pm", "0am", "evening", "4:75 pm"]) assert.equal(toClock(v), "", String(v));
   assert.equal(clockLabel(16 * 60), "4:00 PM");
   assert.equal(clockLabel(0), "12:00 AM");
-  assert.equal(clockLabel(at("2026-09-28 07:00")), "7:00 AM");
+  assert.equal(clockLabel(at("2026-10-19 07:00")), "7:00 AM");
 });
 
 test("a block with times: its moments, call days, window and the dates it touches", () => {
   const b = timedBlock(TIMED_PERIOD);
-  assert.equal(new Date(b.startMs).toISOString(), at("2026-09-25 16:00"));
-  assert.equal(new Date(b.endMs).toISOString(), at("2026-09-28 07:00"));
+  assert.equal(new Date(b.startMs).toISOString(), at("2026-10-16 16:00"));
+  assert.equal(new Date(b.endMs).toISOString(), at("2026-10-19 07:00"));
   assert.equal(b.turnover, 7 * 60);
-  assert.deepEqual(blockCallDays(b), ["2026-09-25", "2026-09-26", "2026-09-27"]);
-  assert.equal(timedBlockLabel(TIMED_PERIOD), "Sep 25, 4:00 PM to Sep 28, 7:00 AM");
-  assert.deepEqual(timedSpan(TIMED_PERIOD), { start: "2026-09-25", end: "2026-09-28" });
+  assert.deepEqual(blockCallDays(b), ["2026-10-16", "2026-10-17", "2026-10-18"]);
+  assert.equal(timedBlockLabel(TIMED_PERIOD), "Oct 16, 4:00 PM to Oct 19, 7:00 AM");
+  assert.deepEqual(timedSpan(TIMED_PERIOD), { start: "2026-10-16", end: "2026-10-19" });
   // A block ending at midnight does not touch the day it ends on.
-  assert.deepEqual(timedSpan({ start: "2026-09-25", startTime: "16:00", end: "2026-09-28", endTime: "00:00" }), { start: "2026-09-25", end: "2026-09-27" });
+  assert.deepEqual(timedSpan({ start: "2026-10-16", startTime: "16:00", end: "2026-10-19", endTime: "00:00" }), { start: "2026-10-16", end: "2026-10-18" });
   // Without times, nothing here applies and the old reading stands.
-  assert.equal(timedBlock({ start: "2026-09-25", end: "2026-09-27" }), null);
-  assert.equal(isTimedPeriod({ start: "2026-09-25", end: "2026-09-27", startTime: "", endTime: "" }), false);
-  assert.equal(isTimedPeriod({ start: "2026-09-25", endTime: "07:00" }), false, "an end time without an end date is no time");
+  assert.equal(timedBlock({ start: "2026-10-16", end: "2026-10-18" }), null);
+  assert.equal(isTimedPeriod({ start: "2026-10-16", end: "2026-10-18", startTime: "", endTime: "" }), false);
+  assert.equal(isTimedPeriod({ start: "2026-10-16", endTime: "07:00" }), false, "an end time without an end date is no time");
   assert.equal(hasTimedPeriods(UNTIMED_CONTRACT), false);
   assert.equal(hasTimedPeriods(TIMED_CONTRACT), true);
 });
@@ -92,12 +92,12 @@ test("a start time alone is no time: the block keeps its untimed meaning; end ti
   // Read as a block starting at 6:00 AM, a start time alone turned every
   // call day over at 6:00 AM and kept the end date as a call day of its own
   // (see coverage-block-review-fixes.test.mjs). It is ignored instead.
-  const startOnly = { start: "2026-11-05", startTime: "06:00", end: "2026-11-11" };
+  const startOnly = { start: "2026-11-12", startTime: "06:00", end: "2026-11-18" };
   assert.equal(timedBlock(startOnly), null);
   assert.equal(isTimedPeriod(startOnly), false);
-  const endOnly = timedBlock({ start: "2026-09-25", end: "2026-09-28", endTime: "07:00" });
-  assert.equal(new Date(endOnly.startMs).toISOString(), at("2026-09-25 07:00"));
-  assert.deepEqual(blockCallDays(endOnly), ["2026-09-25", "2026-09-26", "2026-09-27"]);
+  const endOnly = timedBlock({ start: "2026-10-16", end: "2026-10-19", endTime: "07:00" });
+  assert.equal(new Date(endOnly.startMs).toISOString(), at("2026-10-16 07:00"));
+  assert.deepEqual(blockCallDays(endOnly), ["2026-10-16", "2026-10-17", "2026-10-18"]);
   // Starting before the turnover (7:00 AM start, 5:00 PM turnover) opens
   // with one long call day under the start date, never the day before.
   const early = { start: "2026-10-01", startTime: "07:00", end: "2026-10-03", endTime: "17:00" };
@@ -109,61 +109,61 @@ test("a start time alone is no time: the block keeps its untimed meaning; end ti
 });
 
 test("a block that ends before it starts covers nothing, and the form says why", () => {
-  const bad = { start: "2026-09-25", startTime: "16:00", end: "2026-09-25", endTime: "07:00" };
+  const bad = { start: "2026-10-16", startTime: "16:00", end: "2026-10-16", endTime: "07:00" };
   assert.equal(timedBlock(bad).valid, false);
   assert.deepEqual(blockCallDays(timedBlock(bad)), []);
   const c = { ...TIMED_CONTRACT, coveragePeriods: [bad] };
-  assert.equal(isStipendDay(c, "2026-09-25", []), false);
-  assert.match(periodProblem(bad, 2), /^Block 2 ends before it starts \(Sep 25, 4:00 PM to Sep 25, 7:00 AM\)\. Check its dates and times\.$/);
-  assert.match(periodProblem({ start: "2026-09-25", end: "", endTime: "07:00" }, 1), /no end date/);
+  assert.equal(isStipendDay(c, "2026-10-16", []), false);
+  assert.match(periodProblem(bad, 2), /^Block 2 ends before it starts \(Oct 16, 4:00 PM to Oct 16, 7:00 AM\)\. Check its dates and times\.$/);
+  assert.match(periodProblem({ start: "2026-10-16", end: "", endTime: "07:00" }, 1), /no end date/);
   assert.equal(periodProblem(TIMED_PERIOD, 1), "");
-  assert.equal(periodProblem({ start: "2026-09-25", end: "2026-09-27" }, 1), "");
+  assert.equal(periodProblem({ start: "2026-10-16", end: "2026-10-18" }, 1), "");
 });
 
 test("a block saves its times as HH:MM, and a block without times saves exactly what it always did", () => {
-  assert.deepEqual(savedPeriod({ start: "2026-09-25", end: "2026-09-27" }), { start: "2026-09-25", end: "2026-09-27" });
-  assert.deepEqual(Object.keys(savedPeriod({ start: "2026-09-25", end: "2026-09-27", startTime: "", endTime: "" })), ["start", "end"]);
-  assert.deepEqual(savedPeriod({ start: "2026-09-25", end: "2026-09-28", startTime: "4pm", endTime: "07:00" }), TIMED_PERIOD);
+  assert.deepEqual(savedPeriod({ start: "2026-10-16", end: "2026-10-18" }), { start: "2026-10-16", end: "2026-10-18" });
+  assert.deepEqual(Object.keys(savedPeriod({ start: "2026-10-16", end: "2026-10-18", startTime: "", endTime: "" })), ["start", "end"]);
+  assert.deepEqual(savedPeriod({ start: "2026-10-16", end: "2026-10-19", startTime: "4pm", endTime: "07:00" }), TIMED_PERIOD);
   const fmt = (d) => `<${d}>`;
-  assert.equal(coveragePeriodText(TIMED_PERIOD, fmt), "Sep 25, 4:00 PM to Sep 28, 7:00 AM");
-  assert.equal(coveragePeriodText({ start: "2026-09-25", end: "2026-09-27" }, fmt), "<2026-09-25> \u{2013} <2026-09-27>");
-  assert.equal(coveragePeriodText({ start: "2026-09-25", end: "2026-09-25" }, fmt), "<2026-09-25>");
+  assert.equal(coveragePeriodText(TIMED_PERIOD, fmt), "Oct 16, 4:00 PM to Oct 19, 7:00 AM");
+  assert.equal(coveragePeriodText({ start: "2026-10-16", end: "2026-10-18" }, fmt), "<2026-10-16> \u{2013} <2026-10-18>");
+  assert.equal(coveragePeriodText({ start: "2026-10-16", end: "2026-10-16" }, fmt), "<2026-10-16>");
 });
 
 // ── Call days ────────────────────────────────────────────────────
 
 const SIX_TO_SIX = { id: "c-six", callStipend: 3000, stipendHours: 4, overageHourlyRate: 300, hourlyRate: 0, incrementMinutes: 15, minCallMinutes: 15,
-  coveragePeriods: [{ start: "2026-11-05", startTime: "06:00", end: "2026-11-12", endTime: "06:00" }] };
+  coveragePeriods: [{ start: "2026-11-12", startTime: "06:00", end: "2026-11-19", endTime: "06:00" }] };
 
 test("a 6 AM to 6 AM block: 6:15 AM work files under that same day, though the contract's call day starts at 7", () => {
   assert.equal(callDayStartHour(SIX_TO_SIX), 7);
-  assert.equal(deriveCallDay(at("2026-11-06 06:15"), SIX_TO_SIX), "2026-11-06");
-  assert.equal(deriveCallDay(at("2026-11-06 05:59"), SIX_TO_SIX), "2026-11-05");
-  assert.equal(deriveCallDay(at("2026-11-05 06:15"), SIX_TO_SIX), "2026-11-05");
-  assert.equal(deriveCallDay(at("2026-11-12 05:59"), SIX_TO_SIX), "2026-11-11");
+  assert.equal(deriveCallDay(at("2026-11-13 06:15"), SIX_TO_SIX), "2026-11-13");
+  assert.equal(deriveCallDay(at("2026-11-13 05:59"), SIX_TO_SIX), "2026-11-12");
+  assert.equal(deriveCallDay(at("2026-11-12 06:15"), SIX_TO_SIX), "2026-11-12");
+  assert.equal(deriveCallDay(at("2026-11-19 05:59"), SIX_TO_SIX), "2026-11-18");
   // Outside the block the contract's own 7:00 decides.
-  assert.equal(deriveCallDay(at("2026-11-12 06:15"), SIX_TO_SIX), "2026-11-11");
-  assert.equal(deriveCallDay(at("2026-11-12 07:15"), SIX_TO_SIX), "2026-11-12");
-  // Before the block begins on its start date, Nov 4 is no call day, so the
+  assert.equal(deriveCallDay(at("2026-11-19 06:15"), SIX_TO_SIX), "2026-11-18");
+  assert.equal(deriveCallDay(at("2026-11-19 07:15"), SIX_TO_SIX), "2026-11-19");
+  // Before the block begins on its start date, Nov 11 is no call day, so the
   // block's first day takes it (coverageBlocks.js leadInCallDay).
-  assert.equal(deriveCallDay(at("2026-11-05 05:30"), SIX_TO_SIX), "2026-11-05");
-  assert.equal(deriveCallDay(at("2026-11-04 23:30"), SIX_TO_SIX), "2026-11-04");
+  assert.equal(deriveCallDay(at("2026-11-12 05:30"), SIX_TO_SIX), "2026-11-12");
+  assert.equal(deriveCallDay(at("2026-11-11 23:30"), SIX_TO_SIX), "2026-11-11");
   // The number form is the old rule, untouched.
-  assert.equal(deriveCallDay(at("2026-11-06 06:15"), 7), "2026-11-05");
-  assert.equal(callDayStartHour(SIX_TO_SIX, at("2026-11-06 06:15")), 6);
-  assert.equal(callDayStartHour(SIX_TO_SIX, at("2026-11-12 06:15")), 7);
-  assert.equal(live.currentCallDay(SIX_TO_SIX, new Date(at("2026-11-08 06:30"))), "2026-11-08");
-  assert.deepEqual(["2026-11-04", "2026-11-05", "2026-11-11", "2026-11-12"].map((d) => isStipendDay(SIX_TO_SIX, d, [])), [false, true, true, false]);
+  assert.equal(deriveCallDay(at("2026-11-13 06:15"), 7), "2026-11-12");
+  assert.equal(callDayStartHour(SIX_TO_SIX, at("2026-11-13 06:15")), 6);
+  assert.equal(callDayStartHour(SIX_TO_SIX, at("2026-11-19 06:15")), 7);
+  assert.equal(live.currentCallDay(SIX_TO_SIX, new Date(at("2026-11-15 06:30"))), "2026-11-15");
+  assert.deepEqual(["2026-11-11", "2026-11-12", "2026-11-18", "2026-11-19"].map((d) => isStipendDay(SIX_TO_SIX, d, [])), [false, true, true, false]);
   assert.equal(startedCoverageDays(SIX_TO_SIX).length, 7);
 
-  const early = entry(SIX_TO_SIX, "Call", "2026-11-06 06:15", "2026-11-06 06:17", { description: "Synthetic early call" });
-  assert.equal(early.callDay, "2026-11-06");
-  const priced = computeBilling(SIX_TO_SIX, [early], true, [early], [], new Set(["2026-11-06"]));
+  const early = entry(SIX_TO_SIX, "Call", "2026-11-13 06:15", "2026-11-13 06:17", { description: "Synthetic early call" });
+  assert.equal(early.callDay, "2026-11-13");
+  const priced = computeBilling(SIX_TO_SIX, [early], true, [early], [], new Set(["2026-11-13"]));
   assert.deepEqual(priced.lines.map((l) => [l.date, l.label, l.flag ?? l.amount]), [
-    ["2026-11-06", "On-call coverage (daily total)", 3000],
+    ["2026-11-13", "On-call coverage (daily total)", 3000],
     [null, "\u{b7} Call: Synthetic early call", "included"],
   ]);
-  assert.equal(invoiceDays({ lines: priced.lines, total: priced.total })[0].window, "call 6:00 AM Nov 6 to 6:00 AM Nov 7");
+  assert.equal(invoiceDays({ lines: priced.lines, total: priced.total })[0].window, "call 6:00 AM Nov 13 to 6:00 AM Nov 14");
 });
 
 test("the 6 AM block across the November fall-back still turns over at 6:00 on the wall clock", () => {
@@ -174,35 +174,35 @@ test("the 6 AM block across the November fall-back still turns over at 6:00 on t
 });
 
 test("after the 6 AM block ends, a 6:15 AM entry bills after the call ended, at the hourly rate", () => {
-  const late = entry(SIX_TO_SIX, "Rounding", "2026-11-12 06:15", "2026-11-12 06:45", { description: "Synthetic handoff" });
-  assert.equal(late.callDay, "2026-11-11");
-  const priced = computeBilling(SIX_TO_SIX, [late], true, [late], [], new Set(["2026-11-11"]));
+  const late = entry(SIX_TO_SIX, "Rounding", "2026-11-19 06:15", "2026-11-19 06:45", { description: "Synthetic handoff" });
+  assert.equal(late.callDay, "2026-11-18");
+  const priced = computeBilling(SIX_TO_SIX, [late], true, [late], [], new Set(["2026-11-18"]));
   const out = priced.lines.find((l) => l.kind === "outside");
-  assert.deepEqual([out.date, out.label, out.minutes, out.amount, out.item], ["2026-11-11", "After call ended at 6:00 AM", 30, 150, "Rounding: Synthetic handoff"]);
+  assert.deepEqual([out.date, out.label, out.minutes, out.amount, out.item], ["2026-11-18", "After call ended at 6:00 AM", 30, 150, "Rounding: Synthetic handoff"]);
   assert.equal(priced.total, 3000 + 150);
   assert.equal(priced.lines.filter((l) => l.label.startsWith("\u{b7} ")).length, 0, "nothing of it is stipend work");
 });
 
 test("splitting on: a call crossing the 6:00 AM turnover splits there, and a sign-out crossing the block's end splits at its end", () => {
   const six = { ...SIX_TO_SIX, splitAtDayStart: true };
-  const pieces = splitAtCallDay(entry(six, "Call", "2026-11-06 05:45", "2026-11-06 06:15"), six);
-  assert.deepEqual(pieces.map((r) => `${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ["05:45-06:00 2026-11-05 15", "06:00-06:15 2026-11-06 15"]);
+  const pieces = splitAtCallDay(entry(six, "Call", "2026-11-13 05:45", "2026-11-13 06:15"), six);
+  assert.deepEqual(pieces.map((r) => `${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ["05:45-06:00 2026-11-12 15", "06:00-06:15 2026-11-13 15"]);
   // No cut at 7:00 inside the block: the contract's hour is not the turnover there.
-  assert.equal(splitAtCallDay(entry(six, "Procedure", "2026-11-06 06:30", "2026-11-06 07:30"), six).length, 1);
+  assert.equal(splitAtCallDay(entry(six, "Procedure", "2026-11-13 06:30", "2026-11-13 07:30"), six).length, 1);
 
   const timed = { ...TIMED_CONTRACT, splitAtDayStart: true };
-  const signOut = entry(timed, "Sign-out", "2026-09-28 06:30", "2026-09-28 08:45");
+  const signOut = entry(timed, "Sign-out", "2026-10-19 06:30", "2026-10-19 08:45");
   const split = splitRows(signOut, timed, (() => { let n = 0; return () => `g${++n}`; })());
-  assert.deepEqual(split.map((r) => `${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ["06:30-07:00 2026-09-27 30", "07:00-08:45 2026-09-28 105"]);
+  assert.deepEqual(split.map((r) => `${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ["06:30-07:00 2026-10-18 30", "07:00-08:45 2026-10-19 105"]);
   // Split or whole, the sign-out bills the same dollars.
-  const days = new Set(["2026-09-27", "2026-09-28"]);
+  const days = new Set(["2026-10-18", "2026-10-19"]);
   const whole = computeBilling(TIMED_CONTRACT, [signOut], true, [signOut], [], days);
   const parts = computeBilling(timed, split, true, split, [], days);
   assert.equal(whole.total, parts.total);
   assert.equal(whole.total, 3000 + 525);
 });
 
-// ── The owner-shaped invoice ─────────────────────────────────────
+// ── The timed-block invoice ─────────────────────────────────────
 
 const timedInvoice = () => {
   const list = timedBlockEntries();
@@ -210,26 +210,26 @@ const timedInvoice = () => {
   return { list, priced, inv: { lines: priced.lines, total: priced.total } };
 };
 
-test("Sep 25 4:00 PM to Sep 28 7:00 AM bills three call days, not four", () => {
+test("Oct 16 4:00 PM to Oct 19 7:00 AM bills three call days, not four", () => {
   const { priced } = timedInvoice();
   const stipendDays = priced.lines.filter((l) => l.label === "On-call coverage (daily total)").map((l) => l.date);
-  assert.deepEqual(stipendDays, ["2026-09-25", "2026-09-26", "2026-09-27"]);
-  assert.equal(isStipendDay(TIMED_CONTRACT, "2026-09-28", []), false);
-  assert.deepEqual(startedCoverageDays(TIMED_CONTRACT), ["2026-09-25", "2026-09-26", "2026-09-27"]);
-  // Before the call begins on Sep 25 its stipend is not yet owed.
-  assert.deepEqual(startedCoverageDays(TIMED_CONTRACT, new Date(at("2026-09-25 15:59"))), []);
-  assert.deepEqual(startedCoverageDays(TIMED_CONTRACT, new Date(at("2026-09-25 16:00"))), ["2026-09-25"]);
+  assert.deepEqual(stipendDays, ["2026-10-16", "2026-10-17", "2026-10-18"]);
+  assert.equal(isStipendDay(TIMED_CONTRACT, "2026-10-19", []), false);
+  assert.deepEqual(startedCoverageDays(TIMED_CONTRACT), ["2026-10-16", "2026-10-17", "2026-10-18"]);
+  // Before the call begins on Oct 16 its stipend is not yet owed.
+  assert.deepEqual(startedCoverageDays(TIMED_CONTRACT, new Date(at("2026-10-16 15:59"))), []);
+  assert.deepEqual(startedCoverageDays(TIMED_CONTRACT, new Date(at("2026-10-16 16:00"))), ["2026-10-16"]);
 });
 
-test("day 1: orientation $1,950, before call began 0.50 h $150, stipend $3,000, callback beyond 0.50 h $150, total $5,250", () => {
+test("day 1: orientation $1,625, before call began 0.50 h $150, stipend $3,000, callback beyond 0.50 h $150, total $4,925", () => {
   const { inv } = timedInvoice();
   const [fri] = invoiceDays(inv);
-  assert.equal(fri.title, "Fri, Sep 25, 2026");
-  assert.equal(fri.window, "call 4:00 PM Sep 25 to 7:00 AM Sep 26");
-  assert.equal(fri.total, 5250);
+  assert.equal(fri.title, "Fri, Oct 16, 2026");
+  assert.equal(fri.window, "call 4:00 PM Oct 16 to 7:00 AM Oct 17");
+  assert.equal(fri.total, 4925);
   assert.deepEqual(table(fri), [
-    ["Orientation", "8:30 AM–11:00 AM", "2.50 h @ $300.00/hr", "$750.00"],
-    ["Orientation", "11:30 AM–3:30 PM", "4.00 h @ $300.00/hr", "$1,200.00"],
+    ["Orientation", "8:30 AM–11:00 AM", "2.50 h @ $250.00/hr", "$625.00"],
+    ["Orientation", "11:30 AM–3:30 PM", "4.00 h @ $250.00/hr", "$1,000.00"],
     ["Before call began at 4:00 PM", "", "0.50 h @ $300.00/hr", "$150.00"],
     ["Rounding: Synthetic rounds and family meeting", "3:30 PM–4:00 PM", "0.50 h", "$150.00"],
     ["Call stipend", "covers the first 4.00 h of work", "4.00 h used of 4.00 h", "$3,000.00"],
@@ -240,14 +240,14 @@ test("day 1: orientation $1,950, before call began 0.50 h $150, stipend $3,000, 
     ["Call: Synthetic phone call C", "1:45 AM–2:00 AM", "0.25 h", "$75.00"],
     ["Call: Synthetic ED call D", "2:00 AM–2:15 AM", "0.25 h", "$75.00"],
   ]);
-  assert.deepEqual(fri.rows.filter((r) => r.sums).map((r) => r.amount), [750, 1200, 150, 3000, 150]);
+  assert.deepEqual(fri.rows.filter((r) => r.sums).map((r) => r.amount), [625, 1000, 150, 3000, 150]);
 });
 
-test("the sign-out on the last morning: 30 min inside Sep 27's call day, 105 min after call ended at $300/hr", () => {
+test("the sign-out on the last morning: 30 min inside Oct 18's call day, 105 min after call ended at $300/hr", () => {
   const { priced, inv } = timedInvoice();
   const days = invoiceDays(inv);
   assert.deepEqual(days.map((d) => d.window), [
-    "call 4:00 PM Sep 25 to 7:00 AM Sep 26", "call 7:00 AM Sep 26 to 7:00 AM Sep 27", "call 7:00 AM Sep 27 to 7:00 AM Sep 28",
+    "call 4:00 PM Oct 16 to 7:00 AM Oct 17", "call 7:00 AM Oct 17 to 7:00 AM Oct 18", "call 7:00 AM Oct 18 to 7:00 AM Oct 19",
   ]);
   const sun = days[2];
   assert.deepEqual(table(sun).slice(-4), [
@@ -258,20 +258,20 @@ test("the sign-out on the last morning: 30 min inside Sep 27's call day, 105 min
   ]);
   assert.equal(sun.total, 3000 + 1350 + 525);
   const after = priced.lines.find((l) => l.kind === "outside" && l.side === "after");
-  assert.deepEqual([after.date, after.minutes, after.rate, after.amount], ["2026-09-27", 105, 300, 525]);
-  assert.equal(priced.dayOverMin["2026-09-27"], 270, "only minutes inside the block draw the allowance");
+  assert.deepEqual([after.date, after.minutes, after.rate, after.amount], ["2026-10-18", 105, 300, 525]);
+  assert.equal(priced.dayOverMin["2026-10-18"], 270, "only minutes inside the block draw the allowance");
 });
 
 test("same grand total and minutes as the same block entered without times (end date = last call day)", () => {
   const { list, priced, inv } = timedInvoice();
   const untimed = computeBilling(UNTIMED_CONTRACT, list, true, list, [], null);
-  assert.equal(priced.total, 14925);
+  assert.equal(priced.total, 14600);
   assert.equal(untimed.total, priced.total);
   assert.equal(untimed.totalMin, priced.totalMin);
-  assert.deepEqual(invoiceDays(inv).map((d) => d.total), [5250, 4800, 4875]);
+  assert.deepEqual(invoiceDays(inv).map((d) => d.total), [4925, 4800, 4875]);
   // The same agreement entered with the end date as written and no times
   // bills a fourth, empty stipend day: the $3,000 that should not be there.
-  const asWritten = computeBilling({ ...UNTIMED_CONTRACT, coveragePeriods: [{ start: "2026-09-25", end: "2026-09-28" }] }, list, true, list, [], null);
+  const asWritten = computeBilling({ ...UNTIMED_CONTRACT, coveragePeriods: [{ start: "2026-10-16", end: "2026-10-19" }] }, list, true, list, [], null);
   assert.equal(asWritten.total - priced.total, 3000);
 });
 
@@ -287,9 +287,9 @@ test("a later invoice: work already billed draws the allowance with its minutes 
   const rounding = { ...list[2], invoiceId: "inv-1" };
   const calls = list.slice(3, 7);
   const allEntries = [list[0], list[1], rounding, ...calls];
-  const earlier = { id: "inv-1", contractId: TIMED_CONTRACT.id, entryIds: [rounding.id], dayOverMin: { "2026-09-25": 0 },
-    lines: [{ date: "2026-09-25", label: "On-call coverage (daily total)", amount: 3150 }] };
-  const priced = computeBilling(TIMED_CONTRACT, calls, true, allEntries, [earlier], new Set(["2026-09-25"]));
+  const earlier = { id: "inv-1", contractId: TIMED_CONTRACT.id, entryIds: [rounding.id], dayOverMin: { "2026-10-16": 0 },
+    lines: [{ date: "2026-10-16", label: "On-call coverage (daily total)", amount: 3150 }] };
+  const priced = computeBilling(TIMED_CONTRACT, calls, true, allEntries, [earlier], new Set(["2026-10-16"]));
   const day = priced.lines.find((l) => l.label === "Additional work (daily total)");
   assert.deepEqual([day.priorMin, day.loggedMin, day.overMin, day.amount], [210, 270, 30, 150]);
   assert.equal(priced.lines.some((l) => l.kind === "outside"), false, "the rounding's 30 minutes before the call went out on its own invoice");
@@ -298,18 +298,18 @@ test("a later invoice: work already billed draws the allowance with its minutes 
 
 test("every format prints the window and the before/after rows, and the day totals add up to the invoice", async () => {
   const { inv } = timedInvoice();
-  const DOC = { number: "INV-SYN-2", physician: "Synthetic Physician, DO", facility: "Synthetic Regional Hospital", agency: "Synthetic Staffing", periodStart: "2026-09-25", periodEnd: "2026-09-27", terms: "Synthetic terms" };
+  const DOC = { number: "INV-SYN-2", physician: "Synthetic Physician, DO", facility: "Synthetic Regional Hospital", agency: "Synthetic Staffing", periodStart: "2026-10-16", periodEnd: "2026-10-18", terms: "Synthetic terms" };
   const doc = { ...DOC, ...inv };
   const layout = invoiceLayout(doc);
   assert.equal(layout.mode, "days", layout.reason);
   assert.equal(cents(layout.days.reduce((s, d) => s + d.total, 0)), cents(inv.total));
   const text = invoicePlainText(doc);
-  for (const words of ["Fri, Sep 25, 2026 \u{b7} call 4:00 PM Sep 25 to 7:00 AM Sep 26", "Before call began at 4:00 PM", "After call ended at 7:00 AM", "Total for Fri, Sep 25, 2026: $5,250.00", "TOTAL DUE: $14,925.00"]) {
+  for (const words of ["Fri, Oct 16, 2026 \u{b7} call 4:00 PM Oct 16 to 7:00 AM Oct 17", "Before call began at 4:00 PM", "After call ended at 7:00 AM", "Total for Fri, Oct 16, 2026: $4,925.00", "TOTAL DUE: $14,600.00"]) {
     assert.ok(text.includes(words), `text: ${words}`);
   }
   assert.ok(!text.includes(EM_DASH));
   const pdf = Buffer.from(buildInvoicePdf(doc).output("arraybuffer")).toString("latin1");
-  for (const words of ["call 4:00 PM Sep 25 to 7:00 AM Sep 26", "Before call began at 4:00 PM", "After call ended at 7:00 AM", "Call stipend"]) assert.ok(pdf.includes(words), `PDF: ${words}`);
+  for (const words of ["call 4:00 PM Oct 16 to 7:00 AM Oct 17", "Before call began at 4:00 PM", "After call ended at 7:00 AM", "Call stipend"]) assert.ok(pdf.includes(words), `PDF: ${words}`);
   const wb = XLSX.read(new Uint8Array(await invoiceXlsxFile(doc).arrayBuffer()), { type: "array" });
   const rows = XLSX.utils.sheet_to_json(wb.Sheets.Invoice, { header: 1, defval: "" });
   assert.ok(rows.some((r) => r[0] === "Before call began at 4:00 PM" && r[3] === 150));
@@ -320,7 +320,7 @@ test("every format prints the window and the before/after rows, and the day tota
   assert.equal(cents(amounts.reduce((s, v) => s + v, 0)), cents(inv.total), "the Amount column sums to the invoice");
   const zip = await JSZip.loadAsync(await (await invoiceDocxFile(doc)).arrayBuffer());
   const xml = await zip.file("word/document.xml").async("string");
-  for (const words of ["call 4:00 PM Sep 25 to 7:00 AM Sep 26", "Before call began at 4:00 PM", "After call ended at 7:00 AM"]) assert.ok(xml.includes(words), `Word: ${words}`);
+  for (const words of ["call 4:00 PM Oct 16 to 7:00 AM Oct 17", "Before call began at 4:00 PM", "After call ended at 7:00 AM"]) assert.ok(xml.includes(words), `Word: ${words}`);
   assert.ok(!JSON.stringify(layout).includes(EM_DASH));
 });
 
@@ -332,10 +332,10 @@ test("times stored the loose way (\"4pm\", from a scan) bill the same as HH:MM",
 
 test("orientation keeps its own terms inside or outside the block", () => {
   const c = TIMED_CONTRACT;
-  const o = entry(c, "Orientation", "2026-09-25 17:00", "2026-09-25 18:00");
-  const priced = computeBilling(c, [o], true, [o], [], new Set(["2026-09-25"]));
+  const o = entry(c, "Orientation", "2026-10-16 17:00", "2026-10-16 18:00");
+  const priced = computeBilling(c, [o], true, [o], [], new Set(["2026-10-16"]));
   const line = priced.lines.find((l) => l.kind === "orientation");
-  assert.deepEqual([line.minutes, line.amount], [60, 300]);
+  assert.deepEqual([line.minutes, line.amount], [60, 250]);
   assert.equal(priced.lines.some((l) => l.kind === "outside"), false);
 });
 
@@ -343,25 +343,25 @@ test("an entry crossing the block start is shared out by its clock time, in whol
   const c = TIMED_CONTRACT;
   // 3:50 to 4:40 PM, 50 raw minutes, billed 60: 10 min before, 40 inside,
   // so 1 of 4 increments before (largest remainder) and 3 inside.
-  const e = entry(c, "Procedure", "2026-09-25 15:50", "2026-09-25 16:40");
+  const e = entry(c, "Procedure", "2026-10-16 15:50", "2026-10-16 16:40");
   const parts = live.coveragePartsOf(c, e);
   assert.deepEqual([parts.before, parts.inside, parts.after], [15, 45, 0]);
   // A call answered a minute before 4:00 bills its minimum before the call began.
-  const call = entry(c, "Call", "2026-09-25 15:59", "2026-09-25 16:01");
+  const call = entry(c, "Call", "2026-10-16 15:59", "2026-10-16 16:01");
   assert.deepEqual(live.coveragePartsOf(c, call) && [live.coveragePartsOf(c, call).before, live.coveragePartsOf(c, call).inside], [15, 0]);
   // Wholly inside: nothing to share.
-  assert.equal(live.coveragePartsOf(c, entry(c, "Call", "2026-09-25 17:00", "2026-09-25 17:02")), null);
+  assert.equal(live.coveragePartsOf(c, entry(c, "Call", "2026-10-16 17:00", "2026-10-16 17:02")), null);
   assert.equal(live.stipendMinutesOf(c, e), 45);
   assert.deepEqual(live.outsideChargeOf(c, e), { minutes: 15, amount: 75, rate: 300 });
 });
 
 test("two blocks back to back: work across the seam is inside coverage, as before", () => {
   const c = { ...SIX_TO_SIX, coveragePeriods: [
-    { start: "2026-11-05", startTime: "06:00", end: "2026-11-12", endTime: "06:00" },
-    { start: "2026-11-12", startTime: "06:00", end: "2026-11-15", endTime: "06:00" },
+    { start: "2026-11-12", startTime: "06:00", end: "2026-11-19", endTime: "06:00" },
+    { start: "2026-11-19", startTime: "06:00", end: "2026-11-22", endTime: "06:00" },
   ] };
-  const e = entry(c, "Procedure", "2026-11-12 05:30", "2026-11-12 06:30");
-  assert.equal(e.callDay, "2026-11-11");
+  const e = entry(c, "Procedure", "2026-11-19 05:30", "2026-11-19 06:30");
+  assert.equal(e.callDay, "2026-11-18");
   assert.equal(live.coveragePartsOf(c, e), null);
 });
 
@@ -369,7 +369,7 @@ test("two blocks back to back: work across the seam is inside coverage, as befor
 
 test("Northfield without times: every line, amount, total and minute byte-identical to 4b65234a", () => {
   const list = northfieldEntries();
-  for (const days of [null, new Set(["2026-09-25", "2026-09-27"])]) {
+  for (const days of [null, new Set(["2026-10-16", "2026-10-18"])]) {
     assert.equal(JSON.stringify(computeBilling(NORTHFIELD_CONTRACT, list, true, list, [], days)), JSON.stringify(frozen.computeBilling(NORTHFIELD_CONTRACT, list, true, list, [], days)));
   }
 });

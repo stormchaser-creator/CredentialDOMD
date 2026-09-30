@@ -98,7 +98,7 @@ test('custom category tables: shape, isolation, the membership write gate, and a
       insert into public.custom_categories (id, user_id, name, slug, fields) values
         ('10000000-0000-4000-8000-000000000001', '${A}', 'Hospital ID Badges', 'badge hospital id', '[{"key":"badgeNumber","label":"Badge number","type":"text"}]');
       insert into public.custom_records (id, user_id, category_id, category_name, name, field_values, document_ids) values
-        ('20000000-0000-4000-8000-000000000001', '${A}', '10000000-0000-4000-8000-000000000001', 'Hospital ID Badges', 'Penrose badge', '{"badgeNumber":"PX-1182"}', '["d1"]')`));
+        ('20000000-0000-4000-8000-000000000001', '${A}', '10000000-0000-4000-8000-000000000001', 'Hospital ID Badges', 'Juniper badge', '{"badgeNumber":"PX-1182"}', '["d1"]')`));
     const n = await pg.sql(`select count(*) from public.custom_records where user_id = '${A}'`);
     assert.equal(n, '1');
   });

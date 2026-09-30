@@ -4,12 +4,12 @@ import concurrent.futures, hashlib, json, os, subprocess, tempfile
 from pathlib import Path
 import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
 import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
-BIN=Path('/opt/homebrew/opt/postgresql@17/bin'); ROOT=Path(__file__).resolve().parents[2]
+BIN=Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin'); ROOT=Path(__file__).resolve().parents[2]
 ENV={k:v for k,v in os.environ.items() if not k.startswith('PG')}; checks=[]
 def check(name,ok):
  if not ok: raise AssertionError(name)
  checks.append(name)
-with tempfile.TemporaryDirectory(prefix='limited-billing-',dir='/private/tmp') as temp:
+with tempfile.TemporaryDirectory(prefix='limited-billing-',dir='/tmp') as temp:
  root=Path(temp); socket=root/'socket';socket.mkdir()
  def run(*args,**kw):return subprocess.run([str(a) for a in args],text=True,capture_output=True,env=ENV,**kw)
  slot=pg_slot.acquire(root/'data')

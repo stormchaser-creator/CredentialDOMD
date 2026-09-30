@@ -25,9 +25,9 @@ const BOX = /[─-╿]/;
 // ── A realistic partially-paid invoice: three line items, one payment in ──
 const partial = {
   number: "INV-0012",
-  physician: "Eric Whitney, DO", npi: "1234567890", email: "eric@example.com",
-  facility: "Arrowhead Regional Medical Center", agency: "ANMG",
-  location: "Colton, CA", billTo: "ap@example.com",
+  physician: "Rowan Testa, DO", npi: "1234567890", email: "rowan@example.com",
+  facility: "Cedar Ridge Regional Medical Center", agency: "Summit Staffing",
+  location: "Larkfield, CA", billTo: "ap@example.com",
   periodStart: "2026-08-01", periodEnd: "2026-08-15",
   terms: "$1,500.00 per on-call day covering the first 4 hours of logged work, time beyond @ $300.00/hr; billed in 15-minute increments",
   lines: [
@@ -71,8 +71,8 @@ eq("balance derived when not supplied", invoicePayment({ total: 100, paid: 40 })
 eq("a bare invoice (first send) has no payment", invoicePayment({ total: 100 }), { total: 100, paid: 0, balance: 100, hasPayment: false, partial: false, settled: false });
 
 // ── Subject ──
-eq("subject names the sender and the facility", subject, "Invoice INV-0012 from Eric Whitney, DO for Arrowhead Regional Medical Center");
-eq("subject degrades without a facility", invoiceSubject({ number: "INV-0001", physician: "Eric Whitney, DO" }), "Invoice INV-0001 from Eric Whitney, DO");
+eq("subject names the sender and the facility", subject, "Invoice INV-0012 from Rowan Testa, DO for Cedar Ridge Regional Medical Center");
+eq("subject degrades without a facility", invoiceSubject({ number: "INV-0001", physician: "Rowan Testa, DO" }), "Invoice INV-0001 from Rowan Testa, DO");
 ok("subject has no em dash", !subject.includes(EM_DASH));
 
 // ── Share-sheet blurb ──
@@ -80,14 +80,14 @@ const [blurbLead, ...blurbRest] = blurb.split("\n\n");
 eq("blurb leads with the subject line (iOS Mail may promote it)", blurbLead.trim(), subject + ".");
 ok("blurb body is one flowing paragraph", blurbRest.length === 1 && !blurbRest[0].includes("\n"));
 ok("blurb reads correctly with every line break stripped", /Medical Center\. The attached invoice/.test(blurb.replace(/\n/g, "")));
-ok("blurb doesn't repeat the invoice number/physician/facility the subject already gave", blurb.split("INV-0012").length === 2 && blurb.split("Arrowhead Regional Medical Center").length === 2);
+ok("blurb doesn't repeat the invoice number/physician/facility the subject already gave", blurb.split("INV-0012").length === 2 && blurb.split("Cedar Ridge Regional Medical Center").length === 2);
 ok("blurb has no em dash", !blurb.includes(EM_DASH));
 ok("blurb has no CR", !blurb.includes("\r"));
 ok("partial blurb never calls the full amount 'total due'", !blurb.includes("Total due"));
 ok("partial blurb states total, paid, balance", blurb.includes("Invoice total: $3,025.00. Paid to date: $1,500.00. Balance due: $1,525.00."));
 ok("unpaid blurb states total due", invoiceCoverBlurb(unpaid).includes("Total due: $3,025.00."));
 ok("settled blurb says paid in full", invoiceCoverBlurb(settled).includes("Invoice total: $3,025.00, paid in full."));
-ok("blurb signs with name, NPI, email", blurb.includes("Thank you, Eric Whitney, DO (NPI 1234567890, eric@example.com)."));
+ok("blurb signs with name, NPI, email", blurb.includes("Thank you, Rowan Testa, DO (NPI 1234567890, rowan@example.com)."));
 ok("blurb mentions the period", blurb.includes("covers Aug 1, 2026 through Aug 15, 2026"));
 ok("blurb says 'Below' when the invoice text follows in the same body", invoiceCoverBlurb(partial, { attached: false }).includes("The invoice below"));
 {
@@ -104,7 +104,7 @@ ok("letter opens with a salutation", letter.startsWith("Hello,\n\n"));
 ok("letter puts the money on its own lines", letter.includes("\n\nInvoice total: $3,025.00\nPaid to date: $1,500.00\nBalance due: $1,525.00\n\n"));
 ok("unpaid letter shows a single total-due line", invoiceCoverEmail(unpaid).includes("\n\nTotal due: $3,025.00\n\n"));
 ok("settled letter says paid in full", invoiceCoverEmail(settled).includes("Invoice total: $3,025.00\nPaid in full. No balance is due."));
-ok("letter signs off on separate lines", letter.endsWith("Thank you,\nEric Whitney, DO\nNPI 1234567890\neric@example.com"));
+ok("letter signs off on separate lines", letter.endsWith("Thank you,\nRowan Testa, DO\nNPI 1234567890\nrowan@example.com"));
 {
   const bare = invoiceCoverEmail({ number: "INV-0003", total: 200 });
   ok("bare letter has no undefined/null", !/undefined|null/.test(bare), bare);
@@ -127,7 +127,7 @@ ok("letter signs off on separate lines", letter.endsWith("Thank you,\nEric Whitn
 ok("rule is plain ASCII", /^-+$/.test(TEXT_RULE));
 ok("rule fits a phone-width Mail body", TEXT_RULE.length <= 32);
 {
-  const legacy = ["INVOICE INV-0004", "─".repeat(40), "From: Eric Whitney, DO", "─".repeat(40), "TOTAL DUE: $900.00"].join("\r\n");
+  const legacy = ["INVOICE INV-0004", "─".repeat(40), "From: Rowan Testa, DO", "─".repeat(40), "TOTAL DUE: $900.00"].join("\r\n");
   const fixed = normalizeInvoiceText(legacy);
   ok("legacy box rules are replaced", !BOX.test(fixed));
   eq("legacy CRLF is normalized to \\n", fixed.split("\n").length, 5);
@@ -153,19 +153,19 @@ for (const inv of [partial, unpaid, settled, { number: "X" }]) {
 
 // ── Day-rate invoice lines (dutyPay): no em dash, still keyed as call lines ──
 {
-  const contract = { dayRate: 2060.09, callRateGrid: [{ hospital: "Arrowhead Regional Medical Center (ARMC)", primary: 500, backup: 250 }] };
-  const pay = dutyDayPay(contract, { date: "2026-08-03", workedDay: true, callPeriods: [{ hospital: "Arrowhead Regional Medical Center (ARMC)", role: "primary" }] });
-  eq("day-rate call line label", pay.lines[1].label, "On call: Arrowhead Regional Medical Center (ARMC) (primary)");
+  const contract = { dayRate: 1875.4, callRateGrid: [{ hospital: "Cedar Ridge Regional Medical Center (CRRMC)", primary: 450, backup: 225 }] };
+  const pay = dutyDayPay(contract, { date: "2026-08-03", workedDay: true, callPeriods: [{ hospital: "Cedar Ridge Regional Medical Center (CRRMC)", role: "primary" }] });
+  eq("day-rate call line label", pay.lines[1].label, "On call: Cedar Ridge Regional Medical Center (CRRMC) (primary)");
   ok("day-rate call line still keys as a call line (summarizeDuties/DutyLog use startsWith)", pay.lines[1].label.startsWith("On call"));
   for (const l of pay.lines) ok("no em dash in day-rate line labels", !l.label.includes(EM_DASH), l.label);
-  eq("day-rate day total", pay.total, 2560.09);
+  eq("day-rate day total", pay.total, 2325.4);
 }
 
 // -- Expense invoices say what they are (ticket e8cc2a02) --
 {
   const expense = {
-    number: "EXP-0003", kind: "expenses", physician: "Eric Whitney, DO", npi: "1234567890", email: "eric@example.com",
-    facility: "ANMG Locums", periodStart: "2026-08-03", periodEnd: "2026-08-09", total: 412.37,
+    number: "EXP-0003", kind: "expenses", physician: "Rowan Testa, DO", npi: "1234567890", email: "rowan@example.com",
+    facility: "Summit Locums", periodStart: "2026-08-03", periodEnd: "2026-08-09", total: 412.37,
   };
   const eBlurb = invoiceCoverBlurb({ ...expense, receipts: 3 });
   const eLetter = invoiceCoverEmail({ ...expense, receipts: 3 });
@@ -177,7 +177,7 @@ for (const inv of [partial, unpaid, settled, { number: "X" }]) {
     ok("expense cover counts the receipts that ride along", t.includes("3 receipts are attached."), t);
     ok("expense cover has no em dash", !t.includes(EM_DASH));
   }
-  ok("expense blurb still leads with the subject", eBlurb.startsWith("Invoice EXP-0003 from Eric Whitney, DO for ANMG Locums. \n\n"));
+  ok("expense blurb still leads with the subject", eBlurb.startsWith("Invoice EXP-0003 from Rowan Testa, DO for Summit Locums. \n\n"));
   eq("expense letter keeps five paragraphs", eLetter.split("\n\n").length, 5);
   ok("one receipt reads in the singular", invoiceCoverBlurb({ ...expense, receipts: 1 }).includes("The receipt is attached."));
   for (const receipts of [0, undefined, -2, "x"]) {

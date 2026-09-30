@@ -94,6 +94,9 @@ test('AppContext saves, edits, stars and deletes a device-only record without an
   const record = name => (...args) => { cloud.push(name); return Promise.resolve(args); };
   const context = {
     useCallback: fn => fn, window: { alert() {} }, user: { id: UID }, userIdRef: { current: 'profile' },
+    // addItem records a document's storage path once it lands (SYNC-017), and
+    // canAddItem answers for the same owner.
+    offlineMode: false, dataOwnerRef: { current: UID }, getActiveUserId: () => UID, setData() {}, allowsDataChange: () => true,
     get dataRef() { return state; },
     updateSection: (key, updater) => { state.current = { ...state.current, [key]: updater(state.current[key]) }; return true; },
     guardedSetData: next => { state.current = next; return true; },
@@ -303,9 +306,14 @@ test('the mail, text-message, clipboard and share paths scrub, and the error rep
 
 test('restoring a JSON backup brings Protected Identity back to this device only', async () => {
   const src = await readFile(new URL('../../src/components/features/DataExport.jsx', import.meta.url), 'utf8');
-  assert.match(src, /mergeIdentityRestore\(data\[IDENTITY_SECTION\], raw\[IDENTITY_SECTION\]\)/);
+  // Merged with the records on this device as they are when the restore
+  // plans and applies (not a copy from before it read the ledger).
+  assert.match(src, /mergeIdentityRestore\(base\?\.\[IDENTITY_SECTION\], raw\[IDENTITY_SECTION\]\)/);
   // The cloud push after a restore walks the synced collections only, and
-  // Protected Identity is not one of them.
-  assert.match(src, /for \(const key of COLLECTION_KEYS\) \{\s*if \(merged\[key\]\?\.length > 0\) bulkSync/);
+  // Protected Identity is not one of them: the plan is built over
+  // COLLECTION_KEYS and only its changed rows are sent (SYNC-015).
+  assert.match(src, /const options = \{ collectionKeys: COLLECTION_KEYS/);
+  assert.match(src, /planRestore\(base, raw, options\)/);
+  assert.match(src, /for \(const \[key, rows\] of Object\.entries\(plan\.changed\)\)/);
   assert.doesNotMatch(src, /bulkSync\([^)]*IDENTITY_SECTION/);
 });

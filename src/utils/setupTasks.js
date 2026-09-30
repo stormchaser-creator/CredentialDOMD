@@ -25,7 +25,7 @@
 
 import { isNonExpiring } from "./helpers.js";
 import { isAlertable, isInactive } from "./lifecycle.js";
-import { emailRemindersOn } from "./reminderPreferences.js";
+import { emailRemindersOn, reminderLeadDays } from "./reminderPreferences.js";
 import { STATE_NAMES } from "../constants/states.js";
 import { CV_FILENAME_RE } from "./cvImport.js";
 
@@ -88,6 +88,8 @@ const hasDoc = (data, section, id) => linkedDocs(data, section, id).length > 0;
  * states and entered only the old licence has nothing being watched.
  */
 const currentLicenses = (ctx) => ctx.licenses.filter((l) => !isInactive(l));
+/** The DEA registrations the DEA row and its drawer are about: never a historical or superseded one. */
+export const currentDeaRecords = (licenses) => (licenses || []).filter((l) => l && isDea(l) && !isInactive(l));
 const holdsMedicalLicense = (ctx) => currentLicenses(ctx).some(isMedicalLicense);
 
 /** The two records every credentialing office asks for a copy of. */
@@ -131,6 +133,7 @@ export const EMPTY_SETUP_STATE = Object.freeze({
   hiddenUntil: null,
   proCounted: null,
   betaCounted: null,
+  cvImportedAt: null,
   declared: {},
   tasks: {},
 });
@@ -174,6 +177,10 @@ export function normalizeSetupState(raw) {
         t1: half(r.progress.t1), t2: half(r.progress.t2),
       }
       : null,
+    // When a CV import first saved something. A positive fact, so it does
+    // not live in `declared`, which holds only declared negatives (noCv,
+    // noDea) and which the admin summary counts as "not applicable".
+    cvImportedAt: typeof r.cvImportedAt === "string" && r.cvImportedAt ? r.cvImportedAt : null,
     declared: { ...declared },
     tasks: { ...tasks },
   };
@@ -214,10 +221,15 @@ export const TASK_DEFS = [
     declaredNa: "noCv",
     naDetail: "Not applicable. You said you would rather type it in.",
     // Done when a CV is on file, OR when the record it would have filled is
-    // already there. The second clause is what keeps an established account
-    // from being told it is behind on a step it no longer needs.
-    doneWhen: ({ data }) =>
-      (data.documents || []).some((d) => CV_FILENAME_RE.test(d?.name || ""))
+    // already there, OR when a CV import has saved something (the review
+    // stamps cvImportedAt: it reads the file without keeping it, and
+    // a CV that saved only licences and publications, or one whose file name
+    // does not say CV, left this row open forever). The second clause is what
+    // keeps an established account from being told it is behind on a step it
+    // no longer needs.
+    doneWhen: ({ data, s }) =>
+      !!normalizeSetupState(s?.setupState).cvImportedAt
+      || (data.documents || []).some((d) => CV_FILENAME_RE.test(d?.name || ""))
       || ((data.education || []).length > 0 && (data.workHistory || []).length > 0),
     evidenceWhen: null,
     cardLine: () => "Upload your CV and the app reads your degree, training, positions and licenses off it.",
@@ -358,7 +370,7 @@ export const TASK_DEFS = [
     verb: "Turn on reminders",
     doneWhen: ({ s }) =>
       // Email reminders read blank as on, as send-reminders mails them.
-      !!(emailRemindersOn(s.notifyEmail) || s.notifyBrowser || s.notifyText) && !!s.email && Number(s.reminderLeadDays) > 0,
+      !!(emailRemindersOn(s.notifyEmail) || s.notifyBrowser || s.notifyText) && !!s.email && reminderLeadDays(s.reminderLeadDays) > 0,
     evidenceWhen: null,
     cardLine: () => "Reminders are off. Everything you have entered is sitting here silently.",
     nextPhrase: () => "turning reminders on",
@@ -667,7 +679,7 @@ export function evidenceQueue(data, taskId) {
     case "proof": return q("licenses", proofRecords(ctx));
     case "boards": return q("licenses", boardRecords(ctx));
     case "lifeSupport": return q("licenses", lifeSupportRecords(ctx));
-    case "dea": return q("licenses", ctx.licenses.filter(isDea));
+    case "dea": return q("licenses", currentDeaRecords(ctx.licenses));
     case "education": return q("education", educationRecords(ctx));
     case "idPhoto": return q("travelDocs", idRecords(ctx));
     case "privileges": return q("privileges", privilegeRecords(ctx));
@@ -966,8 +978,18 @@ export function withProSnapshot(state, { proCounted, betaCounted }, prune) {
 export function withTask(state, id, status, { why = "", now = new Date() } = {}, prune) {
   const next = normalizeSetupState(state);
   const tasks = { ...next.tasks };
-  if (!status) delete tasks[id];
-  else tasks[id] = { s: status, at: new Date(now).toISOString(), ...(why ? { why } : {}) };
+  if (!status) {
+    delete tasks[id];
+    // Clearing undoes both kinds of "does not apply": a stored na, and the
+    // declared negative some rows close on (noDea, noCv). Put it back left
+    // the declaration standing, and the row never came back.
+    const key = TASK_DEFS.find((d) => d.id === id)?.declaredNa;
+    if (key && next.declared?.[key]) {
+      const declared = { ...next.declared };
+      delete declared[key];
+      return write(next, { tasks, declared }, prune);
+    }
+  } else tasks[id] = { s: status, at: new Date(now).toISOString(), ...(why ? { why } : {}) };
   return write(next, { tasks }, prune);
 }
 
@@ -977,6 +999,15 @@ export function withTask(state, id, status, { why = "", now = new Date() } = {},
 export function withProgress(state, { done, total, t1, t2 }, at, prune) {
   const next = normalizeSetupState(state);
   return write(next, { progress: { done, total, at: at || null, t1: half(t1), t2: half(t2) } }, prune);
+}
+
+/**
+ * A CV import saved something. Stamped once: the first import is the one
+ * that closed "Start from your CV".
+ */
+export function withCvImported(state, nowIso, prune) {
+  const next = normalizeSetupState(state);
+  return next.cvImportedAt ? pruneSetupState(next, prune) : write(next, { cvImportedAt: nowIso }, prune);
 }
 
 export function withDeclared(state, key, value, prune) {
@@ -1018,9 +1049,21 @@ export function homeCardForm(setup, { now = new Date() } = {}) {
 }
 
 /**
- * The whole board as one fraction. Tier 1 is the number that matters while
- * setup is running; once it is stamped, "Setup" means the whole list, which
- * is what the terminal Home line and the Setup tiles count.
+ * The one count every Setup surface prints (the Credentials rail, the More
+ * tile, the Setup strip and Home's Form D line): Tier 1 while it is
+ * unfinished, the packet once Tier 1 is complete and there is a packet.
+ * Form D used to print the whole board, so a Tier 1 row that came undone
+ * without a regression line read "13 of 15" on Home and "5 of 6" everywhere
+ * else.
+ */
+export function setupSurfaceCounts(setup) {
+  const { tier1, tier2 } = setup.counts;
+  return tier1.complete && tier2.total > 0 ? tier2 : tier1;
+}
+
+/**
+ * The whole board as one fraction: the score stamped for somebody who cannot
+ * read this physician's records. The Setup surfaces print setupSurfaceCounts.
  */
 export function boardCounts(setup) {
   const a = setup.counts.tier1;
@@ -1258,8 +1301,11 @@ export function setupProgressSummary(setupState) {
     if (label) bits.push(`last finished: ${label}`);
   }
   const skipped = Object.values(s.tasks || {}).filter((t) => t?.s === "skipped").length;
+  // Only a declared negative a task reads (noCv, noDea) is a task that does
+  // not apply; anything else stored under `declared` is not one.
+  const naKeys = new Set(TASK_DEFS.map((d) => d.declaredNa).filter(Boolean));
   const na = Object.values(s.tasks || {}).filter((t) => t?.s === "na").length
-    + Object.keys(s.declared || {}).length;
+    + Object.keys(s.declared || {}).filter((k) => naKeys.has(k) && s.declared[k] === true).length;
   if (skipped) bits.push(`${skipped} skipped`);
   if (na) bits.push(`${na} not applicable`);
   const detail = bits.join(", ");

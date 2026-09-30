@@ -88,6 +88,30 @@ input, textarea, select {
   font-size: inherit;
 }
 
+/* ─── Admin tap targets ─────────────────────────────────────────
+   Below the desk breakpoint (AppContext isDesktop: 1024 px), every control
+   on the owner's Admin screens is at least 32 x 32 px (QA ADMIN-001 to
+   ADMIN-004 and ADMIN-008: row actions, search boxes and filters were 24 px,
+   disclosures 23 px, text buttons 14 px). The screens' inline styles set
+   padding and fonts but no height, so this adds only the floor; the desk
+   layout is unchanged. AdminDashboard's root carries the class. */
+@media (max-width: 1023.98px) {
+  .cdomd-admin button,
+  .cdomd-admin select,
+  .cdomd-admin input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  .cdomd-admin summary,
+  .cdomd-admin [role="button"] {
+    min-height: 32px;
+  }
+  .cdomd-admin button,
+  .cdomd-admin [role="button"] {
+    min-width: 32px;
+  }
+  .cdomd-admin summary {
+    padding-block: 5px;
+  }
+}
+
 a {
   text-decoration: none;
   color: inherit;
@@ -450,7 +474,12 @@ img, svg {
   margin-left: 240px;
   min-height: 100vh;
   min-width: 0;
+  /* `clip`, for the reason given at #root: `hidden` made this the scroll
+     container of the top bar, the Credentials rail and every desk table
+     header, a box that never scrolls itself, so all three scrolled away with
+     the page (SETTINGS-013). `hidden` stays first as the fallback. */
   overflow-x: hidden;
+  overflow-x: clip;
   transition: margin-left 0.25s ease;
 }
 .cmd-content-inner {

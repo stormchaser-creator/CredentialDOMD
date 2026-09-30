@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -15,12 +16,21 @@ const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
 const STUBS = {
-  'context/AppContext': 'export const useApp = () => globalThis.__screen.app;',
-  'utils/storageScope': 'export const BASE_KEYS = { timer: "timer", lastContract: "lastContract" }; const m = () => globalThis.__screen.storage; export const lsGet = (k) => m()[k] ?? null; export const lsSet = (k, v) => { m()[k] = v; }; export const lsGetJSON = (k) => m()[k] ?? null; export const lsSetJSON = (k, v) => { m()[k] = v; }; export const lsRemove = (k) => { delete m()[k]; };',
+  // useNotifications and AppProvider are for App.jsx; a test that renders the
+  // app shell sets globalThis.__screen.notifications to change the answer.
+  'context/AppContext': 'export const useApp = () => globalThis.__screen.app; export const useNotifications = () => globalThis.__screen.notifications ?? { browserPermission: "default", requestPermission: async () => "default", checkAndNotify() {} }; export const AppProvider = ({ children }) => children;',
+  'utils/storageScope': 'export const BASE_KEYS = { timer: "timer", lastContract: "lastContract", unrecordedInvoices: "unrecordedInvoices" }; const m = () => globalThis.__screen.storage; export const lsGet = (k) => m()[k] ?? null; export const lsSet = (k, v) => { m()[k] = v; }; export const lsGetJSON = (k) => m()[k] ?? null; export const lsSetJSON = (k, v) => { m()[k] = v; }; export const lsRemove = (k) => { delete m()[k]; };',
   'utils/privateVault': 'const v = () => globalThis.__screen.vault; export const getPrivate = (s, id) => v()[s + ":" + id] || ""; export const setPrivate = (s, id, t) => { v()[s + ":" + id] = t; }; export const removePrivate = (s, id) => { delete v()[s + ":" + id]; }; export const looksLikePHI = () => null;',
-  'lib/supabase': 'export const supabase = {}; export const downloadDocumentBlob = async () => null; export default {};',
-  'hooks/useDeskKeys': 'export const useDeskAddShortcut = () => {};',
+  // A stored file comes back as null (not reachable) unless a test sets
+  // globalThis.__screen.download to hand one back.
+  // Invoice numbers are worked out on the device (no server) unless a test
+  // sets globalThis.__screen.allocate to answer allocate_invoice_number.
+  'lib/supabase': 'export const supabase = {}; export const downloadDocumentBlob = async (p) => (globalThis.__screen?.download ? globalThis.__screen.download(p) : null); export const allocateInvoiceNumberRpc = (...a) => (globalThis.__screen?.allocate ? globalThis.__screen.allocate(...a) : null); export const uploadDocumentFile = async () => globalThis.__screen?.uploadDocumentFile?.() ?? null; export default {};',
+  'hooks/useDeskKeys': 'export const useDeskAddShortcut = () => {}; export const useDeskKeyboard = () => {};',
 };
+// Sign-in (Clerk) for screens that read the signed-in user, such as Settings.
+// Only bundled in by a test that asks for it: loadScreens(src, { clerk: true }).
+const CLERK = 'const u = () => globalThis.__screen.clerkUser ?? null; export const useUser = () => ({ isLoaded: true, isSignedIn: !!u(), user: u() }); export const useClerk = () => ({ user: u(), signOut: async () => {}, openUserProfile() {} }); export const useAuth = () => ({ isLoaded: true, userId: u()?.id ?? null, getToken: async () => null }); export const SignedIn = ({ children }) => children; export const SignedOut = () => null; export const SignIn = () => null; export const ClerkProvider = ({ children }) => children;';
 
 // A minimal hook runtime: state and refs persist by call order; memo and
 // callback recompute every render (always correct, never stale); effects run
@@ -41,20 +51,35 @@ function runtime() {
   };
 }
 const reactStub = { ...React, memo: (c) => c };
-for (const hook of ['useState', 'useRef', 'useMemo', 'useCallback', 'useEffect', 'useSyncExternalStore']) reactStub[hook] = (...args) => current[hook](...args);
+// With no mounted runtime (renderScreen), React's own hooks run: a plain
+// server render, state at its first value and no effects.
+const real = { ...React, useSyncExternalStore: (subscribe, get, server) => React.useSyncExternalStore(subscribe, get, server ?? get) };
+for (const hook of ['useState', 'useRef', 'useMemo', 'useCallback', 'useEffect', 'useSyncExternalStore']) reactStub[hook] = (...args) => (current ? current[hook](...args) : real[hook](...args));
 
-/** Bundle `exportsSource` (an `export {...} from "./src/..."` line) once, before any window exists. */
-export async function loadScreens(exportsSource) {
+/**
+ * Bundle `exportsSource` (an `export {...} from "./src/..."` line) once, before any window exists.
+ * `expose` names module-private functions to export as well ({ 'src/App.jsx': ['AppInner'] });
+ * `real` lists fixtures to leave out, so that module is bundled as it is ('lib/supabase').
+ */
+export async function loadScreens(exportsSource, { expose = {}, real: keep = [], clerk = false } = {}) {
+  const stubbed = Object.keys(STUBS).filter(k => !keep.includes(k));
+  const pattern = new RegExp(`(${stubbed.map(k => k.replace('/', '\\/')).join('|')})(\\.js)?$`);
+  const exposed = Object.entries(expose).map(([file, names]) => [fileURLToPath(new URL(`../../${file}`, import.meta.url)), names]);
   const bundled = await build({
     stdin: { contents: exportsSource, resolveDir: root, loader: 'jsx' },
     bundle: true, define: { 'import.meta.env': '{}' }, platform: 'node', format: 'cjs', write: false, jsx: 'automatic',
     external: ['react', 'react/jsx-runtime', 'react-dom'], logLevel: 'silent',
     plugins: [{ name: 'synthetic-device', setup(b) {
-      const keys = Object.keys(STUBS);
-      b.onResolve({ filter: /(context\/AppContext|utils\/storageScope|utils\/privateVault|lib\/supabase|hooks\/useDeskKeys)(\.js)?$/ }, ({ path }) => ({
-        path: keys.find(k => path.replace(/\.js$/, '').endsWith(k)), namespace: 'fixture',
+      b.onResolve({ filter: pattern }, ({ path }) => ({
+        path: stubbed.find(k => path.replace(/\.js$/, '').endsWith(k)), namespace: 'fixture',
       }));
-      b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({ contents: STUBS[path] }));
+      if (clerk) b.onResolve({ filter: /^@clerk\/clerk-react$/ }, () => ({ path: 'clerk', namespace: 'fixture' }));
+      b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({ contents: path === 'clerk' ? CLERK : STUBS[path] }));
+      for (const [file, names] of exposed) {
+        b.onLoad({ filter: new RegExp(`${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }, async ({ path }) => ({
+          contents: `${await readFile(path, 'utf8')}\nexport { ${names.join(', ')} };`, loader: 'jsx',
+        }));
+      }
     } }],
   });
   const mod = { exports: {} };
@@ -80,6 +105,8 @@ export function mount(Component, { data: seed = {}, confirm = () => true, storag
   const app = {
     data, theme: THEME, isDesktop: false, setData: () => {},
     addItem: (key, item) => { if (refused('add', key)) return false; calls.push(['add', key, item]); apply(key, l => [...l, item]); return true; },
+    // Whether an add would be accepted, without adding (AppContext canAddItem).
+    canAddItem: (key) => !refused('add', key),
     editItem: (key, item) => { if (refused('edit', key)) return false; calls.push(['edit', key, item]); apply(key, l => l.map(x => (x.id === item.id ? item : x))); return true; },
     deleteItem: (key, id) => { if (refused('delete', key)) return false; calls.push(['delete', key, id]); apply(key, l => l.filter(x => x.id !== id)); return true; },
   };
@@ -88,6 +115,16 @@ export function mount(Component, { data: seed = {}, confirm = () => true, storag
   globalThis.__screen = { app, storage: { ...storage }, vault: {} };
   const render = () => { current = h; h.begin(); const tree = Component(props); h.flush(); return tree; };
   return { render, calls, dialogs, data, storage: globalThis.__screen.storage, html: () => renderToStaticMarkup(render()) };
+}
+
+/**
+ * One server render of a screen as React itself runs it (no hook runtime):
+ * the markup a physician would first see, with `app` as the account.
+ */
+export function renderScreen(Component, { app, props = {}, storage = {}, vault = {}, notifications, clerkUser } = {}) {
+  current = null;
+  globalThis.__screen = { app, storage: { ...storage }, vault: { ...vault }, notifications, clerkUser };
+  return renderToStaticMarkup(React.createElement(Component, props));
 }
 
 // Every element in a tree, including ones passed as a Modal's footer.

@@ -204,8 +204,13 @@ test('reminder emails skip historical, superseded, pending and date-unknown rows
   assert.equal(rowLifecycle({ lifecycle_status: 'Weird' }), 'active');
   assert.equal(remindable(null), false);
   const fn = readFileSync(new URL('../supabase/functions/send-reminders/index.ts', import.meta.url), 'utf8');
-  const loop = fn.slice(fn.indexOf('for (const r of (data || []) as any[])'), fn.indexOf('items.push(', fn.indexOf('for (const r of (data || []) as any[])')));
-  assert.match(loop, /if \(!remindable\(r\)\) continue;/, 'the digest loop filters every row through remindable');
+  // Every row the query returned, custom records after their category names
+  // are brought up to date (withCurrentCategoryNames), goes through the loop.
+  assert.match(fn, /let rows = \(data \|\| \[\]\) as any\[\];/);
+  const start = fn.indexOf('for (const r of rows)');
+  assert.ok(start > 0, 'the digest loop reads the rows');
+  const loop = fn.slice(start, fn.indexOf('items.push(', start));
+  assert.match(loop, /if \(!remindable\(r, \{ table: t\.table, today \}\)\) continue;/, 'the digest loop filters every row through remindable');
 });
 
 // -- Exports, the CV, Vera, the share text -------------------------------

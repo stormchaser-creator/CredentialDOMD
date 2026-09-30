@@ -9,10 +9,15 @@ import CvImportReview from "./CvImportReview";
 import Modal from "../shared/Modal";
 
 
+// `lists` says what each CV is built from, for the note shown when this CV
+// is empty although another one is not (buildCvContent decides the sections).
 const CV_TEMPLATES = [
-  { id: "clinical", name: "Clinical CV", description: "Standard format for hospital credentialing" },
-  { id: "academic", name: "Academic CV", description: "Detailed format for academic positions" },
-  { id: "locum", name: "Locum Tenens", description: "Compact format for locum assignments" },
+  { id: "clinical", name: "Clinical CV", cvName: "Clinical CV", description: "Standard format for hospital credentialing",
+    lists: "work history, education, licenses, hospital privileges, publications, organizations, courses, liability insurance and references" },
+  { id: "academic", name: "Academic CV", cvName: "Academic CV", description: "Detailed format for academic positions",
+    lists: "work history, education, licenses, hospital privileges, publications, organizations, courses and CME" },
+  { id: "locum", name: "Locum Tenens", cvName: "Locum Tenens CV", description: "Compact format for locum assignments",
+    lists: "licenses, hospital privileges, courses, work history, education, languages, liability insurance and references" },
 ];
 
 function CVGenerator() {
@@ -25,19 +30,36 @@ function CVGenerator() {
   const s = data.settings;
 
   const cvContent = useMemo(() => buildCvContent(data, template), [data, template]);
+  // A CV can be empty while another is not: publications alone fill the
+  // Clinical CV and leave the Locum Tenens CV with its header. "Add
+  // credentials first" is for a record that fills none of them.
+  const anyCv = useMemo(() => CV_TEMPLATES.some(t => buildCvContent(data, t.id).length > 1), [data]);
+  const current = CV_TEMPLATES.find(t => t.id === template) || CV_TEMPLATES[0];
 
+  // What the CV actually holds: buildCvContent always adds the header, so any
+  // other section is something to preview. Checking licences, education and
+  // CME alone hid the preview of a CV that Copy and Save PDF would export
+  // (work history, publications, memberships...).
+  const hasData = cvContent.length > 1;
 
   // Plain text for Copy: phone-safe rules, no em dashes (shareText.cvPlainText).
   const generatePlainText = () => cvPlainText(cvContent);
 
   const flash = (msg) => { setNote(msg); setTimeout(() => setNote(""), 2500); };
+  // A CV with nothing but its header is not something to send anyone.
+  const emptyNote = () => `Nothing on the ${current.cvName} yet.`;
 
+  // copyToClipboard returns false when both the clipboard API and the
+  // fallback fail; saying "Copied" then left the physician pasting nothing.
   const handleCopyCV = async () => {
-    await copyToClipboard(generatePlainText());
-    flash("Copied. Paste it anywhere.");
+    if (!hasData) { flash(emptyNote()); return; }
+    let ok = false;
+    try { ok = await copyToClipboard(generatePlainText()); } catch { ok = false; }
+    flash(ok ? "Copied. Paste it anywhere." : "Could not copy here. Use Save PDF instead.");
   };
 
   const handlePdfCV = async () => {
+    if (!hasData) { flash(emptyNote()); return; }
     try {
       const result = await shareCvPdf(cvContent, { name: s.name || "Physician", degree: s.degreeType || "" });
       if (result === "download") flash("PDF downloaded.");
@@ -46,8 +68,6 @@ function CVGenerator() {
       flash(`Couldn't build the PDF: ${err.message}`);
     }
   };
-
-  const hasData = data.licenses.length > 0 || data.education?.length > 0 || data.cme.length > 0;
 
   return (
     <div>
@@ -61,7 +81,7 @@ function CVGenerator() {
       {/* Template selector */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {CV_TEMPLATES.map(t => (
-          <button key={t.id} onClick={() => setTemplate(t.id)} style={{
+          <button key={t.id} aria-pressed={template === t.id} onClick={() => setTemplate(t.id)} style={{
             flex: 1, padding: "12px 10px", borderRadius: 12,
             border: `1px solid ${template === t.id ? T.accent : T.border}`,
             backgroundColor: template === t.id ? T.accentGlow : T.card,
@@ -92,8 +112,17 @@ function CVGenerator() {
       {!hasData && (
         <div style={{ textAlign: "center", padding: "26px 18px", backgroundColor: T.card, borderRadius: 14, border: `1px solid ${T.border}`, boxShadow: T.shadow1 }}>
           <div style={{ marginBottom: 10 }}><AsclepiusIcon size={32} color={T.textDim} /></div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4 }}>Add credentials first</div>
-          <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 14 }}>Your CV will be auto-generated from the licenses, education, and other credentials you add.</div>
+          {anyCv ? (
+            <>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4 }}>{emptyNote()}</div>
+              <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 14 }}>{`It lists your ${current.lists}.`}</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4 }}>Add credentials first</div>
+              <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 14 }}>Your CV will be auto-generated from the licenses, education, and other credentials you add.</div>
+            </>
+          )}
           {/* A physician who opened the CV generator with an empty record is
               holding a CV already. Reading theirs is the shortest way to fill
               this page. */}

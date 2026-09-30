@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from "react";
+import { dismissButtonStyle } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { liveCategories, findCategory, identifierReason, toOtherExtracted, LIMITS } from "../../utils/customCategories";
@@ -14,7 +15,7 @@ const ROLE_FIELDS = [
   ["issuedDate", "Issued", "date"], ["expirationDate", "Expires", "date"],
 ];
 
-function OtherDocumentReview({ extracted, onFile, onDiscard }) {
+function OtherDocumentReview({ extracted, onFile, onDiscard, idPrefix = "other-document" }) {
   const { theme: T, data, credentialReadOnly } = useApp();
   const iS = useInputStyle();
   const start = useMemo(() => toOtherExtracted(extracted), [extracted]);
@@ -51,26 +52,26 @@ function OtherDocumentReview({ extracted, onFile, onDiscard }) {
         This isn&rsquo;t one of the built-in sections, so it goes in one of your own categories. Everything read from it is below.
       </div>
 
-      <span style={label}>File it in</span>
-      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+      <span id={`${idPrefix}-file-in`} style={label}>File it in</span>
+      <div role="group" aria-labelledby={`${idPrefix}-file-in`} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
         {categories.length > 0 && (
-          <button type="button" onClick={() => setMode("existing")} style={{ flex: 1, padding: "8px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700,
+          <button type="button" aria-pressed={mode === "existing"} onClick={() => setMode("existing")} style={{ flex: 1, padding: "8px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700,
             border: `1px solid ${mode === "existing" ? T.accent : T.border}`, backgroundColor: mode === "existing" ? T.accentDim : "transparent", color: mode === "existing" ? T.accent : T.textMuted }}>
             One of your categories
           </button>
         )}
-        <button type="button" onClick={() => setMode("new")} style={{ flex: 1, padding: "8px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700,
+        <button type="button" aria-pressed={mode === "new"} onClick={() => setMode("new")} style={{ flex: 1, padding: "8px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700,
           border: `1px solid ${mode === "new" ? T.accent : T.border}`, backgroundColor: mode === "new" ? T.accentDim : "transparent", color: mode === "new" ? T.accent : T.textMuted }}>
           A new category
         </button>
       </div>
       {mode === "existing" ? (
-        <select value={categoryId} onChange={e => setCategoryId(e.target.value)} style={{ ...iS, marginBottom: 12 }}>
+        <select aria-labelledby={`${idPrefix}-file-in`} value={categoryId} onChange={e => setCategoryId(e.target.value)} style={{ ...iS, marginBottom: 12 }}>
           {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
         </select>
       ) : (
         <>
-          <input value={newName} maxLength={LIMITS.name} onChange={e => setNewName(e.target.value)} placeholder="e.g. Hospital ID Badges" style={{ ...iS, marginBottom: 4 }} />
+          <input aria-label="New category name" value={newName} maxLength={LIMITS.name} onChange={e => setNewName(e.target.value)} placeholder="e.g. Hospital ID Badges" style={{ ...iS, marginBottom: 4 }} />
           <div style={{ fontSize: 12, color: T.textDim, marginBottom: 12 }}>
             {typedMatch ? `You already have "${typedMatch.name}". This will go there instead of a duplicate.` : "A name for this kind of document, so the next one goes in the same place."}
           </div>
@@ -80,8 +81,8 @@ function OtherDocumentReview({ extracted, onFile, onDiscard }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
         {ROLE_FIELDS.map(([k, l, type]) => (
           <div key={k} style={{ gridColumn: k === "name" ? "1 / -1" : undefined }}>
-            <span style={label}>{l}</span>
-            <input type={type} value={role[k] || ""} onChange={e => setRole(r => ({ ...r, [k]: e.target.value }))} style={iS} />
+            <span id={`${idPrefix}-${k}`} style={label}>{l}</span>
+            <input aria-labelledby={`${idPrefix}-${k}`} type={type} value={role[k] || ""} onChange={e => setRole(r => ({ ...r, [k]: e.target.value }))} style={iS} />
           </div>
         ))}
       </div>
@@ -92,10 +93,10 @@ function OtherDocumentReview({ extracted, onFile, onDiscard }) {
         const why = identifierReason(f.label, f.value);
         return (
           <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, opacity: why ? 0.55 : 1 }}>
-            <input value={f.label} onChange={e => setFacts(fs => fs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} style={{ ...iS, flex: "0 0 38%" }} />
-            <input value={f.value} onChange={e => setFacts(fs => fs.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} style={{ ...iS, flex: 1 }} />
+            <input aria-label={`Detail ${i + 1} name`} value={f.label} onChange={e => setFacts(fs => fs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} style={{ ...iS, flex: "0 0 38%" }} />
+            <input aria-label={f.label ? f.label : `Detail ${i + 1} value`} value={f.value} onChange={e => setFacts(fs => fs.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} style={{ ...iS, flex: 1 }} />
             <button type="button" aria-label="Remove this detail" onClick={() => setFacts(fs => fs.filter((_, j) => j !== i))}
-              style={{ border: "none", background: "none", color: T.danger, fontWeight: 800, cursor: "pointer", padding: "0 6px" }}>&times;</button>
+              style={{ ...dismissButtonStyle(T.danger), fontWeight: 800 }}>&times;</button>
           </div>
         );
       })}

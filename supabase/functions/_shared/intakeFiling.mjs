@@ -177,8 +177,8 @@ const numbersConflict = (a, b) => { const x = normNumber(a), y = normNumber(b); 
 const GENERIC_TYPES = new Set(["", "other", "certification", "certificate", "board certification", "board certification abms", "board certification aoa"]);
 
 // One facility name written out in full inside the other, as whole words:
-// "Arrowhead Neurosurgical Medical Group" inside "Arrowhead Neurosurgical
-// Medical Group / Arrowhead Regional Medical Center". A shared common word
+// "Cedar Ridge Neurosurgical Medical Group" inside "Cedar Ridge Neurosurgical
+// Medical Group / Cedar Ridge Regional Medical Center". A shared common word
 // ("Regional", "Medical") is not enough, and neither is a single word.
 const GENERIC_PLACE_WORDS = new Set(["medical", "group", "center", "centre", "hospital", "hospitals", "health", "healthcare",
   "system", "systems", "regional", "university", "college", "school", "clinic", "clinics", "institute", "community", "general",
@@ -506,7 +506,7 @@ export function patientRecordScreen(fileName, scan) {
 
 /**
  * May an attachment in an email that also asks for something be filed as the
- * physician's own? Its name decides nothing ("Letter330567.pdf" is a real
+ * physician's own? Its name decides nothing ("Letter100234.pdf" is a real
  * approval, "DEA Registration.pdf" can be a blank template). A credentialer
  * sends blank forms, and a blank privileges delineation reads as "privilege"
  * at that facility, so only this: a built-in credential type (never a new category),
@@ -588,7 +588,7 @@ export function plainCategoryName(name) {
  * output:
  *   { outcome: "created" | "updated" | "linked" | "unfiled" | "removed",
  *     section, table, recordId,
- *     readsAs: "Sanford Health Plan credentialing approval -> Privileges"
+ *     readsAs: "Prairie Health Plan credentialing approval -> Privileges"
  *              (what it was read as and where it goes; "" when unfiled),
  *     writes: [{ table, op: "insert" | "update", id, row }]   in order,
  *     document: { linked_to, name, type } | { name } | null,

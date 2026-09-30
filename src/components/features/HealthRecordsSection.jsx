@@ -5,15 +5,28 @@ import { pushModal, popModal } from "../../utils/deskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
+import { TAP_MIN, CARD_ACTION_GAP, cardActionSize } from "../shared/actionButton.js";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, StarIcon } from "../shared/Icons";
 import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, getHealthRecordResults, TB_RESULTS } from "../../constants/credentialTypes";
-import { generateId, getStatusColor, getStatusLabel, formatDate, describeItem } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, formatDate, describeItem, deleteConfirmText } from "../../utils/helpers";
+import { docMime } from "../../utils/inboxDocs";
 import DocAttach from "./DocAttach";
-import { attachExistingDoc } from "../../utils/docPrefill";
+import { SECTION_FIELDS } from "../../utils/sectionFields.js";
 
-function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId, onAutoViewDone }) {
+// health_records' columns. `doses` is one too (a vaccine series) and is not
+// in SECTION_FIELDS, so it is named here or a scanned series would lose it.
+const HEALTH_SCAN_KEYS = Object.freeze([...SECTION_FIELDS.healthRecords, "doses"]);
+import { attachExistingDoc } from "../../utils/docPrefill";
+import FollowUpHistory from "../shared/FollowUpHistory";
+
+// Two fields side by side. A plain 1fr track cannot shrink below a date
+// input's own minimum (about 189 px in Chrome), so on a phone the second date
+// ran off the dialog's right edge; minmax(0, 1fr) splits the width.
+const PAIR = "minmax(0, 1fr) minmax(0, 1fr)";
+
+function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone }) {
   const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T, toggleFavorite } = useApp();
   const starButton = (item) => {
     const on = item?.favorite === true;
@@ -21,7 +34,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
       <button type="button" aria-pressed={on} title={on ? "Remove from Favorites" : "Add to Favorites"}
         aria-label={on ? "Remove from Favorites" : "Add to Favorites"}
         onClick={(e) => { e.stopPropagation(); toggleFavorite("healthRecords", item.id); }}
-        style={{ padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex",
+        style={{ padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", ...cardActionSize,
           backgroundColor: on ? T.accentDim : "transparent", color: on ? T.accent : T.textDim }}>
         <StarIcon filled={on} />
       </button>
@@ -64,7 +77,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
     const byteStr = atob(doc.data.split(",")[1]);
     const arr = new Uint8Array(byteStr.length);
     for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" }));
+    const url = URL.createObjectURL(new Blob([arr], { type: docMime(doc) || "application/pdf" }));
     window.open(url, "_blank");
   }, []);
 
@@ -89,9 +102,17 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
   const [reqError, setReqError] = useState(null);
 
   const handleSave = useCallback(() => {
+    // health_records.category is NOT NULL in the database: a record added
+    // from the All tab on "Select category..." was refused whole and lived
+    // on this device only. Checked on an edit too, where the blank option is
+    // just as easy to pick.
+    if (!String(form.category || "").trim()) {
+      setReqError("Choose a category so this record can be saved to your account.");
+      return;
+    }
     // TB tests and fit tests expire — the date is the whole point.
     if ((form.category === "TB Test" || form.category === "Fit Test") && !form.expirationDate) {
-      setReqError(`${form.category}s expire — enter the expiration date so the app can warn you before it lapses.`);
+      setReqError(`${form.category}s expire. Enter the expiration date so the app can warn you before it lapses.`);
       return;
     }
     setReqError(null);
@@ -125,8 +146,18 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
   useEffect(() => {
     if (!autoEditId) return;
     const it = items.find(x => x.id === autoEditId);
-    if (it) { openEdit(it); onAutoEditDone?.(); }
-  }, [autoEditId, items, openEdit, onAutoEditDone]);
+    if (it) {
+      openEdit(it); onAutoEditDone?.();
+      // "Add date" links land on the exact field they came for, as they do
+      // in every CrudSection form.
+      if (autoFocusField) {
+        setTimeout(() => {
+          const el = document.querySelector(`[data-fkey="${autoFocusField}"]`);
+          try { el?.focus(); el?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* older browser */ }
+        }, 400);
+      }
+    }
+  }, [autoEditId, items, openEdit, onAutoEditDone, autoFocusField]);
 
   // Opened from the dashboard list or search: show the record's details.
   useEffect(() => {
@@ -157,8 +188,8 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
       {/* Filter chips */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         {[{ k: "all", l: "All" }, ...HEALTH_RECORD_CATEGORIES.map(c => ({ k: c, l: c }))].map(t => (
-          <button key={t.k} onClick={() => setFilter(t.k)} style={{
-            padding: "6px 14px", fontSize: 13, borderRadius: 22,
+          <button key={t.k} aria-pressed={filter === t.k} onClick={() => setFilter(t.k)} style={{
+            padding: "6px 14px", fontSize: 13, borderRadius: 22, minHeight: TAP_MIN,
             border: `1px solid ${filter === t.k ? T.accent : T.border}`,
             backgroundColor: filter === t.k ? T.accent : "transparent",
             color: filter === t.k ? "#fff" : T.textMuted,
@@ -171,8 +202,9 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
 
       {/* Add/Edit Modal */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Health Record" : "Add Health Record"}>
-        <Field label="Category">
-          <select value={form.category || ""} onChange={e => setForm(f => ({ ...f, category: e.target.value, type: "" }))} style={{ ...iS, appearance: "auto" }}>
+        {editItem && <FollowUpHistory item={editItem} />}
+        <Field label="Category *">
+          <select required aria-required="true" value={form.category || ""} onChange={e => { setReqError(null); setForm(f => ({ ...f, category: e.target.value, type: "" })); }} style={{ ...iS, appearance: "auto" }}>
             <option value="">Select category...</option>
             {HEALTH_RECORD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -186,9 +218,9 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
           </Field>
         )}
         <Field label="Display Name"><input value={form.name || ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={iS} placeholder="e.g. Annual Flu Shot 2024" /></Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8 }}>
           <Field label="Date Administered"><input type="date" value={form.dateAdministered || ""} onChange={e => setForm(f => ({ ...f, dateAdministered: e.target.value }))} style={iS} /></Field>
-          <Field label="Expiration Date"><input type="date" value={form.expirationDate || ""} onChange={e => setForm(f => ({ ...f, expirationDate: e.target.value }))} style={iS} /></Field>
+          <Field label="Expiration Date"><input type="date" data-fkey="expirationDate" value={form.expirationDate || ""} onChange={e => setForm(f => ({ ...f, expirationDate: e.target.value }))} style={iS} /></Field>
         </div>
         {(form.category === "TB Test" || form.category === "Titer / Immunity" || form.category === "Drug Screen") && (
           <Field label="Result">
@@ -201,26 +233,26 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
         {/* Lab detail — quantitative titers, drug screens, TB blood tests */}
         {(form.category === "Titer / Immunity" || form.category === "Drug Screen" || form.category === "TB Test") && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8 }}>
               <Field label="Value"><input value={form.resultValue || ""} onChange={e => setForm(f => ({ ...f, resultValue: e.target.value }))} style={iS} placeholder="e.g. 165" /></Field>
               <Field label="Units"><input value={form.resultUnits || ""} onChange={e => setForm(f => ({ ...f, resultUnits: e.target.value }))} style={iS} placeholder="e.g. mIU/mL" /></Field>
             </div>
             <Field label="Reference range"><input value={form.referenceRange || ""} onChange={e => setForm(f => ({ ...f, referenceRange: e.target.value }))} style={iS} placeholder="e.g. ≥ 10 mIU/mL = immune" /></Field>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8 }}>
               <Field label="Collected"><input type="date" value={form.collectedDate || ""} onChange={e => setForm(f => ({ ...f, collectedDate: e.target.value }))} style={iS} /></Field>
               <Field label="Reported"><input type="date" value={form.reportedDate || ""} onChange={e => setForm(f => ({ ...f, reportedDate: e.target.value }))} style={iS} /></Field>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8 }}>
               <Field label="Laboratory"><input value={form.lab || ""} onChange={e => setForm(f => ({ ...f, lab: e.target.value }))} style={iS} placeholder="e.g. Quest Diagnostics" /></Field>
               <Field label="Specimen #"><input value={form.specimenId || ""} onChange={e => setForm(f => ({ ...f, specimenId: e.target.value }))} style={iS} /></Field>
             </div>
-            <Field label="Ordered by / for"><input value={form.orderedBy || ""} onChange={e => setForm(f => ({ ...f, orderedBy: e.target.value }))} style={iS} placeholder="e.g. MPLT Healthcare — Intermountain Peaks" /></Field>
+            <Field label="Ordered by / for"><input value={form.orderedBy || ""} onChange={e => setForm(f => ({ ...f, orderedBy: e.target.value }))} style={iS} placeholder="e.g. the agency, and the assignment it is for" /></Field>
           </>
         )}
         <Field label="Lot / Batch #"><input value={form.lotNumber || ""} onChange={e => setForm(f => ({ ...f, lotNumber: e.target.value }))} style={iS} /></Field>
         <Field label="Administrator / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Employee Health, Hospital Name" /></Field>
         <Field label="Notes"><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 50, resize: "vertical" }} /></Field>
-        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} />
+        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} allowedKeys={HEALTH_SCAN_KEYS} />
         {reqError && (
           <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{reqError}</div>
         )}
@@ -253,6 +285,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
           const docs = linkedDocs(viewItem);
           return (
             <>
+              <FollowUpHistory item={viewItem} />
               {rows.map(([k, v]) => (
                 <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
                   <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{k}</span>
@@ -274,7 +307,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
               )}
               {docs.length > 0 ? (
                 <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Source documents — tap to view</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Source documents (tap to view)</div>
                   {docs.map(doc => (
                     !doc.data ? (
                       <div key={doc.id} style={{
@@ -283,9 +316,9 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
                         color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8,
                       }}>
                         <span style={{ fontSize: 16 }}>{"⏳"}</span>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} — downloading from cloud, check back shortly</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} is downloading from the cloud; check back shortly</span>
                       </div>
-                    ) : doc.type?.startsWith("image/") ? (
+                    ) : docMime(doc).startsWith("image/") ? (
                       <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
                         style={{ width: "100%", borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 8, cursor: "zoom-in", display: "block" }} />
                     ) : (
@@ -302,7 +335,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
                 </div>
               ) : (
                 <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.warning}`, fontSize: 12.5, color: T.textMuted, lineHeight: 1.45 }}>
-                  No source document attached yet. Agencies usually need the actual report or card — tap Edit and attach it so it rides along when you send this record.
+                  No source document attached yet. Agencies usually need the actual report or card. Tap Edit and attach it so it rides along when you send this record.
                 </div>
               )}
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
@@ -322,7 +355,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
 
       {/* Full-screen picture viewer */}
       {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{
+        <div role="dialog" aria-modal="true" aria-label={lightbox.name || "Picture"} onClick={() => setLightbox(null)} style={{
           position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
           display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
         }}>
@@ -389,11 +422,11 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
                       })()}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 3, flexShrink: 0, paddingTop: 2 }}>
+                  <div style={{ display: "flex", gap: CARD_ACTION_GAP, flexShrink: 0, paddingTop: 2 }}>
                     {starButton(item)}
-                  <button onClick={(ev) => { ev.stopPropagation(); onShare(item, "healthRecords"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
-                    <button onClick={(ev) => { ev.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                    <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this record? This cannot be undone.")) handleDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  <button aria-label="Share" onClick={(ev) => { ev.stopPropagation(); onShare(item, "healthRecords"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", ...cardActionSize }}><SendIcon /></button>
+                    <button aria-label="Edit" onClick={(ev) => { ev.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", ...cardActionSize }}><EditIcon /></button>
+                    <button aria-label="Delete" onClick={(ev) => { ev.stopPropagation(); if (window.confirm(deleteConfirmText("record", linkedDocs(item).length, { names: linkedDocs(item).map(d => d.name || "file") }))) handleDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", ...cardActionSize }}><TrashIcon /></button>
                   </div>
                 </div>
                 {/* Dose history for multi-dose vaccines */}

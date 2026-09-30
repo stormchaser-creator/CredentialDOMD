@@ -193,9 +193,16 @@ export function attachmentsPayload(images) {
 /**
  * What to tell the sender when create-ticket saved the ticket but not every
  * file. Empty when nothing was lost, and also when the function is an older
- * one that does not report it (no count means nothing to claim).
+ * one that does not report it (no count means nothing to claim). A retry
+ * that reached the server while the first request was still uploading gets
+ * attachments_pending instead: those files are on their way, so the sender is
+ * told to check rather than to send them again.
  */
 export function ticketAttachmentShortfall(data) {
+  const pending = Number(data?.attachments_pending);
+  if (Number.isInteger(pending) && pending > 0) {
+    return `Your ticket was sent. ${pending} ${pending === 1 ? "file is" : "files are"} still attaching. Check the ticket under Your tickets in a few minutes, and add any file that is missing as a reply.`;
+  }
   const n = Number(data?.attachments_failed);
   if (!Number.isInteger(n) || n <= 0) return "";
   return `Your ticket was sent, but ${n} ${n === 1 ? "file" : "files"} did not attach. Add ${n === 1 ? "it" : "them"} as a reply.`;

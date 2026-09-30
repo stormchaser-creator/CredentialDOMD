@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import { sameDeletionStamp } from '../../src/utils/dataDeletion.js';
+import { deletionUnconfirmedMessage, rememberDeletionResult, rememberedDeletionResult } from '../../src/utils/accountDeletionResult.js';
 
 // Execute actual confirmation/caller functions; every data, storage and server
 // dependency below is synthetic. This suite performs no real deletion or fetch.
@@ -60,12 +62,23 @@ function fixture({ profileId = 'profileA', offline = false, deferDeletingState =
       }; return capturedOwner;
     },
     purgeUserStorage: asyncDependency('purgeUserStorage'), clearDeviceKeys: (...args) => record('clearDeviceKeys', args),
+    advanceLocalFence: (...args) => record('advanceLocalFence', args) ?? 'synthetic-fence',
+    lsGet: () => null, WIPE_SEEN_KEY: 'synthetic-wipe', sameDeletionStamp,
     deleteAllData: asyncDependency('deleteAllData'), requestAccountDeletion: asyncDependency('requestAccountDeletion'),
+    readAccountDataDeletion: asyncDependency('readAccountDataDeletion', null),
+    honorAccountDataDeletion: asyncDependency('honorAccountDataDeletion', true),
+    recordDataDeletionSeen: (...args) => record('recordDataDeletionSeen', args),
+    reopenAfterAccountDeletion: (...args) => record('reopenAfterAccountDeletion', args),
+    holdAfterUnconfirmedDeletion: (...args) => record('holdAfterUnconfirmedDeletion', args),
+    deletionUnconfirmedMessage,
+    rememberDeletionResult: (...args) => { record('rememberDeletionResult', args); rememberDeletionResult(...args); },
     resetAfterAccountDeletion: (...args) => { record('resetAfterAccountDeletion', args); return resetHandler?.(...args); },
     setDeleting: value => { record('setDeleting', [value]); if (!deferDeletingState) context.deleting = value; },
     setShowDeleteConfirm: value => record('setShowDeleteConfirm', [value]),
     setDeleteInput: value => { record('setDeleteInput', [value]); context.deleteInput = value; },
-    console: { warn() {}, error() {} },
+    setDeletionResult: value => record('setDeletionResult', [value]),
+    DELETION_SUPPORT_REFERENCE: 'DELETE-SERVER-UNFINISHED',
+    console: { warn: (...args) => calls.push({ name: 'console.warn', args, actor }), error() {} },
   };
   vm.runInNewContext(code, context);
   return {
@@ -143,6 +156,10 @@ test('same-owner confirmed deletion passes its original owner through storage, c
   assert.equal(f.calls.every(call => call.actor === ownerA), true);
   assert.equal(f.named('start').length, 1);
   assert.ok(f.calls.findIndex(call => call.name === 'start') < f.calls.findIndex(call => call.name === 'purgeUserStorage'));
+  // The purge fence moves after the owner is pinned and before anything is purged.
+  assert.deepEqual(f.named('advanceLocalFence').map(call => call.args), [[ownerA]]);
+  assert.ok(f.calls.findIndex(call => call.name === 'start') < f.calls.findIndex(call => call.name === 'advanceLocalFence'));
+  assert.ok(f.calls.findIndex(call => call.name === 'advanceLocalFence') < f.calls.findIndex(call => call.name === 'purgeUserStorage'));
 });
 
 for (const confirmation of ['', 'delete']) {
@@ -223,6 +240,8 @@ function appFixture({ offline = false, profileId = 'profileA', withCache = false
   const window = { alert: message => calls.push({ name: 'alert', args: [message], actor }), Clerk: { user: offline ? null : { id: ownerA }, session: originalSession } };
   const context = {
     user: { id: ownerA }, dataOwnerRef, userIdRef, dataRef, dataLoadGeneration, cacheWriteGeneration, offlineMode: offline, window,
+    loadedDeletionRef: { current: { owner: ownerA, stamp: null, fence: null } }, WIPE_SEEN_KEY: 'synthetic-wipe', lsGet: () => null, sameDeletionStamp,
+    localFence: () => null, adoptLocalFence() {}, localCopyCurrent: () => true,
     data: state, loaded: true, saveTimer: { current: null }, clearTimeout: id => clearedTimers.push(id), getActiveUserId: () => actor,
     useRef: value => ({ current: value }), useEffect: callback => callback(),
     setTimeout: callback => { timers.push(callback); return timers.length; },
@@ -426,4 +445,115 @@ test('a failed durable recovery cancellation stops deletion before cloud changes
   assert.equal(f.named('alert').length, 1);
   assert.match(f.named('alert')[0].args[0], /cloud records have not been deleted/);
   assert.equal(f.named('setDeleting').at(-1).args[0], false);
+});
+
+// SETTINGS-005: a failed server pass was only console.warn'd and a success was
+// never confirmed; the card went back to "Delete All My Data" either way. The
+// member was never told that tickets, backups and the assistant log were
+// still on the server, and the daily cron never retries a self deletion.
+// Values made inside the vm are another realm's objects: compare their JSON.
+const lastResult = f => { const v = f.named('setDeletionResult').at(-1)?.args[0]; return v == null ? v : JSON.parse(JSON.stringify(v)); };
+const holdMessage = f => f.named('holdAfterUnconfirmedDeletion').at(-1)?.args[1];
+// A server pass that did not answer and cannot be read back (SYNC-012) holds
+// the tab (records dropped, writes stopped, reload asked) instead of resetting
+// it to an empty account: the server may still finish. The hold replaces the
+// whole app with its stopped screen, so what SETTINGS-005's card said (what
+// is still on the servers, what to do, the support reference) travels in the
+// hold's message; this page sets no card for it.
+test('a same-owner server failure holds the tab with what remains and the support reference, after the device is cleared', async () => {
+  const f = fixture(); confirm(f);
+  f.handlers.requestAccountDeletion = async () => { throw new Error('Synthetic server refusal'); };
+  await f.run();
+  assert.equal(f.named('holdAfterUnconfirmedDeletion').length, 1);
+  assert.equal(f.named('resetAfterAccountDeletion').length, 0);
+  assert.equal(f.named('alert').length, 0, 'the stopped screen says it; no alert on top of it');
+  assert.equal(holdMessage(f), deletionUnconfirmedMessage({ cloudFailed: false }));
+  assert.match(holdMessage(f), /support tickets and screenshots, the assistant log, feedback and your monthly backups\./);
+  assert.match(holdMessage(f), /support reference DELETE-SERVER-UNFINISHED/);
+  assert.doesNotMatch(holdMessage(f), /Synthetic server refusal/, 'the raw server text never reaches the member');
+  assert.deepEqual(f.named('setDeletionResult').map(c => c.args[0]), [null], 'no card: the page is no longer on screen');
+  const logged = f.named('console.warn').map(c => c.args.join(' ')).join('\n');
+  assert.match(logged, /Synthetic server refusal/, 'the operator still sees it in the console');
+  assert.match(logged, /DELETE-SERVER-UNFINISHED/);
+});
+
+test('a completed deletion is confirmed', async () => {
+  const f = fixture(); confirm(f);
+  await f.run();
+  assert.deepEqual(lastResult(f), { state: 'done' });
+});
+
+test('a client purge failure alone is covered by the server pass; with a server failure both are named on the held screen', async () => {
+  const f = fixture(); confirm(f);
+  f.handlers.deleteAllData = async () => { throw new Error('Synthetic row delete 500'); };
+  await f.run();
+  assert.deepEqual(lastResult(f), { state: 'done' });
+  const g = fixture(); confirm(g);
+  g.handlers.deleteAllData = async () => { throw new Error('Synthetic row delete 500'); };
+  g.handlers.requestAccountDeletion = async () => { throw new Error('Synthetic timeout'); };
+  await g.run();
+  assert.equal(holdMessage(g), deletionUnconfirmedMessage({ cloudFailed: true }));
+  assert.match(holdMessage(g), /monthly backups, and some of your records and uploaded files\./);
+});
+
+test('a lost answer that reads back a new stamp is confirmed like an answer', async () => {
+  const f = fixture(); confirm(f);
+  f.handlers.requestAccountDeletion = async () => { throw new Error('Failed to fetch'); };
+  f.handlers.readAccountDataDeletion = async () => '2026-09-29T12:00:00+00:00';
+  await f.run();
+  assert.equal(f.named('holdAfterUnconfirmedDeletion').length, 0);
+  assert.deepEqual(lastResult(f), { state: 'done' });
+});
+
+test('there is no Try again on this page any more: nothing here could run it after a hold', () => {
+  assert.doesNotMatch(source, /retryServerDeletion|Trying again/);
+});
+
+test('a local-only deletion says the servers were not reached', async () => {
+  const f = fixture({ offline: true }); confirm(f);
+  await f.run();
+  assert.deepEqual(lastResult(f), { state: 'local' });
+});
+
+test('an account switch mid-deletion reports nothing for the other account', async () => {
+  const f = fixture(), pending = deferred(); confirm(f);
+  f.handlers.requestAccountDeletion = () => pending.promise;
+  const deletion = f.run();
+  await tick();
+  f.switchAccount(); pending.resolve({ error: null }); await deletion;
+  assert.equal(f.named('setDeletionResult').filter(c => c.args[0] !== null).length, 0);
+});
+
+// An answered deletion reopens the account, and the app's loading screen
+// unmounts this page while the account loads again: the card's result is
+// kept for the page session, for that account only, and a new run clears it.
+test('the result outlives the reload the reopen causes, for the same account only', async () => {
+  const f = fixture(); confirm(f);
+  f.handlers.requestAccountDeletion = async () => ({ ok: true, tombstoned: true, deleted_at: '2026-09-29T12:00:00.000Z' });
+  await f.run();
+  assert.equal(f.named('reopenAfterAccountDeletion').length, 1);
+  assert.ok(f.calls.findIndex(c => c.name === 'reopenAfterAccountDeletion') < f.calls.findLastIndex(c => c.name === 'rememberDeletionResult'));
+  assert.deepEqual(JSON.parse(JSON.stringify(rememberedDeletionResult(ownerA))), { state: 'done' });
+  assert.equal(rememberedDeletionResult(ownerB), null);
+  const g = fixture(); confirm(g);
+  g.handlers.requestAccountDeletion = async () => { throw new Error('Synthetic server refusal'); };
+  await g.run();
+  assert.equal(rememberedDeletionResult(ownerA), null, 'a new run (here held) clears the old result');
+});
+
+test('the result messages name what was and was not deleted, with no em dash', async () => {
+  const { deletionResultMessage } = await import('../../src/utils/accountDeletionResult.js');
+  assert.equal(deletionResultMessage(null), null);
+  assert.equal(deletionResultMessage({ state: 'partial' }), null, 'no card for an unconfirmed server pass');
+  const done = deletionResultMessage({ state: 'done' });
+  assert.equal(done.ok, true);
+  assert.match(done.lines.join(' '), /deleted from this device and from our servers/);
+  const local = deletionResultMessage({ state: 'local' });
+  assert.match(local.lines.join(' '), /this device only/);
+  const held = deletionUnconfirmedMessage({ cloudFailed: true });
+  assert.equal(held.split('\n').length, 4);
+  assert.match(held, /our servers did not confirm that the deletion finished\./);
+  assert.match(held, /Reload, then run Delete All My Data again/);
+  assert.match(held, /support reference DELETE-SERVER-UNFINISHED/);
+  for (const text of [done.lines.join(' '), local.lines.join(' '), held, deletionUnconfirmedMessage()]) assert.doesNotMatch(text, /\u2014/);
 });

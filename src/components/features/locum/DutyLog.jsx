@@ -1,21 +1,27 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, useRef, memo } from "react";
+import { cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
-import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
+import { generateId, formatDate, copyToClipboard, localDay, sentDay } from "../../../utils/helpers";
+import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
+import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint } from "../../../utils/invoiceRecord";
+import { allocateInvoiceNumberRpc } from "../../../lib/supabase";
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import { exportInvoice } from "../../../utils/invoiceExport";
-import { writeAllowedNow } from "../../../utils/limitedLaunchAccess.js";
+import { confirmWriteAllowed, prepareWriteCheck, SENT_WORK, writeRefusalMessage, accessAuthority } from "../../../utils/limitedLaunchAccess.js";
 import { invoiceSubject } from "../../../utils/invoicePdf";
 import { money, invoiceCoverNotice } from "../../../utils/invoiceCover";
 import { invoicePlainText } from "../../../utils/invoiceLayout";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import InvoiceLinesTable from "../../shared/InvoiceLinesTable";
+import InvoiceMarkSent, { UnrecordedNotes } from "../../shared/InvoiceMarkSent";
+import useUnrecordedInvoices, { useUnloadWarning } from "../../shared/useUnrecordedInvoices";
 import {
   dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
-  monthKey, monthLabel,
+  monthKey, monthLabel, hasGrid, defaultCallSite,
 } from "../../../utils/dutyPay";
 
 /**
@@ -25,7 +31,7 @@ import {
  * unit is the month, so that is what the header totals.
  */
 function DutyLog({ contract }) {
-  const { data, addItem, editItem, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, user, userIdRef } = useApp();
   const iS = useInputStyle();
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
@@ -33,6 +39,26 @@ function DutyLog({ contract }) {
   const [invoicePick, setInvoicePick] = useState(null); // { days, selected: Set }
   const [invoicePreview, setInvoicePreview] = useState(null);
   const [sent, setSent] = useState(false);
+  // The number of the preview already recorded, read and set synchronously so
+  // a second tap waiting on the clipboard cannot record the invoice twice.
+  const recordedRef = useRef(null);
+  // A Send or Copy in progress (WorkLog's): null, "checking" (waiting for
+  // the membership check) or "out". Send, Copy and Mark as sent wait for it.
+  // Which preview it was tapped in: one closed or rebuilt while it waited
+  // sends nothing.
+  const [sending, setSending] = useState(null);
+  const previewSeqRef = useRef(0);
+  // An invoice that went out with its record refused, what the last send came
+  // to when it recorded nothing, and the Mark as sent form (WorkLog's too;
+  // utils/invoiceRecord.js).
+  const [unrecorded, setUnrecorded] = useState(null);
+  const [sendNote, setSendNote] = useState(null);
+  const [markSent, setMarkSent] = useState(null);
+  // One left behind (the preview closed, the page reloaded) is kept on the
+  // device until it is on the Invoices tab; leaving the page while one is on
+  // screen asks first.
+  const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id });
+  useUnloadWarning(!!unrecorded);
   // After a send: where the full cover letter is (the WorkLog notice, here too).
   const [notice, setNotice] = useState(null);
 
@@ -60,6 +86,10 @@ function DutyLog({ contract }) {
   }, [duties]);
 
   const hospitals = hospitalsFor(contract);
+  // An agreement entered by hand has no call rate grid: each call period then
+  // pays the call stipend, logged under a typed site (the facility by default).
+  const gridded = hasGrid(contract);
+  const stipend = Number(contract?.callStipend) || 0;
 
   // ── Invoicing: pick the days, build the itemised invoice, stamp them ──
   // Same picker and PDF as the time engine; the lines are duty lines
@@ -108,12 +138,16 @@ function DutyLog({ contract }) {
     // contract's rate grid — an invoice must never go out short silently.
     const zeroCalls = chosen.reduce((n, d) =>
       n + dutyDayPay(contract, d).lines.filter(l => l.label.startsWith("On call") && !l.amount).length, 0);
-    if (zeroCalls > 0 && !window.confirm(
-      `${zeroCalls} call period${zeroCalls === 1 ? "" : "s"} price at $0 — the hospital on the logged day doesn't match the contract's rate grid anymore. Fix the day or the contract first, or build the invoice anyway?`
+    if (zeroCalls > 0 && !window.confirm(gridded
+      ? `${zeroCalls} call period${zeroCalls === 1 ? "" : "s"} price at $0: the hospital on the logged day no longer matches the contract's rate grid. Fix the day or the contract first, or build the invoice anyway?`
+      : `${zeroCalls} call period${zeroCalls === 1 ? "" : "s"} price at $0 because the agreement has no call stipend or call rate grid. Add one to the agreement first, or build the invoice anyway?`
     )) return;
     const s = data.settings || {};
     const physician = s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician";
-    const num = nextInvoiceNumber(data.invoices);
+    // The server's number replaces the device's a moment after the preview
+    // opens; Send and Copy wait for it (utils/invoiceNumber.js).
+    const reserved = reserveInvoiceNumber(data.invoices, "INV", { rpc: allocateInvoiceNumberRpc, account: userIdRef?.current || user?.id, online: typeof navigator === "undefined" || navigator.onLine !== false });
+    const num = reserved.number;
     const lines = [];
     let total = 0;
     for (const d of chosen) {
@@ -126,33 +160,56 @@ function DutyLog({ contract }) {
     total = Math.round(total * 100) / 100;
     const dayRate = Number(contract.dayRate)
       || (Number(contract.clinicalDayRate) || 0) + (Number(contract.scholarlyRate) || 0);
-    const terms = `${money(dayRate)} all-in day rate per day worked; 24-hour call periods per the agreement's coverage-rate grid (per hospital and role)`;
+    const terms = gridded
+      ? `${money(dayRate)} all-in day rate per day worked; 24-hour call periods per the agreement's coverage-rate grid (per hospital and role)`
+      : `${money(dayRate)} all-in day rate per day worked; 24-hour call periods per the call stipend (${money(stipend)} per period)`;
     const dates = chosen.map(d => d.date);
     // Same day blocks and day totals as the PDF and the time engine's text
     // invoice (utils/invoiceLayout.js). The money is this engine's own.
-    const text = invoicePlainText({
-      number: num, physician, npi: s.npi, email: s.email,
+    const textArgs = {
+      physician, npi: s.npi, email: s.email,
       facility: contract.facility, agency: contract.agency,
       periodStart: dates[0], periodEnd: dates[dates.length - 1], terms, lines, total,
-    });
+    };
+    const text = invoicePlainText({ number: num, ...textArgs });
     setSent(false); // a fresh preview must never inherit a stale ✓
+    recordedRef.current = null;
+    previewSeqRef.current += 1;
+    setSending(null);
+    setUnrecorded(null); setSendNote(null); setMarkSent(null);
+    // Send waits for a membership answer that is only old (confirmWriteAllowed):
+    // asked now, while the invoice is read, so the tap finds it back.
+    prepareWriteCheck("practice");
+    if (reserved.pending) {
+      reserved.done.then(final => setInvoicePreview(p => (p && p.number === num && p.numberPending
+        ? { ...p, number: final, text: invoicePlainText({ number: final, ...p.textArgs }), numberPending: false }
+        : p)));
+    }
     setInvoicePreview({
-      number: num, lines, total, terms,
+      number: num, numberPending: reserved.pending, textArgs, lines, total, terms,
       dutyIds: chosen.map(d => d.id),
       periodStart: dates[0], periodEnd: dates[dates.length - 1],
       text,
     });
   };
 
-  const markDutyBilled = (method) => {
-    if (!invoicePreview) return;
+  // Record the preview's invoice as sent and mark its days billed. `number`
+  // and `sentAt` default to the preview's number and now; Mark as sent passes
+  // the ones on the copy that was sent. True once recorded (or already).
+  const markDutyBilled = (method, { number: asNumber, sentAt: asSentAt, retry = false } = {}) => {
+    if (!invoicePreview || invoicePreview.numberPending) return false;
+    if (recordedRef.current) return true; // already recorded
+    const number = asNumber || invoicePreview.number;
+    const sentAt = asSentAt || new Date().toISOString();
     const invId = generateId();
     // The invoice record goes first: refused (the membership check went
     // stale while the share sheet was open), nothing is marked billed and
-    // the preview stays, with a note that the invoice went out.
+    // the preview stays, with a note that the invoice went out. Gone out, the
+    // record and the days it billed are kept even if a membership check they
+    // wait for answers read-only (SENT_WORK).
     const recorded = addItem("invoices", {
       id: invId,
-      number: invoicePreview.number,
+      number,
       contractId: contract.id,
       periodStart: invoicePreview.periodStart,
       periodEnd: invoicePreview.periodEnd,
@@ -161,29 +218,108 @@ function DutyLog({ contract }) {
       totalAmount: invoicePreview.total,
       dayOverMin: {},
       method,
-      sentAt: new Date().toISOString(),
+      sentAt,
       paidAt: null,
-      text: invoicePreview.text,
+      text: number === invoicePreview.number ? invoicePreview.text : invoicePlainText({ number, ...invoicePreview.textArgs }),
       lines: invoicePreview.lines,
       terms: invoicePreview.terms,
-    });
+    }, SENT_WORK);
+    // Out of the device, so its number is spent even when the record was
+    // refused; this open preview keeps it for the retry (PRAC-030). A number
+    // typed into Mark as sent is spent for this account too.
+    invoiceNumberUsed(number, number === invoicePreview.number ? undefined : (userIdRef?.current || user?.id || ""));
     if (recorded === false) {
-      // An alert: the page notice sits under this open preview.
-      window.alert(`Invoice ${invoicePreview.number} went out but is not on the Invoices tab yet, and these days are still unbilled. Tap Copy text & mark sent once connected to record it.`);
-      return;
+      // Said in the preview every time (WorkLog's markBilledAndLog).
+      const why = writeRefusalMessage(accessAuthority, "practice");
+      if (method === MARKED_SENT) { // the form keeps what was typed
+        setMarkSent(f => (f ? { ...f, tries: (f.tries || 0) + 1, problem: recordRefusedNotice((f.tries || 0) + 1, why) } : f));
+        return false;
+      }
+      setUnrecorded(u => ({ number, method, sentAt, tries: retry ? (u?.tries || 0) + 1 : 0, why }));
+      if (!retry) {
+        rememberUnrecorded({
+          number, sentAt, kind: "INV", contractId: contract.id, total: invoicePreview.total,
+          periodStart: invoicePreview.periodStart || null, periodEnd: invoicePreview.periodEnd || null,
+        });
+        window.alert(notRecordedMessage(number, "these days"));
+      }
+      return false;
     }
+    recordedRef.current = number;
+    forgetUnrecorded(number);
+    setUnrecorded(null); setSendNote(null); setMarkSent(null);
     for (const id of invoicePreview.dutyIds) {
       const d = (data.dutyDays || []).find(x => x.id === id);
-      if (d) editItem("dutyDays", { ...d, invoiceId: invId });
+      if (d) editItem("dutyDays", { ...d, invoiceId: invId }, SENT_WORK);
     }
     setSent(true);
     setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
+    return true;
+  };
+
+  // Mark as sent: record an invoice that went out some other way, under the
+  // number and date on the copy that was sent. Nothing is sent.
+  const recordMarkedSent = () => {
+    if (!invoicePreview || !markSent) return;
+    const number = String(markSent.number ?? "").trim();
+    const problem = markSentProblem({ number, day: markSent.day, invoices: data.invoices, today: localDay() });
+    if (problem) { setMarkSent(f => (f ? { ...f, problem } : f)); return; }
+    markDutyBilled(MARKED_SENT, { number, sentAt: markedSentAt(markSent) });
+  };
+
+  // What Mark as sent opens with (WorkLog's markSentStart): this preview's
+  // number only when its file went to a share sheet, else the newest invoice
+  // from this agreement that went out unrecorded, else nothing.
+  const markSentStart = () => {
+    if (invoicePreview && sendNote?.shared === invoicePreview.number) return { number: invoicePreview.number, day: localDay() };
+    const last = leftUnrecorded[leftUnrecorded.length - 1];
+    if (last) return { number: last.number, day: sentDay(last.sentAt), from: unrecordedHint(last), at: last.sentAt };
+    return { number: "", day: localDay() };
+  };
+
+  // A preview holding an invoice that went out unrecorded asks before closing.
+  const closePreview = () => {
+    if (unrecorded && !recordedRef.current && !window.confirm(closeUnrecordedQuestion(unrecorded.number))) return;
+    previewSeqRef.current += 1; // a Send or Copy still waiting for the membership check stops
+    setSending(null);
+    setInvoicePreview(null); setSent(false); setUnrecorded(null); setSendNote(null); setMarkSent(null);
   };
 
   const [fmtOpen, setFmtOpen] = useState(false);
+  // Runs a Send or Copy (`go`) once the membership check lets it (WorkLog's
+  // whenWriteAllowed): an invoice that goes out has to be recorded, so never
+  // one the record would refuse. Send, Copy and Mark as sent wait meanwhile.
+  // Nothing goes out once the invoice was recorded while the check ran (the
+  // unrecorded banner's Record as sent), or the preview closed.
+  const whenWriteAllowed = async (go) => {
+    const opened = previewSeqRef.current;
+    setSending("checking");
+    try {
+      if (!(await confirmWriteAllowed("practice"))) return;
+      if (recordedRef.current || previewSeqRef.current !== opened) return;
+      setSending("out");
+      await go();
+    } finally {
+      // A preview opened since has its own.
+      if (previewSeqRef.current === opened) setSending(null);
+    }
+  };
   const sendDutyInvoice = async (format) => {
-    // An invoice that goes out has to be recorded: never send one the record would refuse.
-    if (!writeAllowedNow("practice")) return;
+    // Already recorded, its number not in yet, or a Send or Copy in progress.
+    if (sent || sending || recordedRef.current || invoicePreview?.numberPending) return;
+    await whenWriteAllowed(() => sendDutyFile(format));
+  };
+  // Copy: billed only once the text is really on the clipboard.
+  const copyDutyInvoice = async () => {
+    if (sent || sending || recordedRef.current || invoicePreview?.numberPending) return;
+    await whenWriteAllowed(async () => {
+      let ok = false;
+      try { ok = await copyToClipboard(invoicePreview.text); } catch { ok = false; }
+      if (!ok) { window.alert("Could not copy the invoice. Nothing was marked billed. Use Send invoice… instead, or try again."); return; }
+      markDutyBilled("copy");
+    });
+  };
+  const sendDutyFile = async (format) => {
     const s = data.settings || {};
     const args = {
       number: invoicePreview.number,
@@ -195,8 +331,17 @@ function DutyLog({ contract }) {
       terms: invoicePreview.terms, lines: invoicePreview.lines,
       totalMin: 0, total: invoicePreview.total,
     };
-    const how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
-    if (how === null) return; // share sheet cancelled
+    setSendNote(null);
+    let how;
+    try {
+      how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
+    } catch (err) {
+      setSendNote({ text: sendFailedNotice(err), shared: null });
+      return;
+    }
+    // Closed without reporting a send: said in the preview, with the way to
+    // record one that did go out.
+    if (how === null) { setSendNote({ text: shareClosedNotice(invoicePreview.number), shared: invoicePreview.number }); return; }
     const msg = invoiceCoverNotice(how);
     if (msg) {
       setNotice(msg);
@@ -226,20 +371,25 @@ function DutyLog({ contract }) {
     // never the document that went out; make that explicit before saving.
     // (Skipped on the placement re-entry so it can't ask twice per save.)
     if (!confirmed && editing !== "new" && form.invoiceId && !window.confirm(
-      "This day is already on a sent invoice. Editing updates your records but NOT the invoice that went out — to change the invoice too, delete it on the Invoices tab (days become unbilled) and generate it again. Edit anyway?"
+      "This day is already on a sent invoice. Editing updates your records but NOT the invoice that went out. To change the invoice too, delete it on the Invoices tab (days become unbilled) and generate it again. Edit anyway?"
     )) return;
     if (!confirmed && !form.placementOk) {
       const warn = checkPlacement(data.locumContracts || [], contract, form.date);
       if (warn) { setPlacement(warn); return; }
     }
+    // With a grid a period needs one of its hospitals. Without one, a blank
+    // site is the facility's, never a reason to drop the call.
+    const periods = (form.callPeriods || []).filter(Boolean)
+      .map(p => (gridded ? p : { ...p, hospital: String(p.hospital || "").trim() || defaultCallSite(contract), role: "primary" }))
+      .filter(p => p.hospital);
     const clean = {
       contractId: contract.id,
       date: form.date,
       workedDay: !!form.workedDay,
-      callPeriods: (form.callPeriods || []).filter(p => p && p.hospital),
+      callPeriods: periods,
       // Legacy columns kept in step so an older client still reads the day
-      callHospital: (form.callPeriods || [])[0]?.hospital || null,
-      callRole: (form.callPeriods || [])[0]?.role || null,
+      callHospital: periods[0]?.hospital || null,
+      callRole: periods[0]?.role || null,
       notes: form.notes || "",
       placementOk: confirmed || !!form.placementOk,
     };
@@ -277,6 +427,10 @@ function DutyLog({ contract }) {
         background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
         fontSize: 15, fontWeight: 800, cursor: "pointer",
       }}>+ Log a day</button>
+
+      {/* An invoice from this agreement that went out without a record and
+          was left behind: said here until it is recorded or forgotten. */}
+      {!invoicePreview && UnrecordedNotes({ T, list: leftUnrecorded, what: "its days", onForget: forgetUnrecorded })}
 
       {/* Invoice CTA — same pick-the-days flow as the time engine. Counts
           DAYS (two rows on one date are still one day) to match the picker. */}
@@ -334,7 +488,7 @@ function DutyLog({ contract }) {
               <div style={{ padding: "8px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, marginBottom: 6 }}>
                 {sum.byHospital.map((h, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: T.textMuted, padding: "2px 0" }}>
-                    <span>{h.hospital.replace(/\s*\(.*\)$/, "")} — {h.role} × {h.periods}</span>
+                    <span>{h.hospital.replace(/\s*\(.*\)$/, "")}: {h.role} × {h.periods}</span>
                     <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>${h.amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
                   </div>
                 ))}
@@ -391,13 +545,13 @@ function DutyLog({ contract }) {
                 background: invoicePick.selected.size ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
                 color: "#fff", fontSize: 15, fontWeight: 800, cursor: invoicePick.selected.size ? "pointer" : "default",
               }}>
-              Invoice {invoicePick.selected.size} day{invoicePick.selected.size === 1 ? "" : "s"} — {money(pickTotal)}
+              Invoice {invoicePick.selected.size} day{invoicePick.selected.size === 1 ? "" : "s"}: {money(pickTotal)}
             </button>
           </>
         )}
       </Modal>
 
-      <Modal open={!!invoicePreview} onClose={() => { setInvoicePreview(null); setSent(false); }} title="Invoice preview">
+      <Modal open={!!invoicePreview} onClose={closePreview} title="Invoice preview">
         {invoicePreview && (
           <>
             <div style={{
@@ -415,27 +569,33 @@ function DutyLog({ contract }) {
             </div>
             {sent ? (
               <div style={{ textAlign: "center", padding: "12px", fontSize: 15, fontWeight: 800, color: "#22c55e" }}>
-                ✓ Marked sent — it's on the Invoices tab
+                ✓ Recorded as sent. It's on the Invoices tab.
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <button onClick={() => setFmtOpen(true)} style={{
+                <button disabled={!!invoicePreview.numberPending || !!sending} onClick={() => { if (!invoicePreview.numberPending && !sending) setFmtOpen(true); }} style={{
                   width: "100%", padding: "14px", borderRadius: 12, border: "none",
-                  background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
-                  fontSize: 15, fontWeight: 800, cursor: "pointer",
-                }}>Send invoice…</button>
+                  background: invoicePreview.numberPending || sending ? T.border : "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
+                  fontSize: 15, fontWeight: 800, cursor: invoicePreview.numberPending ? "default" : sending ? "wait" : "pointer",
+                }}>{invoicePreview.numberPending ? "Reserving the invoice number…" : sending === "checking" ? "Checking your membership…" : "Send invoice…"}</button>
                 <InvoiceFormatChooser open={fmtOpen} onClose={() => setFmtOpen(false)}
                   onPick={(f) => { setFmtOpen(false); sendDutyInvoice(f); }} />
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => { if (!writeAllowedNow("practice")) return; copyToClipboard(invoicePreview.text); markDutyBilled("copy"); }} style={{
+                  <button disabled={!!invoicePreview.numberPending || !!sending} onClick={copyDutyInvoice} style={{
                     flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${T.border}`,
-                    backgroundColor: "transparent", color: T.text, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+                    backgroundColor: "transparent", color: sending ? T.textMuted : T.text, fontSize: 13.5, fontWeight: 700, cursor: sending ? "wait" : "pointer",
                   }}>Copy text &amp; mark sent</button>
-                  <button onClick={() => setInvoicePreview(null)} style={{
+                  <button onClick={closePreview} style={{
                     padding: "12px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
                     backgroundColor: "transparent", color: T.textMuted, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
                   }}>Cancel</button>
                 </div>
+                {InvoiceMarkSent({
+                  T, iS, pending: unrecorded, note: sendNote?.text, start: markSentStart(),
+                  form: markSent, setForm: setMarkSent, today: localDay(), waiting: invoicePreview.numberPending || !!sending,
+                  onRecordPending: () => unrecorded && markDutyBilled(unrecorded.method, { number: unrecorded.number, sentAt: unrecorded.sentAt, retry: true }),
+                  onRecordMarked: recordMarkedSent, unbilled: "these days",
+                })}
               </div>
             )}
           </>
@@ -447,39 +607,47 @@ function DutyLog({ contract }) {
           <>
             <Field label="Date"><input type="date" value={form.date || ""} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={iS} /></Field>
 
-            <Field label="Day worked" hint="Surgery, clinic, rounding, or other daytime services — pays the all-in day rate">
+            <Field label="Day worked" hint="Surgery, clinic, rounding, or other daytime services; pays the all-in day rate">
               <button onClick={() => setForm(f => ({ ...f, workedDay: !f.workedDay }))} style={{
                 width: "100%", padding: "12px", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer",
                 border: `1px solid ${form.workedDay ? T.accent : T.border}`,
                 backgroundColor: form.workedDay ? T.accent : "transparent",
                 color: form.workedDay ? "#fff" : T.textMuted,
-              }}>{form.workedDay ? "Yes — day worked" : "No clinical day"}</button>
+              }}>{form.workedDay ? "Yes, day worked" : "No clinical day"}</button>
             </Field>
 
-            <Field label="On call" hint="Each hospital covered pays its own grid rate — add one row per hospital">
+            <Field label="On call" hint={gridded
+              ? "Each hospital covered pays its own grid rate. Add one row per hospital."
+              : `This agreement has no call rate grid, so each call period pays the call stipend (${money(stipend)}). Add a grid on the agreement if call pays by hospital.`}>
               {(form.callPeriods || []).map((p, i) => (
                 <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-                  <select value={p.hospital} onChange={e => setForm(f => ({
-                    ...f, callPeriods: f.callPeriods.map((x, j) => j === i ? { ...x, hospital: e.target.value } : x),
-                  }))} style={{ ...iS, appearance: "auto", flex: 1, minWidth: 0 }}>
-                    {hospitals.map(h => <option key={h} value={h}>{h}</option>)}
-                  </select>
-                  <button onClick={() => setForm(f => ({
+                  {gridded ? (
+                    <select aria-label={`Call period ${i + 1} hospital`} value={p.hospital} onChange={e => setForm(f => ({
+                      ...f, callPeriods: f.callPeriods.map((x, j) => j === i ? { ...x, hospital: e.target.value } : x),
+                    }))} style={{ ...iS, appearance: "auto", flex: 1, minWidth: 0 }}>
+                      {hospitals.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  ) : (
+                    <input aria-label={`Call period ${i + 1} site`} value={p.hospital || ""} onChange={e => setForm(f => ({
+                      ...f, callPeriods: f.callPeriods.map((x, j) => j === i ? { ...x, hospital: e.target.value } : x),
+                    }))} style={{ ...iS, flex: 1, minWidth: 0 }} placeholder={defaultCallSite(contract)} />
+                  )}
+                  {gridded && <button onClick={() => setForm(f => ({
                     ...f, callPeriods: f.callPeriods.map((x, j) => j === i ? { ...x, role: x.role === "backup" ? "primary" : "backup" } : x),
                   }))} style={{
                     padding: "11px 13px", borderRadius: 10, fontSize: 12.5, fontWeight: 800, cursor: "pointer", flexShrink: 0,
                     border: `1px solid ${p.role === "backup" ? T.border : T.accent}`,
                     backgroundColor: p.role === "backup" ? "transparent" : T.accent,
                     color: p.role === "backup" ? T.textMuted : "#fff",
-                  }}>{p.role === "backup" ? "Backup" : "Primary"}</button>
-                  <button onClick={() => setForm(f => ({ ...f, callPeriods: f.callPeriods.filter((_, j) => j !== i) }))} style={{
-                    padding: "11px 12px", borderRadius: 10, border: "none", flexShrink: 0,
+                  }}>{p.role === "backup" ? "Backup" : "Primary"}</button>}
+                  <button aria-label={`Remove call period ${i + 1}`} onClick={() => setForm(f => ({ ...f, callPeriods: f.callPeriods.filter((_, j) => j !== i) }))} style={{
+                    padding: "11px 12px", borderRadius: 10, border: "none", flexShrink: 0, ...cardActionSize,
                     backgroundColor: T.dangerDim, color: T.danger, fontSize: 13, fontWeight: 800, cursor: "pointer",
                   }}>×</button>
                 </div>
               ))}
               <button onClick={() => setForm(f => ({
-                ...f, callPeriods: [...(f.callPeriods || []), { hospital: hospitals[0] || "", role: "primary" }],
+                ...f, callPeriods: [...(f.callPeriods || []), { hospital: gridded ? hospitals[0] || "" : defaultCallSite(contract), role: "primary" }],
               }))} style={{
                 width: "100%", padding: "11px", borderRadius: 10, cursor: "pointer",
                 border: `1px dashed ${T.accent}`, backgroundColor: "transparent",
@@ -491,7 +659,7 @@ function DutyLog({ contract }) {
 
             {/* The arithmetic, itemised, so the invoice is never a mystery */}
             <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 12, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
-              {preview.lines.length === 0 && <div style={{ fontSize: 13, color: T.textMuted }}>Nothing logged for this day — it invoices $0.</div>}
+              {preview.lines.length === 0 && <div style={{ fontSize: 13, color: T.textMuted }}>Nothing logged for this day, so it invoices $0.</div>}
               {preview.lines.map((l, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: T.textMuted, padding: "3px 0" }}>
                   <span>{l.label}</span>

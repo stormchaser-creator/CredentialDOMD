@@ -38,6 +38,25 @@ test('a ticket saved without one of its files says so instead of the plain confi
   assert.equal(form.find(n => n.type === 'screenshot').props.value.length, 0);
 });
 
+// Review 2026-09-30: a retry after a lost response that reaches the server
+// while the first request is still uploading. The files are on their way, so
+// the member is not told they failed or asked to send them again.
+test('a retry answered while the first request is still uploading says the files are still attaching', async () => {
+  const f = fixture();
+  f.edit('textarea', 'Synthetic report with two files attached');
+  attachTwo(f);
+  let send = f.button('Send ticket').props.onClick();
+  f.sends[0].resolve({ error: { context: { status: 504 } } });
+  await send;
+  send = f.button('Send ticket').props.onClick();
+  f.sends[1].resolve({ data: { ok: true, id: ID, duplicate: true, attachments_stored: 0, attachments_failed: 0, attachments_pending: 2 } });
+  await send;
+  const shown = f.text(f.render());
+  assert.match(shown, /Your ticket was sent\. 2 files are still attaching\./);
+  assert.doesNotMatch(shown, /did not attach|Add them as a reply\./);
+  assert.equal(f.timers.length, 0, 'the sheet stays open so it can be read');
+});
+
 test('a ticket whose files all landed keeps the plain confirmation and closes itself', async () => {
   const f = fixture();
   f.edit('textarea', 'Synthetic report with two files attached');

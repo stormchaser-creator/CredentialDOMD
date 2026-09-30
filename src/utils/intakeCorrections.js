@@ -36,12 +36,15 @@ export const CORRECTION_ACTIONS = Object.freeze(["dismiss_request", "edit_cover_
 const MAX_ITEMS = 12;
 
 /**
- * Did this document arrive by email? An inbox type, or a MIME type in
- * mimeType: email-inbound writes documents.mime_type, and the app's own
- * uploads keep their MIME type in `type` and leave that column empty.
+ * Did this document arrive by email? An inbox type, or origin "email", which
+ * email-inbound stamps on every document it creates (documents.origin,
+ * migration 20260929230000). Not mimeType: the sync layer writes mime_type
+ * for the app's own uploads too, so every reloaded upload carries one, and
+ * reading it as email made each link of an upload a false "forwarded
+ * document moved" correction in the intake prompt.
  */
 export function arrivedByEmail(doc) {
-  return !!doc && (INBOX_DOC_TYPES.includes(doc.type) || !!doc.mimeType);
+  return !!doc && (INBOX_DOC_TYPES.includes(doc.type) || doc.origin === "email");
 }
 
 /** "licenses" from "licenses:abc"; "inbox" for an emailed document with no link; "" otherwise. */

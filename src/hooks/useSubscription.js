@@ -3,7 +3,6 @@
  *
  * Reads tier + entitlement state from Supabase subscriptions table.
  * Enforces:
- *  - Free tier hard credential cap at 5
  *  - Founding lock window display (locked until lock_ends_at)
  *  - Resident verification + 90d-post-graduation auto-conversion display
  *  - Per-feature gates via featureMap.tierIncludesFeature
@@ -16,7 +15,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
 import { useLimitedLaunchAccess } from "./useLimitedLaunchAccess.js";
-import { LIMITED_LAUNCH_ACCESS_ENABLED, accessAuthority, membershipReadOnly } from "../utils/limitedLaunchAccess.js";
+import { LIMITED_LAUNCH_ACCESS_ENABLED, accessAuthority, membershipReadOnly, hasManageableSubscription } from "../utils/limitedLaunchAccess.js";
 import { useUser } from "@clerk/clerk-react";
 import { supabase } from "../lib/supabase";
 import { TIERS, getTier } from "../utils/pricingEngine";
@@ -114,7 +113,6 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
   const [foundingLockEndsAt, setFoundingLockEndsAt] = useState(null);
   const [graduationDate, setGraduationDate] = useState(null);
   const [seatCount, setSeatCount] = useState(1);
-  const [credentialUsage, setCredentialUsage] = useState(0);
 
   // Listen for mock-tier changes (dev mode)
   useEffect(() => {
@@ -188,14 +186,10 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
         setHasSubscription(false);
         setLoading(false);
       });
-
-    // Load credential usage count (for free-tier 5-credential cap)
-    supabase
-      .from("credentials")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .then(({ count }) => { if (current) setCredentialUsage(count ?? 0); })
-      .catch(() => {});
+    // No credential count here. This used to count rows in a "credentials"
+    // table for a free-tier cap, but no such table was ever created (records
+    // live in the TABLE_MAP tables), so the count always failed to 0 and the
+    // cap never applied; canAddCredential below keeps that behavior.
     return () => { current = false; };
   }, [userId, previewTier]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -236,7 +230,13 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
         const result = await createLimitedLaunchClient({ accountId: userId }).portal();
         window.location.assign(result.url);
         return { ok: true };
-      } catch {
+      } catch (error) {
+        // No billing account at all: there is nothing to manage or cancel,
+        // and trying again never changes that.
+        if (error?.code === "billing_account_not_found") {
+          window.alert("There is no subscription on this account, so there is nothing to manage or cancel. Contact support@credentialdomd.com if you think this is a mistake.");
+          return { ok: false, error: "no_subscription" };
+        }
         window.alert("Billing management could not open. Please try again. Your membership and records have not changed.");
         return { ok: false };
       }
@@ -261,7 +261,6 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
   const effectiveTier = freeBeta ? "locum" : currentTier;
   const tierObject = getTier(effectiveTier);
   const isPaid = effectiveTier !== "free" && effectiveTier !== "resident";
-  const isFreeAtLimit = effectiveTier === "free" && credentialUsage >= (tierObject?.credentialLimit ?? Infinity);
   const isTrialing = trialEndsAt && new Date(trialEndsAt) > new Date();
   const isFoundingLocked = effectiveTier === "founding" && foundingLockEndsAt &&
     new Date(foundingLockEndsAt) > new Date();
@@ -277,7 +276,7 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
     (featureKey) => tierIncludesFeature(tierObject, featureKey),
     [tierObject]
   );
-  const canAddCredential = useCallback(() => !isFreeAtLimit, [isFreeAtLimit]);
+  const canAddCredential = useCallback(() => true, []);
 
   return {
     // Identity
@@ -287,7 +286,6 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
     // Status flags
     loading,
     isPaid,
-    isFreeAtLimit,
     isTrialing,
     isFoundingLocked,
     // Billing truth, independent of the beta unlock: is there a live paid
@@ -309,7 +307,6 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
 
     // Quotas
     seatCount,
-    credentialUsage: ownsLoadedSubscription ? credentialUsage : 0,
     credentialLimit: tierObject?.credentialLimit ?? null,
 
     // Capability checks
@@ -347,7 +344,8 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
       isPro: limitedLaunch.access ? limitedLaunch.access.capabilities.credential.read === true : limitedLaunch.verifying === true,
       isPractice: false, isDevMode: false,
       isPaid: !!limitedLaunch.access?.purchasedOfferId,
-      hasSubscription: !!(limitedLaunch.access?.purchasedOfferId || limitedLaunch.access?.scheduledMembership),
+      // A failed renewal (past_due, unpaid) still needs the portal to fix the card.
+      hasSubscription: hasManageableSubscription(limitedLaunch.access),
       isLifetime: limitedLaunch.access?.lifetime.credential === true && limitedLaunch.access?.lifetime.practice === true,
       isFreeBeta: limitedLaunch.access?.freeBeta?.state === "active",
       isTrialing: limitedLaunch.access?.practiceTrial.state === "active",

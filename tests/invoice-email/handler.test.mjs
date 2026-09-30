@@ -44,7 +44,7 @@ test("the letter keeps its line breaks end to end: preview, request, handler, Re
   assert.equal(mail.text, draft.email.text, "the text Resend got is the text the preview showed");
   const paragraphs = mail.text.split("\n\n");
   assert.equal(paragraphs[0], "Hello,");
-  assert.match(paragraphs[1], /^Attached is invoice INV-20260920-01 for physician services at Synthetic Hospital \(via Synthetic Locums\), covering Sep 14, 2026 through Sep 20, 2026\.$/);
+  assert.match(paragraphs[1], /^Attached is invoice INV-20260922-04 for physician services at Synthetic Hospital \(via Synthetic Locums\), covering Aug 24, 2026 through Aug 30, 2026\.$/);
   assert.equal(paragraphs[2], "Total due: $12,500.50");
   assert.equal(paragraphs.at(-2), "Thank you,\nSynthetic Physician, DO\nNPI 9999999999\ndoc@example.test", "the signature keeps its own lines");
   assert.equal(paragraphs.at(-1), invoiceEmailFooter("Synthetic Physician, DO"));

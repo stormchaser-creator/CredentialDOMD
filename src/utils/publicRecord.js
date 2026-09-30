@@ -57,8 +57,14 @@ export function dedupeKey(section, item) {
     return f ? `privileges:${f}` : "";
   }
   if (section === "workHistory") {
+    // Employer and position: a physician can hold several positions at one
+    // employer (resident, then faculty). A lead with no title (Medicare's
+    // employer list) keys on the employer alone, which every job on file
+    // there also answers to (dedupeKeysOnFile).
     const e = norm(item?.employer);
-    return e ? `workHistory:${e}` : "";
+    if (!e) return "";
+    const p = norm(item?.position);
+    return p ? `workHistory:${e}|${p}` : `workHistory:${e}`;
   }
   if (section === "publications") {
     const pmid = norm(item?.pmid);
@@ -73,7 +79,11 @@ export function dedupeKey(section, item) {
     return o ? `memberships:${o}` : "";
   }
   if (section === "education") {
+    // School and program: a residency and a fellowship at one center are two
+    // rows. A school with no stated type keys on the school alone.
     const i = norm(item?.institution);
+    const type = norm(item?.type);
+    if (i && type) return `education:${i}|${type}`;
     if (i) return `education:${i}`;
     // Medicare files the school as "OTHER", so the medical school finding
     // carries a degree type and no institution. A physician holds one MD or
@@ -86,16 +96,24 @@ export function dedupeKey(section, item) {
 
 /**
  * Every key a record already on file answers to. An education row typed with
- * a school also answers to its degree, so a finding that has the degree and
- * no school still recognizes it.
+ * a school also answers to the school alone and to its degree, so a finding
+ * that has the degree and no school (Medicare) still recognizes it; a job
+ * also answers to its employer alone, so an untitled employer lead does.
  */
 function dedupeKeysOnFile(section, item) {
-  const keys = [dedupeKey(section, item)];
+  const keys = [dedupeKey(section, item), orgKey(section, item)];
   if (section === "education") {
     const t = norm(item?.type);
     if (t) keys.push(`education:type:${t}`);
   }
   return keys.filter(Boolean);
+}
+
+/** The looser key: the institution or employer alone, or "". */
+function orgKey(section, item) {
+  if (section === "workHistory") { const e = norm(item?.employer); return e ? `workHistory:${e}` : ""; }
+  if (section === "education") { const i = norm(item?.institution); return i ? `education:${i}` : ""; }
+  return "";
 }
 
 /**
@@ -136,7 +154,11 @@ export function markAlreadyOnFile(findings, existing = {}, settings = {}) {
       return { ...f, alreadyOnFile: already, replaces: replacedSettingsKeys(f.fields, settings) };
     }
     const k = dedupeKey(f.section, f.fields);
-    return { ...f, alreadyOnFile: !!k && have.has(k) };
+    const already = !!k && have.has(k);
+    // Same institution or employer, different program or position: a hint
+    // ("you have another entry here"), never a lock.
+    const org = orgKey(f.section, f.fields);
+    return { ...f, alreadyOnFile: already, sameOrgOnFile: !already && !!org && org !== k && have.has(org) };
   });
 }
 

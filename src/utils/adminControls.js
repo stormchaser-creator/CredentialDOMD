@@ -1,3 +1,38 @@
+// The words the admin screens use for each stored state. The database says
+// 'revoked' for a paused account or invitation; nobody reading Admin should
+// have to translate that (the Accounts filter already says Paused).
+const STATE_LABELS = {
+  profile: { active: 'Active', pending: 'Pending', revoked: 'Paused' },
+  invite: { invited: 'Invited', active: 'Active', revoked: 'Paused' },
+};
+
+export function accessStateLabel(kind, status) {
+  const labels = STATE_LABELS[kind === 'invite' ? 'invite' : 'profile'];
+  return Object.hasOwn(labels, status) ? labels[status] : String(status || 'Unknown');
+}
+
+/** The one sentence the confirm dialog shows about what will change. */
+export function accessChangeSummary(change) {
+  if (change.action === 'remove') return 'This removes an unclaimed invitation.';
+  if (change.kind === 'invite') {
+    return `The invitation will change from ${accessStateLabel('invite', change.row.status)} to ${accessStateLabel('invite', change.status)}.`;
+  }
+  return `App access will change from ${accessStateLabel('profile', change.row.access_status)} to ${accessStateLabel('profile', change.status)}.`;
+}
+
+// admin_change_profile_access and admin_change_invite refuse a change whose
+// reviewed row moved on with SQLSTATE PT409, which PostgREST answers as HTTP
+// 409 (20260930030000_admin_refusals_not_retryable.sql). Re-sending the same
+// reviewed request can never pass that check, so the dialog offers Refresh,
+// not Retry.
+export const STALE_REVIEW_CODE = 'PT409';
+
+function controlFailure(error) {
+  const failure = new Error(error.message || 'The change could not be saved.');
+  if (error.code === STALE_REVIEW_CODE) failure.stale = true;
+  return failure;
+}
+
 export function adminControlRequest(change, reason, requestId) {
   const note = String(reason || '').trim();
   if (note.length < 10 || note.length > 500) throw new Error('Enter a reason between 10 and 500 characters.');
@@ -24,7 +59,7 @@ export function adminControlRequest(change, reason, requestId) {
 export async function submitAdminControl(client, change, reason, requestId) {
   const request = adminControlRequest(change, reason, requestId);
   const result = await client.rpc(request.name, request.args);
-  if (result?.error) throw new Error(result.error.message || 'The change could not be saved.');
+  if (result?.error) throw controlFailure(result.error);
   const receipt = result?.data;
   const validTimestamp = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
   const validAudit = typeof receipt?.audit_id === 'string'

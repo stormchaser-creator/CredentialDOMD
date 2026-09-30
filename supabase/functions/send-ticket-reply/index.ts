@@ -35,6 +35,32 @@
 // emailed an hour after it was stored. Every try carries the same Resend
 // Idempotency-Key, so a send whose answer was lost is not sent twice.
 //
+// EVERY TRY SENDS THE SAME BYTES, WHILE RESEND MAY HOLD THEM. Resend refuses a
+// key reused within 24 hours with a different body (409
+// invalid_idempotent_request) and sends nothing. Until 2026-09-29 each try
+// built the request again from the ticket's current subject and the owner's
+// current address, so a first try whose answer was lost, followed by a
+// subject or address change, left every retry refused and the reply never
+// recorded as emailed. The first try's body is now stored
+// (ticket_reply_emails.payload, 20260930031500) before it is sent and every
+// retry sends it, so Resend answers a retry with the first try's result.
+// The stored body is kept only while a try of it may have been taken: no
+// answer, a 5xx, or a 409 (concurrent_idempotent_requests: still in flight).
+// Any other 4xx (400, 403, 422, 429) is Resend refusing the request before it
+// takes it, so the body is forgotten with the claim
+// (ticket_reply_email_payload_refused) and the next try stores and sends the
+// current one: a fixed address, subject or email builder goes out instead of
+// the refused bytes being refused again on every retry.
+// If Resend still answers invalid_idempotent_request (an earlier try went out
+// with other bytes: one from before the body was stored, or one whose body
+// could not be stored), that try reached Resend and a new key could email the
+// member twice. The claim stands only with a mark on the reply's
+// ticket_reply_emails row (ticket_reply_email_refusal), which
+// scripts/ticket-fix/reconcile.mjs reports to the owner once: the earlier email
+// may have gone to an older address. With nowhere to put the mark (the
+// migration not applied, or a reply with no row) the claim is released as
+// before, so reconcile.mjs reports the reply as not emailed after an hour.
+//
 // REPLIES TO THE EMAIL. A support reply's reply_to is
 // support+<ticket id>@credentialdomd.com, which email-inbound adds to the
 // ticket when it comes from the owner's confirmed, authenticated mailbox and
@@ -143,22 +169,32 @@ Deno.serve(async (req) => {
       await supabase.from("support_messages").update({ emailed_at: null }).eq("id", messageId).eq("emailed_at", claimedAt);
     }
   };
+  const built = JSON.stringify({
+    from: mail.from,
+    to: [email],
+    reply_to: mail.replyTo,
+    subject,
+    text: mail.text,
+  });
+  // The first try's body, stored before it is sent; this try's when none is
+  // stored yet. Without the function (20260930031500 not applied) or a
+  // ticket_reply_emails row (a reply stored before 20260929150000), this try's.
+  let payload = built;
+  const { data: stored, error: storeError } = await supabase
+    .rpc("ticket_reply_email_payload", { p_message_id: messageId, p_payload: built });
+  if (storeError) console.warn(`send-ticket-reply: reply ${messageId}: its email body was not stored (${storeError.code || "error"}${storeError.code === "PGRST202" ? "; apply 20260930031500" : ""}). Sending this try's body.`);
+  const frozen = !storeError && typeof stored === "string" && stored.length > 1;
+  if (frozen) payload = stored;
   let r: Response;
   try {
     r = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      // One key per message, the same on every try: a retry of a send that
-      // did reach Resend (the answer was lost) gets the first result back
-      // instead of a second email. Resend keeps a key 24 hours; the retries
-      // end after about 11.
+      // One key per message, the same on every try, with the same body: a
+      // retry of a send that did reach Resend (the answer was lost) gets the
+      // first result back instead of a second email. Resend keeps a key 24
+      // hours; the retries end after about 11.
       headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json", "Idempotency-Key": `ticket-reply/${messageId}` },
-      body: JSON.stringify({
-        from: mail.from,
-        to: [email],
-        reply_to: mail.replyTo,
-        subject,
-        text: mail.text,
-      }),
+      body: payload,
     });
   } catch (error) {
     // No answer from Resend. The claim must not stand, or the retry would
@@ -170,9 +206,38 @@ Deno.serve(async (req) => {
     return json({ sent: false, reason: "email service unreachable" }, 502);
   }
   const body = await r.text();
-  if (!r.ok) {
-    console.error("resend failed:", r.status, body.slice(0, 300));
+  if (r.ok) return json({ sent: true });
+  let refusal = "";
+  try { refusal = String(JSON.parse(body)?.name || ""); } catch { /* not JSON */ }
+  if (r.status === 409 && refusal === "invalid_idempotent_request") {
+    // An earlier try under this key reached Resend with a different body (it
+    // came before this reply's body was stored, or its body could not be
+    // stored). Resend refuses every try under this key for 24 hours and
+    // sends nothing, and a new key could email the member twice. Keep the
+    // claim only with a mark reconcile.mjs reports: that earlier email may
+    // have gone to an older address, or under an older subject.
+    const { data: marked, error: markError } = await supabase
+      .rpc("ticket_reply_email_refusal", { p_message_id: messageId, p_refusal: refusal });
+    if (!markError && marked === true) {
+      console.error(`reply ${messageId}: Resend holds an earlier try under ticket-reply/${messageId} with a different body (409 invalid_idempotent_request); that try reached Resend, so the reply is recorded as emailed, marked, and not sent again. reconcile.mjs alerts the owner to confirm its delivery.`);
+      return json({ sent: false, reason: "an earlier try reached the email service", recorded: true });
+    }
+    console.error(`reply ${messageId}: Resend holds an earlier try under ticket-reply/${messageId} with a different body (409 invalid_idempotent_request), and the reply could not be marked (${markError?.code || "no ticket_reply_emails row"}${markError?.code === "PGRST202" ? "; apply 20260930031500" : ""}); claim released, so it stays not emailed and reconcile.mjs reports it.`);
     await release();
+    return json({ sent: false, reason: "an earlier try reached the email service", recorded: false });
   }
-  return json({ sent: r.ok });
+  // Refused before Resend took it (not a 409, not a timeout): nothing was
+  // sent, so the stored body goes with the claim and the next try sends the
+  // current one. Resend's documentation does not say whether it keeps a
+  // refused request's key; if it does, the next body gets the 409 above,
+  // which marks the reply for the owner and sends nothing twice. A 5xx or a
+  // 409 keeps the body: Resend may have taken it.
+  if (frozen && r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 409) {
+    const { error: forgetError } = await supabase
+      .rpc("ticket_reply_email_payload_refused", { p_message_id: messageId, p_payload: payload });
+    if (forgetError) console.error(`reply ${messageId}: could not forget the refused email body (${forgetError.code || "error"}); the next try sends it again`);
+  }
+  console.error("resend failed:", r.status, body.slice(0, 300));
+  await release();
+  return json({ sent: false });
 });

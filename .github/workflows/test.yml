@@ -50,3 +50,15 @@ jobs:
           PG_BIN="$(pg_config --bindir 2>/dev/null || true)"
           echo "PG_BIN=${PG_BIN:-<not found, PostgreSQL tests will skip>}"
           LC_ALL=C PG_BIN="$PG_BIN" npm test
+
+      # The PostgreSQL suites written in Python (tests/*/postgres-*.py), one at
+      # a time, after the node tests so no two disposable servers compete for
+      # shared memory. A non-zero exit fails the job. Each suite applies a
+      # pinned list of migrations; the runner prints any function a later
+      # migration redefines as "superseded" (QA OPS-012). Skips with a message
+      # when the runner has no PostgreSQL server.
+      - name: Run the PostgreSQL suites
+        working-directory: src
+        run: |
+          PG_BIN="$(pg_config --bindir 2>/dev/null || true)"
+          LC_ALL=C PG_BIN="$PG_BIN" npm run test:pg-suites

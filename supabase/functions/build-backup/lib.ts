@@ -122,7 +122,7 @@ export function periodFor(date: Date): string {
 }
 
 /**
- * "Dr. Eric Whitney, MD" to "Eric"; falls back to the mailbox name.
+ * "Dr. Rowan Testa, MD" to "Rowan"; falls back to the mailbox name.
  *
  * The version in send-reminders/index.ts strips "Dr" but leaves the dot behind,
  * so the first token is "." and every physician who writes their name with a

@@ -69,9 +69,9 @@ test("a category name or field label that IS an identifier is refused, as label 
 
 test("a packed record carries ONLY real columns, so the cloud never rejects it whole", () => {
   const { record } = packRecord(badges(), {
-    name: "Penrose badge", issuer: "Penrose Hospital", number: "PX-1182",
+    name: "Juniper badge", issuer: "Juniper Hospital", number: "PX-1182",
     issuedDate: "2026-01-02", expirationDate: "2028-01-02",
-    values: { "Badge number": "PX-1182", facility: "Penrose" },
+    values: { "Badge number": "PX-1182", facility: "Juniper" },
     facts: [{ label: "Color", value: "Blue" }],
     badgeNumber: "stray", surprise: "stray", data: "stray",
   }, { id: "R1" });
@@ -79,7 +79,7 @@ test("a packed record carries ONLY real columns, so the cloud never rejects it w
   assert.deepEqual(extra, [], "a stray top-level key would be sent as a column and reject the row");
   assert.equal(record.categoryId, "C1");
   assert.equal(record.categoryName, "Hospital ID Badges");
-  assert.deepEqual(record.fieldValues, { badgeNumber: "PX-1182", facility: "Penrose" });
+  assert.deepEqual(record.fieldValues, { badgeNumber: "PX-1182", facility: "Juniper" });
   assert.deepEqual(record.customFields, { Color: "Blue" });
   assert.equal(record.expirationDate, "2028-01-02");
 });
@@ -95,7 +95,7 @@ test("nothing is silently dropped: repeated labels keep every reading", () => {
 
 test("identifiers are withheld AND reported, the rest of the record still saves", () => {
   const { record, withheld } = packRecord(badges(), {
-    name: "Penrose badge",
+    name: "Juniper badge",
     facts: [{ label: "MRN", value: "00482913" }, { label: "Date of Birth", value: "1970-01-01" },
             { label: "Color", value: "Blue" }, { label: "Notes", value: "SSN 123-45-6789" }],
     notes: "Social Security 123-45-6789",
@@ -152,11 +152,11 @@ test("every record stays reachable: archived or missing categories surface as un
 test("moving a record keeps every value", () => {
   const from = badges();
   const to = buildCategory({ name: "Facility access", fields: ["Facility"] }, { id: "C9" });
-  const { record } = packRecord(from, { name: "Penrose", values: { "Badge number": "PX-1", facility: "Penrose" }, facts: [{ label: "Color", value: "Blue" }], documentIds: ["d1"] }, { id: "R1" });
+  const { record } = packRecord(from, { name: "Juniper", values: { "Badge number": "PX-1", facility: "Juniper" }, facts: [{ label: "Color", value: "Blue" }], documentIds: ["d1"] }, { id: "R1" });
   const moved = moveRecord({ ...record, favorite: true }, to);
   assert.equal(moved.id, "R1");
   assert.equal(moved.categoryId, "C9");
-  assert.equal(moved.fieldValues.facility, "Penrose");
+  assert.equal(moved.fieldValues.facility, "Juniper");
   assert.equal(moved.customFields["Badge number"], "PX-1", "a value with no matching field moves to details, not the bin");
   assert.equal(moved.customFields.Color, "Blue");
   assert.deepEqual(moved.documentIds, ["d1"]);
@@ -214,8 +214,8 @@ test("a field labelled ID never collides with the record's id column", () => {
 test("Vera's two record shapes add together instead of one replacing the other", () => {
   const data = { customCategories: [{ id: "C1", name: "Badges" }] };
   const [a] = repairActions([{ kind: "create_record", section: "customRecords", categoryId: "C1",
-    record: { name: "Penrose" }, fields: { expirationDate: "2028-01-01", color: "blue" }, customFields: { Access: "OR" } }], { data });
-  assert.equal(a.record.name, "Penrose");
+    record: { name: "Juniper" }, fields: { expirationDate: "2028-01-01", color: "blue" }, customFields: { Access: "OR" } }], { data });
+  assert.equal(a.record.name, "Juniper");
   assert.equal(a.record.expirationDate, "2028-01-01");
   assert.deepEqual(a.record.facts.map(f => f.label).sort(), ["Access", "Color"]);
   const [b] = repairActions([{ kind: "create_category", category: { name: "Awards" }, record: { name: "Best Resident" } }], { data });
@@ -243,14 +243,14 @@ test("a document is filed only to a record that exists", () => {
 
 test("an update replaces what it names, clears what it blanks, and keeps everything else", () => {
   const cat = badges();
-  const existing = { id: "R1", categoryId: "C1", categoryName: "Hospital ID Badges", name: "Penrose", issuer: "Penrose",
-    fieldValues: { badgeNumber: "OLD", facility: "Penrose" }, customFields: { Color: "Blue" }, documentIds: ["d1"], favorite: true };
+  const existing = { id: "R1", categoryId: "C1", categoryName: "Hospital ID Badges", name: "Juniper", issuer: "Juniper",
+    fieldValues: { badgeNumber: "OLD", facility: "Juniper" }, customFields: { Color: "Blue" }, documentIds: ["d1"], favorite: true };
   const { record } = updateRecord(cat, existing, { values: { "Badge number": "NEW" }, expirationDate: "2028-01-01" }, { addDocumentIds: ["d2"] });
   assert.equal(record.fieldValues.badgeNumber, "NEW");
-  assert.equal(record.fieldValues.facility, "Penrose", "an unmentioned value is kept");
+  assert.equal(record.fieldValues.facility, "Juniper", "an unmentioned value is kept");
   assert.ok(!Object.values(record.customFields).includes("OLD"), "the replaced value must not reappear as a detail");
   assert.equal(record.customFields.Color, "Blue");
-  assert.equal(record.issuer, "Penrose");
+  assert.equal(record.issuer, "Juniper");
   assert.equal(record.expirationDate, "2028-01-01");
   assert.deepEqual(record.documentIds, ["d1", "d2"]);
   assert.equal(record.favorite, true);
@@ -260,9 +260,9 @@ test("an update replaces what it names, clears what it blanks, and keeps everyth
 });
 
 test("editing a record under Unsorted never erases its category values", () => {
-  const existing = { id: "R1", categoryId: "GONE", categoryName: "Hospital ID Badges", name: "Penrose",
+  const existing = { id: "R1", categoryId: "GONE", categoryName: "Hospital ID Badges", name: "Juniper",
     fieldLabels: { badgeNumber: "Badge number" }, fieldValues: { badgeNumber: "PX-1" } };
-  const { record } = updateRecord(null, existing, { name: "Penrose", notes: "renewed", values: {} });
+  const { record } = updateRecord(null, existing, { name: "Juniper", notes: "renewed", values: {} });
   assert.equal(record.fieldValues.badgeNumber, "PX-1");
   assert.equal(record.categoryId, "GONE", "it keeps its original category");
   assert.equal(record.categoryName, "Hospital ID Badges");

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { AsclepiusIcon, SunIcon, MoonIcon } from "./Icons";
+import { avatarInitials } from "../../utils/helpers";
 
 /**
  * Responsive navigation component:
@@ -14,10 +15,10 @@ import { AsclepiusIcon, SunIcon, MoonIcon } from "./Icons";
  *   fabItem: { key, label, icon } — center FAB button (optional)
  */
 export default function SideNav({ items, active, onChange, fabItem }) {
-  const { theme: T, toggleTheme, data, user, isDesktop } = useApp();
+  const { theme: T, toggleTheme, data, isDesktop, isDark } = useApp();
 
-  const isDark = data.settings.theme === "dark";
-  const initials = (data.settings.name || user?.email || "?").slice(0, 2).toUpperCase();
+  // The same initials as the top bar and Settings (HOME-005).
+  const initials = avatarInitials(data.settings.name);
 
   if (!isDesktop) {
     return <BottomNav items={items} active={active} onChange={onChange} fabItem={fabItem} T={T} />;
@@ -51,6 +52,7 @@ export default function SideNav({ items, active, onChange, fabItem }) {
           return (
             <button
               key={item.key}
+              aria-current={isActive ? "page" : undefined}
               className={`cmd-nav-item ${isActive ? "cmd-nav-item-active" : ""}`}
               onClick={() => onChange(item.key)}
               style={{
@@ -155,6 +157,7 @@ function BottomNavInner({ items, active, onChange, fabItem, T }) {
           return (
             <button
               key={item.key}
+              aria-label={item.label}
               onClick={() => onChange(item.key)}
               style={{
                 width: 50, height: 50, borderRadius: 14,
@@ -174,6 +177,7 @@ function BottomNavInner({ items, active, onChange, fabItem, T }) {
         return (
           <button
             key={item.key}
+            aria-current={isActive ? "page" : undefined}
             onClick={() => onChange(item.key)}
             style={{
               display: "flex", flexDirection: "column", alignItems: "center",

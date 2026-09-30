@@ -82,13 +82,13 @@ eq("unknown -> other", guessReceiptCategory("Zyxwv Holdings"), "Other");
 
 // ── normalizeReceipt: the Alamo toll case from the ticket ──
 const alamoRaw = {
-  merchant: " Alamo Rent A Car ", date: "08/15/2026", total: "$23.40", currency: "$",
-  category: "Tolls", last4: "****4321", paymentMethod: "Visa", description: "Toll charges, Denver rental Aug 12-15",
+  merchant: " Alamo Rent A Car ", date: "08/06/2026", total: "$23.40", currency: "$",
+  category: "Tolls", last4: "****4321", paymentMethod: "Visa", description: "Toll charges, Denver rental Aug 3-6",
 };
 const alamo = normalizeReceipt(alamoRaw);
 eq("alamo normalized", alamo, {
-  merchant: "Alamo Rent A Car", date: "2026-08-15", total: 23.4, currency: "USD", category: "Tolls",
-  last4: "4321", paymentMethod: "Visa", description: "Toll charges, Denver rental Aug 12-15",
+  merchant: "Alamo Rent A Car", date: "2026-08-06", total: 23.4, currency: "USD", category: "Tolls",
+  last4: "4321", paymentMethod: "Visa", description: "Toll charges, Denver rental Aug 3-6",
 });
 eq("bad model category falls back by keyword", normalizeReceipt({ merchant: "Alamo", category: "Toll fees", total: 5 }).category, "Tolls");
 eq("missing category guesses from merchant", normalizeReceipt({ merchant: "Lyft", total: 18 }).category, "Rideshare / Taxi");
@@ -98,17 +98,17 @@ eq("null extracted survives", normalizeReceipt(null), { merchant: "", date: "", 
 eq("array extracted survives", normalizeReceipt([1, 2]).total, 0);
 
 // ── notes carry payment provenance ──
-eq("note with card", receiptNote(alamo), "Scanned receipt · Toll charges, Denver rental Aug 12-15 · paid with Visa ending 4321");
+eq("note with card", receiptNote(alamo), "Scanned receipt · Toll charges, Denver rental Aug 3-6 · paid with Visa ending 4321");
 eq("note bare", receiptNote(normalizeReceipt({ merchant: "X" })), "Scanned receipt");
 ok("note flags foreign currency", receiptNote(normalizeReceipt({ merchant: "X", currency: "CAD" })).includes("total in CAD"));
 ok("note has no em dash", !receiptNote(alamo).includes("—"));
 
 // ── Work > Expenses row: the shape Expenses.jsx / StatementImport write ──
-const exp = receiptToExpense(alamo, { id: "e1", agency: " MPLT Healthcare " });
+const exp = receiptToExpense(alamo, { id: "e1", agency: " Mossbank Healthcare " });
 eq("expense keys", Object.keys(exp).sort(), ["agency", "amount", "category", "date", "id", "notes", "vendor"]);
 eq("expense row", exp, {
-  id: "e1", date: "2026-08-15", amount: 23.4, category: "Tolls", vendor: "Alamo Rent A Car",
-  agency: "MPLT Healthcare", notes: "Scanned receipt · Toll charges, Denver rental Aug 12-15 · paid with Visa ending 4321",
+  id: "e1", date: "2026-08-06", amount: 23.4, category: "Tolls", vendor: "Alamo Rent A Car",
+  agency: "Mossbank Healthcare", notes: "Scanned receipt · Toll charges, Denver rental Aug 3-6 · paid with Visa ending 4321",
 });
 eq("lodging bills as Hotel", receiptToExpense(normalizeReceipt({ merchant: "Hyatt", category: "Lodging", total: 200, date: "2026-08-01" }), { id: "e2", agency: "A" }).category, "Hotel");
 eq("fuel bills as Gas", receiptToExpense(normalizeReceipt({ merchant: "Shell", category: "Fuel", total: 40, date: "2026-08-01" }), { id: "e3", agency: "A" }).category, "Gas");
@@ -118,10 +118,10 @@ eq("ledger-only category falls to Other when forced billable", receiptToExpense(
 const ded = receiptToDeduction(alamo, { id: "d1" });
 eq("deduction keys", Object.keys(ded).sort(), ["amount", "category", "date", "description", "id", "merchant", "notes", "source", "taxYear"]);
 eq("deduction row", ded, {
-  id: "d1", date: "2026-08-15", category: "Travel — parking / tolls",
-  description: "Alamo Rent A Car (Toll charges, Denver rental Aug 12-15)", merchant: "Alamo Rent A Car",
+  id: "d1", date: "2026-08-06", category: "Travel — parking / tolls",
+  description: "Alamo Rent A Car (Toll charges, Denver rental Aug 3-6)", merchant: "Alamo Rent A Car",
   amount: 23.4, taxYear: "2026", source: "receipt scan",
-  notes: "Scanned receipt · Toll charges, Denver rental Aug 12-15 · paid with Visa ending 4321",
+  notes: "Scanned receipt · Toll charges, Denver rental Aug 3-6 · paid with Visa ending 4321",
 });
 eq("deduction description without detail", receiptToDeduction(normalizeReceipt({ merchant: "Hyatt", total: 1, date: "2026-01-01" }), { id: "d2" }).description, "Hyatt");
 
@@ -132,7 +132,7 @@ eq("meals at 50% in the tax estimate", deductionTotal([meal]), 32);
 eq("tolls at 100%", deductionTotal([ded]), 23.4);
 
 // ── save gate ──
-eq("ok expense", receiptSaveIssues(alamoRaw, "expense", "MPLT"), []);
+eq("ok expense", receiptSaveIssues(alamoRaw, "expense", "Mossbank"), []);
 eq("ok deduction", receiptSaveIssues(alamoRaw, "deduction", ""), []);
 eq("expense needs agency", receiptSaveIssues(alamoRaw, "expense", "  "), ["Pick the agency to bill."]);
 eq("needs date and total", receiptSaveIssues({ merchant: "X" }, "deduction", ""), ["Enter the receipt date.", "Enter the total paid."]);

@@ -7,7 +7,7 @@ import { useApp } from "../../context/AppContext";
  * exist for billing offices that re-key or edit line items.
  */
 const FORMATS = [
-  { key: "pdf", label: "PDF", sub: "Polished invoice — what most billing departments expect", icon: "📄" },
+  { key: "pdf", label: "PDF", sub: "Polished invoice, what most billing departments expect", icon: "📄" },
   { key: "docx", label: "Word", sub: "Editable document (.docx)", icon: "📝" },
   { key: "xlsx", label: "Excel", sub: "Line items as a spreadsheet (.xlsx)", icon: "📊" },
 ];

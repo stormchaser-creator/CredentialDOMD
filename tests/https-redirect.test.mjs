@@ -11,6 +11,7 @@ import { renderCme } from '../scripts/build-cme.mjs';
 import { renderLegalPages } from '../scripts/generate-legal-pages.mjs';
 import { renderWatchPages } from '../scripts/watch-pages.mjs';
 import { loadVideoCatalog } from '../scripts/help-videos.mjs';
+import { appContentSecurityPolicy } from '../src/utils/appCsp.js';
 
 // Plain http://credentialdomd.com/app/ loaded without switching to https, and
 // every signup call from it was refused (403). Each page now switches itself
@@ -114,8 +115,8 @@ test('pages that set a Content-Security-Policy allow only this exact redirect an
   }
   // The app adds its policy by <meta> at startup, after index.html has already switched to https.
   const main = await read('src/main.jsx');
-  const policy = main.slice(main.indexOf('csp.content = ['), main.indexOf('].join("; ");'));
-  assert.match(policy, /"upgrade-insecure-requests",/);
+  assert.match(main, /csp\.content = appContentSecurityPolicy\(import\.meta\.env\.VITE_SUPABASE_URL\);/);
+  assert.ok(appContentSecurityPolicy('https://synthetic.supabase.co').split('; ').includes('upgrade-insecure-requests'));
 });
 
 test('the check refuses a missing, late, repeated or blocked redirect', () => {

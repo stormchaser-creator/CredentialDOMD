@@ -134,7 +134,8 @@ test('the header rule itself', () => {
 test('every place a CSV or Excel file can enter the app runs the guard before reading or storing it', async () => {
   const read = p => readFile(new URL(`../${p}`, import.meta.url), 'utf8');
   for (const [path, handler, firstRead] of [
-    ['src/components/features/DocumentsSection.jsx', 'const handleFiles = useCallback(async (files) => {', 'extractOfficeText({ name: file.name'],
+    // The Files gate, shared by Upload, Camera and "Upload it again" (checked below).
+    ['src/components/features/DocumentsSection.jsx', 'async function checkBeforeRead(file) {', 'extractOfficeText({ name: file.name'],
     ['src/components/features/CrudSection.jsx', 'const handleUpload = useCallback(async (files) => {', 'reader.readAsDataURL(file)'],
     ['src/components/features/DocAttach.jsx', 'const handleFiles = useCallback(async (files) => {', 'reader.readAsDataURL(file)'],
     ['src/components/features/AssistantSection.jsx', 'const handleFile = useCallback(async (file) => {', 'extractOfficeText({ name: file.name'],
@@ -152,6 +153,16 @@ test('every place a CSV or Excel file can enter the app runs the guard before re
     const readAt = src.indexOf(firstRead, a);
     assert.ok(guard > a, `${path} does not run the spreadsheet guard`);
     assert.ok(readAt > guard, `${path} reads the file before the guard runs`);
+  }
+  // Every Files path that stores a file runs that gate before reading it.
+  const docs = await read('src/components/features/DocumentsSection.jsx');
+  for (const handler of ['const handleFiles = useCallback(async (files) => {', 'const reuploadFile = useCallback(async (docId, file) => {']) {
+    const a = docs.indexOf(handler);
+    assert.ok(a >= 0, `${handler} not found`);
+    const gate = docs.indexOf('await checkBeforeRead(file)', a);
+    // readAsDataUrl(file, type): the bytes carry the type the gate settled on.
+    const readAt = docs.indexOf('await readAsDataUrl(file', a);
+    assert.ok(gate > a && readAt > gate, `${handler} reads the file before the gate runs`);
   }
 });
 
@@ -176,4 +187,19 @@ test('refusals in a multi-file pick stay on screen after a later file succeeds',
   assert.equal(withRefusals(refused)(refused[0]), refused[0], 'the refusal alone when it was the last word');
   assert.equal(withRefusals(refused)(null), refused[0]);
   assert.equal(withRefusals([...refused, 'b'])('b'), `${refused[0]} b`);
+});
+
+test('the running list a pick showed as it went is not said again after the loop', () => {
+  // Every caller puts refused.join(" ") on screen at each refusal, so after
+  // two of them the message is that joined string, which is not one element
+  // of the array. It came back as "a b a b".
+  const a = '"caselog.csv" was not attached. This spreadsheet has a "MRN" column.';
+  const b = '"big.pdf" exceeds the 10 MB size limit.';
+  assert.equal(withRefusals([a, b])(`${a} ${b}`), `${a} ${b}`);
+  // A stop after them adds its own words once; what was on screen was the
+  // list so far.
+  assert.equal(withRefusals([a, b, 'stop'])(`${a} ${b}`), `${a} ${b} stop`);
+  assert.equal(withRefusals([a, b, 'stop'])(a), `${a} ${b} stop`);
+  // Anything else on screen still follows the refusals.
+  assert.equal(withRefusals([a, b])('3 fields filled.'), `${a} ${b} 3 fields filled.`);
 });

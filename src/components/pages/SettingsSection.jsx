@@ -1,5 +1,6 @@
 import LimitedLaunchMembership from "./LimitedLaunchMembership.jsx";
 import { useState, useMemo, useEffect, memo } from "react";
+import { dismissButtonStyle } from "../shared/actionButton";
 import { formatPhone, emailProblem, websiteLabel } from "../../utils/contactFormat";
 import { useApp } from "../../context/AppContext";
 import { DESK_KEYS } from "../../utils/deskKeys";
@@ -13,12 +14,14 @@ import { STATES } from "../../constants/states";
 import { findProvidersByName, extractLicensesFromNPI } from "../../utils/npiLookup";
 import { splitName, mergeNpiLicenses, additionalStatesAfterImport, degreeFromCredential } from "../../utils/npiImport";
 import { normalizeBirthday, formatBirthday } from "../../utils/cmePassport";
-import { generateId, downscalePhoto } from "../../utils/helpers";
+import { generateId, downscalePhoto, avatarInitials } from "../../utils/helpers";
 import {
   MATE_ACT, AOA_NATIONAL, ABMS_MOC, AOA_OCC,
   ABMS_SUBSPECIALTIES, AOA_SUBSPECIALTIES, UCNS_CERTS, ABPS_CERTS,
 } from "../../constants/boardRequirements";
 import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
+import { trackedStates } from "../../utils/compliance";
+import { effectiveThemeName } from "../../constants/themes";
 import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, textAlert } from "../../utils/notifications";
 import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, describeAiBudget, useAnthropicAvailable } from "../../utils/aiClient";
 import { CODER_MODELS } from "../../utils/cptCoder";
@@ -31,17 +34,48 @@ import {
   addProblem, normalizeAddress, pendingLine, resendBlockedReason, rowForAddress,
   accountMailboxVerified, REQUESTS_INBOX, CME_INBOX, LINK_TTL_HOURS,
 } from "../../utils/forwardingAddresses";
-import { emailRemindersOn } from "../../utils/reminderPreferences";
+import { emailRemindersOn, reminderLeadDays, REMINDER_LEAD_DAYS_RANGE } from "../../utils/reminderPreferences";
+
+// The least a control on this page may be in either direction, so a thumb
+// finds it on a phone (SETTINGS-014): switches, chips and small buttons.
+const TAP_MIN = 36;
 
 function SettingsSection({ onUpgrade }) {
   const { data, addItem, updateSettings, theme: T, toggleTheme, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop,
-    isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage, limitedLaunch } = useApp();
+    isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage, limitedLaunch, settingsRefusal, clearSettingsRefusal } = useApp();
   const iS = useInputStyle();
   const s = data.settings;
 
   const update = (k, v) => updateSettings({ [k]: v });
+  // Lead time: a draft while typing (it may sit empty), saved on blur or
+  // Enter through the same 7..365 clamp send-reminders applies (NOTIFY-004).
+  const [leadDraft, setLeadDraft] = useState(null);
+  const commitLead = (value) => {
+    setLeadDraft(null);
+    const next = reminderLeadDays(value);
+    if (next !== s.reminderLeadDays) update("reminderLeadDays", next);
+  };
+  // An unknown stored theme (the 'arctic' column default) renders dark.
+  const isDark = effectiveThemeName(s.theme) === "dark";
+  // The Email field is saved when it is left (or on Enter), never per
+  // keystroke: each keystroke used to save, so an address that turned out to
+  // be on another account left its truncated prefix in the profile. null
+  // means "not editing": the field shows the saved address.
+  const [emailDraft, setEmailDraft] = useState(null);
+  const emailShown = emailDraft ?? s.email ?? "";
+  const emailRefused = settingsRefusal?.field === "email" ? settingsRefusal.address : null;
+  const editEmail = (value) => {
+    if (emailRefused) clearSettingsRefusal?.();
+    setEmailDraft(value);
+  };
+  const commitEmail = (value) => {
+    const next = String(value ?? "").trim();
+    if (emailProblem(next)) return; // stays in the field, with the problem under it
+    setEmailDraft(null);
+    if (next !== (s.email || "")) update("email", next);
+  };
   const [addingState, setAddingState] = useState("");
-  // Stored as "MM-DD"; shown as "July 25" so the field reads like a date.
+  // Stored as "MM-DD"; shown as "July 14" so the field reads like a date.
   const [bdayText, setBdayText] = useState(() => formatBirthday(data.settings.birthMonthDay));
   const [npiLoading, setNpiLoading] = useState(false);
   const [npiResults, setNpiResults] = useState(null); // array of search results
@@ -160,6 +194,13 @@ function SettingsSection({ onUpgrade }) {
   };
 
   const availableStates = STATES.filter(st => !allTrackedStates.includes(st));
+  // States a current medical license keeps on the list whatever is picked
+  // here: removing one is re-added at once, so its row offers no ✕ and says
+  // why instead. The primary goes only when another picked state can take
+  // its place (Set Primary on another row moves it otherwise).
+  const licenceStates = new Set(trackedStates(null, [], data.licenses));
+  const removable = st => !licenceStates.has(st)
+    && (st !== s.primaryState || (s.additionalStates || []).some(x => x !== st));
 
   return (
     <div>
@@ -231,7 +272,7 @@ function SettingsSection({ onUpgrade }) {
           }}>
             {s.profilePhoto
               ? <img src={s.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 25%" }} />
-              : (s.name ? s.name.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase() : "MD")}
+              : avatarInitials(s.name)}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <label style={{
@@ -350,7 +391,7 @@ function SettingsSection({ onUpgrade }) {
         {/* ACCME asks a CME provider for the month and day of a learner's
             birth in order to match reported credit to them. The year is not
             part of that, so it is not asked for and not stored. */}
-        <Field label="Birth Month and Day" hint="What a CME provider needs to report your credit to the ACCME. The year is never asked for.">
+        <Field label="Birth Month and Day" hint="What a CME provider needs to report your credit to the ACCME. The year is never asked for. Kept on this device only.">
           <input
             name="birthMonthDay"
             value={bdayText}
@@ -361,7 +402,7 @@ function SettingsSection({ onUpgrade }) {
             }}
             onBlur={() => { const n = normalizeBirthday(bdayText); if (n) setBdayText(formatBirthday(n)); }}
             style={iS}
-            placeholder="July 25, or 7/25"
+            placeholder="July 14, or 7/14"
           />
           <div style={{ fontSize: 12, color: bdayText.trim() && !normalizeBirthday(bdayText) ? T.danger : T.textDim, marginTop: 4 }}>
             {!bdayText.trim()
@@ -398,9 +439,22 @@ function SettingsSection({ onUpgrade }) {
         <Field label="Board Specialties" hint="Select all boards you are certified in. CME tracking is based on these.">
           <SpecialtyPicker selected={s.specialties || []} onChange={v => update("specialties", v)} degreeType={s.degreeType} iS={iS} T={T} />
         </Field>
-        <Field label="Email" hint={emailProblem(s.email) || "For share emails and your CV header"}>
-          <input type="email" name="email" autoComplete="email" value={s.email || ""} onChange={e => update("email", e.target.value)}
-            style={{ ...iS, ...(emailProblem(s.email) ? { borderColor: "#ef4444" } : {}) }} placeholder="your@email.com" />
+        <Field label="Residency Start (PGY 1)" hint="The July your residency began. Case Logs labels each year from it (PGY 1, PGY 2...). Leave it blank to see plain years such as 2019-20.">
+          <select name="trainingStartYear" value={s.trainingStartYear ? String(s.trainingStartYear) : ""}
+            onChange={e => update("trainingStartYear", e.target.value ? parseInt(e.target.value, 10) : null)}
+            style={{ ...iS, appearance: "auto" }}>
+            <option value="">Not set: plain years</option>
+            {Array.from({ length: 61 }, (_, i) => new Date().getFullYear() - i).map(y => (
+              <option key={y} value={String(y)}>July {y}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Email" hint={emailRefused ? `${emailRefused} is on another CredentialDOMD account, so it was not saved.`
+          : emailProblem(emailShown) || "For share emails and your CV header. Not your sign-in email; change that under Password and sign-in email."}>
+          <input type="email" name="email" autoComplete="email" value={emailShown} onChange={e => editEmail(e.target.value)}
+            onBlur={e => commitEmail(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { commitEmail(e.target.value); e.target.blur?.(); } }}
+            style={{ ...iS, ...(emailRefused || emailProblem(emailShown) ? { borderColor: "#ef4444" } : {}) }} placeholder="your@email.com" />
         </Field>
         <Field label="Phone" hint="For share texts and your CV header">
           <input type="tel" name="tel" autoComplete="tel" value={s.phone || ""}
@@ -417,7 +471,7 @@ function SettingsSection({ onUpgrade }) {
         </Field>
         <Field label="Languages" hint="e.g. Fluent in Spanish"><input value={s.languages || ""} onChange={e => update("languages", e.target.value)} style={iS} placeholder="Languages beyond English" /></Field>
         <Field label="Professional Summary" hint="Opening paragraph of your CV"><textarea value={s.professionalSummary || ""} onChange={e => update("professionalSummary", e.target.value)} style={{ ...iS, minHeight: 96, resize: "vertical", fontFamily: "inherit" }} placeholder="Board-certified neurosurgeon with…" /></Field>
-        <Field label="CV Highlight Line" hint="One bold line under the summary — books, projects, distinctions"><input value={s.cvHighlights || ""} onChange={e => update("cvHighlights", e.target.value)} style={iS} placeholder="e.g. Author of two books" /></Field>
+        <Field label="CV Highlight Line" hint="One bold line under the summary: books, projects, distinctions"><input value={s.cvHighlights || ""} onChange={e => update("cvHighlights", e.target.value)} style={iS} placeholder="e.g. Author of two books" /></Field>
       </div>
 
       {/* Email: the addresses inbound mail may be forwarded from. The
@@ -483,10 +537,10 @@ function SettingsSection({ onUpgrade }) {
           <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza... or AQ...." />
         </Field>
         <Field label="Your own Anthropic key (optional)" hint={s.anthropicApiKey
-          ? "Saved \u2713 on this device only. Vera and the Opus coder run on this key instead of the shared one, so the Opus daily limit does not apply; document scanning still uses Gemini. Not synced, so enter it again on other devices."
+          ? "Saved \u2713 on this device only. The Opus coder runs on this key now, and Vera does when Vera answers with is set to Claude Opus; either way the Opus daily limit does not apply. Document scanning still uses Gemini. Not synced, so enter it again on other devices."
           : opusOn
-            ? "Optional: a shared Opus key is available on this account, so Vera already thinks on Claude Opus with nothing pasted here. Add your own key (console.anthropic.com) to lift the Opus daily limit; calls then bill to your key. Stored on this device only, never synced to your account."
-            : "Optional. Paste your own key (console.anthropic.com) and Vera and the Opus coder run on Claude Opus billed to you. Stored on this device only, never synced to your account."}>
+            ? "Optional: a shared Opus key is available on this account, so Vera can think on Claude Opus with nothing pasted here once Vera answers with is set to Claude Opus. Add your own key (console.anthropic.com) to lift the Opus daily limit; calls then bill to your key. Stored on this device only, never synced to your account."
+            : "Optional. Paste your own key (console.anthropic.com) and the Opus coder runs on Claude Opus billed to you, and so does Vera when Vera answers with is set to Claude Opus. Stored on this device only, never synced to your account."}>
           <input type="password" value={s.anthropicApiKey || ""} onChange={e => update("anthropicApiKey", e.target.value)} style={iS} placeholder="sk-ant-..." />
         </Field>
       </div>
@@ -513,10 +567,13 @@ function SettingsSection({ onUpgrade }) {
                   <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
                     {s.degreeType || !hasSeparateBoards(st) ? `${req.hours} hrs / ${req.cycle}-yr cycle` : "Separate MD and DO boards. Set your degree above to see hours."}
                   </div>
+                  {licenceStates.has(st) && <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
+                    Tracked because you hold a {st} medical license. Mark that license historical to stop tracking.
+                  </div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
-                  {!isPrimary && <button onClick={() => makePrimary(st)} style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Set Primary</button>}
-                  {allTrackedStates.length > 1 && <button onClick={() => removeState(st)} style={{ padding: "4px 8px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{"\u2715"}</button>}
+                  {!isPrimary && <button onClick={() => makePrimary(st)} style={{ minHeight: TAP_MIN, padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Set Primary</button>}
+                  {allTrackedStates.length > 1 && removable(st) && <button onClick={() => removeState(st)} aria-label={`Stop tracking ${st}`} style={{ minHeight: TAP_MIN, minWidth: TAP_MIN, padding: "4px 8px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{"\u2715"}</button>}
                 </div>
               </div>
             );
@@ -524,7 +581,7 @@ function SettingsSection({ onUpgrade }) {
         </div>
         {availableStates.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>
-            <select value={addingState} onChange={e => setAddingState(e.target.value)} style={{ ...iS, flex: 1, appearance: "auto" }}>
+            <select aria-label="Add a state" value={addingState} onChange={e => setAddingState(e.target.value)} style={{ ...iS, flex: 1, appearance: "auto" }}>
               <option value="">Add a state...</option>
               {availableStates.map(st => <option key={st} value={st}>{st}</option>)}
             </select>
@@ -548,20 +605,27 @@ function SettingsSection({ onUpgrade }) {
           boxShadow: T.shadow1,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 20 }}>{data.settings.theme === "dark" ? "\ud83c\udf19" : "\u2600\ufe0f"}</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{data.settings.theme === "dark" ? "Dark Mode" : "Light Mode"}</span>
+            <span style={{ fontSize: 20 }}>{isDark ? "\ud83c\udf19" : "\u2600\ufe0f"}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{isDark ? "Dark Mode" : "Light Mode"}</span>
           </div>
-          <button onClick={toggleTheme} style={{
-            width: 48, height: 28, borderRadius: 14, border: "none",
-            backgroundColor: data.settings.theme === "dark" ? T.accent : T.border,
-            cursor: "pointer", position: "relative", transition: "background 0.2s",
+          {/* The button is the tap target (48x36); the 48x28 track is drawn
+              inside it (SETTINGS-014, as ToggleRow). */}
+          <button type="button" role="switch" aria-checked={isDark} aria-label="Dark Mode" onClick={toggleTheme} style={{
+            width: 48, minHeight: TAP_MIN, flexShrink: 0, padding: 0, border: "none",
+            backgroundColor: "transparent", cursor: "pointer", display: "flex", alignItems: "center",
           }}>
-            <div style={{
-              width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff",
-              position: "absolute", top: 3,
-              left: data.settings.theme === "dark" ? 23 : 3,
-              transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-            }} />
+            <span aria-hidden="true" style={{
+              display: "block", width: 48, height: 28, borderRadius: 14, flexShrink: 0,
+              backgroundColor: isDark ? T.accent : T.border,
+              position: "relative", transition: "background 0.2s",
+            }}>
+              <span style={{
+                display: "block", width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff",
+                position: "absolute", top: 3,
+                left: isDark ? 23 : 3,
+                transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+              }} />
+            </span>
           </button>
         </div>
         <div style={{ height: 10 }} />
@@ -638,7 +702,7 @@ function SettingsSection({ onUpgrade }) {
             on/off switch (a page can't un-grant browser permission) */}
         {typeof Notification !== "undefined" && Notification.permission === "granted" ? (
           <ToggleRow label="Browser Notifications"
-            sub={s.notifyBrowser === false ? "Off — this app won't pop alerts on this device" : "On — alerts pop on this device"}
+            sub={s.notifyBrowser === false ? "Off: this app won't pop alerts on this device" : "On: alerts pop on this device"}
             active={s.notifyBrowser !== false}
             onToggle={() => update("notifyBrowser", s.notifyBrowser === false)}
             color={T.accent} T={T} />
@@ -648,7 +712,7 @@ function SettingsSection({ onUpgrade }) {
               <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Browser Notifications</div>
               <div style={{ fontSize: 12, color: T.textDim }}>
                 {typeof Notification === "undefined" ? "Not supported on this device" :
-                 Notification.permission === "denied" ? "Blocked — allow notifications for this site in your browser or phone settings first" : "Click to enable"}
+                 Notification.permission === "denied" ? "Blocked. Allow notifications for this site in your browser or phone settings first" : "Click to enable"}
               </div>
             </div>
             {typeof Notification !== "undefined" && Notification.permission === "default" && (
@@ -656,7 +720,7 @@ function SettingsSection({ onUpgrade }) {
                 const r = await Notification.requestPermission();
                 if (r === "granted") update("notifyBrowser", true);
               }} style={{
-                padding: "7px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
+                minHeight: TAP_MIN, padding: "7px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.textMuted,
                 fontSize: 12, fontWeight: 600, cursor: "pointer",
               }}>Enable</button>
@@ -689,7 +753,7 @@ function SettingsSection({ onUpgrade }) {
           <div style={{ display: "flex", gap: 4 }}>
             {[{ d: 1, l: "Daily" }, { d: 3, l: "3 Days" }, { d: 7, l: "Weekly" }, { d: 14, l: "Biweekly" }, { d: 30, l: "Monthly" }].map(opt => (
               <button key={opt.d} onClick={() => update("notifyFreqDays", opt.d)} style={{
-                flex: 1, padding: "6px 2px", borderRadius: 6, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                flex: 1, minHeight: TAP_MIN, padding: "6px 2px", borderRadius: 6, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
                 backgroundColor: (s.notifyFreqDays || 7) === opt.d ? T.accent : T.input,
                 color: (s.notifyFreqDays || 7) === opt.d ? "#fff" : T.textMuted,
               }}>{opt.l}</button>
@@ -707,10 +771,23 @@ function SettingsSection({ onUpgrade }) {
             <button onClick={() => {
               setTestNotice("");
               const alerts = generateAlerts(data);
-              if (!alerts) { alert("No active alerts to send."); return; }
+              const allowed = typeof Notification !== "undefined" && Notification.permission === "granted";
+              if (!alerts) {
+                // Nothing is due, which is exactly when a member wants to know
+                // notifications work. A browser test is real; opening a mail
+                // or Messages draft would not exercise send-reminders at all.
+                const email = "Email reminders come from a daily check and are sent only when something is due or has changed.";
+                if (allowed) {
+                  fireBrowserNotification("CredentialDOMD Test", "Notifications are working. Nothing is due right now.", "test-" + Date.now());
+                  setTestNotice(`Test sent. Nothing is due right now. ${email}`);
+                } else {
+                  setTestNotice(`Nothing is due right now. Turn on browser notifications to test them here. ${email}`);
+                }
+                return;
+              }
               const msg = buildNotificationMessage(data, alerts);
               if (!msg) { alert("Could not build notification."); return; }
-              if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+              if (allowed) {
                 fireBrowserNotification("CredentialDOMD Test", msg.shortText, "test-" + Date.now());
               }
               if (emailRemindersOn(s.notifyEmail) && s.email) composeEmail(s.email, msg.subject, msg.body);
@@ -718,7 +795,7 @@ function SettingsSection({ onUpgrade }) {
               else if (typeof Notification === "undefined" || Notification.permission !== "granted") {
                 alert("Enable browser notifications, or add email/phone above.");
               }
-            }} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Test</button>
+            }} style={{ minHeight: TAP_MIN, padding: "6px 14px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Test</button>
           </div>
           {testNotice && (
             <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 6, lineHeight: 1.45 }}>{testNotice}</div>
@@ -729,8 +806,13 @@ function SettingsSection({ onUpgrade }) {
       {/* Reminders */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 12 }}>Reminders</h3>
-        <Field label="Lead time (days)" hint="How far ahead items show as expiring soon">
-          <input type="number" value={s.reminderLeadDays} onChange={e => update("reminderLeadDays", parseInt(e.target.value) || 90)} style={{ ...iS, maxWidth: 140 }} />
+        <Field label="Lead time (days)" hint="How far ahead items show as expiring soon, from 7 to 365 days">
+          <input type="number" name="reminderLeadDays" inputMode="numeric" min={REMINDER_LEAD_DAYS_RANGE[0]} max={REMINDER_LEAD_DAYS_RANGE[1]} step={1}
+            value={leadDraft ?? String(reminderLeadDays(s.reminderLeadDays))}
+            onChange={e => setLeadDraft(e.target.value)}
+            onBlur={e => commitLead(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { commitLead(e.target.value); e.target.blur?.(); } }}
+            style={{ ...iS, maxWidth: 140 }} />
         </Field>
       </div>
 
@@ -827,11 +909,11 @@ function SettingsSection({ onUpgrade }) {
                   {hasSeparateBoards(st) && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, backgroundColor: T.warningDim, color: T.warning, fontWeight: 700 }}>{s.degreeType} Board</span>}
                 </div>
                 {noCME ? (
-                  <div style={{ fontSize: 13, color: T.warning, fontWeight: 600 }}>No general CME hour requirement{(stEntry.topics || []).length > 0 ? " \u2014 topic-specific mandates only" : ""}</div>
+                  <div style={{ fontSize: 13, color: T.warning, fontWeight: 600 }}>No general CME hour requirement{(stEntry.topics || []).length > 0 ? ", only topic-specific mandates" : ""}</div>
                 ) : (
                   <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 2 }}>{stEntry.total} hours / {stEntry.cycle}-year cycle</div>
                 )}
-                {stEntry.cat1min > 0 && <div style={{ fontSize: 12, color: T.accent, fontWeight: 600, marginBottom: 2 }}>{stEntry.cat1min} hrs min &mdash; {stEntry.cat1note}</div>}
+                {stEntry.cat1min > 0 && <div style={{ fontSize: 12, color: T.accent, fontWeight: 600, marginBottom: 2 }}>{stEntry.cat1min} hrs min: {stEntry.cat1note}</div>}
                 {stEntry.rollover && stEntry.rollover !== "No" && <div style={{ fontSize: 10, color: T.success, marginBottom: 2 }}>Rollover: {stEntry.rollover}</div>}
                 {stEntry.moc && stEntry.moc !== "No" && <div style={{ fontSize: 10, color: T.textDim, marginBottom: 2 }}>MOC: {stEntry.moc}</div>}
                 {(stEntry.topics || []).filter(t => t.hours > 0).length > 0 && (
@@ -988,9 +1070,10 @@ function SpecialtyPicker({ selected, onChange, degreeType, iS, T }) {
                 backgroundColor: T.accentGlow, color: T.accent, border: `1px solid ${T.accent}`,
               }}>
                 {info.name}{info.source ? ` (${info.source})` : ""}
-                <button onClick={() => toggle(id)} style={{
-                  background: "none", border: "none", color: T.accent,
-                  cursor: "pointer", padding: 0, fontSize: 14, fontWeight: 700, lineHeight: 1,
+                {/* 32 x 32 around the ×, pulled back into the chip's padding so
+                    the chip is drawn the size it was and the × sits where it did. */}
+                <button aria-label={`Remove ${info.name}`} onClick={() => toggle(id)} style={{
+                  ...dismissButtonStyle(T.accent), fontSize: 14, margin: "-8px -12px",
                 }}>{"\u00d7"}</button>
               </span>
             );
@@ -1015,6 +1098,7 @@ function SpecialtyPicker({ selected, onChange, degreeType, iS, T }) {
         }}>
           <div style={{ padding: "8px 10px", borderBottom: `1px solid ${T.border}` }}>
             <input
+              aria-label="Search boards, subspecialties"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search boards, subspecialties..."

@@ -55,7 +55,7 @@ Good afternoon,
 
 Thank you! Please see below items needed for your credentialing process:
 
-   - MPLT COI
+   - Ridgeway COI
    - MMR dose #2
    - TB form – This was sent via Docusign
    - Logs – 12-months. I have requested.
@@ -113,25 +113,25 @@ export const RECORDS = {
     { id: "hr-fit", category: "Fit Test", type: "N95 Respirator", dateAdministered: "2026-03-01", expirationDate: "2027-03-01" },
   ],
   insurance: [
-    { id: "ins-coi", type: "Professional Liability", provider: "ProAssurance Specialty Insurance", effectiveDate: "2026-03-01", expirationDate: "2027-03-01" },
-    { id: "ins-coi-old", type: "Professional Liability - Claims Made", provider: "ProAssurance Specialty Insurance", effectiveDate: "2025-03-01", expirationDate: "2026-03-01" },
-    { id: "ins-tail", type: "Tail Coverage", provider: "Medical Protective" },
+    { id: "ins-coi", type: "Professional Liability", provider: "Harborline Specialty Insurance", effectiveDate: "2026-03-01", expirationDate: "2027-03-01" },
+    { id: "ins-coi-old", type: "Professional Liability - Claims Made", provider: "Harborline Specialty Insurance", effectiveDate: "2025-03-01", expirationDate: "2026-03-01" },
+    { id: "ins-tail", type: "Tail Coverage", provider: "Stonecrest Mutual" },
     { id: "ins-health", type: "Health Insurance (personal)", provider: "Blue Shield", expirationDate: "2026-12-31" },
   ],
   education: [
     { id: "edu-do", type: "Doctor of Osteopathic Medicine (DO)", institution: "Western University of Health Sciences", graduationDate: "2012-05-20" },
-    { id: "edu-res", type: "Residency Certificate", name: "Neurological Surgery Residency", institution: "Riverside University Health System", graduationDate: "2019-06-30" },
+    { id: "edu-res", type: "Residency Certificate", name: "Neurological Surgery Residency", institution: "Mesa Vista University Health System", graduationDate: "2019-06-30" },
     { id: "edu-fel", type: "Fellowship Certificate", name: "Skull Base Fellowship", institution: "Barrow Neurological Institute", graduationDate: "2020-06-30" },
     { id: "edu-bs", type: "Bachelor of Science (BS)", institution: "University of California", graduationDate: "2008-06-01" },
   ],
   screenings: [
-    { id: "scr-bg", type: "Background Screening Report", agency: "ScoutLogic", reportDate: "2026-02-01" },
+    { id: "scr-bg", type: "Background Screening Report", agency: "Brightline Screening", reportDate: "2026-02-01" },
     { id: "scr-oig", type: "OIG / SAM Exclusion Check", agency: "Verisys", result: "No exclusions", reportDate: "2026-02-01" },
-    { id: "scr-drug", type: "Drug Screen Report", agency: "Quest Diagnostics", result: "Negative", reportDate: "2026-02-03" },
+    { id: "scr-drug", type: "Drug Screen Report", agency: "Northgate Labs", result: "Negative", reportDate: "2026-02-03" },
     { id: "scr-fp", type: "Fingerprinting / Livescan", agency: "California DOJ", reportDate: "2026-02-05" },
   ],
   privileges: [
-    { id: "priv-armc", type: "Hospital Privileges", facility: "Arrowhead Regional Medical Center", state: "CA", appointmentDate: "2025-10-01", expirationDate: "2027-09-30" },
+    { id: "priv-crrmc", type: "Hospital Privileges", facility: "Cedar Ridge Regional Medical Center", state: "CA", appointmentDate: "2025-10-01", expirationDate: "2027-09-30" },
   ],
   travelDocs: [
     { id: "td-passport", type: "Passport", provider: "US Department of State", expirationDate: "2031-01-01" },
@@ -139,8 +139,8 @@ export const RECORDS = {
   ],
   professionalPhotos: [{ id: "ph-1", name: "Headshot 2026", dateTaken: "2026-01-10" }],
   cme: [{ id: "cme-1", title: "Stroke update 2026", category: "AMA PRA Category 1", hours: 4, date: "2026-03-01", provider: "AANS" }],
-  workHistory: [{ id: "wh-1", type: "Employment", position: "Neurosurgeon", employer: "ANMG", startDate: "2020-01-01" }],
-  peerReferences: [{ id: "ref-1", name: "Jane Smith", degree: "MD", institution: "ARMC", relationship: "Colleague", email: "j@x.example", phone: "555-0100" }],
+  workHistory: [{ id: "wh-1", type: "Employment", position: "Neurosurgeon", employer: "Cedar Ridge Neurosurgical Medical Group", startDate: "2020-01-01" }],
+  peerReferences: [{ id: "ref-1", name: "Jane Smith", degree: "MD", institution: "CRRMC", relationship: "Colleague", email: "j@x.example", phone: "555-0100" }],
   malpracticeHistory: [{ id: "mal-1", outcome: "Dismissed", facility: "Memorial", state: "CA", dateFiled: "2021-01-01" }],
   locumContracts: [{ id: "lc-1", facility: "Rural Hospital", state: "ND" }],
   travelExpenses: [{ id: "te-1", category: "Lodging", vendor: "Marriott" }],
@@ -184,14 +184,14 @@ export const DOCS = [
   doc("doc-bs", "BS diploma.pdf", pdf, "education:edu-bs", "2024-01-02T10:00:00Z"),
   doc("doc-bg", "Background report.pdf", pdf, "screenings:scr-bg", "2026-02-02T10:00:00Z"),
   doc("doc-oig", "OIG SAM check.pdf", pdf, "screenings:scr-oig", "2026-02-02T10:00:00Z"),
-  doc("doc-scr-drug", "Quest drug screen.pdf", pdf, "screenings:scr-drug", "2026-02-04T10:00:00Z"),
+  doc("doc-scr-drug", "Northgate drug screen.pdf", pdf, "screenings:scr-drug", "2026-02-04T10:00:00Z"),
   doc("doc-fp", "Livescan.pdf", pdf, "screenings:scr-fp", "2026-02-06T10:00:00Z"),
-  doc("doc-priv", "ARMC reappointment letter.pdf", pdf, "privileges:priv-armc", "2025-10-02T10:00:00Z"),
+  doc("doc-priv", "CRRMC reappointment letter.pdf", pdf, "privileges:priv-crrmc", "2025-10-02T10:00:00Z"),
   doc("doc-passport", "Passport.jpg", jpg, "travelDocs:td-passport", "2025-04-21T10:00:00Z"),
   doc("doc-td-dl", "Driver license.jpg", jpg, "travelDocs:td-dl", "2025-04-22T10:00:00Z"),
   doc("doc-photo", "headshot.png", "image/png", "professionalPhotos:ph-1", "2026-01-11T10:00:00Z"),
   doc("doc-cme", "Stroke update certificate.pdf", pdf, "cme:cme-1", "2026-03-02T10:00:00Z"),
-  doc("doc-wh", "ANMG verification.pdf", pdf, "workHistory:wh-1", "2025-01-02T10:00:00Z"),
+  doc("doc-wh", "CRNMG verification.pdf", pdf, "workHistory:wh-1", "2025-01-02T10:00:00Z"),
   doc("doc-ref", "Smith letter.pdf", pdf, "peerReferences:ref-1", "2025-01-02T10:00:00Z"),
   doc("doc-mal", "Closure.pdf", pdf, "malpracticeHistory:mal-1", "2025-01-02T10:00:00Z"),
   doc("doc-contract", "ND locum agreement license terms.pdf", pdf, "locumContracts:lc-1", "2026-05-02T10:00:00Z"),
@@ -309,8 +309,8 @@ Avery
   // certificate, a Livescan, and a form the rules cannot name.
   compounds: {
     subject: "Colorado file",
-    fromName: "Kyle Sample",
-    fromAddr: "kyle.sample@brackwater.example",
+    fromName: "Jordan Sample",
+    fromAddr: "jordan.sample@brackwater.example",
     body: `Dr. Testa,
 
 For the Colorado file we need the following.
@@ -325,20 +325,19 @@ For the Colorado file we need the following.
 - Signed attestation form (attached)
 
 Thanks,
-Kyle`,
+Jordan`,
   },
-  // Sanford Health Plan's credentialing approval, forwarded to docs@ on
-  // 2026-09-25, body verbatim from the document_requests row it produced. The
-  // forward wrapped its Subject: line, so the body opens with the tail of
-  // the physician's name ("E. <surname>, DO") and a stray "To:" line, and the
-  // old reading took "E." for a lettered list item asking for "<surname>, DO".
-  // (This file still carries the owner's name; see the note in the commit
-  // that took the correspondents' names out of REQUEST_1 and REQUEST_2.)
-  sanfordApproval: {
-    subject: "Sanford Health Plan Initial Application Approval Letter for Eric",
+  // A health plan's credentialing approval, forwarded to docs@, shaped like
+  // the one that arrived on 2026-09-25; the plan, the names and the numbers
+  // are invented. The forward wrapped its Subject: line, so the body opens
+  // with the tail of the physician's name ("E. <surname>, DO") and a stray
+  // "To:" line, and the old reading took "E." for a lettered list item asking
+  // for "<surname>, DO".
+  healthPlanApproval: {
+    subject: "Prairie Health Plan Initial Application Approval Letter for Rowan",
     fromName: null,
-    fromAddr: "verificationservices@sanfordhealth.org",
-    body: readFileSync(new URL("./fixtures/intake/sanford-approval-body.txt", import.meta.url), "utf8"),
+    fromAddr: "verificationservices@prairiehealth.example",
+    body: readFileSync(new URL("./fixtures/intake/health-plan-approval-body.txt", import.meta.url), "utf8"),
   },
 };
 
@@ -372,12 +371,12 @@ if (isMain) {
   // ── Request 2, end to end ─────────────────────────────────────────────────
   {
     const asks = parseAsks(REQUEST_2.body, REQUEST_2.subject);
-    eq("R2: four asks, notes and commentary stripped", asks, ["MPLT COI", "MMR dose #2", "TB form", "Logs 12-months"]);
+    eq("R2: four asks, notes and commentary stripped", asks, ["Ridgeway COI", "MMR dose #2", "TB form", "Logs 12-months"]);
     eq("R2: kinds", asks.map(kindOf), ["coi_malpractice", "mmr", "tb", "case_logs"]);
     const p = buildProposal(REQUEST_2, CATALOGUE, PHYSICIAN, NOW);
     eq("R2: statuses", p.items.map((i) => i.status), ["found", "found", "found", "report"]);
     eq("R2: the COI is the unexpired one", p.items[0].docIds, ["doc-coi"]);
-    eq("R2: its label", p.items[0].labels, ["Professional Liability COI, ProAssurance Specialty Insurance"]);
+    eq("R2: its label", p.items[0].labels, ["Professional Liability COI, Harborline Specialty Insurance"]);
     eq("R2: MMR is a series: both doses and the titer", p.items[1].docIds, ["doc-mmr2", "doc-mmr1", "doc-measles"]);
     eq("R2: MMR labels", p.items[1].labels,
       ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination", "Measles (Rubeola) IgG titer, Immune"]);
@@ -389,7 +388,7 @@ if (isMain) {
     eq("R2: the cover note", p.coverNote, [
       "Hello Morgan,", "",
       "Attached are the documents you asked for:",
-      "- Professional Liability COI, ProAssurance Specialty Insurance",
+      "- Professional Liability COI, Harborline Specialty Insurance",
       "- MMR (Measles, Mumps, Rubella) vaccination",
       "- MMR (Measles, Mumps, Rubella) vaccination",
       "- Measles (Rubeola) IgG titer, Immune",
@@ -414,7 +413,7 @@ if (isMain) {
     ["State license", "state_license"], ["medical license", "state_license"], ["California license", "state_license"],
     ["Diploma", "diploma"], ["medical school diploma", "diploma"], ["Residency certificate", "residency_cert"],
     ["Residency diploma", "residency_cert"], ["Residency certificate or diploma", "residency_cert"], ["Fellowship diploma", "fellowship_cert"],
-    ["fellowship certificate", "fellowship_cert"], ["MPLT COI", "coi_malpractice"], ["COI", "coi_malpractice"],
+    ["fellowship certificate", "fellowship_cert"], ["Ridgeway COI", "coi_malpractice"], ["COI", "coi_malpractice"],
     ["Malpractice", "coi_malpractice"], ["certificate of insurance", "coi_malpractice"], ["liability coverage", "coi_malpractice"],
     ["claims history", "coi_malpractice"], ["MMR dose #2", "mmr"], ["measles titer", "mmr"], ["rubella IgG", "mmr"],
     ["Hep B", "hep_b"], ["hepatitis b surface antibody", "hep_b"], ["varicella", "varicella"], ["chickenpox titer", "varicella"],
@@ -595,15 +594,15 @@ if (isMain) {
   eq("DEA label carries the state", describeEntry(entry("doc-dea-nd")), "DEA Registration, ND");
   eq("vaccination label", describeEntry(entry("doc-mmr1")), "MMR (Measles, Mumps, Rubella) vaccination");
   eq("TB label carries the result", describeEntry(entry("doc-tb")), "QuantiFERON-TB Gold, Negative");
-  eq("COI label carries the carrier", describeEntry(entry("doc-coi")), "Professional Liability COI, ProAssurance Specialty Insurance");
+  eq("COI label carries the carrier", describeEntry(entry("doc-coi")), "Professional Liability COI, Harborline Specialty Insurance");
   eq("titer label", describeEntry(entry("doc-varicella")), "Varicella Zoster IgG titer, Immune");
   eq("fit test label", describeEntry(entry("doc-fit")), "N95 Respirator fit test");
-  eq("privileges label carries the facility", describeEntry(entry("doc-priv")), "Hospital Privileges, Arrowhead Regional Medical Center");
+  eq("privileges label carries the facility", describeEntry(entry("doc-priv")), "Hospital Privileges, Cedar Ridge Regional Medical Center");
   eq("an unlinked document is its filename", describeEntry(entry("doc-cv")), "Rowan Testa CV 2026.pdf");
   eq("a CME entry is its title", describeEntry(entry("doc-cme")), "Stroke update 2026");
   eq("null is empty", describeEntry(null), "");
   eq("an em dash typed into a record does not reach the note",
-    describeEntry({ ...entry("doc-coi"), recType: "Professional Liability \u2014 Occurrence" }), "Professional Liability, Occurrence COI, ProAssurance Specialty Insurance");
+    describeEntry({ ...entry("doc-coi"), recType: "Professional Liability \u2014 Occurrence" }), "Professional Liability, Occurrence COI, Harborline Specialty Insurance");
 
   // ── parseAsks: noise, markers, structure ──────────────────────────────────
   eq("Outlook numbering, checkboxes, bullets, notes and phrasing all survive",
@@ -756,19 +755,19 @@ if (isMain) {
   // stored note then said "Attached are the documents you asked for" over a
   // licence that was no longer in the packet.
   {
-    const two = buildProposal({ subject: "DEA and license", fromName: "Kyle Sample", fromAddr: "k@brackwater.example", body: "- DEA\n- Colorado license" }, CATALOGUE, PHYSICIAN, NOW);
+    const two = buildProposal({ subject: "DEA and license", fromName: "Jordan Sample", fromAddr: "k@brackwater.example", body: "- DEA\n- Colorado license" }, CATALOGUE, PHYSICIAN, NOW);
     eq("two-doc proposal: two found items", two.items.map((i) => [i.ask, i.status, i.docIds]), [["DEA", "found", ["doc-dea-ca"]], ["Colorado license", "found", ["doc-lic-co"]]]);
-    eq("untick one: the note lists one and names the other as not enclosed", noteForSelection(two, ["doc-dea-ca"], PHYSICIAN, "Kyle Sample"),
-      "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CA\n\nNot enclosed this time:\n- Colorado license\n\nRegards,\nRowan Testa, DO");
-    eq("untick both: the not-enclosed block alone, nothing promised", noteForSelection(two, [], PHYSICIAN, "Kyle Sample"),
-      "Hello Kyle,\n\nNot enclosed this time:\n- DEA\n- Colorado license\n\nRegards,\nRowan Testa, DO");
-    eq("null selection means nothing attached", noteForSelection(two, null, PHYSICIAN, "Kyle Sample"), noteForSelection(two, [], PHYSICIAN, "Kyle Sample"));
-    eq("a Set works as the selection", noteForSelection(two, new Set(["doc-lic-co"]), PHYSICIAN, "Kyle Sample"),
-      "Hello Kyle,\n\nAttached are the documents you asked for:\n- State Medical License (DO), CO\n\nNot enclosed this time:\n- DEA\n\nRegards,\nRowan Testa, DO");
-    eq("ids not in the proposal change nothing", noteForSelection(two, ["doc-dea-ca", "doc-cv", "nope"], PHYSICIAN, "Kyle Sample"), noteForSelection(two, ["doc-dea-ca"], PHYSICIAN, "Kyle Sample"));
-    ok("the not-enclosed block promises nothing", !noteForSelection(two, [], PHYSICIAN, "Kyle Sample").includes("follow"));
-    eq("no name: the trimmed note ends without a sign-off too", noteForSelection(two, ["doc-dea-ca"], PHYSICIAN_NO_NAME, "Kyle Sample"),
-      "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CA\n\nNot enclosed this time:\n- Colorado license");
+    eq("untick one: the note lists one and names the other as not enclosed", noteForSelection(two, ["doc-dea-ca"], PHYSICIAN, "Jordan Sample"),
+      "Hello Jordan,\n\nAttached are the documents you asked for:\n- DEA Registration, CA\n\nNot enclosed this time:\n- Colorado license\n\nRegards,\nRowan Testa, DO");
+    eq("untick both: the not-enclosed block alone, nothing promised", noteForSelection(two, [], PHYSICIAN, "Jordan Sample"),
+      "Hello Jordan,\n\nNot enclosed this time:\n- DEA\n- Colorado license\n\nRegards,\nRowan Testa, DO");
+    eq("null selection means nothing attached", noteForSelection(two, null, PHYSICIAN, "Jordan Sample"), noteForSelection(two, [], PHYSICIAN, "Jordan Sample"));
+    eq("a Set works as the selection", noteForSelection(two, new Set(["doc-lic-co"]), PHYSICIAN, "Jordan Sample"),
+      "Hello Jordan,\n\nAttached are the documents you asked for:\n- State Medical License (DO), CO\n\nNot enclosed this time:\n- DEA\n\nRegards,\nRowan Testa, DO");
+    eq("ids not in the proposal change nothing", noteForSelection(two, ["doc-dea-ca", "doc-cv", "nope"], PHYSICIAN, "Jordan Sample"), noteForSelection(two, ["doc-dea-ca"], PHYSICIAN, "Jordan Sample"));
+    ok("the not-enclosed block promises nothing", !noteForSelection(two, [], PHYSICIAN, "Jordan Sample").includes("follow"));
+    eq("no name: the trimmed note ends without a sign-off too", noteForSelection(two, ["doc-dea-ca"], PHYSICIAN_NO_NAME, "Jordan Sample"),
+      "Hello Jordan,\n\nAttached are the documents you asked for:\n- DEA Registration, CA\n\nNot enclosed this time:\n- Colorado license");
   }
   for (const [name, r] of Object.entries({ REQUEST_1, REQUEST_2, ...REQUESTS })) {
     const p = buildProposal(r, CATALOGUE, PHYSICIAN, NOW);
@@ -781,7 +780,7 @@ if (isMain) {
       noteForSelection(p, p.docIds.filter((id) => id !== "doc-mmr1"), PHYSICIAN, REQUEST_2.fromName), [
         "Hello Morgan,", "",
         "Attached are the documents you asked for:",
-        "- Professional Liability COI, ProAssurance Specialty Insurance",
+        "- Professional Liability COI, Harborline Specialty Insurance",
         "- MMR (Measles, Mumps, Rubella) vaccination",
         "- Measles (Rubeola) IgG titer, Immune",
         "- QuantiFERON-TB Gold, Negative", "",
@@ -793,7 +792,7 @@ if (isMain) {
       noteForSelection(p, ["doc-coi", "doc-mmr2", "doc-mmr1", "doc-measles"], PHYSICIAN, REQUEST_2.fromName), [
         "Hello Morgan,", "",
         "Attached are the documents you asked for:",
-        "- Professional Liability COI, ProAssurance Specialty Insurance",
+        "- Professional Liability COI, Harborline Specialty Insurance",
         "- MMR (Measles, Mumps, Rubella) vaccination",
         "- MMR (Measles, Mumps, Rubella) vaccination",
         "- Measles (Rubeola) IgG titer, Immune", "",
@@ -807,7 +806,7 @@ if (isMain) {
       noteForSelection(p, [], PHYSICIAN, REQUEST_2.fromName), [
         "Hello Morgan,", "",
         "Not enclosed this time:",
-        "- MPLT COI", "- MMR dose #2", "- TB form", "",
+        "- Ridgeway COI", "- MMR dose #2", "- TB form", "",
         "These will follow separately:",
         "- Logs 12-months", "",
         "Regards,", "Rowan Testa, DO",
@@ -832,19 +831,19 @@ if (isMain) {
 
   // -- Signature and header lines are never asks ----------------------------
   {
-    const asks = parseAsks(REQUESTS.sanfordApproval.body, REQUESTS.sanfordApproval.subject);
+    const asks = parseAsks(REQUESTS.healthPlanApproval.body, REQUESTS.healthPlanApproval.subject);
     // The name the letter opens with, read from the fixture rather than written here.
-    const nameTail = REQUESTS.sanfordApproval.body.split("\n")[0].replace(/^[A-Z]\.\s*/, "").trim();
+    const nameTail = REQUESTS.healthPlanApproval.body.split("\n")[0].replace(/^[A-Z]\.\s*/, "").trim();
     const surname = nameTail.split(",")[0].trim().toLowerCase();
-    ok("Sanford: the letter opens with a lettered name line", /^[A-H]\.\s+\S+, DO$/.test(REQUESTS.sanfordApproval.body.split("\n")[0].trim()));
-    ok("Sanford: no ask names the physician", !asks.some((a) => a.toLowerCase().includes(surname)), JSON.stringify(asks));
-    ok("Sanford: no ask is a header or a contact line", !asks.some((a) => /^to\b|@|\d{3}\)?[ .-]\d{3}/i.test(a)), JSON.stringify(asks));
+    ok("health plan letter: the letter opens with a lettered name line", /^[A-H]\.\s+\S+, DO$/.test(REQUESTS.healthPlanApproval.body.split("\n")[0].trim()));
+    ok("health plan letter: no ask names the physician", !asks.some((a) => a.toLowerCase().includes(surname)), JSON.stringify(asks));
+    ok("health plan letter: no ask is a header or a contact line", !asks.some((a) => /^to\b|@|\d{3}\)?[ .-]\d{3}/i.test(a)), JSON.stringify(asks));
     // Before 2026-09-28 the subject stood in when the body asked nothing,
     // and an approval letter's subject became an ask. A letter that asks
     // nothing is not a request because its subject names a document.
-    eq("Sanford: nothing in the body asks, and the subject does not either", asks, []);
-    const p = buildProposal(REQUESTS.sanfordApproval, CATALOGUE, PHYSICIAN, NOW);
-    ok("Sanford: the cover note never asks what the name line means", !p.coverNote.split("\n").slice(0, -1).join("\n").toLowerCase().includes(nameTail.toLowerCase()), p.coverNote);
+    eq("health plan letter: nothing in the body asks, and the subject does not either", asks, []);
+    const p = buildProposal(REQUESTS.healthPlanApproval, CATALOGUE, PHYSICIAN, NOW);
+    ok("health plan letter: the cover note never asks what the name line means", !p.coverNote.split("\n").slice(0, -1).join("\n").toLowerCase().includes(nameTail.toLowerCase()), p.coverNote);
     const none = [
       "E. Testa, DO", "Testa, DO", "Rowan E. Testa, DO", "Dr. Rowan Testa, DO, FAANS", "Tara Example, CPCS",
       "Casey Example, CPMSM", "Sincerely,", "Best regards,", "To: Credentialing Committee", "Cc: Medical Staff Office",
@@ -920,8 +919,10 @@ if (isMain) {
       ["board certificate", "board_cert", "found", "Please send a copy of your current board certificate.", "high"],
       ["BLS card", "bls", "found", "your BLS card", "high"],
     ]]);
-    ok("a high-confidence reading with every ask answered is one tap", oneTapReady(p));
-    eq("and has nothing to review", reviewReason(p), "");
+    // One tap also needs the forward to have been positively authenticated
+    // (email-inbound stamps proposal.verified; INTAKE-004).
+    ok("a high-confidence reading with every ask answered, from a verified forward, is one tap", oneTapReady({ ...p, verified: true }));
+    eq("and has nothing to review", reviewReason({ ...p, verified: true }), "");
     const medium = buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { ...reading, confidence: "medium" });
     ok("a medium-confidence reading is not one tap", !oneTapReady(medium));
     ok("and says why", reviewReason(medium).includes("not certain"));
@@ -941,6 +942,22 @@ if (isMain) {
     ok("a reading with no asks is not one tap", !oneTapReady(buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [] })));
     eq("duplicate and empty quotes collapse", buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [{ quote: "BLS", kind: "bls" }, { quote: "bls", kind: "bls" }, { quote: "  ", kind: "bls" }, null] }).items.length, 1);
     ok("no reading field ever carries an em dash", !JSON.stringify(buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [{ quote: "BLS \u2014 current", kind: "bls" }] })).includes("\u2014"));
+  }
+
+  // ── An unverified forward is never one tap (INTAKE-004) ─────────────────
+  // A forward whose From: could not be proven (no DMARC pass, no aligned
+  // SPF and DKIM pass) can be a forgery that names the requester itself, so
+  // the packet it asks for is always read before it goes.
+  {
+    const req = { subject: "Documents for your file", fromName: "Sam Example", fromAddr: "s@x.example", body: "unused when a reading is given" };
+    const p = buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [{ quote: "Please send a copy of your current board certificate.", kind: "board_cert" }] });
+    ok("a model/high proposal with no verification recorded is not one tap", !oneTapReady(p));
+    ok("an unverified forward's model/high proposal is not one tap", !oneTapReady({ ...p, verified: false }));
+    ok("a truthy non-boolean is not verification", !oneTapReady({ ...p, verified: "true" }));
+    ok("the same proposal from a verified forward is one tap", oneTapReady({ ...p, verified: true }));
+    ok("an unverified forward says why before anything else",
+      reviewReason({ ...p, verified: false }).startsWith("This forward could not be verified as coming from you. Check who is asking before you send anything."), reviewReason({ ...p, verified: false }));
+    ok("and a legacy row with no verification recorded is not called a forgery", !reviewReason(p).includes("could not be verified"));
   }
 
   // ── House rules: no em dash in anything the module can produce ───────────

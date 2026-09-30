@@ -17,12 +17,14 @@ const ok = (name, cond, extra = "") => { if (cond) pass++; else { fail++; consol
 const sha = (s) => createHash("sha256").update(s).digest("hex");
 
 // ── Gemini prompt: byte-identical to the shipped PROMPT() ───────────────────
-// Hashes were taken from the pre-split file on 2026-09-02 for these inputs.
-const T = "right crani for SDH at Eisenhower, primary surgeon";
+// Hashes were taken from the pre-split file on 2026-09-02 for these inputs
+// (the transcript's hospital name was later swapped for a synthetic one; the
+// prompt differs from the pinned one by exactly that substitution).
+const T = "right crani for SDH at Osterly, primary surgeon";
 const CATS = ["Cranial", "Spine", "Peripheral Nerve"];
 const g1 = geminiPrompt(T, "2026-09-02", CATS);
-eq("gemini prompt length", g1.length, 13074);
-eq("gemini prompt hash", sha(g1), "b877c1186bcc55c0933c5c7e93e34ae578ab3949409e759846711c921a512cdb");
+eq("gemini prompt length", g1.length, 13071);
+eq("gemini prompt hash", sha(g1), "2a77d39f1065349f1c61b8f135fddcbb1247e43e76ca345b2bf5903a772ee7d3");
 const g2 = geminiPrompt("", "2026-01-01", []);
 eq("gemini prompt (empty inputs) length", g2.length, 12992);
 eq("gemini prompt (empty inputs) hash", sha(g2), "f89eb1715e7feda1f298090c239716e7c05c72593c3cfa054e987cf84fc0fa9b");

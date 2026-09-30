@@ -2,8 +2,8 @@
  * Where am I supposed to be on this date?
  *
  * A locum works several agreements at once, and the expensive mistake is
- * logging a day against the wrong one — billing Good Samaritan for a day
- * actually worked at Eisenhower, or logging into a contract whose coverage
+ * logging a day against the wrong one (billing one hospital for a day
+ * actually worked at another), or logging into a contract whose coverage
  * dates were never entered. Both are invisible until an agency queries the
  * invoice weeks later.
  *
@@ -18,8 +18,8 @@ import { timedSpan } from "./coverageBlocks.js";
 /**
  * Coverage blocks for a contract, falling back to a plain start/end pair. A
  * block with times (coverageBlocks.js) counts every calendar date it touches:
- * Sep 25 4:00 PM to Sep 28 7:00 AM covers Sep 25 through the sign-out morning
- * of Sep 28, where the physician still is. One without keeps start to end.
+ * Oct 16 4:00 PM to Oct 19 7:00 AM covers Oct 16 through the sign-out morning
+ * of Oct 19, where the physician still is. One without keeps start to end.
  */
 function blocksOf(contract) {
   if (!contract) return [];
@@ -111,7 +111,7 @@ export function checkPlacement(contracts, contract, dateStr) {
   return {
     level: "unscheduled",
     title: "No coverage on file for this date",
-    message: `${dateStr} isn't inside any scheduled coverage block for ${contract.facility || "this contract"}. That usually means the dates were never added to the agreement — worth fixing on the Contracts tab so future days check themselves.`,
+    message: `${dateStr} isn't inside any scheduled coverage block for ${contract.facility || "this contract"}. That usually means the dates were never added to the agreement. Fix them on the Contracts tab so future days check themselves.`,
     elsewhere: [],
   };
 }

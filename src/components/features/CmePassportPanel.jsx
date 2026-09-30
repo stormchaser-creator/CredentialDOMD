@@ -1,4 +1,5 @@
 import { useState, useMemo, memo } from "react";
+import { TAP_MIN } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { ExternalLinkIcon, CheckIcon } from "../shared/Icons";
 import { copyToClipboard } from "../../utils/helpers";
@@ -98,7 +99,7 @@ function CmePassportPanel({ onImport }) {
             }}>
               {card.missing.map(m => <div key={m.key} style={{ padding: "1px 0" }}>{m.fix}</div>)}
               <button onClick={() => navigate("more", "settings")} style={{
-                marginTop: 4, padding: 0, border: "none", backgroundColor: "transparent",
+                minHeight: TAP_MIN, marginTop: -4, marginBottom: -8, padding: 0, border: "none", backgroundColor: "transparent",
                 color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
               }}>Open Settings</button>
             </div>

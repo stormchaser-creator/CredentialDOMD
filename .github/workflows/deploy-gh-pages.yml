@@ -21,7 +21,22 @@ on:
       - 'scripts/build-help.mjs'
       - 'scripts/sw-precache.mjs'
       - 'scripts/root-sw-retirement.js'
+      # Imported by the build scripts above.
+      - 'scripts/build-cme.mjs'
+      - 'scripts/generate-legal-pages.mjs'
+      - 'scripts/help-videos.mjs'
+      - 'scripts/https-redirect.mjs'
+      - 'scripts/public-launch-render.mjs'
+      - 'scripts/watch-pages.mjs'
+      # Server modules the app bundle imports from src/. Every file outside
+      # src/ that the app or its build imports must be listed here, or a fix
+      # to it alone never reaches the live bundle: tests/ops/deploy-paths.test.mjs
+      # walks the import graph and fails on one that is missing.
       - 'supabase/functions/_shared/billingCatalog.mjs'
+      - 'supabase/functions/_shared/accessPolicy.mjs'
+      - 'supabase/functions/_shared/memberView.mjs'
+      - 'supabase/functions/_shared/veraSourceRegistry.mjs'
+      - 'supabase/functions/_shared/credentialPortalView.mjs'
       - '.github/workflows/deploy-gh-pages.yml'
   workflow_dispatch: {}
 

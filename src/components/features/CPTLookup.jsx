@@ -5,8 +5,11 @@ import { SearchIcon } from "../shared/Icons";
 import { generateId } from "../../utils/helpers";
 import { searchCPT } from "../../utils/cptSearch";
 import { aiCPTLookup } from "../../utils/cptAILookup";
+import { catalogWRVU } from "../../utils/cptCatalog";
 import { aiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { pickableContracts } from "../../utils/contractsForDate";
+import { credentialOnlyMembership } from "../../utils/limitedLaunchAccess";
+import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
 
 // Local calendar date — a UTC slice would file late-evening work on tomorrow
 const localDay = (d) => {
@@ -15,7 +18,14 @@ const localDay = (d) => {
 };
 
 function CPTLookup() {
-  const { data, addItem, theme: T } = useApp();
+  const { data, addItem, theme: T, limitedLaunch, practiceReadOnly } = useApp();
+  // "+ Bill it" writes an RVU encounter, a Practice record. Where the server
+  // answered that Practice is read-only (a Credential-only membership, or one
+  // that lapsed) the button could only be refused, with a message about a
+  // record that does not exist; the page says why instead. A check still in
+  // progress keeps the button, as the Practice tab keeps its screens.
+  const billingClosed = !!limitedLaunch?.enabled && !!practiceReadOnly;
+  const credentialOnly = billingClosed && credentialOnlyMembership(limitedLaunch?.access);
   const iS = useInputStyle();
   const [logged, setLogged] = useState(null);
 
@@ -60,7 +70,17 @@ function CPTLookup() {
     setAiError(null);
     try {
       const result = await aiCPTLookup(query, results.slice(0, 5), apiKey);
-      setAiResults(result.codes || []);
+      // The AI names a code and what it covers, never its work RVU, so
+      // "+ Bill it" on its row logged the code at 0 wRVU. Each code carries
+      // the catalog's figure, the one its search result shows; a figure the
+      // AI offered of its own is never billed, and a code no catalog lists
+      // carries none.
+      const codes = await Promise.all((result.codes || []).map(async (r) => {
+        const { wRVU: _aiFigure, ...row } = r || {};
+        const wRVU = await catalogWRVU(row.code);
+        return wRVU == null ? row : { ...row, wRVU };
+      }));
+      setAiResults(codes);
     } catch (err) {
       setAiError(err.message);
     }
@@ -123,6 +143,20 @@ function CPTLookup() {
         Search by procedure name, keyword, or code number.
       </p>
 
+      {billingClosed && (
+        <div role="note" style={{
+          padding: "10px 14px", borderRadius: 10, fontSize: 13, lineHeight: 1.5,
+          color: T.textMuted, backgroundColor: T.input, border: `1px solid ${T.border}`, marginBottom: 12,
+        }}>
+          {credentialOnly
+            ? "Billing a code to your RVU log is part of Practice, and your Credential membership does not include it. You can still search and copy codes here."
+            : "Billing a code to your RVU log is part of Practice, which is read-only on this account. You can still search and copy codes here."}
+          {credentialOnly && <>
+            {" "}<a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}
+          </>}
+        </div>
+      )}
+
       {/* Search input */}
       <div style={{ position: "relative", marginBottom: 12 }}>
         <span style={{
@@ -133,6 +167,7 @@ function CPTLookup() {
         </span>
         <input
           type="text"
+          aria-label="Search CPT codes"
           value={query}
           onChange={e => handleSearch(e.target.value)}
           placeholder="e.g. 'suboccipital crani' or '61343'"
@@ -176,7 +211,7 @@ function CPTLookup() {
           backgroundColor: confidence === "high" ? (T.successDim || "rgba(34,197,94,0.1)") : confidence === "medium" ? T.warningDim : T.dangerDim,
           marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5,
         }}>
-          {confidence === "high" ? "Strong matches" : confidence === "medium" ? "Possible matches" : "Low confidence \u2014 try AI lookup"}
+          {confidence === "high" ? "Strong matches" : confidence === "medium" ? "Possible matches" : "Low confidence: try AI lookup"}
           {` \u00b7 ${results.length} result${results.length !== 1 ? "s" : ""}`}
         </div>
       )}
@@ -231,7 +266,7 @@ function CPTLookup() {
               </div>
             )}
           </div>
-          <LogButton c={r} />
+          {!billingClosed && <LogButton c={r} />}
         </button>
       ))}
 
@@ -273,13 +308,23 @@ function CPTLookup() {
                     {r.reasoning}
                   </div>
                 )}
+                {typeof r.wRVU === "number" && (
+                  <div style={{ marginTop: 3 }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, color: T.success || "#22c55e",
+                      fontFamily: "monospace",
+                      backgroundColor: T.successDim || "rgba(34,197,94,0.1)",
+                      padding: "1px 6px", borderRadius: 4,
+                    }}>{r.wRVU.toFixed(2)} wRVU</span>
+                  </div>
+                )}
                 {expanded === r.code && (
                   <div style={{ fontSize: 11, color: T.share, marginTop: 4, fontWeight: 600 }}>
                     Copied to clipboard
                   </div>
                 )}
               </div>
-              <LogButton c={{ ...r, shortDesc: r.description }} />
+              {!billingClosed && <LogButton c={{ ...r, shortDesc: r.description }} />}
             </button>
           ))}
         </>

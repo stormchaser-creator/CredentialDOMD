@@ -10,7 +10,7 @@ import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (
 import subprocess
 import tempfile
 
-BIN = Path('/opt/homebrew/opt/postgresql@17/bin')
+BIN = Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 MIGRATION = Path(__file__).resolve().parents[2] / 'supabase/migrations/20260919193000_vera_source_admission.sql'
 ENV = {k:v for k,v in os.environ.items() if not k.startswith('PG')}
 A='10000000-0000-4000-8000-000000000001'
@@ -20,7 +20,7 @@ def check(name, value):
     if not value: raise AssertionError(name)
     checks.append(name)
 
-with tempfile.TemporaryDirectory(prefix='vera-pg-',dir='/private/tmp') as temporary:
+with tempfile.TemporaryDirectory(prefix='vera-pg-',dir='/tmp') as temporary:
     root=Path(temporary); sock=root/'s'; sock.mkdir()
     def run(*args,**kw): return subprocess.run([str(a) for a in args],text=True,capture_output=True,env=ENV,**kw)
     slot=pg_slot.acquire(root/'db')

@@ -49,9 +49,9 @@ eq("and the department after the unescaped separator is still dropped",
 
 // A card with no FN falls back to the structured name, which is family-first.
 eq("no formatted name means the structured one is used",
-  parseVCard("BEGIN:VCARD\nN:Logsdon;Daniel;;Dr.;MD\nTEL:(555) 000-1111\nEND:VCARD").name, "Daniel Logsdon");
+  parseVCard("BEGIN:VCARD\nN:Marchetti;Daniel;;Dr.;MD\nTEL:(555) 000-1111\nEND:VCARD").name, "Daniel Marchetti");
 eq("a group prefix on N is read too",
-  parseVCard("BEGIN:VCARD\nitem1.N:Logsdon;Daniel;;;\nEND:VCARD").name, "Daniel Logsdon");
+  parseVCard("BEGIN:VCARD\nitem1.N:Marchetti;Daniel;;;\nEND:VCARD").name, "Daniel Marchetti");
 
 // Folding: a continuation line starts with a space.
 eq("a folded line is rejoined",

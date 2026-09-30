@@ -78,11 +78,18 @@ export function spreadsheetRefusal(column) {
  * the last file said. Without it, the refusal of caselog.xlsx is replaced by
  * the next file's "3 fields filled." before anyone can read it, and the
  * physician believes both went in. Returns a state updater for the message.
+ *
+ * Each refusal is said once. The callers show the refusals as they happen
+ * (refused.join(" ") so far), so the message on screen can be one refusal or
+ * that running list; either is already in the head and is not repeated.
+ * With two refusals the running list is not an element of the array, and it
+ * used to come back as "a b a b".
  */
 export function withRefusals(refused) {
   return (current) => {
     const head = refused.join(" ");
-    return !current || refused.includes(current) ? head : `${head} ${current}`;
+    const alreadyShown = !current || refused.some((r, i) => current === r || current === refused.slice(0, i + 1).join(" "));
+    return alreadyShown ? head : `${head} ${current}`;
   };
 }
 

@@ -1,0 +1,37 @@
+// Whole days from today to a date, on the local calendar.
+//
+// An expiration is stored as a bare "YYYY-MM-DD", which `new Date()` parses as
+// UTC midnight: in California that is 5 pm the day before, so from 5 pm on a
+// license's last valid day it read "Expired 1d ago", turned red and moved from
+// Expiring to Expired, while formatDate and the CME engine (local midnight)
+// still counted it as current. Every countdown compares local midnight with
+// local midnight here instead, and rounds, so 23- and 25-hour DST days still
+// give whole numbers and no -0 appears. Expired means days < 0; today is 0.
+//
+// Dependency-free so compliance.js, notifications.js and the pure-node tests
+// can all import it.
+
+const MS_PER_DAY = 86400000;
+
+/** A date-only string at local midnight; anything else as the Date parses it. */
+export function parseDay(s) {
+  if (s instanceof Date) return new Date(s.getFullYear(), s.getMonth(), s.getDate());
+  const str = String(s ?? "");
+  if (!str) return null;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(str) ? new Date(`${str}T00:00:00`) : new Date(str);
+  return isNaN(d) ? null : d;
+}
+
+/** Days from today to `s` (negative once it has passed), or null for no date. */
+export function daysUntilDate(s, now = new Date()) {
+  const d = parseDay(s);
+  if (!d) return null;
+  const a = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((a - b) / MS_PER_DAY);
+}
+
+/** Today's local calendar date as YYYY-MM-DD. */
+export function localToday(now = new Date()) {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}

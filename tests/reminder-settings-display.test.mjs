@@ -31,6 +31,10 @@ const stubs = {
     // Every ToggleRow SettingsSection renders is recorded (label, active,
     // onToggle) and then rendered by the real component.
     b.onResolve({ filter: /^\.\.\/shared\/ToggleRow$/ }, () => ({ path: 'toggle', namespace: 'stub' }));
+    // The Password and sign-in email card needs a ClerkProvider (AUTH-012);
+    // it is not what this test reads.
+    b.onResolve({ filter: /^\.\/SignInMethodsCard$/ }, () => ({ path: 'signin', namespace: 'stub' }));
+    b.onLoad({ filter: /^signin$/, namespace: 'stub' }, () => ({ contents: 'export default function SignInMethodsCard() { return null; }', loader: 'js' }));
     b.onLoad({ filter: /^app$/, namespace: 'stub' }, () => ({ contents: 'export const useApp = () => globalThis.__reminderSettingsApp;', loader: 'js' }));
     b.onLoad({ filter: /^toggle$/, namespace: 'stub' }, () => ({
       contents: `import Real from ${JSON.stringify(path.join(src, 'components', 'shared', 'ToggleRow.jsx'))};

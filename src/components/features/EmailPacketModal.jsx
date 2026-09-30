@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, memo } from "react";
+import { TAP_MIN } from "../shared/actionButton";
 import { createPortal } from "react-dom";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
@@ -44,7 +45,7 @@ const rowToCamel = (row) => {
  * So on success this modal pulls the server's row and merges it into
  * data.shareLog by id, which is what the local send history reads.
  */
-function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, initialSubject, initialTo, onSent, onDownloadPacket }) {
+function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, initialSubject, initialTo, onSent, onDownloadPacket, shareItem = null }) {
   const { data, updateSection, userIdRef, theme: T } = useApp();
   const iS = useInputStyle();
   const [to, setTo] = useState("");
@@ -122,6 +123,9 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
           subject: scrubSsn(subject.trim()),
           text: scrubSsn(text),
           doc_ids: chosen.map((d) => d.id),
+          // The record this sheet was opened from (ShareModal), so the
+          // server's share_log row lands in that record's Send history.
+          ...(!request && shareItem ? { item_id: shareItem.id, item_name: shareItem.name || "", item_section: shareItem.section || "" } : {}),
         },
       });
       if (res.error) {
@@ -244,7 +248,7 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
               letting the physician trim the selection by hand. */}
           {onDownloadPacket && (
             <button onClick={() => { onClose?.(); onDownloadPacket(); }} style={{
-              display: "block", marginTop: 6, border: "none", background: "transparent", padding: 0,
+              display: "block", minHeight: TAP_MIN, marginTop: -2, border: "none", background: "transparent", padding: 0,
               color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
             }}>Download the whole packet as one file instead</button>
           )}

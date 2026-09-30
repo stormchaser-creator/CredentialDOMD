@@ -9,10 +9,15 @@ import { repairActions, buildCategory, packRecord, cleanRecordInput, recordFromF
 import { archivedReferenceActions, buildAssistantHistory, latestReferenceSelection, resolveReferenceSelection } from "../../utils/referenceDraft.js";
 import ReferenceDraftCard from "./ReferenceDraftCard.jsx";
 import VeraSourceReceipt from "./VeraSourceReceipt.jsx";
-import { buildExport, makeSpreadsheetFile } from "../../utils/exportData";
-import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
+import { buildExport, exportLabel, makeSpreadsheetFile } from "../../utils/exportData";
+import { isOfficeFile, extractOfficeText, mimeFromName, UPLOAD_ACCEPT } from "../../utils/officeText";
+import { screenDocument } from "../../utils/phiGuard";
+import { dictationErrorText, DICTATION_START_FAILED } from "../../utils/dictationErrors";
+import { docMime, leaveInbox } from "../../utils/inboxDocs";
+import { useAnthropicAvailable } from "../../utils/aiClient";
 import { supabase } from "../../lib/supabase";
 import Modal from "../shared/Modal";
+import { TAP_MIN, dismissButtonStyle } from "../shared/actionButton";
 import EmailPacketModal from "./EmailPacketModal";
 import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../../utils/storageScope";
 import { checkStorageQuota } from "../../utils/storageQuota";
@@ -33,13 +38,22 @@ const slimForArchive = (msgs) =>
  * straight to the developer. Actions only run after you approve them.
  *
  * requestContext ({ id, from_addr, subject } or null): the document request
- * this conversation was opened from (Requests inbox). Send-packet cards then
- * offer "Reply by email", which answers that request with the documents
- * attached and marks it replied.
+ * this conversation was opened from (Requests inbox). A send-packet card
+ * built in a turn while it is set carries it (card.request), and that
+ * card's "Reply by email" answers that request with the documents attached
+ * and marks it replied. The card, not the session, decides: a request left
+ * in the session from earlier once addressed an unrelated packet to its
+ * credentialer. onClearRequest lets the app drop it on New chat.
  */
-function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null }) {
+function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest }) {
   const { data, addItem, editItem, allTrackedStates, userIdRef, navigate, theme: T } = useApp();
   const iS = useInputStyle();
+  // The Opus badge says what answers: Claude only when "Vera answers with"
+  // is Claude Opus AND Opus is reachable (own key, or the shared one), as
+  // assistant.js assistantTurn decides. A pasted key alone leaves Vera on
+  // Gemini. Reactive, so it follows the shared-key status when it lands.
+  const opusReachable = useAnthropicAvailable(data.settings);
+  const onOpus = data.settings?.assistantModel === "opus" && opusReachable;
   // Send-packet card handed to the email modal: { msgId, idx, docIds, note }
   const [emailPacket, setEmailPacket] = useState(null);
   const [msgs, setMsgs] = useState(() => {
@@ -73,6 +87,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   // only read what's attached to the CURRENT message, and answering questions
   // about a document from memory is how it invents things.
   const lastAttachRef = useRef(null);
+  // An open_record turn's navigation, held until its reply is on screen and
+  // saved. Navigating leaves Vera (this screen unmounts), so navigating first
+  // threw the reply away and the question came back as "Not sent".
+  const pendingNavRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -80,8 +98,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       const slim = msgs.slice(-60).map(m => { const c = { ...m }; delete c.sourceAttach; return c; });
       lsSetJSON(BASE_KEYS.chat, slim);
     } catch { /* quota */ }
+    const go = pendingNavRef.current;
+    if (go) { pendingNavRef.current = null; navigate(...go); return; }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs]);
+  }, [msgs, navigate]);
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* stopped */ } }, []);
   useEffect(() => {
     try { lsSetJSON(BASE_KEYS.archives, archives); } catch { /* quota */ }
@@ -104,8 +124,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     setErr(null);
     lastAttachRef.current = null;
     failedMapRef.current.clear();
+    // A new conversation is not about the request the last one answered.
+    onClearRequest?.();
     return true;
-  }, [msgs]);
+  }, [msgs, onClearRequest]);
   const restoreArchive = useCallback((arc) => {
     // The chat on screen is never lost — it archives itself first.
     if (msgs.length) archiveCurrent();
@@ -212,9 +234,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           text: meatiest.slice(0, 800),
         }];
       }
-      // open_record navigates right away (read-only) and becomes a small
-      // "Opened ..." card instead of an approval card.
+      // open_record navigates without an approval (read-only) and becomes a
+      // small "Opened ..." card instead of an approval card.
       const nav = (result.actions || []).find(a => a.kind === "open_record");
+      let navTo = null;
       if (nav) {
         const sec = findSection(nav.section) || null;
         let target = null;
@@ -230,7 +253,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           const sub = target.sec.key === "customRecords"
             ? `custom:${(data.customRecords || []).find(r => r?.id === target.id)?.categoryId || "unsorted"}`
             : target.sec.sub;
-          navigate(target.sec.tab, sub, target.id ? { sec: target.sec.key, id: target.id } : null);
+          navTo = [target.sec.tab, sub, target.id ? { sec: target.sec.key, id: target.id } : null];
           result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, done: true, summary: `Opened ${target.sec.label}${target.id ? "" : " (record not found, showing the section)"}` } : a);
         } else {
           result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, dismissed: true } : a);
@@ -240,14 +263,21 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions, sourceEvidence: result.sourceEvidence };
       // Keep the file with the proposal so Approve can save it to Files too —
       // only for documents the user just attached, never the implicit re-send.
-      if (explicitAtt?.dataUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record" || a.kind === "create_category")) {
-        modelMsg.sourceAttach = { dataUrl: explicitAtt.dataUrl, name: explicitAtt.name };
+      const sourceUrl = explicitAtt?.dataUrl || explicitAtt?.fileDataUrl;
+      if (sourceUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record" || a.kind === "create_category")) {
+        modelMsg.sourceAttach = { dataUrl: sourceUrl, name: explicitAtt.name };
       }
       // Resolve against the latest state: checkbox edits made while Vera was
       // answering must take precedence over the older request's selection.
       // The card stores IDs only; contact text is derived locally at render.
+      // A packet card keeps the request this turn was working, if any, so
+      // its Reply by email never answers a different one later.
+      const forRequest = requestContext?.id ? { id: requestContext.id, from_addr: requestContext.from_addr || "", subject: requestContext.subject || "" } : null;
+      // Navigates once this reply is saved (the msgs effect above).
+      if (navTo) pendingNavRef.current = navTo;
       setMsgs(m => [...m, { ...modelMsg, actions: (modelMsg.actions || []).map(a => a.kind === "draft_references"
-        ? { kind: "draft_references", ...resolveReferenceSelection(a, latestReferenceSelection(m)) } : a) }]);
+        ? { kind: "draft_references", ...resolveReferenceSelection(a, latestReferenceSelection(m)) }
+        : a.kind === "send_packet" ? { ...a, request: forRequest } : a) }]);
       logToCloud(explicitAtt ? "document" : "chat", text, result.reply.slice(0, 300));
       failedMapRef.current.delete(userMsg.id);
     } catch (e2) {
@@ -256,7 +286,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       setErr(e2.message);
     }
     setBusy(false);
-  }, [input, attachment, msgs, data, allTrackedStates, logToCloud, navigate]);
+  }, [input, attachment, msgs, data, allTrackedStates, logToCloud, requestContext]);
 
   // Home search hands Vera a first question; ask it once, then clear the seed.
   const seededRef = useRef(null);
@@ -292,7 +322,8 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     const byteStr = atob(doc.data.split(",")[1]);
     const arr = new Uint8Array(byteStr.length);
     for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-    return new File([arr], doc.name || "document", { type: doc.type || "application/octet-stream" });
+    // docMime: an emailed file's `type` can be its inbox marker, never a MIME type.
+    return new File([arr], doc.name || "document", { type: docMime(doc) || "application/octet-stream" });
   };
 
   const runAction = useCallback(async (msgId, idx) => {
@@ -332,9 +363,13 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     const revive = (category) => {
       if (category?.archivedAt) mustWrite(editItem("customCategories", { ...category, archivedAt: null }), `"${category.name}"`);
     };
+    const withheldReasons = (withheld) => [...new Set(withheld.map(w => w.reason))].join(", ");
     const withheldNote = (withheld) => withheld.length
-      ? `Not saved, on purpose: ${[...new Set(withheld.map(w => w.reason))].join(", ")}. This app does not keep patient identifiers or your SSN and full date of birth.`
+      ? `Not saved, on purpose: ${withheldReasons(withheld)}. This app does not keep patient identifiers or your SSN and full date of birth.`
       : null;
+    // A built-in record card whose every detail was withheld writes nothing.
+    const nothingLeft = (verb, withheld) =>
+      new Error(`Nothing was ${verb}: every detail on this card is one this app does not keep (${withheldReasons(withheld)}).`);
     // New on-the-fly fields go to the founder's approval queue — the schema
     // evolves under admin review, not silently.
     const proposeFields = (section, extra) => {
@@ -352,6 +387,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       const [current] = repairActions([action], { data });
       if (current.invalid) throw new Error(current.invalid);
       let note = null;
+      let ticketId = null;
       if (current.kind === "create_category") {
         const now = new Date().toISOString();
         const category = current.existingCategoryId
@@ -384,7 +420,11 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         if (docId) saveSourceDoc(`customRecords:${id}`, docId);
         note = withheldNote(withheld);
       } else if (current.kind === "create_record") {
-        const { clean, extra } = splitFields(current.section, current.fields, current.customFields);
+        // splitFields drops every identifier (SSN, full date of birth, MRN...)
+        // before anything is written or offered to the field proposal queue.
+        const { clean, extra, withheld } = splitFields(current.section, current.fields, current.customFields);
+        note = withheldNote(withheld);
+        if (!Object.keys(clean).length && !extra && withheld.length) throw nothingLeft("saved", withheld);
         const newId = generateId();
         mustWrite(addItem(current.section, { ...clean, id: newId, ...(extra ? { customFields: extra } : {}) }), "the record");
         proposeFields(current.section, extra);
@@ -404,8 +444,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         note = withheldNote(withheld);
       } else if (action.kind === "update_record") {
         const existing = (data[action.section] || []).find(x => x.id === action.id);
-        if (!existing) throw new Error("Record not found — it may have been deleted.");
-        const { clean, extra } = splitFields(action.section, action.fields, action.customFields);
+        if (!existing) throw new Error("Record not found. It may have been deleted.");
+        const { clean, extra, withheld } = splitFields(action.section, action.fields, action.customFields);
+        note = withheldNote(withheld);
+        if (!Object.keys(clean).length && !extra && withheld.length) throw nothingLeft("changed", withheld);
         mustWrite(editItem(action.section, { ...existing, ...clean, ...(extra ? { customFields: { ...(existing.customFields || {}), ...extra } } : {}) }), "the change");
         proposeFields(action.section, extra);
         saveSourceDoc(`${action.section}:${action.id}`);
@@ -417,6 +459,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           ...doc,
           ...(current.name ? { name: current.name } : {}),
           ...(nextLink !== undefined ? { linkedTo: nextLink } : {}),
+          // Filed from the inbox: its type becomes its MIME type, as every
+          // other filing path does (DocumentsSection linkDoc, intake Add).
+          // Unlinking leaves the type alone.
+          ...(nextLink ? leaveInbox(doc) : {}),
         }), "the document");
         const prev = String(doc.linkedTo || "");
         if (nextLink !== undefined && prev.startsWith("customRecords:") && prev !== nextLink) {
@@ -427,23 +473,32 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         }
       } else if (action.kind === "feedback") {
         const body = action.text || action.summary || "";
-        logToCloud("feedback", `[${action.category || "idea"}] ${body}`, "queued for the developer");
-        // Also file it as a real ticket so it shows up in Admin → Tickets
-        // alongside anything sent through Get help. assistant_log alone is
-        // write-only: no screen reads it.
-        if (supabase) {
-          const category = action.category === "bug" ? "bug"
-            : action.category === "idea" ? "feature_request" : "other";
-          supabase.functions.invoke("create-ticket", {
-            body: {
-              subject: (action.summary || body).slice(0, 180) || "Reported from the assistant",
-              body: `${body}\n\n— reported through the in-app assistant`,
-              category,
-              priority: action.category === "bug" ? "high" : "normal",
-              context_page: "assistant",
-            },
-          }).then(() => {}, () => {});
+        // Filed as a real ticket, so it shows up in Admin > Tickets alongside
+        // anything sent through Get help, and the card says done only once
+        // the ticket exists: offline, a lapsed session or a refused body
+        // leaves the card with its error and Approve to try again.
+        // assistant_log alone is write-only: no screen reads it.
+        if (!supabase) throw new Error("Could not send this to the developer (not connected to your account). Approve again to retry.");
+        const category = action.category === "bug" ? "bug"
+          : action.category === "idea" ? "feature_request" : "other";
+        const subject = String(action.summary || body).trim().slice(0, 180);
+        const res = await supabase.functions.invoke("create-ticket", {
+          body: {
+            // create-ticket wants at least 3 characters of subject.
+            subject: subject.length >= 3 ? subject : "Reported from the assistant",
+            body: `${body}\n\nReported through the in-app assistant.`,
+            category,
+            priority: action.category === "bug" ? "high" : "normal",
+            context_page: "assistant",
+          },
+        });
+        if (res?.error || !res?.data?.ok || !res?.data?.id) {
+          let why = typeof navigator !== "undefined" && navigator.onLine === false ? "you're offline" : "";
+          try { why = (await res?.error?.context?.json?.())?.error || why; } catch { /* no JSON body */ }
+          throw new Error(`Could not send this to the developer${why ? ` (${why})` : ""}. Approve again to retry.`);
         }
+        logToCloud("feedback", `[${action.category || "idea"}] ${body}`, "filed for the developer");
+        ticketId = res.data.id;
       } else if (action.kind === "send_packet") {
         const docs = (action.docIds || [])
           .map(id2 => (data.documents || []).find(d => d.id === id2))
@@ -471,7 +526,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         if (!shared) {
           const standalone = window.navigator.standalone === true
             || window.matchMedia?.("(display-mode: standalone)")?.matches;
-          if (standalone) throw new Error("The share sheet didn't open — try Approve again.");
+          if (standalone) throw new Error("The share sheet didn't open. Try Approve again.");
           // Desktop fallback: download every file and put the cover note on
           // the clipboard, ready to paste into an email.
           try { await copyToClipboard(packetNote); } catch { /* clipboard unavailable */ }
@@ -483,17 +538,20 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           }
           setErr(`This browser can't attach files to a share sheet, so the ${files.length} documents are downloading instead (allow multiple downloads if asked). The cover note is on your clipboard, ready to paste into your email.`);
         }
+        // The same row shape as the Files packet share: share_log has sent_at
+        // (not shared_at) and a NOT NULL section, so the old shape was
+        // refused whole and retried on every load.
         addItem("shareLog", {
-          id: generateId(), itemName: `Vera packet (${docs.length} files)`,
-          method: "share", sharedAt: new Date().toISOString(),
-          recipient: action.summary || "",
+          id: generateId(), itemId: null, itemName: `Vera packet (${docs.length} files)`,
+          section: "documents", method: "share", recipient: action.summary || "",
+          sentAt: new Date().toISOString(),
         });
         if (docs.length < (action.docIds || []).length) {
           setErr(`Sent ${docs.length} of ${(action.docIds || []).length}. The rest haven't downloaded to this device yet.`);
         }
       } else if (action.kind === "export_data") {
         const { rows, label } = buildExport(data, action);
-        if (!rows.length) throw new Error("No records in that range — nothing to export.");
+        if (!rows.length) throw new Error("No records in that range, so there is nothing to export.");
         const ext = action.format === "csv" ? "csv" : "xlsx";
         const range = [action.dateFrom, action.dateTo].filter(Boolean).join("_to_");
         const fname = `${label.replace(/\s+/g, "-")}${range ? `-${range}` : ""}.${ext}`;
@@ -520,7 +578,8 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         // done without doing anything.
         throw new Error("This version cannot run that action.");
       }
-      markAction(msgId, idx, { done: true, ...(note ? { note } : {}) });
+      // error: null clears what a failed earlier attempt said.
+      markAction(msgId, idx, { done: true, error: null, ...(note ? { note } : {}), ...(ticketId ? { ticketId } : {}) });
     } catch (e3) {
       if (e3?.name !== "AbortError") markAction(msgId, idx, { error: e3.message });
     }
@@ -541,14 +600,28 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       if (sheetRefusal) { setErr(sheetRefusal); return; }
       if (isOfficeFile(file)) {
         const text = await extractOfficeText({ name: file.name, type: file.type, file });
-        setAttachment({ text, name: file.name, kind: "office" });
+        // The original file rides along so an approved record keeps it
+        // (saveSourceDoc), as a photo or PDF does. Not as `dataUrl`:
+        // assistant.js routes a turn on that, and an Office binary sent as
+        // inline image data fails every turn. Typed from its name when the
+        // picker gave none, and never kept when it reads as a patient chart
+        // (the upload screens refuse to store one).
+        let fileDataUrl = null;
+        if (screenDocument(`${file.name}\n${text}`)?.level !== "clinical") {
+          const raw = await new Promise((res, rej) => {
+            const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(file);
+          });
+          const mime = file.type && file.type !== "application/octet-stream" ? file.type : (mimeFromName(file.name) || "application/octet-stream");
+          fileDataUrl = String(raw).replace(/^data:[^;,]*/, `data:${mime}`);
+        }
+        setAttachment({ text, name: file.name, kind: "office", ...(fileDataUrl ? { fileDataUrl } : {}) });
       } else if (file.type.startsWith("image/") || file.type === "application/pdf") {
         const dataUrl = await new Promise((res, rej) => {
           const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(file);
         });
         setAttachment({ dataUrl, name: file.name, kind: "inline" });
       } else {
-        setErr("That file type isn't readable — photos, PDFs, Word, and Excel work.");
+        setErr("That file type isn't readable. Photos, PDFs, Word, and Excel work.");
       }
     } catch (e2) { setErr(e2.message); }
   }, []);
@@ -566,8 +639,13 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       if (chunk) setInput(t => (t ? t + " " : "") + chunk.trim());
     };
     rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recRef.current = rec; rec.start(); setListening(true);
+    // Say why it stopped (a denied mic, the home-screen app's blocked speech
+    // service); a stop the user made says nothing.
+    rec.onerror = (ev) => { setListening(false); const m = dictationErrorText(ev?.error); if (m) setErr(m); };
+    recRef.current = rec;
+    setErr(null);
+    try { rec.start(); } catch { setErr(DICTATION_START_FAILED); return; }
+    setListening(true);
   }, [listening]);
 
   const SUGGESTIONS = [
@@ -584,7 +662,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>
             Vera
-            {data.settings.anthropicApiKey && (
+            {onOpus && (
               <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: T.accent, verticalAlign: "middle", padding: "2px 8px", borderRadius: 8, backgroundColor: T.accentDim }}>Opus</span>
             )}
           </h2>
@@ -611,7 +689,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           </div>
         </div>
         <div style={{ fontSize: 12, color: T.textMuted }}>
-          Ask about your file, hand her any document, report a bug, or just say what should work better — she files it where it belongs.
+          Ask about your file, hand her any document, report a bug, or just say what should work better, and she files it where it belongs.
         </div>
       </div>
 
@@ -668,6 +746,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                     : a.kind === "send_packet" ? `Send packet · ${(a.docIds || []).length} documents`
                       : a.kind === "update_document" ? "File / rename a document"
                         : a.kind === "update_record" ? `Update in ${a.section}`
+                        : a.kind === "export_data" ? `Export · ${exportLabel(a.section) || a.section} · ${a.format === "csv" ? "CSV" : "Excel"}`
                           : a.kind === "create_category" ? (a.existingCategoryId ? `Add to ${a.category?.name}` : `New category → ${a.category?.name}`)
                             : a.section === "customRecords" ? `New record → ${a.categoryName || "your category"}` : `New record → ${a.section}`}
                   {a.done && " ✓ done"}
@@ -678,11 +757,26 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                     Missing from your file: {a.missing.join(" · ")}
                   </div>
                 )}
-                {a.customFields && Object.keys(a.customFields).length > 0 && !a.done && (
-                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
-                    +{Object.keys(a.customFields).length} extra detail{Object.keys(a.customFields).length > 1 ? "s" : ""} kept as custom fields
-                  </div>
-                )}
+                {!a.done && (() => {
+                  // A built-in record's card says, before Approve, what the
+                  // identifier gate will keep out (splitFields, as the write).
+                  const builtIn = (a.kind === "create_record" || a.kind === "update_record") && a.section !== "customRecords";
+                  const preview = builtIn ? splitFields(a.section, a.fields, a.customFields) : null;
+                  const kept = Object.keys((preview ? preview.extra : a.customFields) || {}).length;
+                  const withheld = preview?.withheld || [];
+                  return (<>
+                    {kept > 0 && (
+                      <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
+                        +{kept} extra detail{kept > 1 ? "s" : ""} kept as custom fields
+                      </div>
+                    )}
+                    {withheld.length > 0 && (
+                      <div style={{ fontSize: 12, color: T.warning, marginTop: 4 }}>
+                        Will not be saved: {[...new Set(withheld.map(w => w.reason))].join(", ")}. This app does not keep patient identifiers or your SSN and full date of birth.
+                      </div>
+                    )}
+                  </>);
+                })()}
                 {a.kind === "create_category" && !a.done && (a.records || []).length > 0 && (
                   <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
                     Files {(a.records || []).length} record{(a.records || []).length > 1 ? "s" : ""} in it
@@ -705,7 +799,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                     {a.kind === "send_packet" && (
                       <button
                         title="Send these documents as email attachments from CredentialDOMD, replies come to you"
-                        onClick={() => setEmailPacket({ msgId: m.id, idx: i, docIds: a.docIds || [], note: veraCoverNote(a.coverNote) || "" })}
+                        onClick={() => setEmailPacket({ msgId: m.id, idx: i, docIds: a.docIds || [], note: veraCoverNote(a.coverNote) || "", request: a.request || null })}
                         style={{
                           flex: 1, minWidth: 120, padding: "9px", borderRadius: 9, border: `1px solid ${T.accent}`,
                           backgroundColor: "transparent", color: T.accent, fontSize: 13, fontWeight: 800, cursor: "pointer",
@@ -731,32 +825,33 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         {attachment && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, marginBottom: 6 }}>
             <span style={{ fontSize: 13, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>📎 {attachment.name}</span>
-            <button onClick={() => setAttachment(null)} style={{ border: "none", backgroundColor: "transparent", color: T.danger, fontWeight: 800, cursor: "pointer" }}>×</button>
+            <button aria-label={`Remove ${attachment.name}`} onClick={() => setAttachment(null)} style={{ ...dismissButtonStyle(T.danger), fontWeight: 800, margin: "-8px -8px -8px 0" }}>×</button>
           </div>
         )}
         <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
           <input type="file" ref={fileRef} accept={UPLOAD_ACCEPT} style={{ display: "none" }}
             onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
-          <button onClick={() => fileRef.current?.click()} title="Attach a document" style={{
-            padding: "12px 13px", borderRadius: 12, border: `1px solid ${T.border}`,
+          <button onClick={() => fileRef.current?.click()} title="Attach a document" aria-label="Attach a document" style={{
+            padding: "12px 13px", borderRadius: 12, border: `1px solid ${T.border}`, minWidth: TAP_MIN, minHeight: TAP_MIN,
             backgroundColor: "transparent", color: T.text, fontSize: 16, cursor: "pointer", flexShrink: 0,
           }}>📎</button>
-          <button onClick={toggleMic} style={{
-            padding: "12px 13px", borderRadius: 12, flexShrink: 0,
+          <button onClick={toggleMic} aria-label="Dictate" aria-pressed={listening} style={{
+            padding: "12px 13px", borderRadius: 12, flexShrink: 0, minWidth: TAP_MIN, minHeight: TAP_MIN,
             border: listening ? "none" : `1px solid ${T.border}`,
             backgroundColor: listening ? "#ef4444" : "transparent",
             color: listening ? "#fff" : T.text, fontSize: 16, cursor: "pointer",
           }}>{listening ? "◼" : "🎤"}</button>
           <textarea
             ref={taRef}
+            aria-label="Ask Vera anything, or attach a document"
             value={input}
             onChange={e => setInput(e.target.value)}
             placeholder="Ask Vera anything, or attach a document…"
             rows={1}
             style={{ ...iS, resize: "none", minHeight: 46, flex: 1, overflowY: "auto", lineHeight: 1.45, overscrollBehavior: "contain" }}
           />
-          <button onClick={() => send()} disabled={busy || (!input.trim() && !attachment)} style={{
-            padding: "12px 16px", borderRadius: 12, border: "none", flexShrink: 0,
+          <button aria-label="Send" onClick={() => send()} disabled={busy || (!input.trim() && !attachment)} style={{
+            padding: "12px 16px", borderRadius: 12, border: "none", flexShrink: 0, minWidth: TAP_MIN, minHeight: TAP_MIN,
             background: busy || (!input.trim() && !attachment) ? T.border : "linear-gradient(135deg, #10b981, #059669)",
             color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer",
           }}>{busy ? "…" : "Send"}</button>
@@ -775,7 +870,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           <div key={arc.id} style={{ padding: "11px 2px", borderBottom: `1px solid ${T.border}` }}>
             <div role="button" tabIndex={0} onClick={() => setViewArchive(arc)}
               onKeyDown={(e) => { if (e.key === "Enter") setViewArchive(arc); }}
-              style={{ cursor: "pointer" }}>
+              style={{ cursor: "pointer", minHeight: TAP_MIN }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{arc.title}</div>
               <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 1 }}>
                 {new Date(arc.archivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
@@ -835,11 +930,11 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       <EmailPacketModal
         open={!!emailPacket}
         onClose={() => setEmailPacket(null)}
-        request={requestContext}
+        request={emailPacket?.request || null}
         initialDocIds={emailPacket?.docIds}
         initialNote={emailPacket?.note}
         onSent={(res) => {
-          if (emailPacket) markAction(emailPacket.msgId, emailPacket.idx, { done: true, emailedTo: res?.to || requestContext?.from_addr || "" });
+          if (emailPacket) markAction(emailPacket.msgId, emailPacket.idx, { done: true, emailedTo: res?.to || emailPacket.request?.from_addr || "" });
         }}
       />
     </div>

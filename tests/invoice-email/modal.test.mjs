@@ -41,7 +41,7 @@ const built = await build({
     b.onLoad({ filter: /.*/, namespace: "fixture" }, ({ path }) => ({
       contents: path === "context"
         ? "export const useApp = () => globalThis.__email.context;"
-        : "export const supabase = { functions: { invoke: (n, o) => globalThis.__email.invoke(n, o) } }; export const downloadDocumentBlob = async () => null;",
+        : "export const supabase = { functions: { invoke: (n, o) => globalThis.__email.invoke(n, o) } }; export const downloadDocumentBlob = async () => null; export const allocateInvoiceNumberRpc = () => null;",
       loader: "js",
     }));
   } }],
@@ -166,7 +166,7 @@ test("Send by email: what the screen shows is what the billing office gets, line
     const { invoices, modal } = await openFromResend(ctx);
     const tree = modal.render();
     const shown = textOf(find(tree, (n) => n.props && "data-invoice-email-body" in n.props));
-    assert.match(shown, /^Hello,\n\nAttached is invoice INV-20260920-01/);
+    assert.match(shown, /^Hello,\n\nAttached is invoice INV-20260922-04/);
     const to = find(tree, (n) => n.type === "input" && n.props.type === "email");
     assert.equal(to.props.value, "billing@hospital.example", "the agreement's invoice email is filled in");
     assert.equal(invocations.length, 1, "only the check so far; nothing is sent before the tap");
@@ -175,8 +175,8 @@ test("Send by email: what the screen shows is what the billing office gets, line
     assert.match(preview, /From: Synthetic Physician, DO via CredentialDOMD <docs@credentialdomd\.com>/);
     assert.match(preview, /Copy to you: doc\.verified@example\.test/);
     assert.match(preview, /Replies go to: doc\.verified@example\.test/);
-    assert.match(preview, /Subject: Invoice INV-20260920-01 from Synthetic Physician, DO for Synthetic Hospital/);
-    assert.match(preview, /INV-20260920-01\.pdf/);
+    assert.match(preview, /Subject: Invoice INV-20260922-04 from Synthetic Physician, DO for Synthetic Hospital/);
+    assert.match(preview, /INV-20260922-04\.pdf/);
 
     await button(tree, "Send to billing@hospital.example").props.onClick();
     await flush();
@@ -200,7 +200,7 @@ test("Send by email: what the screen shows is what the billing office gets, line
     assert.ok(lastEmailedAt && lastEmailedTo);
     assert.deepEqual(rest, workInvoice(), "nothing else about the invoice changed");
     const after = textOf(invoices.render());
-    assert.match(after, /Invoice INV-20260920-01 was emailed to billing@hospital\.example\. A copy went to doc\.verified@example\.test\./);
+    assert.match(after, /Invoice INV-20260922-04 was emailed to billing@hospital\.example\. A copy went to doc\.verified@example\.test\./);
     assert.match(after, /Emailed Sep 25, 2026 to billing@hospital\.example/);
   });
 });
@@ -413,7 +413,7 @@ test("Send by email: a retried Send after a lost answer is not mailed twice", as
     const sends = invocations.filter((b) => b.action === "send");
     assert.equal(sends.length, 2);
     assert.equal(sends[0].requestId, sends[1].requestId, "the same request id on the retry");
-    assert.match(textOf(invoices.render()), /Invoice INV-20260920-01 was already emailed to billing@hospital\.example on Sep 25, 2026 at .*, so it was not sent again\./);
+    assert.match(textOf(invoices.render()), /Invoice INV-20260922-04 was already emailed to billing@hospital\.example on Sep 25, 2026 at .*, so it was not sent again\./);
   });
 });
 

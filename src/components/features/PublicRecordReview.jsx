@@ -263,6 +263,7 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
             {sourceChip(f)}
             {f.alreadyOnFile && chip("already on file", T.textDim, T.neutralDim)}
+            {f.sameOrgOnFile && chip("you have another entry here", T.info, T.infoDim)}
             {f.planLocked && chip("not on your plan", T.textDim, T.neutralDim)}
             {!locked && f.confidence === "lead" && chip("lead", T.warning, T.warningDim)}
             {!locked && replaces && chip("replaces what you have", T.warning, T.warningDim)}

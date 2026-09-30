@@ -1,17 +1,28 @@
 import { useState, useRef, memo, Fragment } from "react";
 import { useApp } from "../../context/AppContext";
-import { deleteAllData, requestAccountDeletion, clearDeviceKeys } from "../../lib/supabase";
-import { purgeUserStorage } from "../../utils/storageScope";
+import { deleteAllData, requestAccountDeletion, readAccountDataDeletion, clearDeviceKeys } from "../../lib/supabase";
+import { purgeUserStorage, advanceLocalFence, lsGet, WIPE_SEEN_KEY } from "../../utils/storageScope";
+import { honorAccountDataDeletion, recordDataDeletionSeen, sameDeletionStamp } from "../../utils/dataDeletion.js";
 import { DEFAULT_DATA, DEFAULT_SETTINGS } from "../../constants/defaults";
 import { PRIVACY, TERMS, LEGAL_CONTACT } from "../../content/legalText";
+import { deletionResultMessage, deletionUnconfirmedMessage, DELETION_SUPPORT_REFERENCE, rememberDeletionResult, rememberedDeletionResult } from "../../utils/accountDeletionResult.js";
 
 function LegalSection({ page }) {
-  const { data, beginAccountDeletion, resetAfterAccountDeletion, theme: T } = useApp();
+  const { data, user, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, theme: T } = useApp();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [deleting, setDeleting] = useState(false);
+  // What the last Delete All My Data actually did: { state: 'done' | 'local' },
+  // shown on the card until the next run, also after the reopen's reload
+  // remounts this page (rememberDeletionResult). The server's error text
+  // stays in the console; the card uses fixed wording.
+  const [deletionResult, setDeletionResult] = useState(() => rememberedDeletionResult(user?.id));
   const deletionOwnerRef = useRef(null);
   const deletionBusyRef = useRef(false);
+  const showDeletionResult = (accountId, result) => {
+    rememberDeletionResult(accountId, result);
+    setDeletionResult(result);
+  };
 
   const setDeleteConfirmation = (show) => {
     if (deletionBusyRef.current) return;
@@ -31,20 +42,43 @@ function LegalSection({ page }) {
     if (!owner) return;
     try { owner.check(); } catch { setDeleteConfirmation(false); return; }
     const theme = data.settings.theme;
+    // The deletion stamp this device had purged for before this deletion. A
+    // different one read back from the server below is this deletion's.
+    const seenBefore = lsGet(WIPE_SEEN_KEY, owner.accountId);
+    // When the server pass tombstoned the profile: its deleted_at, which this
+    // device purges for and records below.
+    let deletedAt = null;
+    // False when the server step neither answered nor could be read back.
+    let confirmed = true;
     deletionBusyRef.current = true;
     setDeleting(true);
+    showDeletionResult(owner.accountId, null);
+    // The browser's own pass over the records and files failed: said on the
+    // held screen when the server pass does not confirm either.
+    let cloudFailed = false;
     // Clear everything this account keeps on the device: the file, the private
     // vault, the Assistant transcript, timers (localStorage + Capacitor), and
-    // the device-key slot (AI keys + the portal password lock code).
+    // the device-key slot (AI keys + the portal password lock code). A
+    // continuity account's development-era namespace holds the same member's
+    // older copy and goes too, as it does on every other device.
     try {
       owner.start();
-      await purgeUserStorage(owner.accountId).catch(error => {
-        // A failed retirement marker could resurrect legacy bytes after this
-        // deletion. Stop before device-key/cloud deletion or a success reset.
-        if (error.code === "continuity_retirement_unavailable") throw error;
-      });
+      // The purge fence moves FIRST: every other tab of this account on this
+      // device stops writing its copy back into the cache, the write queue or
+      // the vault before the copy goes, instead of refilling it while the
+      // server pass runs (src/utils/dataDeletion.js).
+      const fenced = advanceLocalFence(owner.accountId);
+      for (const subject of [owner.accountId, owner.continuitySource].filter(Boolean)) {
+        await purgeUserStorage(subject).catch(error => {
+          // A failed retirement marker could resurrect legacy bytes after this
+          // deletion. Stop before device-key/cloud deletion or a success reset.
+          if (error.code === "continuity_retirement_unavailable") throw error;
+        });
+      }
+      if (!fenced) advanceLocalFence(owner.accountId);
       owner.check();
       clearDeviceKeys(owner.accountId);
+      if (owner.continuitySource) clearDeviceKeys(owner.continuitySource);
       if (owner.profileId && owner.db) {
         // 1. The client-side purge, everything RLS lets this browser reach:
         //    uploaded document files first (deleteAllData only covers the
@@ -73,27 +107,73 @@ function LegalSection({ page }) {
           owner.check();
           await deleteAllData(owner.profileId, owner);
           owner.check();
-        } catch { owner.check(); /* Same-owner failures may continue to the server pass. */ }
+        } catch { owner.check(); cloudFailed = true; /* Same-owner failures may continue to the server pass. */ }
         // 2. The server finishes what the browser cannot reach: tickets and
         //    screenshots, the assistant log, feedback, backups, usage rows, the
-        //    tombstone ledger, and the profile row itself. If the function is
-        //    unreachable the client purge above stands.
+        //    tombstone ledger, and the profile row itself.
         try {
           owner.check();
-          await requestAccountDeletion(owner);
+          const result = await requestAccountDeletion(owner);
           owner.check();
+          deletedAt = result?.tombstoned === true && typeof result.deleted_at === "string" ? result.deleted_at : null;
         } catch (err) {
           owner.check();
-          console.warn("CredentialDOMD: server-side deletion did not run; the on-device purge stands:", err.message);
+          // The member sees fixed wording only; the server's own text stays
+          // here for the operator, with the support reference.
+          console.warn(`CredentialDOMD: server-side deletion did not confirm (${DELETION_SUPPORT_REFERENCE}):`, err?.message);
+          // The reply can be lost after the server finished (a dropped mobile
+          // connection; the function runs on). Read the account back once: a
+          // new deletion stamp means it did finish, and this device goes on
+          // exactly as if it had answered.
+          try {
+            const stamp = await readAccountDataDeletion(owner.accountId);
+            owner.check();
+            if (stamp && !sameDeletionStamp(stamp, seenBefore)) deletedAt = stamp;
+            else confirmed = false;
+          } catch (readError) {
+            owner.check();
+            console.warn("CredentialDOMD: the deletion could not be read back:", readError?.message);
+            confirmed = false;
+          }
         }
       }
-      // Reset from the canonical defaults so every collection key exists (the old
-      // hand-built object dropped locum/tax/travel collections and crashed adds).
       owner.check();
-      resetAfterAccountDeletion({ ...DEFAULT_DATA, settings: { ...DEFAULT_SETTINGS, theme } }, owner);
+      if (!confirmed) {
+        // Neither answered nor readable. The server may still finish, and the
+        // next load that learns its stamp purges this device again, so the
+        // member must not start adding records here yet. The tab stops
+        // writing and the app replaces this page with its stopped screen,
+        // which says what may still be on the servers, asks for a reload
+        // (which reads the account again) and a second run, and gives the
+        // support reference for when it keeps failing. This page has no
+        // result card for it: it is no longer on screen, and a retry from
+        // here could not start (the hold has released the account).
+        holdAfterUnconfirmedDeletion(owner, deletionUnconfirmedMessage({ cloudFailed }));
+      } else {
+        if (deletedAt) {
+          // Purge once more, now that the server has finished and before the
+          // stamp is recorded: anything another tab managed to write while the
+          // server pass ran goes, and the fence moves again. Recording the
+          // stamp is what keeps this device's next load from purging what the
+          // member adds from here on.
+          try { await honorAccountDataDeletion(owner.accountId, deletedAt, { sourceSubject: owner.continuitySource }); }
+          catch { recordDataDeletionSeen(owner.accountId, deletedAt); }
+          owner.check();
+        }
+        // Reset from the canonical defaults so every collection key exists (the old
+        // hand-built object dropped locum/tax/travel collections and crashed adds).
+        resetAfterAccountDeletion({ ...DEFAULT_DATA, settings: { ...DEFAULT_SETTINGS, theme } }, owner);
+        // The account stays open and empty (owner decision 2026-09-29): sign
+        // in again now so the server reopens it and this device goes on with it.
+        if (deletedAt) reopenAfterAccountDeletion(owner, deletedAt);
+      }
       deletionOwnerRef.current = null;
       setShowDeleteConfirm(false);
       setDeleteInput("");
+      // What it did, in fixed wording (utils/accountDeletionResult.js). A
+      // cloud failure alone is covered when the server pass finished: it
+      // deletes every synced table too.
+      if (confirmed) showDeletionResult(owner.accountId, !(owner.profileId && owner.db) ? { state: "local" } : { state: "done" });
     } catch (error) {
       // A changed identity stops the remaining phases; never retarget or reset
       // the newly selected account. Already-dispatched owner requests may finish.
@@ -116,6 +196,7 @@ function LegalSection({ page }) {
       setDeleteInput={setDeleteInput}
       handleDeleteAllData={handleDeleteAllData}
       deleting={deleting}
+      deletionResult={deletionResult}
     />
   );
   return null;
@@ -167,7 +248,8 @@ function LegalDoc({ doc, T }) {
   );
 }
 
-function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, setDeleteInput, handleDeleteAllData, deleting }) {
+function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, setDeleteInput, handleDeleteAllData, deleting, deletionResult }) {
+  const result = deletionResultMessage(deletionResult);
   return (
     <div>
       <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Your Data Rights</h2>
@@ -192,7 +274,9 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
           to a Supabase database (US region) with uploaded document files in a private storage bucket.
           All transfers are encrypted with TLS. The private note on a work entry stays on this device
           only. Deleting your data below removes it from <strong>this device, the database, file
-          storage, your monthly backups, your support tickets, and the assistant log</strong>. To close
+          storage, your monthly backups, your support tickets, and the assistant log</strong>, and each
+          of your other devices clears its copy, private notes included, the next time it opens online.
+          Your account stays open and empty, so you can sign in again and start over. To close
           the sign-in account itself, email <strong>{LEGAL_CONTACT}</strong>.
         </p>
       </div>
@@ -210,6 +294,13 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
           We strongly recommend exporting a backup first.
         </p>
 
+        {result && <div role={result.ok ? "status" : "alert"} style={{
+          padding: "12px 14px", borderRadius: 10, marginBottom: 10,
+          backgroundColor: result.ok ? T.card : T.dangerDim, border: `1px solid ${result.ok ? T.border : T.danger}`,
+        }}>
+          {result.lines.map((line, i) => <p key={i} style={{ fontSize: 13, lineHeight: 1.6, color: T.text, margin: i ? "6px 0 0" : 0 }}>{line}</p>)}
+        </div>}
+
         {!showDeleteConfirm ? (
           <button onClick={() => setShowDeleteConfirm(true)} style={{
             padding: "10px 20px", borderRadius: 10, border: `1px solid ${T.danger}`,
@@ -220,18 +311,19 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
           <div style={{
             padding: "12px 14px", backgroundColor: T.dangerDim, borderRadius: 10,
           }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: T.danger, marginBottom: 8 }}>
+            <p id="delete-data-confirm-label" style={{ fontSize: 12, fontWeight: 700, color: T.danger, marginBottom: 8 }}>
               Type DELETE to confirm permanent deletion:
             </p>
             <div style={{ display: "flex", gap: 8 }}>
               <input
+                aria-labelledby="delete-data-confirm-label"
                 value={deleteInput}
                 onChange={e => setDeleteInput(e.target.value)}
                 placeholder="Type DELETE"
                 style={{
                   flex: 1, padding: "8px 12px", borderRadius: 10,
                   border: `1px solid ${T.danger}`, backgroundColor: T.input,
-                  color: T.text, fontSize: 14, fontWeight: 600,
+                  color: T.text, fontSize: 16, fontWeight: 600,
                 }}
                 autoFocus
               />

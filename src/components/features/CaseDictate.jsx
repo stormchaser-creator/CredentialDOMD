@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, memo } from "react";
+import { dictationErrorText } from "../../utils/dictationErrors";
 import { useApp } from "../../context/AppContext";
 import { parseCaseDictation } from "../../utils/caseDictation";
+import { localISODate as localDate } from "../../utils/helpers";
 
 /**
  * One mic for the case log: dictate the whole case ("right crani for SDH
- * evacuation at Eisenhower today, no complications"), the AI builds the
+ * evacuation at Osterly today, no complications"), the AI builds the
  * entry, and the add form opens prefilled for review. Nothing saves until
  * the surgeon taps Save.
  */
@@ -35,7 +37,7 @@ function CaseDictate({ categories, onDraft }) {
       setTranscript((finals + " " + interim).trim());
     };
     rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
+    rec.onerror = (ev) => { setListening(false); const m = dictationErrorText(ev?.error); if (m) setErr(m); };
     recRef.current = rec;
     rec.start();
     setListening(true);
@@ -54,7 +56,7 @@ function CaseDictate({ categories, onDraft }) {
     } catch (e2) {
       // The words survive a parse failure: they become the title as-is
       setErr(e2.message);
-      onDraft({ title: words, date: new Date().toISOString().slice(0, 10), role: "Primary Surgeon" });
+      onDraft({ title: words, date: localDate(new Date()), role: "Primary Surgeon" });
       setTranscript("");
     }
     setBusy(false);

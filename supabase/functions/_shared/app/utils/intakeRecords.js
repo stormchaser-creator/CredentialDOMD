@@ -65,6 +65,17 @@ export const EMAIL_FIELDS = Object.freeze({
   locumContracts: Object.freeze({ notes: "notes" }),
 });
 
+/**
+ * A contact card emailed to contacts@ from a forward that could not be
+ * positively authenticated is not written: it waits as a proposal the
+ * physician adds from the app (email-inbound handleContacts). Kept apart
+ * from EMAIL_FIELDS on purpose: an informational email's reading never
+ * proposes a reference (RECORD_SECTIONS), and its schema lists only those.
+ */
+export const CARD_FIELDS = Object.freeze({
+  peerReferences: Object.freeze({ name: "text", institution: "text", email: "text", phone: "text", relationship: "text", notes: "notes" }),
+});
+
 const uniq = (xs) => [...new Set(xs)];
 export const SECTION_TYPES = Object.freeze({
   insurance: Object.freeze([...INSURANCE_TYPES]),
@@ -76,18 +87,21 @@ export const SECTION_TYPES = Object.freeze({
 // Sections with a status source column (migration 20260925030000).
 const SOURCE_SECTIONS = new Set(["insurance", "privileges", "licenses"]);
 // NOT NULL columns and what an unread one becomes, as the app's forms default.
-const TYPE_DEFAULTS = Object.freeze({ insurance: { type: "Other" }, privileges: { type: "Other" }, licenses: { type: "Other" }, cme: { category: "Other" } });
+const TYPE_DEFAULTS = Object.freeze({ insurance: { type: "Other" }, privileges: { type: "Other" }, licenses: { type: "Other" }, cme: { category: "Other" }, peerReferences: { relationship: "Other" } });
 
-export const SECTION_LABEL = Object.freeze({ insurance: "Insurance", privileges: "Privileges", licenses: "Licenses", cme: "CME", locumContracts: "Contracts" });
+export const SECTION_LABEL = Object.freeze({ insurance: "Insurance", privileges: "Privileges", licenses: "Licenses", cme: "CME", locumContracts: "Contracts", peerReferences: "Reference" });
 export const FIELD_LABEL = Object.freeze({
   type: "Type", name: "Name", provider: "Provider", coveragePerClaim: "Per claim", coverageAggregate: "Aggregate",
   effectiveDate: "Effective", expirationDate: "Expires", notes: "Notes", facility: "Facility", city: "City", state: "State",
   appointmentDate: "Appointed", issuedDate: "Issued", title: "Title", category: "Category", hours: "Hours", date: "Date",
-  statusSource: "Source",
+  statusSource: "Source", institution: "Institution", email: "Email", phone: "Phone", relationship: "Relationship",
 });
 
 /** The field kind of `key` in `section`, or "" when an email may not fill it. */
-export const fieldKind = (section, key) => (EMAIL_FIELDS[section] && Object.hasOwn(EMAIL_FIELDS[section], key) ? EMAIL_FIELDS[section][key] : "");
+export const fieldKind = (section, key) => {
+  const fields = EMAIL_FIELDS[section] || CARD_FIELDS[section];
+  return fields && Object.hasOwn(fields, key) ? fields[key] : "";
+};
 
 // ─── Amounts ─────────────────────────────────────────────────────────────────
 
@@ -329,9 +343,26 @@ export function matchRecord(section, fields, rows) {
         && (blank(f.state) && blank(r.state) ? sameText(f.name, r.name) : stateCode(f.state) !== "" && stateCode(f.state) === stateCode(r.state)));
     case "cme":
       return hit((r) => sameText(f.title, r.title) && sameDay(f.date, r.date));
+    case "peerReferences":
+      return hit((r) => sameReference(f, r));
     default:
       return null;
   }
+}
+
+const phoneDigits = (v) => String(v ?? "").replace(/\D/g, "");
+/**
+ * The same person on a contact card and a reference on file: the same name,
+ * and the same email or the same phone digits when the card carries either
+ * (name alone when it carries neither). Two colleagues can share a name.
+ */
+export function sameReference(card, row) {
+  const c = card || {}, r = row || {};
+  if (!nameKey(c.name) || nameKey(c.name) !== nameKey(r.name)) return false;
+  const email = String(c.email ?? "").trim().toLowerCase();
+  const phone = phoneDigits(c.phone);
+  if (!email && !phone) return true;
+  return (!!email && email === String(r.email ?? "").trim().toLowerCase()) || (!!phone && phone === phoneDigits(r.phone));
 }
 
 /**
@@ -450,6 +481,10 @@ export function recordSummary(section, fields) {
       parts.push(f.title || "CME");
       if (!blank(f.hours)) parts.push(`${f.hours} hours`);
       if (validIsoDate(f.date)) parts.push(usDate(f.date));
+      break;
+    case "peerReferences":
+      parts.push(f.name || f.email || f.phone || "A contact");
+      if (!blank(f.institution)) parts.push(f.institution);
       break;
     default:
       parts.push("a note");

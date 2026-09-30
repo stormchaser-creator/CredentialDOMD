@@ -15,6 +15,7 @@ const {
   COLLECTION_TABLES, USER_TABLES, DOCUMENTS_BUCKET, BACKUPS_BUCKET, TICKETS_FOLDER,
   PROFILE_TOMBSTONE_PATCH, PROFILE_KEEP_COLUMNS, HOOK_REQUESTER,
   isSafePrefix, storagePrefixes, chunk, tombstonePatch, isMissingTableError,
+  keepRecentBefore, INVOICE_NUMBER_KEEP_DAYS,
 } = await import("../supabase/functions/delete-account/lib.ts");
 
 let pass = 0, fail = 0;
@@ -49,7 +50,7 @@ const userTables = USER_TABLES.map((t) => t.table);
 for (const t of ["assistant_log", "support_tickets", "support_messages", "feedback", "document_requests",
   "inbound_emails", "ai_usage", "client_errors", "backups", "deleted_items", "field_proposals", "user_events",
   "admin_messages", "admin_message_replies", "credential_portal_invites", "invoice_email_sends", "member_view_events", "member_view_grants",
-  "intake_corrections", "intake_proposals"]) {
+  "intake_corrections", "intake_proposals", "invoice_number_reservations"]) {
   ok(`USER_TABLES covers ${t}`, userTables.includes(t));
 }
 ok("no table is in both lists", !userTables.some((t) => COLLECTION_TABLES.includes(t)));
@@ -67,8 +68,24 @@ eq("administrator access grants are matched by owner_profile_id (their sessions,
 // support access tables with their own migrations, not with this function. A
 // deploy of delete-account before then must not fail every deletion on a
 // missing table.
-eq("only the administrator access, invoice email, support access and intake tables may be absent",
-  USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "invoice_email_sends", "member_view_grants", "member_view_events", "intake_corrections", "intake_proposals"]);
+eq("only the administrator access, invoice email, support access, intake and invoice number tables may be absent",
+  USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "invoice_email_sends", "member_view_grants", "member_view_events", "intake_corrections", "intake_proposals", "invoice_number_reservations"]);
+eq("the invoice number ledger is matched by user_id", USER_TABLES.find((t) => t.table === "invoice_number_reservations").column, "user_id");
+// The account reopens with the same profile id (20260930020000), so the
+// numbers the allocator could issue again (a day within 2 days of today) stay:
+// deleting them handed the reopened account INV-<day>-01 again the same day.
+{
+  const ledger = USER_TABLES.find((t) => t.table === "invoice_number_reservations");
+  eq("only the invoice number ledger keeps recent rows", USER_TABLES.filter((t) => t.keepRecent).map((t) => t.table), ["invoice_number_reservations"]);
+  eq("it keeps the numbers reserved in the last six days", ledger.keepRecent, { column: "reserved_at", days: 6 });
+  eq("six days: a number the allocator can still reach was reserved within five", INVOICE_NUMBER_KEEP_DAYS, 6);
+  const at = Date.parse("2026-10-01T23:59:59.000Z");
+  eq("its cut is six days before the deletion", keepRecentBefore(ledger, at), { column: "reserved_at", before: "2026-09-25T23:59:59.000Z" });
+  // INV-20260929-01, the earliest day the allocator accepts after a deletion
+  // on 2026-10-01 (UTC), could have been reserved as early as 2026-09-27.
+  ok("the earliest reservation of a number still reachable is kept", Date.parse("2026-09-27T00:00:00.000Z") >= Date.parse(keepRecentBefore(ledger, at).before));
+  eq("every other table is deleted whole", USER_TABLES.filter((t) => t.table !== "invoice_number_reservations").map((t) => keepRecentBefore(t, at)).filter(Boolean), []);
+}
 eq("the invoice email ledger is matched by user_id", USER_TABLES.find((t) => t.table === "invoice_email_sends").column, "user_id");
 eq("the support view log is matched by profile_id (the member it is about)", USER_TABLES.find((t) => t.table === "member_view_events").column, "profile_id");
 eq("support access grants are matched by profile_id (their visits cascade)", USER_TABLES.find((t) => t.table === "member_view_grants").column, "profile_id");
@@ -85,8 +102,12 @@ ok("a timeout or no error is NOT treated as a missing table", !isMissingTableErr
     /if \(error && optional && isMissingTableError\(error\)\)[^\n]*return 0; \}\n  if \(error\) throw/.test(index));
   ok("deleting skips only an optional table's missing-relation error",
     /if \(error && optional && isMissingTableError\(error\)\)[^\n]*return; \}\n  if \(error\) throw/.test(index));
-  ok("both passes hand each table's optional flag through",
-    index.includes("countRows(db, table, column, userId, optional === true)") && index.includes("deleteRows(db, table, column, userId, optional === true)"));
+  ok("both passes hand each table's optional flag and its keep cut through, taken at one instant",
+    index.includes("countRows(db, t.table, t.column, userId, t.optional === true, keepRecentBefore(t, startedMs))")
+    && index.includes("deleteRows(db, t.table, t.column, userId, t.optional === true, keepRecentBefore(t, startedMs))")
+    && (index.match(/const startedMs = Date\.now\(\);/g) || []).length === 1);
+  ok("a cut counts and deletes only the rows older than it",
+    (index.match(/await \(olderThan \? rows\.lt\(olderThan\.column, olderThan\.before\) : rows\);/g) || []).length === 2);
 }
 ok("every other user table is matched by user_id",
   USER_TABLES.filter((t) => !["support_messages", "inbound_emails", "client_errors", "admin_messages", "credential_portal_invites", "member_view_events", "member_view_grants"].includes(t.table))

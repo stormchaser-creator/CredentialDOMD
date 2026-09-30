@@ -1,13 +1,14 @@
 import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 /**
  * Voice → a surgical case-log draft. The surgeon says what they did
- * ("right craniotomy for SDH evacuation today at Eisenhower, primary
+ * ("right craniotomy for SDH evacuation today at Osterly, primary
  * surgeon") and the AI returns fields for ONE case, which the app opens
  * PREFILLED for review — dictation never saves a case directly.
  */
 
 import { CONSTRUCT_RULES } from "../constants/cptConstructs.js";
 import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor } from "./aiClient.js";
+import { localISODate } from "./helpers.js";
 
 const OPUS_MODEL = "claude-opus-5";
 const OPUS_JSON_ONLY = "Reply with the JSON object only: no prose before or after it, no markdown fences, no internal or system XML tags. The first character of your reply is { and the last is }.";
@@ -86,7 +87,7 @@ export async function parseCaseDictation(transcript, apiKeyOrSettings, categorie
   const settings = apiKeyOrSettings && typeof apiKeyOrSettings === "object"
     ? apiKeyOrSettings
     : { apiKey: apiKeyOrSettings || "" };
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = localISODate(new Date());
 
   let raw = null;
   // Gemini by default: filling a case-log form from a sentence is extraction,

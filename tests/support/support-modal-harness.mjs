@@ -12,6 +12,7 @@ import vm from 'node:vm';
 import * as drafts from '../../src/utils/supportTextDrafts.js';
 import * as ticketAttachments from '../../src/utils/ticketAttachments.js';
 import * as outgoingText from '../../src/utils/outgoingText.js';
+import * as actionButton from '../../src/components/shared/actionButton.js';
 
 const source = await readFile(new URL('../../src/components/pages/SupportModal.jsx', import.meta.url), 'utf8');
 export const ID = '11111111-1111-4111-8111-111111111111', ID2 = '22222222-2222-4222-8222-222222222222';
@@ -64,6 +65,7 @@ export function fixture({ storage = store(), account = 'user_A', operations = fa
     '../../lib/supabase': { supabase: db },
     '../shared': { ScreenshotAttach: 'screenshot' },
     '../shared/TicketAttachments': { default: 'attachments' },
+    '../shared/actionButton': actionButton,
     '../../utils/ticketAttachments': ticketAttachments,
     '../../utils/outgoingText.js': outgoingText,
     '../../utils/supportTextDrafts': drafts,
@@ -73,7 +75,7 @@ export function fixture({ storage = store(), account = 'user_A', operations = fa
   const ctx = vm.createContext({
     module, exports: module.exports,
     require: n => { assert.ok(n in imports, `SupportModal imports ${n}, which the harness does not provide`); return imports[n]; },
-    window, document: { addEventListener() {}, removeEventListener() {} }, console,
+    window, document: { addEventListener() {}, removeEventListener() {} }, console, crypto,
     setTimeout: fn => { timers.push(fn); return timers.length; }, clearTimeout() {},
   });
   vm.runInContext(transformSync(source + '\nexport {SupportModalContent};', { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);

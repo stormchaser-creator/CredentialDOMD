@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { AppProvider, useApp, useNotifications } from "./context/AppContext";
 import {
   HomeIcon, ScanIcon, CredsIcon, MoreIcon,
@@ -9,7 +9,7 @@ import {
 } from "./components/shared/Icons";
 import EmptyState from "./components/shared/EmptyState";
 import CustomCategorySection, { NewCategoryPanel } from "./components/features/CustomCategorySection";
-import { liveCategories, unsortedRecords } from "./utils/customCategories";
+import { liveCategories, unsortedRecords, categoryLabelFor } from "./utils/customCategories";
 import SideNav from "./components/shared/SideNav";
 import { useDeskKeyboard } from "./hooks/useDeskKeys";
 import StatusDot from "./components/shared/StatusDot";
@@ -26,14 +26,17 @@ import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
 import { CaseDictate } from "./components/features";
 import { FinanceSection } from "./components/features/locum";
-import { academicYearOf, caseWRVU, currentAcademicYear, filterLastMonths } from "./utils/caseLogReport";
+import { academicYearOf, caseWRVU, defaultCaseLogYear, filterLastMonths, yearShowing } from "./utils/caseLogReport";
 import { CMESection } from "./components/features";
 import { CMEResourcesSection } from "./components/features";
 import { CVGenerator } from "./components/features";
 import ReadOnlyRecords from "./components/features/ReadOnlyRecords.jsx";
 import LaunchAccessNotice from "./components/shared/LaunchAccessNotice.jsx";
 import BillingReturnNotice from "./components/shared/BillingReturnNotice.jsx";
+import SyncIssuesNotice from "./components/shared/SyncIssuesNotice.jsx";
+import { deskStickyVars, deskRailStyle, DESK_TOP_BAR_H } from "./components/shared/deskSticky.js";
 import OfflineBanner from "./components/shared/OfflineBanner.jsx";
+import OfflineUnavailable from "./components/shared/OfflineUnavailable.jsx";
 import AccountRecordsLoadError from "./components/shared/AccountRecordsLoadError.jsx";
 import LimitedLaunchMembership from "./components/pages/LimitedLaunchMembership.jsx";
 import { DataExport } from "./components/features";
@@ -50,8 +53,9 @@ import SetupPage from "./components/features/SetupPage";
 import NpiPanel from "./components/features/setup/NpiPanel";
 import RuleProvenance from "./components/shared/RuleProvenance";
 import { BOARD_REQS_META } from "./constants/boardRequirements";
+import { reminderLeadDays } from "./utils/reminderPreferences";
 import { hasSeparateBoards, STATE_REQS_META } from "./constants/stateRequirements";
-import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
+import { stateTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateFetchTracker, certificatesNotIncludedMessage } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox } from "./components/features";
 import { useOpenRequests } from "./hooks/useNewRequestCount";
 import { useIntakeNotes } from "./hooks/useIntakeNotes";
@@ -61,16 +65,17 @@ import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
 import { supportDeepLink } from "./utils/supportDeepLink.js";
 import { RequestPacketSummary, ApproveSendButton, ReviewButton, canSendOnOneTap, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
+import { actionButtonStyle, cardActionSize } from "./components/shared/actionButton";
 import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
-import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
+import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { useIsAdmin } from "./lib/admin";
 import AdminPreviewBanner, { ADMIN_PREVIEW_BANNER_CLEARANCE } from "./components/pages/AdminPreview";
-import { isNonExpiring, mailtoHref, copyToClipboard } from "./utils/helpers";
+import { isNonExpiring, mailtoHref, copyToClipboard, avatarInitials } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { referencesShareTitle, followUpEmail } from "./utils/shareText";
-import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
-import { claimBetaAccess, touchLastSeen, supabase } from "./lib/supabase";
+import { buildSetup, setupOwns, dateless, setupSurfaceCounts } from "./utils/setupTasks";
+import { claimBetaAccess, touchLastSeen, supabase, downloadDocumentBlob } from "./lib/supabase";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut, useAuth, useUser } from "@clerk/clerk-react";
 import { evaluateOfflineFallback, CLERK_LOAD_TIMEOUT_MS } from "./utils/offlineSession";
@@ -78,19 +83,23 @@ import {
   STATES, CASE_CATEGORIES, CASE_CATEGORY_GROUPS,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
 } from "./constants";
-import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardCompliance";
+import { boardComplianceFor, aoaNationalEntry } from "./utils/boardCompliance";
 import { licenseFields, privilegeFields, insuranceFields } from "./utils/credentialForms";
-import { isAlertable, isInactive, isDateUnknown, lifecycleNote, needsResolution, LIFECYCLE_LABELS, lifecycleOf } from "./utils/lifecycle";
+import { isAlertable, isInactive, lifecycleNote, needsResolution, LIFECYCLE_LABELS, lifecycleOf } from "./utils/lifecycle";
+import { licenseDeskColumns } from "./components/features/licenseDeskColumns";
 import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
 } from "./utils/helpers";
 import ConditionalCmeTopics from "./components/shared/ConditionalCmeTopics";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
-import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE } from "./utils/cmePresentation";
-import { complianceFor, standingScore, findStateLicense, windowNotes } from "./utils/compliance";
+import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel } from "./utils/cmePresentation";
+import { complianceFor, standingScore, findStateLicense, windowNotes, splitByCycle, alertingStates, resolvePendingLicense } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
-import { clearStateBanner } from "./utils/clearState";
+import { credentialRecords, alertRecords, lapsingRecords } from "./utils/alertItems.js";
+import { daysUntilDate, localToday } from "./utils/dateDays.js";
+import { clearStateBanner, openActionItems } from "./utils/clearState";
 import { selectFavorites } from "./utils/favorites";
+import { accessGateStatus } from "./utils/accessGateStatus.js";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -170,26 +179,6 @@ export default function App() {
   );
 }
 
-/* ─── Offline: network-only surface placeholder ───────────────── */
-// Vera, Admin and other cloud-only surfaces render this in offline mode: a
-// clear statement instead of a spinner that can never resolve.
-function OfflineUnavailable({ T, feature, detail, onBack }) {
-  return (
-    <div style={{ padding: "48px 24px", textAlign: "center" }}>
-      <div style={{ fontSize: 17, fontWeight: 800, color: T.text }}>{feature} is unavailable offline</div>
-      <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5, maxWidth: 340, margin: "8px auto 0" }}>
-        {detail} Your records on this device are still available, and anything you change will sync when you reconnect.
-      </div>
-      {onBack && (
-        <button onClick={onBack} style={{
-          marginTop: 20, padding: "10px 18px", borderRadius: 10, border: "none",
-          backgroundColor: T.accent, color: "#fff", fontWeight: 700, cursor: "pointer",
-        }}>Back</button>
-      )}
-    </div>
-  );
-}
-
 /* ─── Pro Gate Overlay ────────────────────────────────────────── */
 function ProGate({ T, onUpgrade, featureName }) {
   return (
@@ -209,7 +198,7 @@ function ProGate({ T, onUpgrade, featureName }) {
         boxShadow: "0 4px 16px rgba(16,185,129,0.3)",
       }}>🔒</div>
       <div style={{ fontSize: 17, fontWeight: 800, color: T.text, marginBottom: 6 }}>
-        {featureName} — Pro Feature
+        {featureName}: Pro Feature
       </div>
       <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 20, maxWidth: 260 }}>
         Upgrade to Pro to unlock this feature and everything else CredentialDOMD has to offer.
@@ -230,9 +219,13 @@ function ProGate({ T, onUpgrade, featureName }) {
 }
 
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
-  const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
+  // null until the physician picks a year: Case Logs then opens on the
+  // default from the cases themselves (defaultCaseLogYear), below.
+  const [caseLogYearPick, setCaseLogYear] = useState(null);
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, recordsLoadIssue, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage } = useApp();
+  const { data, loaded, recordsLoadIssue, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
+  const defaultCaseYear = useMemo(() => defaultCaseLogYear(data.caseLogs), [data.caseLogs]);
+  const caseLogYear = caseLogYearPick ?? defaultCaseYear;
   // Admin, from public.app_admins by way of ai-proxy's status GET. A hook, so
   // the Admin card appears when that answer lands rather than one render too
   // late. It gates a card, not a permission: every admin view and every admin
@@ -253,7 +246,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // proposal, or whose proposal predates the newest upload, is rebuilt on
   // the client by the same hook the inbox mounts, so the banner's button
   // and the inbox's card never disagree about what is ready.
-  const { rows: openRequests, count: newRequestCount, refresh: refreshRequests } = useOpenRequests();
+  const { rows: openRequests, count: newRequestCount, refresh: refreshRequests } = useOpenRequests(userIdRef, loaded);
   const openRequestRows = useRequestProposals(openRequests);
   // What informational mail entered or offers (no email goes out for one):
   // the newest on Home, all of them in More > Requests, counted in its badge.
@@ -458,6 +451,57 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     else if (sec.tab === "locum") setLocumSeed({ sub: sec.sub, id: navRecord.id });
   }, [navRecord?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Certificate bytes for Home's Renewal packet, fetched while Home is on
+  // screen rather than inside the tap (a download awaited there would cost
+  // the share sheet its user gesture). Only the certificates of entries in
+  // the current window of a state that shows a Renewal packet button, and
+  // only those missing their bytes on this device; held here, never written
+  // into documents. One fetched, or failed for good, is not fetched again
+  // this session; one that timed out or was fetched offline is fetched again
+  // on the next visit to Home or when the connection comes back, so a
+  // packet sent later does not leave it out for a reason that has passed.
+  const [packetCerts, setPacketCerts] = useState(null);
+  const packetFetch = useRef(null);
+  if (!packetFetch.current) packetFetch.current = { tracker: certificateFetchTracker(), onHome: false, retry: 0 };
+  const [packetRetry, setPacketRetry] = useState(0);
+  useEffect(() => {
+    const again = () => setPacketRetry(n => n + 1);
+    window.addEventListener("online", again);
+    return () => window.removeEventListener("online", again);
+  }, []);
+  useEffect(() => {
+    const f = packetFetch.current;
+    if (tab !== "home") { f.onHome = false; return; }
+    if (!f.onHome || f.retry !== packetRetry) { f.tracker.retryLater(); f.onHome = true; f.retry = packetRetry; }
+    if (!loaded) return;
+    const docs = f.tracker.toFetch(certificateDocsForModels(allTrackedStates.map(st => stateTranscriptModel(data, st))));
+    if (!docs.length) return;
+    f.tracker.started(docs);
+    // Not cancelled when data changes: the background document download
+    // changes data while this runs, and a dropped result would never be
+    // fetched again. Results are keyed by document id, so a late one is
+    // harmless.
+    prefetchCertificates(docs, { download: downloadDocumentBlob, budgetMs: 10000 })
+      .then(fetched => {
+        f.tracker.finished(docs, fetched);
+        setPacketCerts(prev => new Map([...(prev || []), ...fetched]));
+      })
+      .catch(() => f.tracker.finished(docs, null));
+  }, [loaded, tab, data, allTrackedStates, packetRetry]);
+
+  // A link to one case (search, Favorites, Vera, Home's "Cases to complete")
+  // lands on a year that lists it: Case Logs shows one academic year at a
+  // time, and a case outside it was never found, so nothing opened and the
+  // stale link popped the case open later when the year changed. A link to a
+  // case that no longer exists is dropped for the same reason.
+  useEffect(() => {
+    if (autoEditTarget?.sec !== "caseLogs") return;
+    const rec = (data.caseLogs || []).find(c => c && c.id === autoEditTarget.id);
+    if (!rec) { if (loaded) setAutoEditTarget(null); return; }
+    const y = yearShowing(rec, caseLogYear);
+    if (y !== caseLogYear) setCaseLogYear(y);
+  }, [autoEditTarget, data.caseLogs, caseLogYear, loaded]);
+
   useNotifications();
   // ANMG on-call shifts from CallSync: checked once a day when the app
   // opens, on the devices where the calendar link is saved (Sched. tab).
@@ -466,22 +510,28 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const alerts = useMemo(() => generateAlerts(data), [data]);
   const alertCount = alerts?.count || 0;
 
-  // Renewal packet: per-state CME transcript for the current cycle + the
-  // linked certificate files, sent as one share.
   // Renewal packet = the board-ready CME transcript PDF (state cycle window,
-  // requirement lines, every in-window activity, linked certificates on
-  // following pages). Falls back to a plain-text share when the PDF cannot
-  // be built for a state (no window, no entries).
+  // requirement lines, every in-window activity), with each linked
+  // certificate image on a following page and each PDF certificate as a
+  // separate file in the same share. A certificate that could not be read is
+  // named in the PDF's index as not included, and the physician is told.
+  // When no PDF can be built for a state (no window, no entries) it says why.
   const sendRenewalPacket = useCallback(async (st) => {
-    const model = stateTranscriptModel(data, st);
+    const model = stateTranscriptModel(data, st, { certFiles: packetCerts });
     if (model.error) { window.alert(model.error); return; }
     try {
-      const r = await shareTranscriptPdf(model);
-      if (r) addItem("shareLog", { id: generateId(), itemId: null, itemName: `${st} renewal packet`, section: "cme", method: r, recipient: "", sentAt: new Date().toISOString() });
+      const sent = await shareTranscriptPdf(model);
+      // Logged when it went through the share sheet. A desktop download is
+      // not a send, and share_log's method CHECK has no "download".
+      if (sent?.method === "share") addItem("shareLog", { id: generateId(), itemId: null, itemName: `${st} renewal packet`, section: "cme", method: sent.method, recipient: "", sentAt: new Date().toISOString() });
+      // From what was actually sent (see shareTranscriptPdf), not the model
+      // before the build.
+      const missing = sent ? certificatesNotIncludedMessage(sent.model) : "";
+      if (missing) window.alert(missing);
     } catch (err) {
       if (err?.name !== "AbortError") window.alert(`Could not build the transcript PDF: ${err.message}`);
     }
-  }, [data, addItem]);
+  }, [data, addItem, packetCerts]);
 
   const openShare = useCallback((item, section) => {
     // Sharing sends email through the cloud; offline it cannot go anywhere.
@@ -511,7 +561,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       try {
         if (!await copyToClipboard(full)) throw new Error("Copy failed");
       } catch { window.alert("Copy did not complete. Use Vera's reference draft to select and copy the text."); return; }
-      method = "copy";
+      // share_log_method_check allows email, text, clipboard and share.
+      method = "clipboard";
       window.alert("The reference list has been copied. Paste it into an email or text.");
     }
     addItem("shareLog", {
@@ -532,43 +583,38 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     onDelete: (id) => deleteItem(key, id),
   }), [addItem, editItem, deleteItem]);
 
-  const allCreds = useMemo(() => [
-    ...data.licenses.map(l => ({ ...l, _sec: "licenses", _cat: "License" })),
-    ...data.cme.map(c => ({ ...c, _sec: "cme", _cat: "CME" })),
-    ...data.privileges.map(p => ({ ...p, _sec: "privileges", _cat: "Privilege" })),
-    ...data.insurance.map(i => ({ ...i, _sec: "insurance", _cat: "Insurance" })),
-    ...(data.caseLogs || []).map(c => ({ ...c, _sec: "caseLogs", _cat: "Case" })),
-    ...(data.healthRecords || []).map(h => ({ ...h, _sec: "healthRecords", _cat: "Health" })),
-    ...(data.education || []).map(e => ({ ...e, _sec: "education", _cat: "Education" })),
-    ...(data.workHistory || []).map(w => ({ ...w, _sec: "workHistory", _cat: "Work" })),
-    ...(data.peerReferences || []).map(r => ({ ...r, _sec: "peerReferences", _cat: "Reference" })),
-    ...(data.malpracticeHistory || []).map(m => ({ ...m, _sec: "malpracticeHistory", _cat: "Malpractice" })),
-    ...(data.publications || []).map(p => ({ ...p, _sec: "publications", _cat: "Publication" })),
-    ...(data.memberships || []).map(m => ({ ...m, _sec: "memberships", _cat: "Organization" })),
-    // Records in the physician's own categories, so one with an expiry date
-    // warns like any credential. _rail is where it lives on the Credentials page.
-    ...(data.customRecords || []).filter(r => r && r.id).map(r => ({ ...r, _sec: "customRecords", _cat: r.categoryName || "Record", _rail: `custom:${r.categoryId || "unsorted"}` })),
-  ], [data.licenses, data.cme, data.privileges, data.insurance, data.caseLogs, data.healthRecords, data.education, data.workHistory, data.peerReferences, data.malpracticeHistory, data.publications, data.memberships, data.customRecords]);
+  // The credentials Home tracks (ring, tiles, Quick Share), and the wider
+  // list that can alert: the same one the bell and the reminder email use,
+  // which adds travel documents and screenings (src/utils/alertItems.js).
+  const allCreds = useMemo(() => credentialRecords(data), [data.licenses, data.cme, data.privileges, data.insurance, data.caseLogs, data.healthRecords, data.education, data.workHistory, data.peerReferences, data.malpracticeHistory, data.publications, data.memberships, data.customRecords, data.customCategories]); // eslint-disable-line react-hooks/exhaustive-deps
+  const alertCreds = useMemo(() => alertRecords(data, allCreds), [allCreds, data.travelDocs, data.screenings]); // eslint-disable-line react-hooks/exhaustive-deps
+  // What the ring and the tiles count: the credentials that can still lapse
+  // (a membership the physician ended is not renewed).
+  const lapsingCreds = useMemo(() => lapsingRecords(allCreds), [allCreds]);
 
   const { expired, soon, urgent, snoozed } = useMemo(() => {
     const now = new Date();
-    const lead = data.settings.reminderLeadDays || 90;
-    const inWindow = allCreds.filter(i => {
+    // The same clamp (7..365, blank 90) the Notification Center and
+    // send-reminders apply.
+    const lead = reminderLeadDays(data.settings.reminderLeadDays);
+    // Local calendar days (src/utils/dateDays.js): an expiration turns at
+    // local midnight, not at UTC midnight (5 pm the day before in California).
+    const daysOf = (i) => daysUntilDate(i.expirationDate, now);
+    const inWindow = alertCreds.filter(i => {
       // Historical, superseded, pending and date-unknown records never alert
       // (src/utils/lifecycle.js). Snoozing them was the workaround.
       if (!i.expirationDate || !isAlertable(i)) return false;
-      if (new Date(i.expirationDate) < now) return true;
-      const d = Math.ceil((new Date(i.expirationDate) - now) / MS_PER_DAY);
-      return d >= 0 && d <= lead;
+      const d = daysOf(i);
+      return d != null && d <= lead;
     });
     // Acknowledged alerts step aside until their snooze date passes
     const active = inWindow.filter(i => !activeAckFor(data, i.id));
     const snz = inWindow.filter(i => activeAckFor(data, i.id));
-    const exp = active.filter(i => new Date(i.expirationDate) < now);
-    const sn = active.filter(i => new Date(i.expirationDate) >= now);
+    const exp = active.filter(i => daysOf(i) < 0);
+    const sn = active.filter(i => daysOf(i) >= 0);
     const urg = [...exp, ...sn].sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
     return { expired: exp, soon: sn, urgent: urg, snoozed: snz };
-  }, [allCreds, data.settings.reminderLeadDays, data]);
+  }, [alertCreds, data.settings.reminderLeadDays, data]);
 
   // CME math breakdown — tap a state card to see exactly which entries
   // counted, which didn't, and why. {st, comp}
@@ -586,7 +632,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     // Default to "2 weeks" so the modal's Acknowledge button works right away —
     // it's disabled until a quiet-until date is picked, and leaving it blank
     // read as the button silently doing nothing.
-    setAckUntil(new Date(Date.now() + 14 * MS_PER_DAY).toISOString().slice(0, 10));
+    setAckUntil(localToday(new Date(Date.now() + 14 * MS_PER_DAY)));
   }, []);
   const saveAck = useCallback((untilDate) => {
     if (!ackItem || !untilDate) return;
@@ -627,7 +673,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // Board continuing-certification standing (cycle-windowed). Every DO sees
   // the AOA national cycle even before picking a specific board.
   const boardComps = useMemo(() => {
-    const list = computeBoardCompliance(data);
+    // Settings picks plus boards implied by Board Certification records, the
+    // same list the CME page and the transcript use.
+    const list = boardComplianceFor(data);
     if (data.settings.degreeType === "DO" && data.cme.length > 0 && !list.some(b => b.source === "AOA")) {
       list.unshift(aoaNationalEntry(data));
     }
@@ -646,9 +694,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // The tile counts what the page is currently about: Tier 1 while it is
   // unfinished, the packet after it. A tile stuck at "5 of 5" would say the
   // board is finished while the packet section is still half empty.
-  const setupCounts = setupBoard.counts.tier1.complete && setupBoard.counts.tier2.total > 0
-    ? setupBoard.counts.tier2
-    : setupBoard.counts.tier1;
+  const setupCounts = setupSurfaceCounts(setupBoard);
 
   // An incomplete profile silently degrades everything downstream — degree
   // type drives MD-vs-DO CME rules, specialty drives board requirements,
@@ -657,7 +703,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const s = data.settings;
     const gaps = [];
     if (!s.name) gaps.push("your name");
-    if (!s.degreeType) gaps.push("degree (MD or DO — it changes which CME rules apply)");
+    if (!s.degreeType) gaps.push("degree (MD or DO, which decides the CME rules that apply)");
     if (!s.primaryState) gaps.push("primary state");
     if (!(s.specialties || []).length) gaps.push("board specialty (drives your board's CME requirements)");
     if (!s.npi) gaps.push("NPI");
@@ -669,8 +715,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // can't protect what it can't see. Surfaced on Home until fixed.
   const missingExpiration = useMemo(() => {
     const out = [];
-    // Course/device certifications legitimately never expire, and so does a
-    // lifetime board certificate once the physician ticks "does not expire"
+    // Course/device certifications, USMLE, COMLEX and the ECFMG certificate
+    // legitimately never expire (NON_EXPIRING_LICENSE_TYPES), and neither does
+    // a lifetime board certificate once the physician ticks "does not expire"
     // on it. isNonExpiring reads both, so the banner stops nagging about a
     // record that has been answered rather than only about a record type.
     // A record marked "date not yet known" or awaiting confirmation is an
@@ -751,15 +798,27 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     })).sort((a, b) => (a.comp.daysLeft ?? 9e9) - (b.comp.daysLeft ?? 9e9)),
   [allTrackedStates, data]);
 
+  // The states whose CME the ring counts: the states of licences that can
+  // alert, and the primary and Settings picks where no licence is held. A
+  // licence on the Resolve card (pending confirmation, date not known yet)
+  // keeps its state card, but never lowers the ring or lists "<ST> CME
+  // review records" under it, even when the NPI import saved its state
+  // among the picks (HOME-013, compliance.js alertingStates).
+  const ringComps = useMemo(() => {
+    const counted = new Set(alertingStates(data.settings.primaryState, data.settings.additionalStates, data.licenses));
+    return stateComps.filter(x => counted.has(x.st));
+  }, [stateComps, data.settings.primaryState, data.settings.additionalStates, data.licenses]);
+
   // Standing score for the ring: an item is good only while it expires beyond
   // the reminder window; inside the window, past it, missing a required date,
   // or a CME state behind all count against. Acknowledging never raises it.
   // standingScore leaves historical, superseded, pending and date-unknown
-  // records out of the ring entirely (src/utils/lifecycle.js).
+  // records out of the ring entirely (src/utils/lifecycle.js), and ringComps
+  // leaves out the CME of a state only such a record is held in.
   const standing = useMemo(() => standingScore({
-    items: allCreds, missingRequired: missingExpiration, stateComps,
-    leadDays: data.settings.reminderLeadDays || 90,
-  }), [allCreds, missingExpiration, stateComps, data.settings.reminderLeadDays]);
+    items: lapsingCreds, missingRequired: missingExpiration, stateComps: ringComps,
+    leadDays: reminderLeadDays(data.settings.reminderLeadDays),
+  }), [lapsingCreds, missingExpiration, ringComps, data.settings.reminderLeadDays]);
   const compliancePercent = standing.percent;
 
   // Credential counts for ring stats
@@ -774,15 +833,15 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // silences a reminder; it does not renew anything.
   const credStats = useMemo(() => {
     const now = new Date();
-    const lead = data.settings.reminderLeadDays || 90;
+    const lead = reminderLeadDays(data.settings.reminderLeadDays);
     const needsDate = new Set(missingExpiration.map(m => m.item.id));
     let active = 0, expiring = 0, expired = 0, undated = 0;
-    for (const c of allCreds) {
+    for (const c of lapsingCreds) {
       // Historical, superseded, pending and date-unknown records are not
       // counted: they cannot lapse and the ring leaves them out too.
       if (!isAlertable(c)) continue;
       if (c.expirationDate) {
-        const days = Math.ceil((new Date(c.expirationDate) - now) / MS_PER_DAY);
+        const days = daysUntilDate(c.expirationDate, now) ?? NaN;
         if (days < 0) expired += 1;
         else if (days <= lead) expiring += 1;
         else active += 1;
@@ -794,7 +853,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       // Anything that never expires (a case, a publication) is not a count.
     }
     return { active, expiring, expired, undated, total: active + expiring + expired + undated };
-  }, [allCreds, missingExpiration, data.settings.reminderLeadDays]);
+  }, [lapsingCreds, missingExpiration, data.settings.reminderLeadDays]);
 
   // Open locum To-do notes, newest capture first — feeds the Home widget.
   const openTasks = useMemo(() =>
@@ -829,27 +888,33 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     <div style={{ width: "100%", maxWidth: 620, padding: 24, background: T.card, borderRadius: 16 }}>
       <BillingReturnNotice />
       <LimitedLaunchMembership onActivated={recheckAccess} />
-      <button style={{ marginTop: 20 }} onClick={() => { void limitedLaunch.refresh(); void recheckAccess(); }}>Check access again</button>
-      <button style={{ margin: "20px 0 0 12px" }} onClick={signOut}>Sign out</button>
+      {/* The gate card's own outlined buttons (LimitedLaunchMembership), 44 px:
+          these two were bare browser buttons, 20 px tall (QA AUTH-003). */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 20 }}>
+        <button style={actionButtonStyle(T, { isDesktop })} onClick={() => { void limitedLaunch.refresh(); void recheckAccess(); }}>Check access again</button>
+        <button style={actionButtonStyle(T, { isDesktop })} onClick={signOut}>Sign out</button>
+      </div>
     </div>
   </div>;
 
+  // With no access decision: what the gate says, and its button.
+  const gate = accessGateStatus(limitedLaunch);
   if (access !== "active") return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.text, padding: `24px 24px ${24 + previewClearance}px` }}>
       <div style={{ maxWidth: 420, textAlign: "center" }}>
         <AsclepiusIcon size={44} color={T.accent} />
         {access === null ? (
           <>
-            <div role="status" style={{ marginTop: 12, fontSize: 14, color: T.textMuted }}>{limitedLaunch.enabled
-              ? (limitedLaunch.initializationError || limitedLaunch.error || (!limitedLaunch.profileReady ? "Your account setup could not finish. Reload to try again." : "Checking your membership…"))
-              : "Checking your invitation…"}</div>
-            {limitedLaunch.enabled && (limitedLaunch.error || !limitedLaunch.profileReady) && <button style={{ marginTop: 16 }} onClick={() => limitedLaunch.profileReady ? limitedLaunch.refresh() : window.location.reload()}>Try again</button>}
+            <div role="status" style={{ marginTop: 12, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>
+              {gate.lines.map((line, i) => <p key={i} style={{ margin: i ? "10px 0 0" : 0 }}>{line}</p>)}
+            </div>
+            {gate.action && <button style={{ ...actionButtonStyle(T, { isDesktop }), marginTop: 16 }} onClick={() => gate.action === "refresh" ? limitedLaunch.refresh() : window.location.reload()}>{gate.action === "refresh" ? "Try again" : "Reload"}</button>}
           </>
         ) : access === "revoked" ? (
           <>
             <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800 }}>Access paused</div>
             <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>{limitedLaunch.enabled ? "Your account access has been paused. Contact support if you think this is a mistake." : "Your beta access has been paused. Reply to your invitation email if you think this is a mistake."}</div>
-            {limitedLaunch.enabled && <button style={{ marginTop: 16 }} onClick={manage}>Manage an existing subscription</button>}
+            {limitedLaunch.enabled && <button style={{ ...actionButtonStyle(T, { isDesktop }), marginTop: 16 }} onClick={manage}>Manage an existing subscription</button>}
           </>
         ) : (
           <>
@@ -861,7 +926,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           </>
         )}
         <div style={{ marginTop: 14 }}>
-          <button onClick={signOut} style={{ background: "transparent", border: "none", color: T.textDim, fontSize: 13, textDecoration: "underline", cursor: "pointer" }}>Sign out</button>
+          <button onClick={signOut} style={{ background: "transparent", border: "none", color: T.textDim, fontSize: 13, textDecoration: "underline", cursor: "pointer", minHeight: 32, padding: "6px 10px" }}>Sign out</button>
         </div>
       </div>
     </div>
@@ -916,7 +981,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       refreshRequests();
     };
     const linkStyle = {
-      padding: "6px 0", border: "none", background: "none", color: T.accent,
+      padding: "6px 0", minHeight: 32, border: "none", background: "none", color: T.accent,
       fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline",
     };
     // A tap on the count opens the list; it used to be a line of text that
@@ -977,7 +1042,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
     // Hero: Compliance Ring + Stats. The ring's companion numbers are read
     // by the phone's stat rows and the desk's stat tiles alike.
-    const cmeSummary = cmeReviewSummary(stateComps);
+    const cmeSummary = cmeReviewSummary(ringComps);
     const reviewCmeState = (st) => setCmeDetail({ st });
     const openCmeProfile = () => { setTab("more"); setSubPage("settings"); };
     const openCmeLicenses = () => { setTab("credentials"); setSubPage("licenses"); };
@@ -985,7 +1050,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     // What is holding the ring below 100, listed where the number is, each
     // line a tap to the record that fixes it. One renderer for both heroes.
     const needsActionList = (max) => standing.needsAction.length > 0 && (
-      <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 0 }}>
         {standing.needsAction.slice(0, max).map(({ item, days }) => {
           const isCme = item._sec === "cme" && String(item.id).startsWith("cme:");
           const label = isCme ? `${item.state} CME${item.needsConfirmation ? ": confirm applicability" : ""}` : describeItem(item, data.settings.name, item._sec);
@@ -1000,8 +1065,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           };
           return (
             <button key={item.id} onClick={go} style={{
-              display: "flex", alignItems: "baseline", gap: 8, textAlign: "left", width: "100%",
+              display: "flex", alignItems: "center", gap: 8, textAlign: "left", width: "100%",
               background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit",
+              // A row is a thumb's target on a phone: 32 px, not its 16 px text line (HOME-003).
+              minHeight: 32,
             }}>
               <span style={{ fontSize: 13, color: T.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: "nowrap" }}>{when}</span>
@@ -1062,7 +1129,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           </div>
         </div>
         <div style={{ flexBasis: "100%", minWidth: 0 }}>
-          <CmeReviewSummary stateComps={stateComps} credentialDatesCurrent={allCurrent} standing={standing} onReviewState={reviewCmeState} onOpenProfile={openCmeProfile} onOpenLicenses={openCmeLicenses} theme={T} />
+          <CmeReviewSummary stateComps={ringComps} credentialDatesCurrent={allCurrent} standing={standing} onReviewState={reviewCmeState} onOpenProfile={openCmeProfile} onOpenLicenses={openCmeLicenses} theme={T} />
           {needsActionList(4)}
         </div>
       </div>
@@ -1070,14 +1137,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     // Desk: four stat tiles beside the ring (two across next to the Action
     // Required column, four across when the hero has the row to itself),
     // the CME note and the all-current line beneath them. The four tiles
-    // partition every record on file: an alert in its window is either
-    // acknowledged or not, so the numbers always add up.
+    // count only records that can lapse, on the ring's rule: Active,
+    // Expiring (acknowledged included), Expired (acknowledged included) and
+    // No date. They add up to credStats.total. An acknowledged renewal is
+    // counted inside Expiring or Expired and listed under Action Required
+    // ("N acknowledged"), not given a tile: a Snoozed tile counted it twice.
     const heroTiles = [
       { key: "active", value: credStats.active, label: "Active", dot: T.success, num: T.success },
       { key: "expiring", value: credStats.expiring, label: "Expiring", dot: T.warning, num: T.warning },
       { key: "expired", value: credStats.expired, label: "Expired", dot: T.danger, num: T.danger },
       { key: "undated", value: credStats.undated, label: "No date", dot: T.warning, num: T.text },
-      { key: "acknowledged", value: snoozed.length, label: "Snoozed", dot: T.textMuted, num: T.text },
     ];
     const deskHero = (
       <div style={{
@@ -1102,7 +1171,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               </div>
             ))}
           </div>
-          <CmeReviewSummary stateComps={stateComps} credentialDatesCurrent={allCurrent} standing={standing} onReviewState={reviewCmeState} onOpenProfile={openCmeProfile} onOpenLicenses={openCmeLicenses} theme={T} />
+          <CmeReviewSummary stateComps={ringComps} credentialDatesCurrent={allCurrent} standing={standing} onReviewState={reviewCmeState} onOpenProfile={openCmeProfile} onOpenLicenses={openCmeLicenses} theme={T} />
           {needsActionList(6)}
         </div>
       </div>
@@ -1131,10 +1200,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         borderRadius: 12, padding: "12px 16px", marginBottom: 14, cursor: "pointer",
       }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
-          {"⚠️"} Finish your profile — {profileGaps.length} thing{profileGaps.length === 1 ? "" : "s"} missing
+          {"⚠️"} Finish your profile: {profileGaps.length} thing{profileGaps.length === 1 ? "" : "s"} missing
         </div>
         <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
-          Missing: {profileGaps.join(" · ")}. The app can only track what it knows — an empty specialty or degree hides CME requirements that apply to you. Tap to complete it in Settings.
+          Missing: {profileGaps.join(" · ")}. The app can only track what it knows. An empty specialty or degree hides CME requirements that apply to you. Tap to complete it in Settings.
         </div>
       </div>
     );
@@ -1239,11 +1308,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             </div>
             <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
               <button onClick={(ev) => { ev.stopPropagation(); openFollowUp(item); }} style={{
-                padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                padding: "5px 10px", minHeight: 32, borderRadius: 8, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
               }}>Follow up</button>
               <button onClick={(ev) => { ev.stopPropagation(); openAck(item); }} style={{
-                padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                padding: "5px 10px", minHeight: 32, borderRadius: 8, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
               }}>Acknowledge</button>
             </div>
@@ -1260,7 +1329,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const snoozedBlock = snoozed.length > 0 && (
       <div style={{ marginTop: 8 }}>
         <button onClick={() => setShowSnoozed(v => !v)} style={{
-          background: "none", border: "none", padding: "4px 2px", cursor: "pointer",
+          background: "none", border: "none", padding: "4px 2px", minHeight: 32, cursor: "pointer",
           fontSize: 12.5, fontWeight: 600, color: T.textMuted,
         }}>
           {"🔕"} {snoozed.length} acknowledged {showSnoozed ? "▴" : "▾"}
@@ -1281,7 +1350,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 </div>
               </div>
               <button onClick={() => ack && deleteItem("alertAcks", ack.id)} style={{
-                padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                padding: "6px 10px", minHeight: 32, borderRadius: 8, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.accent, fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0,
               }}>Wake</button>
             </div>
@@ -1316,7 +1385,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>To do</h3>
           <button onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
             background: "none", border: "none", fontSize: 13, fontWeight: 600,
-            color: T.accent, cursor: "pointer", padding: 0,
+            color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
           }}>View All</button>
         </div>
         {openTasks.length === 0 ? (
@@ -1324,7 +1393,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
             boxShadow: T.shadow1, fontSize: 13, color: T.textMuted, cursor: "pointer",
           }}>
-            Nothing waiting — add a note when a call comes in and you can&rsquo;t deal with it yet.
+            Nothing waiting. Add a note when a call comes in and you can&rsquo;t deal with it yet.
           </div>
         ) : (
           <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
@@ -1355,7 +1424,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const homeModals = (
       <>
         {/* CME math — which entries counted, which didn't, and why */}
-        <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? `${cmeDetail.st} CME — the math` : "CME"}>
+        <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? `${cmeDetail.st} CME: the math` : "CME"}>
           {cmeDetail && (() => {
             const comp = complianceFor(data, cmeDetail.st);
             const deg = data.settings.degreeType;
@@ -1366,12 +1435,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             // the math, so it has to read the math's own inputs.
             const cat1Keys = comp.cat1Keywords || [];
             const mandateTopics = comp.topicResults.map(t => t.topic);
-            const inWin = [], outWin = [];
-            for (const c of data.cme || []) {
-              const d = c.date ? new Date(c.date) : null;
-              if (d && d >= comp.windowStart && d <= comp.windowEnd) inWin.push(c);
-              else outWin.push(c);
-            }
+            // The engine's own window test (cycleBucket), so a first-day entry
+            // is listed as counted, as the total counts it.
+            const { inWin, outWin } = splitByCycle(data.cme, comp.windowStart, comp.windowEnd);
             return (
               <>
                 <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
@@ -1419,7 +1485,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
                   Counted this cycle ({inWin.length})
                 </div>
-                {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet — every hour you log dated inside the window lands here.</div>}
+                {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet. Every hour you log dated inside the window lands here.</div>}
                 {inWin.map(c => (
                   <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
@@ -1451,7 +1517,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                           <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
                         </div>
                         <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
-                          {c.date ? `${c.date} — outside the cycle window` : "no date on the entry — add one so it can count"}
+                          {c._bucket === "before" ? `${c.date}, before this cycle opened`
+                            : c._bucket === "after" ? `${c.date}, after this renewal closes`
+                            : "No date on the entry. Add one so it can count."}
                         </div>
                       </div>
                     ))}
@@ -1476,7 +1544,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         </Modal>
 
         {/* Board math — same transparency as the state cards */}
-        <Modal open={!!boardDetail} onClose={() => setBoardDetail(null)} title={boardDetail ? `${boardDetail.name} — the math` : "Board"}>
+        <Modal open={!!boardDetail} onClose={() => setBoardDetail(null)} title={boardDetail ? `${boardDetail.name}: the math` : "Board"}>
           {boardDetail && (() => {
             const b = boardDetail;
             const counts = (c) => !b.countRule || (c.category || "").includes(b.countRule);
@@ -1484,9 +1552,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             for (const c of data.cme || []) {
               if (c.date && b.from && c.date >= b.from && c.date <= b.to) {
                 if (counts(c)) inWin.push(c);
-                else excluded.push({ c, why: `category doesn't count for this board — needs ${b.countRule}` });
+                else excluded.push({ c, why: `category doesn't count for this board, which needs ${b.countRule}` });
               } else {
-                excluded.push({ c, why: c.date ? "outside this cycle window" : "no date on the entry — add one so it can count" });
+                excluded.push({ c, why: c.date ? "outside this cycle window" : "no date on the entry; add one so it can count" });
               }
             }
             const fmtD = (d) => new Date(d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -1511,7 +1579,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
                   Counted this cycle ({inWin.length})
                 </div>
-                {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet — hours dated inside the window land here.</div>}
+                {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet. Hours dated inside the window land here.</div>}
                 {inWin.map(c => (
                   <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
@@ -1532,7 +1600,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                           <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
                           <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
                         </div>
-                        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date ? `${c.date} — ${why}` : why}</div>
+                        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date ? `${c.date}: ${why}` : why}</div>
                       </div>
                     ))}
                   </>
@@ -1573,21 +1641,21 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12 }}>
                   Expires {formatDate(exp)}. Nothing to do right now? Silence this alert and the app will raise it again when the date you pick arrives.
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Quiet until</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                <div id="ack-until-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Quiet until</div>
+                <div role="group" aria-labelledby="ack-until-label" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                   {chips.map(c => (
-                    <button key={c.l} onClick={() => setAckUntil(c.v)} style={{
+                    <button key={c.l} aria-pressed={ackUntil === c.v} onClick={() => setAckUntil(c.v)} style={{
                       padding: "9px 13px", borderRadius: 16, fontSize: 13, fontWeight: 700, cursor: "pointer",
                       border: `1px solid ${ackUntil === c.v ? T.accent : T.border}`,
                       backgroundColor: ackUntil === c.v ? T.accent : "transparent",
                       color: ackUntil === c.v ? "#fff" : T.textMuted,
                     }}>{c.l}</button>
                   ))}
-                  <input type="date" value={ackUntil} min={today} onChange={e => setAckUntil(e.target.value)}
+                  <input type="date" aria-labelledby="ack-until-label" value={ackUntil} min={today} onChange={e => setAckUntil(e.target.value)}
                     style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Why (optional — shows with the acknowledged alert)</div>
-                <input value={ackNote} onChange={e => setAckNote(e.target.value)} placeholder="e.g. waiting on the board to extend"
+                <div id="ack-note-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Why (optional, shown with the acknowledged alert)</div>
+                <input aria-labelledby="ack-note-label" value={ackNote} onChange={e => setAckNote(e.target.value)} placeholder="e.g. waiting on the board to extend"
                   style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15 }} />
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
                   <button onClick={() => setAckItem(null)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
@@ -1613,7 +1681,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               <>
                 <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 2 }}>{describeItem(followUpItem, data.settings.name)}</div>
                 <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12 }}>
-                  Expires {formatDate(followUpItem.expirationDate)}. Track what you did about it — an email, a call — so it doesn't get lost.
+                  Expires {formatDate(followUpItem.expirationDate)}. Track what you did about it, such as an email or a call, so it doesn't get lost.
                 </div>
                 {history.length > 0 && (
                   <div style={{ marginBottom: 14 }}>
@@ -1628,11 +1696,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                     ))}
                   </div>
                 )}
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>To (name or email, optional)</div>
-                <input value={followUpRecipient} onChange={e => setFollowUpRecipient(e.target.value)} placeholder="e.g. Kyle, credentialing office"
+                <div id="follow-up-to-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>To (name or email, optional)</div>
+                <input aria-labelledby="follow-up-to-label" value={followUpRecipient} onChange={e => setFollowUpRecipient(e.target.value)} placeholder="e.g. Jordan, credentialing office"
                   style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15, marginBottom: 10 }} />
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>What happened (optional)</div>
-                <input value={followUpNote} onChange={e => setFollowUpNote(e.target.value)} placeholder="e.g. reminded him to update these privileges"
+                <div id="follow-up-note-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>What happened (optional)</div>
+                <input aria-labelledby="follow-up-note-label" value={followUpNote} onChange={e => setFollowUpNote(e.target.value)} placeholder="e.g. asked them to renew the privileges"
                   style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15 }} />
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
                   <button onClick={() => setFollowUpItem(null)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
@@ -1685,7 +1753,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Credentials</h3>
           <button onClick={() => { setTab("credentials"); setSubPage(null); }} style={{
             background: "none", border: "none", fontSize: 13, fontWeight: 600,
-            color: T.accent, cursor: "pointer", padding: 0,
+            color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
           }}>View All</button>
         </div>
         <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
@@ -1736,7 +1804,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>CME Progress</h3>
         <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
           background: "none", border: "none", fontSize: 13, fontWeight: 600,
-          color: T.accent, cursor: "pointer", padding: 0,
+          color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
         }}>Find CME</button>
       </div>
     );
@@ -1750,7 +1818,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         </div>
         <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
           You have a {st} credential (like a DEA registration) but the {st} medical
-          license itself isn't in the app — add it and {st} CME &amp; renewal tracking
+          license itself isn't in the app. Add it and {st} CME &amp; renewal tracking
           turn on automatically. Tap to add it.
         </div>
       </button>
@@ -1759,6 +1827,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       const unmetTopics = comp.topicResults.filter(t => !t.met);
       const dl = comp.daysLeft;
       const urgency = dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok";
+      // A licence here that is still a Resolve task is on file, just not dated.
+      const waiting = comp.windowAnchored ? null : resolvePendingLicense(data.licenses, st);
       return (
         <div key={st} onClick={() => setCmeDetail({ st, comp })} style={{
           backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
@@ -1792,7 +1862,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             <span style={{ fontSize: 12, color: T.textDim }}>
               {comp.windowAnchored
                 ? `License renews ${formatDate(lic.expirationDate)}`
-                : `No ${st} license on file \u2014 tracking a rolling ${comp.cycle}-yr window`}
+                : rollingWindowLabel(st, comp.cycle, waiting ? lifecycleNote(waiting) : null)}
             </span>
             {dl != null && (
               <span style={{
@@ -1837,7 +1907,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 }}>{topicRecordLabel(t)}</span>
               ))}
               <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
-                padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
+                padding: "3px 10px", minHeight: 32, fontSize: 11, fontWeight: 700, borderRadius: 6,
                 border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
               }}>Find CME &rarr;</button>
             </div>
@@ -1859,7 +1929,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           {needsPriorCompletionReview(comp) && <p style={{ fontSize: 11.5, color: T.textMuted, lineHeight: 1.5 }}>{PRIOR_COMPLETION_NOTE}</p>}
           <div style={{ marginTop: 8 }}>
             <button onClick={(e) => { e.stopPropagation(); sendRenewalPacket(st); }} style={{
-              padding: "6px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8,
+              padding: "6px 12px", minHeight: 32, fontSize: 12, fontWeight: 700, borderRadius: 8,
               border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer",
             }}>
               {"\ud83d\udce4"} Renewal packet
@@ -1887,7 +1957,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           </div>
         </div>
         <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
-          {b.unit} \u00b7 {b.windowLabel}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
+          {`${b.unit} \u00b7 ${b.windowLabel}`}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
         </div>
         {b.required > 0 && (
           <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginTop: 8 }}>
@@ -1908,7 +1978,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           )}
           {!b.met && (
             <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
-              padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
+              padding: "3px 10px", minHeight: 32, fontSize: 11, fontWeight: 700, borderRadius: 6,
               border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
             }}>Find CME &rarr;</button>
           )}
@@ -1925,7 +1995,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     ));
     const boardFollowNotes = boardComps.filter(b => b.followsParent).map(b => (
       <div key={b.id} style={{ fontSize: 12, color: T.textDim, padding: "0 4px" }}>
-        {b.label} \u2014 CME follows the primary board above
+        {b.label}: CME follows the primary board above
       </div>
     ));
 
@@ -1936,8 +2006,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     // screen that lists them is a contradiction the physician has to resolve
     // himself, so when something is snoozed the banner names it and the date
     // it comes back instead.
-    const clearState = clearStateBanner(snoozed, id => activeAckFor(data, id)?.until, formatDate);
-    const allClear = allCreds.length > 0 && urgent.length === 0 && (
+    // Not while the ring lists something open: an undated licence or a CME
+    // state that is due never reaches `urgent`, so the old gate said All
+    // Clear beside a ring asking for action. Snoozed items do not block it.
+    const openAction = openActionItems(standing.needsAction, snoozed);
+    const clearState = clearStateBanner(snoozed, id => activeAckFor(data, id)?.until, formatDate, { openAction });
+    const allClear = allCreds.length > 0 && urgent.length === 0 && clearState && (
       <div style={{
         textAlign: "center", padding: "24px 16px", backgroundColor: T.successDim,
         borderRadius: 12, marginBottom: 16,
@@ -2067,7 +2141,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <AdministratorAccessEntry variant="share" onOpen={() => { setTab("more"); setSubPage("adminAccess"); }} />
         <div style={{ position: "relative", marginBottom: 12 }}>
           <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: T.textDim }}><SearchIcon /></div>
-          <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search credentials..." data-desk-search="" style={{
+          <input aria-label="Search credentials" value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search credentials..." data-desk-search="" style={{
             width: "100%", padding: "12px 14px 12px 40px", backgroundColor: T.input,
             border: `1px solid ${T.inputBorder}`, borderRadius: 10, color: T.text,
             fontSize: 15, outline: "none", boxSizing: "border-box",
@@ -2075,7 +2149,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         </div>
         <div className="cmd-h-scroll" style={{ display: "flex", gap: 6, marginBottom: 16 }}>
           {fTabs.map(t => (
-            <button key={t.k} onClick={() => setShareFilter(t.k)} style={{
+            <button key={t.k} aria-pressed={shareFilter === t.k} onClick={() => setShareFilter(t.k)} style={{
               padding: "6px 14px", fontSize: 13, borderRadius: 20, flexShrink: 0,
               border: `1px solid ${shareFilter === t.k ? T.accent : T.border}`,
               backgroundColor: shareFilter === t.k ? T.accent : "transparent",
@@ -2239,8 +2313,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {describeItem(record, data.settings.name, section)}
                   </div>
-                  <div style={{ fontSize: 12, color: T.textDim }}>{section === "customRecords" ? (record.categoryName || "Your categories") : (meta[section]?.label || section)}</div>
+                  <div style={{ fontSize: 12, color: T.textDim }}>{section === "customRecords" ? (categoryLabelFor(data, record) || "Your categories") : (meta[section]?.label || section)}</div>
                 </div>
+                {/* 7 by 9 px around a 17 px star measured 35 x 31 on a phone;
+                    cardActionSize holds it to the 32 x 32 floor, star centred. */}
                 <button
                   type="button"
                   aria-pressed="true"
@@ -2248,7 +2324,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   title="Remove from Favorites"
                   onClick={(e) => { e.stopPropagation(); toggleFavorite(section, record.id); }}
                   style={{
-                    padding: "7px 9px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex",
+                    padding: "7px 9px", borderRadius: 8, border: "none", cursor: "pointer",
+                    ...cardActionSize,
                     backgroundColor: T.accentDim, color: T.accent, flexShrink: 0,
                   }}
                 >
@@ -2270,23 +2347,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 10 }}>Every state license number the federal registry lists, in one lookup.</div>
           <NpiPanel dense />
         </div>
-        <CrudSection title="Licenses" sectionKey="licenses" favoritable {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={[
-          { key: "type", label: "Type" },
-          { key: "state", label: "State", width: "9%" },
-          { key: "licenseNumber", label: "Number" },
-          { key: "issuedDate", label: "Issued", type: "date", width: "12%", render: i => i.issuedDate ? formatDate(i.issuedDate) : "\u2014" },
-          // Expires carries the status in its color; expiration scanning is
-          // the job, so it is also the default sort.
-          { key: "expirationDate", label: "Expires", type: "date", width: "13%", render: i => i.expirationDate ? formatDate(i.expirationDate) : (isNonExpiring(i, "licenses") ? "Does not expire" : isDateUnknown(i) ? "Not yet known" : "\u2014"), color: i => {
-            // A historical, superseded, pending or undated record keeps its
-            // date in grey: it raises no alert (src/utils/lifecycle.js).
-            if (!i.expirationDate || !isAlertable(i)) return T.textDim;
-            const c = getStatusColor(i.expirationDate);
-            return c === "red" ? T.danger : (c === "orange" || c === "amber") ? T.warning : T.success;
-          } },
-          { key: "lifecycleStatus", label: "Status", width: "12%", value: i => lifecycleNote(i) || "Active", render: i => lifecycleNote(i) || "Active", color: i => (lifecycleNote(i) ? T.textMuted : T.text) },
-          { key: "renewalCost", label: "Cost", type: "number", width: "9%", align: "right", render: i => parseFloat(i.renewalCost) > 0 ? `$${parseFloat(i.renewalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "\u2014" },
-        ]} filterTabs={[
+        <CrudSection title="Licenses" sectionKey="licenses" favoritable {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={licenseDeskColumns(T)} filterTabs={[
           { key: "medical", label: "Medical Licenses", match: i => /medical license|physician|osteopathic|training license/i.test(i.type || "") },
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
@@ -2294,9 +2355,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." fields={licenseFields({ degreeType: data.settings.degreeType, records: data.licenses, physicianName: data.settings.name })} renderExtra={item => <RenewalInfo item={item} />} />
       </>);
     }
-    if (sub === "cme") return <CMESection onShare={openShare} />;
+    if (sub === "cme") return <CMESection onShare={openShare} {...crudTarget("cme")} />;
     if (sub === "findCme") return <CMEResourcesSection />;
-    if (sub === "matrix") return <MultiStateMatrix />;
+    if (sub === "matrix") return <MultiStateMatrix onAddLicense={() => openAddIn("licenses")} />;
     if (sub?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={sub.split(":")[1]} />;
     if (sub === "privileges") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Hospital Privileges" /></div>;
@@ -2306,10 +2367,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Insurance Policies" /></div>;
       return <CrudSection title="Insurance" sectionKey="insurance" favoritable {...crudTarget("insurance")} items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={insuranceFields({ records: data.insurance, physicianName: data.settings.name })} />;
     }
-    if (sub === "screenings") return <ScreeningsSection onShare={openShare} />;
-    if (sub === "publications") return <CrudSection title="Publications" sectionKey="publications" favoritable {...crudTarget("publications")} items={data.publications || []} {...crud("publications")} onShare={openShare} emptyIcon={"\ud83d\udcda"} emptyTitle="No publications" emptySub="Papers, chapters, and case reports — they appear on your CV in the order you set." fields={[{ key: "name", label: "Short Label", placeholder: "e.g. Cureus 2026 — Composite Homeostatic Wave" }, { key: "citation", label: "Full Citation (as it should read on the CV)", type: "textarea" }, { key: "year", label: "Year" }, { key: "sortOrder", label: "Order on CV", type: "number", placeholder: "1 = first; blank = after the ordered ones" }, { key: "doi", label: "DOI" }, { key: "pmid", label: "PMID" }, { key: "url", label: "Link" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (sub === "memberships") return <CrudSection title="Professional Organizations" sectionKey="memberships" favoritable {...crudTarget("memberships")} items={data.memberships || []} {...crud("memberships")} onShare={openShare} emptyIcon={"\ud83c\udfdb\ufe0f"} emptyTitle="No memberships" emptySub="AMA, ACS, CNS, AANS, AOA — society memberships appear on your CV under Professional Organizations. Track dues and renewal dates here too." fields={[{ key: "organization", label: "Organization", placeholder: "e.g. Congress of Neurological Surgeons" }, { key: "role", label: "Membership Type", placeholder: "e.g. Member, Fellow, Resident member" }, { key: "cost", label: "Annual Dues ($)", type: "currency", placeholder: "e.g. 310" }, { key: "startDate", label: "Member Since", type: "date" }, { key: "expirationDate", label: "Renewal Due", type: "date" }, { key: "endDate", label: "Ended (blank if current)", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (sub === "professionalPhotos") return <CrudSection title="Professional Photo" sectionKey="professionalPhotos" favoritable {...crudTarget("professionalPhotos")} items={data.professionalPhotos || []} {...crud("professionalPhotos")} onShare={openShare} emptyIcon={"\ud83d\udcf8"} emptyTitle="No professional photo" emptySub="Agencies ask for a recent color photo — keep a dated headshot here and it rides along in packets." fields={[{ key: "name", label: "Label", placeholder: "e.g. Professional headshot" }, { key: "dateTaken", label: "Date Taken", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "screenings") return <ScreeningsSection onShare={openShare} {...crudTarget("screenings")} />;
+    if (sub === "publications") return <CrudSection title="Publications" sectionKey="publications" favoritable {...crudTarget("publications")} items={data.publications || []} {...crud("publications")} onShare={openShare} emptyIcon={"\ud83d\udcda"} emptyTitle="No publications" emptySub="Papers, chapters, and case reports appear on your CV in the order you set." fields={[{ key: "name", label: "Short Label", placeholder: "e.g. Cureus 2026: Outcomes after ACDF" }, { key: "citation", label: "Full Citation (as it should read on the CV)", type: "textarea" }, { key: "year", label: "Year" }, { key: "sortOrder", label: "Order on CV", type: "number", placeholder: "1 = first; blank = after the ordered ones" }, { key: "doi", label: "DOI" }, { key: "pmid", label: "PMID" }, { key: "url", label: "Link" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "memberships") return <CrudSection title="Professional Organizations" sectionKey="memberships" favoritable {...crudTarget("memberships")} items={data.memberships || []} {...crud("memberships")} onShare={openShare} emptyIcon={"\ud83c\udfdb\ufe0f"} emptyTitle="No memberships" emptySub="Society memberships (AMA, ACS, CNS, AANS, AOA) appear on your CV under Professional Organizations. Track dues and renewal dates here too." fields={[{ key: "organization", label: "Organization", placeholder: "e.g. Congress of Neurological Surgeons" }, { key: "role", label: "Membership Type", placeholder: "e.g. Member, Fellow, Resident member" }, { key: "cost", label: "Annual Dues ($)", type: "currency", placeholder: "e.g. 310" }, { key: "startDate", label: "Member Since", type: "date" }, { key: "expirationDate", label: "Renewal Due", type: "date" }, { key: "endDate", label: "Ended (blank if current)", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "professionalPhotos") return <CrudSection title="Professional Photo" sectionKey="professionalPhotos" favoritable {...crudTarget("professionalPhotos")} items={data.professionalPhotos || []} {...crud("professionalPhotos")} onShare={openShare} emptyIcon={"\ud83d\udcf8"} emptyTitle="No professional photo" emptySub="Agencies ask for a recent color photo. Keep a dated headshot here and it rides along in packets." fields={[{ key: "name", label: "Label", placeholder: "e.g. Professional headshot" }, { key: "dateTaken", label: "Date Taken", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (sub === "healthRecords") return <HealthRecordsSection onShare={openShare} {...crudTarget("healthRecords")} />;
     if (sub === "travelDocs") return <CrudSection title="Travel & IDs" sectionKey="travelDocs" favoritable {...crudTarget("travelDocs")} filterTabs={[
       { key: "ids", label: "Personal IDs", match: i => /driver|passport|visa|global entry|known traveler|tsa/i.test(i.type || "") },
@@ -2322,7 +2383,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       { key: "expirationDate", label: "Expires (if it does)", type: "date" },
       { key: "notes", label: "Notes", type: "textarea" },
     ]} />;
-    if (sub === "education") return <CrudSection title="Education" sectionKey="education" favoritable {...crudTarget("education")} items={[...(data.education || [])].sort((a, b) => (b.graduationDate || b.startDate || "").localeCompare(a.graduationDate || a.startDate || ""))} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "education") return <CrudSection title="Education" sectionKey="education" favoritable {...crudTarget("education")} items={[...(data.education || [])].sort((a, b) => (b.graduationDate || b.startDate || "").localeCompare(a.graduationDate || a.startDate || ""))} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES, required: true }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (sub === "caseLogs") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;
       {
@@ -2331,7 +2392,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         return <>
           <CaseLogSummary cases={allCases} year={caseLogYear} onYear={setCaseLogYear} />
           <CaseDictate categories={CASE_CATEGORIES} onDraft={setCaseDraft} />
-          <CrudSection title="Case Logs" sectionKey="caseLogs" favoritable {...crudTarget("caseLogs")} items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES, groups: CASE_CATEGORY_GROUPS }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
+          <CrudSection title="Case Logs" sectionKey="caseLogs" favoritable {...crudTarget("caseLogs")} items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing: every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES, groups: CASE_CATEGORY_GROUPS, required: true }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
               {item.role && <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{item.role}</span>}
               {caseWRVU(item) > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{caseWRVU(item).toFixed(2)} wRVU</span>}
@@ -2341,35 +2402,15 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         </>;
       }
     }
-    if (sub === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" favoritable {...crudTarget("workHistory")} items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "select", options: ["No", "Yes"] }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" favoritable {...crudTarget("workHistory")} items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES, required: true }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "checkbox", checkboxLabel: "Current position" }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (sub === "peerReferences") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Peer References" /></div>;
-      const handleContactImport = async () => {
-        if (!('contacts' in navigator && 'ContactsManager' in window)) { return; }
-        try {
-          const [contact] = await navigator.contacts.select(['name', 'email', 'tel'], { multiple: false });
-          if (!contact) return;
-          addItem('peerReferences', {
-            id: generateId(),
-            name: contact.name?.[0] || "",
-            email: contact.email?.[0] || "",
-            phone: contact.tel?.[0] || "",
-          });
-        } catch {}
-      };
-      const contactsSupported = typeof window !== 'undefined' && 'contacts' in navigator && 'ContactsManager' in window;
+      // Import from Contacts lives inside the Add form (CrudSection
+      // contactImport): it prefills the form and the required Relationship is
+      // then chosen. A banner here used to add the contact directly with no
+      // relationship; peer_references.relationship is NOT NULL, so that
+      // reference was refused whole and lived on one device.
       return (<>
-        {contactsSupported && (
-          <div style={{ marginBottom: 12, padding: "14px 16px", borderRadius: 14, backgroundColor: T.accentDim, border: `1px solid ${T.accent}30`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Import from Contacts</div>
-              <div style={{ fontSize: 12, color: T.textMuted }}>Add a peer reference from your phone contacts</div>
-            </div>
-            <button onClick={handleContactImport} style={{ padding: "8px 16px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
-              Import
-            </button>
-          </div>
-        )}
         <CrudSection title="Peer References" sectionKey="peerReferences" favoritable {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} onShareMany={shareManyReferences} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
       </>);
     }
@@ -2392,7 +2433,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       const activeRailId = deskSub.startsWith("findCme:") ? "findCme" : deskSub;
       return (
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-            <nav style={{ width: 240, flexShrink: 0, position: "sticky", top: "calc(var(--desk-sticky-top, 56px) + 16px)", display: "flex", flexDirection: "column", gap: 14 }}>
+            <nav style={{ ...deskRailStyle(240), display: "flex", flexDirection: "column", gap: 14 }}>
             <button onClick={() => openSetup(null)} style={{
               display: "flex", alignItems: "center", gap: 8, width: "100%",
               padding: "8px 10px", borderRadius: 10, cursor: "pointer",
@@ -2484,7 +2525,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 15, fontWeight: 600, color: p.accent ? T.accent : T.text }}>{p.label}</div>
                           {locked
-                            ? <div style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>Pro feature — Upgrade to unlock</div>
+                            ? <div style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>Pro feature. Upgrade to unlock</div>
                             : p.count !== undefined
                               ? <div style={{ fontSize: 13, color: T.textDim }}>{p.count} item{p.count !== 1 ? "s" : ""}</div>
                               : p.accent && <div style={{ fontSize: 13, color: T.textMuted }}>Browse accredited CME providers</div>
@@ -2521,13 +2562,15 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     );
     if (subPage === "settings") return <SettingsSection onUpgrade={() => setShowPricing(true)} />;
     if (subPage === "cv") return <CVGenerator />;
-    if (subPage === "finance") return <FinanceSection />;
+    // "finance:<view>" opens a view of Finance (the Deductions ledger from a
+    // filed receipt or Home search); keyed so a second link resets the tab.
+    if (subPage === "finance" || subPage?.startsWith("finance:")) return <FinanceSection key={subPage} initialTab={subPage.split(":")[1]} />;
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
     if (subPage === "requests") return <RequestsInbox onAskVera={askVera} initialOpenId={requestsOpenId} onOpened={onRequestOpened} />;
     if (subPage === "assistant") return offlineMode
       ? <OfflineUnavailable T={T} feature="Vera" detail="Vera answers through the cloud AI service." onBack={() => setSubPage(null)} />
-      : <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} requestContext={veraRequest} />;
+      : <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} requestContext={veraRequest} onClearRequest={() => setVeraRequest(null)} />;
     if (subPage === "faq") return <FAQSection />;
     if (subPage === "privacy") return <LegalSection page="privacy" />;
     if (subPage === "terms") return <LegalSection page="terms" />;
@@ -2544,7 +2587,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
           {/* Assistant */}
-          <button onClick={() => setSubPage("assistant")} className="cmd-card-hover" style={{
+          <button onClick={() => { setVeraRequest(null); setSubPage("assistant"); }} className="cmd-card-hover" style={{
             display: "flex", alignItems: "center", gap: 12,
             backgroundColor: T.card, border: `2px solid ${T.accent}`,
             borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
@@ -2787,8 +2830,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (tab === "documents") return <DocumentsSection />;
     if (tab === "share") return renderShare();
     if (tab === "credentials") return renderCredentials();
-    if (tab === "locum") return <LocumDashboard initialSub={locumSeed?.sub || (subPage === "todo" ? "todo" : undefined)} focusId={locumSeed?.id} onFocusConsumed={() => setLocumSeed(null)} />;
-    if (tab === "team") return <TeamSection />;
+    if (tab === "locum") return <LocumDashboard initialSub={locumSeed?.sub || subPage || undefined} focusId={locumSeed?.id} onFocusConsumed={() => setLocumSeed(null)} />;
     if (tab === "more") return renderMore();
   };
 
@@ -2798,12 +2840,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const railReachable = !!subPage && (railIds.has(subPage) || subPage.startsWith("findCme:"));
   const showBack = (tab === "credentials" && subPage && !(isDesktop && railReachable)) || (tab === "more" && subPage);
 
-  // Bottom-nav slot 4: Locum (for tier === "locum") OR Team (for practice/group) OR Team default.
-  // Eric is a locum so this lights up for him.
-  const isLocumTier = plan === "locum";
-  const slot4 = isLocumTier
-    ? { id: "locum", label: "Practice", icon: <span style={{ fontSize: 18 }}>🏥</span> }
-    : { id: "team", label: "Team", icon: <span style={{ fontSize: 18 }}>👥</span> };
+  // Bottom-nav slot 4 is always Practice. It used to fall back to a "Team"
+  // tab for any other plan, whose screen read and wrote a team_members table
+  // that no migration ever created; group management is not offered (see
+  // publicLaunch.mjs teamAvailability). Practice shows the planned offer to
+  // an account without the Practice package and never starts checkout.
+  const slot4 = { id: "locum", label: "Practice", icon: <span style={{ fontSize: 18 }}>🏥</span> };
 
   const tabItems = [
     { id: "home", label: "Home", icon: <HomeIcon /> },
@@ -2813,16 +2855,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     { id: "more", label: "More", icon: <MoreIcon /> },
   ];
 
-  const pageTitle = tab === "home" ? "Dashboard" : tab === "documents" ? "Documents" : tab === "share" ? "Share" : tab === "credentials" ? "Credentials" : tab === "locum" ? "Practice" : tab === "team" ? "Team" : "More";
+  const pageTitle = tab === "home" ? "Dashboard" : tab === "documents" ? "Documents" : tab === "share" ? "Share" : tab === "credentials" ? "Credentials" : tab === "locum" ? "Practice" : "More";
 
   const FONT_ZOOM = { S: 0.88, M: 1, L: 1.1, XL: 1.2, XXL: 1.35 };
   const fontZoom = FONT_ZOOM[data.settings.fontSize] || 1;
-  // The top bar's height, published to the zoomed content as the offset that
-  // sticky headers (DeskTable, the Credentials rail) hang below. A length
-  // inside a zoomed subtree scales with the zoom, so the bar's real height
-  // is divided out here: 56px of bar is 56 / 1.2 = 46.67 zoomed px at XL.
-  const TOP_BAR_H = 56;
-  const deskStickyVars = { "--desk-sticky-top": `${(TOP_BAR_H / fontZoom).toFixed(2)}px` };
+  // The top bar's height and the window's, published to the zoomed content
+  // for what sticks in it (DeskTable headers, the Credentials and Setup
+  // rails). A length inside a zoomed subtree scales with the zoom, so both
+  // are divided by it: 56px of bar is 56 / 1.2 = 46.67 zoomed px at XL
+  // (src/components/shared/deskSticky.js).
+  const stickyVars = deskStickyVars(fontZoom);
 
   // Desktop sidebar mirrors the five bottom-bar destinations; the center
   // "Add" FAB becomes the Documents entry it already navigates to. Active
@@ -2854,19 +2896,24 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}>
         <div style={{
-          height: TOP_BAR_H, display: "flex", alignItems: "center", justifyContent: "space-between",
+          height: DESK_TOP_BAR_H, display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "0 16px",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {showBack ? (
+              // Back is the way out of every subpage: 44 px tall in the 56 px
+              // bar, not the 20 px line of its text (HOME-004).
               <button onClick={() => setSubPage(null)} style={{
                 display: "flex", alignItems: "center", gap: 4, background: "none",
                 border: "none", color: T.accent, fontSize: 15, fontWeight: 600,
-                cursor: "pointer", padding: 0,
+                cursor: "pointer", padding: "0 12px 0 0", minHeight: 44,
               }}><BackIcon /> Back</button>
             ) : (
               <>
-                <div onClick={() => { setTab("more"); setSubPage("settings"); }} style={{
+                <div role="button" tabIndex={0} aria-label="Profile and settings"
+                  onClick={() => { setTab("more"); setSubPage("settings"); }}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTab("more"); setSubPage("settings"); } }}
+                  style={{
                   width: 36, height: 36, borderRadius: 18, overflow: "hidden",
                   background: "linear-gradient(135deg, #0D9488, #1A73E8)",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -2875,7 +2922,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 }}>
                   {data.settings.profilePhoto
                     ? <img src={data.settings.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 25%" }} />
-                    : (data.settings.name ? data.settings.name.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase() : "MD")}
+                    : avatarInitials(data.settings.name)}
                 </div>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2889,7 +2936,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             )}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={() => setNotifCenterOpen(true)} style={{
+            <button onClick={() => setNotifCenterOpen(true)} aria-label={alertCount > 0 ? `Notifications, ${alertCount} ${alertCount === 1 ? "alert" : "alerts"}` : "Notifications"} style={{
               width: 36, height: 36, borderRadius: 10,
               backgroundColor: T.input, border: `1px solid ${T.border}`,
               display: "flex", alignItems: "center", justifyContent: "center",
@@ -2909,20 +2956,20 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 </div>
               )}
             </button>
-            <button onClick={toggleTheme} style={{
+            <button onClick={toggleTheme} aria-label="Dark theme" aria-pressed={isDark} style={{
               width: 36, height: 36, borderRadius: 10,
               backgroundColor: T.input, border: `1px solid ${T.border}`,
               display: "flex", alignItems: "center", justifyContent: "center",
               cursor: "pointer", color: T.textMuted,
             }}>
-              {data.settings.theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
           </div>
         </div>
       </div>
 
       {/* ─── CONTENT ───────────────────────────────────── */}
-      <div style={isDesktop ? { zoom: fontZoom, ...deskStickyVars } : { paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
+      <div style={isDesktop ? { zoom: fontZoom, ...stickyVars } : { paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
         {tab === "home" && <NotificationBanner onOpenCenter={() => setNotifCenterOpen(true)} onGoSettings={() => { setTab("more"); setSubPage("settings"); }} />}
         {tab === "home" && <AdminMessageCard />}
         <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}>
@@ -2933,6 +2980,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               answer asks for a reload. */}
           {/* Back from Stripe: the purchase is being confirmed, or nothing was charged. */}
           <BillingReturnNotice onReviewOffers={() => { setTab("more"); setSubPage("settings"); }} />
+          {/* A save the cloud refused, named by record, on every tab. */}
+          <SyncIssuesNotice />
           {(limitedLaunch.reconnecting || limitedLaunch.checking || limitedLaunch.outdated) && <LaunchAccessNotice />}
           {renderContent()}
           {previewClearance > 0 && <div aria-hidden="true" data-admin-preview-clearance="" style={{ height: previewClearance }} />}
@@ -2999,7 +3048,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {tabItems.map(t => {
           if (t.isCenter) {
             return (
-              <button key={t.id} onClick={() => { setTab("documents"); setSubPage(null); }} style={{
+              <button key={t.id} aria-label="Add a document" onClick={() => { setTab("documents"); setSubPage(null); }} style={{
                 width: 50, height: 50, borderRadius: 25, border: "none",
                 background: "linear-gradient(135deg, #10b981, #059669)",
                 color: "#fff",
@@ -3017,7 +3066,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           }
           const active = tab === t.id || (t.id === "documents" && tab === "share");
           return (
-            <button key={t.id} onClick={() => { setTab(t.id); setSubPage(null); }} style={{
+            <button key={t.id} aria-current={active ? "page" : undefined} onClick={() => { setTab(t.id); setSubPage(null); }} style={{
               display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
               padding: "6px 12px", background: "none", border: "none", cursor: "pointer",
               color: active ? T.tabActive : T.tabInactive, fontSize: 11,

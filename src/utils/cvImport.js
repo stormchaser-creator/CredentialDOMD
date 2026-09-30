@@ -36,6 +36,7 @@ import {
   EDUCATION_TYPES, WORK_HISTORY_TYPES, PRIVILEGE_TYPES, getLicenseTypes,
 } from "../constants/credentialTypes.js";
 import { STATES, STATE_NAMES } from "../constants/states.js";
+import { isCurrentJob } from "./helpers.js";
 
 const arr = (v) => (Array.isArray(v) ? v : []);
 const str = (v) => clean(v);
@@ -134,7 +135,7 @@ function toState(value) {
  *
  * cvContent.namesThePhysician silently swaps a record's `name` for its type
  * when the name looks like the physician's own, because a scanned diploma
- * saved under "Daniel Logsdon" reads as nonsense on a CV. A parser that
+ * saved under "Daniel Marchetti" reads as nonsense on a CV. A parser that
  * writes the person's name into `name` would be feeding that swap on every
  * row. This is the same test, applied before the record is ever proposed.
  */
@@ -172,8 +173,8 @@ export function normalizeCvSections(raw, { deg = "", name = "" } = {}) {
   const specialties = arr(s.specialties).map(str).filter(Boolean);
   if (specialties.length) settings.specialties = specialties;
 
-  // Two names to test against, not one: the profile may hold "Dan Logsdon"
-  // while the CV prints "Daniel Logsdon", and a credential labelled with
+  // Two names to test against, not one: the profile may hold "Dan Marchetti"
+  // while the CV prints "Daniel Marchetti", and a credential labelled with
   // either is still labelled with the physician.
   const ownNames = [name, settings.name].filter(Boolean);
   const isPerson = (given) => ownNames.some((own) => namesThePhysician(given, own));
@@ -201,9 +202,9 @@ export function normalizeCvSections(raw, { deg = "", name = "" } = {}) {
     state: toState(w?.state),
     startDate: cvYearDate(w?.startDate),
     endDate: cvYearDate(w?.endDate),
-    // The form's own select is No / Yes, and cvContent.range falls back to
-    // "current" on a blank end date either way.
-    current: w?.current === true || /^(yes|true|current|present)$/i.test(str(w?.current)) ? "Yes" : "No",
+    // The column is a boolean (recordWrite.js stores one on every path), and
+    // cvContent.range falls back to "current" on a blank end date either way.
+    current: isCurrentJob(w?.current),
     description: str(w?.description),
   })).filter((w) => w.employer || w.position);
 
@@ -257,7 +258,7 @@ export function normalizeCvSections(raw, { deg = "", name = "" } = {}) {
 const yearOf = (d) => (str(d) ? String(d).slice(0, 4) : "");
 const dateRange = (a, b, current) => {
   const from = yearOf(a);
-  const to = current === "Yes" ? "current" : yearOf(b);
+  const to = isCurrentJob(current) ? "current" : yearOf(b);
   if (!from && !to) return "";
   return `${from || "?"} to ${to || "current"}`;
 };

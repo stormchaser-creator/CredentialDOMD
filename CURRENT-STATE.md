@@ -6,6 +6,21 @@
 
 # CredentialDOMD — Current State
 
+## Dormant code (not reachable in the live build), 2026-09-30
+
+Kept in the tree, not mounted for any member. The live build sets
+`VITE_LIMITED_LAUNCH_ACCESS_ENABLED=true`, so `useSubscription` forces
+`plan: "locum"` and bottom-nav slot 4 is always Practice, never Team; and no
+menu, card or deep link sets `tab` to `"share"`. Remounting any of these is a
+product change: check the item's note first (QA OPS-010).
+
+| Code | Where | Note |
+| --- | --- | --- |
+| Quick Share page (`renderShare`, its `AdministratorAccessEntry variant="share"`) | `src/App.jsx`, tab `"share"` | Reached only by `setTab("share")`, which nothing calls. The Administrator access entry on it is therefore dead; the live one is under More. |
+| Team (`TeamSection`) | `src/components/pages/TeamSection.jsx`, tab `"team"` | Slot 4 falls back to Team only when the plan is not `locum`, which the limited launch never allows. |
+| `CredentialPortalLauncher` (default export) | `src/components/features/CredentialPortalModal.jsx` | Unused; `CredentialPortalModal` in the same file is live and tested. |
+| `HospitalRotations` | `src/components/features/locum/HospitalRotations.jsx` | Not mounted. Its writes now go through addItem/editItem/deleteItem with uuid ids (the old `rot-...` ids would have been rejected by the uuid `rotations.id` column at self-heal), so it is safe to mount. |
+
 ## UPDATE 2026-07-08 — autonomy prep session (Claude, Studio)
 
 **Done this session (no credentials needed):**
@@ -133,7 +148,7 @@ Can do today with no further work:
 
 **Evidence:**
 - `scripts/deploy-functions.sh` exists; comments explicitly say "Run this after getting your Stripe price IDs and Supabase access token."
-- The function source is in `supabase/functions/{create-checkout-session, customer-portal, stripe-webhook, npi-proxy, founding-count, send-onboarding-email}/index.ts` — written, not deployed.
+- The function source is in `supabase/functions/{create-checkout-session, customer-portal, stripe-webhook, npi-proxy, founding-count}/index.ts` — written, not deployed. (`send-onboarding-email` was removed on 2026-09-29: it read `onboarding_queue` and `email_templates`, which no migration creates.)
 
 **To fix:**
 ```bash

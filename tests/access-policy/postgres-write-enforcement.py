@@ -9,7 +9,7 @@ import hashlib, json, os, subprocess, tempfile
 from pathlib import Path
 import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
 import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
-BIN=Path('/opt/homebrew/opt/postgresql@17/bin')
+BIN=Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 ROOT=Path(__file__).resolve().parents[2]
 ENV={k:v for k,v in os.environ.items() if not k.startswith('PG')}
 MIGRATION=ROOT/'supabase/migrations/20260920230000_access_write_enforcement.sql'
@@ -25,7 +25,7 @@ DOC='20000000-0000-4000-8000-000000000001'
 NEW='20000000-0000-4000-8000-000000000002'
 ALIAS='20000000-0000-4000-8000-000000000003'
 COLLECTIONS=['screenings','follow_ups','professional_photos','publications','travel_docs','professional_memberships','peer_references','document_requests','share_log','notification_log','alert_acks']
-with tempfile.TemporaryDirectory(prefix='write-enforcement-',dir='/private/tmp') as temp:
+with tempfile.TemporaryDirectory(prefix='write-enforcement-',dir='/tmp') as temp:
     root=Path(temp); socket=root/'socket'; socket.mkdir()
     def run(*args,**kw): return subprocess.run([str(x) for x in args],text=True,capture_output=True,env=ENV,**kw)
     slot=pg_slot.acquire(root/'data')

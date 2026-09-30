@@ -10,7 +10,7 @@ import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__
 import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 
 ROOT=Path(__file__).resolve().parents[2]
-BIN=Path('/opt/homebrew/opt/postgresql@17/bin')
+BIN=Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 ENV={k:v for k,v in os.environ.items() if not k.startswith('PG')}
 checks=[]
 def check(name,value):
@@ -19,7 +19,7 @@ def check(name,value):
 def text(value): return "'"+str(value).replace("'","''")+"'"
 def lit(value): return text(json.dumps(value,separators=(',',':')))+'::jsonb'
 
-with tempfile.TemporaryDirectory(prefix='beta-deferred-',dir='/private/tmp') as temp:
+with tempfile.TemporaryDirectory(prefix='beta-deferred-',dir='/tmp') as temp:
  base=Path(temp); sock=base/'socket'; sock.mkdir()
  def run(*args,**kw): return subprocess.run([str(a) for a in args],text=True,capture_output=True,env=ENV,**kw)
  slot=pg_slot.acquire(base/'data')

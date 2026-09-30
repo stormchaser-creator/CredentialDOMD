@@ -1,11 +1,12 @@
 import { useRef, useState, useCallback, memo } from "react";
+import { cardActionSize } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { UploadIcon, CameraIcon, FileIcon, TrashIcon } from "../shared/Icons";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
-import { mergeExtracted, mergeScanned, findDuplicateDoc } from "../../utils/docPrefill";
+import { mergeExtracted, mergeScanned, splitScanned, findDuplicateDoc } from "../../utils/docPrefill";
 import { docMime } from "../../utils/inboxDocs";
 import { docAttachedLabel, fmtBytes, docBytes } from "../../utils/docLabel";
 import { checkStorageQuota } from "../../utils/storageQuota";
@@ -33,8 +34,14 @@ import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
  *  - analyzer / textAnalyzer: section-specific analyzers (default: classify)
  *  - existingDocs (optional): [{ doc, ready }] from Files the user may pick
  *    instead of uploading again; same analyzer, same fill, linked on save
+ *  - allowedKeys (optional): the host table's columns. The default
+ *    classifier can call a CME certificate a licence, or a drug screen a
+ *    health record, and return that section's keys; every key a form holds is
+ *    written as a column, and one the table lacks rejects the whole record.
+ *    With allowedKeys, only those keys fill the form and the rest are kept as
+ *    details (customFields), for every document type.
  */
-function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnalyzer, existingDocs }) {
+function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnalyzer, existingDocs, allowedKeys }) {
   const { data, theme: T } = useApp();
   const uploadRef = useRef(null);
   const cameraRef = useRef(null);
@@ -83,10 +90,19 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
       if (extracted && typeof extracted === "object") {
         // An "other" document is not this form's kind of record: none of its
         // keys are this table's columns, so all of it is kept as details
-        // rather than written as columns. Known types fill the form as before.
-        if (result?.documentType === "other") setForm((prev) => mergeScanned(prev, extracted, []).form);
-        else setForm((prev) => mergeExtracted(prev, extracted));
-        setMsg(`Document read, fields auto-filled. Review before saving.${note}`);
+        // rather than written as columns. A host that names its columns gets
+        // only those, whatever type the scan says it read; anything else is
+        // kept as a detail rather than rejecting the whole record.
+        const keys = result?.documentType === "other" ? [] : allowedKeys;
+        if (keys) {
+          const { extras, withheld } = splitScanned(extracted, keys);
+          setForm((prev) => mergeScanned(prev, extracted, keys).form);
+          const extraCount = Object.keys(extras).length;
+          setMsg(`Document read, fields auto-filled${extraCount ? `, ${extraCount} more detail${extraCount !== 1 ? "s" : ""} kept on the record` : ""}. Review before saving.${withheld.length ? " Patient identifiers, SSNs and full birth dates were left out." : ""}${note}`);
+        } else {
+          setForm((prev) => mergeExtracted(prev, extracted));
+          setMsg(`Document read, fields auto-filled. Review before saving.${note}`);
+        }
       } else {
         setIsError(true);
         setMsg(`Attached, but no fields could be read from this document.${note}`);
@@ -96,7 +112,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
       setMsg(err.message || "Attached, but the document could not be read.");
     }
     setScanning(false);
-  }, [aiOn, data.settings, setForm, analyzer, textAnalyzer]);
+  }, [aiOn, data.settings, setForm, analyzer, textAnalyzer, allowedKeys]);
 
   const handleFiles = useCallback(async (files) => {
     // The account's 2 GB line, counting files already staged on this form
@@ -192,20 +208,24 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
         {scanning ? "Reading document…" : "Upload or photograph and AI fills the form"}
       </div>
       {existingDocs && (
-        <div style={{ marginTop: 8 }}>
+        <div>
+          {/* A text link, but a 32 px tall target: with padding 0 it was one
+              13 px line (16 px) to hit on a phone. The 8 px it gains above
+              and below the words replace the margins that sat there. */}
           <button onClick={() => setShowExisting((s) => !s)} disabled={scanning} style={{
-            border: "none", backgroundColor: "transparent", padding: 0,
+            border: "none", backgroundColor: "transparent", padding: 0, minHeight: 32,
+            display: "inline-flex", alignItems: "center",
             color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",
           }}>
             {showExisting ? "Hide documents in Files" : "Use a document already uploaded"}
           </button>
           {showExisting && (
             existingDocs.length === 0 ? (
-              <div style={{ fontSize: 13, color: T.textDim, marginTop: 6 }}>
+              <div style={{ fontSize: 13, color: T.textDim }}>
                 No PDFs, photos, or Word files in Files yet. Upload the agreement above.
               </div>
             ) : (
-              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {existingDocs.map(({ doc, ready }) => {
                   const sub = !ready
                     ? "Still downloading to this device"
@@ -243,8 +263,9 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
               <FileIcon />
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
               {doc.existingId && <span style={{ fontSize: 11, color: T.textDim, flexShrink: 0 }}>in Files</span>}
-              <button onClick={() => setAttachedDocs((prev) => prev.filter((_, j) => j !== i))} style={{
-                border: "none", backgroundColor: "transparent", color: T.danger, cursor: "pointer", display: "flex", padding: 2,
+              <button aria-label={`Remove ${doc.name}`} onClick={() => setAttachedDocs((prev) => prev.filter((_, j) => j !== i))} style={{
+                border: "none", backgroundColor: "transparent", color: T.danger, cursor: "pointer", padding: 2,
+                ...cardActionSize, flexShrink: 0, margin: "-6px -8px -6px 0",
               }}><TrashIcon /></button>
             </div>
           ))}

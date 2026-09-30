@@ -31,8 +31,13 @@
  * and nothing after it: the MTA copies sender-chosen identifiers in beside
  * its verdicts, and a substring test once found "dmarc=pass" inside one.
  *
- * Pure by design: no Deno, no Supabase, no imports.
+ * Pure by design: no Deno, no Supabase, and no imports but the pure matcher
+ * (requestPacket.ts), whose oneTapReady the approve path's backstop reads,
+ * and the app's list of section keys (sectionFields.js).
  */
+
+import { oneTapReady } from "./requestPacket.ts";
+import { BUILT_IN_SECTIONS } from "./app/utils/sectionFields.js";
 
 export interface ProposalItem {
   ask: string;
@@ -51,6 +56,8 @@ export interface Proposal {
   docIds: string[];
   missing: string[];
   coverNote: string;
+  /** The forward was positively authenticated (requestPacket.ts Proposal.verified). */
+  verified?: boolean;
 }
 
 export interface AckInput {
@@ -473,6 +480,14 @@ export interface SummaryInput {
   /** What to check before it goes (requestPacket.ts reviewReason). */
   review?: string;
   /**
+   * The forward was NOT positively authenticated (email-inbound mayFileFrom
+   * false). This summary goes to the address the forward claimed to be
+   * from, which is the real physician's inbox even when the forward was
+   * forged, so it does not open with "Got it." (the physician may have sent
+   * nothing) and never offers one tap, whatever oneTap says.
+   */
+  unverified?: boolean;
+  /**
    * Nothing in the email read as an ask, although it was taken for a request
    * (intakeUnderstanding.mjs, reading.unclear): what it was about, and the
    * sentences of it that name a document. The summary then says it is
@@ -495,6 +510,9 @@ const NO_PROPOSAL_NOTE = "The packet could not be prepared automatically; open t
 const NOT_FOUND_OPENING = "Got it. A document request came in, but the requester's address was not found in the forwarded text.";
 const NOT_FOUND_NEXT_STEP = "Open the request, enter their address under Requester's email and choose the documents.";
 
+// The summary's first line when the forward could not be authenticated.
+const UNVERIFIED_SUMMARY_OPENING = "A forward that could not be verified as coming from you arrived at docs@. If you did not forward it, do not send anything from it.";
+
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -508,6 +526,12 @@ function plural(n: number, one: string, many: string): string {
  * followed neither. The caller appends its own footer.
  */
 export function physicianSummaryText(input: SummaryInput): string {
+  if (input.unverified === true) {
+    // Everything below, less the "Got it." that says the physician did this
+    // and less any one-tap call to action, under a line that says why.
+    const body = physicianSummaryText({ ...input, unverified: false, oneTap: false });
+    return `${UNVERIFIED_SUMMARY_OPENING}\n\n${body.replace(/^Got it\. /, "")}`;
+  }
   // Read only when the requester was found; with no requester nobody is
   // named as the asker (see the two not-found openings).
   const who = String(input.requesterName ?? "").trim() || String(input.requesterAddr ?? "").trim() || "The requester";
@@ -618,7 +642,7 @@ export const MAX_APPROVE_SUBJECT = 200;
 export const MAX_APPROVE_TEXT = 5000;
 
 export type ApproveBody =
-  | { ok: true; requestId: string; ccSelf: boolean; subjectOverride: string | null; textOverride: string | null; docIds: string[] | null }
+  | { ok: true; requestId: string; ccSelf: boolean; subjectOverride: string | null; textOverride: string | null; docIds: string[] | null; reviewed: boolean }
   | { ok: false; error: string };
 
 /**
@@ -677,5 +701,49 @@ export function approveRequestBody(body: unknown): ApproveBody {
     }
   }
 
-  return { ok: true, requestId, ccSelf: b.cc_self !== false, subjectOverride, textOverride, docIds };
+  // reviewed: the app sent this from the request's own screen, with the
+  // draft in view (RequestPacket.js approveBody). Only a literal true counts.
+  return { ok: true, requestId, ccSelf: b.cc_self !== false, subjectOverride, textOverride, docIds, reviewed: b.reviewed === true };
+}
+
+/**
+ * The record a hand-built send (a record's Send sheet) was made from, for
+ * the share_log row, so the record's Send history shows the email:
+ * { itemId, itemName, section } or null when the call names none. Only a
+ * label, never a permission: item_id is kept when it is a uuid, item_name
+ * is one trimmed line of at most 200 characters, and a section the app does
+ * not know is "documents". Nothing here widens what is sent or to whom.
+ */
+export function shareLogItem(body: unknown): { itemId: string | null; itemName: string; section: string } | null {
+  const b = body as Record<string, unknown> | null;
+  if (!b || typeof b !== "object") return null;
+  const rawId = String(b.item_id ?? "").trim();
+  const itemId = UUID_RE.test(rawId) ? rawId : null;
+  const itemName = String(b.item_name ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (!itemId && !itemName) return null;
+  const s = String(b.item_section ?? "").trim();
+  const section = (BUILT_IN_SECTIONS as readonly string[]).includes(s) ? s : "documents";
+  return { itemId, itemName, section };
+}
+
+export const UNVERIFIED_APPROVE_REFUSAL = "This forward could not be verified as coming from you, so it cannot be sent on one tap. Open the request, check who is asking, and send it from there.";
+
+/**
+ * The approve path's backstop for a forward that was not positively
+ * authenticated (INTAKE-004). The app no longer offers one tap for one
+ * (oneTapReady needs proposal.verified), but an installed copy built before
+ * that still would, and a tap there would mail the packet to whoever a
+ * forger wrote into the forwarded text. So an approve that was not sent from
+ * the request's own screen (reviewed false) is refused when the stored
+ * proposal is not verified but would otherwise have been one tap. A proposal
+ * that would not have been one tap anyway (keyword, uncertain, missing
+ * items) was only ever sent after a review, and goes as before.
+ * Returns the refusal text, or null to carry on.
+ */
+export function unverifiedApproveRefusal(proposal: unknown, reviewed: boolean): string | null {
+  if (reviewed === true) return null;
+  if (!proposal || typeof proposal !== "object" || Array.isArray(proposal)) return null;
+  const p = proposal as Record<string, unknown>;
+  if (p.verified === true) return null;
+  return oneTapReady({ ...p, verified: true } as never) ? UNVERIFIED_APPROVE_REFUSAL : null;
 }

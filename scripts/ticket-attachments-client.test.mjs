@@ -172,6 +172,12 @@ eq("the same total cap", MAX_TICKET_TOTAL_BYTES, server.MAX_TOTAL_ATTACHMENT_BYT
   eq("a function that does not report it claims nothing", ticketAttachmentShortfall({ ok: true, id: "x" }), "");
   eq("no response claims nothing", ticketAttachmentShortfall(null), "");
   ok("no em dash in the shortfall", !ticketAttachmentShortfall({ attachments_failed: 3 }).includes("\u{2014}"));
+  // Review 2026-09-30: a retry while the first request is still uploading.
+  eq("files still on their way are not called failed", ticketAttachmentShortfall({ ok: true, attachments_failed: 0, attachments_pending: 3 }),
+    "Your ticket was sent. 3 files are still attaching. Check the ticket under Your tickets in a few minutes, and add any file that is missing as a reply.");
+  eq("one still on its way is named in the singular", ticketAttachmentShortfall({ ok: true, attachments_pending: 1 }),
+    "Your ticket was sent. 1 file is still attaching. Check the ticket under Your tickets in a few minutes, and add any file that is missing as a reply.");
+  ok("no em dash while attaching", !ticketAttachmentShortfall({ attachments_pending: 2 }).includes("\u{2014}"));
 }
 
 // ── Telling a picture from a file ─────────────────────────────────────────

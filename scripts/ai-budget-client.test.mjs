@@ -44,7 +44,8 @@ const BASE = {
 {
   const m = await loadWith(BASE);
   eq("status carries the budget fields", [m.sharedAiStatus.monthSpentUsd, m.sharedAiStatus.budgetSoftUsd, m.sharedAiStatus.budgetHardUsd, m.sharedAiStatus.overSoft, m.sharedAiStatus.overHard], [3.1234, 8, 15, false, false]);
-  eq("settings line", m.describeAiBudget({}), { line: "About $3.12 of $15.00 this month on the shared keys.", warning: null });
+  // A status with no split (a proxy before QA OPS-005's) sends the budget's own figure as monthSpentUsd.
+  eq("settings line", m.describeAiBudget({}), { line: "About $3.12 of $15.00 this month on shared Opus.", warning: null });
   ok("opus is open", m.usesSharedOpus({}) === true);
   eq("opus status line", m.describeOpusStatus({}), "Shared Opus: on, 2 of 60 calls used today");
   eq("nothing to say with own keys for both", m.describeAiBudget({ apiKey: "k", anthropicApiKey: "k" }), null);
@@ -55,7 +56,7 @@ const BASE = {
 {
   const m = await loadWith({ ...BASE, monthSpentUsd: 9.5, overSoft: true });
   const b = m.describeAiBudget({});
-  eq("soft line", b.line, "About $9.50 of $15.00 this month on the shared keys.");
+  eq("soft line", b.line, "About $9.50 of $15.00 this month on shared Opus.");
   eq("soft warning", b.warning, "Past the $8.00 soft line for this month. At $15.00, Vera, the RVU coder and case dictation switch to Gemini until the first of next month.");
   ok("opus still open past the soft line", m.usesSharedOpus({}) === true);
   ok("no em dash in the copy", !/—/.test(b.warning + b.line));

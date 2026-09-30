@@ -6,6 +6,8 @@ import { transformSync } from 'esbuild';
 import { createClient } from '@supabase/supabase-js';
 import { createAccessAuthority, allowsSettingsChange, membershipWriteError } from '../../src/utils/limitedLaunchAccess.js';
 import { profileInitializationError, profileSupportReference } from '../../src/utils/profileIssueDiagnostics.js';
+import * as syncRules from '../../src/utils/syncRules.js';
+import { LOCAL_ONLY_SETTINGS } from '../../src/constants/defaults.js';
 
 const source = await readFile(new URL('../../src/lib/supabase.js', import.meta.url), 'utf8');
 const code = transformSync(source, { loader: 'js', format: 'cjs', define: {
@@ -38,13 +40,17 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false, c
       }
       return createClient(url, key, options);
     } },
-    '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data' },
-    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor },
+    '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS },
+    '../utils/syncRules.js': syncRules,
+    // No data deletion purges anything here, so the purge fence never moves.
+    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { return { initializeProfile: () => f.initializeProfile() }; } },
     '../utils/profileIssueDiagnostics.js': { profileInitializationError },
     '../utils/continuityRecovery.js': { PRODUCTION_CLERK_ISSUER: 'https://clerk.credentialdomd.com',
       createContinuityBinding: (receipt, context) => { f.bindingContext = context; if (f.bind) return f.bind(receipt); return receipt; },
-      recoverContinuity: binding => f.recover(binding) },
+      recoverContinuity: binding => f.recover(binding),
+      continuitySourceSubject: binding => binding?.continuity?.sourceSubject ?? null },
     '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {}, configureSecretContinuity: binding => { f.configured = binding; } },
     '../utils/founding.js': { foundingFromProfile: () => ({}) },
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, allowsSettingsChange: value => allowsSettingsChange(value, authority), membershipWriteError },
@@ -53,12 +59,12 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false, c
   const context = vm.createContext({ module, exports: module.exports, require: name => imports[name],
     window: { Clerk: clerk }, localStorage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) },
     fetch: async (url, options) => {
-      const request = { url: String(url), method: options.method, headers: new Headers(options.headers), body: options.body, actor };
+      const request = { url: String(url), method: options.method, headers: new Headers(options.headers), body: options.body, signal: options.signal, actor };
       requests.push(request);
       if (f.onRequest) return f.onRequest(request);
       return options.method === 'GET' ? Response.json([]) : new Response(null, { status: 204 });
     },
-    console: { warn() {}, error() {} }, crypto, Date, Blob, atob,
+    console: { warn() {}, error() {} }, crypto, Date, Blob, atob, setTimeout, clearTimeout, AbortController,
   });
   vm.runInContext(continuity ? continuityCode : code, context);
   return Object.assign(f, { api: module.exports, requests, values, clerk, switchAccount, signOut, authority });
@@ -91,6 +97,26 @@ test('real SDK still sends a normal owner-bound update with its captured token',
   assert.equal(f.requests[0].headers.get('authorization'), 'Bearer synthetic-token-A');
   assert.ok(f.requests[0].url.includes('user_id=eq.profileA'));
   assert.equal(f.values.size, 0);
+});
+
+// A settings save that has no answer gives up at the limit (SETTINGS-007
+// review): the real SDK hands the cancel to fetch, so the stalled PATCH cannot
+// land later over newer text, and the change is queued for the next load.
+test('real SDK cancels a settings PATCH that has no answer at the limit, and the change is queued', { timeout: 5000 }, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture();
+  f.onRequest = () => new Promise(() => {});
+  const saving = f.api.saveSettings('profileA', { languages: 'Spanish' }, 'user_syntheticA');
+  for (let i = 0; i < 20 && !f.requests.length; i++) await tick();
+  assert.equal(f.requests.length, 1);
+  const [patch] = f.requests;
+  assert.equal(patch.method, 'PATCH');
+  assert.ok(patch.url.includes('/profiles?id=eq.profileA'));
+  assert.equal(patch.signal?.aborted, false, 'the request carries a signal that can cancel it');
+  t.mock.timers.tick(f.api.SETTINGS_SEND_LIMIT_MS);
+  assert.equal(await saving, null);
+  assert.equal(patch.signal.aborted, true, 'fetch is told to cancel');
+  assert.deepEqual(JSON.parse(f.values.get('ops:user_syntheticA')).map(op => [op.op, op.payload]), [['settings', { languages: 'Spanish' }]]);
 });
 
 test('expired membership does not deny an owner-bound data-rights deletion or server request', async () => {

@@ -22,8 +22,8 @@ eq("merge fills blanks", mergeExtracted({ facility: "" }, { facility: "Riverside
 eq("merge keeps typed", mergeExtracted({ facility: "Typed" }, { facility: "Riverside" }), { facility: "Typed" });
 eq("merge keeps typed number", mergeExtracted({ hourlyRate: 250 }, { hourlyRate: 300 }), { hourlyRate: 250 });
 eq("merge skips null/empty", mergeExtracted({ facility: "" }, { facility: null, agency: "" }), { facility: "" });
-eq("merge empty array is blank", mergeExtracted({ coveragePeriods: [] }, { coveragePeriods: [{ start: "2026-07-28", end: "2026-08-10" }] }), { coveragePeriods: [{ start: "2026-07-28", end: "2026-08-10" }] });
-eq("merge keeps filled array", mergeExtracted({ coveragePeriods: [{ start: "2026-01-01", end: "" }] }, { coveragePeriods: [{ start: "2026-07-28", end: "2026-08-10" }] }), { coveragePeriods: [{ start: "2026-01-01", end: "" }] });
+eq("merge empty array is blank", mergeExtracted({ coveragePeriods: [] }, { coveragePeriods: [{ start: "2026-08-04", end: "2026-08-17" }] }), { coveragePeriods: [{ start: "2026-08-04", end: "2026-08-17" }] });
+eq("merge keeps filled array", mergeExtracted({ coveragePeriods: [{ start: "2026-01-01", end: "" }] }, { coveragePeriods: [{ start: "2026-08-04", end: "2026-08-17" }] }), { coveragePeriods: [{ start: "2026-01-01", end: "" }] });
 eq("merge undefined form", mergeExtracted(undefined, { a: 1 }), { a: 1 });
 eq("merge junk extracted", mergeExtracted({ a: 1 }, "nope"), { a: 1 });
 eq("merge fills increment when no default", mergeExtracted({ coveragePeriods: [] }, { incrementMinutes: 30 }), { coveragePeriods: [], incrementMinutes: 30 });
@@ -57,7 +57,7 @@ ok("zip not readable", !isReadableDoc({ name: "a.zip", type: "application/zip" }
 const files = [
   { id: "lic", name: "dea.pdf", type: "application/pdf", data: "d", uploadedAt: "2026-08-30", linkedTo: "licenses:l1" },
   { id: "old", name: "IMG_0269.jpeg", type: "image/jpeg", data: "d", uploadedAt: "2026-08-01", linkedTo: "" },
-  { id: "hint", name: "Locum Agreement 2026.pdf", type: "application/pdf", data: "d", uploadedAt: "2026-08-10", linkedTo: "" },
+  { id: "hint", name: "Locum Agreement 2026.pdf", type: "application/pdf", data: "d", uploadedAt: "2026-08-17", linkedTo: "" },
   { id: "agr", name: "signed.pdf", type: "application/pdf", data: "d", uploadedAt: "2026-07-01", linkedTo: "locumContracts:c9" },
   { id: "own", name: "mine.pdf", type: "application/pdf", data: "d", uploadedAt: "2026-06-01", linkedTo: "locumContracts:c1" },
   { id: "new", name: "scan.pdf", type: "application/pdf", data: "d", uploadedAt: "2026-08-20", linkedTo: "" },
@@ -73,18 +73,18 @@ eq("candidates without contract id", agreementDocCandidates(files).map(c => c.do
 eq("candidates empty", agreementDocCandidates(undefined), []);
 
 // ── isoDate ──
-eq("iso passthrough", isoDate("2026-07-28"), "2026-07-28");
-eq("iso datetime", isoDate("2026-07-28T00:00:00Z"), "2026-07-28");
-eq("iso long form", isoDate("July 28, 2026"), "2026-07-28");
+eq("iso passthrough", isoDate("2026-08-04"), "2026-08-04");
+eq("iso datetime", isoDate("2026-08-04T00:00:00Z"), "2026-08-04");
+eq("iso long form", isoDate("August 4, 2026"), "2026-08-04");
 eq("iso garbage", isoDate("soon"), "");
 eq("iso empty", isoDate(null), "");
 
 // ── normalizeAgreementFields: analyzer JSON → form shape ──
 const raw = {
-  payModel: "stipend", facility: " Riverside Community Hospital ", location: "Lafayette, CO", agency: "",
-  billTo: "ap@riverside.org", callStipend: "$3,000", stipendHours: "4", overageHourlyRate: 300,
-  hourlyRate: "n/a", incrementMinutes: "15", startDate: "2026-07-28", endDate: "2026-08-10",
-  coveragePeriods: [{ start: "2026-07-28", end: "2026-08-10" }, { start: "2026-09-14" }, { start: "", end: "" }, null],
+  payModel: "stipend", facility: " Riverside Community Hospital ", location: "Loveland, CO", agency: "",
+  billTo: "ap@riverside.example", callStipend: "$3,000", stipendHours: "4", overageHourlyRate: 300,
+  hourlyRate: "n/a", incrementMinutes: "15", startDate: "2026-08-04", endDate: "2026-08-17",
+  coveragePeriods: [{ start: "2026-08-04", end: "2026-08-17" }, { start: "2026-09-21" }, { start: "", end: "" }, null],
   callRateGrid: [{ hospital: "Main", primary: "3000", backup: "1,500" }, { hospital: "", primary: null }, "junk"],
   notes: "Cancel with 30 days notice.",
 };
@@ -93,28 +93,28 @@ eq("norm numbers", [norm.callStipend, norm.stipendHours, norm.overageHourlyRate,
 ok("norm drops unparsable number", !("hourlyRate" in norm));
 ok("norm drops empty text", !("agency" in norm));
 eq("norm trims text", norm.facility, "Riverside Community Hospital");
-eq("norm periods", norm.coveragePeriods, [{ start: "2026-07-28", end: "2026-08-10" }, { start: "2026-09-14", end: "" }]);
-eq("norm dates", [norm.startDate, norm.endDate], ["2026-07-28", "2026-08-10"]);
+eq("norm periods", norm.coveragePeriods, [{ start: "2026-08-04", end: "2026-08-17" }, { start: "2026-09-21", end: "" }]);
+eq("norm dates", [norm.startDate, norm.endDate], ["2026-08-04", "2026-08-17"]);
 eq("norm grid", norm.callRateGrid, [{ hospital: "Main", primary: 3000, backup: 1500 }]);
 eq("norm payModel kept", norm.payModel, "stipend");
 eq("norm bad payModel dropped", "payModel" in normalizeAgreementFields({ payModel: "weekly" }), false);
-eq("norm span becomes one block", normalizeAgreementFields({ startDate: "2026-07-28", endDate: "2026-08-10" }).coveragePeriods, [{ start: "2026-07-28", end: "2026-08-10" }]);
-eq("norm end-only block", normalizeAgreementFields({ coveragePeriods: [{ end: "2026-08-10" }] }).coveragePeriods, [{ start: "2026-08-10", end: "2026-08-10" }]);
+eq("norm span becomes one block", normalizeAgreementFields({ startDate: "2026-08-04", endDate: "2026-08-17" }).coveragePeriods, [{ start: "2026-08-04", end: "2026-08-17" }]);
+eq("norm end-only block", normalizeAgreementFields({ coveragePeriods: [{ end: "2026-08-17" }] }).coveragePeriods, [{ start: "2026-08-17", end: "2026-08-17" }]);
 eq("norm no dates no periods", "coveragePeriods" in normalizeAgreementFields({ facility: "X" }), false);
 eq("norm garbage", normalizeAgreementFields("x"), {});
 eq("norm array", normalizeAgreementFields([1]), {});
 eq("norm empty grid dropped", "callRateGrid" in normalizeAgreementFields({ callRateGrid: "none" }), false);
 
 // ── withAgreementFields wraps the analyzer result ──
-const wrapped = withAgreementFields({ confidence: "high", extracted: { callStipend: "$3,000", coveragePeriods: [] , startDate: "2026-07-28" } });
+const wrapped = withAgreementFields({ confidence: "high", extracted: { callStipend: "$3,000", coveragePeriods: [] , startDate: "2026-08-04" } });
 eq("wrap keeps confidence", wrapped.confidence, "high");
-eq("wrap normalizes", wrapped.extracted, { callStipend: 3000, coveragePeriods: [{ start: "2026-07-28", end: "" }], startDate: "2026-07-28" });
+eq("wrap normalizes", wrapped.extracted, { callStipend: 3000, coveragePeriods: [{ start: "2026-08-04", end: "" }], startDate: "2026-08-04" });
 eq("wrap null", withAgreementFields(null), null);
 
 // The full path a scanned contract takes into a fresh Add Agreement form
 const fresh = { coveragePeriods: [] };
 const filled = mergeExtracted(fresh, wrapped.extracted);
-eq("end to end: form takes dates and stipend", filled, { coveragePeriods: [{ start: "2026-07-28", end: "" }], callStipend: 3000, startDate: "2026-07-28" });
+eq("end to end: form takes dates and stipend", filled, { coveragePeriods: [{ start: "2026-08-04", end: "" }], callStipend: 3000, startDate: "2026-08-04" });
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
