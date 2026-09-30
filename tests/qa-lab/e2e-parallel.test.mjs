@@ -18,7 +18,7 @@ import { GENERATED_DIR, REPO_ROOT } from '../../qa-lab/lib/paths.mjs';
 import {
   DEFAULT_E2E_DIR, DEFAULT_RESULTS_JSON, envFlag, noRestart, parallelSafe, resultsFile, runOutputs,
 } from '../../qa-lab/e2e/support/run-options.mjs';
-import { clearRunawayRetries, loopingPids, runPlan } from '../../qa-lab/e2e/run.mjs';
+import { TOP_UP_BELOW, TOP_UP_EVERY_MS, clearRunawayRetries, loopingPids, runPlan, startTopUps } from '../../qa-lab/e2e/run.mjs';
 import ResultsReporter from '../../qa-lab/e2e/support/results-reporter.mjs';
 import {
   DEFAULT_MIN_AGE_MINUTES, FOUNDING_LOCK_KEY, describeReset, foundingResetSql, minAgeMinutes,
@@ -102,6 +102,34 @@ test('either switch turns parallel-safe mode on: no restart, no --fresh, the lab
   assert.equal(runPlan([], { QA_E2E_NO_RESTART: '1' }).childEnv.QA_E2E_RESULTS, undefined, 'the switch alone keeps the default results file');
   assert.equal(runPlan([], { QA_E2E_NO_TOPUP: '1' }).topUp, false);
   assert.equal(runPlan([], {}).topUp, true);
+});
+
+test('founding top-ups during a run: a look every few minutes frees places only under the threshold, and stops with the run', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const lines = [];
+  const lefts = [80, TOP_UP_BELOW, TOP_UP_BELOW - 1, null, 12];
+  let resets = 0;
+  const reset = () => { resets += 1; return { freed: 5, kept: 3, before: { live: { left: 30 }, test: { left: 98 } }, after: { live: { left: 35 }, test: { left: 98 } }, byState: {}, minAgeMinutes: 15 }; };
+  const stop = startTopUps({ deps: { left: () => lefts.shift(), reset, log: (m) => lines.push(m) } });
+  t.mock.timers.tick(TOP_UP_EVERY_MS - 1);
+  assert.equal(resets, 0, 'nothing before the first interval');
+  t.mock.timers.tick(1);
+  assert.equal(resets, 0, '80 left: plenty');
+  t.mock.timers.tick(TOP_UP_EVERY_MS);
+  assert.equal(resets, 0, `exactly ${TOP_UP_BELOW} left is not under the threshold`);
+  t.mock.timers.tick(TOP_UP_EVERY_MS);
+  assert.equal(resets, 1, 'under the threshold: the places journeys took are freed');
+  assert.ok(lines.some((l) => /^qa-e2e: founding top-up during the run: /.test(l)), lines.join('\n'));
+  t.mock.timers.tick(TOP_UP_EVERY_MS);
+  assert.equal(resets, 1, 'an unreadable count (null) frees nothing');
+  stop();
+  t.mock.timers.tick(TOP_UP_EVERY_MS * 3);
+  assert.equal(resets, 1, 'stopped with the run: 12 left is never looked at');
+  // A failed reset is logged, not thrown into the runner.
+  const failing = startTopUps({ deps: { left: () => 0, reset: () => { throw new Error('db down'); }, log: (m) => lines.push(m) } });
+  t.mock.timers.tick(TOP_UP_EVERY_MS);
+  failing();
+  assert.match(lines.at(-1), /founding top-up during the run failed: db down/);
 });
 
 test('runaway PostgREST retries: a session counts when seen in two looks of ten, never on one', () => {

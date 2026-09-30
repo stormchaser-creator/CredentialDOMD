@@ -19,8 +19,9 @@
 // Anything after `--` goes to `playwright test`. The lab this starts is stopped
 // again at the end (the stack keeps running, as with qa:lab). Every paid journey
 // takes one of the 96 public founding places: under 40 left, the runner frees
-// the ones journeys took more than 15 minutes ago (npm run qa:founding-reset;
-// QA_E2E_NO_TOPUP=1 skips it). Results: qa-lab/.generated/results.json
+// the ones journeys took more than 15 minutes ago (npm run qa:founding-reset),
+// before the run and every 3 minutes during it (a full run pays for about 110
+// members; QA_E2E_NO_TOPUP=1 skips both). Results: qa-lab/.generated/results.json
 // (checklist id -> pass/fail/blocked with evidence), the HTML report in
 // qa-lab/.generated/e2e/html/, screenshots in qa-lab/.generated/e2e/shots/.
 import { spawn, spawnSync } from 'node:child_process';
@@ -40,8 +41,10 @@ const CONFIG = path.join(HERE, 'playwright.config.mjs');
 const PLAYWRIGHT = path.join(REPO_ROOT, 'node_modules', '@playwright', 'test', 'cli.js');
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-/** Top up the founding places when fewer than this many are left (a full run takes about 30). */
+/** Top up the founding places when fewer than this many are left. */
 export const TOP_UP_BELOW = 40;
+/** How often the runner looks at the founding places while the journeys run. */
+export const TOP_UP_EVERY_MS = 3 * 60 * 1000;
 
 /**
  * What this run does, from its arguments and environment. Parallel-safe mode
@@ -93,6 +96,42 @@ async function ensureLab({ mayStart = true } = {}) {
  */
 function foundingPlacesLeft() {
   try { return foundingPlaces().live.left; } catch { return null; }
+}
+
+const TOP_UP_DEPS = {
+  left: () => { const n = foundingPlacesLeft(); return n === null ? null : Number(n); },
+  reset: () => resetFoundingPlaces(),
+  log: (message) => console.log(message),
+};
+
+/**
+ * Keeps the founding offer open while the journeys run. A full run pays for
+ * more members (about 110 of its 123 journeys) than the lab has public places
+ * (96), so a top-up before the run is not enough: every `everyMs` this looks
+ * at the places left and, under `below`, frees the ones journeys took more
+ * than 15 minutes ago (resetFoundingPlaces, under the product's founding
+ * locks, so it is safe while journeys pay). Returns a function that stops it.
+ */
+export function startTopUps({ everyMs = TOP_UP_EVERY_MS, below = TOP_UP_BELOW, deps = TOP_UP_DEPS } = {}) {
+  const look = () => {
+    try {
+      const left = deps.left();
+      if (left === null || !Number.isFinite(left) || left >= below) return;
+      for (const line of describeReset(deps.reset())) deps.log(`qa-e2e: founding top-up during the run: ${line}`);
+    } catch (e) { deps.log(`qa-e2e: founding top-up during the run failed: ${e.message}`); }
+  };
+  const timer = setInterval(look, everyMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
+/** Runs Playwright as a child (not spawnSync, so the top-ups can run meanwhile); resolves with its exit status. */
+function runPlaywright(args, env) {
+  return new Promise((resolve) => {
+    const pw = spawn(process.execPath, [PLAYWRIGHT, ...args], { stdio: 'inherit', cwd: REPO_ROOT, env });
+    pw.once('error', (e) => { console.error(`qa-e2e: could not start Playwright: ${e.message}`); resolve(1); });
+    pw.once('exit', (code) => resolve(code ?? 1));
+  });
 }
 
 // Tables the app syncs (src/lib/supabase.js TABLE_MAP), for the zombie check.
@@ -233,7 +272,7 @@ export async function runE2e(argv = process.argv.slice(2)) {
   const placesLeft = foundingPlacesLeft();
   let left = placesLeft === null ? NaN : Number(placesLeft);
   if (Number.isFinite(left)) {
-    console.log(`qa-e2e: ${left} founding places left in the lab (a full run takes about 30)`);
+    console.log(`qa-e2e: ${left} founding places left in the lab (a full run pays for about 110; places older than 15 minutes are freed again during the run)`);
     if (left < TOP_UP_BELOW && plan.topUp && !argv.includes('--list')) {
       try {
         const reset = resetFoundingPlaces();
@@ -243,7 +282,9 @@ export async function runE2e(argv = process.argv.slice(2)) {
     }
     if (left < 25) console.log('qa-e2e: WARNING: the founding offer will close soon; npm run qa:founding-reset frees the places journeys took (older than 15 minutes)');
   }
-  const r = spawnSync(process.execPath, [PLAYWRIGHT, 'test', '-c', CONFIG, ...plan.argv], { stdio: 'inherit', cwd: REPO_ROOT, env: plan.childEnv });
+  const stopTopUps = plan.topUp && !argv.includes('--list') ? startTopUps() : () => {};
+  const status = await runPlaywright(['test', '-c', CONFIG, ...plan.argv], plan.childEnv);
+  stopTopUps();
   const wrote = existsSync(RESULTS) && statSync(RESULTS).mtimeMs >= Date.parse(since);
   if (!plan.argv.includes('--list') && wrote) {
     const results = JSON.parse(readFileSync(RESULTS, 'utf8'));
@@ -258,7 +299,7 @@ export async function runE2e(argv = process.argv.slice(2)) {
     child.kill('SIGTERM');
     await new Promise((res) => (child.exitCode !== null ? res() : child.once('exit', res)));
   }
-  return r.status ?? 1;
+  return status;
 }
 
 if (isMain(import.meta.url)) {

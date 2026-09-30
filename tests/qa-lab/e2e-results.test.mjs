@@ -49,12 +49,54 @@ test('checklist ids: fail beats pass beats blocked; unreached tags are blocked; 
     assert.equal(res.features['SYNC-001'].status, 'blocked');
     assert.equal(res.features['DOCS-001'].status, 'blocked');
     assert.equal(res.features['OPS-003'].status, 'not_run');
-    assert.deepEqual(res.summary, { pass: 1, fail: 1, blocked: 3, not_run: 1 });
+    assert.deepEqual(res.summary, { pass: 1, fail: 1, blocked: 3, by_design: 0, not_run: 1 });
     assert.equal(res.byPriority.P0.fail, 1);
     assert.equal(res.bugs.length, 1);
     assert.equal(res.bugs[0].title, 'wrong price');
     assert.equal(res.journeys.length, 3);
     assert.equal(res.features['BILL-001'].name, 'Offer', 'names and priorities come from the checklist');
+  } finally {
+    if (prev === undefined) delete process.env.QA_FEATURES; else process.env.QA_FEATURES = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('by_design: a verified non-bug outranks pass, never a failure; it is counted per priority and listed with its reason', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'qa-e2e-results-'));
+  const prev = process.env.QA_FEATURES;
+  try {
+    const checklist = [
+      { id: 'SHARE-005', name: 'Packet', priority: 'P1', area: 'SHARE' },
+      { id: 'SYNC-016', name: 'Two devices', priority: 'P1', area: 'SYNC' },
+      { id: 'CRED-005', name: 'Protected identity', priority: 'P0', area: 'CRED' },
+    ];
+    writeFileSync(path.join(dir, 'features.json'), JSON.stringify(checklist));
+    process.env.QA_FEATURES = path.join(dir, 'features.json');
+    const out = path.join(dir, 'results.json');
+    const r = new ResultsReporter({ outputFile: out });
+    const note = (id, why) => feature({ id, title: 'differs on purpose', status: 'by_design', reason: why, checks: [], shots: [] });
+    // SHARE-005: the stretch passes, and one expectation is the product's design.
+    r.onTestEnd(fakeTest('packet', ['@SHARE-005']), fakeResult('passed', [
+      feature({ id: 'SHARE-005', title: 'zip', status: 'pass', checks: [{ name: 'zip', ok: true }], shots: [] }),
+      note('SHARE-005', 'custom categories are left out on purpose'),
+    ]));
+    // SYNC-016: by design in one journey, a real failure in another: fail wins.
+    r.onTestEnd(fakeTest('clock', ['@SYNC-016']), fakeResult('passed', [note('SYNC-016', 'device clocks')]));
+    r.onTestEnd(fakeTest('devices', ['@SYNC-016']), fakeResult('failed', [feature({ id: 'SYNC-016', title: 'edit', status: 'fail', checks: [{ name: 'B wins', ok: false }], shots: [] })], 'boom'));
+    // CRED-005: only a by-design note.
+    r.onTestEnd(fakeTest('phone', ['@CRED-005']), fakeResult('passed', [note('CRED-005', 'the 32 px floor is the lab\'s own')]));
+    // An unknown status from a journey is never taken for a pass.
+    r.onTestEnd(fakeTest('odd', []), fakeResult('passed', [feature({ id: 'CRED-005', title: 'odd', status: 'weird', checks: [], shots: [] })]));
+    r.onEnd({ status: 'failed' });
+    const res = JSON.parse(readFileSync(out, 'utf8'));
+    assert.equal(res.features['SHARE-005'].status, 'by_design');
+    assert.equal(res.features['SHARE-005'].evidence.find((e) => e.status === 'by_design').reason, 'custom categories are left out on purpose');
+    assert.equal(res.features['SYNC-016'].status, 'fail', 'a real failure elsewhere is never hidden by a by-design note');
+    assert.equal(res.features['CRED-005'].status, 'fail', 'an unknown status counts as a failure');
+    assert.deepEqual(res.summary, { pass: 0, fail: 2, blocked: 0, by_design: 1, not_run: 0 });
+    assert.deepEqual(res.byPriority.P1, { pass: 0, fail: 1, blocked: 0, by_design: 1, not_run: 0 });
+    assert.deepEqual(res.byDesign.map((b) => b.feature).sort(), ['CRED-005', 'SHARE-005', 'SYNC-016']);
+    assert.ok(res.byDesign.every((b) => b.reason && b.journey));
   } finally {
     if (prev === undefined) delete process.env.QA_FEATURES; else process.env.QA_FEATURES = prev;
     rmSync(dir, { recursive: true, force: true });

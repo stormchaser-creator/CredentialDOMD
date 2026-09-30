@@ -30,8 +30,9 @@ test('back from Checkout before the events land: "confirming", nothing to buy, t
   await qa.feature('BILL-003', 'Return before the webhook: the app confirms, then activates without a reload', async () => {
     // The events land 10 seconds after the browser is sent back (Stripe: usually a second or two, sometimes more).
     ({ sessionId } = await payForMembership(page, { plan: { delayMs: 10000, order: 'shuffled', mode: 'concurrent' } }));
-    const shown = await notice(page).waitFor({ timeout: 15000 }).then(() => true, () => false);
-    const early = shown ? await notice(page).innerText() : '';
+    // "Checking your membership…" (the app's loading line) is a membership status too: wait for the return notice itself.
+    const shown = await page.getByRole('status').filter({ hasText: CONFIRMING }).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+    const early = shown ? await page.getByRole('status').filter({ hasText: CONFIRMING }).first().innerText() : await notice(page).innerText().catch(() => '');
     await qa.shot('back from checkout, confirming');
     const before = await checkoutAttempts(sessionId);
     qa.check('back in the app before any event reached the webhook', before.length === 0, before.map((d) => `${d.type} ${d.status}`).join(', ') || 'no attempts yet');
@@ -104,6 +105,9 @@ test('the first invoice.paid is refused as busy: nothing recorded, the app keeps
       });
       const refused = await waitFor('invoice.paid to be refused as busy', async () => (await checkoutAttempts(sessionId)).find((d) => d.type === 'invoice.paid' && d.status === 503) || null, { timeoutMs: 30000, intervalMs: 250 }).catch(() => null);
       qa.check('the first invoice.paid is answered 503 billing_reconciliation_pending, and Stripe will retry it', !!refused && /billing_reconciliation_pending/.test(refused.response) && refused.willRetry === true, refused ? `${refused.status} ${refused.response.slice(0, 80)}` : 'no refused attempt');
+      // The refusal can come before the returning page has loaded the member's access ("Checking your
+      // membership…" is the app's loading line): wait for the return notice, as the first journey does.
+      await page.getByRole('status').filter({ hasText: CONFIRMING }).first().waitFor({ timeout: 15000 }).catch(() => {});
       const noticeText = await notice(page).innerText().catch(() => '');
       await qa.shot('busy webhook, still confirming');
       qa.check('the app keeps saying it is confirming', CONFIRMING.test(noticeText), noticeText.slice(0, 120));

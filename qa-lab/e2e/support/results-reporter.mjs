@@ -8,11 +8,15 @@
 // results still list every feature a journey touched.
 //
 // Status of one checklist id across every journey that touched it:
-//   fail     any journey's stretch for it failed (a check, or the stretch threw)
-//   pass     at least one journey passed it and none failed it
-//   blocked  journeys reached it only to record that the lab cannot exercise
-//            it, or never reached it because an earlier stretch failed
-//   not_run  no journey covers it yet
+//   fail       any journey's stretch for it failed (a check, or the stretch threw)
+//   by_design  none failed it, and a journey recorded (qa.byDesign) that the
+//              product differs from the checklist's expectation on purpose, or
+//              in a way verified not to be a product bug (the reason is in
+//              the evidence)
+//   pass       at least one journey passed it and none failed it
+//   blocked    journeys reached it only to record that the lab cannot exercise
+//              it, or never reached it because an earlier stretch failed
+//   not_run    no journey covers it yet
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { REPO_ROOT } from '../../lib/paths.mjs';
@@ -24,7 +28,10 @@ export function featuresPath() {
   return process.env.QA_FEATURES || path.resolve(REPO_ROOT, '..', 'qa-data', 'features.json');
 }
 
-const RANK = { fail: 3, pass: 2, blocked: 1, not_run: 0 };
+const RANK = { fail: 4, by_design: 3, pass: 2, blocked: 1, not_run: 0 };
+/** ANSI colour codes in Playwright's error text (built from the ESC code so no control character sits in a regex literal). */
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+const EMPTY = () => ({ pass: 0, fail: 0, blocked: 0, by_design: 0, not_run: 0 });
 
 export default class ResultsReporter {
   constructor(options = {}) { this.options = options; this.tests = []; this.started = new Date(); }
@@ -40,7 +47,7 @@ export default class ResultsReporter {
     this.tests.push({
       title: test.titlePath().slice(1).join(' > '), file: path.relative(REPO_ROOT, test.location.file), status: result.status,
       durationMs: result.duration, retry: result.retry, tags, features, bugs, shots,
-      error: result.error ? String(result.error.message || '').replace(/\u001b\[[0-9;]*m/g, '').split('\n').slice(0, 12).join('\n') : null,
+      error: result.error ? String(result.error.message || '').replace(ANSI, '').split('\n').slice(0, 12).join('\n') : null,
     });
   }
 
@@ -65,7 +72,7 @@ export default class ResultsReporter {
       for (const f of j.features) {
         recorded.add(f.id);
         const entry = touch(f.id);
-        const status = f.status === 'blocked' ? 'blocked' : f.status;
+        const status = RANK[f.status] === undefined ? 'fail' : f.status;
         entry.evidence.push({ journey: j.title, file: j.file, status, stretch: f.title || undefined, checks: f.checks, screenshots: f.shots, error: f.error, reason: f.reason });
         if (RANK[status] > RANK[entry.status]) entry.status = status;
       }
@@ -78,10 +85,10 @@ export default class ResultsReporter {
         if (RANK[status] > RANK[entry.status]) entry.status = status;
       }
     }
-    const summary = { pass: 0, fail: 0, blocked: 0, not_run: 0 };
+    const summary = EMPTY();
     for (const v of Object.values(out)) summary[v.status] += 1;
     const byPriority = {};
-    for (const v of Object.values(out)) { const p = v.priority || 'unknown'; byPriority[p] ||= { pass: 0, fail: 0, blocked: 0, not_run: 0 }; byPriority[p][v.status] += 1; }
+    for (const v of Object.values(out)) { const p = v.priority || 'unknown'; byPriority[p] ||= EMPTY(); byPriority[p][v.status] += 1; }
 
     const results = {
       generatedAt: new Date().toISOString(), startedAt: this.started.toISOString(), runStatus: fullResult.status,
@@ -89,12 +96,14 @@ export default class ResultsReporter {
       summary, byPriority,
       journeys: journeys.map((j) => ({ title: j.title, file: j.file, status: j.status, durationMs: j.durationMs, features: [...new Set([...j.features.map((f) => f.id), ...j.tags])], error: j.error, screenshots: j.shots })),
       bugs: journeys.flatMap((j) => j.bugs),
+      // What journeys found to differ from the checklist on purpose (or verified not a product bug), with why.
+      byDesign: journeys.flatMap((j) => j.features.filter((f) => f.status === 'by_design').map((f) => ({ feature: f.id, finding: f.title || null, reason: f.reason || null, journey: j.title, file: j.file }))),
       features: Object.fromEntries(Object.entries(out).sort(([a], [b]) => a.localeCompare(b))),
     };
     const file = this.options.outputFile || resultsFile();
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(results, null, 2) + '\n');
-    console.log(`\nqa-e2e: results ${file}\n  features: ${summary.pass} pass, ${summary.fail} fail, ${summary.blocked} blocked, ${summary.not_run} not run; bugs recorded: ${results.bugs.length}`);
+    console.log(`\nqa-e2e: results ${file}\n  features: ${summary.pass} pass, ${summary.fail} fail, ${summary.by_design} by design, ${summary.blocked} blocked, ${summary.not_run} not run; bugs recorded: ${results.bugs.length}`);
   }
 
   printsToStdio() { return false; }

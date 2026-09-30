@@ -214,9 +214,35 @@ export function releaseReconcileLease(profileId, token) {
 }
 
 /** Waits for the member app (the gate gone and the main navigation shown). */
-export async function waitForMemberApp(page, timeoutMs = 120000) {
+/**
+ * The identity step's lab-only stalls, told apart by the app's support reference: under load
+ * the local edge runtime has answered initialize-clerk-profile 503 continuity_unavailable, and
+ * 401 when its fetch of the mock Clerk's JWKS timed out (5 s), for every journey loading in the
+ * same seconds; and the gateway has answered the profile step 502 (2026-09-30). A closed
+ * account's ACCOUNT_UNAVAILABLE-H409 is the product's answer and never matches.
+ */
+export const TRANSIENT_IDENTITY = /Support reference: ID-(?:INIT-UNAVAILABLE-H(?:401|5\d\d)|PROFILE-UNKNOWN-H5\d\d)\b/;
+
+/**
+ * Waits for the member app (the Credentials button). When the load stops on a transient identity
+ * failure ("Your account identity could not be verified ... Reload to try again"), taps Try again
+ * as the screen asks, at most `retries` times, and says so on the run's output (the app's own
+ * report of the stop stays in client_errors, so results.json's labHealth counts it).
+ */
+export async function waitForMemberApp(page, timeoutMs = 120000, { retries = 2 } = {}) {
   await page.getByRole('region', { name: 'Membership' }).waitFor({ state: 'detached', timeout: timeoutMs }).catch(() => {});
-  await page.getByRole('button', { name: /^Credentials$/ }).first().waitFor({ timeout: timeoutMs });
+  const app = page.getByRole('button', { name: /^Credentials$/ }).first();
+  const stalled = page.getByRole('status').filter({ hasText: TRANSIENT_IDENTITY }).first();
+  for (let i = 0; i < retries; i++) {
+    await app.or(stalled).first().waitFor({ timeout: timeoutMs });
+    if (await app.isVisible().catch(() => false)) return;
+    const ref = ((await stalled.innerText().catch(() => '')).match(TRANSIENT_IDENTITY) || ['a transient identity failure'])[0];
+    console.log(`qa-lab: the member app stopped on ${ref} (a lab stall); tapping Try again, as the screen asks`);
+    await page.getByRole('button', { name: 'Try again' }).first().click().catch(() => {});
+    await sleep(2000);   // let the reload Try again starts replace the stopped page
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+  }
+  await app.waitFor({ timeout: timeoutMs });
 }
 
 /**

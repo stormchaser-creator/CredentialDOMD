@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FEATURE_SWITCHES, assertLabOnlyEnv, envFileText, functionsEnv } from '../../qa-lab/lib/functions-env.mjs';
+import { FEATURE_SWITCHES, SDK_HOST_VARIABLES, assertLabOnlyEnv, envFileText, functionsEnv } from '../../qa-lab/lib/functions-env.mjs';
 import { generateLabSecrets } from '../../qa-lab/lib/lab-secrets.mjs';
 import { stackConfigText } from '../../qa-lab/lib/stack.mjs';
 import { productionAppFlags, qaAppEnv } from '../../qa-lab/lib/app-env.mjs';
@@ -38,7 +38,7 @@ test('every provider location points at the mock server or a reserved .test name
     const host = new URL(value).hostname;
     assert.ok(['host.docker.internal', '127.0.0.1'].includes(host) || host.endsWith('.qa.credentialdomd.test'), `${name} = ${value}`);
   }
-  for (const name of ['CLERK_API_BASE', 'CLERK_JWKS_URL', 'STRIPE_API_BASE', 'RESEND_API_BASE', 'ANTHROPIC_API_BASE', 'GEMINI_API_BASE']) {
+  for (const name of ['CLERK_API_BASE', 'CLERK_JWKS_URL', 'STRIPE_API_BASE', 'RESEND_API_BASE', 'ANTHROPIC_API_BASE', 'GEMINI_API_BASE', 'ANTHROPIC_BASE_URL']) {
     assert.match(env[name], /^http:\/\/host\.docker\.internal:54380(\/|$)/, name);
   }
   assert.equal(env.CLERK_ISSUER, LAB_ISSUER);
@@ -78,8 +78,39 @@ test('a run may override feature switches only', () => {
 
 test('every name the lab sets is one a function reads (a typo would silently do nothing)', () => {
   const source = functionsSource();
-  for (const name of Object.keys(make())) assert.match(source, new RegExp(`["'\`(]${name}["'\`)]`), `no function reads ${name}`);
+  for (const name of Object.keys(make())) {
+    if (name in SDK_HOST_VARIABLES) continue;   // read by a provider SDK, checked below
+    assert.match(source, new RegExp(`["'\`(]${name}["'\`)]`), `no function reads ${name}`);
+  }
   for (const name of Object.keys(FEATURE_SWITCHES)) assert.ok(name in make(), name);
+});
+
+test('a provider SDK that picks its own host is pointed at the mock through the variable the SDK reads', () => {
+  const env = make();
+  const files = [];
+  (function walk(dir) {
+    for (const name of readdirSync(dir)) {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) walk(full); else if (/\.(ts|mjs|js)$/.test(name)) files.push([path.relative(ROOT, full), readFileSync(full, 'utf8')]);
+    }
+  })(path.join(ROOT, 'supabase', 'functions'));
+  // Every Anthropic SDK client a function builds without a baseURL depends on ANTHROPIC_BASE_URL.
+  const sdkUsers = files.filter(([, text]) => text.includes(SDK_HOST_VARIABLES.ANTHROPIC_BASE_URL.sdkImport));
+  assert.ok(sdkUsers.length >= 1, 'a function imports the Anthropic SDK (email-inbound\'s understanding step)');
+  for (const [rel, text] of sdkUsers) {
+    for (const m of text.matchAll(/new Anthropic\(\{([^}]*)\}\)/g)) assert.doesNotMatch(m[1], /baseURL/, `${rel}: a client with its own baseURL needs its own lab override, not ANTHROPIC_BASE_URL`);
+  }
+  for (const [name, spec] of Object.entries(SDK_HOST_VARIABLES)) {
+    assert.match(env[name], /^http:\/\/host\.docker\.internal:54380\//, `${name} points at the mock`);
+    assert.ok(files.some(([, text]) => text.includes(spec.sdkImport)), `${name}: some function imports ${spec.sdkImport}`);
+    // The installed SDK (the version the functions pin) reads the variable for its host.
+    const sdk = readFileSync(path.join(ROOT, spec.sdkFile), 'utf8');
+    assert.ok(sdk.includes(spec.read), `${spec.sdkFile} reads ${name}`);
+    const pinned = files.map(([, text]) => (text.match(/npm:@anthropic-ai\/sdk@([\d.]+)/) || [])[1]).filter(Boolean);
+    const installed = JSON.parse(readFileSync(path.join(ROOT, 'node_modules', '@anthropic-ai', 'sdk', 'package.json'), 'utf8')).version;
+    for (const v of pinned) assert.equal(v, installed, `the functions pin @anthropic-ai/sdk@${v}; the SDK checked here is ${installed}`);
+  }
+  assert.throws(() => assertLabOnlyEnv({ ...env, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' }, secrets, vault), /real provider/);
 });
 
 test('the env file is plain name=value lines', () => {

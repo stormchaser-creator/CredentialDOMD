@@ -141,7 +141,9 @@ test('owner controls: pause and restore access, lifetime grant, view as member, 
     const banner = await page.getByText(/Viewing .* read-only|read-only view|member view/i).first().waitFor({ timeout: 30000 }).then(() => true, () => false);
     await qa.shot('view as member');
     qa.check('the member\'s account opens read-only with a banner', banner);
-    const session = row(`select reason, ended_at, expires_at from public.member_view_sessions where profile_id = '${member.profile.id}' order by started_at desc limit 1`);
+    // The banner can show before the session row is written: wait for the row (15 s at most).
+    const sessionRow = () => row(`select reason, ended_at, expires_at from public.member_view_sessions where profile_id = '${member.profile.id}' order by started_at desc limit 1`);
+    const session = await waitFor('the member view session', async () => sessionRow() || null, { timeoutMs: 15000 }).catch(() => sessionRow());
     qa.check('member_view_sessions row with the reason, ending within 15 minutes', session?.reason === 'QA checklist' && Date.parse(session.expires_at) - Date.now() <= 15 * 60e3 + 5000, session);
     await page.getByRole('button', { name: /^Exit/ }).first().click().catch(() => {});
     await sleep(2000);

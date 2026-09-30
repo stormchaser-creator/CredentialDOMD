@@ -10,7 +10,8 @@
 //   * `qa` records what the checklist needs: which feature a stretch of the
 //     journey exercises (qa.feature), the checks inside it (qa.check, soft: the
 //     journey goes on and fails at the end), product bugs with evidence
-//     (qa.bug), features a journey could not reach (qa.blocked), screenshots
+//     (qa.bug), features a journey could not reach (qa.blocked), differences
+//     from the checklist verified not to be bugs (qa.byDesign), screenshots
 //     (qa.shot). The results reporter turns these into
 //     qa-lab/.generated/results.json.
 import { test as base, expect } from '@playwright/test';
@@ -123,6 +124,13 @@ export const test = base.extend({
       },
       /** A feature this journey cannot exercise in the lab, and why. */
       blocked(id, reason) { record('qa-feature', { id, title: '', status: 'blocked', reason, checks: [], shots: [] }); },
+      /**
+       * What the journey saw differs from the checklist's expectation, and the difference was
+       * verified not to be a product bug (on purpose, or out of reach in production): `finding`
+       * says what differs, `why` the verdict. The id reads by_design unless a check fails it.
+       * Use it only for a verdict reached by reading the code, never to quiet a failing check.
+       */
+      byDesign(id, finding, why) { record('qa-feature', { id, title: finding, status: 'by_design', reason: why, checks: [], shots: current?.shots.slice(-1) || [] }); },
       async shot(name) {
         const s = await takeShot(page, `${testInfo.titlePath.slice(1).join(' ')} ${name}`.slice(0, 140), testInfo);
         current?.shots.push(s);

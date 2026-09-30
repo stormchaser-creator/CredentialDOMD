@@ -6,7 +6,11 @@
 //     these through the base-URL overrides added for the lab (CLERK_API_BASE,
 //     CLERK_JWKS_URL, CLERK_PRODUCTION_ISSUER, RESEND_API_BASE, STRIPE_API_BASE,
 //     ANTHROPIC_API_BASE, GEMINI_API_BASE); production sets
-//     none of them, so production keeps the real providers.
+//     none of them, so production keeps the real providers. A provider SDK
+//     that picks its own host is pointed at the mock through the variable the
+//     SDK itself reads (SDK_HOST_VARIABLES): email-inbound's understanding step
+//     (_shared/intakeModelCall.ts) builds its Anthropic client with no baseURL,
+//     so without ANTHROPIC_BASE_URL it would reach api.anthropic.com.
 //   * Every key and secret is a lab-generated value (lab-secrets.mjs) or a local
 //     vault value from step 1. None is, or can be, a production value.
 //   * assertLabOnlyEnv refuses to write a file that breaks either rule.
@@ -37,6 +41,16 @@ export const FEATURE_SWITCHES = Object.freeze({
   SUPPORT_OUTBOUND_ENABLED: ['false', 'docs/AUTONOMOUS-SUPPORT-IMPLEMENTATION.md: defaults false'],
   SUPPORT_CANARY_VERIFIED: ['false', 'the code default'],
   INBOUND_AUTHSERV_IDS: [`mx.${LAB_EMAIL_DOMAIN}`, 'the authserv-id lab inbound mail is stamped with'],
+});
+
+/**
+ * Variables a provider SDK reads for its own host, when a function builds the
+ * SDK's client without one: the name, the SDK import that reads it, and where
+ * the installed SDK reads it (tests/qa-lab/functions-env.test.mjs checks all
+ * three). Production sets none of them, so production keeps the real host.
+ */
+export const SDK_HOST_VARIABLES = Object.freeze({
+  ANTHROPIC_BASE_URL: { sdkImport: 'npm:@anthropic-ai/sdk@', sdkFile: 'node_modules/@anthropic-ai/sdk/client.js', read: "readEnv)('ANTHROPIC_BASE_URL')" },
 });
 
 const SECRET_NAME = /(KEY|SECRET|TOKEN|PEPPER)$/;
@@ -74,6 +88,8 @@ export function functionsEnv({ mockPort, appPort, overrides = process.env, secre
     // AI: mocked by default; the mock forwards to a real provider only with QA_AI=real (capped).
     ANTHROPIC_API_BASE: `${mock}${MOCK_PATHS.anthropic}`,
     GEMINI_API_BASE: `${mock}${MOCK_PATHS.gemini}`,
+    // The Anthropic SDK's own variable (SDK_HOST_VARIABLES): intake's client has no baseURL.
+    ANTHROPIC_BASE_URL: `${mock}${MOCK_PATHS.anthropic}`,
     // Local shared secrets.
     WELCOME_HOOK_SECRET: vault.welcome_hook_secret,
     CREDENTIAL_PORTAL_SECRET: s.credentialPortalSecret,

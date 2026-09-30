@@ -808,9 +808,14 @@ when it needs a member (the founding offer, as a new physician would: back in
 the app at once, the Stripe events a moment later, concurrently, busy answers
 retried; once the membership is active the app is opened again, as the member's
 next visit), then uses the app through its screens, in a browser that enforces
-the functions' CORS (the API is another origin). After the steps that matter it checks both sides:
-what the screen shows, and the local database (read-only `psql` against the lab
-stack) or the email the mock Resend captured.
+the functions' CORS (the API is another origin): at a desk (1280 x 900), or on a
+phone (375 x 812 and 390 x 844, touch, an iPhone user agent) for the `phone-*`
+journeys. The public site (landing page, state guides, help, the administrator
+page) is the deploy's own package served on loopback with production's two
+Workers in front of it (`support/bill-admin-support-public-helpers.mjs`). After
+the steps that matter it checks both sides: what the screen shows, and the local
+database (read-only `psql` against the lab stack) or the email the mock Resend
+captured.
 
 ### Running them
 
@@ -825,16 +830,22 @@ npm run qa:e2e -- --list                # list journeys (keeps the last results.
 
 Anything after `--` goes to `playwright test`. A lab the runner started is
 stopped at the end (the stack keeps running, as with `qa:lab`). Three workers by
-default (`QA_E2E_WORKERS`); a full run takes about 6 minutes plus 3 for `--fresh`.
+default (`QA_E2E_WORKERS`); a full run (123 journeys in 57 files) takes about 26
+minutes plus 3 for `--fresh`.
 Playwright's own Chromium (1.63, revision 1243) is used; `QA_BROWSER_CHANNEL=chrome`
 uses the installed Google Chrome instead.
 
 **Founding places.** Every journey that pays takes one of the lab's 96 public
-founding places (100 less the 4 promised ones, as live), and a full run takes
-about 30. Once they are gone the gate offers the early-bird price and the signup
-journey's "$99" checks fail for a lab reason. The runner prints how many public
-places are left (100 minus every live slot row, promised or taken); under 40 it
-tops them up itself (below; `QA_E2E_NO_TOPUP=1` skips that), and warns under 25.
+founding places (100 less the 4 promised ones, as live), and a full run pays for
+about 110 members, more than there are places. Once they are gone the gate offers
+the early-bird price (Credential only, no Practice), and the signup journey's
+"$99" checks and every Practice journey fail for a lab reason. The runner prints
+how many public places are left (100 minus every live slot row, promised or
+taken); under 40 it tops them up itself, before the run and every 3 minutes
+while it runs (below; `QA_E2E_NO_TOPUP=1` skips both), and warns under 25. At
+three workers a run takes about 3 places a minute and a place can be freed once
+it is 15 minutes old, so the count dips to about 15 near the fifteenth minute
+and then holds; more workers than three can empty it.
 A lab that is already running is re-checked first: no port beyond loopback, and
 the gateway's functions CORS plugin still removed.
 
@@ -912,7 +923,10 @@ Output (all under the gitignored `qa-lab/.generated/`):
     journey; `qa.check(name, ok, detail)` is a soft check (the journey goes on and
     fails at the end); `qa.bug({...})` records a product bug with its step,
     expected and actual result and a screenshot; `qa.blocked(id, reason)` records
-    what the lab cannot exercise; `qa.shot(name)` saves a screenshot;
+    what the lab cannot exercise; `qa.byDesign(id, finding, why)` records a
+    difference from the checklist that was verified not to be a product bug (by
+    reading the code, never to quiet a failing check); `qa.shot(name)` saves a
+    screenshot;
   - `secondBrowser()` opens a clean second browser (no shared storage) for the
     two-device checks.
 - `e2e/support/lab.mjs` has the steps and reads every journey shares: create a
@@ -929,6 +943,15 @@ Output (all under the gitignored `qa-lab/.generated/`):
   included), `checkoutAttempts(sessionId)`, and `holdReconcileLease(profileId)` /
   `releaseReconcileLease` (take the member's reconcile lease in the local
   database, as a concurrent event would, so the next event is refused busy).
+- Each area's journeys have their own shared steps in
+  `e2e/support/<area>-helpers.mjs` (credentials, practice, home and
+  notifications, settings and sign-in, sync/documents/intake,
+  Vera/CV/sharing, billing/admin/support/public site, ops, phone). The phone
+  audit (`phone-helpers.mjs`) measures every screen and dialog: horizontal
+  scroll, content past the edges, text cut off, controls under the lab's 32 px
+  floor (WCAG 2.2 asks for 24), and each primary control reachable and not
+  covered; `smallByDesign` records controls under 32 px that were verified not
+  to be bugs (they must still meet WCAG's 24).
 - Specs are tagged with the checklist ids they cover (`@CRED-001`), so
   `--grep @CRED-001` runs them.
 
@@ -941,18 +964,22 @@ parallel journeys never take each other's answers.
 
 ```json
 {
-  "summary": { "pass": 0, "fail": 0, "blocked": 0, "not_run": 0 },
-  "byPriority": { "P0": { "pass": 0, "fail": 0, "blocked": 0, "not_run": 0 } },
+  "summary": { "pass": 0, "fail": 0, "blocked": 0, "by_design": 0, "not_run": 0 },
+  "byPriority": { "P0": { "pass": 0, "fail": 0, "blocked": 0, "by_design": 0, "not_run": 0 } },
   "journeys": [ { "title": "...", "file": "qa-lab/e2e/x.spec.mjs", "status": "passed", "features": ["CRED-001"], "error": null } ],
   "bugs": [ { "feature": "DOCS-008", "title": "...", "step": "...", "expected": "...", "actual": "...", "severity": "medium", "screenshot": "..." } ],
+  "byDesign": [ { "feature": "SHARE-005", "finding": "...", "reason": "...", "journey": "..." } ],
   "features": { "CRED-001": { "status": "pass", "name": "...", "priority": "P0", "evidence": [ { "journey": "...", "checks": [ { "name": "...", "ok": true, "detail": "..." } ], "screenshots": ["..."] } ] } },
   "labHealth": { "clientErrors": [], "zombies": [], "edgeFunctionErrors": [] }
 }
 ```
 
-An id is `fail` if any journey's stretch for it failed, `pass` if one passed it
-and none failed it, `blocked` if the lab could not exercise it or the journey
-stopped before reaching it, `not_run` if no journey covers it yet. The checklist
+An id is `fail` if any journey's stretch for it failed; `by_design` if none
+failed it and a journey recorded (`qa.byDesign`) that the product differs from
+the checklist's expectation on purpose or in a way verified not to be a bug (the
+verdict is in the evidence and in `byDesign`); `pass` if one passed it and none
+failed it; `blocked` if the lab could not exercise it or the journey stopped
+before reaching it; `not_run` if no journey covers it yet. The checklist
 itself (261 features, `features.json`) is not in this repository; the runner
 reads it from `QA_FEATURES` or `../qa-data/features.json` beside the worktree,
 for names and priorities. `labHealth` is what the lab saw during the run beyond
@@ -960,92 +987,394 @@ the journeys' own checks: client error reports the app sent, zombie rows (a row
 whose id is also tombstoned in `deleted_items`), and edge-function error lines in
 the runtime's log.
 
-### Result, 2026-09-30
+### Result, 2026-09-30 (the full suite)
 
-Full run with `--fresh` after the review fixes (26 journeys, 3 workers, 6.6
-minutes): **20 journeys passed, 6 failed, every failure a product bug below**
-(none from the lab). Checklist coverage: **83 of 261 ids exercised: 77 pass, 6
-fail, 0 blocked**; 178 not run yet. By priority: P0 35 pass / 4 fail / 22 not
-run; P1 34 / 2 / 96; P2 8 / 0 / 60. Lab health: 0 runaway PostgREST retries left,
-1 zombie row (the restore bug's), 3 client error reports (the Delete-All dead end
-twice, the paused member's refused enrollment). The edge-function log now also
-counts `billing_reconciliation_pending` 503s (about 80 a run): the busy answers of
-concurrent Stripe events, each retried and accepted. Compared with 2026-09-29:
-two new billing-return journeys (one passes; one fails on the new product bug
-below), and every other journey has the same result.
+Full run with `--fresh` (123 journeys in 57 files, three workers, 25.0 minutes,
+started 2026-09-30 08:17 UTC): **54 journeys passed, 69 failed, and every
+failing journey fails on product bugs in the list below** (each suspect journey
+was re-run alone first). It started at 01:17 Pacific, after midnight, so the
+three US-evening date bugs (PRAC-022, PRAC-027 and the low PRAC-030: the UTC
+date taken for today) passed here; they failed in the two runs made in the
+Pacific evening. Three journeys stopped short on the lab or on their own race,
+each also failing on real bugs: the owner's tab-count journey on an identity
+stall at the profile step (ID-PROFILE-UNKNOWN-H502, retried since; ADMIN-003
+fails on its own bug either way), the owner-controls journey reading the
+member-view session row before it was written (fixed since), and the
+setup-packet journey's capture run, whose Save button re-rendered away under
+load. So ADMIN-006 and SETTINGS-011 are counted `fail` below although both
+passed in the five other runs and alone. Race-dependent bugs fail in some runs
+and not others: SETTINGS-007's lost last letters, and OPS-008's reports of an
+interrupted load (OPS-008 fails on its retention bug in every run).
+
+Checklist coverage: **261 of 261 ids exercised, 0 not run**:
+
+| Priority | pass | fail | by design | blocked | not run | total |
+|---|---|---|---|---|---|---|
+| P0 | 39 | 20 | 2 | 0 | 0 | 61 |
+| P1 | 71 | 57 | 3 | 1 | 0 | 132 |
+| P2 | 35 | 33 | 0 | 0 | 0 | 68 |
+| all | 145 | 110 | 5 | 1 | 0 | 261 |
+
+An id fails when any stretch for it fails, so one bug fails the id although most
+of it works: the phone journeys alone fail every Credentials section on the
+record card's 26-28 px buttons (CRED-001), and many ids fail on a bug already
+fixed on `release/qa1` (the list says where). Lab health: 26 client error
+reports (the journeys that force a load failure, a render crash and a refused
+checkout, and the product's own reports of an interrupted load, OPS-008), 3
+zombie rows (the restore, stale-device and patient-record bugs: SYNC-015,
+SYNC-010, DOCS-003), 764 edge-function error lines (mostly the busy
+`billing_reconciliation_pending` answers of concurrent Stripe events, each retried
+and accepted, and the welcome email logging every outcome at error level), and
+0 runaway PostgREST retries left.
 
 | File | Journey | Checklist ids | Result |
 |---|---|---|---|
+| `account-settings.spec.mjs` | settings: setup card, profile and reminder settings persist, support access, daily reminder email | HOME-001, SETTINGS-007, SETTINGS-002, NOTIFY-004, SETTINGS-006, NOTIFY-001 | pass |
+| `admin-controls.spec.mjs` | owner controls: pause and restore access, lifetime grant, view as member, owner message | ADMIN-001, AUTH-008, ADMIN-006, ADMIN-005, SUPPORT-003 | fail (ADMIN-001; ADMIN-006 on the journey's own race, fixed since) |
 | `admin-invite-gift.spec.mjs` | owner: invite to join sends one email and grants nothing | ADMIN-001 | pass |
 | `admin-invite-gift.spec.mjs` | owner: lifetime gift by email, claimed by signing up with that address | ADMIN-001, BILL-014 | pass |
-| `billing-return.spec.mjs` | back from Checkout before the events land: "confirming", nothing to buy, then active on its own | BILL-003 | fail (BILL-003: shared AI stale after the purchase lands) |
+| `bill-admin-support-public-admin.spec.mjs` | owner: Errors, Waitlist, Fields and AI tab counts follow each action | ADMIN-003 | fail: stopped before its checks on an identity stall (ID-PROFILE-UNKNOWN-H502, a lab stall, retried since); alone it fails on ADMIN-003 |
+| `bill-admin-support-public-admin.spec.mjs` | owner: reports and CSV, control history paging, traffic history | ADMIN-004, ADMIN-008 | pass |
+| `bill-admin-support-public-admin.spec.mjs` | owner: ticket agent approval and archive, each after a reload | ADMIN-007 | pass; blocked: ADMIN-007 |
+| `bill-admin-support-public-admin.spec.mjs` | member: a resolved ticket archived, then answered again | SUPPORT-005 | fail (SUPPORT-005) |
+| `bill-admin-support-public-admin.spec.mjs` | Help & FAQ search; the admin-only share-sheet probe | SUPPORT-004, ADMIN-009 | fail (SUPPORT-004) |
+| `bill-admin-support-public-billing.spec.mjs` | founding price: landing, in-app quote and Checkout agree; the cap moves all | BILL-004 | pass |
+| `bill-admin-support-public-billing.spec.mjs` | expired offer review: Checkout refused; Refresh clears consent | BILL-013 | pass |
+| `bill-admin-support-public-billing.spec.mjs` | membership ends: read-only archive, downloads, no edits; buying again | BILL-008, BILL-009, BILL-012 | fail (BILL-012) |
+| `bill-admin-support-public-billing.spec.mjs` | early-bird Credential: 30-day Practice trial, then Practice read-only | BILL-012 | fail (BILL-012) |
+| `bill-admin-support-public-billing.spec.mjs` | a free-beta member buys a membership that starts when the beta ends | BILL-011 | fail (BILL-011) |
+| `bill-admin-support-public-site.spec.mjs` | visitor: landing offer, create-account path, fallback, beacon | PUBLIC-001, BILL-004, PUBLIC-006 | fail (BILL-004, PUBLIC-006) |
+| `bill-admin-support-public-site.spec.mjs` | visitor: state guides, guide email, invalid and rate-limited requests | PUBLIC-002 | pass |
+| `bill-admin-support-public-site.spec.mjs` | visitor: landing controls at phone width | PUBLIC-008 | fail (PUBLIC-008) |
+| `bill-admin-support-public-site.spec.mjs` | visitor: legal pages vs the app, help videos, CME and locums, link crawl | PUBLIC-003, PUBLIC-004, PUBLIC-005, PUBLIC-007 | pass |
+| `bill-admin-support-public-site.spec.mjs` | private administrator page headers and the legacy root service worker | PUBLIC-009 | pass; blocked: PUBLIC-009 |
+| `billing-return.spec.mjs` | back from Checkout before the events land: "confirming", nothing to buy, then active on its own | BILL-003 | fail (BILL-003) |
 | `billing-return.spec.mjs` | the first invoice.paid is refused as busy: nothing recorded, the app keeps confirming, the retry activates | BILL-003 | pass |
 | `billing.spec.mjs` | return from Checkout without paying: notice, nothing charged, dismiss sticks, checkout can be resumed | BILL-002, BILL-010 | pass |
 | `billing.spec.mjs` | paid member: membership card, customer portal, cancel at period end, export | BILL-007, BILL-005, SYNC-019 | pass |
-| `admin-controls.spec.mjs` | owner controls: pause and restore access, lifetime grant, view as member, owner message | ADMIN-001, AUTH-008, ADMIN-006, ADMIN-005, SUPPORT-003 | fail (ADMIN-001) |
-| `account-settings.spec.mjs` | settings: setup card, profile and reminder settings persist, support access, daily reminder email | HOME-001, SETTINGS-007, SETTINGS-002, NOTIFY-004, SETTINGS-006, NOTIFY-001 | pass |
+| `cred-caselogs-references.spec.mjs` | case logs: summary, reports, Vera export, dictation; references: contacts, several at once, heads-up | CRED-035, CRED-036, CRED-042, CRED-043, CRED-044 | fail (CRED-035, CRED-042, CRED-043) |
+| `cred-categories.spec.mjs` | custom categories: rename, add a field, hide, unsorted records moved; the paused Answer Bank | CRED-047, CRED-048, CRED-046 | fail (CRED-047) |
+| `cred-cme-compliance.spec.mjs` | CME against the rules: transcript PDF, compliance cards, cycle grouping, conditional topic, cycle start, Find CME | CRED-011, CRED-012, CRED-033, CRED-029, CRED-013, CRED-034 | fail (CRED-011, CRED-034) |
+| `cred-cme-import.spec.mjs` | CME import, certificates and the CME Passport panel | CRED-010, CRED-031, CRED-032 | fail (CRED-031, CRED-032) |
+| `cred-licenses.spec.mjs` | licenses: matrix, renewal info, NPI import, filter tabs, desk sorting, scan to fill, camera | CRED-017, CRED-028, CRED-014, CRED-026, CRED-027, CRED-015, CRED-030 | fail (CRED-017, CRED-028) |
+| `cred-privileges-education.spec.mjs` | privileges keep an encrypted portal password; education and a professional photo | CRED-004, CRED-018, CRED-038 | fail (CRED-018) |
+| `credentials-sections.spec.mjs` | credentials: every other section adds, edits, survives a reload and deletes | CRED-007, CRED-008, CRED-009, CRED-019, CRED-021, CRED-022, CRED-020, CRED-039, CRED-040, CRED-041, CRED-045, CRED-037, CRED-006 | pass |
 | `credentials-special.spec.mjs` | protected identity stays on the device and encrypted; a custom category holds synced records | CRED-005, CRED-023, CRED-024 | pass |
 | `device-sync.spec.mjs` | sign out purges the device; signing back in restores the cloud records | AUTH-005, AUTH-002 | pass |
-| `documents.spec.mjs` | documents: smart scan files a license with its file; duplicate and PHI spreadsheet refused; link, unlink, delete | DOCS-001, DOCS-002, DOCS-004, DOCS-008, DOCS-009 | fail (DOCS-008) |
 | `device-sync.spec.mjs` | network drops mid-session: the edit is queued (or refused out loud) and replays after reconnect | SYNC-008 | pass |
 | `device-sync.spec.mjs` | opened offline: the device copy shows as a read-only archive; nothing can be saved; reconnect resumes | SYNC-005 | pass |
+| `documents.spec.mjs` | documents: smart scan files a license with its file; duplicate and PHI spreadsheet refused; link, unlink, delete | DOCS-001, DOCS-002, DOCS-004, DOCS-008, DOCS-009 | fail (DOCS-008) |
 | `expenses-backup.spec.mjs` | expenses: log two with receipts, invoice them to the agency with the receipts attached | PRAC-019, PRAC-007 | pass |
-| `home-vera.spec.mjs` | home and Vera: search opens a record, Vera answers, notification center, acknowledge an alert | HOME-008, VERA-001, NOTIFY-002, HOME-015 | pass |
-| `credentials-sections.spec.mjs` | credentials: every other section adds, edits, survives a reload and deletes | CRED-007, CRED-008, CRED-009, CRED-019, CRED-021, CRED-022, CRED-020, CRED-039, CRED-040, CRED-041, CRED-045, CRED-037, CRED-006 | pass |
 | `expenses-backup.spec.mjs` | backup: export JSON, delete a record, restore it; an invalid file is refused | SYNC-018, SYNC-015 | fail (SYNC-015) |
-| `intake.spec.mjs` | intake: confirm a forwarding address, forward a document to docs@, an unconfirmed sender is not filed | INTAKE-001, INTAKE-002, INTAKE-003 | pass |
 | `expenses-backup.spec.mjs` | a session ended elsewhere: device-only data and queued work are not lost silently | AUTH-006 | pass |
+| `home-notify-cards.spec.mjs` | alerts and cards: notifications, needs-action, Action Required, banner | NOTIFY-006, HOME-010, HOME-014, HOME-020, NOTIFY-003 | fail (HOME-020, NOTIFY-006) |
+| `home-notify-cards.spec.mjs` | cards: missing dates, resolve, no license, profile, preview, all clear | HOME-012, HOME-013, HOME-025, HOME-011, HOME-023, HOME-026 | fail (HOME-012, HOME-013, HOME-026) |
+| `home-notify-cme.spec.mjs` | CME on Home: math, Find CME, renewal packet, boards, rules changed | HOME-016, HOME-017, HOME-018, HOME-024 | fail (HOME-017, HOME-018) |
+| `home-notify-nav.spec.mjs` | desk and phone: sidebar, rail, top bar, keys, tab bar | HOME-006, HOME-005, HOME-019, HOME-004 | fail (HOME-005, HOME-006) |
+| `home-notify-nav.spec.mjs` | hand-offs, reminder and guide emails, More, email links | HOME-009, HOME-021, HOME-022, NOTIFY-007, HOME-007, NOTIFY-005 | fail (NOTIFY-007) |
+| `home-vera.spec.mjs` | home and Vera: search opens a record, Vera answers, notification center, acknowledge an alert | HOME-008, VERA-001, NOTIFY-002, HOME-015 | pass |
+| `intake.spec.mjs` | intake: confirm a forwarding address, forward a document to docs@, an unconfirmed sender is not filed | INTAKE-001, INTAKE-002, INTAKE-003 | pass |
+| `member-records.spec.mjs` | full member: licenses added, edited, starred, attached, deleted; Home and a second browser agree | CRED-001, HOME-003, CRED-002, CRED-025, CRED-016, CRED-003, SYNC-001, SYNC-003 | pass |
+| `ops-app.spec.mjs` | client errors: a records-load failure and a render crash reach Admin > Errors; the crash card reloads; failed writes never report | OPS-008, OPS-015 | fail (OPS-008) |
+| `ops-app.spec.mjs` | AI metering: Vera and a scan are metered with cost; at the monthly budget the member is told, and Vera answers on Gemini | OPS-005 | fail (OPS-005); blocked: OPS-005 |
+| `ops-app.spec.mjs` | new version: a deploy while the tab is open updates it, then the pill; tapping it reloads with the session kept | OPS-007 | pass; blocked: OPS-007 |
+| `ops-app.spec.mjs` | dormant screens: Quick Share and Team are reachable from no menu at desk or phone width; nothing mounts HospitalRotations or the portal modal; rotations still sync, back up and delete | OPS-010 | fail (OPS-010) |
+| `ops-app.spec.mjs` | storage orphans: the report finds a file whose row is gone and nothing else of this member; its printed remedy leaves the bytes | OPS-011 | fail (OPS-011); blocked: OPS-011 |
+| `ops-app.spec.mjs` | owner notifier: its own SQL and message, run against the lab, report a new member, a ticket, a client error and the payment once | OPS-014, OPS-009 | pass; blocked: OPS-014 |
+| `ops-host.spec.mjs` | CI gates the deploy: tests, the table and column gates, then the build; every test file is found | OPS-006 | fail (OPS-006); blocked: OPS-006 |
+| `ops-host.spec.mjs` | PostgreSQL suites in Python: which ones anything runs, and whether each passes on a disposable PostgreSQL | OPS-012 | fail (OPS-012) |
+| `ops-host.spec.mjs` | ticket agent: its own harness passes offline, it holds merges for the owner, and it takes and releases its lock | OPS-009 | pass; blocked: OPS-009 |
+| `ops-host.spec.mjs` | backups: the monthly ZIP builder's smoke passes; the off-site backup cannot be pointed at the lab | OPS-003 | pass; blocked: OPS-003 |
+| `ops-jobs.spec.mjs` | scheduled jobs: each command runs as pg_cron would, the functions it calls answer 2xx, and each prune keeps only what it should | OPS-001 | fail (OPS-001); blocked: OPS-001 |
+| `ops-jobs.spec.mjs` | cancelled-account deletion: only accounts past their deletion date are wiped; a paying member never is | OPS-002 | pass; by design: OPS-002 |
+| `ops-jobs.spec.mjs` | hook secret: every database-called function refuses a missing or wrong secret and a member token, with no side effect | OPS-004 | pass |
+| `ops-jobs.spec.mjs` | deployed functions: each has a caller or is retired, and the uncalled ones refuse or are harmless | OPS-013 | pass; blocked: OPS-013 |
+| `phone-credentials.spec.mjs` | phone 375x812 > credentials 375: every section's list, Add form and card; reload; second phone | CRED-006, CRED-001, CRED-007, CRED-008, CRED-009, CRED-018, CRED-019, CRED-020, CRED-021, CRED-022, CRED-037, CRED-039, CRED-040, CRED-041, CRED-045, CRED-005, CRED-038, CRED-025, CRED-046, CRED-026, CRED-028, CRED-017, CRED-023, CRED-047, CRED-002, CRED-003 | fail (CRED-001, CRED-007, CRED-008, CRED-009, CRED-018, CRED-019, CRED-020, CRED-021, CRED-022, CRED-026, CRED-028, CRED-037, CRED-039, CRED-040, CRED-041, CRED-045, CRED-047); by design: CRED-005 |
+| `phone-credentials.spec.mjs` | phone 390x844 > credentials 390: every section's list, Add form and card; reload; second phone | CRED-006, CRED-001, CRED-007, CRED-008, CRED-009, CRED-018, CRED-019, CRED-020, CRED-021, CRED-022, CRED-037, CRED-039, CRED-040, CRED-041, CRED-045, CRED-005, CRED-038, CRED-025, CRED-046, CRED-026, CRED-028, CRED-017, CRED-023, CRED-047, CRED-002, CRED-003 | fail (CRED-001, CRED-007, CRED-008, CRED-009, CRED-018, CRED-019, CRED-020, CRED-021, CRED-022, CRED-026, CRED-028, CRED-037, CRED-039, CRED-040, CRED-041, CRED-045, CRED-047); by design: CRED-005 |
+| `phone-docs-practice.spec.mjs` | phone 375x812 > documents and practice 375: upload, review, camera, agreement, time, invoice, email, payment | DOCS-001, DOCS-002, DOCS-005, DOCS-009, PRAC-001, PRAC-017, PRAC-009, PRAC-011, PRAC-002, PRAC-015, PRAC-004, PRAC-005, PRAC-019, PRAC-020 | fail (DOCS-002, DOCS-009, PRAC-001, PRAC-002, PRAC-011, PRAC-015, PRAC-017, PRAC-020); by design: PRAC-009 |
+| `phone-docs-practice.spec.mjs` | phone 390x844 > documents and practice 390: upload, review, camera, agreement, time, invoice, email, payment | DOCS-001, DOCS-002, DOCS-005, DOCS-009, PRAC-001, PRAC-017, PRAC-009, PRAC-011, PRAC-002, PRAC-015, PRAC-004, PRAC-005, PRAC-019, PRAC-020 | fail (DOCS-002, DOCS-009, PRAC-001, PRAC-002, PRAC-011, PRAC-015, PRAC-017, PRAC-020); by design: PRAC-009 |
+| `phone-home.spec.mjs` | phone 375x812 > home 375: gate, offer, Home, bottom bar, setup card, ring vs desk | AUTH-003, BILL-001, HOME-004, HOME-002, HOME-001, HOME-003, HOME-015, NOTIFY-002, HOME-006 | fail (AUTH-003, HOME-001, HOME-003, HOME-004, HOME-006) |
+| `phone-home.spec.mjs` | phone 390x844 > home 390: gate, offer, Home, bottom bar, setup card, ring vs desk | AUTH-003, BILL-001, HOME-004, HOME-002, HOME-001, HOME-003, HOME-015, NOTIFY-002, HOME-006 | fail (AUTH-003, HOME-001, HOME-003, HOME-004, HOME-006) |
+| `phone-settings-admin.spec.mjs` | phone 375x812 > settings and admin 375: More, profile, switches, Setup, text size, Support, Admin | HOME-007, SETTINGS-007, BILL-007, SETTINGS-014, NOTIFY-004, SETTINGS-001, SETTINGS-013, SUPPORT-001, ADMIN-001, ADMIN-002, ADMIN-005, ADMIN-003, ADMIN-008, ADMIN-004 | fail (ADMIN-001, ADMIN-002, ADMIN-003, ADMIN-004, ADMIN-008, SETTINGS-001, SETTINGS-007, SETTINGS-014) |
+| `phone-settings-admin.spec.mjs` | phone 390x844 > settings and admin 390: More, profile, switches, Setup, text size, Support, Admin | HOME-007, SETTINGS-007, BILL-007, SETTINGS-014, NOTIFY-004, SETTINGS-001, SETTINGS-013, SUPPORT-001, ADMIN-001, ADMIN-002, ADMIN-005, ADMIN-003, ADMIN-008, ADMIN-004 | fail (ADMIN-001, ADMIN-002, ADMIN-003, ADMIN-004, ADMIN-008, SETTINGS-001, SETTINGS-007, SETTINGS-014) |
+| `practice-days.spec.mjs` | practice day-rate agreement: filed from a scan, its schedule, days and call logged, outstanding days invoiced | PRAC-018, PRAC-024, PRAC-012, PRAC-003 | pass |
+| `practice-days.spec.mjs` | practice forecast calendar and CallSync: plan days, load coverage dates, sync the call schedule | PRAC-025, PRAC-014 | fail (PRAC-025) |
+| `practice-finance.spec.mjs` | practice tax prep: filing profile and assumptions drive the estimate; estimated payments recorded, edited, removed | PRAC-027 | pass |
+| `practice-finance.spec.mjs` | practice deductions and card statements: manual lines, year filter, CSV and memo; import, re-import, a patient file refused | PRAC-028, PRAC-029 | fail (PRAC-028, PRAC-029) |
+| `practice-numbers.spec.mjs` | practice invoice numbers: work, day-rate and expense invoices on one day; a deleted number; two browsers at once | PRAC-030 | fail (PRAC-030) |
+| `practice-rvu.spec.mjs` | practice CPT lookup: search, copy, ask the AI, bill it; a Credential-only member is refused | PRAC-026 | fail (PRAC-026) |
+| `practice-rvu.spec.mjs` | practice RVU log: code a case, adjust, save to the case log, add one anyway, edit, delete; filters and totals | PRAC-013, PRAC-023 | fail (PRAC-013) |
+| `practice-todo-invoices.spec.mjs` | practice to do: capture, edit, time and finish a task into the Work tab, bill it; done, no charge; delete | PRAC-020 | fail (PRAC-020) |
+| `practice-todo-invoices.spec.mjs` | practice invoices and agreements: share the PDF again, resend a text-only invoice; summary, attached file, archive, delete | PRAC-016, PRAC-017 | fail (PRAC-017) |
+| `practice-work.spec.mjs` | practice work: contract picker with an ended agreement, the call timer, dictating an entry | PRAC-021, PRAC-008, PRAC-022 | fail (PRAC-008) |
+| `practice-work.spec.mjs` | practice work: a call split at the start of the call day, edit and delete entries, a billed entry | PRAC-010, PRAC-011 | fail (PRAC-011) |
 | `practice.spec.mjs` | practice: agreement, logged time, invoice, email to billing, payment, delete returns entries | PRAC-001, PRAC-009, PRAC-002, PRAC-004, PRAC-005, PRAC-006, PRAC-015 | pass |
+| `settings-auth-access.spec.mjs` | membership check notices: reconnecting while checks fail, Try again, Check again, Reload; writes refused not lost | AUTH-009 | pass |
+| `settings-auth-access.spec.mjs` | account setup failure screen: a readable message and a working Try again; enrollment failure on the gate | AUTH-011, AUTH-013 | pass; blocked: AUTH-013 |
+| `settings-auth-access.spec.mjs` | admin tier preview in the URL is ignored for a non-admin (unpaid signup and paid member) | AUTH-017 | pass |
+| `settings-auth-access.spec.mjs` | invitation link: captured before sign-in, removed from the address bar, kept out of error reports, grants nothing | AUTH-015, AUTH-007 | pass; blocked: AUTH-007 |
+| `settings-auth-access.spec.mjs` | a new primary sign-in email moves the verified mailbox; docs@ files from the new address and refuses the old | AUTH-016 | pass |
+| `settings-auth-access.spec.mjs` | pre-cutover member: the continuity binding attaches the new Clerk subject to the existing profile, never a new empty one | AUTH-014 | pass; blocked: AUTH-014 |
+| `settings-auth-profile.spec.mjs` | settings: birth month and day, licensed states, CME requirements, AI keys stay on the device, sign-in card | SETTINGS-008, SETTINGS-009, SETTINGS-016, SETTINGS-015, AUTH-010, AUTH-012 | fail (AUTH-012, SETTINGS-008, SETTINGS-009, SETTINGS-016) |
+| `settings-auth-profile.spec.mjs` | settings: appearance, dashboard, notifications follow the account; text sizes and the desk layout | SETTINGS-014, SETTINGS-013 | fail (SETTINGS-013, SETTINGS-014) |
+| `settings-auth-setup-packet.spec.mjs` | setup packet: CME drawer, headshot, capture run, public-record fill; each trip out comes back | SETTINGS-012, SETTINGS-017, SETTINGS-018, SETTINGS-011 | fail (SETTINGS-012; SETTINGS-011 on a load stall, passes alone) |
+| `settings-auth-setup-records.spec.mjs` | setup: licenses from the registry and by hand, expiration dates, DEA, reminders; deep links come back | SETTINGS-003, SETTINGS-018, SETTINGS-010, SETTINGS-004 | fail (SETTINGS-004, SETTINGS-010, SETTINGS-018) |
+| `settings-auth-setup.spec.mjs` | setup board: task menu, skip and not-applicable persist, put back, declared negatives, narration, counts agree | SETTINGS-001, SETTINGS-003 | fail (SETTINGS-001) |
 | `signup-checkout.spec.mjs` | new signup: pending gate, $99 founding offer with Practice, checkout, active member | AUTH-001, AUTH-003, AUTH-004, BILL-001, BILL-003, BILL-006, HOME-002 | pass |
 | `signup-checkout.spec.mjs` | welcome email on: the owner approves it in Admin > Emails, the next paid member gets exactly one | ADMIN-001, BILL-003 | pass |
 | `support.spec.mjs` | support: ticket with a screenshot, owner replies in the app, member sees it, reply email captured | SUPPORT-001, ADMIN-002, SUPPORT-006, SUPPORT-002 | fail (ADMIN-002) |
+| `sync-docs-intake-docs.spec.mjs` | a document that reads as a patient record is removed after reading, even while its upload is still in flight | DOCS-003 | fail (DOCS-003) |
+| `sync-docs-intake-docs.spec.mjs` | the camera: a photo is taken into the review queue and kept; Cancel stores nothing; a refused permission says so | DOCS-005 | pass; blocked: DOCS-005 |
+| `sync-docs-intake-docs.spec.mjs` | receipts: one filed as an agency expense, one as a deduction, each with its receipt linked | DOCS-006 | fail (DOCS-006) |
+| `sync-docs-intake-docs.spec.mjs` | documents that fit no section: a new category, an existing one, kept plain, and Discard on a recognised card | DOCS-007 | fail (DOCS-007) |
+| `sync-docs-intake-docs.spec.mjs` | stored documents: an image becomes the profile photo (downscaled, kept after a reload); a PDF opens in a new tab | DOCS-010 | pass |
+| `sync-docs-intake-intake.spec.mjs` | Home request banner: one-tap packet, Review, Next request, a self-addressed request; the requester acknowledgement on and off | INTAKE-008, INTAKE-004 | fail (INTAKE-004) |
+| `sync-docs-intake-intake.spec.mjs` | More > Requests: tabs, refresh, reply by email with chosen documents and an edited note, dismiss and back, Ask Vera | INTAKE-005 | pass |
+| `sync-docs-intake-intake.spec.mjs` | intake notes: the Home banner, then Add + Undo, Edit + Add, Dismiss and Done on the notes' cards | INTAKE-006, INTAKE-007 | pass |
+| `sync-docs-intake-intake.spec.mjs` | contacts@ turns a shared .vcf into peer references once; support@ is relayed to the owner with its file and reply-to the sender | INTAKE-009, INTAKE-010 | fail (INTAKE-009); blocked: INTAKE-010 |
+| `sync-docs-intake-sync-data.spec.mjs` | every write fits its table: share-log rows from the Documents packet, the reference list and Vera's packet | SYNC-002 | fail (SYNC-002) |
+| `sync-docs-intake-sync-data.spec.mjs` | four ~3 MB documents in one session: no quota warning, and the offline copy lists all four | SYNC-017 | fail (SYNC-017) |
+| `sync-docs-intake-sync-data.spec.mjs` | the private-notes vault: export, erase, restore from a file, paste, and a file that is not a vault | SYNC-020 | fail (SYNC-020) |
+| `sync-docs-intake-sync-data.spec.mjs` | the member's exit copy: Export saved records, and the account ZIP holds every section, file and nothing secret | SYNC-021 | pass |
+| `sync-docs-intake-sync-devices.spec.mjs` | a backup with 1,050 case logs imports and all of them come back, here and on another browser | SYNC-007 | pass |
+| `sync-docs-intake-sync-devices.spec.mjs` | a file attached on one device opens on another (or says it is still coming) | SYNC-013 | pass |
+| `sync-docs-intake-sync-devices.spec.mjs` | device-only secrets and settings stay on the device they were set on | SYNC-014 | pass |
+| `sync-docs-intake-sync-devices.spec.mjs` | two devices edit the same license: the later edit wins; a device clock set minutes fast is by design | SYNC-016 | pass; by design: SYNC-016 |
+| `sync-docs-intake-sync-load.spec.mjs` | records that fail to load: a clear screen with Try again, never an empty account | SYNC-004 | pass |
+| `sync-docs-intake-sync-load.spec.mjs` | a save refused during a membership re-check keeps the form and its file; after reconnecting one record is saved | SYNC-006 | pass |
+| `sync-docs-intake-sync-load.spec.mjs` | an add that never reached the cloud, edited once the network is back, keeps the edit after the replay | SYNC-009 | fail (SYNC-009) |
+| `sync-docs-intake-sync-load.spec.mjs` | a record kept only on this device is pushed up on load; a stale device does not resurrect a deleted one | SYNC-010 | fail (SYNC-010) |
 | `two-devices.spec.mjs` | a delete on device A stays deleted on device B that was offline with a stale copy | SYNC-011 | pass |
-| `member-records.spec.mjs` | full member: licenses added, edited, starred, attached, deleted; Home and a second browser agree | CRED-001, HOME-003, CRED-002, CRED-025, CRED-016, CRED-003, SYNC-001, SYNC-003 | pass |
 | `two-devices.spec.mjs` | Delete All My Data wipes the account; the other device drops its stale cache | SETTINGS-005, SYNC-012 | fail (SETTINGS-005) |
+| `vera-cv-share-cv.spec.mjs` | CV: read my CV, tick and save, read it again; generate the CV; the setup packet downloads and sends | CV-001, CV-002, SHARE-005 | fail (CV-001, CV-002); by design: SHARE-005 |
+| `vera-cv-share-portal.spec.mjs` | administrator access: the physician shares a view-only link; the administrator verifies, previews, downloads; narrow, resend, end date, revoke | SHARE-006, SHARE-001 | pass |
+| `vera-cv-share-send.spec.mjs` | send a license: share sheet, Mail, Text, Copy and history; email with attachments, the file cap and the hourly cap; documents as one packet | SHARE-002, SHARE-003, SHARE-004 | fail (SHARE-003) |
+| `vera-cv-share-vera-chat.spec.mjs` | Vera sends a packet by email and by the share sheet; sign-out has nothing unsynced | VERA-003 | fail (VERA-003) |
+| `vera-cv-share-vera-chat.spec.mjs` | Vera: reference draft, feedback ticket, dictation, archived chats, source line, own Anthropic key | VERA-006, VERA-008, VERA-009, VERA-010, VERA-012, VERA-013 | fail (VERA-013) |
+| `vera-cv-share-vera-records.spec.mjs` | Vera files a document, creates and updates records, opens one, renames a document, exports case logs | VERA-002, VERA-004, VERA-005, VERA-011, VERA-007 | fail (VERA-002, VERA-004, VERA-005, VERA-007) |
 
-Two lab fixes the reruns needed: the AI script marker is now the file's whole
-base64 (a script left queued by a journey that stopped early matched the next
-run's synthetic PDF, which differs only in a few digits), and the custom-category
-form is opened with one click unless no dialog is open at all (under load a
-second click closed the opening form).
+Many stretches check the core path (add, edit, reload, delete, or the screen and
+its rows) rather than every sub-expectation the checklist lists for the id; each
+id's evidence in `results.json` names exactly what was checked, and its `blocked`
+evidence what the lab could not reach (Lab limitations, below).
 
-Many P1 stretches check the core path (add, edit, reload, delete, or the
-screen and its rows) rather than every sub-expectation the checklist lists for
-the id; each id's evidence in `results.json` names exactly what was checked.
-Not run yet: most of Practice beyond billing (RVUs, schedule, duty days, call
-timer, CallSync, to-do), CME import and transcripts, the NPI registry import,
-CV import and generation, Vera's filing and packets, sharing and the
-administrator portal, public pages, the scheduled jobs other than reminders,
-and the ops items that are not app features (offsite backup, CI, launchd
-agents).
+**Product bugs the journeys found, verified** (production behaves the same: the
+schema, functions and app code are production's `main`; each is in
+`results.json` under `bugs` with its step, expected and actual result and a
+screenshot in `.generated/e2e/shots/`). Every finding the new journeys filed was
+checked again against the code, one at a time, before it went on this list;
+"Fixed on" says where a fix exists today. `release/qa1` carries most fixes;
+`main` (production, 4ed3e410) and this branch have none of them, so the
+journeys still fail on each.
 
-**Product bugs the journeys found** (production behaves the same: the schema,
-functions and app code are production's; each is in `results.json` under
-`bugs` with its step, expected and actual result and a screenshot in
-`.generated/e2e/shots/`):
+Credentials (licenses, CME, education, case logs, references, categories):
+
+| Severity | Id | Bug | Fixed on |
+|---|---|---|---|
+| medium | CRED-011 | CME transcript PDF: a board recorded as a Board Certification license gets a Board MOC card but no board transcript | `release/qa1` (fix/qa-cred-home 6f180604) |
+| medium | CRED-017 | Multi-State Matrix: the CME cell always reads 0 hours, and unmet topics never show | `release/qa1` (fix/qa-cred-home 726b2d73) |
+| medium | CRED-018 | Education: a record saved without a Type is accepted by the form but refused by the database, so it lives on one device | `release/qa1` (074d3ff6, fix/qa-cloud-writes) |
+| medium | CRED-042 | Peer References: the page's "Import from Contacts" banner saves the contact at once, with no Relationship, and the database refuses it | `release/qa1` (fix/qa-cloud-writes a0331652) |
+| medium | CRED-032 | CME Passport: the birth month and day is lost on the next load, so the reporting details go back to "missing" (the same bug as SETTINGS-008) | `release/qa1` (93bf0bb9, 7a506440) |
+| low | CRED-017 | Multi-State Matrix: the empty state's "Add a license" button does nothing | `release/qa1` (726b2d73) |
+| low | CRED-028 | Licenses at desk width: a license's renewal info ("How to renew", portal, state guide) is not reachable | `release/qa1` (fix/qa-cred-home e26ccc86) |
+| low | CRED-031 | CME: opening a certificate whose file is missing from Storage says "Could not open that document: {}" | not fixed |
+| low | CRED-034 | Find CME: free providers are sorted last, not first | `release/qa1` (fix/qa-cred-home 0ffc013e) |
+| low | CRED-035 | Case Logs: every physician's academic years are labelled as PGY years counted from July 2018 | `release/qa1` (fix/qa-cred-home 58c77c04) |
+| low | CRED-043 | Peer References: sending several references from a desk browser is never logged (`share_log` refuses method `copy`; the same cause as SYNC-002 low) | `release/qa1` (fix/qa-cloud-writes 5a3d4b8d) |
+| low | CRED-047 | Custom categories: after a rename, Favorites still names the old category under a starred record | `release/qa1` (fix/qa-cred-home 4565a595) |
+
+Practice (work, RVUs, to do, invoices, finance):
+
+| Severity | Id | Bug | Fixed on |
+|---|---|---|---|
+| high | PRAC-013 | RVU log: a dictation with a patient's MRN and date of birth is sent to the AI coder and stored in `encounters.spoken_text` | `release/qa1` (fix/qa-practice 43602cb4) |
+| high | PRAC-028 | Deductions: a manual line never reaches the account (its id is not a uuid) | `release/qa1` (fix/qa-cloud-writes 8070e764) |
+| high | PRAC-029 | Statement import reads a patient list: "Patient Name, MRN" rows are offered as deduction lines named after patients | `release/qa1` (fix/qa-practice b8c4cac4, 6acc94eb) |
+| medium | PRAC-030 | Two expense invoices sent on the same day get the same number | `release/qa1` (fix/qa-practice 6d142629) |
+| medium | PRAC-030 | A deleted invoice's number is issued again to the next invoice | `release/qa1` (fix/qa-practice 300514f9, 6d142629, 6f7e31cf) |
+| medium | PRAC-030 | Two devices invoicing at the same time issue the same invoice number | `release/qa1` (fix/qa-practice 300514f9, c83cacac, 6f7e31cf) |
+| medium | PRAC-020 | To do: "Notes (for the invoice)" never reaches the invoice; it becomes the device-only private note | `release/qa1` (fix/qa-practice d53c7a1e) |
+| medium | PRAC-020 | To do: a task is marked done (and reads "billed") when its Work entry is cancelled | `release/qa1` (fix/qa-practice d53c7a1e) |
+| medium | PRAC-013 | RVU log: editing an encounter's codes leaves the case log it created at the old codes and wRVU | `release/qa1` (fix/qa-practice 43602cb4, 38a3409d, af410d45) |
+| medium | PRAC-026 | CPT Lookup: "+ Bill it" on an AI-suggested code logs it at 0 wRVU | not fixed |
+| medium | PRAC-022 | Work dictation tells the AI the UTC date as "today" in the US evening | `release/qa1` (fix/qa-cred-home 4c006de1) |
+| medium | PRAC-028 | Deductions CSV: a category containing a comma splits into extra columns | `release/qa1` (fix/qa-practice 84de127d) |
+| medium | PRAC-029 | Statement import: a row billed to the agency on an earlier import is ticked again on re-import | `release/qa1` (fix/qa-practice b8c4cac4, 6acc94eb) |
+| low | PRAC-030 | Invoice numbers carry the UTC date: an invoice sent at 7 PM Pacific is numbered with tomorrow's date | `release/qa1` (fix/qa-practice 6d142629) |
+| low | PRAC-027 | Tax Prep: an estimated payment recorded in the US evening defaults to tomorrow's date | `release/qa1` (fix/qa-practice 14c4d1af) |
+| low | PRAC-025 | Forecast: "Load contract coverage dates" estimates a day-rate agreement's days at its call stipend, not its day rate | not fixed |
+| low | PRAC-026 | CPT Lookup offers "+ Bill it" to a Credential-only member and refuses it with "This record is read-only" | not fixed |
+| low | PRAC-029 | Deductions: lines imported from a card statement are listed and exported as "manual" | not fixed |
+| low | PRAC-008 | The call timer shows a negative clock ("-1:-1:-1") for its first second (`release/qa1`'s b85709d5, labelled PRAC-008, fixes a different problem) | not fixed |
+| low | PRAC-011 | Deleting a work entry leaves its private (patient-identifying) note in the device vault | `release/qa1` (fix/qa-practice dc7115ba) |
+| low | PRAC-017 | Deleting an agreement also deletes its signed agreement file, but the confirm does not say so | `release/qa1` (fix/qa-practice 57892be3) |
+
+Home and notifications:
+
+| Severity | Id | Bug | Fixed on |
+|---|---|---|---|
+| medium | HOME-013 | A license saved as "date not yet known" or "Pending confirmation" still lowers the ring: its state joins CME tracking and "<ST> CME review records" is listed as needing action | not fixed |
+| medium | NOTIFY-007 | The daily reminder email never names a record in the member's own category, although Home and the bell alert on it | not fixed |
+| low | HOME-018 | Home Board Certification card and subspecialty note print raw escape codes (`·`, `—`) | not fixed |
+| low | HOME-005 | The desk sidebar avatar shows the first two letters of the name while the top bar shows the initials | not fixed |
+| low | HOME-006 | A new member's first tap on the theme switch does nothing visible (profile theme `arctic`; the same bug as SETTINGS-014) | `release/qa1` (fix/qa-cred-home 0cb8af15, fix/qa-auth-bill-settings c81c5e85) |
+| low | HOME-012 | Home "Add date →" on an undated TB or fit test opens the Health Record form without focus on its expiration date | `release/qa1` (fix/qa-cred-home b948c521) |
+| low | HOME-020 | A follow-up logged on a health record's alert never shows on that record | `release/qa1` (fix/qa-cred-home b948c521) |
+| low | HOME-026 | Home says "All Clear" while the ring beside it lists records that need action | `release/qa1` (fix/qa-cred-home cf43aeba) |
+| low | NOTIFY-006 | "Send Test Notification" does nothing but alert "No active alerts to send." when nothing is due | `release/qa1` (fix/qa-auth-bill-settings 51fe875a) |
+| low | HOME-017 | A downloaded renewal packet is logged with method `download`, which `share_log` refuses; the write stays queued and is retried on every load | `release/qa1` (fix/qa-docs-vera-intake c2e5c7ad) |
+
+Settings, setup and sign-in:
+
+| Severity | Id | Bug | Fixed on |
+|---|---|---|---|
+| high | SETTINGS-010 | Setup > Expiration dates: typing a date on the keyboard saves a partial year (0002) and the row disappears mid-typing | `release/qa1` (fix/qa-auth-bill-settings b96eaaa3) |
+| medium | SETTINGS-007 | Profile fields typed on the keyboard lose their last letters: one unordered save per keystroke | not fixed |
+| medium | SETTINGS-013 | Desk width: the top bar, the desk table header and the Credentials rail are not sticky; they scroll away with the page | not fixed |
+| medium | SETTINGS-013 | Desk width 1280 px: the Licenses table cuts off the license number and the expiration year, even at the default text size | not fixed |
+| medium | SETTINGS-001 | Setup: Put it back does not restore a row closed by "I do not hold a DEA registration" or "I would rather type it in" | `release/qa1` (fix/qa-auth-bill-settings f1aef4d8) |
+| medium | SETTINGS-004 | Setup > Reminders shows the sign-in address in "Where the warning goes" but saves it only if the field is edited; the task then says "No address on file to warn" | `release/qa1` (fix/qa-auth-bill-settings 40cf5bad) |
+| medium | SETTINGS-008 | Birth month and day is lost on the next online load, and the CME Passport card then says it is missing | `release/qa1` (fix/qa-auth-bill-settings 93bf0bb9) |
+| medium | SETTINGS-012 | Setup > CME for the current cycle > "Add one by hand" opens no form and never returns to Setup | `release/qa1` (fix/qa-auth-bill-settings e95a0c28) |
+| medium | SETTINGS-018 | Phone: back from a Setup packet row's add form, the packet is folded and the row's drawer is hidden | `release/qa1` (fix/qa-auth-bill-settings 7604c79a) |
+| medium | AUTH-012 | No way to change the password or the sign-in email from inside the app, and Help does not say how | `release/qa1` (fix/qa-auth-bill-settings d2bf73b0) |
+| low | SETTINGS-001 | Setup counts disagree once Protected is stamped and the CV row comes undone: Home counts the whole board, while More, the rail and the strip count the Protected tier | `release/qa1` (fix/qa-auth-bill-settings f7e00de6) |
+| low | SETTINGS-009 | Licensed States: the ✕ beside a state that comes from a license does nothing | `release/qa1` (fix/qa-auth-bill-settings f074ec5c) |
+| low | SETTINGS-014 | A new account's first tap on the theme switch changes nothing on screen (the profile starts as theme `arctic`) | `release/qa1` (fix/qa-auth-bill-settings c81c5e85) |
+| low | SETTINGS-016 | Find on a mandatory topic that no listed provider carries opens an empty list with no way to meet the requirement | `release/qa1` (fix/qa-auth-bill-settings 299a5309, 96bd5e7c) |
+
+Sync, documents and intake:
+
+| Severity | Id | Bug | Fixed on |
+|---|---|---|---|
+| high | SYNC-010 | A stale device resurrects a record deleted on another device when its deletion-ledger read fails | `release/qa1` (fix/qa-cloud-writes 16617e4b) |
+| high | SYNC-009 | An edit made after a failed first save is reverted by the replay of the queued insert | `release/qa1` (fix/qa-cloud-writes 34c4a8a2) |
+| high | DOCS-003 | A patient record removed after reading stays on the server when its upload finishes after the reading | `release/qa1` (fix/qa-cloud-writes 3f5bce24) |
+| medium | SYNC-017 | Several large uploads in one session overflow the device cache; the offline copy stops updating | `release/qa1` (fix/qa-cloud-writes a1aad2b3) |
+| medium | SYNC-002 | Vera's packet send logs a `share_log` row the table refuses (`sharedAt`, no section), retried on every load | `release/qa1` (fix/qa-cloud-writes 5a3d4b8d) |
+| medium | DOCS-007 | Discard on a recognised Smart Scan review card keeps the uploaded file in Documents and Storage | `release/qa1` (fix/qa-docs-vera-intake b9e593af) |
+| medium | INTAKE-004 | The owner's Home request banner and Requests inbox list every member's open document requests as the owner's own | not fixed |
+| low | SYNC-002 | Sharing the peer-reference list without a share sheet logs method `copy`, which `share_log` refuses | `release/qa1` (fix/qa-cloud-writes 5a3d4b8d) |
+| low | DOCS-006 | Smart Scan: "Open Expenses" after filing a receipt opens Practice on Work, not on Expenses | not fixed |
+| low | DOCS-006 | Smart Scan: "Open Deductions" after filing a receipt lands on Finance > Tax Prep, not the Deductions ledger | `release/qa1` (fix/qa-docs-vera-intake 928d2ba6) |
+| low | SYNC-020 | Private notes: "Restore from a file" takes any JSON (a full backup) into the vault | `release/qa1` (fix/qa-cloud-writes 07211659) |
+| low | INTAKE-009 | contacts@: the same .vcf sent twice creates duplicate peer references | `release/qa1` (fix/qa-docs-vera-intake 4b5adfe3) |
+| low | INTAKE-004 | Home request banner names the physician as the requester of a self-addressed request instead of "Requester not found" | not fixed |
+
+Vera, CV and sharing:
+
+| Severity | Id | Bug | Fixed on |
+|---|---|---|---|
+| medium | VERA-003 | Vera packet shared through the share sheet is never logged: the `share_log` insert is refused and queued, and Sign out then warns about an unsynced change | `release/qa1` (fix/qa-docs-vera-intake c2e5c7ad) |
+| medium | VERA-004 | Vera: approved membership dues / renewal update saved as custom fields instead of `cost` and `expiration_date` | `release/qa1` (fix/qa-docs-vera-intake 57e76533, 8c2158ec) |
+| medium | VERA-004 | Vera: approved work-history "reason for leaving" saved as a custom field instead of `reason_for_leaving` | `release/qa1` (fix/qa-docs-vera-intake 57e76533) |
+| medium | VERA-002 | Vera drops an attached Word (.docx) document when its proposed record is approved | `release/qa1` (fix/qa-docs-vera-intake a6448f6f) |
+| medium | CV-001 | CV import locks a second program or position at the same institution as "already on file" | `release/qa1` (fix/qa-cred-home e4f9e6cc) |
+| low | VERA-005 | Vera: after an `open_record` navigation the reply is lost and the question shows "Not sent" with Try again | not fixed |
+| low | SHARE-003 | A record emailed "with attachments" never appears in that record's Send history | `release/qa1` (fix/qa-docs-vera-intake fd79825a) |
+| low | VERA-013 | Vera shows an "Opus" badge as soon as an own Anthropic key is pasted, while Gemini on the shared key answers | `release/qa1` (fix/qa-docs-vera-intake adc1d969) |
+| low | VERA-007 | Vera's export card is headed "New record -> caseLogs" | not fixed |
+| low | CV-002 | Generate CV: the "Locum Tenens" template ("Compact format for locum assignments") is not a format of its own | not fixed |
+
+Billing, admin, support and the public site:
+
+| Severity | Id | Bug | Fixed on |
+|---|---|---|---|
+| high | BILL-011 | A free-beta member's deferred purchase never settles: `limited-stripe-webhook` answers 503 `billing_unavailable` to every Checkout event | not fixed |
+| high | BILL-012 | A member whose paid membership ended cannot buy again: Checkout refuses with "Your saved checkout has different terms" | `release/qa1` (fix/qa-auth-bill-settings 37c67289) |
+| medium | SUPPORT-005 | A member's reply on a resolved, archived ticket stays resolved and archived: the owner never sees it | `release/qa1` (fix/qa-admin-ops dad6c342, 0fc8a971) |
+| low | BILL-004 | Landing page past the founding cap: the hero and price repaint to $149, but static sentences still offer "Founding Credential is $99/year" | not fixed |
+| low | BILL-012 | After the Practice trial ends, the Practice tab says "Membership expiry does not delete your data" and does not say how to add Practice | `release/qa1` (fix/qa-auth-bill-settings 0573bea5) |
+| low | ADMIN-003 | Admin Waitlist and Fields: the tab label keeps its old count after Add, Remove or Dismiss until another tab is opened | `release/qa1` (fix/qa-admin-ops beb49e1f) |
+| low | SUPPORT-004 | Help & FAQ: clearing the search leaves a different question open | `release/qa1` (fix/qa-admin-ops 1ee3b647) |
+| low | PUBLIC-006 | Visits to the `/states/` hub page are never counted: the beacon is refused 400 | `release/qa1` (fix/qa-cloud-writes 6d0ef70e) |
+| low | PUBLIC-008 | State renewal guides have no Support menu (and no help link) in their header, unlike `/` and `/help/` | not fixed |
+
+Operations:
+
+| Severity | Id | Bug | Fixed on |
+|---|---|---|---|
+| medium | OPS-001 | `prune-backups` deletes only the `storage.objects` row; the backup ZIP stays in the bucket, invisible and billed | `release/qa1` (fix/qa-admin-ops d4343996) |
+| low | OPS-008 | Reloading while the account loads sends the owner "Account load stopped" / "Membership check failed (network...)" errors although nothing failed | not fixed |
+| low | OPS-008 | Any `report-error` call from another build deletes the current build's reports older than a day | `release/qa1` (fix/qa-admin-ops 68bc76a6) |
+| low | OPS-005 | The monthly AI spend shown to the member leaves out Gemini ("About $0.00 of $15.00 this month on the shared keys") | not fixed |
+| low | OPS-006 | A fix to a shared module the app bundles does not trigger the web deploy | `release/qa1` (fix/qa-admin-ops 1f8f6b1d) |
+| low | OPS-011 | `storage-orphans.mjs` prints a remedy that deletes only the metadata row; the orphan's file stays in the bucket | `release/qa1` (fix/qa-admin-ops 8d8127d4) |
+
+Phone layouts (375 x 812 and 390 x 844; none fixed on any branch except HOME-006):
 
 | Severity | Id | Bug |
 |---|---|---|
-| medium | BILL-003 | **Back from Checkout, the new member is told "AI is not on yet ... Shared AI: available once your membership is active" after the membership is confirmed**, until a reload. `fetchSharedAiStatus` (`src/utils/aiClient.js`) asks `ai-proxy` once per page load; the load that returns from Checkout asks while the membership is still pending (the Stripe events land after the return, as they do live), gets "pending", and nothing asks again when `useBillingReturn` sees the purchase land. In the documents journey (before `newMember()` reopened the app) Upload opened no file chooser. Found 2026-09-30 by `billing-return.spec.mjs`, once the Checkout stand-in stopped settling the events before the redirect. |
+| medium | CRED-021 | Health Records form: the Expiration Date field runs off the right edge (the form scrolls sideways) |
+| medium | CRED-037 | Screenings form: the Reported date field runs off the right edge |
+| medium | CRED-028 | License card: "How to renew · Biennial (2 years)" is cut to "Ho…" when the license is urgent |
+| medium | PRAC-015 | Practice: the "Invoices" and "Contracts" sub-tabs read "Invoi…" and "Cont…" |
+| low | HOME-006 | The top bar's theme switch does nothing on the first tap for a new account (fixed on `release/qa1`, as above) |
+| low | HOME-004 | The top bar's Back button is a 60 x 20 px tap target |
+| low | AUTH-003 | Gate: "Check access again" and "Sign out" are unstyled browser buttons 20 px tall |
+| low | HOME-001 | Home Setup card: "Not now" (48 x 15) and "Open setup ›" (82 x 16) are text-only tap targets |
+| low | HOME-003 | Home: banner Snooze, ring rows, Action Required, To do and search controls are 15-29 px |
+| low | CRED-001 | Record cards: the star, send, edit and delete buttons are 26-28 px tall, 3 px apart |
+| low | CRED-026 | Filter chips (Licenses, Health Records, Travel & IDs) are 30 px tall |
+| low | CRED-009 | CME form: the topic chips are 30 px tall |
+| low | CRED-047 | Custom category: Rename, Add a field, Hide category, and the field editor's Save and Cancel are 29 px |
+| low | DOCS-002 | Smart Scan review card: the "Not right?" type chips are 22 px tall |
+| low | DOCS-009 | Documents: the stored document's delete (30 x 26), File with AI and Select to send (30 px) are under 32 px |
+| low | PRAC-001 | Add Agreement: "Use a document already uploaded" is 16 px and the split-calls checkbox row 21 px |
+| low | PRAC-017 | Agreement card: edit, Archive and delete are 29 px |
+| low | PRAC-011 | Work log entry: edit and delete are 30 x 26 and 28 x 24 |
+| low | PRAC-002 | Invoice day picker: "All days" and "None" are 31 px |
+| low | PRAC-020 | To do: the task text (the tap-to-edit target) is a 20 px line |
+| low | SETTINGS-014 | Profile & settings: switches (44 x 24), theme switch (48 x 28), frequency chips (26 px) and Test (29 px) are under 32 px |
+| low | SETTINGS-001 | Setup: "…" menu buttons 26 x 21; Skip for now and Does not apply to me 16 px; menu items 31 px |
+| low | ADMIN-001 | Admin > Accounts: row actions and search 24 px; Refresh section is a bare 20 px button |
+| low | ADMIN-002 | Admin > Tickets: search and filters are 24 px |
+| low | ADMIN-003 | Admin > Errors, Waitlist, Fields and AI: controls 14-31 px; Load more is a bare 20 px button |
+| low | ADMIN-008 | Admin > Traffic history: Refresh is 28 px |
+| low | ADMIN-004 | Admin > Control history and Emails: bare 20 px buttons and 23 px disclosures |
+
+**Filed, then verified not to be product bugs** (kept here so they are not
+filed again). The journeys record the first five as `by_design`, with the reason
+in the evidence; the last three stay `fail`, because the checklist's expectation
+is not met, but nothing a physician or the owner meets in production:
+
+| Id | Finding | Verdict |
+|---|---|---|
+| SHARE-005 | The Setup packet leaves files filed in the physician's own categories out of the ZIP and the Send it preselection | By design: `PACKET_SECTIONS` (`src/utils/credentialExport.js`) is the credentialing sections on purpose, and its docblock names custom categories as outside the packet. Send it lists every document, so such a file can be ticked by hand |
+| SYNC-016 | A device whose clock runs ten minutes fast overwrites a later edit made on another device | The mechanism is real (last write wins by device clock), but it needs two devices minutes apart and the same field edited within that time; phones and Macs keep their clocks within a second. A hardening item (let the database stamp `updated_at`), not a bug a physician meets |
+| OPS-002 | The daily deletion job would wipe an active, paying member whose `data_deletion_date` is in the past | Unreachable: nothing in the product writes a non-null `data_deletion_date` (its only writers set NULL), and a member who writes their own only schedules their own deletion, which Delete All My Data already allows. Defense in depth (check `cancelled_at` and the subscription) is worth adding |
+| CRED-005 | Phone Protected Identity: a record's Edit, Delete and Show are 31 px | 32 px is the lab's own floor; WCAG 2.2's minimum is 24 px, and Delete asks first |
+| PRAC-009 | Phone Practice: the seven sub-tab buttons are 45 x 30 px | The same: above WCAG's 24 px, and a missed tap opens the neighbouring tab, nothing more (the cut labels are PRAC-015, a real bug) |
+| OPS-001 | `send-reminders-daily`, `send-guide-sweep` and `monthly-backup` dispatch with pg_net's 5 s default timeout; at about 300 members the run's record is a timeout | A scaling risk: production has a handful of members and the run takes well under a second. Cheap to fix before growth (`timeout_milliseconds`, as `dispatch_account_deletions` has) |
+| OPS-012 | 12 of 13 PostgreSQL suites cited as coverage are run by nothing; `postgres-foundation.py` already fails | True, and a test-hygiene gap, not product behaviour: the shipped notifier passes the repaired suite. Fixed on `release/qa1` (fix/qa-admin-ops 0865298b) |
+| OPS-010 | Quick Share, Team, CredentialPortalModal and HospitalRotations are unreachable and undocumented as dormant | Dormant code shows no screen; a documentation gap only. `release/qa1` (fa362298) documents it; `docs/CREDENTIAL-PORTAL-IMPLEMENTATION.md:7` still says "More and Quick Share" |
+
+**Found by the first 26 journeys (step 3), still failing in this run:**
+
+| Severity | Id | Bug |
+|---|---|---|
 | high | SETTINGS-005 | After **Delete All My Data** the account dead-ends: the app is not signed out, and every later load shows "Your account identity could not be verified. Your existing records have not changed. Reload to try again (ID-INIT-ACCOUNT_UNAVAILABLE-H409)". `profiles.deleted_at` makes `account_is_closed` true, so `initialize-clerk-profile` answers `account_unavailable`; "records have not changed" is false; Data Rights says only closing the sign-in account needs an email to support; the paid subscription stays active and is not cancelled. |
-| medium | ADMIN-001 | Admin > Accounts **Pause / Approve hangs on "Saving…"** (Cancel disabled) when the member's profile changed after the list loaded, which a member opening the app does. `admin_change_profile_access` raises "Account changed. Refresh and review it again" with SQLSTATE 40001, and PostgREST (14.14 locally) re-runs 40001 transactions, so the refusal re-runs indefinitely (still running 15 minutes later): each re-run locks the member's profile row, so a second attempt on that member hangs too, and the loop holds PostgREST pool connections until PostgREST restarts. A direct call with a stale timestamp did not answer in 40 s. Production impact depends on its PostgREST version; a deterministic refusal should not use a retryable SQLSTATE. |
-| medium | ADMIN-002 | Admin > Tickets: **a ticket's screenshot never displays**. `TicketAttachments` renders `<img src=signed Storage URL>`, and the app's CSP (`src/main.jsx`) allows images only from `'self' data: blob: https://img.clerk.com`, not the Supabase host. |
+| medium | BILL-003 | **Back from Checkout, the new member is told "AI is not on yet ... Shared AI: available once your membership is active" after the membership is confirmed**, until a reload: `fetchSharedAiStatus` (`src/utils/aiClient.js`) asks `ai-proxy` once per page load, while the membership is still pending, and nothing asks again when `useBillingReturn` sees the purchase land. |
+| medium | ADMIN-001 | Admin > Accounts **Pause / Approve hangs on "Saving…"** (Cancel disabled) when the member's profile changed after the list loaded. `admin_change_profile_access` raises "Account changed. Refresh and review it again" with SQLSTATE 40001, which PostgREST (14.14 locally) re-runs indefinitely, holding the member's profile row and pool connections. Production impact depends on its PostgREST version; a deterministic refusal should not use a retryable SQLSTATE. |
+| medium | ADMIN-002 | Admin > Tickets: **a ticket's screenshot never displays**: the app's CSP (`src/main.jsx`) allows images only from `'self' data: blob: https://img.clerk.com`, not the Supabase host of the signed link. |
 | medium | DOCS-008 | Documents: **once linked, a document cannot be relinked or unlinked** from its card; the "Link to credential..." select renders only while `linkedTo` is empty. |
-| medium | SYNC-015 | **Restore from Backup replaces each section on the device** instead of merging ("This will merge with your current data"): a record added after the backup disappears until a reload (`{...data, ...filtered}`). |
-| medium | SYNC-015 | **A restored record keeps its tombstone**: the row is back but `deleted_items` still holds it (a zombie; the run's lab health counts them). |
-| low | NOTIFY-001 | The **reminder email counts one day too few** after 12:00 UTC ("in 19 days" for a date 20 days away): `dayDiff` in `send-reminders` rounds from midnight UTC, and the daily job runs at 13:00 UTC. The journey's check fails only when it runs between 12:00 and 24:00 UTC (it did at 22:36 and 23:24 UTC; the final run above started after midnight UTC and passed). |
+| medium | SYNC-015 | **Restore from Backup replaces each section on the device** instead of merging ("This will merge with your current data"): a record added after the backup disappears until a reload. |
+| medium | SYNC-015 | **A restored record keeps its tombstone**: the row is back but `deleted_items` still holds it (a zombie). |
+| low | NOTIFY-001 | The **reminder email counts one day too few** after 12:00 UTC ("in 19 days" for a date 20 days away): `dayDiff` in `send-reminders` rounds from midnight UTC, and the daily job runs at 13:00 UTC. The check fails only when the run is between 12:00 and 24:00 UTC (this one was not). |
 | low | BILL-005 | After **cancelling in the customer portal**, the membership card still reads like a renewing membership (the access snapshot carries no cancel-at-period-end for a normal paid subscription). |
 | low | CRED-003 | Deleting a license **also deletes its attached files, but the confirm does not say so** ("Delete this item? This cannot be undone."). |
 
 Also seen, not recorded as bugs: the paid-member welcome logs every normal
 outcome at error level (`[Error] {"event":"welcome_email","state":"disabled"}`
-about 75 times a run), which buries real errors in the function logs; many
+about 300 times a run), which buries real errors in the function logs; many
 icon-only buttons (record star/share/edit/delete except the star, the top bar's
 bell and theme) have no accessible name, and form labels are not tied to their
 inputs; "Pause" in Admin writes `access_status = 'revoked'` and its dialog says
-"will change from active to revoked"; the invite-to-join counter is service
-wide (20 a day), so more than about 20 journey runs a day without `--fresh`
-exhaust it.
+"will change from active to revoked"; Admin > Traffic history leaves "via links"
+empty rather than 0 on a day with no visit from a link (`admin_visits_daily`
+sums to null); the invite-to-join counter is service wide (20 a day), so more
+than about 20 journey runs a day without `--fresh` exhaust it.
 
 ### What the lab needed for step 3
 
@@ -1105,6 +1434,84 @@ journeys' to check. The support reply email's fixed `Idempotency-Key` with a
 body that can change between retries (above, under Resend) is filed as a
 product follow-up.
 
+### The full suite, 2026-09-30: what the lab and the journeys needed
+
+Nine areas' journeys (97 new, 123 in all) were written in parallel on one lab;
+this pass ran them together on a fresh lab six times, told the journeys' and
+the lab's faults from the product's by comparing the runs and re-running each
+suspect journey alone, and fixed only the former. The result above is the
+sixth run.
+
+- **A leak to a real provider, closed.** email-inbound's understanding step
+  (`_shared/intakeModelCall.ts`) builds its Anthropic SDK client with no
+  `baseURL`, so the SDK goes where `ANTHROPIC_BASE_URL` says or to
+  `https://api.anthropic.com`; the lab set only `ANTHROPIC_API_BASE`
+  (ai-proxy's). Since the 0929 merge, every forward a member's model allowance
+  admitted sent a `count_tokens` request with the synthetic forwarded text and
+  the lab's placeholder key to api.anthropic.com (refused for the key: no model
+  call was made or billed; the rules then read the email). In the first run of
+  this pass two journeys reached it (`intake.spec.mjs`'s forward to docs@ and
+  `settings-auth-access.spec.mjs`'s email move; `ai_reservations` shows one
+  admission each), and earlier full runs did the same. The functions'
+  environment now sets `ANTHROPIC_BASE_URL` to the mock
+  (`SDK_HOST_VARIABLES` in `lib/functions-env.mjs`), and `functions-env.test.mjs`
+  fails if a function builds an Anthropic client the variable would not steer,
+  or the lab stops setting it. With forwards now read by the mock, the intake
+  journeys also exercise the one-tap path (INTAKE-004: Approve and send, Next
+  request, Done), which passes; the self-addressed request is still read by the
+  rules (the member's allowance used up first), the path its banner bug was
+  verified on (with the model's reading the banner says "Requester not found").
+- **Founding places during the run**: a full run pays for more members than the
+  lab has places, so the runner now frees places older than 15 minutes every 3
+  minutes while the journeys run (above).
+- **`by_design`**: a status for a difference from the checklist verified not to
+  be a product bug (`qa.byDesign`), used for five of the eight filed findings the
+  verification rejected (the list below says which and why). The other three
+  stay `fail`: the checklist's expectation is not met, though no physician or
+  the owner meets it in production.
+- **Journey faults fixed** (each failed in one full run and not the other, or
+  alone; each re-run alone after the fix): the traffic-history check read an
+  empty "via links" cell as a missing row (the view's sum is null on a day with
+  no visit from a link, as on a fresh lab); the busy-webhook journey read the
+  notice while the returning page still showed its loading line ("Checking your
+  membership…"), and now waits for the return notice as the other
+  billing-return journey does; the landing page's nav CTA was checked 0.9 s
+  after a smooth scroll down the whole page (now: until the plans are in view,
+  8 s at most); the record's "Email with attachments" sheet was read before it
+  ticked the record's two files ("0 of 2 selected" for a moment under load);
+  the other billing-return journey took the app's loading line for the return
+  notice too; the scanned agreement's document row was read before its link to
+  the new contract landed (it is stored at upload and linked on Save). One
+  fault went the other way: the phone review card's audit exempted the "Not
+  right?" chips it had just filed as DOCS-002's bug, so DOCS-002 read `pass`
+  with a verified bug on file; the owning screen now checks its own chips.
+  After the sixth run: the owner's member-view check read the session row
+  before it was written (it now waits for the row).
+  SETTINGS-007's lost last letters show in some runs and not others (a race
+  between one save per keystroke): a real bug whose check fails when the race
+  is lost, not a flaky journey.
+- **Identity stalls in the lab, retried as the screen asks.** In three of the
+  six runs a journey stopped on "Your account identity could not be verified
+  ... Reload to try again": in the first run one member's reopen after paying got
+  `initialize-clerk-profile` 503 `continuity_unavailable` 0.4 s after a 200 on
+  the same load (ID-INIT-UNAVAILABLE-H503); in the third, three journeys
+  reloading in the same four seconds got 401 after 5.07 s upstream (the
+  function's fetch of the mock Clerk's JWKS timing out at jose's 5 s, so the
+  token could not be verified; ID-INIT-UNAVAILABLE-H401), and the reports those
+  stops sent used up `report-error`'s per-IP cap for a journey that needed it;
+  in the sixth, the profile step got a 502 from the gateway
+  (ID-PROFILE-UNKNOWN-H502). Each journey reached its own checks when re-run.
+  The phone journeys already tapped Try again on such a stop
+  (`phone-helpers.mjs`); `waitForMemberApp` now does the same, at most twice,
+  for those references only (`TRANSIENT_IDENTITY`; never for a closed account's
+  ACCOUNT_UNAVAILABLE-H409), and prints each retry on the run's output; the
+  app's own report of the stop stays in `labHealth.clientErrors`.
+  Not filed as a product bug: these answers came from the local stack under
+  three browsers' load (the edge runtime and its gateway), and the function does
+  not log what it caught.
+- **Lint**: the new and changed lab files are clean under ESLint's recommended
+  rules for Node modules (the repository's own config lints `.js`/`.jsx` only).
+
 ### Checklist expectations that differ from the product's design
 
 The journeys check the product's intended behaviour where the checklist's
@@ -1122,10 +1529,16 @@ expectation turned out to be written against an older or assumed design:
 
 ### Lab limitations
 
+What the journeys cannot reach, and the ids it leaves `blocked` or only partly
+checked (each id's evidence names what was checked instead):
+
 - **Clerk's own screens are not reproduced**: the sign-up form, email codes,
-  passwords, passkeys, sign-in methods and the account page (AUTH-010, AUTH-012,
-  AUTH-013 not run). A session "revoked elsewhere" is ended through the mock
-  Clerk's API (AUTH-006).
+  passwords, passkeys, "Forgot password?" and the account page (AUTH-013
+  blocked; AUTH-010 and AUTH-012 checked on the app's side only). A session
+  "revoked elsewhere" is ended through the mock Clerk's API (AUTH-006). The mock
+  keeps one address book for both of its instances, so a legacy-instance member
+  cannot also sign in as a new account in the browser (AUTH-014, the server half
+  only).
 - **Stripe's hosted pages are stand-ins**: Pay, Cancel, and a portal with
   "Cancel at period end". No cards, 3-D Secure, invoices by email or refunds.
   Event timing is Stripe's shape (back at once, events concurrent, retried) but
@@ -1134,25 +1547,48 @@ expectation turned out to be written against an older or assumed design:
   payment methods that settle later (a session completed with
   `payment_status: unpaid`) are not reproduced.
 - **AI is mocked**: answers are canned or scripted; `QA_AI=real` with a lab key
-  calls the real providers, capped.
+  calls the real providers, capped. The budget refusal on the shared Opus key
+  (OPS-005) is not reached: production has that key paused and the lab mirrors
+  its secret names.
+- **Phones are Chromium** with an iPhone user agent, touch and the phone's
+  viewport; WebKit (Safari) is not available, so Safari-only rendering and the
+  native camera input a phone opens (DOCS-005) are not covered.
+- **Time of day matters**: several bugs show only in the US evening (the UTC
+  date is already tomorrow: PRAC-022, PRAC-027, the low PRAC-030) or after 12:00
+  UTC (NOTIFY-001), so a run at another hour passes those checks.
+- **Host and production state are out of reach**: pg_cron's run history
+  (OPS-001), GitHub Actions results (OPS-006), the launchd agents on the Studio
+  (OPS-009, OPS-014, ADMIN-007's agent), a backup restored from production's
+  data (OPS-003), production's storage-orphan counts (OPS-011), the deployed
+  function list (OPS-013, read from the lab template) and production's Cloudflare
+  route for `/credential-access*` (PUBLIC-009). The journeys run the same SQL,
+  scripts and Workers against the lab instead.
+- **Scheduled jobs are off**: journeys run each job's command by hand, as
+  pg_cron would (`ops-jobs.spec.mjs`), which exercises the same functions.
+- **Invitations are off** in production (`limited_invitation_enabled = false`)
+  and in the lab (AUTH-007 checks the refusal, not the invitation path).
+- **One IP for every journey**: `report-error` caps reports at 30 per hashed IP
+  per 10 minutes, and every browser here is 127.0.0.1, so several runs at once
+  can exhaust it; the journeys then record AUTH-011, AUTH-015 and OPS-008's
+  retention check as blocked. A single full run stays under it unless a lab
+  stall makes many loads stop and report at once (it did once, in the third
+  run of the full suite).
 - **Signed Storage links** from functions name the stack's internal gateway
   (`kong:8000`). Journeys serve them from the local gateway; opened by hand in
   the lab they do not load. They are also what the app's CSP blocks as images
-  (a product bug, below), and production's would be blocked the same way.
-- **The public site** (landing page, state guides, `credential-access` portal)
-  is not served by the lab app server: PUBLIC-*, SHARE-001 not run.
-- **Scheduled jobs are off**: journeys run a job's dispatch function by hand
-  (`dispatch_daily_reminders()`), which exercises the same function and edge
-  function the cron job would.
-- **Desk viewport only** (1280 x 900); phone layouts are not covered.
+  (ADMIN-002), and production's would be blocked the same way.
+- **The lab serves one build**, so "reload on the new build" (OPS-007) reloads
+  the same bundle.
 - **Network drops** are Playwright's offline switch; a cold start of the PWA with
   no network at all is not covered.
 - **PostgREST 14.14** runs locally; production's version is not known to the
-  lab, which matters for the pause/approve hang above (the lab may only read
+  lab, which matters for the pause/approve hang (ADMIN-001; the lab may only read
   production's catalog, so it did not probe production's API).
-- The edge runtime logs `Deno.core.runMicrotasks() is not supported` and
-  `beforeunload ... Uncaught null` about 50 times a run: the local CLI's runtime,
-  not the functions.
+- The local edge runtime logs `Deno.core.runMicrotasks() is not supported` and
+  `beforeunload ... Uncaught null` about 40 times a run (the CLI's runtime, not
+  the functions), and under load it has stalled the identity step
+  (`initialize-clerk-profile` 503, or 401 when its JWKS fetch from the mock timed
+  out); the journeys tap Try again on those (the full-suite notes above).
 
 ## Files
 
@@ -1186,12 +1622,13 @@ expectation turned out to be written against an older or assumed design:
 | `app/vite.config.mjs` | the QA-lab build: Clerk alias, issuer and hosted-page rewrites (`LAB_REWRITES`), app server, output folder |
 | `app/clerk-shim.jsx`, `app/qa-clerk.js`, `app/QaSignIn.jsx` | the QA sign-in |
 | `mocks/server.mjs` | the mock server (`clerk.mjs`, `stripe.mjs`, `stripe-params.mjs`, `resend.mjs`, `ai.mjs`, `signing.mjs`, `store.mjs`, `http.mjs`) |
-| `e2e/run.mjs` | `npm run qa:e2e` (starts the lab if needed, `--fresh`, lab health, founding top-up, parallel-safe mode) |
+| `e2e/run.mjs` | `npm run qa:e2e` (starts the lab if needed, `--fresh`, lab health, founding top-up before and during the run, parallel-safe mode) |
 | `e2e/support/run-options.mjs` | parallel-safe mode: `QA_E2E_RESULTS`, `QA_E2E_NO_RESTART`, each run's output folders |
 | `founding-reset.mjs` | `npm run qa:founding-reset`: frees the founding places journeys took, nothing else |
 | `e2e/playwright.config.mjs` | Playwright settings: Chromium, desk viewport, three workers, reporters |
-| `e2e/*.spec.mjs` | the journeys (list below) |
-| `e2e/support/fixtures.mjs`, `e2e/support/lab.mjs` | the journeys' fixtures and shared steps |
+| `e2e/*.spec.mjs` | the journeys (table above) |
+| `e2e/support/fixtures.mjs`, `e2e/support/lab.mjs` | the journeys' fixtures (`qa.feature`, `check`, `bug`, `blocked`, `byDesign`) and shared steps |
+| `e2e/support/<area>-helpers.mjs` | each area's shared steps: `cred-`, `practice-`, `home-notify-`, `settings-auth-`, `sync-docs-intake-`, `vera-cv-share-`, `bill-admin-support-public-` (also builds and serves the public site), `ops-`, `phone-` (the phone sizes and layout audit) |
 | `e2e/support/results-reporter.mjs` | writes `.generated/results.json` (or the run's `QA_E2E_RESULTS` file) |
 | `.generated/` (gitignored) | `catalog.json`, `schema.sql`, `local-secrets.json`, `parity-report.txt`; step 2: `lab-secrets.json`, `stack/` (the CLI workdir: `supabase/config.toml` from the template, `signing_keys.json`, a `functions` link), `functions.env`, `lab.json`, `lab-ports.json`, `mocks/`, `app-dist/`, `logs/`, `smoke/`; step 3: `results.json`, `e2e/` |
 
@@ -1273,6 +1710,16 @@ Step 3 (offline):
 - `tests/qa-lab/public-repo-safety.test.mjs`: the journeys may name the
   product's own intake address and the app's placeholder examples, nothing else
   outside the reserved domains.
+- `tests/qa-lab/e2e-results.test.mjs`: also `by_design`: it outranks `pass`,
+  never a failure, is counted per priority and listed with its verdict in
+  `byDesign`; an unknown status from a journey counts as a failure.
+- `tests/qa-lab/e2e-parallel.test.mjs`: also the founding top-ups during a run:
+  a look every 3 minutes frees places only under 40, an unreadable count frees
+  nothing, a failed reset is logged, and the looks stop with the run.
+- `tests/qa-lab/functions-env.test.mjs`: also a provider SDK that picks its own
+  host: every Anthropic SDK client a function builds has no `baseURL`, the lab
+  sets `ANTHROPIC_BASE_URL` to the mock, the installed SDK (the version the
+  functions pin) reads that variable, and a real host there is refused.
 
 The journeys themselves (`*.spec.mjs`) need the running lab and are not part of
 `npm test`.
