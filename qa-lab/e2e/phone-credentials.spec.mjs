@@ -271,7 +271,10 @@ for (const width of [375, 390]) {
         qa.check('it is listed', await page.getByText('QA phone liability application').first().isVisible().catch(() => false));
         qa.check('the SSN is not shown in the clear', !(await page.locator('body').innerText()).includes('000-12-3456'));
         const withRecord = await auditScreen(qa, page, 'Protected Identity with a record', { allowSmall: anyOf(known, PROTECTED_BUTTONS) });
-        file(withRecord, 'Protected Identity with a record');
+        // Its Edit and Delete also fit CRED-001's card-action pattern; they are the by-design
+        // controls recorded just below, so they must not file the CRED-001 bug (smallByDesign:
+        // "file no bug for them"). Every other section's cards are still swept for it.
+        file({ ...withRecord, small: (withRecord.small || []).filter((s) => !PROTECTED_BUTTONS.test(s.el)) }, 'Protected Identity with a record');
         smallByDesign(qa, withRecord, { id: 'CRED-005', match: PROTECTED_BUTTONS, what: 'a record\'s Edit, Delete and Show', why: PROTECTED_VERDICT });
         await backButton(page).tap();
       }, { soft: true });

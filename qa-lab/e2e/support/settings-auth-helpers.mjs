@@ -51,14 +51,22 @@ export async function waitForSetupState(profileId, predicate, timeoutMs = 20000)
   return last;
 }
 
-/** The Setup count on Home's card ("Setup · 2 of 6"), the More tile and the Credentials rail. */
+/**
+ * The Setup count on Home's card ("Setup · 2 of 6"), the More tile and the Credentials rail.
+ * `homeRegression` is Home's other one-line form: once Protected was stamped and a
+ * Protected row with a regression line has come undone, Home names it instead of
+ * counting ("Setup: your DEA registration is no longer on file", SetupCard.jsx Form D,
+ * tier1Regressed), and `home` is then null.
+ */
 export async function setupCountsEverywhere(page) {
   const grab = (text, re) => { const m = re.exec(text.replace(/\s+/g, ' ')); return m ? `${m[1]} of ${m[2]}` : null; };
   await goTab(page, 'Home');
   await sleep(800);
   // Home's card: "Setup · n of m" (Protected unfinished, or the one-line form once it was stamped)
   // or "Packet setup · n of m" (Protected finished, the packet left).
-  const home = grab(await page.locator('body').innerText(), /[Ss]etup · (\d+) of (\d+)/);
+  const homeText = await page.locator('body').innerText();
+  const home = grab(homeText, /[Ss]etup · (\d+) of (\d+)/);
+  const homeRegression = (/Setup: ([^›\n]{1,120}?)\s*›/.exec(homeText) || [])[1]?.trim() || null;
   await goTab(page, 'More');
   await sleep(500);
   const more = grab(await page.getByRole('button', { name: /Setup Get everything on file/ }).first().innerText().catch(() => ''), /(\d+) of (\d+)/);
@@ -66,7 +74,7 @@ export async function setupCountsEverywhere(page) {
   await sleep(800);
   const railButton = page.getByRole('button', { name: /Setup.*\d+ of \d+/ }).first();
   const rail = grab(await railButton.innerText().catch(() => ''), /(\d+) of (\d+)/);
-  return { home, more, rail };
+  return { home, homeRegression, more, rail };
 }
 
 // ── Profile & settings ─────────────────────────────────────────────────────

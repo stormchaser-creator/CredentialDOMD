@@ -201,7 +201,15 @@ test('setup board: task menu, skip and not-applicable persist, put back, declare
     await openSetupPage(page);
     const strip = await stripCounts(page);
     const want = `${strip?.done} of ${strip?.total}`;
-    qa.check('Home card, More tile and Credentials rail still agree with the strip (Protected is finished here, so Home shows its one-line form)', counts.home === want && counts.more === want && counts.rail === want, JSON.stringify({ strip: want, ...counts }));
+    // Protected was stamped earlier and the DEA registration on file was deleted since (the
+    // stretch before the declared negatives), and "Put it back" has just withdrawn the "no DEA"
+    // declaration: DEA is the one Protected row undone. Home's one-line form then names it
+    // instead of counting (SetupCard.jsx Form D, tier1Regressed; the DEA task's regressionLine),
+    // while More, the rail and the strip count the Protected tier.
+    const deaUndone = strip?.label === 'Protected' && strip.done < strip.total;
+    const homeOk = counts.home === want
+      || (deaUndone && counts.home === null && counts.homeRegression === 'your DEA registration is no longer on file');
+    qa.check('Home card, More tile and Credentials rail still agree with the strip (Protected is finished here, so Home shows its one-line form: the count, or the undone DEA row named)', homeOk && counts.more === want && counts.rail === want, JSON.stringify({ strip: want, label: strip?.label, ...counts }));
     qa.check('profiles row unchanged apart from the board', profileOf(profile.auth_user_id)?.id === profile.id);
   }, { soft: true });
 
