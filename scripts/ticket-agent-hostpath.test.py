@@ -49,12 +49,41 @@ R = '20000000-0000-4000-8000-000000000002'
 X = '20000000-0000-4000-8000-000000000004'
 VERSION = '2026-09-19T12:00:00+00:00'
 checks = []
+# The scenario directory a failing check describes (set by scenario()).
+current = {'run': None}
+
+
+def evidence(run, result=None, size=4000):
+    """What a failed check shows: the runner log tail, each run record's
+    status and sessions, and the shell's own output when it printed any."""
+    if run is None:
+        return ''
+    filename = run / 'runner.log'
+    text = '\n--- runner.log tail ---\n' + (filename.read_text()[-size:] if filename.exists() else '(no runner.log)')
+    for record in sorted((run / 'work' / 'runs').glob('*/run.json')):
+        try:
+            value = json.loads(record.read_text())
+            text += f"\n--- {record.parent.name}/run.json: status={value.get('status')} reason={value.get('reason')} sessions=" + \
+                json.dumps([(s.get('role'), s.get('ok'), s.get('reason')) for s in value.get('sessions', [])])
+        except Exception as error:
+            text += f'\n--- {record.parent.name}/run.json unreadable: {error}'
+    if result is not None and (result.stdout or result.stderr):
+        text += '\n--- runner stdout/stderr ---\n' + (result.stdout + result.stderr)[-1500:]
+    return text
 
 
 def check(name, okay, detail=None):
     if not okay:
-        raise AssertionError(name if detail is None else f'{name}: {detail}')
+        # No detail given: the scenario's log tail at least says where it went.
+        raise AssertionError(name + evidence(current['run']) if detail is None else f'{name}: {detail}')
     checks.append(name)
+
+
+def check_parts(name, run, parts, result=None):
+    """One check made of several conditions, each (label, okay, seen): a
+    failure names every condition that failed, with what it saw."""
+    failed = [f'{label} (saw {seen!r})' for label, okay, seen in parts if not okay]
+    check(name, not failed, 'failed: ' + '; '.join(failed) + evidence(run, result) if failed else None)
 
 
 def write(filename, content, mode=0o600):
@@ -66,7 +95,14 @@ def quoted(value):
     return "'" + str(value).replace("'", "'\\''") + "'"
 
 
-with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp') as tmp:
+# The folder is the runner's TMPDIR, so its name reaches the log: a refused
+# answer that did not Read an attachment is logged by "rule name", and the
+# host takes every snake_case word of the refusal, including those in the
+# attachment's path. tempfile's random part draws from [a-z0-9_], so about 1
+# run in 70 got a folder like support-hostpath-ab_cdefg and a REPAIR line
+# ending "attachments ab_cdefg" (2026-09-29). Ending the name on a digit means
+# no part of it can read as a snake_case word.
+with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/private/tmp') as tmp:
     folder = Path(tmp)
     folder.chmod(0o700)
 
@@ -130,9 +166,9 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
            'SUPPORT_FIXTURE_PSQL': str(PG / 'psql'), 'SUPPORT_FIXTURE_SOCKET': str(sock),
            'SUPPORT_FIXTURE_RECORDER': f'http://127.0.0.1:{recorder.server_address[1]}'}
 
-    def command(*args, **kwargs):
+    def command(*args, timeout=30, **kwargs):
         return subprocess.run([str(a) for a in args], text=True, capture_output=True,
-                              env=env, timeout=30, **kwargs)
+                              env=env, timeout=timeout, **kwargs)
 
     slot = pg_slot.acquire(folder / 'data')
     initialized = command(PG / 'initdb', '-D', folder / 'data', '-U', 'postgres',
@@ -179,6 +215,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         reset(two_owners, approved, status, payload)
         run = folder / name
         run.mkdir(mode=0o700)
+        current['run'] = run
         repo = run / 'repo'
         for rel in HOST_FILES:
             source = ROOT / rel
@@ -241,8 +278,14 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         write(script, original)
         return run, state, script, repo
 
+    # A whole runner run: its sandboxed sessions take seconds, but a machine
+    # running the full suite in parallel can stretch that well past the 30 s
+    # a single command gets. No check here is about how fast a run is.
     def execute(script):
-        return command('/bin/zsh', script, cwd=script.parent)
+        try:
+            return command('/bin/zsh', script, cwd=script.parent, timeout=240)
+        except subprocess.TimeoutExpired as error:
+            raise AssertionError(f'the runner did not finish in {error.timeout} s' + evidence(script.parent)) from None
 
     def invocations(run):
         filename = run / 'model-inputs.jsonl'
@@ -328,7 +371,12 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
 
         for name in ['reapprove', 'withdraw', 'new_input', 'change_owner']:
             run, state, script, repo = scenario(name)
-            check(name + ' permits generation but withholds stale publication', execute(script).returncode == 0 and len(invocations(run)) == 1 and count() == 0 and 'reply_withheld' in (run / 'runner.log').read_text())
+            result = execute(script)
+            check_parts(name + ' permits generation but withholds stale publication', run, [
+                ('runner exit 0', result.returncode == 0, result.returncode),
+                ('one worker invocation', len(invocations(run)) == 1, len(invocations(run))),
+                ('no stored reply', count() == 0, count()),
+                ('log says reply_withheld', 'reply_withheld' in log(run), None)], result)
 
         for name, repairs in [('invalid_json', 0), ('provider_error', 0), ('bad_assessment', 2), ('answered_question', 2)]:
             run, state, script, repo = scenario(name)
@@ -477,8 +525,10 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         service_key = '.'.join(base64.urlsafe_b64encode(part.encode()).decode().rstrip('=') for part in ('{"alg":"HS256"}', '{"role":"service_role"}', 'synthetic-signature'))
         check('attachment: the storage key never reaches the log', service_key not in log(run) and service_key.split('.')[1] not in log(run))
         check('attachment: the extractor saw the screenshot inline', [json.loads(line)['images'] for line in (run / 'extract-inputs.jsonl').read_text().splitlines()] == [1])
-        seen = [json.loads(line) for line in (run / 'worker-attachments.jsonl').read_text().splitlines()]
-        check('attachment: an answer with no Read of it was refused and the worker resumed', 'REPAIR — ' + T + ' attempt 1: attachments\n' in log(run) and [v['resumed'] for v in seen] == [False, True], log(run)[-2000:])
+        seen = [json.loads(line) for line in (run / 'worker-attachments.jsonl').read_text().splitlines()] if (run / 'worker-attachments.jsonl').exists() else []
+        check_parts('attachment: an answer with no Read of it was refused and the worker resumed', run, [
+            ('log has the attachments REPAIR', 'REPAIR — ' + T + ' attempt 1: attachments\n' in log(run), [line for line in log(run).splitlines() if 'REPAIR' in line]),
+            ('worker ran fresh then resumed', [v['resumed'] for v in seen] == [False, True], seen)], result)
         check('attachment: the session sandbox let this ticket\'s sessions read it', all(v['readable'] for v in seen) and
               all(json.loads(line)['readable'] for line in (run / 'confirm-inputs.jsonl').read_text().splitlines()))
         check('attachment: the confirmer judged the observation', [json.loads(line)['attachments'] for line in (run / 'confirm-inputs.jsonl').read_text().splitlines()] == [['att-1']])

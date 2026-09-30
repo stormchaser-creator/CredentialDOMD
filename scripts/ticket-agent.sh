@@ -47,8 +47,14 @@ fi
 HOST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-ticket-host.XXXXXX") || exit 1
 trap '/bin/rm -rf "$HOST_DIR"' EXIT
 HOST_HEAD=$(/usr/bin/git -C "$REPO" rev-parse --verify HEAD 2>/dev/null) || { echo "$(date '+%F %T') ERROR — cannot read the repository HEAD" >> "$LOG"; exit 1; }
-( setopt pipefail; /usr/bin/git -C "$REPO" archive "$HOST_HEAD" scripts/ticket-agent-context.mjs scripts/ticket-agent-isolated.mjs \
-    scripts/ticket-agent-prompt.md scripts/ticket-fix scripts/notify-owner.sh | /usr/bin/tar -x -C "$HOST_DIR" ) 2>/dev/null &&
+# Through a file, never a pipe: tar stops reading at the end-of-archive
+# marker, so git archive, still writing its record padding into the pipe,
+# could die of SIGPIPE and pipefail called the copy failed. On a loaded
+# machine 7% of copies did (2026-09-29): the run stopped before any ticket
+# with "cannot copy the host code".
+/usr/bin/git -C "$REPO" archive --format=tar -o "$HOST_DIR/.host-code.tar" "$HOST_HEAD" scripts/ticket-agent-context.mjs scripts/ticket-agent-isolated.mjs \
+    scripts/ticket-agent-prompt.md scripts/ticket-fix scripts/notify-owner.sh 2>> "$LOG" &&
+  /usr/bin/tar -x -f "$HOST_DIR/.host-code.tar" -C "$HOST_DIR" 2>> "$LOG" && /bin/rm -f "$HOST_DIR/.host-code.tar" &&
   [ -f "$HOST_DIR/scripts/ticket-agent-context.mjs" ] || { echo "$(date '+%F %T') ERROR — cannot copy the host code from $HOST_HEAD" >> "$LOG"; exit 1; }
 HOST="$HOST_DIR/scripts"
 # Paths a model run may not change. A change to any of them in $REPO
