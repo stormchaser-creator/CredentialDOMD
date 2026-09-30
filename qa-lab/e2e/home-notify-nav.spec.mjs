@@ -70,12 +70,14 @@ test('desk and phone: sidebar, rail, top bar, keys, tab bar', {
     qa.check('the avatar opens More > Profile & settings', await hasBackButton(page) && /Profile & settings/.test(await bodyText(page)) && /board specialties/i.test(await bodyText(page)), (await bodyText(page)).slice(0, 160));
     await home(page);
     let icons = await topBarIcons(page);
-    qa.check('the bell shows a count of 1 for the one license due in 20 days', icons.bellBadge === '1', `badge "${icons.bellBadge}"`);
+    // The bell counts what Home lists (5b60976f): the license due in 20 days and the TX CME gap
+    // it brings (2 of 48 hours logged), the same count the Notification Center gives.
+    qa.check('the bell shows a count of 2: the license due in 20 days and the TX CME gap', icons.bellBadge === '2', `badge "${icons.bellBadge}"`);
     await icons.bell.click();
     const center = page.getByRole('dialog', { name: 'Notification Center' });
     const opened = await center.waitFor({ timeout: 10000 }).then(() => true, () => false);
     const centerText = (await center.innerText().catch(() => '')).replace(/\s+/g, ' ');
-    qa.check('the bell opens the Notification Center listing the license', opened && /QA Nav Texas License|Texas|TX/.test(centerText) && /1 expiring within 90 days/.test(centerText), centerText.slice(0, 200));
+    qa.check('the bell opens the Notification Center listing the license and the TX CME gap', opened && /QA Nav Texas License|Texas|TX/.test(centerText) && /1 expiring within 90 days/.test(centerText) && /1 state with CME gaps/.test(centerText), centerText.slice(0, 200));
     await page.keyboard.press('Escape');
     await center.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
 
@@ -234,7 +236,7 @@ test('desk and phone: sidebar, rail, top bar, keys, tab bar', {
     // Esc peels one modal at a time: the rule-change report over the CME math.
     await home(page);
     await page.getByText(/^TX$/).first().click();
-    const math = page.getByRole('dialog', { name: 'TX CME — the math' });
+    const math = page.getByRole('dialog', { name: 'TX CME: the math', exact: true });
     await math.waitFor({ timeout: 10000 });
     await math.getByRole('button', { name: 'Rules changed?' }).click();
     const report = page.getByRole('dialog', { name: /^Report a rule change/ });
@@ -360,7 +362,7 @@ test('hand-offs, reminder and guide emails, More, email links', {
     await page.getByRole('button', { name: 'RVUs', exact: true }).first().click();
     await page.getByPlaceholder('Type a CPT code (e.g. 61312) or name to add it').fill('61312');
     await page.getByRole('button', { name: /^61312\b/ }).first().click();
-    await page.getByRole('button', { name: /^Save — / }).click();
+    await page.getByRole('button', { name: /^Save [\d.]+ wRVU$/ }).click();
     await sleep(2500);
     const c = await eventually('the case', async () => row(`select id, role, category, source, cpt_codes from public.case_logs where user_id = '${profile.id}'`), 15000);
     qa.check('the operative code went to the case log with no role (source RVU log)', !!c && !c.role && c.source === 'RVU log' && /61312/.test(c.cpt_codes || ''), c);
@@ -402,7 +404,7 @@ test('hand-offs, reminder and guide emails, More, email links', {
     await reloadApp(page);
     await home(page);
     const homeText = await bodyText(page);
-    qa.check('Home alerts on the license, the DEA and the permit', /State Medical License — TX/.test(homeText) && /DEA Registration — TX/.test(homeText) && /QA fluoroscopy permit/.test(homeText));
+    qa.check('Home alerts on the license, the DEA and the permit', /State Medical License, TX/.test(homeText) && /DEA Registration, TX/.test(homeText) && /QA fluoroscopy permit/.test(homeText));
 
     const run = await runHook('send-reminders', { profile_id: profile.id });
     qa.check('send-reminders sent this member one email', run.status === 200 && run.data?.results?.[0]?.sent === true, JSON.stringify(run.data).slice(0, 200));

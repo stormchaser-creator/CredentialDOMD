@@ -1,9 +1,10 @@
 // Sync journeys about loading and replaying a member's records:
 //   * SYNC-004  a collection read that fails shows "Your records haven't
 //               finished loading" with Try again, never an empty account;
-//   * SYNC-006  a save refused while the membership is re-checked keeps the
-//               form, its values and its file; after reconnecting one record
-//               and one linked file are saved;
+//   * SYNC-006  a save made while the membership check fails is kept on the
+//               device with its file and says so; once a check answers active
+//               one record and one linked file are saved; a save waiting on a
+//               check that answers read-only is taken back and the member told;
 //   * SYNC-009  an add that never reached the cloud, then edited once the
 //               network is back, keeps the edit through the replay;
 //   * SYNC-010  a record that exists only on this device (its queue lost) is
@@ -13,7 +14,7 @@
 // own request, as a dropped connection would); the lab is never touched.
 import { test } from './support/fixtures.mjs';
 import {
-  field, landing, newMember, openCredentials, pendingOps, recordButtons, row, rows, signIn, sleep, syntheticPdf, tombstones, waitFor, waitForMemberApp,
+  accessSnapshot, field, landing, mockApi, newMember, openCredentials, pendingOps, recordButtons, row, rows, signIn, sleep, stripeFor, syntheticPdf, tombstones, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import { blockRequests, isFunction, isRest, pageText } from './support/sync-docs-intake-helpers.mjs';
 
@@ -76,10 +77,24 @@ test('records that fail to load: a clear screen with Try again, never an empty a
 });
 
 test('a save refused during a membership re-check keeps the form and its file; after reconnecting one record is saved', { tag: ['@SYNC-006'] }, async ({ page, qa }) => {
-  const { profile } = await newMember(page, { firstName: 'Remy', lastName: 'Refused' });
+  const { user, profile } = await newMember(page, { firstName: 'Remy', lastName: 'Refused' });
   const started = new Date(Date.now() - 2000).toISOString();
+  const KEPT = /saved on this device and will sync to your account when the app reconnects/;
+  // The membership check fails from here on (billing-entitlements unreachable); the member
+  // switches back to the tab, which asks the server again at once.
+  const failChecks = async () => {
+    const unblock = await blockRequests(page, (u) => isFunction(u, 'billing-entitlements'));
+    const checked = page.waitForRequest((r) => r.url().includes('/functions/v1/billing-entitlements'), { timeout: 20000 }).catch(() => null);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await checked;
+    await sleep(1500);
+    return unblock;
+  };
 
-  await qa.feature('SYNC-006', 'Add form with a file; the membership check fails; Save is refused out loud; reconnect; Save again', async () => {
+  // Since 8bafa3a1 a save that meets a failed check, inside the 24 h grace after the last
+  // active answer, is kept on the device and queued for replay (awaitingAccess) instead of
+  // refused; it goes up once a check answers active and is taken back if one answers read-only.
+  await qa.feature('SYNC-006', 'Add form with a file while the membership check fails: Save keeps the license and its file on this device and says so; a check that answers active sends one record and one linked file', async () => {
     await openCredentials(page, 'Licenses');
     await page.getByRole('button', { name: 'Add' }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
@@ -92,40 +107,72 @@ test('a save refused during a membership re-check keeps the form and its file; a
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), dlg.getByRole('button', { name: 'Upload' }).click()]);
     await chooser.setFiles([{ name: 'qa-refused-license.pdf', mimeType: 'application/pdf', buffer: syntheticPdf('QA synthetic Utah license for a refused save') }]);
     await dlg.getByText('qa-refused-license.pdf').first().waitFor({ timeout: 30000 });
-    // The membership check fails from here on (billing-entitlements unreachable); the member
-    // switches back to the tab, which asks the server again at once.
-    const unblock = await blockRequests(page, (u) => isFunction(u, 'billing-entitlements'));
-    const checked = page.waitForRequest((r) => r.url().includes('/functions/v1/billing-entitlements'), { timeout: 20000 }).catch(() => null);
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await checked;
-    await sleep(1500);
+    const unblock = await failChecks();
     const dialogs = qa.report.dialogs.length;
     await dlg.getByRole('button', { name: 'Add' }).click();
-    await sleep(2500);
+    const closed = await dlg.waitFor({ state: 'detached', timeout: 20000 }).then(() => true, () => false);
     const said = qa.report.dialogs.slice(dialogs).join(' | ');
-    await qa.shot('refused save');
-    qa.check('the refusal says "Reconnecting, try again in a moment." or "Changes can\'t be saved until you reconnect."', /Reconnecting, try again in a moment\.|Changes can't be saved until you reconnect\./.test(said), said || 'no alert');
-    qa.check('the form stays open', await dlg.isVisible());
-    qa.check('every typed value is still there', await field(dlg, 'License #').inputValue() === 'QA-REFUSE-606' && await field(dlg, 'Display Name').inputValue() === 'QA Refused Save License' && await field(dlg, /^Expires/).inputValue() === '2029-03-31');
-    qa.check('the attached file is still listed', await dlg.getByText('qa-refused-license.pdf').first().isVisible().catch(() => false));
-    qa.check('nothing reached the database', !rows(`select id from public.licenses where user_id = '${profile.id}'`).length && !rows(`select id from public.documents where user_id = '${profile.id}'`).length);
-    // Back online: Save again until the app accepts it (a refusal asks for a fresh check itself).
+    const kept = page.getByRole('status').filter({ hasText: KEPT });
+    const keptShown = await kept.waitFor({ timeout: 20000 }).then(() => true, () => false);
+    await qa.shot('save kept on device');
+    qa.check('Save is not refused (no alert) and closes the form', closed && !said, said || (closed ? '' : 'the form stayed open'));
+    qa.check('a notice says the change is saved on this device and will sync', keptShown, keptShown ? (await kept.innerText()).replace(/\s+/g, ' ').slice(0, 200) : (await pageText(page)).slice(0, 200));
+    qa.check('the license is listed on this device', /QA-REFUSE-606/.test(await pageText(page)));
+    const queued = await pendingOps(page);
+    qa.check('the license and its file are queued on this device, waiting for the membership check', queued.some((op) => op?.awaitingAccess === true && op.collectionKey === 'licenses') && queued.some((op) => op?.awaitingAccess === true && op.collectionKey === 'documents'), JSON.stringify(queued.map((op) => ({ key: op?.collectionKey, op: op?.op, awaitingAccess: op?.awaitingAccess }))).slice(0, 300));
+    qa.check('nothing reached the database while the check fails', !rows(`select id from public.licenses where user_id = '${profile.id}'`).length && !rows(`select id from public.documents where user_id = '${profile.id}'`).length);
+    // Back online: the next check answers active, and the kept saves go up without another tap.
     await unblock();
-    let tries = 0;
-    for (; tries < 6 && await dlg.isVisible().catch(() => false); tries++) {
-      await sleep(tries ? 3000 : 1500);
-      await dlg.getByRole('button', { name: 'Add' }).click().catch(() => {});
-      await dlg.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
-    }
-    qa.check('after reconnecting, Save closes the form', !(await dlg.isVisible().catch(() => false)), `${tries} tap(s)`);
-    await sleep(4000);
-    const lic = rows(`select id from public.licenses where user_id = '${profile.id}' and created_at > '${started}'`);
-    qa.check('exactly one license was created', lic.length === 1, `${lic.length}`);
+    const answered = page.waitForResponse((r) => r.url().includes('/functions/v1/billing-entitlements') && r.request().method() === 'POST', { timeout: 30000 }).then((r) => r.status(), () => null);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    qa.check('the next membership check answers 200', (await answered) === 200);
+    const lic = await waitFor('the kept license in the database', async () => { const r = rows(`select id from public.licenses where user_id = '${profile.id}' and created_at > '${started}'`); return r.length ? r : null; }, { timeoutMs: 30000 }).catch(() => []);
+    await waitFor('its file', async () => row(`select id from public.documents where user_id = '${profile.id}' and storage_path is not null and linked_to is not null`), { timeoutMs: 30000 }).catch(() => null);
+    await sleep(3000);
+    const licenses = rows(`select id from public.licenses where user_id = '${profile.id}' and created_at > '${started}'`);
+    qa.check('exactly one license was created', licenses.length === 1, `${licenses.length} (first seen ${lic.length})`);
     const docs = rows(`select id, name, linked_to, storage_path from public.documents where user_id = '${profile.id}'`);
-    qa.check('exactly one document, linked to that license, with its file stored', docs.length === 1 && docs[0].linked_to === `licenses:${lic[0]?.id}` && !!docs[0].storage_path, JSON.stringify(docs));
-    qa.check('no document without a linked record', docs.every((d) => d.linked_to && lic.some((l) => d.linked_to === `licenses:${l.id}`)));
+    qa.check('exactly one document, linked to that license, with its file stored', docs.length === 1 && docs[0].linked_to === `licenses:${licenses[0]?.id}` && !!docs[0].storage_path, JSON.stringify(docs));
+    qa.check('no document without a linked record', docs.every((d) => d.linked_to && licenses.some((l) => d.linked_to === `licenses:${l.id}`)));
+    const gone = await kept.waitFor({ state: 'detached', timeout: 20000 }).then(() => true, () => false);
     const queue = await pendingOps(page);
-    qa.check('nothing left queued', queue.length === 0, JSON.stringify(queue).slice(0, 160));
+    qa.check('the notice goes and nothing is left queued', gone && queue.length === 0, JSON.stringify(queue).slice(0, 160));
+  });
+
+  await qa.feature('SYNC-006', 'A real read-only answer: the membership ends while a save waits for the check; the save is taken back and the member told', async () => {
+    await openCredentials(page, 'Licenses');
+    await page.getByRole('button', { name: 'Add' }).first().click();
+    const dlg = page.getByRole('dialog', { name: 'Add' });
+    await dlg.waitFor();
+    await field(dlg, 'Type').selectOption('State Medical License');
+    await field(dlg, 'Display Name').fill('QA Read-only Save License');
+    await field(dlg, 'License #').fill('QA-READONLY-607');
+    await field(dlg, 'State').selectOption('NM');
+    await field(dlg, /^Expires/).fill('2029-04-30');
+    const unblock = await failChecks();
+    // The membership ends for real: Stripe (the lab's stand-in) cancels the subscription now.
+    const [sub] = (await stripeFor(user.id)).sessions.map((x) => x.subscription).filter(Boolean);
+    let r = await mockApi(`/qa/stripe/subscriptions/${encodeURIComponent(sub)}/cancel`, { method: 'POST', body: { atPeriodEnd: false } });
+    for (let i = 0; i < 5 && !(r.delivery?.status >= 200 && r.delivery?.status < 300); i++) {
+      await sleep(3000);
+      const evt = (await stripeFor(user.id)).deliveries.find((d) => d.type === 'customer.subscription.deleted');
+      if (evt) r = { delivery: await mockApi(`/qa/stripe/events/${evt.event}/resend`, { method: 'POST', body: {} }) };
+    }
+    const ended = await waitFor('write access ended', async () => (accessSnapshot(user.id)?.capabilities?.credential?.write === false ? true : null), { timeoutMs: 30000 }).catch(() => false);
+    qa.check('the membership ends: the server answers read-only for Credential', ended, JSON.stringify(accessSnapshot(user.id)?.capabilities?.credential));
+    // The check can answer again; the save asks for it and waits for the answer.
+    await unblock();
+    const dialogs = qa.report.dialogs.length;
+    await dlg.getByRole('button', { name: 'Add' }).click();
+    const told = await waitFor('the refusal', async () => (qa.report.dialogs.length > dialogs ? true : null), { timeoutMs: 20000 }).catch(() => false);
+    await sleep(1500);
+    const said = qa.report.dialogs.slice(dialogs).join(' | ');
+    await qa.shot('read-only answer refuses');
+    qa.check('the member is told the change was not kept because the membership no longer allows it', told && /Your membership no longer allows changes here, so your last change was not kept\.|This record is read-only\./.test(said), said || 'no alert');
+    qa.check('the license is not kept on this device', !/QA-READONLY-607/.test(await pageText(page)));
+    const queue = await pendingOps(page);
+    qa.check('nothing is queued to replay', !queue.some((op) => JSON.stringify(op).includes('QA-READONLY-607')), JSON.stringify(queue).slice(0, 200));
+    qa.check('nothing reached the database', !row(`select id from public.licenses where user_id = '${profile.id}' and license_number = 'QA-READONLY-607'`));
   });
 });
 
@@ -222,11 +269,22 @@ test('a record kept only on this device is pushed up on load; a stale device doe
     await sleep(3000);
     qa.check('B deleted it: row gone, tombstoned', !row(`select id from public.publications where id = '${target.id}'`) && tombstones(profile.id).some((t) => t.item_id === target.id));
     // Device A still holds it in its copy; its read of the deletion ledger fails on this load.
+    // An unreadable ledger is unknown data, never an empty one (16617e4b): the load stops on the
+    // records-load screen instead of opening the account on a copy that may hold deleted rows.
     const unblock = await blockRequests(page, (u, m) => m === 'GET' && isRest(u, 'deleted_items'));
     await page.reload();
+    const screen = page.getByRole('alert').filter({ hasText: /haven't finished loading/ });
+    const stopped = await screen.waitFor({ timeout: 60000 }).then(() => true, () => false);
+    await sleep(3000);
+    await qa.shot('ledger unreadable');
+    const whileBlocked = row(`select id from public.publications where id = '${target.id}'`);
+    qa.check('the load stops on "Your records haven\'t finished loading" while the ledger cannot be read', stopped && /DATA-LOAD-UNAVAILABLE/.test(await pageText(page)), (await pageText(page)).slice(0, 200));
+    qa.check('no account is opened behind it (no Credentials navigation)', !(await page.getByRole('button', { name: /^Credentials$/ }).count()));
+    qa.check('nothing is pushed up while the load is stopped (no zombie row)', !whileBlocked);
+    await unblock();
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
     await waitForMemberApp(page);
     await sleep(6000);
-    await unblock();
     const back = row(`select id from public.publications where id = '${target.id}'`);
     await openCredentials(page, 'Publications');
     const shownOnA = /QA deleted elsewhere paper/.test(await pageText(page));

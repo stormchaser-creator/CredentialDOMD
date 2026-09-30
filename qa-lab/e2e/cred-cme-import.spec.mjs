@@ -92,7 +92,8 @@ test('CME import, certificates and the CME Passport panel', {
     const opioid = rs.find((r) => /Opioid/.test(r.title));
     qa.check('a topic is guessed from the title and subject ("Opioid Prescribing")', opioid?.topics.includes('Opioid Prescribing'), opioid);
     // Remove that topic chip, untick the third row.
-    await dlg.getByRole('button', { name: /^Opioid Prescribing\s*×$/ }).first().click();
+    // The chip is named for what it does (43341dc1): "Remove topic Opioid Prescribing".
+    await dlg.getByRole('button', { name: 'Remove topic Opioid Prescribing', exact: true }).first().click();
     // One checkbox and one title box per row, in the same order.
     const titles = await dlg.locator('input[placeholder="Activity title"]').evaluateAll((els) => els.map((e) => e.value));
     await dlg.locator('input[type=checkbox]').nth(titles.indexOf('QA Spine Imaging Review')).uncheck();

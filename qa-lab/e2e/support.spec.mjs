@@ -72,7 +72,7 @@ test('support: ticket with a screenshot, owner replies in the app, member sees i
         severity: 'medium',
       });
     }
-    await other.page.getByPlaceholder('Reply to the physician — they see this in their ticket.').fill(replyText);
+    await other.page.getByRole('textbox', { name: 'Reply to the physician', exact: true }).fill(replyText);
     await other.page.getByRole('button', { name: 'Send reply' }).click();
     await other.page.getByText(replyText).first().waitFor({ timeout: 30000 });
     await other.page.screenshot({ path: (await qa.shot('admin view before reply')).replace(/\.png$/, '-admin.png') });

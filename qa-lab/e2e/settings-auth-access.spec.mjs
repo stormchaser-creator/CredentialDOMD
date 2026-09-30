@@ -10,7 +10,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { test } from './support/fixtures.mjs';
 import {
-  LAB_EMAIL_DOMAIN, createPhysician, emails, field, lab, labExec, landing, mockApi, newMember, openCredentials, profileOf,
+  LAB_EMAIL_DOMAIN, createPhysician, emails, field, lab, labExec, landing, mockApi, newMember, openCredentials, pendingOps, profileOf,
   row, rows, signIn, sleep, stamp, syntheticPdf, tableRow, waitFor, waitForMemberApp, waitForProfile,
 } from './support/lab.mjs';
 import { openSettings } from './support/settings-auth-helpers.mjs';
@@ -40,7 +40,7 @@ test('membership check notices: reconnecting while checks fail, Try again, Check
   await addLicenseByHand(page, 'QA-NOTICE-1');
   const phoneBefore = profileOf(user.id).phone;
 
-  await qa.feature('AUTH-009', 'Offline while signed in: the note appears only once the check keeps failing; saves are refused out loud; back online it clears by itself', async () => {
+  await qa.feature('AUTH-009', 'Offline while signed in: the note appears only once the check keeps failing; a save is kept on this device and syncs when the check answers; back online it clears by itself', async () => {
     await openSettings(page);
     const t0 = Date.now();
     await context.setOffline(true);
@@ -57,21 +57,36 @@ test('membership check notices: reconnecting while checks fail, Try again, Check
     // The screens stay usable: Credentials still lists the license.
     await openCredentials(page, 'Licenses');
     qa.check('Credentials still opens with the saved license', await tableRow(page, 'QA-NOTICE-1').isVisible().catch(() => false));
-    // A save is refused with a message, never silently dropped.
+    // A save while the check fails, inside the grace after the last active answer, is kept on
+    // this device and queued until a check answers (8bafa3a1: never refused, never dropped).
     await openSettings(page);
     const dialogsBefore = qa.report.dialogs.length;
-    await page.getByPlaceholder('(555) 123-4567').fill('(555) 010-0142');
+    const phoneField = page.getByPlaceholder('(555) 123-4567');
+    await phoneField.fill('(555) 010-0142');
+    await phoneField.blur();
     await sleep(1500);
-    const refused = qa.report.dialogs.slice(dialogsBefore);
-    qa.check('the edit is refused with a message', refused.length > 0, refused.join(' | ') || 'no message');
+    const said = qa.report.dialogs.slice(dialogsBefore);
+    qa.check('the edit is not refused (no alert)', said.length === 0, said.join(' | '));
+    const kept = page.getByRole('status').filter({ hasText: /saved on this device and will sync to your account when the app reconnects/ });
+    const keptShown = await kept.waitFor({ timeout: 20000 }).then(() => true, () => false);
+    await qa.shot('save kept on device');
+    qa.check('a notice says the change is saved on this device and will sync', keptShown, keptShown ? (await kept.innerText()).replace(/\s+/g, ' ').slice(0, 200) : (await bodyText(page)).slice(0, 200));
+    qa.check('the field keeps the edit', (await phoneField.inputValue()) === '(555) 010-0142');
+    const queued = await pendingOps(page);
+    qa.check('the save is queued on this device, waiting for the membership check', queued.some((op) => op?.awaitingAccess === true), JSON.stringify(queued).slice(0, 240));
+    qa.check('nothing reached the profile while the check fails', profileOf(user.id).phone === phoneBefore, JSON.stringify({ before: phoneBefore, now: profileOf(user.id).phone }));
     const answered = page.waitForResponse((r) => r.url().includes('/functions/v1/billing-entitlements') && r.request().method() === 'POST', { timeout: 30000 }).then((r) => r.status(), () => null);
     await context.setOffline(false);
     const cleared = await note.waitFor({ state: 'detached', timeout: 30000 }).then(() => true, () => false);
     qa.check('back online the note clears by itself', cleared);
     const entitlements = await answered;
-    await sleep(1500);
-    qa.check('the refused edit did not reach the profile', profileOf(user.id).phone === phoneBefore, JSON.stringify({ before: phoneBefore, now: profileOf(user.id).phone }));
     qa.check('billing-entitlements answers 200 after reconnect', entitlements === 200, `status ${entitlements}`);
+    // Replayed only after that allowing answer.
+    const synced = await waitFor('the kept edit on the profile', async () => (profileOf(user.id).phone === '(555) 010-0142' ? true : null), { timeoutMs: 30000 }).catch(() => false);
+    qa.check('the kept edit reaches the profile once the check answers', synced, JSON.stringify({ before: phoneBefore, now: profileOf(user.id).phone }));
+    const gone = await kept.waitFor({ state: 'detached', timeout: 20000 }).then(() => true, () => false);
+    const left = await pendingOps(page);
+    qa.check('the notice goes and nothing is left queued', gone && !left.some((op) => op?.awaitingAccess === true), JSON.stringify(left).slice(0, 240));
   }, { soft: true });
 
   await qa.feature('AUTH-009', '"Try again" on the note: refused while the check still fails, clears once it succeeds', async () => {
@@ -138,29 +153,37 @@ test('account setup failure screen: a readable message and a working Try again; 
   const before = profileOf(user.id);
   const since = nowSql();
 
-  await qa.feature('AUTH-011', 'initialize-clerk-profile blocked: a message under the logo and Try again; unblocked, one tap reaches Home with every record', async () => {
+  await qa.feature('AUTH-011', 'initialize-clerk-profile blocked: a message under the logo and Reload; unblocked, one tap reaches Home with every record', async () => {
     const sent = [];
     page.on('request', (r) => { if (r.url().includes('/functions/v1/report-error') && r.method() === 'POST') sent.push({ body: r.postData() || '', response: r.response() }); });
     await page.route(fn('initialize-clerk-profile'), (r) => r.abort('failed'));
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    const status = page.getByRole('status').first();
-    await status.waitFor({ timeout: 60000 });
-    await sleep(3000);
-    const msg = (await status.innerText()).replace(/\s+/g, ' ');
-    const tryAgain = page.getByRole('button', { name: 'Try again' });
-    await qa.shot('setup failed');
-    qa.check('a readable failure message, not "Checking your membership…"', !/^Checking your membership/.test(msg) && /could not|Reload to try again/i.test(msg), msg.slice(0, 200));
-    qa.check('a "Try again" button is offered', await tryAgain.isVisible().catch(() => false));
-    await tryAgain.click();
-    await page.getByRole('status').first().waitFor({ timeout: 60000 });
-    await sleep(3000);
-    const again = (await page.getByRole('status').first().innerText()).replace(/\s+/g, ' ');
-    qa.check('Try again while still blocked shows the same readable failure (never an endless check)', /could not|Reload to try again/i.test(again) && await tryAgain.isVisible().catch(() => false), again.slice(0, 160));
-    await page.unroute(fn('initialize-clerk-profile'));
-    await tryAgain.click();
-    await waitForMemberApp(page, 60000).catch(() => {});
-    await openCredentials(page, 'Licenses');
-    qa.check('after unblocking, one tap reaches the app with the license', await tableRow(page, 'QA-INIT-1').isVisible().catch(() => false));
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      const status = page.getByRole('status').first();
+      await status.waitFor({ timeout: 60000 });
+      await sleep(3000);
+      const msg = (await status.innerText()).replace(/\s+/g, ' ');
+      // An account-load stop asks for a reload, so the gate's button reads "Reload" (a9fb298b,
+      // accessGateStatus: "Try again" is only for a membership check that can be retried in place).
+      const reload = page.getByRole('button', { name: 'Reload', exact: true });
+      await qa.shot('setup failed');
+      qa.check('a readable failure message, not "Checking your membership…"', !/^Checking your membership/.test(msg) && /could not|Reload to try again/i.test(msg), msg.slice(0, 200));
+      qa.check('a "Reload" button is offered (the message asks for a reload)', await reload.isVisible().catch(() => false) && !(await page.getByRole('button', { name: 'Try again', exact: true }).count()));
+      // Reload reloads the page (window.location.reload): wait for the new document.
+      const navigated = await Promise.all([page.waitForEvent('domcontentloaded', { timeout: 30000 }).then(() => true, () => false), reload.click()]).then(([n]) => n);
+      await page.getByRole('status').first().waitFor({ timeout: 60000 });
+      await sleep(3000);
+      const again = (await page.getByRole('status').first().innerText()).replace(/\s+/g, ' ');
+      qa.check('Reload while still blocked reloads and shows the same readable failure (never an endless check)', navigated && /could not|Reload to try again/i.test(again) && await reload.isVisible().catch(() => false), again.slice(0, 160));
+      await page.unroute(fn('initialize-clerk-profile'));
+      await reload.click();
+      await waitForMemberApp(page, 60000).catch(() => {});
+      await openCredentials(page, 'Licenses');
+      qa.check('after unblocking, one tap reaches the app with the license', await tableRow(page, 'QA-INIT-1').isVisible().catch(() => false));
+    } finally {
+      // Never leave the profile step blocked for the next stretch.
+      await page.unroute(fn('initialize-clerk-profile')).catch(() => {});
+    }
     const stops = sent.filter((x) => /Account load stopped/.test(x.body));
     const statuses = await Promise.all(stops.map(async (x) => (await x.response.catch(() => null))?.status() ?? null));
     qa.check('the app reports the stop with a support reference only', stops.length > 0 && stops.every((x) => /"message":"Account load stopped \([A-Z0-9-]+\)\."/.test(x.body)), `${stops.length} report(s), statuses ${statuses.join(', ')}`);

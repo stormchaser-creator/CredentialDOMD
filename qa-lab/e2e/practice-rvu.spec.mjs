@@ -11,10 +11,12 @@ import { addAgreement, credentialOnlyMember, localDay, subTab, watchAiRequests }
 const bodyText = async (page) => (await page.locator('body').innerText()).replace(/[ \t]+/g, ' ');
 const wr = (codes) => Math.round(codes.reduce((t, c) => t + (Number(c.wRVU) || 0) * (Number(c.units) || 1), 0) * 100) / 100;
 
+/** A code's × button, named "Remove <code>" (43341dc1). */
+const removeCode = (code) => ({ name: `Remove ${code}`, exact: true });
 /** A review chip (or encounter modal line) for one code: the innermost block holding the code and its × button. */
 const codeLine = (scope, code) => {
   const root = typeof scope.page === 'function' ? scope.page() : scope; // `has` is matched inside each candidate, so it is built from the page
-  return scope.locator('div').filter({ hasText: new RegExp(`^${code}(?!\\d)`) }).filter({ has: root.getByRole('button', { name: '×', exact: true }) }).last();
+  return scope.locator('div').filter({ hasText: new RegExp(`^${code}(?!\\d)`) }).filter({ has: root.getByRole('button', removeCode(code)) }).last();
 };
 
 test('practice CPT lookup: search, copy, ask the AI, bill it; a Credential-only member is refused', {
@@ -117,16 +119,16 @@ test('practice RVU log: code a case, adjust, save to the case log, add one anywa
     const reviewed = await codeLine(page, '61312').waitFor({ timeout: 45000 }).then(() => true, () => false);
     await qa.shot('coded');
     qa.check('the AI returns CPT codes with wRVU for review', reviewed && /29\.42 wRVU × 1/.test(await codeLine(page, '61312').innerText()));
-    await codeLine(page, '99223').getByRole('button', { name: '+', exact: true }).click();
+    await codeLine(page, '99223').getByRole('button', { name: 'More units of 99223', exact: true }).click();
     qa.check('+ adds a unit', /3\.50 wRVU × 2/.test(await codeLine(page, '99223').innerText()));
-    await codeLine(page, '99223').getByRole('button', { name: '−', exact: true }).click();
-    await codeLine(page, '61154').getByRole('button', { name: '×', exact: true }).click();
+    await codeLine(page, '99223').getByRole('button', { name: 'Fewer units of 99223', exact: true }).click();
+    await codeLine(page, '61154').getByRole('button', removeCode('61154')).click();
     qa.check('× removes a code', !(await codeLine(page, '61154').isVisible().catch(() => false)));
     await page.getByPlaceholder('Type a CPT code (e.g. 61312) or name to add it').fill('62223');
     await page.getByRole('button', { name: /^62223\b/ }).first().click();
     qa.check('a code typed in is added', await codeLine(page, '62223').isVisible());
     await page.locator('label', { hasText: /Case log category/ }).locator('xpath=..').locator('select').selectOption('Cranial: Trauma/Other');
-    const saveBtn = page.getByRole('button', { name: /^Save — [\d.]+ wRVU$/ });
+    const saveBtn = page.getByRole('button', { name: /^Save [\d.]+ wRVU$/ });
     qa.check('the save button totals 46.62 wRVU (61312 + 99223 + 62223)', /46\.62/.test(await saveBtn.innerText()), await saveBtn.innerText());
     await saveBtn.click();
     operative = await waitFor('the encounter', async () => encounters()[0] || null, { timeoutMs: 20000 }).catch(() => null);
@@ -143,7 +145,7 @@ test('practice RVU log: code a case, adjust, save to the case log, add one anywa
     await scriptAi('gemini', { json: { encounters: [{ code: '99223', units: 1, why: 'initial inpatient consult, high' }], questions: [], confidence: 'high' } }, tag2);
     await page.getByRole('button', { name: 'Code it' }).click();
     await codeLine(page, '99223').waitFor({ timeout: 45000 });
-    await page.getByRole('button', { name: /^Save — 3\.50 wRVU$/ }).click();
+    await page.getByRole('button', { name: /^Save 3\.50 wRVU$/ }).click();
     const note = await page.getByText(/evaluation and management codes, so nothing went to the career case log/).first().waitFor({ timeout: 10000 }).then(() => true, () => false);
     qa.check('an E/M-only save says nothing went to the case log', note);
     await page.getByRole('button', { name: 'Add it to my case log anyway' }).click();
@@ -160,7 +162,7 @@ test('practice RVU log: code a case, adjust, save to the case log, add one anywa
     const reached = sent.some((b) => b.includes('MRN 4455667'));
     let stored = null;
     if (coded) {
-      await page.getByRole('button', { name: /^Save — [\d.]+ wRVU$/ }).click();
+      await page.getByRole('button', { name: /^Save [\d.]+ wRVU$/ }).click();
       stored = await waitFor('the encounter with the dictation', async () => encounters(`and spoken_text like '%${tag3}%'`)[0] || null, { timeoutMs: 15000 }).catch(() => null);
     }
     await qa.shot('dictation with an identifier');
@@ -176,7 +178,7 @@ test('practice RVU log: code a case, adjust, save to the case log, add one anywa
     }
     if (stored) {
       // Delete the encounter that carries the (synthetic) identifier, as the physician would.
-      await page.getByRole('button').filter({ hasText: /61154/ }).last().getByRole('button').last().click();
+      await page.getByRole('button').filter({ hasText: /61154/ }).last().getByRole('button', { name: 'Delete encounter', exact: true }).click();
       await waitFor('the identifier encounter deleted', async () => (!row(`select id from public.encounters where id = '${stored.id}'`) ? true : null), { timeoutMs: 15000 }).catch(() => null);
     }
 
@@ -184,8 +186,8 @@ test('practice RVU log: code a case, adjust, save to the case log, add one anywa
     await page.getByRole('button').filter({ hasText: /61312/ }).filter({ hasText: /62223/ }).last().click();
     const m = page.getByRole('dialog', { name: 'Encounter' });
     await m.waitFor();
-    await codeLine(m, '62223').getByRole('button', { name: '×', exact: true }).click();
-    await m.getByPlaceholder('Add a code — type a number or a name').fill('61313');
+    await codeLine(m, '62223').getByRole('button', removeCode('62223')).click();
+    await m.getByRole('textbox', { name: 'Add a code', exact: true }).fill('61313');
     await m.getByRole('button', { name: /^61313\b/ }).first().click();
     await m.getByRole('button', { name: 'Save changes' }).click();
     await m.waitFor({ state: 'detached', timeout: 10000 });
@@ -204,7 +206,7 @@ test('practice RVU log: code a case, adjust, save to the case log, add one anywa
 
     // Delete it, confirmed.
     const card = page.getByRole('button').filter({ hasText: /61313/ }).last();
-    await card.getByRole('button').last().click();
+    await card.getByRole('button', { name: 'Delete encounter', exact: true }).click();
     await sleep(1500);
     qa.check('the delete asks "Delete this encounter?"', qa.report.dialogs.some((d) => /Delete this encounter\?/.test(d)));
     qa.check('the encounter is gone and tombstoned', !row(`select id from public.encounters where id = '${operative.id}'`) && tombstones(profile.id).some((t) => t.item_id === operative.id));
@@ -224,7 +226,7 @@ test('practice RVU log: code a case, adjust, save to the case log, add one anywa
     await sleep(300);
     const picked = await page.locator('select').filter({ has: page.locator('option', { hasText: 'QAFH' }) }).first().inputValue().catch(() => null);
     qa.check('dating it 40 days ago picks the agreement in force then', picked === qafh.id, picked);
-    await page.getByRole('button', { name: /^Save — 16\.64 wRVU$/ }).click();
+    await page.getByRole('button', { name: /^Save 16\.64 wRVU$/ }).click();
     await waitFor('the dated encounter', async () => encounters(`and date = '${localDay(-40)}'`)[0] || null, { timeoutMs: 15000 });
     await sleep(1000);
     const all = encounters();

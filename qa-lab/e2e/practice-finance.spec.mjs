@@ -193,7 +193,8 @@ test('practice deductions and card statements: manual lines, year filter, CSV an
     await page.getByRole('button', { name: 'Print', exact: true }).click();
     qa.check('Print opens the print dialog for the memo', (await page.evaluate(() => window.__qaPrinted)) === 1);
     // Remove a line.
-    await page.locator('div').filter({ hasText: /^QA Texas license application/ }).filter({ has: page.getByRole('button', { name: '✕' }) }).last().getByRole('button', { name: '✕' }).click();
+    // The ✕ is named for its line (43341dc1).
+    await page.getByRole('button', { name: 'Remove QA Texas license application', exact: true }).click();
     await sleep(1500);
     qa.check('removing asks "Remove this deduction line?"', qa.report.dialogs.some((x) => /Remove this deduction line\?/.test(x)));
     qa.check('the line leaves the ledger', !/QA Texas license application/.test(await bodyText(page)));
@@ -243,8 +244,10 @@ test('practice deductions and card statements: manual lines, year filter, CSV an
     m = await importFile('qa-card-statement.csv', statement);
     text = (await m.innerText()).replace(/\s+/g, ' ');
     await qa.shot('statement re-import');
-    const flagged = (text.match(/already in ledger/gi) || []).length;
-    qa.check('the two deducted rows are flagged "already in ledger" and unticked', flagged >= 2, text.slice(0, 400));
+    // The duplicate badge reads "already recorded" and covers a row recorded as a Work expense too
+    // (StatementImport.jsx: "rows already recorded (as a deduction or a work expense) are flagged").
+    const flagged = (text.match(/already recorded/gi) || []).length;
+    qa.check('the three recorded rows (two deductions, the hotel as a Work expense) are flagged "already recorded"', flagged === 3, text.slice(0, 400));
     if (!qa.check('nothing is selected the second time (the hotel was already recorded as a Work expense)', /0 of 4 lines selected/.test(text), text.match(/\d+ of \d+ lines selected[^A-Z]*/)?.[0])) {
       qa.bug({
         title: 'Statement import: a row billed to the agency on an earlier import is ticked again on re-import',

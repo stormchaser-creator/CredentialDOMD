@@ -42,7 +42,7 @@ test('home and Vera: search opens a record, Vera answers, notification center, a
     await goTab(page, 'Home');
     const search = page.getByRole('textbox', { name: 'Search everything, or ask Vera' });
     await search.fill('QA-FIND-4242');
-    const hit = page.getByText(/State Medical License — AZ/).first();
+    const hit = page.getByText(/State Medical License, AZ/).first();
     const found = await hit.waitFor({ timeout: 10000 }).then(() => true, () => false);
     await qa.shot('search results');
     qa.check('the search lists the license by its number', found);

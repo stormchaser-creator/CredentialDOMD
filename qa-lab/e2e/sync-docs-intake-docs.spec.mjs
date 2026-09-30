@@ -1,12 +1,13 @@
 // Documents journeys (Smart Scan):
-//   * DOCS-003  a file that reads as a patient record is removed after reading,
-//               also when its upload is still in flight when the reading ends;
+//   * DOCS-003  a file that reads as a patient record is refused after reading
+//               and never stored ("was not uploaded"), also on a slow connection;
 //   * DOCS-005  the camera: a photo taken enters the review queue and is kept,
 //               Cancel stores nothing, a refused permission says so;
 //   * DOCS-006  a receipt filed as an agency expense, another as a deduction,
 //               each with the receipt linked;
 //   * DOCS-007  a document that fits no section: a new category, an existing
-//               one, "Keep as plain document", and Discard on a recognised card;
+//               one, "Keep as plain document", and "Delete this file" on a
+//               recognised card;
 //   * DOCS-010  a stored image opens in the lightbox and becomes the profile
 //               photo (downscaled); a stored PDF opens in a new tab.
 // The mock AI answers each file's scan with a scripted reading, matched to
@@ -44,11 +45,13 @@ test('a document that reads as a patient record is removed after reading, even w
       }
       await openDocuments(page);
       await chooseFiles(page, upload(page), [{ name, mimeType: 'application/pdf', buffer: pdf }]);
-      const msg = page.getByText(new RegExp(`"${name.replace(/\./g, '\\.')}" was removed\\.`));
+      // Since 3f5bce24 a scannable file is read BEFORE it is stored, and a patient record is
+      // refused there: "<name>" was not uploaded (it never reaches the bucket or the table).
+      const msg = page.getByText(new RegExp(`"${name.replace(/\./g, '\\.')}" was not uploaded\\.`));
       const said = await msg.first().waitFor({ timeout: 60000 }).then(() => true, () => false);
       const text = await pageText(page);
       await qa.shot(`patient record ${tag}`);
-      qa.check(`"${name} was removed." is shown`, said);
+      qa.check(`"${name}" was not uploaded. is shown`, said);
       qa.check('with the patient-record warning', /This looks like a patient record\. It contains/.test(text), (text.match(/This looks like a patient record[^.]*\./) || [''])[0]);
       await sleep(slow ? 12000 : 5000);
       if (release) await release();
@@ -112,7 +115,8 @@ test('the camera: a photo is taken into the review queue and kept; Cancel stores
 
   await qa.feature('DOCS-005', 'Camera > Take Photo: a camera-<time>.jpg is read and kept', async () => {
     await openDocuments(page);
-    await page.getByRole('button', { name: 'Camera' }).click();
+    // Exact name: a stored photo's delete button is "Delete camera-<time>.jpg" (43341dc1).
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
     const take = page.getByRole('button', { name: 'Take Photo' });
     await take.waitFor({ timeout: 15000 });
     await sleep(1500);
@@ -138,7 +142,7 @@ test('the camera: a photo is taken into the review queue and kept; Cancel stores
 
   await qa.feature('DOCS-005', 'Camera > Cancel stores nothing', async () => {
     const before = cameraDocs().length;
-    await page.getByRole('button', { name: 'Camera' }).click();
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
     await page.getByRole('button', { name: 'Take Photo' }).waitFor({ timeout: 15000 });
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await sleep(3000);
@@ -148,7 +152,7 @@ test('the camera: a photo is taken into the review queue and kept; Cancel stores
 
   await qa.feature('DOCS-005', 'A refused camera permission shows a dismissible message', async () => {
     await page.evaluate(() => { window.__qaCamera = 'deny'; });
-    await page.getByRole('button', { name: 'Camera' }).click();
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
     const msg = page.getByText('Could not access camera. Check browser permissions.');
     const shown = await msg.waitFor({ timeout: 10000 }).then(() => true, () => false);
     await qa.shot('camera refused');
@@ -174,7 +178,7 @@ test('receipts: one filed as an agency expense, one as a deduction, each with it
     await page.getByRole('button', { name: /Save to (Expenses|Deductions)/ }).waitFor({ timeout: 60000 });
     const exp = page.getByRole('button', { name: /Bill to agency/ });
     if (await exp.isVisible().catch(() => false)) await exp.click();
-    await page.getByPlaceholder('Bill to agency (e.g. MPLT Healthcare)').fill('QA Locum Agency');
+    await page.getByRole('textbox', { name: 'Bill to agency', exact: true }).fill('QA Locum Agency');
     await qa.shot('receipt card expense');
     await page.getByRole('button', { name: 'Save to Expenses' }).click();
     expense = await waitFor('the expense row', async () => row(`select id, date, amount, vendor, agency, category from public.travel_expenses where user_id = '${profile.id}'`), { timeoutMs: 20000 }).catch(() => null);
@@ -294,29 +298,32 @@ test('documents that fit no section: a new category, an existing one, kept plain
     qa.check('no category or record was made for it', !rows(`select id from public.custom_categories where user_id = '${profile.id}' and name = 'QA Agendas'`).length);
   });
 
-  await qa.feature('DOCS-007', 'Discard on a recognised card removes the pending file', async () => {
+  // b9e593af: the recognised card's Discard only dropped the card and kept the file; it now reads
+  // "Keep as plain document" (as on the other cards), and "Delete this file" removes it, asked first.
+  await qa.feature('DOCS-007', 'Delete this file on a recognised card removes the pending file (asked first)', async () => {
     await scanAs(lic, { documentType: 'license', confidence: 'high', extracted: { type: 'State Medical License', name: 'KS Medical License', licenseNumber: 'QA-KS-7007', state: 'KS', expirationDate: '2029-01-31' } });
     await chooseFiles(page, upload(page), [{ name: 'qa-discard-license.pdf', mimeType: 'application/pdf', buffer: lic }]);
-    const discard = page.getByRole('button', { name: 'Discard', exact: true }).first();
-    const has = await discard.waitFor({ timeout: 60000 }).then(() => true, () => false);
-    qa.check('a recognised card offers Discard', has);
+    const card = page.locator('div').filter({ hasText: 'qa-discard-license.pdf' }).filter({ has: page.getByRole('button', { name: 'Save to License' }) }).last();
+    const del = card.getByRole('button', { name: 'Delete this file', exact: true });
+    const has = await del.waitFor({ timeout: 60000 }).then(() => true, () => false);
+    const keep = await card.getByRole('button', { name: 'Keep as plain document', exact: true }).count();
+    const discard = await card.getByRole('button', { name: /^Discard$/ }).count();
+    await qa.shot('recognised card actions');
+    qa.check('a recognised card offers "Keep as plain document" and "Delete this file", and no Discard that keeps the file', has && keep === 1 && discard === 0, `delete ${has}, keep ${keep}, discard ${discard}`);
     if (!has) return;
-    await discard.click();
-    await sleep(3000);
-    const d = docRow(profile.id, 'qa-discard-license.pdf');
-    const obj = d ? row(`select 1 as x from storage.objects where bucket_id = 'documents' and name = '${d.storage_path}'`) : null;
-    await qa.shot('after discard');
-    qa.check('the discarded file is gone (no documents row, no Storage object)', !d && !obj, d ? `row ${d.id} still there, object ${!!obj}` : 'gone');
+    const stored = await waitFor('the stored file', async () => docRow(profile.id, 'qa-discard-license.pdf'), { timeoutMs: 30000 }).catch(() => null);
+    const dialogs = qa.report.dialogs.length;
+    await del.click();
+    await sleep(1000);
+    qa.check('Delete this file asks first', qa.report.dialogs.slice(dialogs).some((x) => /Delete this document\? This cannot be undone\./.test(x)), qa.report.dialogs.slice(dialogs).join(' | '));
+    const d = await waitFor('the row to go', async () => (docRow(profile.id, 'qa-discard-license.pdf') ? null : true), { timeoutMs: 20000 }).then(() => null, () => docRow(profile.id, 'qa-discard-license.pdf'));
+    const obj = stored?.storage_path ? await waitFor('the object to go', async () => (row(`select 1 as x from storage.objects where bucket_id = 'documents' and name = '${stored.storage_path}'`) ? null : true), { timeoutMs: 20000 }).then(() => false, () => true) : false;
+    await qa.shot('after delete this file');
+    qa.check('the file was stored before the card was answered', !!stored?.storage_path, stored?.storage_path || 'no row');
+    qa.check('the deleted file is gone (no documents row, no Storage object)', !d && !obj, d ? `row ${d.id} still there, object ${obj}` : obj ? 'Storage object still there' : 'gone');
+    qa.check('it is tombstoned', !!stored && !!row(`select 1 as x from public.deleted_items where item_id = '${stored.id}'`));
+    qa.check('the review card is gone', !(await card.isVisible().catch(() => false)));
     qa.check('no license was created', !rows(`select id from public.licenses where user_id = '${profile.id}'`).length);
-    if (d) {
-      qa.bug({
-        title: 'Smart Scan: Discard on a recognised review card keeps the uploaded file in Documents and in Storage',
-        step: 'Documents > Upload a license PDF > on its review card tap Discard',
-        expected: 'The pending file is removed (checklist DOCS-007: discard removes the pending file)',
-        actual: `documents row ${d.id} and its Storage object stay, unlinked, and show under Stored Documents. DocumentsSection handleDiscard only drops the card (the same handler as "Keep as plain document"); the file was stored before the card appeared`,
-        severity: 'medium',
-      });
-    }
   });
 });
 

@@ -253,7 +253,7 @@ test('membership ends: read-only archive, downloads, no edits; buying again', {
     await lp.getByRole('button', { name: 'Consult', exact: true }).click();
     await lp.getByRole('button', { name: 'Yesterday' }).click();
     await lp.getByPlaceholder('e.g. 60').fill('60');
-    await lp.getByPlaceholder('e.g. ED consult — head CT review').fill('QA archive consult');
+    await lp.getByRole('textbox', { name: 'Billing note (optional)', exact: true }).fill('QA archive consult');
     await lp.getByRole('button', { name: 'Log it' }).click();
     const yes = page.getByRole('button', { name: 'Yes, log it here' });
     if (await yes.waitFor({ timeout: 3000 }).then(() => true, () => false)) await yes.click();
@@ -481,7 +481,7 @@ test('early-bird Credential: 30-day Practice trial, then Practice read-only', {
     await lp.getByRole('button', { name: 'Consult', exact: true }).click();
     await lp.getByRole('button', { name: 'Yesterday' }).click();
     await lp.getByPlaceholder('e.g. 60').fill('30');
-    await lp.getByPlaceholder('e.g. ED consult — head CT review').fill('QA trial consult');
+    await lp.getByRole('textbox', { name: 'Billing note (optional)', exact: true }).fill('QA trial consult');
     await lp.getByRole('button', { name: 'Log it' }).click();
     const yes = page.getByRole('button', { name: 'Yes, log it here' });
     if (await yes.waitFor({ timeout: 3000 }).then(() => true, () => false)) await yes.click();

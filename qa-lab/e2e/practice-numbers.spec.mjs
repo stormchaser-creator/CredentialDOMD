@@ -40,7 +40,7 @@ test('practice invoice numbers: work, day-rate and expense invoices on one day; 
     await d.getByRole('spinbutton', { name: '$ amount' }).fill(amount);
     await d.getByRole('button', { name: 'Airfare', exact: true }).click();
     await d.getByPlaceholder('Vendor (e.g. United, Marriott, Hertz)').fill(vendor);
-    await d.getByPlaceholder('Bill to agency (e.g. MPLT Healthcare)').fill('QA Numbers Agency');
+    await d.getByRole('textbox', { name: 'Bill to agency', exact: true }).fill('QA Numbers Agency');
     await d.getByRole('button', { name: 'Add expense' }).click();
     await d.waitFor({ state: 'detached', timeout: 20000 });
     await installShareStandIn(page);

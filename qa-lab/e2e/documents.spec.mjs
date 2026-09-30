@@ -45,12 +45,23 @@ test('documents: smart scan files a license with its file; duplicate and PHI spr
     const linked = lic ? await waitFor('the link', async () => row(`select linked_to from public.documents where id = '${doc.id}'`)?.linked_to || null, { timeoutMs: 15000 }).catch(() => null) : null;
     qa.check('the document is linked to the new license', !!linked && linked.includes(lic.id), linked);
     qa.check('the physician\'s own name is not used as the Display Name', lic?.name !== 'Dana Documents', lic?.name);
-    const open = page.getByRole('button', { name: /Open|View/ }).filter({ hasText: /license|Open/i }).first();
-    if (await page.getByText(/Filed|Saved to/i).first().isVisible().catch(() => false) && await open.count()) {
+    // The filed banner says where it went and opens the new record's detail (1f8f469a).
+    const saved = await page.getByText('Saved to Licenses & certs.', { exact: true }).first().waitFor({ timeout: 10000 }).then(() => true, () => false);
+    qa.check('the banner says where it went ("Saved to Licenses & certs.")', saved);
+    const open = page.getByRole('button', { name: 'Open License / Certification', exact: true });
+    if (saved && await open.count()) {
       await open.click();
-      await sleep(1000);
-      qa.check('the filed banner opens the license', /Licenses/.test(await page.locator('body').innerText()));
-    }
+      const detail = page.getByRole('dialog', { name: 'State Medical License, CO', exact: true });
+      const opened = await detail.waitFor({ timeout: 10000 }).then(() => true, () => false);
+      // Read before the screenshot: a full-page shot re-lays the page out.
+      const dt = opened ? (await detail.innerText({ timeout: 5000 }).catch(() => '')).replace(/\s+/g, ' ') : '';
+      qa.check('the banner\'s Open shows the new license (its detail, with the scanned number)', opened && dt.includes(number), opened ? dt.slice(0, 200) : 'no detail dialog');
+      if (opened && await detail.isVisible().catch(() => false)) {
+        await detail.getByRole('button', { name: 'Close dialog' }).click();
+        qa.check('its detail closes', await detail.waitFor({ state: 'detached', timeout: 10000 }).then(() => true, () => false));
+      }
+      await qa.shot('filed banner opened the license');
+    } else qa.check('the banner offers Open', false, 'no "Open License / Certification" button');
     await openCredentials(page, 'Licenses');
     qa.check('the license appears in Credentials > Licenses', await tableRow(page, number).isVisible().catch(() => false));
   });
@@ -79,7 +90,7 @@ test('documents: smart scan files a license with its file; duplicate and PHI spr
       if (extra) {
         // Remove the copy so the later stretches see one file, as a physician would.
         const card = page.locator('div').filter({ hasText: 'qa-scan-license-copy.pdf' }).filter({ has: page.getByRole('button', { name: /View PDF/ }) }).last();
-        await card.getByRole('button').filter({ hasNotText: /\S/ }).first().click().catch(() => {});
+        await card.getByRole('button', { name: 'Delete qa-scan-license-copy.pdf', exact: true }).click().catch(() => {});
         await sleep(1500);
       }
     }
@@ -138,8 +149,8 @@ test('documents: smart scan files a license with its file; duplicate and PHI spr
   await qa.feature('DOCS-009', 'Delete a document', async () => {
     const card = page.locator('div').filter({ hasText: 'qa-loose-letter.pdf' }).filter({ has: page.getByRole('button', { name: /View PDF/ }) }).last();
     const dialogs = qa.report.dialogs.length;
-    // The icon-only button on the card is the delete (trash) control.
-    await card.getByRole('button').filter({ hasNotText: /\S/ }).first().click();
+    // The trash button is named for its file (43341dc1).
+    await card.getByRole('button', { name: 'Delete qa-loose-letter.pdf', exact: true }).click();
     await sleep(500);
     const confirm = page.getByRole('dialog').last();
     if (await confirm.getByRole('button', { name: /^Delete/ }).count()) await confirm.getByRole('button', { name: /^Delete/ }).last().click();

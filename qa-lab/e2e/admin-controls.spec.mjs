@@ -42,7 +42,25 @@ test('owner controls: pause and restore access, lifetime grant, view as member, 
     await d.getByRole('textbox', { name: 'Reason for this change' }).fill('QA checklist: pause test');
     await confirm.click();
     let err = '';
-    if (!(await d.waitFor({ state: 'detached', timeout: 15000 }).then(() => true, () => false))) {
+    // c59c0d5c (PT409): when the member's app wrote profiles.updated_at after the list loaded, the
+    // server refuses the reviewed row at once and the dialog offers Refresh; that is the designed
+    // answer (no hang), and the change goes through once the fresh row is reviewed.
+    const staleNote = d.getByText(/changed after the list loaded/);
+    const outcome = await Promise.race([
+      d.waitFor({ state: 'detached', timeout: 15000 }).then(() => 'done'),
+      staleNote.waitFor({ timeout: 15000 }).then(() => 'stale'),
+    ]).catch(() => 'timeout');
+    if (outcome === 'stale') {
+      const refresh = d.getByRole('button', { name: 'Refresh', exact: true });
+      qa.check('a row that changed after the list loaded is refused at once ("Nothing was changed"), with Refresh', await refresh.isVisible().catch(() => false) && /Nothing was changed/.test(await d.innerText().catch(() => '')));
+      await refresh.click();
+      await d.waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
+      await findAccount(page, memberName);
+      await page.getByRole('button', { name: 'Pause access' }).first().click();
+      await d.getByRole('textbox', { name: 'Reason for this change' }).fill('QA checklist: pause test');
+      await confirm.click();
+      if (!(await d.waitFor({ state: 'detached', timeout: 15000 }).then(() => true, () => false))) err = `after Refresh: ${(await d.innerText().catch(() => '')).replace(/\s+/g, ' ').slice(-300)}`;
+    } else if (outcome !== 'done') {
       const full = (await d.innerText().catch(() => '')).replace(/\s+/g, ' ');
       const saving = /Saving/.test(full);
       err = saving ? 'still "Saving…" after 15 s (no answer)' : full.slice(-300);
@@ -68,7 +86,7 @@ test('owner controls: pause and restore access, lifetime grant, view as member, 
       await confirm.click();
       await d.waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
     }
-    qa.check('the first attempt answered (no hang or stale-row refusal)', !err, err);
+    qa.check('the attempt answered at once (no hang): saved, or refused as changed with Refresh and saved after it', !err, err);
     const paused = await waitFor('paused', async () => profileOf(member.user.id)?.access_status === 'revoked', { timeoutMs: 15000 }).catch(() => false);
     await qa.shot('paused');
     qa.check('the member\'s access becomes paused (access_status revoked)', paused, `${profileOf(member.user.id)?.access_status} ${err}`);

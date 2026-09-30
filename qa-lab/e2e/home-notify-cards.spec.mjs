@@ -122,7 +122,7 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
 
   await qa.feature('HOME-010', 'Needs-action lines: a license opens its edit form on Expires, a CME line opens the math', async () => {
     await home(page);
-    const lic = needsLine(page, 'State Medical License — TX');
+    const lic = needsLine(page, 'State Medical License, TX');
     const cme = needsLine(page, /^TX CME/);
     await qa.shot('needs action list');
     qa.check('the license is listed under the ring with its days left', await lic.isVisible().catch(() => false), (await lic.innerText().catch(() => '')).replace(/\s+/g, ' '));
@@ -141,18 +141,18 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     await home(page);
     if (await cme.isVisible().catch(() => false)) {
       await cme.click();
-      const math = page.getByRole('dialog', { name: 'TX CME — the math' });
-      qa.check('the CME line opens "TX CME — the math"', await math.waitFor({ timeout: 10000 }).then(() => true, () => false));
+      const math = page.getByRole('dialog', { name: 'TX CME: the math', exact: true });
+      qa.check('the CME line opens "TX CME: the math"', await math.waitFor({ timeout: 10000 }).then(() => true, () => false));
       await page.keyboard.press('Escape');
     }
   }, { soft: true });
 
   await qa.feature('HOME-014', 'Action Required: a card opens the record\'s edit form on its date, in its section or custom category', async () => {
     await home(page);
-    const txCard = actionCard(page, 'State Medical License — TX');
+    const txCard = actionCard(page, 'State Medical License, TX');
     const permitCard = actionCard(page, 'QA fluoroscopy permit');
     qa.check('Action Required lists the license and the custom-category record', await txCard.isVisible().catch(() => false) && await permitCard.isVisible().catch(() => false), (await bodyText(page)).match(/Action Required.{0,300}/)?.[0]);
-    await txCard.getByText('State Medical License — TX').click();
+    await txCard.getByText('State Medical License, TX').click();
     let edit = page.getByRole('dialog', { name: 'Edit' });
     let ok = await edit.waitFor({ timeout: 10000 }).then(() => true, () => false);
     await sleep(900);
@@ -184,7 +184,7 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     const office = `credentialing-${stamp().toLowerCase()}@${LAB_EMAIL_DOMAIN}`;
     await home(page);
     await recordOpens(page);
-    await actionCard(page, 'State Medical License — TX').getByRole('button', { name: 'Follow up' }).click();
+    await actionCard(page, 'State Medical License, TX').getByRole('button', { name: 'Follow up' }).click();
     let dlg = page.getByRole('dialog', { name: 'Log a follow-up' });
     await dlg.waitFor({ timeout: 10000 });
     await dlg.getByPlaceholder('e.g. Kyle, credentialing office').fill('QA credentialing office');
@@ -192,7 +192,7 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     await dlg.getByRole('button', { name: 'Log it' }).click();
     await dlg.waitFor({ state: 'detached', timeout: 5000 });
     await sleep(1500);
-    await actionCard(page, 'State Medical License — TX').getByRole('button', { name: 'Follow up' }).click();
+    await actionCard(page, 'State Medical License, TX').getByRole('button', { name: 'Follow up' }).click();
     dlg = page.getByRole('dialog', { name: 'Log a follow-up' });
     await dlg.waitFor({ timeout: 10000 });
     qa.check('reopening shows the logged note in History', /History.*Note · QA credentialing office.*QA called about the renewal/.test((await dlg.innerText()).replace(/\s+/g, ' ')));
@@ -206,7 +206,7 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     qa.check('the address is not used as a greeting', !!mail && !decodeURIComponent(mail).includes(`Hi ${office}`));
     const ups = rows(`select item_id, item_name, recipient, note, emailed from public.follow_ups where user_id = '${profile.id}' order by created_at desc limit 2`);
     qa.check('follow_ups holds both, newest first, the second marked emailed', ups.length === 2 && ups[0].emailed === true && ups[0].recipient === office && ups[1].emailed === false && ups[1].recipient === 'QA credentialing office' && ups.every((u) => u.item_id === txId), ups);
-    await actionCard(page, 'State Medical License — TX').getByRole('button', { name: 'Follow up' }).click();
+    await actionCard(page, 'State Medical License, TX').getByRole('button', { name: 'Follow up' }).click();
     dlg = page.getByRole('dialog', { name: 'Log a follow-up' });
     await dlg.waitFor({ timeout: 10000 });
     const hist = (await dlg.innerText()).replace(/\s+/g, ' ');
@@ -292,7 +292,9 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     qa.check('Email opens mail to the member\'s own address with the digest', !!mail && mail.slice(7).split('?')[0].replace('%40', '@') === addr && /CredentialDOMD Alert: 4 expiring soon/.test(mailBody) && /EXPIRING SOON \(4\)/.test(mailBody) && /TX/.test(mailBody), mailBody.slice(0, 240));
     qa.check('Text opens Messages to the member\'s phone with the digest', !!sms && /^sms:5550100142\?body=/.test(sms) && /CredentialDOMD Alert/.test(decodeURIComponent(sms)), sms?.slice(0, 160));
     const log = rows(`select method, alert_count from public.notification_log where user_id = '${profile.id}' order by created_at`);
-    qa.check('notification_log records both sends', log.some((l) => l.method === 'email' && l.alert_count === 4) && log.some((l) => l.method === 'text'), log);
+    // alerts.count is what the bell and the banner show: the 4 expiring and the TX CME gap the
+    // Texas license brings (5b60976f, "Notification Center and bell list what Home lists").
+    qa.check('notification_log records both sends, each with the 5 alerts (4 expiring and the TX CME gap)', log.some((l) => l.method === 'email' && l.alert_count === 5) && log.some((l) => l.method === 'text' && l.alert_count === 5), log);
     p = profileOf(user.id);
     qa.check('profiles.last_notified is stamped', !!p.last_notified, p.last_notified);
 
@@ -312,7 +314,7 @@ test('alerts and cards: notifications, needs-action, Action Required, banner', {
     qa.check('profiles.snoozed_until is set for the escalated cadence (3 days with a license due in 20)', days > 2.9 && days < 3.1, `${p.snoozed_until} (${days.toFixed(2)} days)`);
     await reloadApp(page);
     await home(page);
-    qa.check('the snooze holds across a reload', /4 alerts snoozed · next check in \d+d/.test(await bodyText(page)));
+    qa.check('the snooze holds across a reload (the 5 alerts)', /5 alerts snoozed · next check in \d+d/.test(await bodyText(page)), ((await bodyText(page)).match(/\d+ alerts? snoozed[^\n]{0,40}/) || [''])[0]);
     await page.getByRole('button', { name: 'View', exact: true }).click();
     qa.check('View opens the Notification Center', await page.getByRole('dialog', { name: 'Notification Center' }).waitFor({ timeout: 10000 }).then(() => true, () => false));
     await page.keyboard.press('Escape');
@@ -355,7 +357,7 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     await add.getByRole('button', { name: /^(Save|Add)$/ }).last().click();
     await sleep(800);
     const refusal = (await add.innerText().catch(() => '')).match(/TB Tests expire[^\n]*/)?.[0] || '';
-    qa.check('the form refuses a TB test with no expiration and says why (so an undated one only arrives another way)', /enter the expiration date/.test(refusal), refusal);
+    qa.check('the form refuses a TB test with no expiration and says why (so an undated one only arrives another way)', /Enter the expiration date/.test(refusal), refusal);
     await add.getByRole('button', { name: 'Cancel' }).click().catch(() => page.keyboard.press('Escape'));
     // An undated TB test and an undated license that arrived another way (a lab report import, the NPI registry import).
     const [tbId] = await seed(user, profile.id, 'health_records', [{ category: 'TB Test', type: 'QuantiFERON-TB Gold', name: 'QA TB test 2026', date_administered: day(-10) }]);
@@ -378,7 +380,7 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     const banner = cardByTitle(page, /^⚠️ \d+ records? missing an expiration date/);
     const bt = (await banner.innerText().catch(() => '')).replace(/\s+/g, ' ');
     await qa.shot('missing dates banner');
-    qa.check('the banner lists the TB test and the undated license', /2 records missing an expiration date/.test(bt) && /Health record: .*QA TB test 2026/.test(bt) && /License: State Medical License — AZ/.test(bt), bt.slice(0, 300));
+    qa.check('the banner lists the TB test and the undated license', /2 records missing an expiration date/.test(bt) && /Health record: .*QA TB test 2026/.test(bt) && /License: State Medical License, AZ/.test(bt), bt.slice(0, 300));
     await banner.getByRole('button').filter({ hasText: 'QA TB test 2026' }).click();
     const edit = page.getByRole('dialog', { name: 'Edit Health Record' });
     const opened = await edit.waitFor({ timeout: 10000 }).then(() => true, () => false);
@@ -460,11 +462,11 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
         severity: 'medium',
       });
     }
-    qa.check('the pending license due in 20 days is not in Action Required', !(await actionCard(page, 'State Medical License — UT').count()));
+    qa.check('the pending license due in 20 days is not in Action Required', !(await actionCard(page, 'State Medical License, UT').count()));
     const dry = await runHook('send-reminders', { profile_id: profile.id, dry_run: true });
     const res = (dry.data?.results || [])[0] || {};
     qa.check('the daily reminder run names neither (dry run for this member)', dry.status === 200 && !/QA-UT|QA-CO|Utah|Colorado| UT| CO/.test(res.text || '') , JSON.stringify(res).slice(0, 300));
-    await card.getByRole('button').filter({ hasText: 'State Medical License — CO' }).click();
+    await card.getByRole('button').filter({ hasText: 'State Medical License, CO' }).click();
     const edit = page.getByRole('dialog', { name: 'Edit' });
     const opened = await edit.waitFor({ timeout: 10000 }).then(() => true, () => false);
     await sleep(900);
@@ -500,7 +502,7 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     await home(page);
     const banner = cardByTitle(page, /^⚠️ Finish your profile/);
     const bt = (await banner.innerText().catch(() => '')).replace(/\s+/g, ' ');
-    qa.check('with Tier 1 done and no specialty or NPI the banner lists exactly those', /Finish your profile — 2 things missing/.test(bt) && /Missing: board specialty .* · NPI\./.test(bt), bt.slice(0, 240));
+    qa.check('with Tier 1 done and no specialty or NPI the banner lists exactly those', /Finish your profile: 2 things missing/.test(bt) && /Missing: board specialty .* · NPI\./.test(bt), bt.slice(0, 240));
     await banner.click();
     await sleep(900);
     qa.check('tapping it opens More > Profile & settings', await hasBackButton(page) && /board specialties/i.test(await bodyText(page)));
@@ -540,7 +542,7 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     // The first row (the list keeps the records' order, retired ones last).
     const first = section.locator('div[style*="cursor: pointer"]').first();
     const firstText = (await first.innerText().catch(() => '')).replace(/\s+/g, ' ');
-    const firstRow = rows(`select license_number, type, state from public.licenses where user_id = '${profile.id}'`).find((l) => firstText.startsWith(`${l.type} — ${l.state}`));
+    const firstRow = rows(`select license_number, type, state from public.licenses where user_id = '${profile.id}'`).find((l) => firstText.startsWith(`${l.type}, ${l.state}`));
     await first.click();
     await sleep(1200);
     const view = page.getByRole('dialog').first();
@@ -554,6 +556,20 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
   }, { soft: true });
 
   await qa.feature('HOME-026', 'All clear only when nothing is urgent; with an alert set aside it says so and when it returns', async () => {
+    // cf43aeba: no All Clear while the ring lists something that needs action. The undated AZ
+    // license (HOME-012) and the two licenses on the Resolve card (HOME-013) are still listed, so
+    // they go first, the way a physician removes them (Credentials > Licenses > Delete, confirmed).
+    const unresolved = ['QA-AZ-UNDATED', 'QA-CO-UNKNOWN', 'QA-UT-PENDING'];
+    const left = () => rows(`select license_number from public.licenses where user_id = '${profile.id}' and license_number in (${unresolved.map((n) => `'${n}'`).join(', ')})`);
+    await openCredentials(page, 'Licenses');
+    for (const number of unresolved) {
+      const r = page.getByRole('row').filter({ hasText: number }).first();
+      if (!(await r.count())) continue;
+      await r.getByRole('button', { name: 'Delete', exact: true }).click();
+      await eventually(`${number} deleted`, async () => (left().some((l) => l.license_number === number) ? null : true), 15000).catch(() => null);
+    }
+    qa.check('the undated and unresolved licenses are deleted', left().length === 0, left());
+    await reloadApp(page);
     await home(page);
     let text = await bodyText(page);
     const needs = await page.getByRole('button').filter({ hasText: /no expiration date|days? left|review records/ }).allInnerTexts();
@@ -571,11 +587,14 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
       });
     }
     // Something due: the banner goes. Acknowledge it: the banner names the set-aside item's return date.
-    await seed(user, profile.id, 'licenses', [{ type: 'State Medical License', name: 'QA NV soon', license_number: 'QA-NV-25', state: 'NV', expiration_date: day(25) }]);
+    // A DEA registration (in NM, where the license is on file): a new state's medical license due
+    // soon would also bring that state's CME due, which the ring lists as open and which no
+    // acknowledgement sets aside, so no clear state could show (cf43aeba, clearStateBanner).
+    await seed(user, profile.id, 'licenses', [{ type: 'DEA Registration', name: 'QA NM DEA soon', license_number: 'QA-DEA-NM-25', state: 'NM', expiration_date: day(25) }]);
     await reloadApp(page);
     await home(page);
-    qa.check('with a license due in 25 days the all-clear banner is gone', !/All Clear|Nothing to do today/.test(await bodyText(page)));
-    await actionCard(page, 'State Medical License — NV').getByRole('button', { name: 'Acknowledge', exact: true }).click();
+    qa.check('with a DEA registration due in 25 days the all-clear banner is gone', !/All Clear|Nothing to do today/.test(await bodyText(page)));
+    await actionCard(page, 'DEA Registration, NM').getByRole('button', { name: 'Acknowledge', exact: true }).click();
     const m = page.getByRole('dialog', { name: 'Acknowledge this alert' });
     await m.getByRole('button', { name: '2 weeks' }).click();
     await m.getByRole('button', { name: 'Acknowledge', exact: true }).click();

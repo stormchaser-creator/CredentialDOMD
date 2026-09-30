@@ -63,7 +63,8 @@ test('settings: setup card, profile and reminder settings persist, support acces
 
   await qa.feature('SETTINGS-002', 'About you: name edit persists', async () => {
     await openMore(page, 'Profile & settings');
-    const name = page.getByRole('textbox', { name: 'Your full name' });
+    // The Field's label names its input (43341dc1); "Your full name" is only the placeholder.
+    const name = page.getByRole('textbox', { name: 'Full Name', exact: true });
     await name.fill('Sydney Quinn Settings');
     await name.blur();
     await sleep(3000);

@@ -95,7 +95,8 @@ export async function askVera(page, question, answer, { expectText, provider = '
   const response = provider === 'anthropic' ? { text: JSON.stringify(answer) } : { json: answer };
   if (answer) await scriptAi(provider, response, question);
   if (attach) {
-    await chooseFiles(page, page.getByRole('button', { name: '📎' }), [attach]);
+    // The paperclip is named "Attach a document" (43341dc1).
+    await chooseFiles(page, page.getByRole('button', { name: 'Attach a document', exact: true }), [attach]);
     await page.getByText(`📎 ${attach.name}`).first().waitFor({ timeout: 10000 });
   }
   await veraBox(page).fill(question);

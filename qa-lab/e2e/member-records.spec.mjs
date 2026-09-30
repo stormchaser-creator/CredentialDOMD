@@ -182,7 +182,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     qa.check('starring did not change updated_at (a star must not beat real edits)', after.updated_at === before.updated_at, `${before.updated_at} -> ${after.updated_at}`);
     await openCredentials(page, 'Favorites');
     const fav = await page.locator('body').innerText();
-    qa.check('Favorites lists the starred license (1 starred record, the NM license)', /1 starred record/.test(fav) && /State Medical License — NM/.test(fav), fav.match(/\d+ starred record[^\n]*/)?.[0]);
+    qa.check('Favorites lists the starred license (1 starred record, the NM license)', /1 starred record/.test(fav) && /State Medical License, NM/.test(fav), fav.match(/\d+ starred record[^\n]*/)?.[0]);
   });
 
   let docId = null;
@@ -211,10 +211,14 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     const doc = docId ? row(`select * from public.documents where id = '${docId}'`) : null;
     await openCredentials(page, 'Licenses');
     const dialogsBefore = qa.report.dialogs.length;
-    await tableRow(page, 'QA-CO-2002').getByRole('cell').last().getByRole('button').last().click();
+    await tableRow(page, 'QA-CO-2002').getByRole('cell').last().getByRole('button', { name: 'Delete', exact: true }).click();
     await sleep(500);
     const asked = qa.report.dialogs.slice(dialogsBefore).join(' | ');
-    qa.check('the native confirm asks "Delete this item? This cannot be undone."', /Delete this item\? This cannot be undone\./.test(asked), asked);
+    // A record with files says the files go too and names them (f18c7a1f, 57892be3: deleteConfirmText).
+    const expected = doc
+      ? `Delete this item and its 1 attached file (${doc.name})? The file will be removed from Files too. This cannot be undone.`
+      : 'Delete this item? This cannot be undone.';
+    qa.check(`the native confirm asks "${expected}"`, asked.replace(/^confirm: /, '') === expected, asked);
     if (doc && !/document|file|attach/i.test(asked)) {
       qa.bug({ title: 'Deleting a license silently deletes its attached files too; the confirm does not say so',
         step: 'Credentials > Licenses > trash on a license with an attached PDF', expected: 'The confirmation names the attached file(s) that will be deleted with the record',

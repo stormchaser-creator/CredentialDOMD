@@ -30,14 +30,14 @@ const BUGS = [
     actual: 'LocumDashboard.jsx:23-31 labels them "Invoices" and "Contracts" while the buttons (LocumDashboard.jsx:58-67: flex 1, min-width 0, white-space nowrap, text-overflow ellipsis) get 45 px each, so both are cut to an ellipsis. The physician has to guess which tab holds invoices and which holds agreements.',
   },
   {
-    key: 'work-entry-icons', feature: 'PRAC-011', kind: 'small', match: /^button \(no text; icon\)$/, only: 'Work with an entry', severity: 'low',
+    key: 'work-entry-icons', feature: 'PRAC-011', kind: 'small', match: /^button "(Edit entry|Delete entry)"$|^button \(no text; icon\)$/, only: 'Work with an entry', severity: 'low',
     title: 'Phone work log: each entry\'s edit and delete buttons are about 30 x 26 px, 8 px apart',
     step: 'Practice > Work on a phone with a logged entry',
     expected: 'Each at least 32 x 32 px',
     actual: 'WorkLog.jsx:1799-1807 styles them padding 5px 7px around a 14-16 px icon: 30 x 26 (edit) and 28 x 24 (delete).',
   },
   {
-    key: 'contract-card', feature: 'PRAC-017', kind: 'small', match: /^button "(Archive|Unarchive)"$|^button \(no text; icon\)$/, only: 'Contracts with an agreement', severity: 'low',
+    key: 'contract-card', feature: 'PRAC-017', kind: 'small', match: /^button "(Archive|Unarchive|Edit|Delete agreement)"$|^button \(no text; icon\)$/, only: 'Contracts with an agreement', severity: 'low',
     title: 'Phone agreement card: edit, Archive and delete are 29 px tall',
     step: 'Practice > Contracts on a phone with an agreement',
     expected: 'Each at least 32 px tall',
@@ -58,7 +58,7 @@ const BUGS = [
     actual: 'ScanReviewCard.jsx:237-243 styles them padding 4px 10px, font 11: 22 px tall, 4 px apart.',
   },
   {
-    key: 'doc-card', feature: 'DOCS-009', kind: 'small', match: /^button "(Select to send|File with AI)"$|^button \(no text; icon\)$/, only: 'Documents with a stored document', severity: 'low',
+    key: 'doc-card', feature: 'DOCS-009', kind: 'small', match: /^button "(Select to send|File with AI|Delete [^"]+\.[A-Za-z0-9]+)"$|^button \(no text; icon\)$/, only: 'Documents with a stored document', severity: 'low',
     title: 'Phone Documents: a stored document\'s delete button (30 x 26), "File with AI" and "Select to send" (30 px) are under 32 px',
     step: 'Documents on a phone with a stored document',
     expected: 'Each at least 32 x 32 px',
@@ -110,7 +110,7 @@ for (const width of [375, 390]) {
         await phoneTab(page, '+');
         await sleep(500);
         const upload = page.getByRole('button', { name: 'Upload' }).first();
-        file(await auditScreen(qa, page, 'Documents (empty)', { allowSmall: known, primary: [['Upload', upload], ['Camera', page.getByRole('button', { name: 'Camera' }).first()]] }));
+        file(await auditScreen(qa, page, 'Documents (empty)', { allowSmall: known, primary: [['Upload', upload], ['Camera', page.getByRole('button', { name: 'Camera', exact: true }).first()]] }));
         const pdf = syntheticPdf(`QA synthetic phone license ${tag}`);
         await scriptAi('gemini', { json: { documentType: 'license', confidence: 'high', extracted: {
           type: 'State Medical License', name: 'CO Medical License', licenseNumber: number, state: 'CO', issuedDate: '2024-06-01', expirationDate: '2028-05-31',
@@ -127,7 +127,8 @@ for (const width of [375, 390]) {
         const save = page.getByRole('button', { name: 'Save to License' });
         file(await auditScreen(qa, page, 'Documents review card', {
           allowSmall: anyOf(knownBut('review-chips'), matchOf('doc-card')),
-          primary: [['Save to License', save], ['Discard', page.getByRole('button', { name: /^(Discard|Delete)/ }).first()]],
+          // The card's other actions since b9e593af: keep the file unfiled, or delete it (asked).
+          primary: [['Save to License', save], ['Keep as plain document', page.getByRole('button', { name: 'Keep as plain document', exact: true }).first()], ['Delete this file', page.getByRole('button', { name: 'Delete this file', exact: true }).first()]],
         }));
         const values = await page.getByRole('textbox').evaluateAll((els) => els.map((e) => e.value));
         qa.check('the review card shows the read license number', values.includes(number), values.filter(Boolean).slice(0, 5).join(' | '));
@@ -140,7 +141,8 @@ for (const width of [375, 390]) {
 
       await qa.feature('DOCS-005', 'Camera on a phone opens the device camera (a capture file picker)', async () => {
         await phoneTab(page, '+');
-        const camera = page.getByRole('button', { name: 'Camera' }).first();
+        // Exact: a stored photo's delete button is named "Delete camera-<time>.jpg" (43341dc1).
+        const camera = page.getByRole('button', { name: 'Camera', exact: true }).first();
         const chooser = await Promise.all([page.waitForEvent('filechooser', { timeout: 10000 }), camera.tap()]).then(([c]) => c, () => null);
         qa.check('a tap on Camera opens a file chooser (the phone\'s camera sheet)', !!chooser);
         if (chooser) {
@@ -164,7 +166,7 @@ for (const width of [375, 390]) {
         await phoneTab(page, '+');
         await sleep(1000);
         const card = page.locator('div').filter({ hasText: 'qa-phone-letter.pdf' }).filter({ has: page.getByRole('button', { name: /View PDF/ }) }).last();
-        const trash = card.getByRole('button').filter({ hasNotText: /\S/ }).first();
+        const trash = card.getByRole('button', { name: 'Delete qa-phone-letter.pdf', exact: true });
         file(await auditScreen(qa, page, 'Documents with a stored document', { allowSmall: known, primary: [['document delete', trash]] }), 'Documents with a stored document');
         const dialogs = qa.report.dialogs.length;
         await trash.tap();
@@ -211,7 +213,7 @@ for (const width of [375, 390]) {
         await sub('Work').tap();
         await sleep(600);
         const log = page.getByRole('button', { name: 'Log past time' });
-        const work = await auditScreen(qa, page, 'Practice Work', { allowSmall: exceptChrome(), allowClipped: tabsCut, primary: [['Log past time', log], ['start timer', page.getByRole('button', { name: /start timer/ })]] });
+        const work = await auditScreen(qa, page, 'Practice Work', { allowSmall: exceptChrome(), allowClipped: tabsCut, primary: [['Log past time', log], ['start timer', page.getByRole('button', { name: /Got a call\? Start the timer/ })]] });
         file(work);
         smallByDesign(qa, work, { id: 'PRAC-009', match: CHROME.practiceTabs, what: 'the Practice sub-tab strip\'s seven buttons', why: TABS_VERDICT });
         await log.tap();
@@ -221,7 +223,7 @@ for (const width of [375, 390]) {
         await d.getByRole('button', { name: 'Consult', exact: true }).tap();
         await d.getByRole('button', { name: 'Yesterday' }).tap();
         await d.getByPlaceholder('e.g. 60').fill('60');
-        await d.getByPlaceholder('e.g. ED consult — head CT review').tap();
+        await d.getByRole('textbox', { name: 'Billing note (optional)', exact: true }).tap();
         await page.keyboard.type('QA phone consult');
         await d.getByRole('button', { name: 'Log it' }).tap();
         const yes = page.getByRole('button', { name: 'Yes, log it here' });

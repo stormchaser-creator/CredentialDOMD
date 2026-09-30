@@ -76,8 +76,17 @@ test('licenses: matrix, renewal info, NPI import, filter tabs, desk sorting, sca
     await sleep(1500);
     const moved = await page.getByText('Import from the NPI registry').first().isVisible().catch(() => false);
     const hash = await page.evaluate(() => location.hash);
+    // Since 726b2d73 it opens Licenses with its Add form open (App.jsx openAddIn('licenses')).
+    const addForm = page.getByRole('dialog', { name: 'Add', exact: true });
+    const formOpen = await addForm.waitFor({ timeout: 10000 }).then(() => true, () => false);
     await qa.shot('matrix add a license');
     qa.check('"Add a license" opens Credentials > Licenses', moved, `still on the matrix: ${await empty.isVisible().catch(() => false)}; location.hash ${hash}`);
+    qa.check('...with the Add form open, ready for the license', formOpen && (await addForm.getByRole('button', { name: 'Add', exact: true }).count()) > 0);
+    if (formOpen) {
+      // Closed with its own button, so the next stretch starts on the Licenses page.
+      await addForm.getByRole('button', { name: 'Close dialog' }).click();
+      qa.check('the Add form closes', await addForm.waitFor({ state: 'detached', timeout: 10000 }).then(() => true, () => false));
+    }
     if (!moved) {
       qa.bug({
         title: 'Multi-State Matrix: the empty state\'s "Add a license" button does nothing',

@@ -105,7 +105,7 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
       const d = page.getByRole('dialog', { name: 'Log a day' });
       await d.waitFor();
       await field(d, 'Date').fill(date);
-      if (!worked) await d.getByRole('button', { name: 'Yes — day worked' }).click();
+      if (!worked) await d.getByRole('button', { name: 'Yes, day worked', exact: true }).click();
       for (const [i, c] of calls.entries()) {
         await d.getByRole('button', { name: '+ Add a call period' }).click();
         await d.locator('select').nth(i).selectOption(c.hospital);
@@ -126,7 +126,8 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
       await d.locator('select').nth(1).selectOption(GRID[1].hospital);
       await d.getByRole('button', { name: 'Primary', exact: true }).nth(1).click();
       qa.check('the second call period reads Backup at QSH, $400.00', /On call: QA South Hospital \(QSH\) \(backup\) \$400\.00/.test((await d.innerText()).replace(/\s+/g, ' ')));
-      await d.getByRole('button', { name: '×' }).nth(1).click();
+      // The × is named for its row (43341dc1).
+      await d.getByRole('button', { name: 'Remove call period 2', exact: true }).click();
     } });
     qa.check('the day\'s preview itemises $2,000 day worked + $1,500 primary call = $3,500.00', /Day worked \$2000\.00/.test(p1) && /On call: QA North Hospital \(QNH\) \(primary\) \$1500\.00/.test(p1) && /This day invoices \$3500\.00/.test(p1), p1.slice(p1.indexOf('Day worked'), p1.indexOf('Day worked') + 200));
     await logDay({ date: day2, notes: 'QA clinic day' });
@@ -174,7 +175,7 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
     const label = await btn.innerText().catch(() => '');
     qa.check('"Invoice 3 unbilled days $5,150.00" is offered', /Invoice 3 unbilled days\s*\$5,150\.00/.test(label.replace(/\s+/g, ' ')), label);
     await btn.click();
-    await page.getByRole('button', { name: /^Invoice 3 days — \$5,150\.00$/ }).click();
+    await page.getByRole('button', { name: /^Invoice 3 days: \$5,150\.00$/ }).click();
     const preview = page.getByRole('dialog', { name: 'Invoice preview' });
     await preview.waitFor();
     const text = (await preview.innerText()).replace(/\s+/g, ' ');
@@ -185,7 +186,7 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
     qa.check('an invoices row for $5,150.00 on the day-rate agreement covering the three days', !!inv && Number(inv.total_amount) === 5150 && inv.contract_id === contract.id && (inv.entry_ids || []).length === 3 && inv.period_start === day1 && inv.period_end === day3, inv && { number: inv.number, total: inv.total_amount, entries: inv.entry_ids, period: `${inv.period_start}..${inv.period_end}` });
     const billed = rows(`select date, invoice_id from public.duty_days where user_id = '${profile.id}'`);
     qa.check('each duty day now carries the invoice id', billed.length === 3 && billed.every((b) => b.invoice_id === inv?.id), billed);
-    qa.check('the preview says it was marked sent', /Marked sent — it's on the Invoices tab/.test(await bodyText(page)) || !!inv);
+    qa.check('the preview says it was marked sent', /Recorded as sent\. It's on the Invoices tab\./.test(await bodyText(page)) || !!inv);
     const clip = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
     qa.check('the copied text is the invoice: its number, the lines and $5,150.00', clip.includes(inv?.number || '???') && /Day worked/.test(clip) && /5,150\.00/.test(clip), clip.slice(0, 300));
     await sleep(2000);
@@ -209,7 +210,10 @@ test('practice forecast calendar and CallSync: plan days, load coverage dates, s
   const mesa = await waitFor('the second agreement', async () => row(`select * from public.locum_contracts where user_id = '${profile.id}' and facility = 'QA Mesa Hospital'`), { timeoutMs: 20000 });
 
   // One day on the calendar (navigating to its month first).
-  const header = page.locator('div').filter({ has: page.getByRole('button', { name: '‹' }) }).filter({ has: page.getByRole('button', { name: '›' }) }).last();
+  // The month arrows are named "Previous month" / "Next month" (43341dc1).
+  const PREV = { name: 'Previous month', exact: true };
+  const NEXT = { name: 'Next month', exact: true };
+  const header = page.locator('div').filter({ has: page.getByRole('button', PREV) }).filter({ has: page.getByRole('button', NEXT) }).last();
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const showMonth = async (iso) => {
     const want = Number(iso.slice(0, 4)) * 12 + Number(iso.slice(5, 7)) - 1;
@@ -217,7 +221,7 @@ test('practice forecast calendar and CallSync: plan days, load coverage dates, s
       const m = /([A-Z][a-z]+) (\d{4})/.exec(await header.innerText());
       const shown = m ? Number(m[2]) * 12 + MONTHS.indexOf(m[1]) : want;
       if (shown === want) return;
-      await header.getByRole('button', { name: shown < want ? '›' : '‹' }).click();
+      await header.getByRole('button', shown < want ? NEXT : PREV).click();
     }
   };
   const openDay = async (iso) => {
@@ -239,9 +243,9 @@ test('practice forecast calendar and CallSync: plan days, load coverage dates, s
   await qa.feature('PRAC-025', 'Forecast calendar: months, a planned day, vacation, edit, remove, load coverage dates, month detail', async () => {
     await subTab(page, 'Sched.');
     const now = await header.innerText();
-    await header.getByRole('button', { name: '›' }).click();
+    await header.getByRole('button', NEXT).click();
     const next = await header.innerText();
-    await header.getByRole('button', { name: '‹' }).click();
+    await header.getByRole('button', PREV).click();
     qa.check('› and ‹ move a month and back', now.includes(monthName(localDay(0))) && !next.includes(monthName(localDay(0))) && (await header.innerText()).includes(monthName(localDay(0))), `${now.trim()} -> ${next.trim()}`);
 
     // A planned day: the day-rate agreement, day + call, expected adjusted.

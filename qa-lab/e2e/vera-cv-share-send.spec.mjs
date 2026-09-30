@@ -117,8 +117,10 @@ test('send a license: share sheet, Mail, Text, Copy and history; email with atta
     qa.check('the email arrives with both files attached', (full?.attachments || []).length === 2 && files.every((f) => (full.attachments || []).some((a) => a.filename === f)), JSON.stringify((full?.attachments || []).map((a) => a.filename)));
     qa.check('from "<name> via CredentialDOMD <docs@...>", reply-to the physician, a copy to the physician', /via CredentialDOMD/.test(full?.from || '') && JSON.stringify(full?.reply_to || full?.replyTo || '').includes(user.email) && JSON.stringify(full?.cc || '').includes(user.email), `${full?.from} | reply ${JSON.stringify(full?.reply_to || full?.replyTo)} | cc ${JSON.stringify(full?.cc)}`);
     qa.check('a send_reservations row was taken', rows(`select id from public.send_reservations where user_id = '${pid}'`).length >= 1);
-    const emailed = shareLog(pid).find((r) => r.method === 'email' && /Email packet/.test(r.item_name || ''));
-    qa.check('share_log has the server-written send', !!emailed, JSON.stringify(emailed));
+    // fd79825a: send-packet-email names the record it was sent from (item_id and the record's own
+    // name), so the send shows in that record's history; no more "Email packet (N files)".
+    const emailed = shareLog(pid).find((r) => r.method === 'email' && r.recipient === recipient && Date.parse(r.sent_at) >= Date.parse(since) - 1000);
+    qa.check('share_log has the server-written send, under the license (its id and name)', !!emailed && emailed.item_id === lic?.id && !!emailed.item_name && !/^Email packet/.test(emailed.item_name), JSON.stringify(emailed));
     await sheet.getByRole('button', { name: 'Done' }).click();
     await page.keyboard.press('Escape');
     const reopened = await openSend();

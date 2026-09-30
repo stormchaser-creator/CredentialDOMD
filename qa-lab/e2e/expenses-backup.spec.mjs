@@ -24,7 +24,7 @@ test('expenses: log two with receipts, invoice them to the agency with the recei
       await d.getByRole('spinbutton', { name: '$ amount' }).fill(amount);
       await d.getByRole('button', { name: cat, exact: true }).click();
       await d.getByPlaceholder('Vendor (e.g. United, Marriott, Hertz)').fill(vendor);
-      await d.getByPlaceholder('Bill to agency (e.g. MPLT Healthcare)').fill('QA Locum Agency');
+      await d.getByRole('textbox', { name: 'Bill to agency', exact: true }).fill('QA Locum Agency');
       await chooseFiles(page, d.getByRole('button', { name: 'Upload' }), [{ name: `qa-${cat.toLowerCase()}-receipt.png`, mimeType: 'image/png', buffer: syntheticPng() }]);
       await sleep(1500);
       await d.getByRole('button', { name: 'Add expense' }).click();

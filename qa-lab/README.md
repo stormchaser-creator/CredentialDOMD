@@ -993,9 +993,10 @@ Output (all under the gitignored `qa-lab/.generated/`):
     two-device checks.
 - `e2e/support/lab.mjs` has the steps and reads every journey shares: create a
   physician, sign in, pay for the membership, open a tab or section, fill a form
-  field by its label (the app's `<label>`s are not tied to their inputs, so
-  fields are found as the label's sibling), find a record's star/share/edit/delete
-  buttons (only the star has an accessible name), the pending-ops queue, Home's
+  field by its label (found as the label's sibling; since 43341dc1 a Field also
+  ties its label to a single control, so `getByRole(..., { name })` works too),
+  find a record's star/share/edit/delete buttons (named "Share", "Edit" and
+  "Delete" since 43341dc1), the pending-ops queue, Home's
   ring and tiles, synthetic PDF/PNG files, the captured email, SQL rows, the
   access snapshot the database computes for a member, PostgREST as a member, the
   Stripe events of a member, and `scriptAi(provider, answer, match)`. For

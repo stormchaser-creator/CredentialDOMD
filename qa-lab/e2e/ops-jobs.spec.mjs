@@ -110,10 +110,17 @@ test('scheduled jobs: each command runs as pg_cron would, the functions it calls
     }
     const oldest = `${sub}/2026-04/qa-${tag}.zip`;
     qa.check('the oldest ZIP is on the storage disk before the prune', (objectBytesOnDisk('backups', oldest) || []).length > 0);
+    // d4343996: prune_old_backups() only fires the prune-backups edge function (pg_net, with the
+    // vault hook secret); the function removes the ZIPs through the Storage API, then their rows.
     const r = runCronJob('prune-backups');
-    qa.check(`the command ran (${r.result} row(s) removed)`, r.ok, r.error || '');
-    const left = rows(`select period from public.backups where user_id = '${pid}' order by period`).map((x) => x.period);
-    qa.check('backups rows: only the 3 newest periods remain', JSON.stringify(left) === JSON.stringify(periods.slice(1)), left.join(', '));
+    qa.check('the command ran and queued one request to prune-backups with the hook secret', r.ok && r.requests.length === 1 && /\/functions\/v1\/prune-backups$/.test(r.requests[0].url) && r.requests[0].hookSecret, r.error || JSON.stringify(r.requests.map((q) => ({ url: q.url, secret: q.hookSecret, timeout: q.timeout }))));
+    const [answer] = await netResponses(r.requests.map((q) => q.id));
+    qa.check(`prune-backups answered 2xx within the job's pg_net timeout (${r.requests[0]?.timeout} ms)`, ok2xx(answer), brief(answer));
+    const want = JSON.stringify(periods.slice(1));
+    const periodsLeft = () => rows(`select period from public.backups where user_id = '${pid}' order by period`).map((x) => x.period);
+    await waitFor('the pruned rows', async () => (JSON.stringify(periodsLeft()) === want ? true : null), { timeoutMs: 30000 }).catch(() => null);
+    const left = periodsLeft();
+    qa.check('backups rows: only the 3 newest periods remain', JSON.stringify(left) === want, left.join(', '));
     const meta = countWhere('backups', 'false') + Number(row(`select count(*)::int as n from storage.objects where bucket_id = 'backups' and name = ${lit(oldest)}`).n);
     qa.check('storage.objects no longer lists the oldest ZIP', meta === 0, `${meta} row(s)`);
     const onDisk = objectBytesOnDisk('backups', oldest) || [];
@@ -124,7 +131,7 @@ test('scheduled jobs: each command runs as pg_cron would, the functions it calls
         title: 'prune-backups deletes only the storage.objects row; the ZIP file stays in the bucket, invisible and billed',
         step: 'A member with backups for 4 months; run the prune-backups job (select public.prune_old_backups())',
         expected: 'The oldest month\'s backups row and its ZIP file are removed',
-        actual: `The backups row and the storage.objects row are deleted, but the file is still on the storage backend (${onDisk[0]}). prune_old_backups() opts in to storage.allow_delete_query and runs "delete from storage.objects" (supabase/migrations/20260902f_prune_backups_delete_guard.sql:21-34, the live body in the lab), which removes only metadata; Storage never deletes the object bytes, and no tool can see them afterwards (the app, delete-account and storage-orphans all read storage.objects). First real prune in production: 2026-11-01 13:30 UTC. Fixed on fix/qa-admin-ops d4343996 (prune-backups edge function removes files through the Storage API).`,
+        actual: `The backups row and the storage.objects row are deleted, but the file is still on the storage backend (${onDisk[0]}); no tool can see it afterwards (the app, delete-account and storage-orphans all read storage.objects). prune_old_backups() hands the prune to the prune-backups edge function (supabase/migrations/20260930010000_prune_backups_storage_api.sql), which is meant to remove each file through the Storage API (supabase/functions/prune-backups/lib.ts) before its row.`,
         severity: 'medium',
       });
     }

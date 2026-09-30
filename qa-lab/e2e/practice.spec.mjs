@@ -17,7 +17,7 @@ async function logPastTime(page, { type = 'Consult', minutes = 60, note }) {
   await d.getByRole('button', { name: type, exact: true }).click();
   await d.getByRole('button', { name: 'Yesterday' }).click();
   await d.getByPlaceholder('e.g. 60').fill(String(minutes));
-  await d.getByPlaceholder('e.g. ED consult — head CT review').fill(note);
+  await d.getByRole('textbox', { name: 'Billing note (optional)', exact: true }).fill(note);
   await d.getByRole('button', { name: 'Log it' }).click();
   // A day outside the agreement's coverage blocks asks once.
   const yes = page.getByRole('button', { name: 'Yes, log it here' });

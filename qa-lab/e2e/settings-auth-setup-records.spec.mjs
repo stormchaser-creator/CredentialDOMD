@@ -179,8 +179,13 @@ test('setup: licenses from the registry and by hand, expiration dates, DEA, remi
     qa.check('the profile address is blank before the drawer is used', !profileOf(user.id).email, profileOf(user.id).email);
     await openSetupPage(page);
     await page.locator('button').filter({ hasText: 'Reminders' }).first().click();
-    const where = page.getByPlaceholder('you@example.com');
+    // 40cf5bad: the field shows only the saved address; the sign-in address is its placeholder,
+    // with a one-tap "Use <address>" that saves it (it used to be pre-filled and never saved).
+    const where = page.getByRole('textbox', { name: 'Where the warning goes', exact: true });
     const shown = await where.inputValue();
+    const hint = await where.getAttribute('placeholder');
+    const useIt = page.getByRole('button', { name: `Use ${user.email}`, exact: true });
+    qa.check('with no address on file the field is empty, the sign-in address only its placeholder, with "Use <address>"', shown === '' && hint === user.email && await useIt.isVisible().catch(() => false), JSON.stringify({ value: shown, placeholder: hint }));
     // The physician turns email on (it is on) and picks a lead time, without touching the address field.
     const toggle = page.getByRole('button', { name: 'Email reminders' });
     await page.getByRole('button', { name: '60 days' }).click();
@@ -190,19 +195,15 @@ test('setup: licenses from the registry and by hand, expiration dates, DEA, remi
     const p1 = profileOf(user.id);
     const text1 = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
     const saysNoAddress = /Reminders No address on file to warn/.test(text1);
-    qa.check('the address the drawer showed is the one on file (or the task says none is)', !shown || p1.email === shown || !saysNoAddress, JSON.stringify({ shownInField: shown, onFile: p1.email, task: text1.match(/Reminders [^.]*\./)?.[0] }));
-    if (shown && !p1.email && saysNoAddress) {
-      qa.bug({
-        title: 'Setup > Reminders shows the sign-in address in "Where the warning goes" but never saves it unless the field is edited; the task then says "No address on file to warn"',
-        step: 'Settings: clear Email. More > Setup > Reminders: the field shows the sign-in address; pick "60 days"; reload',
-        expected: 'The address shown is on file (or clearly marked as not saved), and the task completes',
-        actual: `profiles.email stays blank; the row reads "No address on file to warn" beside a filled-in address. RemindersDrawer initialises the field with s.email || user.email (src/components/features/SetupPage.jsx:287) and writes it only onBlur when it differs from s.email (line 298)`,
-        severity: 'medium',
-      });
-    }
+    qa.check('nothing unsaved passes for an address on file: the profile address is still blank and the task says so', !p1.email && saysNoAddress, JSON.stringify({ shownInField: shown, onFile: p1.email, task: text1.match(/Reminders [^.]*\./)?.[0] }));
+    // "Use <address>" saves the sign-in address.
+    await page.locator('button').filter({ hasText: 'Reminders' }).first().click();
+    await useIt.click();
+    const used = await waitFor('the sign-in address saved', async () => (profileOf(user.id).email === user.email ? true : null), { timeoutMs: 10000, intervalMs: 400 }).catch(() => false);
+    qa.check('"Use <address>" saves the sign-in address as the reminder address', used === true && (await where.inputValue()) === user.email, JSON.stringify({ onFile: profileOf(user.id).email, field: await where.inputValue().catch(() => null) }));
     // Now use it fully: type the address, turn email off and on, pick 60 days.
     const address = `rem-${stamp().toLowerCase()}@${LAB_EMAIL_DOMAIN}`;
-    await page.locator('button').filter({ hasText: 'Reminders' }).first().click();
+    if (!(await where.isVisible().catch(() => false))) await page.locator('button').filter({ hasText: 'Reminders' }).first().click();
     await where.fill(address);
     await where.blur();
     await toggle.click();

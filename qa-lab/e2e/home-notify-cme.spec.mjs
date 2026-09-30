@@ -44,7 +44,7 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
     await qa.shot('tx card');
     qa.check('the TX card shows the hours in window, the renewal date and its days', /15\/48h|15 ?\/ ?48/.test(ct) && /License renews/.test(ct) && /\b200 days\b|\b199 days\b|\b201 days\b/.test(ct), ct.slice(0, 260));
     await card.getByText(/^TX$/).click();
-    const math = page.getByRole('dialog', { name: 'TX CME — the math' });
+    const math = page.getByRole('dialog', { name: 'TX CME: the math', exact: true });
     await math.waitFor({ timeout: 10000 });
     const mt = (await math.innerText()).replace(/\s+/g, ' ');
     await qa.shot('tx math');
@@ -53,7 +53,8 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
     qa.check('Ethics is scored as a required topic (2 of 2 hours recorded)', /Ethics.{0,40}2 \/ 2h recorded|Ethics.{0,30}recorded/.test(mt), (mt.match(/Ethics.{0,60}/) || [''])[0]);
     qa.check('"Counted this cycle (3)" lists the three dated entries in the window', /Counted this cycle \(3\)/i.test(mt) && /QA ethics in practice/.test(mt) && /QA neurosurgery update/.test(mt) && /QA journal club/.test(mt));
     qa.check('the Category 2 entry is tagged as not counting toward Cat 1, the Cat 1 ones as counting', /QA journal club 3h .{0,30}AMA PRA Category 2(?! · counts)/.test(mt) && /AMA PRA Category 1 · counts as Cat 1/.test(mt), (mt.match(/QA journal club.{0,80}/) || [''])[0]);
-    qa.check('"Not counting toward this renewal (2)" gives each reason: outside the window, no date', /Not counting toward this renewal \(2\)/i.test(mt) && /2015-03-01 — outside the cycle window/.test(mt) && /QA undated webinar 1h no date on the entry — add one so it can count/.test(mt), (mt.match(/Not counting.{0,300}/i) || [''])[0]);
+    // e5f020a3 lists from the engine's own window test and says which side of it an entry falls.
+    qa.check('"Not counting toward this renewal (2)" gives each reason: before the cycle opened, no date', /Not counting toward this renewal \(2\)/i.test(mt) && /2015-03-01, before this cycle opened/.test(mt) && /QA undated webinar 1h No date on the entry\. Add one so it can count\./.test(mt), (mt.match(/Not counting.{0,300}/i) || [''])[0]);
     qa.check('the source citation is shown', /Source: Tex\. Admin\. Code tit\. 22, § 161\.35/.test(mt), (mt.match(/Source:.{0,120}/) || [''])[0]);
     await page.keyboard.press('Escape');
     await math.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
@@ -135,25 +136,25 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
     const ct = (await card.innerText().catch(() => '')).replace(/\s+/g, ' ');
     await qa.shot('board cards');
     qa.check('the ABNS card shows 12 of 20 Category 1 hours this year', /Board Certification/.test(text) && /12\/20 hrs/.test(ct), ct.slice(0, 200));
-    qa.check('the subspecialty says its CME follows the primary board', /Autonomic Disorders (—|\\u2014) CME follows the primary board above/.test(text), (text.match(/Autonomic Disorders.{0,60}/) || [''])[0]);
+    qa.check('the subspecialty says its CME follows the primary board', /Autonomic Disorders(:| —| \\u2014) CME follows the primary board above/.test(text), (text.match(/Autonomic Disorders.{0,60}/) || [''])[0]);
     const raw = [...new Set(text.match(/\\u[0-9a-fA-F]{4}/g) || [])];
     qa.check('the board cards print no raw escape codes', raw.length === 0, `${raw.join(', ')}: ${(text.match(/.{0,50}\\u[0-9a-fA-F]{4}.{0,30}/) || [''])[0]}`);
     if (raw.length) {
       qa.bug({
         title: 'Home Board Certification: the card and the subspecialty note print raw escape codes ("\\u00b7", "\\u2014") instead of a dot and a dash',
         step: 'Settings: pick Neurological Surgery (ABMS) and the UCNS Autonomic Disorders certification; view Home, Board Certification',
-        expected: '"AMA PRA Cat 1/year · 2026 (no carryover) · N days left" and "Autonomic Disorders — CME follows the primary board above"',
+        expected: '"AMA PRA Cat 1/year · 2026 (no carryover) · N days left" and "Autonomic Disorders: CME follows the primary board above"',
         actual: `The page reads "${(text.match(/AMA PRA Cat 1\/year.{0,40}/) || [''])[0]}" and "${(text.match(/Autonomic Disorders \\u2014.{0,20}/) || [''])[0]}". App.jsx:1890 and App.jsx:1928 put \\u00b7 and \\u2014 in JSX text, where escapes are not processed (the same card's \` \\u00b7 \${b.daysLeft}\` inside a template literal renders correctly)`,
         severity: 'low',
       });
     }
     await card.getByText(/^Neurological Surgery, ABMS ABNS/).click();
-    const math = page.getByRole('dialog', { name: /Neurological Surgery — the math/ });
+    const math = page.getByRole('dialog', { name: /Neurological Surgery.*: the math$/ });
     await math.waitFor({ timeout: 10000 });
     const mt = (await math.innerText()).replace(/\s+/g, ' ');
     await qa.shot('board math');
     qa.check('the math counts the two Category 1 entries of this year', /Counted this cycle \(2\)/i.test(mt) && /QA ethics in practice/.test(mt) && /QA neurosurgery update/.test(mt), mt.slice(0, 300));
-    qa.check('...and excludes the rest with reasons (category, window, no date)', /Not counting \(3\)/i.test(mt) && /category doesn't count for this board — needs AMA PRA Category 1/.test(mt) && /outside this cycle window/.test(mt) && /no date on the entry/.test(mt), (mt.match(/Not counting.{0,400}/i) || [''])[0]);
+    qa.check('...and excludes the rest with reasons (category, window, no date)', /Not counting \(3\)/i.test(mt) && /category doesn't count for this board, which needs AMA PRA Category 1/.test(mt) && /outside this cycle window/.test(mt) && /no date on the entry/.test(mt), (mt.match(/Not counting.{0,400}/i) || [''])[0]);
     await page.keyboard.press('Escape');
     await math.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
     const find = card.getByRole('button', { name: 'Find CME →' });
@@ -171,7 +172,7 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
     const ticketsBefore = tickets();
     await home(page);
     await stateCard(page, 'TX').getByText(/^TX$/).click();
-    const math = page.getByRole('dialog', { name: 'TX CME — the math' });
+    const math = page.getByRole('dialog', { name: 'TX CME: the math', exact: true });
     await math.waitFor({ timeout: 10000 });
     await math.getByRole('button', { name: 'Rules changed?' }).click();
     let report = page.getByRole('dialog', { name: /^Report a rule change: TX/ });

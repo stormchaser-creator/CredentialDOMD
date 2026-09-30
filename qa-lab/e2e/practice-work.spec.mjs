@@ -75,7 +75,7 @@ test('practice work: contract picker with an ended agreement, the call timer, di
 
   await qa.feature('PRAC-008', 'Call timer: live clock, notes, reload, Stop & Log, discard, a stray tap', async () => {
     await openWork(page, 'QA Hourly Clinic');
-    await page.getByRole('button', { name: /Got a call — start timer/ }).click();
+    await page.getByRole('button', { name: /Got a call\? Start the timer/ }).click();
     const card = page.locator('div').filter({ has: page.getByRole('button', { name: 'Stop & Log' }) }).last();
     await card.waitFor();
     const read = async () => {
@@ -91,7 +91,7 @@ test('practice work: contract picker with an ended agreement, the call timer, di
     if (!qa.check('the clock starts at zero, never negative', /\b00:0\d\b/.test(atTap.text) && !/-\d/.test(atTap.text.split('Will bill')[0]), atTap.text.slice(0, 80))) {
       qa.bug({
         title: 'The call timer shows a negative clock ("-1:-1:-1") for its first second',
-        step: 'Practice > Work: open the Work tab, wait a moment, tap "Got a call — start timer"',
+        step: 'Practice > Work: open the Work tab, wait a moment, tap "Got a call? Start the timer"',
         expected: 'The clock reads 00:00 and counts up',
         actual: `It reads "${(/[-\d:]+(?=\s*\n?\s*Will bill)/.exec(atTap.text) || [''])[0]}" until the first tick: WorkLog keeps the time it last ticked in \`now\` (src/components/features/locum/WorkLog.jsx:138, only ticking while a timer runs, lines 178-182), and the elapsed time (line 1088) is \`now\` minus a start time taken later, so it is negative by however long the tab was open; fmtClock prints each negative part`,
         severity: 'low',
@@ -101,8 +101,8 @@ test('practice work: contract picker with an ended agreement, the call timer, di
     qa.check('the clock runs', second.sec > first.sec, `${first.sec}s then ${second.sec}s`);
     qa.check('it will bill as 15 min (the call minimum)', second.billed === 15, second.text.match(/Will bill as[^\n]*/)?.[0]);
     const billingNote = `QA timer billing note ${stamp('t')}`;
-    await card.getByPlaceholder(/Billing note — shows on the invoice/).fill(billingNote);
-    await card.getByPlaceholder(/Private note — only you see this/).fill('QA private reminder bed twelve');
+    await card.getByRole('textbox', { name: 'Billing note (shows on the invoice)', exact: true }).fill(billingNote);
+    await card.getByRole('textbox', { name: 'Private note (only you see this)', exact: true }).fill('QA private reminder bed twelve');
     await qa.shot('timer running');
     await page.reload();
     await waitForMemberApp(page);
@@ -111,7 +111,7 @@ test('practice work: contract picker with an ended agreement, the call timer, di
     const survived = await card2.waitFor({ timeout: 15000 }).then(() => true, () => false);
     qa.check('the running timer survives a reload on this device', survived);
     if (survived) {
-      qa.check('with both notes', await card2.getByPlaceholder(/Billing note/).inputValue() === billingNote && await card2.getByPlaceholder(/Private note/).inputValue() === 'QA private reminder bed twelve');
+      qa.check('with both notes', await card2.getByRole('textbox', { name: 'Billing note (shows on the invoice)', exact: true }).inputValue() === billingNote && await card2.getByRole('textbox', { name: 'Private note (only you see this)', exact: true }).inputValue() === 'QA private reminder bed twelve');
     }
     const stored = await deviceSlot(page, TIMER);
     qa.check('the timer lives in this device\'s storage, not the cloud', stored?.type === 'Call' && !!stored?.startedAt, stored);
@@ -135,7 +135,7 @@ test('practice work: contract picker with an ended agreement, the call timer, di
 
     // Started by mistake: discard, confirmed.
     await page.getByRole('button', { name: 'Procedure', exact: true }).first().click();
-    await page.getByRole('button', { name: /Discard — started by mistake/ }).click();
+    await page.getByRole('button', { name: /Discard \(started by mistake\)/ }).click();
     await sleep(1000);
     qa.check('Discard asks first', qa.report.dialogs.some((d) => /Discard this timer without logging any time/.test(d)));
     qa.check('a discarded timer logs nothing', rows(`select id from public.work_log where user_id = '${profile.id}'`).length === before + 1);
@@ -148,7 +148,7 @@ test('practice work: contract picker with an ended agreement, the call timer, di
     await page.getByRole('button', { name: 'Stop & Log' }).click();
     await sleep(800);
     const asked = qa.report.dialogs.filter((d) => /seconds on the clock/.test(d)).at(-1) || '';
-    qa.check('stopping within 2 minutes asks, naming the seconds and the 15 minutes it would bill', /Only \d+ seconds on the clock — logging bills 15 min/.test(asked), asked);
+    qa.check('stopping within 2 minutes asks, naming the seconds and the 15 minutes it would bill', /Only \d+ seconds on the clock, and logging bills 15 min/.test(asked), asked);
     qa.check('Cancel keeps the timer running and logs nothing', await page.getByRole('button', { name: 'Stop & Log' }).isVisible() && rows(`select id from public.work_log where user_id = '${profile.id}'`).length === before + 1);
     qa.onDialog(null);
     await page.getByRole('button', { name: 'Stop & Log' }).click();
@@ -167,13 +167,13 @@ test('practice work: contract picker with an ended agreement, the call timer, di
     const sent = watchAiRequests(page);
     const usageBefore = rows(`select id from public.ai_usage where user_id = '${profile.id}'`).length;
     await installSpeechStandIn(page, words);
-    await page.getByRole('button', { name: /Dictate an entry — say what you did/ }).click();
+    await page.getByRole('button', { name: /Dictate an entry: say what you did/ }).click();
     await page.getByText(new RegExp(tag)).first().waitFor({ timeout: 10000 });
     await qa.shot('dictating');
-    await page.getByRole('button', { name: /Done — build the entry/ }).click();
+    await page.getByRole('button', { name: /Done, build the entry/ }).click();
     const d = page.getByRole('dialog', { name: 'Log past time' });
     const opened = await d.waitFor({ timeout: 45000 }).then(() => true, () => false);
-    qa.check('"Done — build the entry" opens Log past time', opened);
+    qa.check('"Done, build the entry" opens Log past time', opened);
     if (!opened) return;
     await qa.shot('dictated entry prefilled');
     const vals = await d.locator('input, textarea').evaluateAll((els) => els.map((e) => e.value));

@@ -58,8 +58,13 @@ test('practice to do: capture, edit, time and finish a task into the Work tab, b
     await fin.locator('input[type="date"]').fill(localDay(-1));
     await fin.locator('label', { hasText: 'Begin' }).locator('xpath=..').locator('input').first().fill(timeText('14:00'));
     await fin.locator('label', { hasText: 'End' }).locator('xpath=..').locator('input').first().fill(timeText('14:30'));
-    const invoiceNote = 'QA invoice note: reviewed imaging with the ICU team';
-    await fin.locator('label', { hasText: 'Notes (for the invoice)' }).locator('xpath=..').locator('textarea').fill(invoiceNote);
+    // d53c7a1e: the old "Notes (for the invoice)" was the device-only private note and is now
+    // labelled so, beside a "Billing note (shows on the invoice)" prefilled with the task's words.
+    const billingNote = fin.getByRole('textbox', { name: 'Billing note (shows on the invoice)', exact: true });
+    const privateField = fin.getByRole('textbox', { name: 'Private note (this device only)', exact: true });
+    qa.check('Finish offers the billing note (the task\'s words) and a device-only private note', (await billingNote.inputValue().catch(() => '')) === 'QA call back ICU consult re: drain' && (await privateField.count()) === 1, await billingNote.inputValue().catch(() => 'no billing note field'));
+    const privateNote = 'QA private note: reviewed imaging with the ICU team';
+    await privateField.fill(privateNote);
     await qa.shot('finish task');
     await fin.getByRole('button', { name: 'Log it to the Work tab' }).click();
     const work = page.getByRole('dialog', { name: 'Log past time' });
@@ -68,7 +73,7 @@ test('practice to do: capture, edit, time and finish a task into the Work tab, b
     const vals = await work.locator('input, textarea').evaluateAll((els) => els.map((e) => e.value));
     await qa.shot('work form from task');
     qa.check('prefilled: 2:00 PM to 2:30 PM, the task words as the billing note', vals.some((v) => /^2:00\s?PM$/i.test(v)) && vals.some((v) => /^2:30\s?PM$/i.test(v)) && vals.includes('QA call back ICU consult re: drain'), vals);
-    qa.check('where "Notes (for the invoice)" landed', true, `field values: ${JSON.stringify(vals)}`);
+    qa.check('the private note typed at Finish is the Work form\'s private note', vals.includes(privateNote), `field values: ${JSON.stringify(vals)}`);
     await work.getByRole('button', { name: 'Log it' }).click();
     const yes = page.getByRole('button', { name: 'Yes, log it here' });
     if (await yes.waitFor({ timeout: 3000 }).then(() => true, () => false)) await yes.click();
@@ -86,16 +91,7 @@ test('practice to do: capture, edit, time and finish a task into the Work tab, b
     const lineText = (await preview.innerText()).replace(/\s+/g, ' ');
     await qa.shot('invoice line from task');
     qa.check('the invoice line carries the task\'s words', /QA call back ICU consult re: drain/.test(lineText), lineText.slice(0, 400));
-    const onInvoice = qa.check('the note typed "for the invoice" is on the invoice', lineText.includes(invoiceNote), lineText.slice(0, 400));
-    if (!onInvoice) {
-      qa.bug({
-        title: 'To do: "Notes (for the invoice)" never reaches the invoice; it is stored as the device-only private note',
-        step: 'Practice > To do > Finish & log time: type in "Notes (for the invoice)", Log it to the Work tab, Log it, then invoice the entry',
-        expected: 'The note appears on the invoice line (the field says it is for the invoice)',
-        actual: `The invoice line reads only the task words; the note went to the Work form's "Private note" (stays on this device, never uploaded, never on invoices): TaskNotes binds the field to form.privateNote (src/components/features/locum/TaskNotes.jsx:266) and hands it to Work as privateNote (line 106); work_log.private_note is ${JSON.stringify(entry?.private_note)}`,
-        severity: 'medium',
-      });
-    }
+    qa.check('the private note stays off the invoice and off the server', !lineText.includes(privateNote) && !entry?.private_note, `work_log.private_note ${JSON.stringify(entry?.private_note)}; ${lineText.slice(0, 200)}`);
     await preview.getByRole('button', { name: 'Copy', exact: true }).click();
     await waitFor('the invoice', async () => row(`select id from public.invoices where user_id = '${profile.id}'`), { timeoutMs: 20000 }).catch(() => null);
     await preview.waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
@@ -281,7 +277,7 @@ test('practice invoices and agreements: share the PDF again, resend a text-only 
     qa.check('it is back in the active list', await page.getByText('QA Summit Hospital', { exact: true }).isVisible());
 
     // Delete an agreement with no work, confirmed.
-    await cardOf('QA Short Visit Hospital').getByRole('button').filter({ hasNotText: /\S/ }).last().click();
+    await cardOf('QA Short Visit Hospital').getByRole('button', { name: 'Delete agreement', exact: true }).click();
     await sleep(2000);
     const asked = qa.report.dialogs.filter((d) => /Delete this agreement/.test(d)).at(-1) || '';
     qa.check('the delete confirm says work entries keep their data', /Work log entries keep their data/.test(asked), asked);
@@ -296,8 +292,10 @@ test('practice invoices and agreements: share the PDF again, resend a text-only 
         actual: `The confirm reads "${asked.replace(/^confirm: /, '')}"; the documents row and its stored file are deleted with the agreement (AppContext deleteItem cascades to linked documents). Contracts.jsx:372`,
         severity: 'low',
       });
-    } else {
-      qa.check('the signed file of the deleted agreement is handled as the confirm says', true, fileAfter ? `kept, linked_to ${fileAfter.linked_to}` : 'deleted, and the confirm said so');
+    } else if (shortDoc) {
+      // The confirm names the files that go with the record (f18c7a1f, 57892be3: deleteConfirmText).
+      const expected = `Delete this agreement and its 1 attached file (${shortDoc.name})? The file will be removed from Files too. Work log entries keep their data. This cannot be undone.`;
+      qa.check('the confirm names the signed file, which is deleted with the agreement', asked.replace(/^confirm: /, '') === expected && !fileAfter, fileAfter ? `kept, linked_to ${fileAfter.linked_to}; confirm "${asked}"` : `deleted; confirm "${asked}"`);
     }
   }, { soft: true });
 });

@@ -212,14 +212,15 @@ test('Vera: reference draft, feedback ticket, dictation, archived chats, source 
   await qa.feature('VERA-009', 'Dictation fills the question; a browser without speech says so', async () => {
     await openVera(page);
     await veraBox(page).fill('');
-    await page.getByRole('button', { name: '🎤' }).click();
+    // The mic is named "Dictate" (43341dc1); while it listens it is pressed and shows ◼.
+    await page.getByRole('button', { name: 'Dictate', exact: true, pressed: false }).click();
     const filled = await waitFor('the transcript', async () => ((await veraBox(page).inputValue()).includes('QA dictated') ? true : null), { timeoutMs: 5000 }).catch(() => false);
-    await page.getByRole('button', { name: '◼' }).click().catch(() => {});
+    await page.getByRole('button', { name: 'Dictate', exact: true, pressed: true }).click().catch(() => {});
     qa.check('the transcript fills the input', !!filled, await veraBox(page).inputValue());
     await veraBox(page).fill('');
     // Now a browser with no speech recognition at all.
     await page.evaluate(() => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition; window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined; });
-    await page.getByRole('button', { name: '🎤' }).click();
+    await page.getByRole('button', { name: 'Dictate', exact: true }).click();
     const msg = await page.getByText('Use the mic key on your keyboard to dictate here.').waitFor({ timeout: 5000 }).then(() => true, () => false);
     await qa.shot('no speech support');
     qa.check('without speech support a message says what to do', msg);

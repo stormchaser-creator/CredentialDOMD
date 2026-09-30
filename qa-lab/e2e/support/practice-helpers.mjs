@@ -100,7 +100,7 @@ export async function logPastTime(page, { type = 'Consult', day = 'Yesterday', s
   if (start) await field(d, 'Start time').fill(timeText(start));
   if (end) await field(d, 'End time').fill(timeText(end));
   if (minutes) await d.getByPlaceholder('e.g. 60').fill(String(minutes));
-  if (note !== undefined) await d.getByPlaceholder('e.g. ED consult — head CT review').fill(note);
+  if (note !== undefined) await d.getByRole('textbox', { name: 'Billing note (optional)', exact: true }).fill(note);
   if (privateNote) await d.getByPlaceholder(/patient name \/ MRN reminder/).fill(privateNote);
   await d.getByRole('button', { name: 'Log it' }).click();
   const yes = page.getByRole('button', { name: 'Yes, log it here' });

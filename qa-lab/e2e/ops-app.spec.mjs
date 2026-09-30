@@ -11,11 +11,13 @@ import {
 } from './support/lab.mjs';
 import { GENERATED_DIR } from '../lib/paths.mjs';
 import {
-  callFunction, countWhere, hostRun, objectBytesOnDisk, repoFile, sharedMember, REPO_ROOT,
+  callFunction, countWhere, hostRun, objectBytesOnDisk, repoFile, sharedMember, stackKeys, REPO_ROOT,
 } from './support/ops-helpers.mjs';
 import { localExec } from '../lib/local-db.mjs';
 import { mkdtempSync, mkdirSync, chmodSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { createClient } from '@supabase/supabase-js';
 
 // What report-error scrubs, server side (supabase/functions/report-error/index.ts SECRET_RE).
 const TOKEN_SHAPED = /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{6,}|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/;
@@ -316,7 +318,7 @@ test('new version: a deploy while the tab is open updates it, then the pill; tap
     const pill = page.getByRole('button', { name: 'Update app to the new version' });
     const shown = await pill.waitFor({ timeout: 30000 }).then(() => true, () => false);
     await qa.shot('update pill');
-    qa.check('"New version — tap to update" shows instead of a second automatic reload', shown && /New version/.test(await pill.innerText().catch(() => '')));
+    qa.check('"New version: tap to update" shows instead of a second automatic reload', shown && /New version/.test(await pill.innerText().catch(() => '')));
     if (!shown) return;
     const cachesBefore = await page.evaluate(async () => (window.caches ? (await caches.keys()).length : -1));
     const reloaded = page.waitForEvent('load', { timeout: 60000 }).then(() => true, () => false);
@@ -362,11 +364,12 @@ test('dormant screens: Quick Share and Team are reachable from no menu at desk o
   }
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  await qa.feature('OPS-010', 'in the code: nothing sets tab "share", Team needs a non-Practice plan, and the dormant components are never mounted', async () => {
+  await qa.feature('OPS-010', 'in the code: nothing sets tab "share", slot 4 is always Practice (no Team tab), and the dormant components are never mounted', async () => {
     const app = repoFile('src/App.jsx');
     const setsShare = hostRun('git', ['grep', '-n', '-E', `setTab\\(["']share["']\\)|navigate\\(["']share["']`, '--', 'src']).stdout.trim();
     qa.check('no code sets tab "share" (renderShare and its Administrator access entry are unreachable)', !setsShare && /if \(tab === "share"\) return renderShare\(\)/.test(app), setsShare);
-    qa.check('Team is slot 4 only for plans other than locum (a founding member is locum)', /isLocumTier\s*\n?\s*\? \{ id: "locum"/.test(app) || /const slot4 = isLocumTier/.test(app));
+    // 5fe734df removed the dormant Team branch: slot 4 is Practice for every plan, and no tab is "team".
+    qa.check('slot 4 is always Practice, and no plan gets a Team tab', /const slot4 = \{ id: "locum", label: "Practice"/.test(app) && !/id: ["']team["']|tab === ["']team["']|setTab\(["']team["']\)/.test(app), (app.match(/const slot4 = [^\n]*/) || [''])[0].slice(0, 160));
     const mounts = hostRun('git', ['grep', '-n', '-E', '<(HospitalRotations|CredentialPortalLauncher)\\b', '--', 'src']).stdout.trim().split('\n').filter(Boolean);
     qa.check('no screen mounts HospitalRotations or CredentialPortalLauncher (which alone opens CredentialPortalModal)', mounts.length === 0, mounts.join(' | '));
     // A heading or line that calls them dormant or unreachable (docs/CREDENTIAL-PORTAL-IMPLEMENTATION.md
@@ -439,26 +442,26 @@ test('storage orphans: the report finds a file whose row is gone and nothing els
     qa.blocked('OPS-011', 'The production run (node scripts/storage-orphans.mjs --counts) reads production through the keychain\'s management token; the lab runs the script\'s own query against the lab instead.');
   }, { soft: true });
 
-  await qa.feature('OPS-011', 'the SQL the script prints for review removes the file, not only its row', async () => {
+  // 8d8127d4: the report prints a Storage API removal (storage.from('documents').remove()), never
+  // SQL on storage.objects, which removed only the row and left the bytes in the bucket.
+  await qa.feature('OPS-011', 'the removal the script prints goes through the Storage API and removes the file, not only its row', async () => {
     if (!orphan) { qa.check('an orphan to remove', false); return; }
     qa.check('the file is on the storage disk', (objectBytesOnDisk('documents', orphan) || []).length > 0);
-    const printed = /select set_config\('storage\.allow_delete_query', 'true', false\);\\ndelete from storage\.objects/.test(script);
-    qa.check('the script prints "set_config(storage.allow_delete_query) + delete from storage.objects" as the remedy', printed);
-    // Run exactly that remedy for this member's own orphan, as the reviewing admin would.
-    labExec(`select set_config('storage.allow_delete_query', 'true', false); delete from storage.objects where bucket_id = 'documents' and name in (${lit(orphan)});`);
-    const listed = !!row(`select 1 as x from storage.objects where bucket_id = 'documents' and name = ${lit(orphan)}`);
+    const { removalScript } = await import(pathToFileURL(path.join(REPO_ROOT, 'scripts/storage-orphans.mjs')).href);
+    const printed = removalScript([orphan]);
+    const code = printed.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+    qa.check('the printed remedy removes the listed file through the Storage API (storage.from("documents").remove)', /db\.storage\.from\("documents"\)\.remove\(/.test(code) && code.includes(JSON.stringify(orphan)), printed.slice(0, 400));
+    qa.check('...and never deletes from storage.objects in SQL', !/delete\s+from\s+storage\.objects|allow_delete_query/i.test(code) && !/set_config\('storage\.allow_delete_query'/.test(script), '');
+    // Run that removal for this member's own orphan, as the reviewing admin would: the same Storage
+    // API call under the service role, against the LAB's gateway (the printed script names production).
+    const db = createClient(lab().urls.api, stackKeys().service, { auth: { persistSession: false } });
+    const { data, error } = await db.storage.from('documents').remove([orphan]);
+    qa.check('the Storage API removes it', !error && (data || []).length === 1, error?.message || JSON.stringify(data));
+    const gone = await waitFor('the object to go', async () => (row(`select 1 as x from storage.objects where bucket_id = 'documents' and name = ${lit(orphan)}`) ? null : true), { timeoutMs: 15000 }).catch(() => false);
     const onDisk = objectBytesOnDisk('documents', orphan) || [];
-    qa.check('after the remedy the object is gone from storage.objects', !listed);
+    qa.check('after the remedy the object is gone from storage.objects', gone);
     qa.check('and its bytes are gone from the bucket', onDisk.length === 0, onDisk.join(', '));
-    if (printed && onDisk.length) {
-      qa.bug({
-        title: 'storage-orphans.mjs prints a remedy that deletes only the metadata row; the orphan\'s file stays in the bucket, now invisible to every tool',
-        step: 'A documents object whose row is gone; run node scripts/storage-orphans.mjs (read-only) and then the SQL it prints for the admin',
-        expected: 'The printed remedy removes the orphan file',
-        actual: `storage.objects no longer lists it, but the bytes are still on the storage backend (${onDisk[0]}), billed, and the next report cannot find them. scripts/storage-orphans.mjs prints "select set_config('storage.allow_delete_query', ...); delete from storage.objects ..." (the same metadata-only delete as prune_old_backups). Fixed on fix/qa-admin-ops 8d8127d4 (prints a Storage API removal instead).`,
-        severity: 'low',
-      });
-    }
+    qa.check('the document that still has its row keeps its file', !!row(`select 1 as x from storage.objects where bucket_id = 'documents' and name = ${lit(docs[0]?.storage_path)}`) && (objectBytesOnDisk('documents', docs[0]?.storage_path) || []).length > 0);
   }, { soft: true });
 });
 

@@ -183,7 +183,7 @@ test('the private-notes vault: export, erase, restore from a file, paste, and a 
       await w.getByRole('button', { name: i ? 'Procedure' : 'Consult', exact: true }).click();
       await w.getByRole('button', { name: 'Yesterday' }).click();
       await w.getByPlaceholder('e.g. 60').fill('30');
-      await w.getByPlaceholder('e.g. ED consult — head CT review').fill(`QA billing note ${i + 1}`);
+      await w.getByRole('textbox', { name: 'Billing note (optional)', exact: true }).fill(`QA billing note ${i + 1}`);
       await w.getByPlaceholder('🔒 e.g. patient name / MRN reminder').fill(note);
       await w.getByRole('button', { name: 'Log it' }).click();
       const yes = page.getByRole('button', { name: 'Yes, log it here' });
@@ -220,7 +220,8 @@ test('the private-notes vault: export, erase, restore from a file, paste, and a 
     await page.getByRole('button', { name: 'Restore these notes' }).click();
     await sleep(1000);
     const pasted = await pageText(page);
-    qa.check('Paste it in + Restore these notes brings both back and says how many', await vaultCount() === 2 && /Restored . 2 private notes on this device/.test(pasted), (pasted.match(/Restored[^.]*\./) || [''])[0]);
+    // 07211659: both restore paths say how many notes came back ("2 private notes restored to this device.").
+    qa.check('Paste it in + Restore these notes brings both back and says how many', await vaultCount() === 2 && /\b2 private notes restored to this device\./.test(pasted), (pasted.match(/[^.]*restored[^.]*\./i) || [''])[0]);
     // A file that is not a vault export (the JSON backup) must not go into the vault.
     const [bk] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.getByRole('button', { name: /Export JSON Backup/ }).click()]);
     const backupFile = await bk.path();

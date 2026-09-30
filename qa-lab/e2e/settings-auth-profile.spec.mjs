@@ -81,12 +81,13 @@ test('settings: birth month and day, licensed states, CME requirements, AI keys 
     const stateRow = (st) => card.locator('div').filter({ has: page.locator('span', { hasText: new RegExp(`^${st}$`) }) }).filter({ has: page.getByRole('button') }).last();
     await stateRow('FL').getByRole('button', { name: 'Set Primary' }).click();
     await sleep(800);
-    await stateRow('TX').getByRole('button', { name: '✕' }).click();
+    // The ✕ is named for its state (43341dc1).
+    await stateRow('TX').getByRole('button', { name: 'Stop tracking TX', exact: true }).click();
     await sleep(2500);
     const p = profileOf(user.id);
     qa.check('profiles.primary_state FL; TX removed from additional_states', p.primary_state === 'FL' && !(p.additional_states || []).includes('TX'), JSON.stringify({ primary: p.primary_state, additional: p.additional_states }));
     // The license-held state: its ✕ must remove it or not be offered.
-    const nvRemove = stateRow('NV').getByRole('button', { name: '✕' });
+    const nvRemove = stateRow('NV').getByRole('button', { name: 'Stop tracking NV', exact: true });
     if (await nvRemove.count()) {
       await nvRemove.click();
       await sleep(1500);
@@ -211,13 +212,25 @@ test('settings: birth month and day, licensed states, CME requirements, AI keys 
     const settingsText = await text(page);
     const controls = await page.getByRole('button', { name: /password|sign-in|sign in|account security|manage account/i }).count();
     const links = await page.getByRole('link', { name: /password|sign-in|account security|manage account/i }).count();
+    qa.check('Settings offers a way to change the password or sign-in email', controls + links > 0, `${controls} button(s), ${links} link(s); Settings mentions: ${(settingsText.match(/[^.]*(password|sign-in)[^.]*\./gi) || []).slice(0, 2).join(' | ') || 'neither word'}`);
+    // The Password and sign-in email card (d2bf73b0): its button opens Clerk's own account
+    // screen (openUserProfile). The lab's Clerk stand-in has no such screen and says so in an
+    // alert, which is how the journey sees that the tap reached it.
+    const change = page.getByRole('button', { name: 'Change password or sign-in email', exact: true });
+    if (await change.count()) {
+      const seen = qa.report.dialogs.length;
+      await change.click();
+      await sleep(1000);
+      const opened = qa.report.dialogs.slice(seen);
+      qa.check('"Change password or sign-in email" opens the account screen (Clerk openUserProfile)', opened.some((d) => /no Clerk account screen/.test(d)) && !(await page.getByRole('alert').filter({ hasText: /could not open|sign-in changed/i }).count()), opened.join(' | ') || 'nothing opened');
+    }
     await openMore(page, 'Help & FAQ');
     await sleep(800);
     const faq = await text(page);
     const faqSays = /password|sign-in email|change (your|the) (sign-in )?email/i.test(faq);
     await qa.shot('help faq');
-    qa.check('Settings offers a way to change the password or sign-in email', controls + links > 0, `${controls} button(s), ${links} link(s); Settings mentions: ${(settingsText.match(/[^.]*(password|sign-in)[^.]*\./gi) || []).slice(0, 2).join(' | ') || 'neither word'}`);
-    qa.check('Help & FAQ says how to change them', faqSays, faqSays ? '' : 'no mention of a password or the sign-in email');
+    // The checklist asks for a control OR a Help answer: Help must say how only when Settings offers no way.
+    if (controls + links === 0) qa.check('Help & FAQ says how to change them (Settings offers no way)', faqSays, faqSays ? '' : 'no mention of a password or the sign-in email');
     if (controls + links === 0 && !faqSays) {
       qa.bug({
         title: 'No way to change the password or the sign-in email from inside the app, and Help does not say how',
@@ -285,7 +298,7 @@ test('settings: appearance, dashboard, notifications follow the account; text si
     if (hasBrowser) await browserSw.click();
     if (browserState === 'denied') {
       // Headless Chromium answers "denied" whatever the context grants; the app must then say so rather than offer a dead switch.
-      qa.check('with notifications blocked by the browser, the row says how to allow them', /Blocked — allow notifications/.test(await page.locator('body').innerText()), 'permission denied in the lab browser');
+      qa.check('with notifications blocked by the browser, the row says how to allow them', /Blocked\. Allow notifications/.test(await page.locator('body').innerText()), 'permission denied in the lab browser');
     } else qa.check('Browser Notifications offers a switch once the browser allows notifications', hasBrowser > 0, `permission ${browserState}`);
     await page.getByRole('button', { name: 'Biweekly', exact: true }).click();
     await sleep(3000);

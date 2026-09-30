@@ -281,7 +281,8 @@ export function rgb(text) { return (String(text).match(/\d+/g) || []).slice(0, 3
 /** Roughly which colour family a computed colour is. */
 export function hue(text) {
   const [r, g, b] = rgb(text);
-  if ([r, g, b].some((x) => Number.isNaN(x))) return 'unknown';
+  // No colour at all (a row that is not there reads undefined, so no numbers): never a hue.
+  if ([r, g, b].some((x) => !Number.isFinite(x))) return 'unknown';
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
   if (max - min < 40) return 'grey';
   if (r >= g && r >= b) return g > 0.55 * r ? 'amber' : 'red';

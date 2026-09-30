@@ -225,7 +225,7 @@ export const TRANSIENT_IDENTITY = /Support reference: ID-(?:INIT-UNAVAILABLE-H(?
 
 /**
  * Waits for the member app (the Credentials button). When the load stops on a transient identity
- * failure ("Your account identity could not be verified ... Reload to try again"), taps Try again
+ * failure ("Your account identity could not be verified ... Reload to try again"), taps Reload
  * as the screen asks, at most `retries` times, and says so on the run's output (the app's own
  * report of the stop stays in client_errors, so results.json's labHealth counts it).
  */
@@ -237,8 +237,9 @@ export async function waitForMemberApp(page, timeoutMs = 120000, { retries = 2 }
     await app.or(stalled).first().waitFor({ timeout: timeoutMs });
     if (await app.isVisible().catch(() => false)) return;
     const ref = ((await stalled.innerText().catch(() => '')).match(TRANSIENT_IDENTITY) || ['a transient identity failure'])[0];
-    console.log(`qa-lab: the member app stopped on ${ref} (a lab stall); tapping Try again, as the screen asks`);
-    await page.getByRole('button', { name: 'Try again' }).first().click().catch(() => {});
+    console.log(`qa-lab: the member app stopped on ${ref} (a lab stall); tapping Reload, as the screen asks`);
+    // An account-load stop's button reads "Reload" since a9fb298b (accessGateStatus); "Try again" before it.
+    await page.getByRole('button', { name: /^(Reload|Try again)$/ }).first().click().catch(() => {});
     await sleep(2000);   // let the reload Try again starts replace the stopped page
     await page.waitForLoadState('domcontentloaded').catch(() => {});
   }
@@ -338,9 +339,11 @@ export async function replayStripeEvent(eventId) {
 // ── App screens ────────────────────────────────────────────────────────────
 
 /**
- * A form control by its visible label. The app's Field component renders a
- * <label> without htmlFor next to the control, so the control is found as the
- * label's sibling (by role this form has no accessible names).
+ * A form control by its visible label, found as the label's sibling (the
+ * label and its control share a parent). Since 43341dc1 the Field component
+ * also ties the label to a single control (htmlFor), so the same control has
+ * that accessible name too; a Field around several controls is a named
+ * group instead, and this still finds its first control.
  */
 export function field(scope, label) {
   return scope.locator('label', { hasText: label }).first().locator('xpath=..').locator('input, select, textarea').first();
@@ -431,8 +434,9 @@ export function tombstones(profileId) {
 
 /**
  * The action buttons of the record (desk table row or card) whose text matches:
- * star, share, edit, delete. They sit together after the star; only the star
- * has an accessible name, so they are found as the star's siblings.
+ * star, share, edit, delete. They sit together after the star and are found as
+ * the star's siblings, in that order (named "Share", "Edit" and "Delete" since
+ * 43341dc1, "... entry" on a CME card).
  */
 export function recordButtons(page, text) {
   const star = page.getByRole('button', { name: /(Add to|Remove from) Favorites/ });

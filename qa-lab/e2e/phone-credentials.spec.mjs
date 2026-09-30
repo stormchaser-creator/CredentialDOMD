@@ -55,7 +55,8 @@ const SECTIONS = [
 const BUGS = [
   {
     key: 'card-actions', feature: 'CRED-001', kind: 'small', severity: 'low',
-    match: /^button "(Add to Favorites|Remove from Favorites)"$|^button \(no text; icon\)$/,
+    // The icons carry names since 43341dc1 ("Share", "Edit", "Delete"; the CME card's "... entry").
+    match: /^button "(Add to Favorites|Remove from Favorites|(Share|Edit|Delete)( entry)?)"$|^button \(no text; icon\)$/,
     title: 'Phone record cards: the star, send, edit and delete buttons are 26 to 28 px tall',
     step: 'Credentials > any section with a record, on a phone: the four buttons on the right of each card',
     expected: 'Each card action at least 32 x 32 px (they sit 3 px apart, so a slightly-off tap hits the neighbour: edit is beside delete)',

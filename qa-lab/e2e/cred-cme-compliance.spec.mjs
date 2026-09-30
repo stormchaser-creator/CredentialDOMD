@@ -5,7 +5,7 @@
 // that falls on the renewal date), and Find CME's search, filters and links.
 import { test } from './support/fixtures.mjs';
 import {
-  chooseFiles, goTab, newMember, openCredentials, openMore, row, sleep, syntheticPng, tableRow, waitForMemberApp,
+  chooseFiles, goTab, newMember, openCredentials, openMore, row, sleep, syntheticPng, tableRow, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import {
   addCme, addLicense, day, dbWait, download, fillField, openAdd, pdfText, saveDialog, stubExternalPages,
@@ -92,13 +92,24 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
   const cert = await dbWait('the certificate row', () => row(`select name, storage_path from public.documents where linked_to = 'cme:${trauma?.id}'`), 30000);
   qa.check('setup: the certificate is stored and linked "cme:<id>"', !!cert?.storage_path, cert);
 
-  await qa.feature('CRED-011', 'Transcript PDF with one state and no board: built straight away, window, requirements, entries, certificate', async () => {
+  await qa.feature('CRED-011', 'Transcript PDF with one state and no board: the picker offers just that state; window, requirements, entries, certificate', async () => {
     await page.reload();
     await waitForMemberApp(page);
     await openCredentials(page, 'CME Credits');
     await sleep(3000);
-    const { name, buffer } = await download(page, page.getByRole('button', { name: 'Transcript PDF' }));
-    qa.check('no picker: one state and no board builds the PDF at once', !(await page.getByRole('dialog', { name: 'Transcript PDF' }).count()), name);
+    // Always through the picker since 7047ba2c, even for one state: the certificates are fetched
+    // while it is open, so the tap that builds the PDF keeps its user gesture.
+    await page.getByRole('button', { name: 'Transcript PDF' }).click();
+    const picker = page.getByRole('dialog', { name: 'Transcript PDF' });
+    const opened = await picker.waitFor({ timeout: 10000 }).then(() => true, () => false);
+    const ohio = picker.getByRole('button', { name: /^Ohio \(OH\)/ });
+    const listed = opened ? (await picker.innerText()).replace(/\s+/g, ' ') : '';
+    qa.check('the picker opens with the one state and no board', opened && (await ohio.count()) === 1 && !/Board continuing certification/i.test(listed) && !/Colorado|\(CO\)/.test(listed), listed.slice(0, 300));
+    if (!opened) return;
+    // The certificate is fetched while the picker is open ("getting the certificates ready").
+    await waitFor('the certificates to be ready', async () => (/getting the certificates ready/.test(await ohio.innerText()) ? null : true), { timeoutMs: 30000 }).catch(() => null);
+    const { name, buffer } = await download(page, ohio);
+    await page.keyboard.press('Escape').catch(() => {});
     const pdf = await pdfText(buffer);
     const t = pdf.text;
     qa.check('the file is the Ohio transcript', /^CME-Transcript-OH-\d{4}-\d{2}-\d{2}\.pdf$/.test(name) && /Ohio medical license renewal/.test(t), name);
@@ -247,37 +258,48 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
     };
     const start = day(-60);
     let res = await setStart(start);
-    qa.check('the license saves with a CME Cycle Start', res.closed, res.refusal);
-    await sleep(2500);
-    const lic = row(`select cme_cycle_start, custom_fields from public.licenses where user_id = '${pid}' and license_number = 'QA-OH-4401'`);
-    qa.check('licenses.cme_cycle_start is saved', lic?.cme_cycle_start === start, lic?.cme_cycle_start);
-    qa.check('editing the license kept the conditional-topic answer', lic?.custom_fields?.['Ohio pain clinic CME applies'] === 'Yes', lic?.custom_fields);
-    let home = await homeCmeCards(page);
-    const expected = dbHours(start, OH_EXP);
-    qa.check(`Home: Ohio now counts only from the start date (${expected} h) and says "Start set on this license"`, home.OH?.total === `Total logged: ${expected}/50h` && /Start set on this license/.test(home.OH?.text || ''), home.OH);
-    await page.getByText(/^Total logged: [\d.]+\/50h$/).first().click();
-    const math = page.getByRole('dialog', { name: /OH CME \u2014 the math/ });
-    await math.waitFor({ timeout: 10000 });
-    const mathText = await math.innerText();
-    await qa.shot('cme math custom start');
-    const startShown = new Date(`${start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    qa.check('the CME math opens with the window from the set date and says why', mathText.includes(`Counting CME dated ${startShown}`) && /Start set on this license, not derived from the renewal date/.test(mathText), mathText.slice(0, 300));
-    await page.keyboard.press('Escape');
+    const startOf = () => row(`select cme_cycle_start from public.licenses where user_id = '${pid}' and license_number = 'QA-OH-4401'`)?.cme_cycle_start ?? null;
+    try {
+      qa.check('the license saves with a CME Cycle Start', res.closed, res.refusal);
+      await sleep(2500);
+      const lic = row(`select cme_cycle_start, custom_fields from public.licenses where user_id = '${pid}' and license_number = 'QA-OH-4401'`);
+      qa.check('licenses.cme_cycle_start is saved', lic?.cme_cycle_start === start, lic?.cme_cycle_start);
+      qa.check('editing the license kept the conditional-topic answer', lic?.custom_fields?.['Ohio pain clinic CME applies'] === 'Yes', lic?.custom_fields);
+      let home = await homeCmeCards(page);
+      const expected = dbHours(start, OH_EXP);
+      qa.check(`Home: Ohio now counts only from the start date (${expected} h) and says "Start set on this license"`, home.OH?.total === `Total logged: ${expected}/50h` && /Start set on this license/.test(home.OH?.text || ''), home.OH);
+      await page.getByText(/^Total logged: [\d.]+\/50h$/).first().click();
+      const math = page.getByRole('dialog', { name: 'OH CME: the math', exact: true });
+      await math.waitFor({ timeout: 10000 });
+      const mathText = await math.innerText();
+      await qa.shot('cme math custom start');
+      const startShown = new Date(`${start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      qa.check('the CME math opens with the window from the set date and says why', mathText.includes(`Counting CME dated ${startShown}`) && /Start set on this license, not derived from the renewal date/.test(mathText), mathText.slice(0, 300));
+      await page.keyboard.press('Escape');
 
-    // A start on the renewal date is ignored, with a warning.
-    res = await setStart(OH_EXP);
-    await sleep(2500);
-    home = await homeCmeCards(page);
-    const full = dbHours(ohStart, OH_EXP);
-    qa.check('a start on the renewal date is not used: the default window is back', home.OH?.total === `Total logged: ${full}/50h`, home.OH?.total);
-    qa.check('Home warns that the cycle start was not used', /CME cycle start on this license is on or after the renewal date, so it was not used/.test(home.OH?.text || ''), home.OH?.text.slice(0, 300));
-    await page.getByText(/^Total logged: [\d.]+\/50h$/).first().click();
-    await math.waitFor({ timeout: 10000 });
-    qa.check('the CME math says to fix it on the license record', /falls on or after the renewal date, so it was not used\. Fix it on the license record/.test(await math.innerText()));
-    await page.keyboard.press('Escape');
-    res = await setStart('');
-    await sleep(2000);
-    qa.check('clearing the start saves null', row(`select cme_cycle_start from public.licenses where user_id = '${pid}' and license_number = 'QA-OH-4401'`)?.cme_cycle_start === null);
+      // A start on the renewal date is ignored, with a warning.
+      res = await setStart(OH_EXP);
+      await sleep(2500);
+      home = await homeCmeCards(page);
+      const full = dbHours(ohStart, OH_EXP);
+      qa.check('a start on the renewal date is not used: the default window is back', home.OH?.total === `Total logged: ${full}/50h`, home.OH?.total);
+      qa.check('Home warns that the cycle start was not used', /CME cycle start on this license is on or after the renewal date, so it was not used/.test(home.OH?.text || ''), home.OH?.text.slice(0, 300));
+      await page.getByText(/^Total logged: [\d.]+\/50h$/).first().click();
+      await math.waitFor({ timeout: 10000 });
+      qa.check('the CME math says to fix it on the license record', /falls on or after the renewal date, so it was not used\. Fix it on the license record/.test(await math.innerText()));
+      await page.keyboard.press('Escape');
+      res = await setStart('');
+      await sleep(2000);
+      qa.check('clearing the start saves null', startOf() === null);
+    } finally {
+      // Never leave Ohio's window moved for the stretches after this one (CRED-034 reads Ohio's standing).
+      if (startOf() !== null) {
+        await page.keyboard.press('Escape').catch(() => {});
+        await page.keyboard.press('Escape').catch(() => {});
+        await setStart('').catch(() => {});
+        await sleep(2000);
+      }
+    }
   }, { soft: true });
 
   await qa.feature('CRED-034', 'Find CME: search, For You / All Providers, pricing, special chips, topic chip, expand, external link, Browse All when compliant', async () => {
