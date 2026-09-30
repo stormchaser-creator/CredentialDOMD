@@ -1,4 +1,5 @@
 import Field from "./Field";
+import { TAP_MIN } from "./actionButton";
 import { recordRefusedNotice, unrecordedBanner, forgetUnrecordedQuestion } from "../../utils/invoiceRecord";
 
 /**
@@ -107,7 +108,7 @@ export default function InvoiceMarkSent({
  * was left behind (the preview closed, the page reloaded): what it was and
  * how to record it, and a way to forget it. Called as a function.
  */
-export function UnrecordedNotes({ T, list, what, onForget }) {
+export function UnrecordedNotes({ T, isDesktop = false, list, what, onForget }) {
   if (!list?.length) return null;
   return (
     <div style={{ marginBottom: 12 }}>
@@ -119,7 +120,7 @@ export function UnrecordedNotes({ T, list, what, onForget }) {
           <div style={{ fontWeight: 800, marginBottom: 4 }}>{n.number} is not recorded</div>
           <div style={{ color: T.textMuted, marginBottom: 8 }}>{unrecordedBanner(n, what)}</div>
           <button onClick={() => { if (globalThis.window?.confirm?.(forgetUnrecordedQuestion(n.number))) onForget(n.number); }} style={{
-            padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`,
+            padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: `1px solid ${T.border}`,
             backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
           }}>Forget it</button>
         </div>

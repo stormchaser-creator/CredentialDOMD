@@ -1,5 +1,5 @@
 import { memo, useMemo, useRef, useState } from "react";
-import { cardActionSize, dismissButtonStyle } from "../../shared/actionButton";
+import { cardActionSize, dismissButtonStyle, TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import EmptyState from "../../shared/EmptyState";
@@ -43,7 +43,7 @@ const downloadFiles = (files) => {
  * WITH every receipt attached, so proof travels with the bill.
  */
 function Expenses() {
-  const { data, addItem, editItem, deleteItem, theme: T, user, userIdRef } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, user, userIdRef, isDesktop } = useApp();
   const iS = useInputStyle();
   const expenses = useMemo(
     () => [...(data.travelExpenses || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
@@ -508,7 +508,7 @@ function Expenses() {
 
       {/* An expense invoice that went out without a record and was left
           behind: said here until it is recorded or forgotten. */}
-      {!invOpen && UnrecordedNotes({ T, list: leftUnrecorded, what: "its expenses", onForget: forgetUnrecorded })}
+      {!invOpen && UnrecordedNotes({ T, isDesktop, list: leftUnrecorded, what: "its expenses", onForget: forgetUnrecorded })}
 
       {unbilled.length > 0 && (
         <button onClick={openInvoice} style={{
@@ -586,7 +586,7 @@ function Expenses() {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
             {agencies.map(a => (
               <button key={a} aria-pressed={sameAgency(form.agency, a)} onClick={() => setAgency(a)} style={{
-                padding: "7px 11px", borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                padding: "7px 11px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: "pointer",
                 border: `1px solid ${sameAgency(form.agency, a) ? T.accent : T.border}`,
                 backgroundColor: sameAgency(form.agency, a) ? T.accent : "transparent",
                 color: sameAgency(form.agency, a) ? "#fff" : T.textMuted,
@@ -607,7 +607,7 @@ function Expenses() {
           return (
             <button key={d.id} type="button" onClick={() => openReceipt(d)}
               title={file ? `Open ${d.name}` : "Fetching this receipt"}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", width: "100%",
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", width: "100%", minHeight: TAP_MIN,
                 borderBottom: `1px solid ${T.border}`, border: "none", borderBottomStyle: "solid",
                 background: "none", textAlign: "left", cursor: file ? "pointer" : "default",
                 fontFamily: "inherit", opacity: pending ? 0.6 : 1 }}>
@@ -695,7 +695,7 @@ function Expenses() {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
             {invAgencies.map(a => (
               <button key={a} aria-pressed={sameAgency(invAgency, a)} onClick={() => pickAgency(a)} style={{
-                padding: "7px 11px", borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                padding: "7px 11px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: "pointer",
                 border: `1px solid ${sameAgency(invAgency, a) ? T.accent : T.border}`,
                 backgroundColor: sameAgency(invAgency, a) ? T.accent : "transparent",
                 color: sameAgency(invAgency, a) ? "#fff" : T.textMuted,

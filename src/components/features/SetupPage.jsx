@@ -339,7 +339,7 @@ export function RemindersDrawer() {
       </div>}
       {!s.email && !draft && loginEmail && !refused && (
         <button type="button" onClick={() => commitEmail(loginEmail)} style={{
-          display: "block", border: "none", background: "transparent", padding: "0 0 12px", color: T.accent,
+          display: "block", border: "none", background: "transparent", position: "relative", padding: "2px 0 14px", margin: "-2px 0", color: T.accent,
           fontSize: 16, fontWeight: 700, cursor: "pointer", textAlign: "left",
         }}>Use {loginEmail}</button>
       )}

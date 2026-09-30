@@ -5,7 +5,7 @@ import { billedCodes } from "../../utils/caseBilling.js";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
-import { TAP_MIN, CARD_ACTION_GAP, cardActionSize } from "../shared/actionButton.js";
+import { TAP_MIN, CARD_ACTION_GAP, cardActionSize, inlineLinkTap } from "../shared/actionButton.js";
 import DeskTable from "../shared/DeskTable";
 import { formRows } from "../../utils/formLayout";
 import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
@@ -970,14 +970,14 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                       return (
                         <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                           <span style={{ fontFamily: open ? "ui-monospace, monospace" : "inherit", userSelect: "all" }}>{open ? open : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}</span>
-                          <button onClick={(e) => { e.stopPropagation(); if (open) setRevealed(r => ({ ...r, [f.key]: null })); else revealSecret(f); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.accent, cursor: "pointer" }}>{open ? "Hide" : "Show"}</button>
-                          {open && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(open); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, cursor: "pointer" }}>Copy</button>}
+                          <button onClick={(e) => { e.stopPropagation(); if (open) setRevealed(r => ({ ...r, [f.key]: null })); else revealSecret(f); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.accent, cursor: "pointer" }}>{open ? "Hide" : "Show"}</button>
+                          {open && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(open); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, cursor: "pointer" }}>Copy</button>}
                         </span>
                       );
                     }
                     if (f.type === "url") {
                       const href = /^https?:\/\//i.test(v) ? v : `https://${v}`;
-                      return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.accent }}>{String(v).replace(/^https?:\/\//i, "")}</a>;
+                      return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, ...inlineLinkTap }}>{String(v).replace(/^https?:\/\//i, "")}</a>;
                     }
                     if (f.type === "currency") {
                       const n = parseFloat(v);

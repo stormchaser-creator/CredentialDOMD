@@ -1,6 +1,6 @@
 import { useApp } from "../../context/AppContext";
 import { BILLING_RETURN_COPY, BILLING_SUPPORT_EMAIL } from "../../utils/billingReturn.js";
-import { actionButtonStyle } from "./actionButton.js";
+import { actionButtonStyle, inlineLinkTap } from "./actionButton.js";
 
 /**
  * What a buyer back from Stripe sees: the payment is being confirmed, it is
@@ -18,7 +18,7 @@ export default function BillingReturnNotice({ onReviewOffers }) {
     : BILLING_RETURN_COPY[notice.phase];
   if (!copy) return null;
   const at = copy.indexOf(BILLING_SUPPORT_EMAIL);
-  const text = at < 0 ? copy : <>{copy.slice(0, at)}<a href={`mailto:${BILLING_SUPPORT_EMAIL}`} style={{ color: T.accent }}>{BILLING_SUPPORT_EMAIL}</a>{copy.slice(at + BILLING_SUPPORT_EMAIL.length)}</>;
+  const text = at < 0 ? copy : <>{copy.slice(0, at)}<a href={`mailto:${BILLING_SUPPORT_EMAIL}`} style={{ color: T.accent, ...inlineLinkTap }}>{BILLING_SUPPORT_EMAIL}</a>{copy.slice(at + BILLING_SUPPORT_EMAIL.length)}</>;
   const button = primary => actionButtonStyle(T, { primary, isDesktop });
   return <aside role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", marginBottom: 14,
     background: T.card, color: T.text, border: `1px solid ${notice.phase === "confirmed" ? T.success : T.border}`, borderRadius: 12 }}>

@@ -1,5 +1,5 @@
 import { useState, useMemo, memo } from "react";
-import { cardActionSize } from "../shared/actionButton";
+import { cardActionSize, TAP_MIN } from "../shared/actionButton";
 import OtherDocumentReview from "./OtherDocumentReview";
 import { identifierReason } from "../../utils/customCategories";
 import { useApp } from "../../context/AppContext";
@@ -157,7 +157,7 @@ function hasReadings(extracted) {
 function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard, onDeleteFile, reviewId = "review" }) {
   // Ids for the field labels, unique per card (Documents lists one per scan).
   const labelId = (key) => `scan-${reviewId}-${key}-label`;
-  const { theme: T, data, allTrackedStates } = useApp();
+  const { theme: T, data, allTrackedStates, isDesktop } = useApp();
   const iS = useInputStyle();
   // Topics a tracked state mandates, including ones not in the general
   // CME_TOPICS list (e.g. "Florida Laws and Rules"): a state mandate counts
@@ -367,7 +367,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard, onDele
                         ...p,
                         topics: on ? (p.topics || []).filter(x => x !== t) : [...(p.topics || []), t],
                       }))} style={{
-                        fontSize: 12, padding: "4px 10px", borderRadius: 10, cursor: "pointer", fontWeight: 600,
+                        fontSize: 12, padding: "4px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 10, cursor: "pointer", fontWeight: 600,
                         border: `1px solid ${on ? T.accent : T.border}`,
                         backgroundColor: on ? T.accent : "transparent",
                         color: on ? "#fff" : T.textMuted,
@@ -440,7 +440,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard, onDele
                     {agencies.length > 0 && (
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
                         {agencies.map(a => (
-                          <button key={a} aria-pressed={sameAgency(agency, a)} onClick={() => setAgency(a)} style={{ ...chip(sameAgency(agency, a)), padding: "7px 11px", fontSize: 12 }}>{a}</button>
+                          <button key={a} aria-pressed={sameAgency(agency, a)} onClick={() => setAgency(a)} style={{ ...chip(sameAgency(agency, a)), padding: "7px 11px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 12 }}>{a}</button>
                         ))}
                       </div>
                     )}
@@ -517,7 +517,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard, onDele
       {onDeleteFile && (
         <div style={{ padding: "0 18px 14px" }}>
           <button type="button" onClick={onDeleteFile} style={{
-            padding: "6px 0", border: "none", background: "none", color: T.danger,
+            position: "relative", padding: "7px 0", margin: "-1px 0", border: "none", background: "none", color: T.danger,
             fontSize: 16, fontWeight: 700, cursor: "pointer", textDecoration: "underline",
           }}>Delete this file</button>
         </div>

@@ -31,7 +31,7 @@ import {
  * unit is the month, so that is what the header totals.
  */
 function DutyLog({ contract }) {
-  const { data, addItem, editItem, deleteItem, theme: T, user, userIdRef } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, user, userIdRef, isDesktop } = useApp();
   const iS = useInputStyle();
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
@@ -430,7 +430,7 @@ function DutyLog({ contract }) {
 
       {/* An invoice from this agreement that went out without a record and
           was left behind: said here until it is recorded or forgotten. */}
-      {!invoicePreview && UnrecordedNotes({ T, list: leftUnrecorded, what: "its days", onForget: forgetUnrecorded })}
+      {!invoicePreview && UnrecordedNotes({ T, isDesktop, list: leftUnrecorded, what: "its days", onForget: forgetUnrecorded })}
 
       {/* Invoice CTA — same pick-the-days flow as the time engine. Counts
           DAYS (two rows on one date are still one day) to match the picker. */}

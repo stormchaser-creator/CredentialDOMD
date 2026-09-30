@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
+import { TAP_MIN } from "../shared/actionButton";
 import { generateId, formatDate } from "../../utils/helpers";
 import {
   IDENTITY_LOCK_MIN, encryptSecret, decryptSecret, getIdentityLockCode, getLockCode, getShortLockCode,
@@ -29,7 +30,7 @@ import {
 const EMPTY = { label: "", legalFirstName: "", legalMiddleName: "", legalLastName: "", suffix: "", fullDob: "", ssn: "", source: "", verifiedDate: "", notes: "" };
 
 export default function ProtectedIdentitySection() {
-  const { data, addItem, editItem, deleteItem, theme: T, user } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, user, isDesktop } = useApp();
   const iS = useInputStyle();
   const uid = user?.id || null;
   const records = [...(data[SECTION] || [])].filter((r) => r && r.id)
@@ -185,7 +186,7 @@ export default function ProtectedIdentitySection() {
   };
 
   const btn = (primary) => ({
-    padding: "7px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+    padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
     border: primary ? "none" : `1px solid ${T.border}`,
     backgroundColor: primary ? T.accent : "transparent", color: primary ? "#fff" : T.text,
   });

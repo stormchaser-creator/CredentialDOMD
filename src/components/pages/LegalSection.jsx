@@ -335,7 +335,7 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
               }}>{deleting ? "Deleting..." : "Confirm Delete"}</button>
             </div>
             <button disabled={deleting} onClick={() => setShowDeleteConfirm(false)} style={{
-              marginTop: 8, padding: "6px 0", width: "100%", border: "none",
+              position: "relative", margin: "4px 0 -4px", padding: "10px 0", width: "100%", border: "none",
               backgroundColor: "transparent", color: T.textDim, fontSize: 11, cursor: deleting ? "default" : "pointer",
             }}>Cancel</button>
           </div>

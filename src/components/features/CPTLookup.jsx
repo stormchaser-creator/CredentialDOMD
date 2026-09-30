@@ -10,6 +10,7 @@ import { aiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { pickableContracts } from "../../utils/contractsForDate";
 import { credentialOnlyMembership } from "../../utils/limitedLaunchAccess";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
+import { inlineLinkTap } from "../shared/actionButton";
 
 // Local calendar date — a UTC slice would file late-evening work on tomorrow
 const localDay = (d) => {
@@ -152,7 +153,7 @@ function CPTLookup() {
             ? "Billing a code to your RVU log is part of Practice, and your Credential membership does not include it. You can still search and copy codes here."
             : "Billing a code to your RVU log is part of Practice, which is read-only on this account. You can still search and copy codes here."}
           {credentialOnly && <>
-            {" "}<a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}
+            {" "}<a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}
           </>}
         </div>
       )}

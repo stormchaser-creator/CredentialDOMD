@@ -502,7 +502,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                   <ComplianceBar label="Total logged hours" earned={comp.totalEarned} required={comp.totalRequired} met={comp.totalMet} />
                   {!comp.totalMet && (
                     <button onClick={() => navigate("credentials", "findCme")} style={{
-                      padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
+                      padding: "3px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
                       backgroundColor: T.accentGlow, color: T.accent, cursor: "pointer", marginTop: 2, marginBottom: 4, marginLeft: 2,
                     }}>Find CME Courses &rarr;</button>
                   )}
@@ -537,7 +537,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                   />
                   {!tr.met && (
                     <button onClick={() => navigate("credentials", `findCme:${tr.topic}`)} style={{
-                      padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
+                      padding: "3px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
                       backgroundColor: T.accentGlow, color: T.accent, cursor: "pointer", marginTop: 2, marginBottom: 4, marginLeft: 2,
                     }}>Find CME for {tr.topic} &rarr;</button>
                   )}
@@ -880,7 +880,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                             return (
                               <button onClick={(ev) => { ev.stopPropagation(); openSourceDoc(doc); }} style={{
                                 marginTop: 6, display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%",
-                                padding: "5px 10px", borderRadius: 9, border: `1px solid ${T.border}`,
+                                padding: "5px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: `1px solid ${T.border}`,
                                 backgroundColor: T.input, color: T.accent, fontSize: 12, fontWeight: 700, cursor: "pointer",
                               }}>
                                 <span>{"\ud83d\udcc4"}</span>

@@ -23,7 +23,7 @@ const short = (n) => {
  * or under.
  */
 function Forecast() {
-  const { data, addItem, editItem, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
   const contracts = data.locumContracts || [];
   const sched = data.scheduleDays || [];
@@ -337,8 +337,8 @@ function Forecast() {
                         <div style={{ fontSize: 14, fontWeight: 700, color: T.warning }}>Vacation / day off</div>
                         <div style={{ fontSize: 12.5, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || "No reason noted"}</div>
                       </div>
-                      <button onClick={() => editEntry(e)} style={{ padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Edit</button>
-                      <button onClick={() => removeEntry(e.id)} style={{ padding: "7px 12px", borderRadius: 9, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Remove</button>
+                      <button onClick={() => editEntry(e)} style={{ padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Edit</button>
+                      <button onClick={() => removeEntry(e.id)} style={{ padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Remove</button>
                     </div>
                   );
                 }
@@ -349,8 +349,8 @@ function Forecast() {
                       <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c?.facility || "No contract"}</div>
                       <div style={{ fontSize: 12.5, color: T.textMuted }}>{e.kind === "day+call" ? "Day + call" : e.kind === "day" ? "Day" : "Call"} · {money(e.expected)}{e.invoiceId ? " · invoiced" : ""}</div>
                     </div>
-                    <button onClick={() => editEntry(e)} style={{ padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Edit</button>
-                    <button onClick={() => removeEntry(e.id)} style={{ padding: "7px 12px", borderRadius: 9, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Remove</button>
+                    <button onClick={() => editEntry(e)} style={{ padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Edit</button>
+                    <button onClick={() => removeEntry(e.id)} style={{ padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Remove</button>
                   </div>
                 );
               })}

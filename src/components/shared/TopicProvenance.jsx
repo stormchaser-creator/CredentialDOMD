@@ -57,7 +57,7 @@ function TopicProvenance({ periodLabel, cite, url, sourceInherited, citeInherite
           title={sourceInherited
             ? "Opens the board page for this state's rules, not this specific line."
             : "Opens the primary source for this requirement."}
-          style={{ color: T.accent, fontWeight: 700, textDecoration: "underline", whiteSpace: "nowrap", flexShrink: 0 }}
+          style={{ color: T.accent, fontWeight: 700, textDecoration: "underline", whiteSpace: "nowrap", flexShrink: 0, position: "relative", padding: "9px 0", margin: "-9px 0" }}
         >{sourceInherited ? "Board page ↗" : "Source ↗"}</a>
       )}
     </div>

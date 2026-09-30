@@ -1,5 +1,6 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
+import { inlineLinkTap } from "../shared/actionButton";
 import { AsclepiusIcon } from "../shared/Icons";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
 import ShareFormatProbe from "../features/ShareFormatProbe";
@@ -246,7 +247,7 @@ function FAQSection() {
       </div>
       <p style={{ margin: "0 0 14px", fontSize: 13, color: T.textMuted }}>
         Answers to common questions about CredentialDOMD.
-        {" "}<a href="/help" style={{ color: T.accent }}>Open step-by-step written guides</a>.
+        {" "}<a href="/help" style={{ color: T.accent, ...inlineLinkTap }}>Open step-by-step written guides</a>.
       </p>
 
       {/* Renders for admins only (the share-sheet line-break probe). */}
