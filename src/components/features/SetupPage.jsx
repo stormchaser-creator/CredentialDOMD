@@ -916,7 +916,7 @@ export default function SetupPage({
       <button onClick={ackNarration} style={{
         border: "none", background: "transparent", padding: "0 4px", color: T.accent,
         fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
-        minHeight: SETUP_TAP_MIN, margin: "-8px -4px",
+        position: "relative", minHeight: SETUP_TAP_MIN, margin: "-8px -4px",
       }}>Got it</button>
     </div>
   ) : null;

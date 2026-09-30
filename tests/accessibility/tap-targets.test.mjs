@@ -142,6 +142,23 @@ test('the tap-target reader refuses a text control under 32 px on a phone, howev
     'function R({ s }) { return <button style={{ ...s, padding: "6px 12px" }}>Refresh</button>; }',
     // Inherited small text read from the element around it.
     'const x = <div style={{ fontSize: 11, lineHeight: 1.2 }}><button style={{ font: "inherit", padding: "5px 0", border: "none" }}>Remove</button></div>;',
+    // Padding pulled back by a negative margin with no position: the rows it
+    // overlaps take the taps there (Chromium: a 36 px summary answers over 27.5 px, or 18).
+    'const x = <details><summary style={{ padding: "9px 0", margin: "-9px 0" }}>Activity</summary><p>body</p></details>;',
+    'const linkBtn = { padding: "9px 0", margin: "-3px 0", border: "none", background: "none", font: "inherit", fontSize: 13 }; const x = <button style={linkBtn}>Review in full</button>;',
+    'const x = <div><button style={{ display: "block", padding: "9px 0", margin: "-9px 0", border: "none", fontSize: 13 }}>Review in full</button><div>Next row</div></div>;',
+    'const x = <div style={{ display: "flex", flexDirection: "column" }}><a href="/x" style={{ padding: "9px 0", margin: "-9px 0", fontSize: 13 }}>CO board</a><span>Next row</span></div>;',
+    'const x = <a href="/x" style={{ display: "block", padding: "5px 0", margin: "-5px 0 3px", fontSize: 15, lineHeight: 1.55 }}>CO board</a>;',
+    'const x = <button style={{ padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0", border: "none", fontSize: 13 }}>View All</button>;',
+    'const x = <p>Every ask is clear. <button style={{ display: "inline-flex", minHeight: TAP_MIN, margin: "-8px 0", padding: 0, border: "none" }}>Change it in Settings</button> and more.</p>;',
+    'function R({ s }) { return <button style={{ ...s, minHeight: 32, margin: "-6px 0" }}>Refresh</button>; }',
+    // A flex property of its own does not make a link in a sentence a flex item
+    // (Chromium: 15, 27 and 15 px answer the tap), nor does a component around it.
+    'const x = <p style={{ fontSize: 12 }}>See <a href="/x" style={{ flexShrink: 0, minHeight: 32 }}>the guides</a> now.</p>;',
+    'const x = <p>See <a href="/x" style={{ alignSelf: "center", padding: "10px 0" }}>the guides</a></p>;',
+    'const x = <p style={{ fontSize: 12 }}>See <a href="/x" style={{ display: "inline", flex: 1, minHeight: 40 }}>the guides</a> now.</p>;',
+    'const x = <Row><a href="/x" style={{ whiteSpace: "nowrap", flexShrink: 0, minHeight: 32 }}>Source</a></Row>;',
+    'const x = <p>See <a href="/x" style={{ flex: 1, position: "relative", padding: "10px 0" }}>Go</a> now.</p>;',
   ];
   for (const jsx of bad) assert.notDeepEqual(audit(jsx, ['text']), [], jsx);
   const good = [
@@ -157,8 +174,13 @@ test('the tap-target reader refuses a text control under 32 px on a phone, howev
     'const x = <p style={{ fontSize: 12 }}>See <a href="/help" style={{ color: T.accent, ...inlineLinkTap }}>the guides</a>.</p>;',
     'const x = <p style={{ fontSize: 11 }}>See <a href="/help" style={inlineLinkTap}>the guides</a>.</p>;',
     'const x = <details><summary style={{ position: "relative", padding: "9px 0", margin: "-9px 0" }}>Activity</summary></details>;',
-    'const x = <a href="/x" style={{ display: "block", padding: "5px 0", margin: "-5px 0 3px", fontSize: 15, lineHeight: 1.55 }}>CO board</a>;',
+    'const x = <a href="/x" style={{ display: "block", position: "relative", padding: "5px 0", margin: "-5px 0 3px", fontSize: 15, lineHeight: 1.55 }}>CO board</a>;',
+    'const x = <button style={{ position: "relative", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0", border: "none", fontSize: 13 }}>View All</button>;',
+    'const x = <div style={{ display: "flex", flexDirection: "column" }}><a href="/x" style={{ position: "relative", padding: "9px 0", margin: "-9px 0", fontSize: 13 }}>CO board</a><span>Next row</span></div>;',
     'function R({ s }) { return <button style={{ ...s, minHeight: 32 }}>Refresh</button>; }',
+    'function R({ s }) { return <button style={{ ...s, position: "relative", minHeight: 32, margin: "-6px 0" }}>Refresh</button>; }',
+    // A flex item by the element around it: its min-height holds.
+    'const x = <div style={{ display: "flex", gap: 8 }}><span>Label</span><a href="/x" style={{ flexShrink: 0, minHeight: 32 }}>Open the guides</a></div>;',
     // Wide words, a full-width row, a value as the label, a thumbnail link.
     'const x = <button style={{ padding: "9px 0", fontSize: 13, fontWeight: 700, border: "none" }}>Edit this record</button>;',
     'const x = <button style={{ padding: "9px 0", width: "100%", border: "none" }}>Cancel</button>;',
@@ -191,6 +213,26 @@ test('the reader works out a text control\'s box the way the browser draws it (n
   // only down to its own line (26 px of 35); the reader counts none of the padding below it.
   const [unpositioned] = textBoxes('const x = <p style={{ fontSize: 12, lineHeight: 1.5 }}>See <a href="/x" style={{ paddingTop: 10, paddingBottom: 10 }}>Open the download</a> now.</p>;');
   assert.ok(unpositioned.h <= 26, `reads ${unpositioned.h}`);
+  // Chromium, the height that answers a tap (elementFromPoint down the box)
+  // where the reader must not read more: padding pulled back by a negative
+  // margin with no position, and links in a sentence with a flex property of their own.
+  const hit = [
+    ['<details style={{ fontSize: 12 }}><summary style={{ padding: "9px 0", margin: "-9px 0" }}>Activity</summary><p>body text line one here</p></details>', 27.5],
+    ['<div><p style={{ fontSize: 12 }}>line before</p><details open style={{ fontSize: 12 }}><summary style={{ padding: "9px 0", margin: "-9px 0" }}>Activity</summary><p>body text line one here</p></details></div>', 18],
+    ['<div style={{ fontSize: 13 }}><button style={{ display: "block", padding: "9px 0", margin: "-9px 0", border: "none", background: "none", font: "inherit" }}>Review in full</button><div>next row text here</div></div>', 28.5],
+    ['<div style={{ display: "flex", flexDirection: "column", fontSize: 13 }}><a href="/x" style={{ padding: "9px 0", margin: "-9px 0" }}>CO board</a><span>next row text here</span></div>', 28.5],
+    ['<p style={{ fontSize: 13, lineHeight: 1.5 }}>When every ask is clear, one tap here sends it. <button style={{ padding: 0, border: "none", background: "none", font: "inherit", fontWeight: 700, display: "inline-flex", alignItems: "center", minHeight: 32, margin: "-8px 0" }}>Change it in Settings</button> and more words so the sentence runs on.</p>', 26],
+    ['<p style={{ fontSize: 12 }}>See <a href="/x" style={{ flexShrink: 0, minHeight: 32 }}>the guides</a> now.</p>', 15.5],
+    ['<p style={{ fontSize: 12 }}>See <a href="/x" style={{ alignSelf: "center", padding: "10px 0" }}>the guides</a> and more text.</p>', 27],
+    ['<p style={{ fontSize: 12 }}>See <a href="/x" style={{ display: "inline", flex: 1, minHeight: 40 }}>the guides</a> now.</p>', 15.5],
+  ];
+  for (const [jsx, h] of hit) {
+    const [box] = textBoxes(`const x = ${jsx};`);
+    assert.ok(box.h <= h, `${jsx}: reads ${box.h} px, Chromium answers the tap over ${h}`);
+  }
+  // Positioned, the whole box answers (Chromium 36 of 36).
+  const [positioned] = textBoxes('const x = <details style={{ fontSize: 12, lineHeight: 1.5 }}><summary style={{ position: "relative", padding: "9px 0", margin: "-9px 0" }}>Activity</summary><p>body</p></details>;');
+  assert.ok(positioned.h <= 36.25 && positioned.h >= 34.5, `reads ${positioned.h}`);
 });
 
 test('a link in a sentence reaches the floor with inlineLinkTap from 11 px text up, and the phone floor is TAP_MIN', () => {

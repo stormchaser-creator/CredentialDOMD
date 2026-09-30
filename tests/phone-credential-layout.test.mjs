@@ -16,7 +16,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { mountComponent } from './component-harness.mjs';
+import { mountComponent, settle } from './component-harness.mjs';
 
 const actionButton = await import('../src/components/shared/actionButton.js');
 const helpers = await import('../src/utils/helpers.js');
@@ -198,6 +198,33 @@ test('the desk table is unchanged: its star keeps the desk row size', async () =
   assert.ok(table, 'desk width shows the table');
   const star = walk(table.props.actions(LICENSE)).map((e) => e.node).find((n) => /Favorites/.test(n.props?.['aria-label'] || ''));
   assert.equal(star.props.style.minHeight, undefined);
+});
+
+test('the detail sheet keeps Show, Hide and Copy whole beside a long password on a phone', async () => {
+  // The value cell breaks anywhere so a long password wraps; at 375 px in
+  // Chromium the buttons it holds were squeezed to "Hid / e" and "Co / py".
+  const secretBox = { hasLockCode: () => true, isEncrypted: () => true, decryptSecret: async (v) => v };
+  const record = { id: 'priv-1', name: 'Synthetic General Hospital', loginSecret: 'synthetic-portal-password' };
+  const ui = await mountComponent('src/components/features/CrudSection.jsx', {
+    app: app({}),
+    props: {
+      title: 'Privileges', sectionKey: 'privileges', items: [record], onShare: noop, onDelete: noop, autoViewId: 'priv-1', onAutoViewDone: noop,
+      fields: [{ key: 'name', label: 'Display Name' }, { key: 'loginSecret', label: 'Portal password', type: 'secret' }],
+    },
+    modules: { actionButton, helpers, lifecycle, caseBilling, formLayout, secretBox },
+  });
+  // In the open sheet: the closed Add form draws a Show of its own.
+  const button = (label) => walk(openModal(ui)).map((e) => e.node).find((n) => n.type === 'button' && ui.text(n).trim() === label);
+  assert.ok(button('Show'), 'the detail sheet is open on the password row');
+  assert.equal(button('Show').props.style.whiteSpace, 'nowrap', 'Show');
+  button('Show').props.onClick({ stopPropagation() {} });
+  await settle();
+  ui.render();
+  for (const label of ['Hide', 'Copy']) {
+    assert.ok(button(label), `${label} shows once the password is revealed`);
+    assert.equal(button(label).props.style.whiteSpace, 'nowrap', label);
+    assertTapFloor(button(label).props.style, label, { square: false });
+  }
 });
 
 // ── RenewalInfo itself ──────────────────────────────────────────────────────

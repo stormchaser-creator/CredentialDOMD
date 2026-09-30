@@ -671,11 +671,12 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
           </>
         )}
         {/* A link inside the sentence: 32 px tall, its extra height taken
-            back by negative margins so the line it sits on does not grow. */}
+            back by negative margins so the line it sits on does not grow, and
+            positioned so the sentence's next line does not take its lower 8 px. */}
         <button onClick={() => navigate("more", "settings")} style={{
           padding: 0, border: "none", background: "none", color: T.accent,
           font: "inherit", fontWeight: 700, cursor: "pointer", textDecoration: "underline",
-          display: "inline-flex", alignItems: "center", minHeight: TAP_MIN, margin: "-8px 0",
+          display: "inline-flex", alignItems: "center", position: "relative", minHeight: TAP_MIN, margin: "-8px 0",
         }}>{routable.length > 0 ? "add another address in Settings" : "Open Settings, Email"}</button>.
       </div>
 

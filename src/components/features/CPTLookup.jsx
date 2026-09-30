@@ -126,7 +126,7 @@ function CPTLookup() {
       onClick={(e) => { e.stopPropagation(); logToBilling(c); }}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); logToBilling(c); } }}
       style={{
-        flexShrink: 0, alignSelf: "center", padding: "8px 12px", borderRadius: 10,
+        display: "inline-block", flexShrink: 0, alignSelf: "center", padding: "8px 12px", borderRadius: 10,
         border: `1px solid ${logged === c.code ? "transparent" : T.accent}`,
         backgroundColor: logged === c.code ? (T.successDim || "rgba(34,197,94,0.12)") : "transparent",
         color: logged === c.code ? (T.success || "#22c55e") : T.accent,

@@ -967,11 +967,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                     if (f.type === "choice") return choiceOptions(f, viewItem).find(o => o.value === v)?.label || "A record no longer on file";
                     if (f.type === "secret") {
                       const open = revealed[f.key];
+                      // The value cell breaks anywhere (a long password wraps), so Hide
+                      // and Copy keep their words whole or a phone draws "Hid / e".
                       return (
                         <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                           <span style={{ fontFamily: open ? "ui-monospace, monospace" : "inherit", userSelect: "all" }}>{open ? open : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}</span>
-                          <button onClick={(e) => { e.stopPropagation(); if (open) setRevealed(r => ({ ...r, [f.key]: null })); else revealSecret(f); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.accent, cursor: "pointer" }}>{open ? "Hide" : "Show"}</button>
-                          {open && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(open); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, cursor: "pointer" }}>Copy</button>}
+                          <button onClick={(e) => { e.stopPropagation(); if (open) setRevealed(r => ({ ...r, [f.key]: null })); else revealSecret(f); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, whiteSpace: "nowrap", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.accent, cursor: "pointer" }}>{open ? "Hide" : "Show"}</button>
+                          {open && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(open); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, whiteSpace: "nowrap", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, cursor: "pointer" }}>Copy</button>}
                         </span>
                       );
                     }

@@ -28,9 +28,16 @@
 //     padding, and takes no min-height. Its padding below lies over the
 //     sentence's next line, which the browser hits first, so it only counts
 //     when the link is positioned (inlineLinkTap in actionButton.js).
-//   - A flex or grid item is a block whatever its display says. A block
-//     control (a row, a disclosure) or one at a % width or flex: 1 is as wide
-//     as its row; a label that is a value ({label}) is not measured across.
+//   - A flex or grid item is a block whatever its display says. It is one
+//     only when the element around it in this file is laid out as flex or
+//     grid: a flexShrink or alignSelf of its own does nothing in a sentence.
+//     A block control (a row, a disclosure), one at a % width, or a flex item
+//     at flex: 1 is as wide as its row; a label that is a value ({label}) is
+//     not measured across.
+//   - Padding grown and pulled back by a negative margin lies under the
+//     neighbours it overlaps, which the browser hits first, unless the
+//     control is positioned: the margin comes off its height (Chromium: an
+//     unpositioned 36 px summary takes the tap over 27.5 px, or 18).
 //   - Where the style cannot be read (a spread of a prop, a function this
 //     reader cannot see into), only what is set after it counts.
 // This reads stricter than the page, never looser.
@@ -433,17 +440,34 @@ function labels(node) {
   return seen ? out : null;
 }
 
-/** Whether `el` is a flex or grid item: its own style places it in one, or the element around it is one. */
-function flexItem(ctx, el, s) {
-  if (['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'justifySelf', 'order', 'gridArea', 'gridColumn', 'gridRow'].some(k => k in s)) return true;
+/**
+ * Whether `el` is a flex or grid item: the element around it in this file is
+ * an intrinsic element laid out as flex or grid every way its conditions go.
+ * A flex property in the control's own style (flexShrink, alignSelf) does not
+ * make it one: inside a sentence it does nothing, and the link stays inline.
+ * Nor does a component around it, which draws its own wrapper.
+ */
+function flexItem(ctx, el) {
   for (let n = ctx.parents.get(el); n; n = ctx.parents.get(n)) {
     if (n.type !== 'JSXElement') continue;
+    if (!/^[a-z]/.test(jsxName(n.openingElement.name))) return false;
     const a = attr(n, 'style');
     const outer = a?.value?.type === 'JSXExpressionContainer' ? styles(ctx, a.value.expression) : [];
     return outer.length > 0 && outer.every(v => v !== UNKNOWN && /(^|-)(flex|grid)$/.test(String(v.display)));
   }
   return false;
 }
+
+/** A variant's margin on each side, 0 where none is set or it cannot be read. */
+function margin(s) {
+  const [t, r, b, l] = sides(s.margin);
+  const out = { t, r, b, l };
+  if ('marginBlock' in s) [out.t, out.b] = pair(s.marginBlock);
+  if ('marginInline' in s) [out.l, out.r] = pair(s.marginInline);
+  for (const [k, side] of [['marginTop', 't'], ['marginRight', 'r'], ['marginBottom', 'b'], ['marginLeft', 'l']]) if (k in s) out[side] = len(s[k]);
+  return [out.t, out.r, out.b, out.l].map(x => (Number.isNaN(x) ? 0 : x));
+}
+const POSITIONED = /^(relative|absolute|fixed|sticky)$/;
 
 /**
  * A text control's border box on a phone, as the browser lays it out: its
@@ -453,7 +477,9 @@ function flexItem(ctx, el, s) {
 function textBox(ctx, el, s, tag) {
   const display = typeof s.display === 'string' ? s.display : { button: 'inline-block', a: 'inline', span: 'inline', summary: 'block' }[tag] ?? 'block';
   // A flex or grid item is laid out as a block whatever its display says.
-  const inline = display === 'inline' && !flexItem(ctx, el, s);
+  const flex = flexItem(ctx, el);
+  const inline = display === 'inline' && !flex;
+  const positioned = POSITIONED.test(String(s.position));
   const font = fontFor(ctx, el, s, tag);
   const [pt, pr, pb, pl] = padding(s).map(x => (Number.isNaN(x) ? 0 : x));
   const [bt, br, bb, bl] = border(s);
@@ -461,13 +487,24 @@ function textBox(ctx, el, s, tag) {
   // no min-height. Its padding below lies over the sentence's next line, which
   // the browser hits first unless the link is positioned (inlineLinkTap).
   const line = inline ? NORMAL_LINE * font.size : font.line;
-  const below = inline && !/^(relative|absolute|fixed|sticky)$/.test(String(s.position)) ? 0 : pb;
+  const below = inline && !positioned ? 0 : pb;
   const content = line + pt + below + bt + bb;
   const setH = inline ? 0 : px(s.height), minH = inline ? 0 : px(s.minHeight);
-  const h = setH ? Math.max(setH, minH) : Math.max(minH, content);
-  // Width: a block box (a row, a disclosure) or a stretched one is as wide as its row.
-  const full = (!inline && !display.startsWith('inline') && tag !== 'button')
-    || (typeof s.width === 'string' && /%$/.test(s.width.trim())) || Number(s.flex) >= 1 || Number(s.flexGrow) >= 1 || /^1\b/.test(String(s.flex ?? ''));
+  const drawn = setH ? Math.max(setH, minH) : Math.max(minH, content);
+  // A box pulled over its neighbours by a negative margin (padding grown and
+  // taken back so the row keeps its height) lies under them there unless it
+  // is positioned: the browser hits a later row or flex item over its bottom,
+  // and an earlier row's line over its top, first. Chromium, a 36 px summary
+  // at "9px 0" / "-9px 0": 27.5 px take the tap with a line after it, 18 with
+  // lines on both sides; positioned, all 36. A margin does nothing on an inline box.
+  const [mt, , mb] = margin(s);
+  const under = inline || positioned ? 0 : Math.max(0, -mt) + Math.max(0, -mb);
+  const h = Math.max(0, drawn - under);
+  // Width: a block box (a row, a disclosure) or a stretched one is as wide as
+  // its row. An inline box takes no width, and flex: 1 only stretches a flex item.
+  const full = !inline && ((!display.startsWith('inline') && tag !== 'button')
+    || (typeof s.width === 'string' && /%$/.test(s.width.trim()))
+    || (flex && (Number(s.flex) >= 1 || Number(s.flexGrow) >= 1 || /^1\b/.test(String(s.flex ?? '')))));
   // A label this reader cannot see ({label}) is not measured across.
   const words = labels(el);
   let w = Infinity;
@@ -478,7 +515,8 @@ function textBox(ctx, el, s, tag) {
     const setW = inline ? 0 : px(s.width), minW = inline ? 0 : px(s.minWidth);
     w = setW ? Math.max(setW, minW) : Math.max(minW, across + pl + pr + bl + br);
   }
-  return { h, w, why: setH || minH >= content ? `${setH ? 'height' : 'minHeight'} ${setH || minH}` : `${round(font.size)} px text on a ${round(line)} px line, ${pt + below} px padding${bt + bb ? `, ${bt + bb} px border` : ''}` };
+  const drawnWhy = setH || minH >= content ? `${setH ? 'height' : 'minHeight'} ${setH || minH}` : `${round(font.size)} px text on a ${round(line)} px line, ${pt + below} px padding${bt + bb ? `, ${bt + bb} px border` : ''}`;
+  return { h, w, why: under ? `${drawnWhy}, less ${under} px under its neighbours: a negative margin and no position` : drawnWhy };
 }
 
 // Whether `node` never renders on a phone: it sits in the desk branch of an
@@ -525,7 +563,10 @@ function textProblem(ctx, el, s, tag) {
     // min-height or height of its own, on a box that takes one.
     const inlineByDefault = tag === 'a' || tag === 'span';
     const takesHeight = !inlineByDefault || (typeof s.display === 'string' && s.display !== 'inline');
-    return size(s, 'minHeight', 'height') >= FLOOR && takesHeight ? null
+    // A negative margin set after it lies under its neighbours unless a position set after it lifts it.
+    const [mt, , mb] = margin(s);
+    const under = POSITIONED.test(String(s.position)) ? 0 : Math.max(0, -mt) + Math.max(0, -mb);
+    return size(s, 'minHeight', 'height') - under >= FLOOR && takesHeight ? null
       : `its style cannot be read here, so its ${FLOOR} px floor cannot be seen (give it minHeight inline)`;
   }
   const box = textBox(ctx, el, s, tag);

@@ -734,7 +734,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
   const renderThread = () => (
     <>
       <button onClick={leaveThread} style={{
-        background: "none", border: "none", padding: 0, minHeight: TAP_MIN, margin: "-8px 0 0", cursor: "pointer",
+        background: "none", border: "none", position: "relative", padding: 0, minHeight: TAP_MIN, margin: "-8px 0 0", cursor: "pointer",
         color: T.accent, fontSize: 13, fontWeight: 700,
       }}>{"←"} All tickets</button>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>

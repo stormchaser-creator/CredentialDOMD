@@ -1385,7 +1385,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>To do</h3>
           <button onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
             background: "none", border: "none", fontSize: 13, fontWeight: 600,
-            color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
+            color: T.accent, cursor: "pointer", position: "relative", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
           }}>View All</button>
         </div>
         {openTasks.length === 0 ? (
@@ -1753,7 +1753,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Credentials</h3>
           <button onClick={() => { setTab("credentials"); setSubPage(null); }} style={{
             background: "none", border: "none", fontSize: 13, fontWeight: 600,
-            color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
+            color: T.accent, cursor: "pointer", position: "relative", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
           }}>View All</button>
         </div>
         <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
@@ -1804,7 +1804,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>CME Progress</h3>
         <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
           background: "none", border: "none", fontSize: 13, fontWeight: 600,
-          color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
+          color: T.accent, cursor: "pointer", position: "relative", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
         }}>Find CME</button>
       </div>
     );
