@@ -228,9 +228,12 @@ eq("MD label names AMA PRA Cat 1", cat1BucketLabel(["AMA PRA Category 1"], "MD")
 ok("label never claims AMA counts when the state excludes it",
   !cat1BucketLabel(["AOA Category 1-A", "AOA Category 1-B"], "DO").includes("AMA"));
 
-// The label must agree with what the engine actually counted.
+// The label must agree with what the engine actually counted. The licence is
+// anchored (window 2025-09-30 to 2027-09-30), so its entries are dated inside
+// that window, not relative to today: RECENT leaves it on 8 January 2028.
+const IN_ANCHORED_WINDOW = "2026-03-15";
 const caDoLive = computeCompliance(
-  [cme("AMA PRA Category 1", 20, RECENT), cme("AOA Category 1-A", 10.25, RECENT)],
+  [cme("AMA PRA Category 1", 20, IN_ANCHORED_WINDOW), cme("AOA Category 1-A", 10.25, IN_ANCHORED_WINDOW)],
   "CA", "DO", { licenseExpiration: "2027-09-30" }
 );
 eq("CA/DO earns only the AOA hours", caDoLive.cat1Earned, 10.25);
@@ -238,7 +241,7 @@ eq("label built from the engine's own keyword list", cat1BucketLabel(caDoLive.ca
 
 // The breakdown makes the gap legible: the 20 AMA hours are shown, not hidden.
 const bd = cat1Breakdown(
-  [cme("AMA PRA Category 1", 20, RECENT), cme("AOA Category 1-A", 10.25, RECENT), cme("AMA PRA Category 2", 3, RECENT)],
+  [cme("AMA PRA Category 1", 20, IN_ANCHORED_WINDOW), cme("AOA Category 1-A", 10.25, IN_ANCHORED_WINDOW), cme("AMA PRA Category 2", 3, IN_ANCHORED_WINDOW)],
   { start: caDoLive.windowStart, end: caDoLive.windowEnd, accepted: caDoLive.cat1Keywords, degreeType: "DO" }
 );
 eq("counted hours match the engine", bd.counted, [{ category: "AOA Category 1-A", hours: 10.25, reason: null }]);
