@@ -42,9 +42,13 @@ end to end:
    `SUPABASE_ACCESS_TOKEN` (section "Production access").
 2. **Once per checkout.** `npm ci`. The lab needs the dev dependencies
    `@playwright/test`, `playwright-core`, `jose`, `stripe` and `svix`
-   (`package.json`); a `node_modules` installed before the lab reached `main`
-   lacks them, and a worktree that links another checkout's `node_modules` has
-   them only if that checkout installed them. `npm test` does not need them.
+   (`package.json`), and so does `npm test`: `tests/qa-lab/mocks.test.mjs`
+   drives the mocks with `jose`, `svix` and `stripe`, and
+   `tests/qa-lab/e2e-parallel.test.mjs` loads the Playwright configuration. A
+   `node_modules` installed before the lab reached `main` lacks them (those two
+   files then fail with "Cannot find package"), and a worktree that links or
+   clones another checkout's `node_modules` has them only once that checkout
+   has run `npm ci`.
 3. **The checklist** (optional, for names and priorities in `results.json`):
    `features.json` is not in this repository. The runner reads `QA_FEATURES`, or
    `../qa-data/features.json` beside the checkout. Without it every journey
