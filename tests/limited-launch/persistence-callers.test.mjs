@@ -5,6 +5,8 @@ import vm from 'node:vm';
 import { localFallbackReference, profileSupportReference, profileInitializationError } from '../../src/utils/profileIssueDiagnostics.js';
 import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from '../../src/utils/accountRecordsLoad.js';
 import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
+import { applyHeldQueue } from '../../src/utils/heldChanges.js';
+import { accountDataDeletedAt, sameDeletionStamp } from '../../src/utils/dataDeletion.js';
 
 // Execute the actual provider functions with synthetic dependencies. Extracting
 // this contiguous function block avoids mounting Clerk/React or making requests;
@@ -31,7 +33,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
   let actor = ownerA;
   const calls = [], stateWrites = [], queuedUpdates = [], warnings = [];
   const stateFor = (owner, docs = []) => ({ settings: { name: owner }, documents: docs, licenses: [] });
-  const f = { calls, stateWrites, warnings, state: stateFor(ownerA, documents), handlers: {} };
+  const f = { calls, stateWrites, warnings, state: stateFor(ownerA, documents), handlers: {}, pending: 1 };
   const userIdRef = { current: 'profileA' }, dataOwnerRef = { current: ownerA };
   const dataLoadGeneration = { current: 0 }, dataRef = { current: f.state };
   const window = { Clerk: { user: { id: ownerA } } };
@@ -47,30 +49,44 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
   };
   const context = {
     offlineMode: offline, window, userIdRef, dataOwnerRef, dataLoadGeneration, dataRef, cacheWriteGeneration: { current: 0 },
+    loadedDeletionRef: { current: null }, accountDataDeletedAt, sameDeletionStamp,
+    honorAccountDataDeletion: asyncDependency('honorAccountDataDeletion', false),
+    // Reads of the deletion stamp and the purge fence are not effects; only
+    // adopting a fence is recorded.
+    localFence: () => null,
+    adoptLocalFence: (...args) => record('adoptLocalFence', args),
     user: { id: ownerA }, useCallback: callback => callback, accessAuthority: { enabled: false, suspendWrites: () => calls.push({ name: 'suspendWrites' }) },
     DEFAULT_DATA: { settings: {}, documents: [], licenses: [] }, COLLECTION_KEYS: ['licenses', 'documents'], WIPE_SEEN_KEY: 'synthetic-wipe',
     getActiveUserId: () => actor,
     profileSupportReference, localFallbackReference,
     ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords,
     reportError: (...args) => record('reportError', args),
+    // A load that stops is reported unless the page is being left (OPS-008);
+    // this page stays, so it is the same report.
+    reportUnlessLeaving: (...args) => record('reportError', args),
     ensureProfile: asyncDependency('ensureProfile', { id: 'profileA' }),
     replayPendingOps: asyncDependency('replayPendingOps'),
+    // The non-uuid id repair runs before replay; replay runs only with
+    // something queued, after the deletion ledger is read.
+    repairStoredIds: asyncDependency('repairStoredIds'),
+    pendingOpCount: () => f.pending, lsGetJSON: () => null, lsSetJSON() {}, BASE_KEYS: {}, generateId: () => 'synthetic-id',
     loadFromSupabase: asyncDependency('loadFromSupabase', () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, documents: [], licenses: [] })),
     loadData: asyncDependency('loadData', () => ({ _userId: 'profileA', ...stateFor(ownerA) })),
     saveData: asyncDependency('saveData'),
     listTombstones: asyncDependency('listTombstones', () => new Set()),
     uploadDocumentFile: asyncDependency('uploadDocumentFile', doc => `${ownerA}/${doc.id}`),
     downloadDocumentFile: asyncDependency('downloadDocumentFile', file.data),
+    missingDocumentFiles: new Set(),
     sbUpdate: asyncDependency('sbUpdate'), sbSaveSettings: asyncDependency('sbSaveSettings'), bulkSync: asyncDependency('bulkSync'),
     purgeUserStorage: asyncDependency('purgeUserStorage'),
-    lsGet: (...args) => record('lsGet', args) ?? null,
+    lsGet: () => null,
     lsSet: (...args) => record('lsSet', args),
     readCachedData: (...args) => record('readCachedData', args) ?? null,
     withLocalOnlySettings: cloud => cloud,
     hasLegacyStorage: () => false, adoptLegacyStorage: () => null,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [],
     // The REAL reconciler, so the harness exercises the actual sweep.
-    reconcileDocumentLinks,
+    reconcileDocumentLinks, applyHeldQueue,
     setData: update => { calls.push({ name: 'setData', actor }); if (deferReact) queuedUpdates.push(update); else applyUpdate(update); },
     setProfileIssue: value => { calls.push({ name: 'setProfileIssue', actor, value }); },
     setRecordsLoadIssue: value => { calls.push({ name: 'setRecordsLoadIssue', actor, value }); },
@@ -128,7 +144,7 @@ test('account switch while cloud data waits cannot replace the new profile or st
   await tick();
   assert.equal(f.named('loadFromSupabase').length, 1);
   f.switchAccount(); pending.resolve({ _userId: 'profileA', settings: { name: 'Late Cloud A' }, documents: [] }); await loading;
-  assert.deepEqual(f.calls.map(call => call.name), ['ensureProfile', 'setProfileOwner', 'setProfileIssue', 'replayPendingOps', 'loadFromSupabase']);
+  assert.deepEqual(f.calls.map(call => call.name), ['ensureProfile', 'setProfileOwner', 'setProfileIssue', 'repairStoredIds', 'listTombstones', 'replayPendingOps', 'loadFromSupabase']);
   assertNoLateWrites(f);
 });
 
@@ -165,7 +181,8 @@ test('deferred React document updater checks ownership again when React applies 
   const f = fixture({ documents: [file], deferReact: true });
   await f.api.reconcileDocumentFiles('profileA', [file], ownerA, f.current());
   assert.equal(f.named('setData').length, 1);
-  assert.equal(f.named('sbUpdate').length, 1);
+  // The upload writes the whole row itself (SYNC-010); no partial update follows.
+  assert.equal(f.named('sbUpdate').length, 0);
   f.switchAccount(); const nextAccountState = f.state;
   f.flushReact();
   assert.equal(f.state, nextAccountState);
@@ -216,8 +233,9 @@ test('same-owner reconciliation uploads local bytes and downloads missing bytes'
   const docs = [file, { id: 'doc-two', storagePath: `${ownerA}/doc-two` }], f = fixture({ documents: docs });
   await f.api.reconcileDocumentFiles('profileA', docs, ownerA, f.current());
   assert.equal(f.named('uploadDocumentFile').length, 1);
+  assert.deepEqual(f.named('uploadDocumentFile')[0].args.slice(1), [ownerA, 'profileA'], 'the file and its row, for this profile');
   assert.equal(f.named('downloadDocumentFile').length, 1);
-  assert.equal(f.named('sbUpdate').length, 1);
+  assert.equal(f.named('sbUpdate').length, 0, 'no partial update of a row that may not exist');
   assert.equal(f.state.documents[0].storagePath, `${ownerA}/${file.id}`);
   assert.equal(f.state.documents[1].data, file.data);
   assert.equal(f.stateWrites.every(write => write.actor === ownerA), true);
@@ -269,8 +287,13 @@ function cacheFixture() {
   const data = { settings: { name: 'Synthetic A' }, documents: [file] };
   const dataOwnerRef = { current: ownerA }, dataLoadGeneration = { current: 1 };
   const window = { Clerk: { user: { id: ownerA } } };
+  const storage = new Map();
   const context = {
     data, dataOwnerRef, dataLoadGeneration, cacheWriteGeneration: { current: 0 }, window, user: { id: ownerA }, loaded: true, offlineMode: false,
+    loadedDeletionRef: { current: { owner: ownerA, stamp: null, fence: null } }, WIPE_SEEN_KEY: 'synthetic-wipe', sameDeletionStamp,
+    lsGet: (base, owner) => storage.get(`${base}:${owner}`) ?? null,
+    // storageScope.localCopyCurrent over this fixture's storage.
+    localCopyCurrent: (owner, fence) => fence === undefined || (storage.get(`synthetic-fence:${owner}`) ?? null) === (fence ?? null),
     getActiveUserId: () => actor,
     useRef: value => ({ current: value }), useEffect: callback => { context.cleanup = callback(); },
     setTimeout: callback => { scheduled.push(callback); return scheduled.length; }, clearTimeout() {},
@@ -278,12 +301,42 @@ function cacheFixture() {
   };
   vm.runInNewContext(cacheCode, context);
   return {
-    writes, data, scheduled,
+    writes, data, scheduled, storage, loadedDeletionRef: context.loadedDeletionRef,
     fire: () => { for (const callback of scheduled) callback(); },
     switchAccount() { actor = ownerB; dataOwnerRef.current = ownerB; window.Clerk.user = { id: ownerB }; dataLoadGeneration.current += 1; },
     supersedeLoad() { dataLoadGeneration.current += 1; },
   };
 }
+
+test('a tab whose records predate a deletion another tab purged for cannot write them back to the cache', () => {
+  const f = cacheFixture();
+  // Another tab of this browser honored a server data deletion.
+  f.storage.set(`synthetic-wipe:${ownerA}`, '2026-09-29T12:00:00.123+00:00');
+  f.fire();
+  assert.equal(f.writes.length, 0);
+});
+
+test('a tab whose records predate a purge another tab ran (Delete All My Data, before any stamp) cannot write them back to the cache', () => {
+  const f = cacheFixture();
+  // Another tab moved the purge fence and is still waiting on the server.
+  f.storage.set(`synthetic-fence:${ownerA}`, 'fence-after-purge');
+  f.fire();
+  assert.equal(f.writes.length, 0);
+  // Loaded again after that purge: it caches as before.
+  const g = cacheFixture();
+  g.storage.set(`synthetic-fence:${ownerA}`, 'fence-after-purge');
+  g.loadedDeletionRef.current = { owner: ownerA, stamp: null, fence: 'fence-after-purge' };
+  g.fire();
+  assert.equal(g.writes.length, 1);
+});
+
+test('records loaded after the deletion this device honored keep caching, whatever the stamp spelling', () => {
+  const f = cacheFixture();
+  f.storage.set(`synthetic-wipe:${ownerA}`, '2026-09-29T12:00:00.123+00:00');
+  f.loadedDeletionRef.current = { owner: ownerA, stamp: '2026-09-29T12:00:00.123Z', fence: null };
+  f.fire();
+  assert.equal(f.writes.length, 1);
+});
 
 test('old debounced cache callback cannot write A render data under B after account switch', () => {
   const f = cacheFixture();
@@ -366,6 +419,8 @@ test('the fallback report names the stage reached and an allowlisted cause, neve
 
 test('failed collections without a cache stop before partial hydration, link repair or cache writes', async () => {
   const f = fixture();
+  // Nothing queued, so the only ledger read would be the merge's own.
+  f.pending = 0;
   f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A', accessStatus: 'active' },
     documents: [{ id: file.id, linkedTo: 'licenses:unavailable-license' }], _errored: new Set(['licenses']) });
   await f.api.loadDataForUser(ownerA);
@@ -450,13 +505,14 @@ test('a complete retry clears the records error only after validating the same a
 });
 
 
-test('server-wiped account retires recovery before replay and stops if the marker cannot persist', async () => {
+test('server-wiped account purges before replay and stops if the recovery marker cannot persist', async () => {
   const f = fixture();
   f.handlers.ensureProfile = () => ({ id: 'profileA', deleted_at: '2026-09-20T12:00:00Z' });
-  f.handlers.purgeUserStorage = async () => { const error = Error('Synthetic blocked marker'); error.code = 'continuity_retirement_unavailable'; throw error; };
+  f.handlers.honorAccountDataDeletion = async () => { const error = Error('Synthetic blocked marker'); error.code = 'continuity_retirement_unavailable'; throw error; };
   await f.api.loadDataForUser(ownerA);
-  assert.equal(f.named('purgeUserStorage')[0].args[1].retireRecovery, true);
+  assert.deepEqual(f.named('honorAccountDataDeletion')[0].args, [ownerA, '2026-09-20T12:00:00Z']);
   for (const name of ['loadData', 'replayPendingOps', 'loadFromSupabase', 'saveData', 'lsSet']) assert.equal(f.named(name).length, 0, name);
+  assert.match(f.named('setProfileIssue').at(-1).value.message, /could not be verified/);
 });
 
 
@@ -496,3 +552,111 @@ test('reconciliation waits for loaded, online and current protected account stat
     assert.deepEqual(calls, []);
   }
 });
+
+// SYNC-010: a document on this device only whose file never uploaded has no
+// storage path, and documents.storage_path is NOT NULL: a row push can never
+// create it. It must go through the file upload (which writes the whole row),
+// never through bulkSync, and stay in the merged state meanwhile.
+test('SYNC-010: self-heal leaves an un-uploaded document to the file upload, and pushes one that has its path', async () => {
+  const unUploaded = { id: 'doc-bytes', name: 'a.pdf', data: file.data };
+  const uploadedNoRow = { id: 'doc-path', name: 'b.pdf', storagePath: `${ownerA}/doc-path` };
+  const f = fixture();
+  f.handlers.readCachedData = () => ({ settings: { name: 'Cached A' }, licenses: [], documents: [unUploaded, uploadedNoRow] });
+  await f.api.loadDataForUser(ownerA);
+  await tick();
+  const pushedDocs = f.named('bulkSync').filter((c) => c.args[1] === 'documents').flatMap((c) => c.args[2].map((d) => d.id));
+  assert.deepEqual(pushedDocs, ['doc-path']);
+  assert.deepEqual(f.named('uploadDocumentFile').map((c) => c.args[0].id), ['doc-bytes']);
+  assert.equal(JSON.stringify(f.state.documents.map((d) => d.id).sort()), '["doc-bytes","doc-path"]', 'both stay visible');
+});
+
+test('SYNC-010: a deletion ledger that cannot be read stops the load before any self-heal push', async () => {
+  const f = fixture();
+  f.pending = 0;
+  f.handlers.readCachedData = () => ({ settings: { name: 'Cached A' }, licenses: [{ id: 'deleted-elsewhere' }], documents: [] });
+  f.handlers.listTombstones = async () => { const e = Error('Synthetic ledger timeout'); e.code = 'tombstones_unavailable'; throw e; };
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(f.named('bulkSync').length, 0, 'the stale copy is not pushed back');
+  assert.equal(f.named('saveData').length, 0);
+  assert.equal(f.named('setRecordsLoadIssue').at(-1).value?.supportReference, 'DATA-LOAD-UNAVAILABLE');
+  assert.equal(f.named('suspendWrites').length, 1);
+});
+
+test('SYNC-008: the link sweep sends its two-column writes as partial updates', async () => {
+  const f = fixture();
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, licenses: [], documents: [{ id: 'doc-l', name: 'a.pdf', linkedTo: 'licenses:gone' }] });
+  await f.api.loadDataForUser(ownerA);
+  const sweep = f.named('sbUpdate');
+  assert.equal(sweep.length, 1);
+  assert.equal(JSON.stringify(sweep[0].args[2]), '{"id":"doc-l","linkedTo":""}');
+  assert.equal(sweep[0].args[5]?.partial, true);
+});
+
+test('SYNC-013: a file Storage does not have is marked missing in state and not requested again this session', async () => {
+  const doc = { id: 'doc-missing', name: 'sheet.xlsx', storagePath: `${ownerA}/doc-missing` };
+  const f = fixture({ documents: [doc] });
+  f.handlers.downloadDocumentFile = async () => ({ missing: true });
+  await f.api.reconcileDocumentFiles('profileA', [doc], ownerA, f.current());
+  assert.equal(f.state.documents[0].fileMissing, true);
+  assert.equal(f.named('sbUpdate').length, 0, 'a device note, never an edit');
+  await f.api.reconcileDocumentFiles('profileA', [doc], ownerA, f.current());
+  assert.equal(f.named('downloadDocumentFile').length, 1, 'asked once');
+  // An outage is not "missing": nothing is marked, and it is asked again.
+  const g = fixture({ documents: [{ ...doc, id: 'doc-offline', storagePath: `${ownerA}/doc-offline` }] });
+  g.handlers.downloadDocumentFile = async () => ({ failed: true });
+  await g.api.reconcileDocumentFiles('profileA', g.state.documents, ownerA, g.current());
+  assert.equal(g.state.documents[0].fileMissing, undefined);
+});
+
+test('SYNC-013: a document given its file again goes through the file upload, not a row push that would borrow the old path', async () => {
+  const cloudDoc = { id: 'doc-again', name: 'a.pdf', storagePath: `${ownerA}/doc-again`, updatedAt: '2026-09-01T00:00:00.000Z' };
+  const f = fixture();
+  f.handlers.readCachedData = () => ({ settings: { name: 'Cached A' }, licenses: [], documents: [{ ...cloudDoc, storagePath: undefined, data: file.data, updatedAt: '2026-09-29T00:00:00.000Z' }] });
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, licenses: [], documents: [cloudDoc] });
+  await f.api.loadDataForUser(ownerA);
+  await tick();
+  assert.equal(f.named('bulkSync').filter((c) => c.args[1] === 'documents').length, 0);
+  assert.deepEqual(f.named('uploadDocumentFile').map((c) => c.args[0].id), ['doc-again']);
+});
+
+// A copy saved before this device learned the storage path (an older version
+// never recorded it, or the tab closed first) is not a file waiting for
+// Storage. Taken as one, it replaced a row another device had filed since.
+test('SYNC-013: a stale copy with bytes and no path leaves a newer cloud row standing and only re-attaches its bytes', async () => {
+  const cloudDoc = { id: 'doc-filed', name: 'License.pdf', linkedTo: 'licenses:l1', storagePath: `${ownerA}/doc-filed`, updatedAt: '2026-09-28T00:00:00.000Z' };
+  const f = fixture();
+  f.pending = 0;
+  f.handlers.readCachedData = () => ({ settings: { name: 'Cached A' }, licenses: [], documents: [{ id: 'doc-filed', name: 'cert.pdf', linkedTo: '', data: file.data }] });
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, licenses: [{ id: 'l1' }], documents: [cloudDoc] });
+  await f.api.loadDataForUser(ownerA);
+  await tick();
+  assert.equal(f.named('uploadDocumentFile').length, 0, 'the stale copy is not uploaded over the row');
+  assert.equal(f.named('bulkSync').filter((c) => c.args[1] === 'documents').length, 0);
+  const doc = f.state.documents.find((d) => d.id === 'doc-filed');
+  assert.equal(doc.linkedTo, 'licenses:l1', 'the filing made on the other device stands');
+  assert.equal(doc.name, 'License.pdf');
+  assert.equal(doc.storagePath, cloudDoc.storagePath);
+  assert.equal(doc.data, file.data, 'the bytes are kept for this session');
+});
+
+test('SYNC-013: a file given again that has not reached Storage is uploaded even after the row was edited elsewhere, under the row\'s own details', async () => {
+  const cloudDoc = { id: 'doc-again', name: 'Renamed elsewhere.pdf', linkedTo: 'licenses:l1', storagePath: `${ownerA}/doc-again`, mimeType: 'image/png', updatedAt: '2026-09-29T12:00:00.000Z' };
+  const f = fixture();
+  f.pending = 0;
+  f.handlers.readCachedData = () => ({ settings: { name: 'Cached A' }, licenses: [], documents: [{ id: 'doc-again', name: 'a.pdf', linkedTo: '', type: 'application/pdf', size: 1, data: file.data, pendingUpload: true, updatedAt: '2026-09-29T11:00:00.000Z' }] });
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, licenses: [{ id: 'l1' }], documents: [cloudDoc] });
+  await f.api.loadDataForUser(ownerA);
+  await tick();
+  const [upload] = f.named('uploadDocumentFile');
+  assert.ok(upload, 'the new file goes up');
+  const sent = upload.args[0];
+  assert.equal(sent.data, file.data);
+  assert.equal(sent.type, 'application/pdf', 'the new file\'s type');
+  assert.equal(sent.name, 'Renamed elsewhere.pdf', 'the row keeps the details edited elsewhere');
+  assert.equal(sent.linkedTo, 'licenses:l1');
+  assert.equal(sent.updatedAt, cloudDoc.updatedAt, 'and its time, so it does not look like a newer edit');
+  const doc = f.state.documents.find((d) => d.id === 'doc-again');
+  assert.equal(doc.storagePath, `${ownerA}/doc-again`);
+  assert.equal(doc.pendingUpload, undefined, 'the note clears once the file is in Storage');
+});
+

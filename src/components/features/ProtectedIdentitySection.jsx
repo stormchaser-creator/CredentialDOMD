@@ -215,7 +215,7 @@ export default function ProtectedIdentitySection() {
                   : `Enter the Protected Identity lock code (${IDENTITY_LOCK_MIN} or more characters), or set one now. It stays on this device.`)
                 : "That code did not open this record. Enter the lock code it was saved with, and it will be re-locked with your Protected Identity code."}
             </div>
-            <input type="password" autoComplete="off" value={codeDraft} onChange={(e) => setCodeDraft(e.target.value)}
+            <input type="password" aria-label="Lock code" autoComplete="off" value={codeDraft} onChange={(e) => setCodeDraft(e.target.value)}
               placeholder={unlock.step === "strong" ? `Lock code (${IDENTITY_LOCK_MIN}+ characters)` : "The lock code it was saved with"} style={iS} />
             {unlock.error && <div role="alert" style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: T.danger }}>{unlock.error}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -241,7 +241,7 @@ export default function ProtectedIdentitySection() {
           The SSN and full date of birth are encrypted with a lock code of at least {IDENTITY_LOCK_MIN} characters that stays on this device.
         </p>
         <p style={{ margin: 0 }}>
-          Signing out of this browser clears them. A full JSON backup (More, Data &amp; Backup) is the one copy that leaves this device,
+          Sign out clears them from this browser; a session that simply expires keeps them for your next sign-in. A full JSON backup (More, Data &amp; Backup) is the one copy that leaves this device,
           with the SSN and date of birth still encrypted; restoring that backup brings them back.
         </p>
       </div>

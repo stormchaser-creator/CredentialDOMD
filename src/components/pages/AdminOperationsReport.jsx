@@ -114,7 +114,7 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
       <p style={{ fontSize: 13 }}>Oldest open ticket: {report.support.oldest_open_at ? `created ${formatReportTimestamp(report.support.oldest_open_at)}` : "No open tickets in this snapshot."}</p>
       <div style={{ ...card, padding: 0, overflowX: "auto", marginTop: 20 }} role="region" aria-label="Daily operations counts" tabIndex={0}>
         <table style={{ width: "100%", minWidth: 600, borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
-          <caption style={{ textAlign: "left", padding: 16, fontWeight: 700 }}>Daily activity in UTC — today is partial</caption>
+          <caption style={{ textAlign: "left", padding: 16, fontWeight: 700 }}>Daily activity in UTC (today is partial)</caption>
           <thead><tr>{["UTC date", "New signup profiles", "Recorded page loads", "Tickets created", "Retained error reports"].map(label => <th key={label} scope="col" style={{ textAlign: label === "UTC date" ? "left" : "right", padding: "10px 12px", borderBottom: `1px solid ${T.border || "#d1d5db"}`, fontSize: 12 }}>{label}</th>)}</tr></thead>
           <tbody>{report.daily.map(row => <tr key={row.day}>
             <th scope="row" style={{ textAlign: "left", fontWeight: 500, padding: "10px 12px", borderBottom: `1px solid ${T.border || "#d1d5db"}` }}>{row.day}</th>

@@ -27,7 +27,7 @@ function fixture({ publicSignup = true, enabled = true, profileReady = true } = 
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, ACCESS_REFRESH_MS: 300000, LIMITED_LAUNCH_ACCESS_ENABLED: enabled, PUBLIC_SELF_SERVICE_SIGNUP_ENABLED: publicSignup },
     '../utils/launchInvitation.js': { clearLaunchInvitation: () => calls.push(['clear-invitation']) },
     '../utils/accessRefreshFailure.js': refreshFailure,
-    '../lib/errorReport.js': { reportError: () => {} },
+    '../lib/errorReport.js': { reportError: () => {}, reportUnlessLeaving: () => {} },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: ({ accountId: id }) => ({
       bootstrap: () => { calls.push(['bootstrap', id]); return f.bootstrap(id); },
       entitlements: () => { calls.push(['entitlements', id]); return f.entitlements(id); },
@@ -131,4 +131,18 @@ test('identity initialization failure overrides an earlier active membership and
     offlineMode: false, user: { id: 'user_synthetic' }, data: { settings: { accessStatus: 'active' } } };
   vm.runInNewContext(gateCode, context);
   assert.equal(context.result.access, null);
+});
+
+// What the gate says with no access decision (App.jsx, src/utils/accessGateStatus.js).
+test('the gate shows an account-load stop in either mode, one paragraph per line, with a Reload', async () => {
+  const { accessGateStatus } = await import('../../src/utils/accessGateStatus.js');
+  for (const enabled of [true, false]) {
+    assert.deepEqual(accessGateStatus({ enabled, initializationError: 'Synthetic first line.\nSynthetic reference SYN-1.', profileReady: true }),
+      { lines: ['Synthetic first line.', 'Synthetic reference SYN-1.'], action: 'reload' });
+  }
+  assert.deepEqual(accessGateStatus({ enabled: false }), { lines: ['Checking your invitation…'], action: null });
+  assert.deepEqual(accessGateStatus({ enabled: true, error: 'Synthetic refusal', profileReady: true }), { lines: ['Synthetic refusal'], action: 'refresh' });
+  assert.deepEqual(accessGateStatus({ enabled: true, error: 'Synthetic refusal', profileReady: false }), { lines: ['Synthetic refusal'], action: 'reload' });
+  assert.deepEqual(accessGateStatus({ enabled: true, profileReady: false }), { lines: ['Your account setup could not finish. Reload to try again.'], action: 'reload' });
+  assert.deepEqual(accessGateStatus({ enabled: true, profileReady: true }), { lines: ['Checking your membership…'], action: null });
 });

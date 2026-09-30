@@ -13,7 +13,7 @@ import {
   isMedicalLicense, isDea, isCsr, isBoard, isLifeSupport,
   ladderState, LADDER, denominatorNarration, proSnapshot, proSnapshotMatches,
   evidenceQueue, runIntro, numberWord, secsPhrase, weekdayName,
-  boardCounts, tier1Regressed,
+  boardCounts, tier1Regressed, setupSurfaceCounts, currentDeaRecords,
 } from "../src/utils/setupTasks.js";
 
 let pass = 0, fail = 0;
@@ -30,15 +30,15 @@ const day = (n) => new Date(NOW.getTime() - n * 86400000).toISOString();
 // A physician the app can already warn: name, degree, state, a dated
 // license, a dated DEA, reminders on.
 const settledSettings = {
-  name: "Eric Whitney", degreeType: "DO", primaryState: "CA",
-  email: "eric@example.com", notifyEmail: true, reminderLeadDays: 90,
+  name: "Rowan Testa", degreeType: "DO", primaryState: "CA",
+  email: "rowan@example.com", notifyEmail: true, reminderLeadDays: 90,
 };
 const doLicense = { id: "l1", type: "State Medical License (DO)", state: "CA", licenseNumber: "A1", expirationDate: "2027-06-30" };
 const deaLicense = { id: "d1", type: "DEA Registration", state: "CA", licenseNumber: "BW1", expirationDate: "2027-01-31" };
 // The CV is Tier 1's first row, and it resolves done from a CV-named file or
 // from education and work history both being on file. A settled physician has
 // been through setup, so they have one.
-const cvDoc = { id: "cv1", name: "Whitney CV 2026.pdf" };
+const cvDoc = { id: "cv1", name: "Testa CV 2026.pdf" };
 const settled = () => ({ settings: { ...settledSettings }, licenses: [{ ...doLicense }, { ...deaLicense }], documents: [{ ...cvDoc }] });
 const build = (data, opts = {}) => buildSetup(data, { now: NOW, ...opts });
 const statusOf = (setup, id) => setup.byId[id].status;
@@ -159,7 +159,11 @@ eq("dateless never walks privileges or insurance", dateless({
   eq("reminders done with email on, an address and a lead", statusOf(s({}), "reminders"), "done");
   eq("reminders pending with every channel off", statusOf(s({ notifyEmail: false, notifyBrowser: false, notifyText: false }), "reminders"), "pending");
   eq("reminders pending with no address", statusOf(s({ email: "" }), "reminders"), "pending");
-  eq("reminders pending with a zero lead", statusOf(s({ reminderLeadDays: 0 }), "reminders"), "pending");
+  // A stored lead is read the way send-reminders reads it (NOTIFY-004):
+  // 0 or unreadable is 90, anything else clamped to 7..365, so it never
+  // turns warnings off and never un-completes this row.
+  eq("a zero lead reads as 90, as the server sends it", statusOf(s({ reminderLeadDays: 0 }), "reminders"), "done");
+  eq("a negative lead reads as 7, as the server sends it", statusOf(s({ reminderLeadDays: -30 }), "reminders"), "done");
   eq("a browser channel alone is enough", statusOf(s({ notifyEmail: false, notifyBrowser: true }), "reminders"), "done");
   eq("no address is named as the problem", s({ email: "" }).byId.reminders.detail, "No address on file to warn.");
 }
@@ -263,8 +267,8 @@ eq("dateless never walks privileges or insurance", dateless({
 // ── The CV row ──
 {
   const withCv = (extra) => build({ settings: { ...settledSettings }, licenses: [doLicense, deaLicense], ...extra });
-  eq("a CV-named file closes the row", statusOf(withCv({ documents: [{ id: "x", name: "Whitney CV 2026.pdf" }] }), "cv"), "done");
-  eq("so does a resume", statusOf(withCv({ documents: [{ id: "x", name: "logsdon-resume.docx" }] }), "cv"), "done");
+  eq("a CV-named file closes the row", statusOf(withCv({ documents: [{ id: "x", name: "Testa CV 2026.pdf" }] }), "cv"), "done");
+  eq("so does a resume", statusOf(withCv({ documents: [{ id: "x", name: "marchetti-resume.docx" }] }), "cv"), "done");
   eq("so does the accented spelling", statusOf(withCv({ documents: [{ id: "x", name: "Résumé 2026.pdf" }] }), "cv"), "done");
   eq("an unrelated file does not", statusOf(withCv({ documents: [{ id: "x", name: "CA license.pdf" }] }), "cv"), "pending");
   // The clause that keeps an established account from being told it is behind
@@ -281,6 +285,23 @@ eq("dateless never walks privileges or insurance", dateless({
   // Home must not carry a permanent line about a CV nobody uploaded.
   eq("an unfinished CV row never reads as a regression",
     tier1Regressed(build({ settings: { ...settledSettings, setupState: { v: 1, startedAt: day(30), tier1DoneAt: day(20) } }, licenses: [doLicense, deaLicense] })), null);
+  // SETTINGS-001: with the CV row come undone (its only CV-named document
+  // deleted, no education or work history) Home's Form D printed the whole
+  // board ("Setup · 13 of 15") while the rail and the Setup strip printed
+  // Tier 1 ("5 of 6"). One selector now counts for every surface.
+  {
+    const stampedState = { v: 1, startedAt: day(30), tier1DoneAt: day(20) };
+    const regressed = build({ settings: { ...settledSettings, setupState: stampedState }, licenses: [doLicense, deaLicense], documents: [] });
+    eq("the CV row is pending again", statusOf(regressed, "cv"), "pending");
+    eq("it is not a named regression", tier1Regressed(regressed), null);
+    eq("Home shows Form D", homeCardForm(regressed, { now: NOW }), CARD_FORM.D);
+    eq("the surface count is Tier 1, as the rail shows", setupSurfaceCounts(regressed), regressed.counts.tier1);
+    ok("and it is not the whole board", setupSurfaceCounts(regressed).total !== boardCounts(regressed).total,
+      JSON.stringify([setupSurfaceCounts(regressed), boardCounts(regressed)]));
+    const done = build({ settings: { ...settledSettings, setupState: stampedState }, licenses: [doLicense, deaLicense], documents: [cvDoc] });
+    ok("with Tier 1 complete the surface count moves on to the packet, when there is one",
+      JSON.stringify(setupSurfaceCounts(done)) === JSON.stringify(done.counts.tier2.total > 0 ? done.counts.tier2 : done.counts.tier1));
+  }
   ok("no CV copy carries an em dash",
     ["label", "why", "verb", "naDetail", "doneClause"].every((k) => !String(TASK_DEFS.find((d) => d.id === "cv")[k] || "").includes("\u2014")));
 }
@@ -330,6 +351,20 @@ eq("dateless never walks privileges or insurance", dateless({
   eq("clearing puts the task back", withTask(st2, "dea", null, {}).tasks, {});
   eq("declaring writes the negative", withDeclared(st0, "noDea", true).declared, { noDea: true });
   eq("undeclaring removes it", withDeclared(withDeclared(st0, "noDea", true), "noDea", false).declared, {});
+  // SETTINGS-001: 'Put it back' on a row closed by a declared negative (the
+  // DEA drawer's "I do not hold a DEA registration", the CV row's "I would
+  // rather type it in") cleared only tasks[id]; the declaration stayed and
+  // the row never came back.
+  for (const [id, key] of [["dea", "noDea"], ["cv", "noCv"]]) {
+    const declared = withDeclared(st0, key, true);
+    const data = st => ({ settings: { ...settledSettings, setupState: st }, licenses: [doLicense], documents: [], education: [], workHistory: [] });
+    eq(`${key} closes the ${id} row`, statusOf(build(data(declared)), id), "na");
+    const restored = withTask(declared, id, null, {});
+    eq(`Put it back on ${id} clears ${key}`, restored.declared, {});
+    eq(`Put it back returns the ${id} row to pending`, statusOf(build(data(restored)), id), "pending");
+    eq(`Put it back leaves another task's declaration alone (${id})`, withTask(withDeclared(declared, id === "dea" ? "noCv" : "noDea", true), id, null, {}).declared,
+      { [id === "dea" ? "noCv" : "noDea"]: true });
+  }
   eq("the snooze is a date, not a dismissal", withSnooze(st0, "2026-09-24T00:00:00.000Z").hiddenUntil, "2026-09-24T00:00:00.000Z");
   eq("starting stamps the clock", withStarted(st0, NOW.toISOString()).startedAt, NOW.toISOString());
   eq("tier 1 stamps once", withTier1Done(st0, NOW.toISOString()).tier1DoneAt, NOW.toISOString());
@@ -776,7 +811,7 @@ eq("shortDate of garbage", shortDate("not a date"), "");
     const d = packed();
     return {
       ...d,
-      privileges: [{ id: "p1", facility: "Arrowhead", expirationDate: "2027-05-01" }],
+      privileges: [{ id: "p1", facility: "Cedar Ridge", expirationDate: "2027-05-01" }],
       insurance: [{ id: "i1", type: "Malpractice", expirationDate: "2027-08-01" }],
       peerReferences: [
         { id: "r1", name: "A Smith, MD", email: "a@x.com" },
@@ -908,7 +943,7 @@ eq("shortDate of garbage", shortDate("not a date"), "");
 // nothing ever asks for its date. (Branch review P1, 2026-09-02.)
 {
   const data = {
-    settings: { name: "Eric Whitney", degreeType: "DO", primaryState: "CO" },
+    settings: { name: "Rowan Testa", degreeType: "DO", primaryState: "CO" },
     licenses: [
       { id: "med", type: "State Medical License (DO)", state: "CO", expirationDate: "2027-05-01" },
       { id: "permit", type: "Fluoroscopy Permit", state: "CA" },
@@ -928,6 +963,24 @@ eq("shortDate of garbage", shortDate("not a date"), "");
     bannerKeeps.join(",") === "permit,ecfmg", bannerKeeps.join(","));
 }
 
+
+// SETTINGS-003: the DEA drawer treated a historical or superseded DEA as "On
+// file", hid the add form and the "I do not hold one" button, and offered
+// date editing on the old record, while the task itself (which ignores
+// inactive records) stayed pending with "Nothing on file yet".
+{
+  const oldDea = { ...deaLicense, id: "d-old", lifecycleStatus: "historical", expirationDate: "2020-01-31" };
+  const replaced = { ...deaLicense, id: "d-sup", lifecycleStatus: "superseded" };
+  const onlyOld = build({ settings: { ...settledSettings }, licenses: [doLicense, oldDea], documents: [cvDoc] });
+  eq("only a historical DEA: the task is pending", statusOf(onlyOld, "dea"), "pending");
+  eq("and the drawer's record set is empty", currentDeaRecords([doLicense, oldDea, replaced]), []);
+  eq("a current DEA is what the drawer shows", currentDeaRecords([doLicense, oldDea, deaLicense]).map(r => r.id), ["d1"]);
+  eq("the proof run skips an inactive DEA too", evidenceQueue({ licenses: [doLicense, oldDea], documents: [] }, "dea").records, []);
+  eq("and still asks for a current one", evidenceQueue({ licenses: [doLicense, deaLicense], documents: [] }, "dea").records.map(r => r.id), ["d1"]);
+  const page = (await import("node:fs")).readFileSync(new URL("../src/components/features/SetupPage.jsx", import.meta.url), "utf8");
+  const drawer = page.slice(page.indexOf("function DeaDrawer("), page.indexOf("function DeaDrawer(") + 600);
+  ok("the DEA drawer lists current records only", /currentDeaRecords\(/.test(drawer));
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

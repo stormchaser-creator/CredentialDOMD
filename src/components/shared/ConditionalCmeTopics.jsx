@@ -18,8 +18,8 @@ export default function ConditionalCmeTopics({ comp }) {
             editItem("licenses", { ...license, customFields });
           }} style={{ display: "block", width: "100%", padding: "9px 10px", marginTop: 6, border: `1px solid ${T.border}`, borderRadius: 7, backgroundColor: T.card, color: T.text, fontSize: 14 }}>
             <option value="">Not sure / not answered</option>
-            <option value="Yes">Yes — this rule applies to me</option>
-            <option value="No">No — this rule does not apply to me</option>
+            <option value="Yes">Yes, this rule applies to me</option>
+            <option value="No">No, this rule does not apply to me</option>
           </select>
         </label> : <p>Add your {comp.state} medical license with its expiration date to record your answer.</p>}
         {topic.applicability === "unknown" && <p style={{ margin: "8px 0 0" }}>The conditional {topic.required}-hour rule is awaiting confirmation. It is not counted as missing hours or assumed exempt.</p>}

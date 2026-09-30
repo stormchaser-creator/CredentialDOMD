@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from "react";
+import { TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { CameraIcon } from "../../shared/Icons";
 import { generateId } from "../../../utils/helpers";
@@ -35,6 +36,9 @@ const SCANNED_FIELDS = ["expirationDate", "issuedDate", "licenseNumber"];
  * that renders a camera control says it the same way, and says it once,
  * directly under the first one on the screen.
  */
+/** A finished yyyy-mm-dd with a year a credential can carry (1900 on). */
+const isWholeDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "") && Number(value.slice(0, 4)) >= 1900;
+
 export const SHARED_KEY_NOTE = "Scanning runs on a shared key with no setup. Add your own free Gemini key in Settings to lift the daily limit.";
 
 export function DateRow({ rec, onCaptured, onOpenRecord }) {
@@ -49,9 +53,18 @@ export function DateRow({ rec, onCaptured, onOpenRecord }) {
   const label = [rec.state, rec.licenseNumber].filter(Boolean).join(" · ")
     || rec.name || rec.type || "License";
 
-  const setDate = (value) => {
+  // What the date field shows while it is being typed. Desktop browsers fire
+  // a change for every year digit (0002-05-01, 0020-05-01, 0202-05-01, then
+  // 2026-05-01), and saving each one stored the year 2 and unmounted the row
+  // before the year was finished. Only a whole date with a plausible year is
+  // saved, once, from a change, a blur or Enter.
+  const [draft, setDraft] = useState(null);
+  const commit = (value) => {
+    if (!isWholeDate(value) || value === (rec.expirationDate || "")) return false;
     editItem("licenses", { ...rec, expirationDate: value });
-    if (value) onCaptured?.(rec);
+    onCaptured?.(rec);
+    setDraft(null);
+    return true;
   };
 
   const handleFile = useCallback(async (file) => {
@@ -137,8 +150,10 @@ export function DateRow({ rec, onCaptured, onOpenRecord }) {
         </div>
         <input
           type="date"
-          value={rec.expirationDate || ""}
-          onChange={(e) => setDate(e.target.value)}
+          value={draft ?? rec.expirationDate ?? ""}
+          onChange={(e) => { if (!commit(e.target.value)) setDraft(e.target.value); }}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(e.target.value); }}
           aria-label={`Expiration date for ${label}`}
           style={{
             padding: "9px 10px", borderRadius: 10, border: `1px solid ${T.inputBorder}`,
@@ -165,14 +180,14 @@ export function DateRow({ rec, onCaptured, onOpenRecord }) {
       </div>
       {busy && <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 4 }}>Reading the card...</div>}
       {msg && <div style={{ fontSize: 12.5, color: err ? T.danger : T.success, fontWeight: 600, marginTop: 4, lineHeight: 1.45 }}>{msg}</div>}
-      <div style={{ display: "flex", gap: 14, paddingTop: 4 }}>
+      <div style={{ display: "flex", gap: 14, marginTop: -4 }}>
         <button onClick={() => fileRef.current?.click()} disabled={busy} style={{
-          border: "none", background: "transparent", padding: 0, color: T.textDim,
+          border: "none", background: "transparent", padding: 0, minHeight: TAP_MIN, color: T.textDim,
           fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>Choose a file instead</button>
         {onOpenRecord && (
           <button onClick={() => onOpenRecord(rec.id)} style={{
-            border: "none", background: "transparent", padding: 0, color: T.textDim,
+            border: "none", background: "transparent", padding: 0, minHeight: TAP_MIN, color: T.textDim,
             fontSize: 12, fontWeight: 600, cursor: "pointer",
           }}>Open the full record {"\u203a"}</button>
         )}

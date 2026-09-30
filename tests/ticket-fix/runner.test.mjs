@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueSQL, parkedTargets, collectQueue, saveReview, loadContext, contextMac, logSafe } from '../../scripts/ticket-agent-context.mjs';
 import { main as alert, lockState, HOLD_FILE } from '../../scripts/ticket-fix/alert.mjs';
-import { reconcile, reconcileSQL, unsentInstalledSQL, unsentSQL } from '../../scripts/ticket-fix/reconcile.mjs';
+import { reconcile, reconcileSQL, unsentInstalledSQL, unsentSQL, unconfirmedSQL } from '../../scripts/ticket-fix/reconcile.mjs';
 import { ReplyRuleError } from '../../scripts/ticket-fix/claims.mjs';
 import { uuid, privateDir, tempRepo } from './helpers.mjs';
 
@@ -470,11 +470,11 @@ test('reconcile: a stored reply no checked path recorded, or one text sent to se
     writeFileSync(runsLog, '0123456789abcdef 2026-09-28T11:00:00Z\nnot-a-run-id\n', { mode: 0o600 });
     let seen;
     // Before 20260929150000 the not-emailed check finds no table and reports nothing.
-    const query = async sql => { if (sql === unsentInstalledSQL()) return [{ installed: false }]; seen = sql; return rows; };
+    const query = async sql => { if (sql === unsentInstalledSQL()) return [{ installed: false, marked: false }]; seen = sql; return rows; };
     const result = await reconcile({ query, state: state.dir, ledgers: [ledgerA, ledgerB], runsLog, send, now: Date.parse('2026-09-28T12:00:00Z') });
     assert.equal(seen, reconcileSQL());
     assert.match(seen, /^begin read only; SELECT v.id, v.ticket_id, v.body_sha256, v.report->>'path' AS path, v.report->>'run_id' AS run_id/);
-    assert.deepEqual(result, { checked: 7, unledgered: 1, unlogged: 1, shared: 1, unemailed: 0, alerts: 3 }, 'two tickets sharing a short text is not a batch; three is');
+    assert.deepEqual(result, { checked: 7, unledgered: 1, unlogged: 1, shared: 1, unemailed: 0, unconfirmed: 0, alerts: 3 }, 'two tickets sharing a short text is not a batch; three is');
     assert.equal(sent.length, 3);
     assert.match(sent[0], new RegExp(`verification ${uuid(14).slice(0, 8)}, ticket ${uuid(4).slice(0, 8)}\\) has no record`), 'a ledger entry for another text does not count');
     assert.match(sent[1], new RegExp(`ticket ${uuid(7).slice(0, 8)}\\) says it came from the hourly runner, but no logged run made it`));
@@ -498,13 +498,14 @@ test('reconcile: a reply still not emailed an hour after it was stored alerts th
   const asked = [];
   const query = async sql => {
     asked.push(sql);
-    if (sql === unsentInstalledSQL()) return [{ installed: true }];
+    if (sql === unsentInstalledSQL()) return [{ installed: true, marked: false }];
     if (sql === unsentSQL()) return unsent;
     return [];
   };
   try {
     const result = await reconcile({ query, state: state.dir, ledgers: [ledger], send });
-    assert.deepEqual(result, { checked: 0, unledgered: 0, unlogged: 0, shared: 0, unemailed: 2, alerts: 2 });
+    assert.deepEqual(result, { checked: 0, unledgered: 0, unlogged: 0, shared: 0, unemailed: 2, unconfirmed: 0, alerts: 2 });
+    assert.ok(!asked.includes(unconfirmedSQL()), 'no refusal column yet: the mark is not read');
     assert.match(unsentSQL(), /^begin read only; SELECT e\.message_id AS id/, 'read only');
     assert.match(unsentSQL(), /m\.emailed_at IS NULL AND e\.queued_at < now\(\) - interval '60 minutes'/);
     assert.deepEqual(sent, [
@@ -518,6 +519,41 @@ test('reconcile: a reply still not emailed an hour after it was stored alerts th
     unsent = [{ id: 'not-a-uuid', ticket_id: uuid(3), attempts: 1, minutes: 61 }];
     await assert.rejects(reconcile({ query, state: state.dir, ledgers: [ledger], send }), /Unusable unsent reply rows/);
     await assert.rejects(reconcile({ query: async sql => (sql === unsentInstalledSQL() ? [] : []), state: state.dir, ledgers: [ledger], send }), /Unusable installation check/);
+    await assert.rejects(reconcile({ query: async sql => (sql === unsentInstalledSQL() ? [{ installed: true }] : []), state: state.dir, ledgers: [ledger], send }), /Unusable installation check/);
+  } finally { state.cleanup(); }
+});
+
+// Review 2026-09-29, second pass: send-ticket-reply keeps the emailed_at claim
+// on Resend's 409 invalid_idempotent_request, and reconcile alerted only while
+// emailed_at was null, so an email that went to an old address was never
+// reported. The mark it now writes (ticket_reply_emails.refusal) is.
+test('reconcile: a reply recorded as emailed on a 409 invalid_idempotent_request alerts the owner once, by id prefix', async () => {
+  const state = privateDir('ticket-reconcile-unconfirmed-');
+  const ledger = path.join(state.dir, 'ledger');
+  mkdirSync(ledger, { mode: 0o700 });
+  const sent = [];
+  const send = async m => { sent.push(m); return true; };
+  let marked = [{ id: uuid(41), ticket_id: uuid(5), attempts: 2 }];
+  const query = async sql => {
+    if (sql === unsentInstalledSQL()) return [{ installed: true, marked: true }];
+    if (sql === unconfirmedSQL()) return marked;
+    return [];
+  };
+  try {
+    const result = await reconcile({ query, state: state.dir, ledgers: [ledger], send });
+    assert.deepEqual(result, { checked: 0, unledgered: 0, unlogged: 0, shared: 0, unemailed: 0, unconfirmed: 1, alerts: 1 });
+    assert.match(unconfirmedSQL(), /^begin read only; SELECT e\.message_id AS id/, 'read only');
+    assert.match(unconfirmedSQL(), /e\.refusal = 'invalid_idempotent_request' AND e\.refused_at > now\(\) - interval '14 days'/);
+    assert.deepEqual(sent, [
+      `CredentialDOMD support: a reply on ticket ${uuid(5).slice(0, 8)} (message ${uuid(41).slice(0, 8)}) is recorded as emailed, but Resend did not send its last try: an earlier try under the same key reached Resend with other content (the ticket owner's address or the ticket subject changed in between). That earlier email may have gone to an old address, or not at all. Check Resend's log for it, and resend by hand if it did not reach the ticket owner's current address.`,
+    ]);
+    assert.ok(!sent.join('').includes('\u2014'));
+    assert.doesNotMatch(sent[0], /@/, 'no address in the alert');
+    assert.match(readFileSync(path.join(state.dir, 'alerts.log'), 'utf8'), /ALERT reply_email_unconfirmed message=00000000 ticket=00000000 attempts=2\n/);
+    assert.equal((await reconcile({ query, state: state.dir, ledgers: [ledger], send })).unconfirmed, 1);
+    assert.equal(sent.length, 1, 'each reply alerts once');
+    marked = [{ id: uuid(41), ticket_id: 'not-a-uuid', attempts: 2 }];
+    await assert.rejects(reconcile({ query, state: state.dir, ledgers: [ledger], send }), /Unusable unconfirmed reply rows/);
   } finally { state.cleanup(); }
 });
 

@@ -36,11 +36,11 @@ test("each scan type goes to its section, and only real columns are written", ()
     ["license", "licenses", { type: "DEA Registration", name: "DEA Registration", licenseNumber: "FW1234567", state: "ND", issuedDate: "2025-02-01", expirationDate: "2028-01-31" }],
     ["cme", "cme", { title: "Spine Summit", category: "AMA PRA Category 1", hours: 7.5, date: "2026-08-14", provider: "AANS", topics: [] }],
     ["privilege", "privileges", { type: "Courtesy Privileges", name: "Courtesy", facility: "Mercy", state: "CO", appointmentDate: "2026-01-01", expirationDate: "2028-01-01" }],
-    ["insurance", "insurance", { type: "Medical Malpractice (Claims-Made)", name: "COI", provider: "ProAssurance", policyNumber: "PA-1", coveragePerClaim: "1,000,000", coverageAggregate: "3,000,000", effectiveDate: "2026-01-01", expirationDate: "2027-01-01" }],
+    ["insurance", "insurance", { type: "Medical Malpractice (Claims-Made)", name: "COI", provider: "Harborline", policyNumber: "HL-1", coveragePerClaim: "1,000,000", coverageAggregate: "3,000,000", effectiveDate: "2026-01-01", expirationDate: "2027-01-01" }],
     ["healthRecord", "healthRecords", { category: "TB Test", type: "QuantiFERON-TB Gold", name: "QFT", dateAdministered: "2026-05-01", result: "Negative" }],
     ["education", "education", { type: "Residency Certificate", name: "Residency", institution: "UCLA", graduationDate: "2019-06-30", fieldOfStudy: "Neurosurgery" }],
     ["travel", "travelDocs", { type: "Passport", name: "US Passport", provider: "United States", expirationDate: "2031-03-01" }],
-    ["agreement", "locumContracts", { facility: "Penrose", location: "Colorado Springs, CO", agency: "Weatherby", startDate: "2026-10-01", endDate: "2026-10-14", hourlyRate: "250", callStipend: "$1,500" }],
+    ["agreement", "locumContracts", { facility: "Juniper Hospital", location: "Fort Collins, CO", agency: "Wexmoor", startDate: "2026-10-01", endDate: "2026-10-14", hourlyRate: "250", callStipend: "$1,500" }],
   ];
   for (const [type, section, extracted] of cases) {
     assert.equal(SCAN_SECTION[type], section);
@@ -65,7 +65,7 @@ test("each scan type goes to its section, and only real columns are written", ()
 });
 
 test("contract numbers and increments are coerced the way the app's save does", () => {
-  const p = plan(scanOf("agreement", { facility: "Penrose", hourlyRate: "250", callStipend: "$1,500", stipendHours: "four" }));
+  const p = plan(scanOf("agreement", { facility: "Juniper Hospital", hourlyRate: "250", callStipend: "$1,500", stipendHours: "four" }));
   const row = p.writes[0].row;
   assert.equal(row.hourly_rate, 250);
   assert.equal(row.call_stipend, 1500);
@@ -132,10 +132,10 @@ test("match rules find the credential already on file", () => {
   assert.equal(findExisting("privileges", { facility: "The Mercy Hospital, Inc." }, [{ id: "p1", facility: "Mercy Hospital" }])?.id, "p1");
   assert.equal(findExisting("privileges", { facility: "Mercy Regional" }, [{ id: "p1", facility: "Mercy Hospital" }]), null);
 
-  const ins = [{ id: "i1", policy_number: "PA-00991", provider: "ProAssurance", type: "Medical Malpractice (Claims-Made)" }];
-  assert.equal(findExisting("insurance", { policyNumber: "pa00991" }, ins)?.id, "i1");
-  assert.equal(findExisting("insurance", { provider: "ProAssurance", type: "Medical Malpractice (Claims-Made)" }, ins)?.id, "i1");
-  assert.equal(findExisting("insurance", { provider: "ProAssurance", type: "Tail Coverage" }, ins), null);
+  const ins = [{ id: "i1", policy_number: "HL-00991", provider: "Harborline", type: "Medical Malpractice (Claims-Made)" }];
+  assert.equal(findExisting("insurance", { policyNumber: "hl00991" }, ins)?.id, "i1");
+  assert.equal(findExisting("insurance", { provider: "Harborline", type: "Medical Malpractice (Claims-Made)" }, ins)?.id, "i1");
+  assert.equal(findExisting("insurance", { provider: "Harborline", type: "Tail Coverage" }, ins), null);
 
   assert.equal(findExisting("education", { type: "Residency Certificate", institution: "UCLA" }, [{ id: "e1", type: "Residency Certificate", institution: "ucla" }])?.id, "e1");
   assert.equal(findExisting("cme", { title: "Spine Summit", date: "2026-08-14" }, [{ id: "c1", title: "Spine summit", date: "2026-08-14" }])?.id, "c1");
@@ -252,11 +252,11 @@ test("a scan that reads as a patient record is marked for removal", () => {
 });
 
 test("labels: readable names that keep the extension, US dates, no em dashes", () => {
-  assert.equal(docLabel(["Sanford Health Plan", "credentialing approval"], "Letter330567.PDF"), "Sanford Health Plan - credentialing approval.pdf");
+  assert.equal(docLabel(["Prairie Health Plan", "credentialing approval"], "Letter704218.PDF"), "Prairie Health Plan - credentialing approval.pdf");
   assert.equal(docLabel(["", ""], "Letter.pdf"), "Letter.pdf");
   assert.equal(docLabel(["A/B: C", ""], "x.png"), "A B C.png");
   assert.equal(usDate("2026-09-24"), "09/24/2026");
-  const p = plan(scanOf("privilege", { facility: `Sanford ${EM_DASH} Fargo`, type: "Credentialing Approval", appointmentDate: "2026-09-24" }));
+  const p = plan(scanOf("privilege", { facility: `Prairie ${EM_DASH} Plainsview`, type: "Credentialing Approval", appointmentDate: "2026-09-24" }));
   assert.ok(!JSON.stringify(p.lines).includes(EM_DASH));
   assert.ok(!p.document.name.includes(EM_DASH));
   const dea = plan(scanOf("license", { type: "DEA Registration", name: "DEA Registration", state: "ND", expirationDate: "2028-01-31" }));
@@ -332,7 +332,7 @@ test("other: a different number, or a name that is only the category's, is a new
     { id: "r2", user_id: USER, category_id: "c1", name: "Hospital ID Badge", number: "", expiration_date: "2026-12-31", field_values: {}, custom_fields: {}, document_ids: [] }];
   const renamed = plan(badge({ number: "B-999" }), { categories: cats, rows: recs });
   assert.equal(renamed.outcome, "created", "same name, another number");
-  const nameless = plan(badge({ name: "", issuer: "Penrose", number: "" }), { categories: cats, rows: recs });
+  const nameless = plan(badge({ name: "", issuer: "Juniper", number: "" }), { categories: cats, rows: recs });
   assert.equal(nameless.outcome, "created", "two hospitals' badges both named after the category are two records");
   const same = plan(badge({ name: "Some other label" }), { categories: cats, rows: recs });
   assert.equal(same.outcome, "updated", "the same number is the same badge");
@@ -363,7 +363,7 @@ test("other: email creates a category only under a plain name, and never echoes 
 });
 
 test("in an email that also asks for something, only a finished credential with a date is filed", () => {
-  assert.equal(fileableFromRequest(scanOf("privilege", { facility: "Sanford Health Plan", appointmentDate: "2026-09-24", expirationDate: "2027-09-30" })), true);
+  assert.equal(fileableFromRequest(scanOf("privilege", { facility: "Prairie Health Plan", appointmentDate: "2026-09-24", expirationDate: "2027-09-30" })), true);
   assert.equal(fileableFromRequest(scanOf("license", { type: "DEA Registration", licenseNumber: "FW1234567", expirationDate: "2028-01-31" })), true);
   assert.equal(fileableFromRequest(scanOf("privilege", { facility: "St. Mary's", type: "Neurosurgery core privileges" })), false, "a blank delineation has no dates");
   assert.equal(fileableFromRequest(scanOf("privilege", { facility: "St. Mary's", expirationDate: "____" })), false);
@@ -374,29 +374,30 @@ test("in an email that also asks for something, only a finished credential with 
   assert.ok(patientRecordScreen("op.pdf", scanOf("unknown", { text: "Operative note. MRN 00481234. Discharge summary." })));
 });
 
-// The owner's own case, 2026-09-25: a fellowship completion letter for a
-// fellowship already on file must attach to it, not become a second one.
+// A case from 2026-09-25: a fellowship completion letter for a fellowship
+// already on file must attach to it, not become a second one. Institutions
+// and dates are synthetic.
 test("a completion letter attaches to the training record it completes", () => {
   const rows = [
-    { id: "fel", type: "Fellowship", name: "Skull Base Fellowship", institution: "Arrowhead Neurosurgical Medical Group", graduation_date: "2026-06-30" },
-    { id: "res", type: "Residency Certificate", institution: "Desert Regional Medical Center and Arrowhead Regional Medical Center", graduation_date: "2025-06-30" },
-    { id: "bs", type: "Bachelor Degree", institution: "Liberty University", graduation_date: "2011-05-15" },
-    { id: "do", type: "Doctor of Osteopathic Medicine (DO)", institution: "Liberty University College of Osteopathic Medicine", graduation_date: "2018-05-19" },
+    { id: "fel", type: "Fellowship", name: "Skull Base Fellowship", institution: "Cedar Ridge Neurosurgical Medical Group", graduation_date: "2024-06-30" },
+    { id: "res", type: "Residency Certificate", institution: "Palmgrove Regional Medical Center and Cedar Ridge Regional Medical Center", graduation_date: "2023-06-30" },
+    { id: "bs", type: "Bachelor Degree", institution: "Harlan University", graduation_date: "2009-05-16" },
+    { id: "do", type: "Doctor of Osteopathic Medicine (DO)", institution: "Harlan University College of Osteopathic Medicine", graduation_date: "2016-05-21" },
   ];
-  const letter = { type: "Fellowship Certificate", institution: "Arrowhead Neurosurgical Medical Group / Arrowhead Regional Medical Center", graduationDate: "2026-06-30" };
+  const letter = { type: "Fellowship Certificate", institution: "Cedar Ridge Neurosurgical Medical Group / Cedar Ridge Regional Medical Center", graduationDate: "2024-06-30" };
   assert.equal(findExisting("education", letter, rows)?.id, "fel");
-  assert.equal(findExisting("education", { type: "Residency Certificate", institution: "Arrowhead Regional Medical Center", graduationDate: "2025-06-30" }, rows)?.id, "res");
-  assert.equal(findExisting("education", { type: "Fellowship Certificate", graduationDate: "2026-06-30" }, rows)?.id, "fel", "no institution read: the date decides");
+  assert.equal(findExisting("education", { type: "Residency Certificate", institution: "Cedar Ridge Regional Medical Center", graduationDate: "2023-06-30" }, rows)?.id, "res");
+  assert.equal(findExisting("education", { type: "Fellowship Certificate", graduationDate: "2024-06-30" }, rows)?.id, "fel", "no institution read: the date decides");
   // Must stay separate.
-  assert.equal(findExisting("education", { type: "Master of Science (MS)", institution: "Liberty University", graduationDate: "2013-05-01" }, rows), null, "a second degree from the same university");
-  assert.equal(findExisting("education", { type: "Fellowship Certificate", institution: "Barrow Neurological Institute", graduationDate: "2026-06-30" }, rows), null, "a different fellowship ending the same day");
-  assert.equal(findExisting("education", { type: "Fellowship Certificate", institution: "Medical Group", graduationDate: "2027-06-30" }, rows), null, "one generic word in common is not the same institution");
+  assert.equal(findExisting("education", { type: "Master of Science (MS)", institution: "Harlan University", graduationDate: "2011-05-01" }, rows), null, "a second degree from the same university");
+  assert.equal(findExisting("education", { type: "Fellowship Certificate", institution: "Barrow Neurological Institute", graduationDate: "2024-06-30" }, rows), null, "a different fellowship ending the same day");
+  assert.equal(findExisting("education", { type: "Fellowship Certificate", institution: "Medical Group", graduationDate: "2025-06-30" }, rows), null, "one generic word in common is not the same institution");
 });
 
 test("a privileges letter naming the facility more fully finds the record, within one state", () => {
-  const rows = [{ id: "pen", type: "Full Admitting Privileges", facility: "Commonspirit Penrose Hospital", state: "CO" }];
-  assert.equal(findExisting("privileges", { facility: "Penrose Hospital", state: "CO" }, rows)?.id, "pen");
-  assert.equal(findExisting("privileges", { facility: "Penrose Hospital" }, rows)?.id, "pen", "no state on the letter");
-  assert.equal(findExisting("privileges", { facility: "Penrose Hospital", state: "TX" }, rows), null, "same name, another state");
-  assert.equal(findExisting("privileges", { facility: "Sanford Health Plan" }, rows), null);
+  const rows = [{ id: "pen", type: "Full Admitting Privileges", facility: "Kestrel Health Juniper Hospital", state: "CO" }];
+  assert.equal(findExisting("privileges", { facility: "Juniper Hospital", state: "CO" }, rows)?.id, "pen");
+  assert.equal(findExisting("privileges", { facility: "Juniper Hospital" }, rows)?.id, "pen", "no state on the letter");
+  assert.equal(findExisting("privileges", { facility: "Juniper Hospital", state: "TX" }, rows), null, "same name, another state");
+  assert.equal(findExisting("privileges", { facility: "Prairie Health Plan" }, rows), null);
 });

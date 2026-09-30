@@ -7,10 +7,13 @@
 // lacks makes PostgREST reject the WHOLE row; the licence form's noExpiration
 // checkbox did exactly that until migration 20260925030000.
 //
+// Type is required on all three: the column is NOT NULL, and a record saved on
+// "Select..." was refused whole by the database (utils/syncRules.js).
+//
 // Pure: plain node tests import it.
 
 import { STATES } from "../constants/states.js";
-import { getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES } from "../constants/credentialTypes.js";
+import { getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, isInherentlyNonExpiringLicense } from "../constants/credentialTypes.js";
 import { lifecycleFields, expirationWaived, PERSONAL_COVERAGE_RE } from "./lifecycle.js";
 import { plainLabel } from "./helpers.js";
 
@@ -22,13 +25,13 @@ const isBoardCert = (f) => /board certification/i.test(f.type || "");
 export function licenseFields({ degreeType, records = [], physicianName } = {}) {
   const life = lifecycleFields({ sectionKey: "licenses", records, labelOf: (r) => plainLabel(r, physicianName, "licenses"), dateNoun: "Expiration" });
   return [
-    { key: "type", label: "Type", type: "select", options: getLicenseTypes(degreeType) },
+    { key: "type", label: "Type", type: "select", options: getLicenseTypes(degreeType), required: true },
     { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" },
     { key: "licenseNumber", label: "License #" },
     { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") },
     { key: "issuedDate", label: "Issued", type: "date" },
     { key: "noExpiration", label: "Expiration", type: "checkbox", checkboxLabel: "This certificate does not expire", show: isBoardCert, hint: "A lifetime diplomate has no renewal date. Tick this and the app stops asking for one. Course and device certifications are already treated this way." },
-    { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE && !(f.noExpiration === true && isBoardCert(f)) && !expirationWaived(f) },
+    { key: "expirationDate", label: "Expires", type: "date", required: (f) => !isInherentlyNonExpiringLicense(f.type) && !(f.noExpiration === true && isBoardCert(f)) && !expirationWaived(f) },
     // "Not known yet" is a different answer from "does not expire": a course
     // certification never expires, and a lifetime diplomate has said so
     // (lifecycle.dateUnknownApplies, which the save path enforces too).
@@ -44,7 +47,7 @@ export function licenseFields({ degreeType, records = [], physicianName } = {}) 
 export function privilegeFields({ records = [], physicianName } = {}) {
   const life = lifecycleFields({ sectionKey: "privileges", records, labelOf: (r) => plainLabel(r, physicianName, "privileges"), dateNoun: "Reappointment" });
   return [
-    { key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES },
+    { key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES, required: true },
     { key: "name", label: "Display Name" },
     { key: "facility", label: "Facility" },
     { key: "city", label: "City" },
@@ -66,7 +69,7 @@ export function privilegeFields({ records = [], physicianName } = {}) {
 export function insuranceFields({ records = [], physicianName } = {}) {
   const life = lifecycleFields({ sectionKey: "insurance", records, labelOf: (r) => plainLabel(r, physicianName, "insurance"), dateNoun: "Expiration" });
   return [
-    { key: "type", label: "Type", type: "select", options: INSURANCE_TYPES },
+    { key: "type", label: "Type", type: "select", options: INSURANCE_TYPES, required: true },
     { key: "name", label: "Display Name" },
     { key: "provider", label: "Carrier" },
     { key: "policyNumber", label: "Policy #" },

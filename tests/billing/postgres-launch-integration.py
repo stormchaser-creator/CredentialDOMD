@@ -6,7 +6,7 @@ triggers and unreviewed function bodies. It is not a production restore.
 import argparse,json,os,subprocess,tempfile
 from pathlib import Path
 parser=argparse.ArgumentParser();parser.add_argument('--root',required=True);parser.add_argument('--inventory',required=True);parser.add_argument('--continuity',required=True);parser.add_argument('--founding',required=True);args=parser.parse_args()
-ROOT=Path(args.root); BIN=Path('/opt/homebrew/opt/postgresql@17/bin')
+ROOT=Path(args.root); BIN=Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 data={r['section']:r['records'] for r in json.loads(Path(args.inventory).read_text())['rows']}
 def q(s):return '"'+s.replace('"','""')+'"'
 def fq(s,t):return q(s)+'.'+q(t)
@@ -59,7 +59,7 @@ for helper in json.loads(Path(args.founding).read_text())['rows']:parts.append(h
 for trigger in data['triggers']:
  if trigger['function'] in ('lock_profile_identity()','lock_profile_founding()','founding_number_on_profile()','founding_number_on_beta_access()'):parts.append(trigger['definition']+';')
 env={k:v for k,v in os.environ.items() if not k.startswith('PG')}
-with tempfile.TemporaryDirectory(prefix='launch-baseline-',dir='/private/tmp') as temp:
+with tempfile.TemporaryDirectory(prefix='launch-baseline-',dir='/tmp') as temp:
  base=Path(temp);sock=base/'socket';sock.mkdir()
  def run(*cmd,**kw):return subprocess.run([str(c) for c in cmd],text=True,capture_output=True,env=env,**kw)
  r=run(BIN/'initdb','-D',base/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8');assert r.returncode==0,r.stderr

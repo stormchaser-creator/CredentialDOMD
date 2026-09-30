@@ -1,8 +1,7 @@
-// The owner's a call-stipend contract invoice of 2026-09-28 (four call
-// days, Sep 25 to 28), as computeBilling produced it before any correction:
-// the invoice that read confusingly (no day totals, "included" with no
-// dollar value) and that the day layout was designed against. The lines are
-// his billing notes, which carry no patient identifiers.
+// A synthetic call-stipend invoice (four call days, Oct 16 to 19, 2026),
+// shaped like the kind of invoice the day layout was designed against: an
+// orientation day, two long weekend days of callbacks, and a last day with
+// no work. Every date, time, note and amount here is invented.
 //
 // northfieldEntries() rebuilds the work-log entries those lines were billed
 // from (America/Chicago), so the same invoice can be priced again
@@ -13,9 +12,9 @@ export const NORTHFIELD = JSON.parse(readFileSync(new URL("./northfield-invoice-
 
 export const NORTHFIELD_CONTRACT = Object.freeze({
   id: "c-northfield", facility: "Synthetic Medical Center", agency: "Synthetic Locums", payModel: "stipend",
-  callStipend: 3000, stipendHours: 4, overageHourlyRate: 300, orientationHourlyRate: 300,
+  callStipend: 3000, stipendHours: 4, overageHourlyRate: 300, orientationHourlyRate: 250,
   hourlyRate: 0, incrementMinutes: 15, minCallMinutes: 15,
-  coveragePeriods: [{ start: "2026-09-25", end: "2026-09-28" }],
+  coveragePeriods: [{ start: "2026-10-16", end: "2026-10-19" }],
 });
 
 const localDay = (iso) => {
@@ -38,7 +37,7 @@ export function northfieldEntries(contractId = NORTHFIELD_CONTRACT.id) {
     // A call is a minute or two on the clock and bills its 15-minute minimum.
     const durationMin = type === "Call" ? 2 : billedMin;
     out.push({
-      id: `northfield-${String(out.length + 1).padStart(2, "0")}`, createdAt: `2026-09-28T12:00:${String(out.length).padStart(2, "0")}Z`,
+      id: `northfield-${String(out.length + 1).padStart(2, "0")}`, createdAt: `2026-10-19T12:00:${String(out.length).padStart(2, "0")}Z`,
       contractId, type, date: localDay(start), callDay, startTime: start,
       endTime: new Date(startMs + durationMin * 60000).toISOString(), durationMin, billedMin,
       description, privateNote: "", invoiceId: null,

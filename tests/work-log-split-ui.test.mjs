@@ -7,16 +7,16 @@ import { computeBilling } from '../src/utils/billing.js';
 // delete, and the contract form's call-day settings, driven through the real
 // components (tests/harness/component-harness.mjs). Synthetic data only.
 
-const clock = pinClock(test, 'America/Denver', '2026-08-12T12:00:00-06:00');
+const clock = pinClock(test, 'America/Denver', '2026-06-10T12:00:00-06:00');
 const screens = await loadScreens('export {default as WorkLog} from "./src/components/features/locum/WorkLog.jsx"; export {default as Contracts} from "./src/components/features/locum/Contracts.jsx";');
 
-const CONTRACT = { id: 'c1', facility: 'Synthetic General', agency: 'Synthetic Staffing', payModel: 'stipend', callStipend: 3000, stipendHours: 4, overageHourlyRate: 300, hourlyRate: 0, incrementMinutes: 15, minCallMinutes: 15, coveragePeriods: [{ start: '2026-07-28', end: '2026-08-09' }], startDate: '2026-07-28', endDate: '2026-08-09' };
+const CONTRACT = { id: 'c1', facility: 'Synthetic General', agency: 'Synthetic Staffing', payModel: 'stipend', callStipend: 3000, stipendHours: 4, overageHourlyRate: 300, hourlyRate: 0, incrementMinutes: 15, minCallMinutes: 15, coveragePeriods: [{ start: '2026-05-26', end: '2026-06-07' }], startDate: '2026-05-26', endDate: '2026-06-07' };
 
 const mount = (name, { contracts, workLog = [], invoices = [], ...rest } = {}) =>
   mountScreen(screens[name], { data: { locumContracts: contracts, workLog: [...workLog], invoices }, ...rest });
 
 // Save, answering the "Check the date" schedule question with yes when it
-// asks (Aug 10 is past these synthetic coverage dates).
+// asks (Jun 8 is past these synthetic coverage dates).
 const save = (m, label) => {
   click(m, label);
   const yes = nodes(m.render()).find(n => n.type === 'button' && textOf(n).includes('Yes, log it here'));
@@ -24,7 +24,7 @@ const save = (m, label) => {
 };
 const hhmm = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
-// Log 06:45 to 07:15 on Aug 10 through the "Log past time" form.
+// Log 06:45 to 07:15 on Jun 8 through the "Log past time" form.
 function logPastTime(m, date, start, end) {
   click(m, 'Log past time');
   let tree = m.render();
@@ -39,58 +39,58 @@ function logPastTime(m, date, start, end) {
 const adds = (m) => m.calls.filter(c => c[0] === 'add' && c[1] === 'workLog').map(c => c[2]);
 const LEGACY_KEYS = ['id', 'createdAt', 'contractId', 'type', 'date', 'callDay', 'startTime', 'endTime', 'durationMin', 'billedMin', 'description', 'privateNote', 'invoiceId'];
 
-test('new entry, splitting off: one row with exactly the keys it always had, whole under Aug 9', () => {
+test('new entry, splitting off: one row with exactly the keys it always had, whole under Jun 7', () => {
   const m = mount('WorkLog', { contracts: [CONTRACT] });
-  logPastTime(m, '2026-08-10', '06:45', '07:15');
+  logPastTime(m, '2026-06-08', '06:45', '07:15');
   const rows = adds(m);
   assert.equal(rows.length, 1);
   assert.deepEqual(Object.keys(rows[0]), LEGACY_KEYS);
-  assert.equal(rows[0].callDay, '2026-08-09');
+  assert.equal(rows[0].callDay, '2026-06-07');
   assert.equal(rows[0].billedMin, 30);
 });
 
 test('new entry, splitting on: one row per piece with a shared group id, and the notice says where each went', () => {
   const m = mount('WorkLog', { contracts: [{ ...CONTRACT, splitAtDayStart: true, dayStartHour: 7 }] });
-  logPastTime(m, '2026-08-10', '06:45', '07:15');
+  logPastTime(m, '2026-06-08', '06:45', '07:15');
   const rows = adds(m);
-  assert.deepEqual(rows.map(r => `${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ['06:45-07:00 2026-08-09 15', '07:00-07:15 2026-08-10 15']);
+  assert.deepEqual(rows.map(r => `${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ['06:45-07:00 2026-06-07 15', '07:00-07:15 2026-06-08 15']);
   assert.ok(rows[0].splitGroupId && rows[0].splitGroupId === rows[1].splitGroupId);
   assert.notEqual(rows[0].id, rows[1].id);
   const html = m.html();
   assert.match(html, /crossed the 7:00 AM start of the call day, so it is split/);
-  assert.match(html, /continues on the Aug 10, 2026 call day/);
-  assert.match(html, /continued from the Aug 9, 2026 call day/);
+  assert.match(html, /continues on the Jun 8, 2026 call day/);
+  assert.match(html, /continued from the Jun 7, 2026 call day/);
 });
 
 test('timer, splitting on: Stop and Log writes the pieces too', () => {
-  clock.setNow('2026-08-10T07:15:00-06:00');
+  clock.setNow('2026-06-08T07:15:00-06:00');
   try {
     const m = mount('WorkLog', {
       contracts: [{ ...CONTRACT, splitAtDayStart: true }],
-      storage: { timer: { contractId: 'c1', type: 'Call', startedAt: '2026-08-10T12:45:00.000Z' } },
+      storage: { timer: { contractId: 'c1', type: 'Call', startedAt: '2026-06-08T12:45:00.000Z' } },
     });
     click(m, 'Stop & Log');
     const rows = adds(m);
-    assert.deepEqual(rows.map(r => `${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ['06:45-07:00 2026-08-09 15', '07:00-07:15 2026-08-10 15']);
+    assert.deepEqual(rows.map(r => `${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ['06:45-07:00 2026-06-07 15', '07:00-07:15 2026-06-08 15']);
     assert.equal(rows[0].splitGroupId, rows[1].splitGroupId);
-  } finally { clock.setNow('2026-08-12T12:00:00-06:00'); }
+  } finally { clock.setNow('2026-06-10T12:00:00-06:00'); }
 });
 
 test('timer, splitting off: the stamp and the row are unchanged', () => {
-  clock.setNow('2026-08-10T07:15:00-06:00');
+  clock.setNow('2026-06-08T07:15:00-06:00');
   try {
-    const m = mount('WorkLog', { contracts: [CONTRACT], storage: { timer: { contractId: 'c1', type: 'Call', startedAt: '2026-08-10T12:45:00.000Z' } } });
+    const m = mount('WorkLog', { contracts: [CONTRACT], storage: { timer: { contractId: 'c1', type: 'Call', startedAt: '2026-06-08T12:45:00.000Z' } } });
     click(m, 'Stop & Log');
     const rows = adds(m);
     assert.equal(rows.length, 1);
     assert.deepEqual(Object.keys(rows[0]), LEGACY_KEYS);
-    assert.equal(rows[0].callDay, '2026-08-09');
-  } finally { clock.setNow('2026-08-12T12:00:00-06:00'); }
+    assert.equal(rows[0].callDay, '2026-06-07');
+  } finally { clock.setNow('2026-06-10T12:00:00-06:00'); }
 });
 
 const PIECES = [
-  { id: 'p1', createdAt: '2026-08-10T13:20:00Z', contractId: 'c1', type: 'Call', date: '2026-08-10', callDay: '2026-08-09', startTime: '2026-08-10T12:45:00.000Z', endTime: '2026-08-10T13:00:00.000Z', durationMin: 15, billedMin: 15, description: 'ED consult', privateNote: '', invoiceId: null, splitGroupId: 'g-old', favorite: true },
-  { id: 'p2', createdAt: '2026-08-10T13:20:00Z', contractId: 'c1', type: 'Call', date: '2026-08-10', callDay: '2026-08-10', startTime: '2026-08-10T13:00:00.000Z', endTime: '2026-08-10T13:15:00.000Z', durationMin: 15, billedMin: 15, description: 'ED consult', privateNote: '', invoiceId: null, splitGroupId: 'g-old', favorite: false },
+  { id: 'p1', createdAt: '2026-06-08T13:20:00Z', contractId: 'c1', type: 'Call', date: '2026-06-08', callDay: '2026-06-07', startTime: '2026-06-08T12:45:00.000Z', endTime: '2026-06-08T13:00:00.000Z', durationMin: 15, billedMin: 15, description: 'ED consult', privateNote: '', invoiceId: null, splitGroupId: 'g-old', favorite: true },
+  { id: 'p2', createdAt: '2026-06-08T13:20:00Z', contractId: 'c1', type: 'Call', date: '2026-06-08', callDay: '2026-06-08', startTime: '2026-06-08T13:00:00.000Z', endTime: '2026-06-08T13:15:00.000Z', durationMin: 15, billedMin: 15, description: 'ED consult', privateNote: '', invoiceId: null, splitGroupId: 'g-old', favorite: false },
 ];
 const editRow = (m, id) => {
   const tree = m.render();
@@ -106,7 +106,7 @@ test('editing a piece opens the whole entry and rewrites both pieces in place', 
   field(m.render(), 'End time').props.onCommit('07:30');
   save(m, 'Save changes');
   const edits = m.calls.filter(c => c[0] === 'edit').map(c => c[2]);
-  assert.deepEqual(edits.map(r => `${r.id} ${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ['p1 06:45-07:00 2026-08-09 15', 'p2 07:00-07:30 2026-08-10 30']);
+  assert.deepEqual(edits.map(r => `${r.id} ${hhmm(r.startTime)}-${hhmm(r.endTime)} ${r.callDay} ${r.billedMin}`), ['p1 06:45-07:00 2026-06-07 15', 'p2 07:00-07:30 2026-06-08 30']);
   assert.ok(edits[0].splitGroupId && edits[0].splitGroupId === edits[1].splitGroupId);
   assert.deepEqual(edits.map(r => r.favorite), [true, false], 'each piece keeps its own star');
   assert.equal(m.calls.filter(c => c[0] !== 'edit').length, 0);
@@ -125,29 +125,29 @@ test('editing a piece of a partly invoiced entry warns about the invoice first',
 // an invoiced entry on save handed a new piece the invoice id, and an invoiced
 // row on a day reads as that day's stipend already billed.
 test('an invoiced whole entry saved unchanged after splitting is turned on stays whole, and the next day still bills its stipend', () => {
-  const contract = { ...CONTRACT, splitAtDayStart: true, coveragePeriods: [{ start: '2026-07-28', end: '2026-08-12' }], endDate: '2026-08-12' };
-  // Aug 9 06:40 to 07:10, logged before splitting was on: call day Aug 8,
-  // billed on INV-SYN-1 for Aug 2 to 8.
-  const whole = { id: 'w1', createdAt: '2026-08-09T13:20:00Z', contractId: 'c1', type: 'Call', date: '2026-08-09', callDay: '2026-08-08', startTime: '2026-08-09T12:40:00.000Z', endTime: '2026-08-09T13:10:00.000Z', durationMin: 30, billedMin: 30, description: 'ED consult', privateNote: '', invoiceId: 'inv1' };
-  const billedDays = ['2026-08-02', '2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08'];
+  const contract = { ...CONTRACT, splitAtDayStart: true, coveragePeriods: [{ start: '2026-05-26', end: '2026-06-10' }], endDate: '2026-06-10' };
+  // Jun 7 06:40 to 07:10, logged before splitting was on: call day Jun 6,
+  // billed on INV-SYN-1 for May 31 to Jun 6.
+  const whole = { id: 'w1', createdAt: '2026-06-07T13:20:00Z', contractId: 'c1', type: 'Call', date: '2026-06-07', callDay: '2026-06-06', startTime: '2026-06-07T12:40:00.000Z', endTime: '2026-06-07T13:10:00.000Z', durationMin: 30, billedMin: 30, description: 'ED consult', privateNote: '', invoiceId: 'inv1' };
+  const billedDays = ['2026-05-31', '2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06'];
   const inv = { id: 'inv1', number: 'INV-SYN-1', contractId: 'c1', entryIds: ['w1'], dayOverMin: Object.fromEntries(billedDays.map(d => [d, 0])), lines: billedDays.map(d => ({ date: d, label: 'On-call coverage (daily total)', amount: 3000 })) };
-  const aug9 = (data) => computeBilling(contract, data.workLog.filter(e => !e.invoiceId), true, data.workLog, data.invoices, new Set(['2026-08-09'])).total;
+  const jun7 = (data) => computeBilling(contract, data.workLog.filter(e => !e.invoiceId), true, data.workLog, data.invoices, new Set(['2026-06-07'])).total;
   const m = mount('WorkLog', { contracts: [contract], workLog: [whole], invoices: [inv] });
-  assert.equal(aug9(m.data), 3000, 'before the save');
+  assert.equal(jun7(m.data), 3000, 'before the save');
   editRow(m, 'w1');
   save(m, 'Save changes');
   assert.match(m.dialogs.map(d => d[1]).join('\n'), /already billed on INV-SYN-1/);
   assert.equal(m.calls.filter(c => c[0] === 'add').length, 0, 'no new row');
   const written = m.calls.filter(c => c[0] === 'edit').map(c => c[2]);
   assert.equal(written.length, 1);
-  assert.equal(`${hhmm(written[0].startTime)}-${hhmm(written[0].endTime)} ${written[0].callDay} ${written[0].billedMin} ${written[0].invoiceId}`, '06:40-07:10 2026-08-08 30 inv1');
-  assert.ok(m.data.workLog.every(e => e.invoiceId !== 'inv1' || e.callDay === '2026-08-08'), 'the invoice id stays on the day it billed');
-  assert.equal(aug9(m.data), 3000, 'Aug 9 still bills its stipend');
+  assert.equal(`${hhmm(written[0].startTime)}-${hhmm(written[0].endTime)} ${written[0].callDay} ${written[0].billedMin} ${written[0].invoiceId}`, '06:40-07:10 2026-06-06 30 inv1');
+  assert.ok(m.data.workLog.every(e => e.invoiceId !== 'inv1' || e.callDay === '2026-06-06'), 'the invoice id stays on the day it billed');
+  assert.equal(jun7(m.data), 3000, 'Jun 7 still bills its stipend');
 });
 
 test('an invoiced split entry is never split another way on save: it waits for the invoice to be deleted', () => {
-  // Invoiced on Aug 9 (the 06:45 piece), then splitting was turned off:
-  // saving would join the pieces and put the Aug 10 minutes on that invoice.
+  // Invoiced on Jun 7 (the 06:45 piece), then splitting was turned off:
+  // saving would join the pieces and put the Jun 8 minutes on that invoice.
   const pieces = PIECES.map((p, i) => (i === 0 ? { ...p, invoiceId: 'inv1' } : p));
   const m = mount('WorkLog', { contracts: [CONTRACT], workLog: pieces, invoices: [{ id: 'inv1', number: 'INV-SYN-1', contractId: 'c1' }] });
   editRow(m, 'p1');
@@ -169,7 +169,7 @@ test('editing a split entry back under one day, with splitting now off, leaves o
   assert.equal(edits.length, 1);
   assert.equal(edits[0].id, 'p1');
   assert.equal(edits[0].splitGroupId, null);
-  assert.equal(`${hhmm(edits[0].startTime)}-${hhmm(edits[0].endTime)} ${edits[0].callDay} ${edits[0].billedMin}`, '06:45-07:15 2026-08-09 30');
+  assert.equal(`${hhmm(edits[0].startTime)}-${hhmm(edits[0].endTime)} ${edits[0].callDay} ${edits[0].billedMin}`, '06:45-07:15 2026-06-07 30');
   assert.deepEqual(m.calls.filter(c => c[0] === 'delete').map(c => c[2]), ['p2']);
 });
 
@@ -241,9 +241,9 @@ test('the coverage hint no longer claims a crossing call bills hourly', () => {
   const hint = field(m.render(), 'Coverage dates').props.hint;
   assert.doesNotMatch(hint, /work after that final 7 AM bills hourly/);
   assert.match(hint, /Work that starts after that final 7:00 AM bills hourly with no stipend/);
-  // Whole toward Aug 9, but inside the stipend only while its hours last:
-  // once Aug 9's allowance is used, the crossing entry bills at the overage rate.
-  assert.match(hint, /An entry that starts before it and runs past it counts whole toward Aug 9's call day: inside its stipend hours while any are left, then at the after-stipend rate\./);
+  // Whole toward Jun 7, but inside the stipend only while its hours last:
+  // once Jun 7's allowance is used, the crossing entry bills at the overage rate.
+  assert.match(hint, /An entry that starts before it and runs past it counts whole toward Jun 7's call day: inside its stipend hours while any are left, then at the after-stipend rate\./);
   assert.doesNotMatch(hint, /inside the stipend, unless/);
   assert.doesNotMatch(hint, /\u{2014}/u, 'no em dash');
   const setting = field(m.render(), 'Start of the call day').props.hint;

@@ -13,8 +13,8 @@
  *   3  dates on file are incomplete
  *
  * A coverage block with times (coverageBlocks.js) is read as the calendar
- * dates it touches (timedSpan): Sep 25 4:00 PM to Sep 28 7:00 AM is in force
- * Sep 25 through Sep 28. A block without times is read as it always was.
+ * dates it touches (timedSpan): Oct 16 4:00 PM to Oct 19 7:00 AM is in force
+ * Oct 16 through Oct 19. A block without times is read as it always was.
  */
 import { timedSpan } from "./coverageBlocks.js";
 
@@ -135,8 +135,8 @@ export function hiddenEndedCount(contracts, currentId, opts = {}) {
 
 // ── Agencies ────────────────────────────────────────────────────
 //
-// One agency often appears under two spellings ("MPLT Healthcare" and "MPLT
-// Healthcare, LLC."). Stored names are never rewritten; lists and matching
+// One agency often appears under two spellings ("Mossbank Healthcare" and
+// "Mossbank Healthcare, LLC."). Stored names are never rewritten; lists and matching
 // compare on this key instead.
 const AGENCY_SUFFIXES = new Set(["llc", "inc", "incorporated", "ltd", "corp", "corporation", "co", "llp", "pllc", "pc", "lp"]);
 
@@ -228,7 +228,7 @@ function bookingDistance(c, date) {
  *      or a multi-year agreement)
  * Within a rank the nearest booking wins, then the shorter term, then the
  * later start. A gap in one contract's term never beats the travel day of
- * another (ticket 8360f6e6: Weatherby's gap was offered for an MPLT trip).
+ * another (ticket 8360f6e6: one agency's gap was offered for another agency's trip).
  */
 export function agencyForDate(contracts, date, { today = todayLocal() } = {}) {
   if (!date) return "";

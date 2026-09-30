@@ -13,26 +13,26 @@ const eq = (n, got, want) => {
 };
 
 // ── normalizeBirthday ──────────────────────────────────────────────────────
-eq("slashes", normalizeBirthday("7/25"), "07-25");
-eq("already padded", normalizeBirthday("07-25"), "07-25");
-eq("a month name", normalizeBirthday("July 25"), "07-25");
-eq("an abbreviated month", normalizeBirthday("Jul 25"), "07-25");
-eq("June and July are not confused", normalizeBirthday("Jun 25"), "06-25");
-eq("day before the month name", normalizeBirthday("25 July"), "07-25");
+eq("slashes", normalizeBirthday("7/14"), "07-14");
+eq("already padded", normalizeBirthday("07-14"), "07-14");
+eq("a month name", normalizeBirthday("July 14"), "07-14");
+eq("an abbreviated month", normalizeBirthday("Jul 14"), "07-14");
+eq("June and July are not confused", normalizeBirthday("Jun 14"), "06-14");
+eq("day before the month name", normalizeBirthday("14 July"), "07-14");
 eq("a leap day is a real birthday", normalizeBirthday("2/29"), "02-29");
 eq("February 30 is not", normalizeBirthday("2/30"), "");
-eq("a pasted full date drops the year", normalizeBirthday("07/25/1978"), "07-25");
-eq("an ISO date drops the year", normalizeBirthday("1978-07-25"), "07-25");
+eq("a pasted full date drops the year", normalizeBirthday("07/14/1981"), "07-14");
+eq("an ISO date drops the year", normalizeBirthday("1981-07-14"), "07-14");
 eq("month 13 is refused", normalizeBirthday("13/01"), "");
 eq("day 0 is refused", normalizeBirthday("7/0"), "");
 eq("a month alone is refused", normalizeBirthday("July"), "");
 eq("a bad month name is refused", normalizeBirthday("Smarch 3"), "");
 eq("empty stays empty", normalizeBirthday(""), "");
 eq("null stays empty", normalizeBirthday(null), "");
-eq("whitespace is tolerated", normalizeBirthday("  7 / 25  "), "07-25");
+eq("whitespace is tolerated", normalizeBirthday("  7 / 14  "), "07-14");
 
-eq("formatted for a human", formatBirthday("07-25"), "July 25");
-eq("formatted from loose input", formatBirthday("7/25"), "July 25");
+eq("formatted for a human", formatBirthday("07-14"), "July 14");
+eq("formatted from loose input", formatBirthday("7/14"), "July 14");
 eq("nothing to format", formatBirthday(""), "");
 
 // ── which license to hand over ─────────────────────────────────────────────
@@ -53,32 +53,32 @@ eq("a license with no state is skipped",
 // ── the card ───────────────────────────────────────────────────────────────
 const full = reportingCard({
   licenses,
-  settings: { name: "Dan Logsdon", degreeType: "MD", npi: "1234567890", primaryState: "CA", birthMonthDay: "07-25" },
+  settings: { name: "Dan Marchetti", degreeType: "MD", npi: "1234567890", primaryState: "CA", birthMonthDay: "07-14" },
 });
 eq("a complete card has nothing missing", full.missing.length, 0);
 eq("complete says so", full.complete, true);
 eq("the copied text", full.text, [
-  "Name: Dan Logsdon, MD",
+  "Name: Dan Marchetti, MD",
   "State of licensure: California (CA)",
   "State license number: A98765",
   "NPI: 1234567890",
-  "Birth month and day: July 25",
+  "Birth month and day: July 14",
   "I give permission to report this CME credit to the ACCME.",
 ].join("\n"));
 
 const alreadyDegreed = reportingCard({
-  licenses, settings: { name: "Dan Logsdon, MD", degreeType: "MD", npi: "1234567890", primaryState: "CA", birthMonthDay: "07-25" },
+  licenses, settings: { name: "Dan Marchetti, MD", degreeType: "MD", npi: "1234567890", primaryState: "CA", birthMonthDay: "07-14" },
 });
-eq("the degree is not doubled", alreadyDegreed.text.split("\n")[0], "Name: Dan Logsdon, MD");
+eq("the degree is not doubled", alreadyDegreed.text.split("\n")[0], "Name: Dan Marchetti, MD");
 
 const npiOnly = reportingCard({
-  licenses: [], settings: { name: "Dan Logsdon", npi: "1234567890", primaryState: "CA", birthMonthDay: "07-25" },
+  licenses: [], settings: { name: "Dan Marchetti", npi: "1234567890", primaryState: "CA", birthMonthDay: "07-14" },
 });
 eq("the NPI alone satisfies the identifier", npiOnly.missing.map(m => m.key), []);
 eq("and no empty license line is copied", npiOnly.text.includes("State license number"), false);
 
 const licenseOnly = reportingCard({
-  licenses: [licenses[2]], settings: { name: "Dan Logsdon", npi: "", primaryState: "CA", birthMonthDay: "07-25" },
+  licenses: [licenses[2]], settings: { name: "Dan Marchetti", npi: "", primaryState: "CA", birthMonthDay: "07-14" },
 });
 eq("the license number alone satisfies it too", licenseOnly.missing.map(m => m.key), []);
 
@@ -88,7 +88,7 @@ eq("an empty account names every gap",
 eq("and copies only the permission", bare.text, "I give permission to report this CME credit to the ACCME.");
 
 const noBirthday = reportingCard({
-  licenses, settings: { name: "Dan Logsdon", npi: "1234567890", primaryState: "CA" },
+  licenses, settings: { name: "Dan Marchetti", npi: "1234567890", primaryState: "CA" },
 });
 eq("the birthday is the usual gap", noBirthday.missing.map(m => m.key), ["birthday"]);
 eq("every gap says how to close it", noBirthday.missing.every(m => m.fix && m.fix.length > 10), true);

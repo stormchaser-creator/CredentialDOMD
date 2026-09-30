@@ -2,6 +2,12 @@ import { DEFAULT_REMINDER_LEAD_DAYS, DEFAULT_NOTIFY_FREQ_DAYS } from "../utils/r
 
 export const STORAGE_KEY = "credentialdomd-data";
 
+// Settings the cloud has no column for: they exist only in this device's
+// cached file. lib/supabase.js explains each one and carries them across a
+// cloud load (withLocalOnlySettings); storageScope.js keeps them when a
+// session ends without Sign out, so the next sign-in finds them.
+export const LOCAL_ONLY_SETTINGS = Object.freeze(["assistantModel", "coderModel", "birthMonthDay"]);
+
 export const DEFAULT_SETTINGS = {
   primaryState: "",
   additionalStates: [],
@@ -9,10 +15,10 @@ export const DEFAULT_SETTINGS = {
   reminderLeadDays: DEFAULT_REMINDER_LEAD_DAYS,
   name: "",
   npi: "",
-  // Month and day only, as "MM-DD". ACCME asks a CME provider for the
-  // month and day of a learner's birth to match reported credit; the year
-  // is not part of that and is not stored. See src/utils/cmePassport.js.
-  birthMonthDay: "",
+  // birthMonthDay ("MM-DD", no year; src/utils/cmePassport.js) is kept on this
+  // device only and deliberately has no default here: LOCAL_ONLY_SETTINGS
+  // (above; lib/supabase.js) carries it across a cloud load, and a default would
+  // make the merged value defined and lose it. Readers coerce undefined to "".
   degreeType: "", // unset until the physician chooses MD or DO; never assume
   specialties: [],
   email: "",
@@ -84,7 +90,7 @@ export const DEFAULT_DATA = {
   workLog: [],        // [{ id, contractId, type, date, startTime, endTime, durationMin, billedMin, description, invoiceId }]
   screenings: [],
   alertAcks: [],     // [{ id, itemId, until, note }] — acknowledged/snoozed expiration alerts
-  followUps: [],     // [{ id, itemId, itemName, recipient, note, emailed, createdAt }] — logged follow-up actions on an expiring item (e.g. "emailed Kyle about Penrose privileges")
+  followUps: [],     // [{ id, itemId, itemName, recipient, note, emailed, createdAt }] — logged follow-up actions on an expiring item (e.g. "emailed the medical staff office about privileges")
   professionalPhotos: [], // [{ id, name, dateTaken, notes }] — headshots for credentialing packets    // [{ id, type, name, agency, requestedBy, assignment, fileNumber, orderDate, reportDate, result, expirationDate, components: [{name, scope, status, date, note}], notes }]
   encounters: [],     // [{ id, contractId, date, codes: [{code, units, desc, wRVU}], note, spokenText }]
   invoices: [],       // [{ id, number, contractId, periodStart, periodEnd, entryIds, totalMinutes, totalAmount, sentAt }]

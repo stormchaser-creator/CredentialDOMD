@@ -9,7 +9,7 @@
 import { transformSync } from "esbuild";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -21,7 +21,12 @@ const tmpPath = path.join(here, ".desk-table.tmp.mjs");
 const themeStub = "data:text/javascript," + encodeURIComponent(
   'export const useApp = () => ({ theme: { card: "#fff", border: "#ddd", textDim: "#666", text: "#111", accent: "#10b981", input: "#f0fdf8", shadow1: "none" } });'
 );
-const src = fs.readFileSync(srcPath, "utf8").replace('"../../context/AppContext"', JSON.stringify(themeStub));
+// Its sibling module (column fitting) is imported by absolute URL, since the
+// transpiled copy is written next to this script.
+const fitUrl = pathToFileURL(path.join(here, "..", "src", "components", "shared", "deskTableFit.js")).href;
+const src = fs.readFileSync(srcPath, "utf8")
+  .replace('"../../context/AppContext"', JSON.stringify(themeStub))
+  .replace('"./deskTableFit"', JSON.stringify(fitUrl));
 fs.writeFileSync(tmpPath, transformSync(src, { loader: "jsx", jsx: "automatic", format: "esm" }).code);
 
 let pass = 0, fail = 0;

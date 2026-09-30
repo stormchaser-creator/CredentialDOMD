@@ -19,26 +19,26 @@ const eq = (name, got, want) => {
 const ok = (name, cond, extra = "") => { if (cond) pass++; else { fail++; console.log(`FAIL ${name} ${extra}`); } };
 
 // ── splitName ──
-eq("name first last", splitName("Eric Whitney"), { firstName: "Eric", lastName: "Whitney" });
-eq("name middle initial", splitName("Eric W. Whitney"), { firstName: "Eric", lastName: "Whitney" });
-eq("name trailing credential", splitName("Eric Whitney, DO"), { firstName: "Eric", lastName: "Whitney" });
+eq("name first last", splitName("Rowan Testa"), { firstName: "Rowan", lastName: "Testa" });
+eq("name middle initial", splitName("Rowan W. Testa"), { firstName: "Rowan", lastName: "Testa" });
+eq("name trailing credential", splitName("Rowan Testa, DO"), { firstName: "Rowan", lastName: "Testa" });
 eq("name two credentials", splitName("Jane Roe MD PhD"), { firstName: "Jane", lastName: "Roe" });
 eq("name generational", splitName("John Smith Jr."), { firstName: "John", lastName: "Smith" });
-eq("name last-first", splitName("Whitney, Eric"), { firstName: "Eric", lastName: "Whitney" });
-eq("name last-first with credential", splitName("Whitney, Eric W., DO"), { firstName: "Eric", lastName: "Whitney" });
+eq("name last-first", splitName("Testa, Rowan"), { firstName: "Rowan", lastName: "Testa" });
+eq("name last-first with credential", splitName("Testa, Rowan W., DO"), { firstName: "Rowan", lastName: "Testa" });
 eq("name surname Do survives", splitName("Anh Do"), { firstName: "Anh", lastName: "Do" });
-eq("name single token", splitName("Whitney"), { firstName: "", lastName: "Whitney" });
-eq("name whitespace", splitName("  Eric   Whitney  "), { firstName: "Eric", lastName: "Whitney" });
+eq("name single token", splitName("Testa"), { firstName: "", lastName: "Testa" });
+eq("name whitespace", splitName("  Rowan   Testa  "), { firstName: "Rowan", lastName: "Testa" });
 eq("name empty", splitName(""), { firstName: "", lastName: "" });
 eq("name null", splitName(null), { firstName: "", lastName: "" });
 
 // ── nameSearchParams (NPPES v2.1 rules) ──
-eq("params plain", nameSearchParams({ firstName: "Eric", lastName: "Whitney", state: "ca" }),
-  { version: "2.1", enumeration_type: "NPI-1", first_name: "Eric", last_name: "Whitney", state: "CA", limit: "20" });
-eq("params wildcard on first", nameSearchParams({ firstName: "Eri", lastName: "Whitney", wildcard: true }).first_name, "Eri*");
-eq("params wildcard needs two chars", nameSearchParams({ firstName: "E", lastName: "Whitney", wildcard: true }).first_name, "E");
-eq("params user star stripped", nameSearchParams({ firstName: "Er*", lastName: "Whit*ney" }), { version: "2.1", enumeration_type: "NPI-1", first_name: "Er", last_name: "Whitney", limit: "20" });
-eq("params last only", nameSearchParams({ lastName: "Whitney" }), { version: "2.1", enumeration_type: "NPI-1", last_name: "Whitney", limit: "20" });
+eq("params plain", nameSearchParams({ firstName: "Rowan", lastName: "Testa", state: "ca" }),
+  { version: "2.1", enumeration_type: "NPI-1", first_name: "Rowan", last_name: "Testa", state: "CA", limit: "20" });
+eq("params wildcard on first", nameSearchParams({ firstName: "Row", lastName: "Testa", wildcard: true }).first_name, "Row*");
+eq("params wildcard needs two chars", nameSearchParams({ firstName: "R", lastName: "Testa", wildcard: true }).first_name, "R");
+eq("params user star stripped", nameSearchParams({ firstName: "Ro*", lastName: "Tes*ta" }), { version: "2.1", enumeration_type: "NPI-1", first_name: "Ro", last_name: "Testa", limit: "20" });
+eq("params last only", nameSearchParams({ lastName: "Testa" }), { version: "2.1", enumeration_type: "NPI-1", last_name: "Testa", limit: "20" });
 eq("params state alone is nothing", nameSearchParams({ state: "OH" }), null);
 eq("params empty", nameSearchParams({}), null);
 eq("params limit clamp high", nameSearchParams({ lastName: "X", limit: 999 }).limit, "200");

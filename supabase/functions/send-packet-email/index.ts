@@ -5,11 +5,15 @@
  * Two ways in, one send path:
  *
  *   Hand-built   POST { request_id?: uuid, to: string, cc_self?: boolean,
- *                       subject: string, text: string, doc_ids: string[] }
- *     The modal: the physician chose everything.
+ *                       subject: string, text: string, doc_ids: string[],
+ *                       item_id?, item_name?, item_section? }
+ *     The modal: the physician chose everything. Sent from a record's Send
+ *     sheet (no request), the item fields name that record for the
+ *     share_log row (requestFlow.ts shareLogItem), so its history shows it.
  *
  *   Approve      POST { request_id: uuid, approve: true, cc_self?: boolean,
- *                       subject?: string, text?: string, doc_ids?: uuid[] }
+ *                       subject?: string, text?: string, doc_ids?: uuid[],
+ *                       reviewed?: true }
  *     The one tap behind "Approve and send". The request row supplies the
  *     recipient (from_addr); doc_ids and text are what the app showed the
  *     physician (the app rebuilds a proposal on the client when the file has
@@ -30,6 +34,13 @@
  *     _shared/requestFlow.ts (approveRequestBody) so it can be tested.
  *     reply_to is the forwarding sender when that is a confirmed address
  *     other than the profile email, the same rule as the acknowledgement.
+ *
+ *     Unverified forward: a call without reviewed: true (the one tap, not
+ *     the request's own screen) is refused (403, code unverified_forward)
+ *     when the stored proposal is not marked verified but would otherwise
+ *     have been one tap (requestFlow.ts unverifiedApproveRefusal). A forged
+ *     forward names its own requester, and the app built before
+ *     proposal.verified existed still offers it one tap.
  *
  *     Text-only: doc_ids may be [] when the stored proposal has at least one
  *     item (every ask "not on file", say), or when the call carries a
@@ -133,7 +144,7 @@ import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
 import { storageSubjects } from "../_shared/clerkContinuity.ts";
-import { approveRequestBody, longDate, replySubject, withoutGuessBlock } from "../_shared/requestFlow.ts";
+import { approveRequestBody, longDate, replySubject, shareLogItem, unverifiedApproveRefusal, withoutGuessBlock } from "../_shared/requestFlow.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_API = (Deno.env.get("RESEND_API_BASE") ?? "https://api.resend.com").replace(/\/$/, "");
@@ -505,7 +516,13 @@ serve(async (req) => {
       if (rErr) throw rErr;
       if (!row || row.user_id !== who.profileId) return json(403, { error: "That request is not in your account" });
       if (row.status === "dismissed") return json(400, { error: "That request was dismissed. Move it back to New before sending." });
-      const proposal = (row.proposal ?? null) as { items?: unknown; docIds?: unknown; coverNote?: unknown } | null;
+      const proposal = (row.proposal ?? null) as { items?: unknown; docIds?: unknown; coverNote?: unknown; verified?: unknown } | null;
+      // An unverified forward's packet is never sent on one tap (INTAKE-004):
+      // the app leads with Review for it, and this refuses the one-tap call
+      // an older installed app would still make. Sent from the request's own
+      // screen (reviewed), it goes.
+      const unverified = unverifiedApproveRefusal(proposal, approve.reviewed);
+      if (unverified) return json(403, { error: unverified, code: "unverified_forward" });
       const proposalItems = Array.isArray(proposal?.items) ? proposal.items.length : 0;
       // What the screen showed wins over what the row holds: the app
       // rebuilds a proposal on the client when the file has changed and
@@ -775,14 +792,17 @@ serve(async (req) => {
         .eq("id", request.id).eq("user_id", who.profileId);
       if (uErr) console.error("document_requests update failed:", uErr.message);
     }
+    // A record's Send sheet names its record (hand-built path only, never
+    // a request reply), so the email shows in that record's Send history.
+    const item = !approve && !requestId ? shareLogItem(body) : null;
     const { error: lErr } = await db.from("share_log").insert({
       user_id: who.profileId,
-      item_name: `Email packet (${attachments.length} file${attachments.length === 1 ? "" : "s"})`,
-      section: "documents",
+      item_name: item?.itemName || `Email packet (${attachments.length} file${attachments.length === 1 ? "" : "s"})`,
+      section: item?.section || "documents",
       method: "email",
       recipient: to,
       sent_at: now,
-      item_id: null,
+      item_id: item?.itemId ?? null,
     });
     if (lErr) console.error("share_log insert failed:", lErr.message);
 

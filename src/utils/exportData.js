@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { caseWRVU } from "./caseLogReport";
 import { lifecycleSummary } from "./lifecycle";
+import { sentDay } from "./helpers";
 
 /**
  * Vera's export engine: turns a section of the user's own data into a real
@@ -46,10 +47,12 @@ const EXPORTS = {
     }),
   },
   invoices: {
-    label: "Invoices", dateField: "sentAt",
+    // The local day it was sent, as the Invoices tab shows it (sentDay), for
+    // the column and the date filter both.
+    label: "Invoices", dateField: "sentAt", dayOf: i => sentDay(i.sentAt),
     row: i => ({
       Number: i.number || "", Total: i.totalAmount ?? "",
-      Sent: String(i.sentAt || "").slice(0, 10), Paid: i.paidAt ? String(i.paidAt).slice(0, 10) : "",
+      Sent: sentDay(i.sentAt), Paid: i.paidAt ? String(i.paidAt).slice(0, 10) : "",
     }),
   },
 };
@@ -57,13 +60,18 @@ const EXPORTS = {
 export const EXPORTABLE_SECTIONS = Object.keys(EXPORTS);
 
 /** Filter + flatten one section. Dates compare as YYYY-MM-DD strings. */
+/** What an export of `section` is called ("Case log"), or null for one Vera cannot build. */
+export function exportLabel(section) {
+  return EXPORTS[section]?.label || null;
+}
+
 export function buildExport(data, { section, dateFrom, dateTo }) {
   const spec = EXPORTS[section];
-  if (!spec) throw new Error(`Exporting "${section}" isn't supported yet — case logs, CME, work log, licenses, and invoices are.`);
+  if (!spec) throw new Error(`Exporting "${section}" isn't supported yet. Case logs, CME, work log, licenses, and invoices are.`);
   let items = [...(data[section] || [])];
   if (dateFrom || dateTo) {
     items = items.filter(it => {
-      const d = String(it[spec.dateField] || "").slice(0, 10);
+      const d = spec.dayOf ? spec.dayOf(it) : String(it[spec.dateField] || "").slice(0, 10);
       if (!d) return false;
       if (dateFrom && d < dateFrom) return false;
       if (dateTo && d > dateTo) return false;

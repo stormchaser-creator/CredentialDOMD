@@ -9,7 +9,7 @@
 // step, no runner.
 // Run: node scripts/request-flow.test.mjs
 import {
-  ackAllowed, ackText, physicianSummaryText, approveRequestBody, firstName, longDate, replySubject, senderPositivelyAuthenticated, withoutGuessBlock,
+  ackAllowed, ackText, physicianSummaryText, approveRequestBody, firstName, longDate, replySubject, senderPositivelyAuthenticated, withoutGuessBlock, unverifiedApproveRefusal,
   topAuthenticationResults, authservId, authEvidence, authVerdicts, senderAuthFailure,
   MAX_APPROVE_SUBJECT, MAX_APPROVE_TEXT, MAX_REPLY_SUBJECT,
 } from "../supabase/functions/_shared/requestFlow.ts";
@@ -59,9 +59,9 @@ refused("authentication as a truthy non-boolean is not authenticated", { senderA
 // Any other confirmed address of the physician: they mailed themselves the
 // checklist from the hospital account and forwarded it from the personal one.
 refused("requester is one of the physician's confirmed forwarding addresses",
-  { requesterAddr: "whit@hospital.org", forwarderAddr: "eric@gmail.com", physicianEmail: "eric@gmail.com", ownAddresses: ["Whit@Hospital.org"] }, "confirmed addresses");
-ok("ownAddresses accepts a Set", ackAllowed({ ...good, requesterAddr: "whit@hospital.org", ownAddresses: new Set(["whit@hospital.org"]) }).ok === false);
-ok("an unrelated confirmed address changes nothing", ackAllowed({ ...good, ownAddresses: ["whit@hospital.org"] }).ok);
+  { requesterAddr: "rowan@hospital.org", forwarderAddr: "rowan.testa@gmail.example", physicianEmail: "rowan.testa@gmail.example", ownAddresses: ["Rowan@Hospital.org"] }, "confirmed addresses");
+ok("ownAddresses accepts a Set", ackAllowed({ ...good, requesterAddr: "rowan@hospital.org", ownAddresses: new Set(["rowan@hospital.org"]) }).ok === false);
+ok("an unrelated confirmed address changes nothing", ackAllowed({ ...good, ownAddresses: ["rowan@hospital.org"] }).ok);
 ok("no ownAddresses at all is fine", ackAllowed({ ...good, ownAddresses: null }).ok);
 for (const local of ["no-reply", "noreply", "do-not-reply", "donotreply", "mailer-daemon", "postmaster", "bounce", "bounces", "notification", "notifications", "NoReply"]) {
   refused(`machine mailbox ${local}@`, { requesterAddr: `${local}@hospital.org` }, "automated");
@@ -294,7 +294,7 @@ const MAP_PASS = { "Authentication-Results": "mx.resend.com; dmarc=pass header.f
 const proposal2 = {
   v: 1, method: "rules",
   items: [
-    { ask: "MPLT COI", kind: "coi_malpractice", status: "found", docIds: ["d1"], labels: ["Professional Liability COI, ProAssurance Specialty Insurance"] },
+    { ask: "Ridgeway COI", kind: "coi_malpractice", status: "found", docIds: ["d1"], labels: ["Professional Liability COI, Harborline Specialty Insurance"] },
     { ask: "MMR dose #2", kind: "mmr", status: "found", docIds: ["d2", "d3"], labels: ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination"] },
     { ask: "TB form", kind: "tb", status: "missing", docIds: [], labels: [] },
     { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [] },
@@ -304,7 +304,7 @@ const proposal2 = {
 const sum2 = physicianSummaryText({ requesterName: "Tara Example", requesterAddr: "tara@ridgeway-group.example", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/", oneTap: true });
 eq("the summary, four asks", sum2,
   "Got it. Tara Example asked for 4 items:\n"
-  + "- MPLT COI: Professional Liability COI, ProAssurance Specialty Insurance\n"
+  + "- Ridgeway COI: Professional Liability COI, Harborline Specialty Insurance\n"
   + "- MMR dose #2: MMR (Measles, Mumps, Rubella) vaccination, MMR (Measles, Mumps, Rubella) vaccination\n"
   + "- TB form: not on file. The reply says nothing about it unless you add it.\n"
   + "- Logs 12-months: follows separately (the app exports it)\n"
@@ -397,11 +397,12 @@ noEmDash("summary", sum2 + notFound + nothing);
 // ── approveRequestBody: the one-tap call's shape ─────────────────────────────
 const RID = "4de7181c-3a38-4fc1-a1e2-ff62d8005b8d";
 eq("the minimal approve body", approveRequestBody({ request_id: RID, approve: true }),
-  { ok: true, requestId: RID, ccSelf: true, subjectOverride: null, textOverride: null, docIds: null });
+  { ok: true, requestId: RID, ccSelf: true, subjectOverride: null, textOverride: null, docIds: null, reviewed: false });
+eq("reviewed is true only when the app says the draft was in view", [true, "true", 1, undefined].map((v) => approveRequestBody({ request_id: RID, approve: true, reviewed: v }).reviewed), [true, false, false, false]);
 eq("cc_self false is honoured", approveRequestBody({ request_id: RID, approve: true, cc_self: false }).ccSelf, false);
 eq("cc_self anything-but-false stays on", approveRequestBody({ request_id: RID, approve: true, cc_self: "no" }).ccSelf, true);
 eq("overrides pass through trimmed", approveRequestBody({ request_id: RID, approve: true, subject: "  Re: docs ", text: "Hi\r\nthere\r\n" }),
-  { ok: true, requestId: RID, ccSelf: true, subjectOverride: "Re: docs", textOverride: "Hi\nthere", docIds: null });
+  { ok: true, requestId: RID, ccSelf: true, subjectOverride: "Re: docs", textOverride: "Hi\nthere", docIds: null, reviewed: false });
 // The screen's packet travels with the tap: doc_ids are what was ticked,
 // text is the note as it read in the box, an emptied box included.
 const D1 = "11111111-1111-4111-8111-111111111111", D2 = "22222222-2222-4222-8222-222222222222";
@@ -435,6 +436,34 @@ ok("a non-string text is refused", approveRequestBody({ request_id: RID, approve
 ok("an empty subject string means no override", approveRequestBody({ request_id: RID, approve: true, subject: "" }).subjectOverride === null);
 ok("null body is refused", approveRequestBody(null).ok === false);
 ok("an array body is refused", approveRequestBody([RID]).ok === false);
+
+// ── An unverified forward (INTAKE-004) ───────────────────────────────────────
+// The summary goes to the address the forward claimed to come from, which is
+// the real physician's inbox even when the forward was forged. It must not
+// read as the physician's own action ("Got it.") and must never say to tap
+// Approve and send, whatever the caller passes for oneTap.
+{
+  const s = physicianSummaryText({ requesterName: "Tara Example", requesterAddr: "tara@ridgeway-group.example", requesterFound: true, proposal: proposal2, appUrl: "u", oneTap: true, unverified: true });
+  ok("unverified: no Approve and send call to action", !s.includes("Approve and send"), s);
+  ok("unverified: no 'Got it.' opening", !s.includes("Got it."), s);
+  ok("unverified: says it could not be verified, first", s.startsWith("A forward that could not be verified as coming from you"), s);
+  ok("unverified: Review is the next step", s.includes("Open the app and tap Review. Nothing goes to Tara Example until you send it."), s);
+  const noItems = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: null, appUrl: "u", unverified: true });
+  ok("unverified with no proposal: no 'Got it.' either", !noItems.includes("Got it.") && noItems.startsWith("A forward that could not be verified"), noItems);
+  noEmDash("unverified summary", s);
+  // The server backstop: an older installed app still computes one tap
+  // without the verification check, so send-packet-email refuses an
+  // unreviewed approve of a proposal that is not verified but would
+  // otherwise have been one tap.
+  const oneTapShape = { v: 2, method: "rules", source: "model", confidence: "high", docIds: ["d1"], missing: [], coverNote: "x",
+    items: [{ ask: "board certificate", kind: "board_cert", ruleKind: "board_cert", status: "found", docIds: ["d1"], labels: ["Board Certification (AOA)"], confidence: "high" }] };
+  ok("unreviewed approve of an unverified one-tap-shaped proposal is refused", typeof unverifiedApproveRefusal({ ...oneTapShape, verified: false }, false) === "string");
+  ok("so is one with no verification recorded", typeof unverifiedApproveRefusal(oneTapShape, false) === "string");
+  eq("a verified one goes", unverifiedApproveRefusal({ ...oneTapShape, verified: true }, false), null);
+  eq("an unverified one the physician reviewed goes", unverifiedApproveRefusal({ ...oneTapShape, verified: false }, true), null);
+  eq("a keyword proposal was never one tap, so an older app's review send still goes", unverifiedApproveRefusal({ ...oneTapShape, source: "rules", confidence: "keyword" }, false), null);
+  eq("no proposal: nothing to refuse here", unverifiedApproveRefusal(null, false), null);
+}
 
 // ── House rules ──────────────────────────────────────────────────────────────
 {

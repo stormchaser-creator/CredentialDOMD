@@ -233,7 +233,7 @@ export function isStipendDay(c, dayKey, allList) {
   if (!c || (c.callStipend || 0) <= 0 || !dayKey) return false;
   if ((allList || []).some(e => e.contractId === c.id && e.type === "CallDay" && callDayOf(e) === dayKey)) return true;
   // A block with times has the call days between its start and end moments
-  // (Sep 25 4:00 PM to Sep 28 7:00 AM: Sep 25, 26, 27); one without keeps
+  // (Oct 16 4:00 PM to Oct 19 7:00 AM: Oct 16, 17, 18); one without keeps
   // start through end, end being the last call day.
   return (c.coveragePeriods || []).some(p => p.start && (isTimedPeriod(p) ? periodHasCallDay(p, dayKey) : dayKey >= p.start && dayKey <= (p.end || p.start)));
 }

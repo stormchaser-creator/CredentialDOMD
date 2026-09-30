@@ -34,8 +34,8 @@ const req = (name) => (name === 'react' ? { useState: (v) => [v, () => {}] } : r
 new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(req, mod, mod.exports);
 const { Archive } = mod.exports;
 
-const download = (contracts) => {
-  const record = { id: 'inv-northfield', number: 'INV-SYN-1', contractId: NORTHFIELD_CONTRACT.id, periodStart: '2026-09-25', periodEnd: '2026-09-28', totalAmount: NORTHFIELD.total, lines: NORTHFIELD.lines, sentAt: '2026-09-28T17:00:00Z' };
+const download = (contracts, { sentAt = '2026-10-19T17:00:00Z' } = {}) => {
+  const record = { id: 'inv-northfield', number: 'INV-SYN-1', contractId: NORTHFIELD_CONTRACT.id, periodStart: '2026-10-16', periodEnd: '2026-10-19', totalAmount: NORTHFIELD.total, lines: NORTHFIELD.lines, sentAt };
   globalThis.__archive = {
     app: { data: { settings: {}, invoices: [record], locumContracts: contracts }, theme: { text: '#111', textMuted: '#666', border: '#aaa', card: '#fff' }, navigate() {} },
     pdf: [], saved: [],
@@ -50,9 +50,22 @@ const download = (contracts) => {
 test('a paused account\'s invoice download prints the agreement\'s call-day window, not a default 7:00 AM', () => {
   const args = download([{ ...NORTHFIELD_CONTRACT, dayStartHour: 8 }]);
   assert.equal(args.dayStartHour, 8);
-  assert.equal(invoiceDays(args)[0].window, 'call day 8:00 AM Sep 25 to 8:00 AM Sep 26');
+  assert.equal(invoiceDays(args)[0].window, 'call day 8:00 AM Oct 16 to 8:00 AM Oct 17');
   // With the agreement gone there is no hour to read: no key, the default window.
   const orphan = download([]);
   assert.equal('dayStartHour' in orphan, false);
-  assert.equal(invoiceDays(orphan)[0].window, 'call day 7:00 AM Sep 25 to 7:00 AM Sep 26');
+  assert.equal(invoiceDays(orphan)[0].window, 'call day 7:00 AM Oct 16 to 7:00 AM Oct 17');
+});
+
+// Its "Issued" date is the local day it was sent, as the Invoices tab shows
+// it: an invoice sent on a US evening is not issued the next (UTC) day.
+test('a paused account\'s invoice download prints the local day it was sent', () => {
+  const zone = process.env.TZ;
+  process.env.TZ = 'America/Chicago';
+  try {
+    assert.equal(download([NORTHFIELD_CONTRACT], { sentAt: '2026-10-20T02:30:00Z' }).issuedDate, '2026-10-19');
+    assert.equal(download([NORTHFIELD_CONTRACT], { sentAt: '2026-10-19' }).issuedDate, '2026-10-19');
+  } finally {
+    if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone;
+  }
 });

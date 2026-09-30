@@ -1,5 +1,5 @@
 import { LIMITED_LAUNCH, limitedOffer, assertLimitedPrice, validateLimitedConfig } from './limitedLaunchCatalog.mjs';
-import { verifiedLimitedPayment } from './limitedLaunchPurchase.mjs';
+import { verifiedLimitedPayment, deferredOpeningInvoice } from './limitedLaunchPurchase.mjs';
 import { limitedBillingTiming, assertDeferredSubscription, deferredCheckoutMessage } from './limitedBillingTiming.mjs';
 import { BILLING_CATALOG } from './billingCatalog.mjs';
 import { createBillingHandlers } from './billingHandlers.mjs';
@@ -229,7 +229,8 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
         closed = true;
       }
       if (!closed) await deps.store.closeCheckout(profile.id, live, claim.attempt_id, prior.status);
-      if (prior.status === 'complete') refuse(409, 'subscription_already_exists');
+      // A completed session whose subscription has ended (none is unfinished,
+      // checked above) is history: the member claims again, on this request.
       trace.phase = 'claim';
       claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
     }
@@ -335,7 +336,9 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       let proof = null;
       if (sub.status === 'active' && id(sub.latest_invoice)) {
         const invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
-        if (invoice.status === 'paid' && invoice.paid === true) proof = verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote: q, livemode: live });
+        // A deferred purchase's $0 opening invoice is paid but is no payment:
+        // it settles as the scheduled membership, with no paid proof.
+        if (invoice.status === 'paid' && invoice.paid === true && !deferredOpeningInvoice({ account, subscription: sub, invoice, billingAnchor, livemode: live })) proof = verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote: q, livemode: live });
       }
       trace.phase = 'settle';
       await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token, p_cancel_at_period_end: sub.cancel_at_period_end === true, p_billing_anchor: billingAnchor }, q.attempt_id, proof);

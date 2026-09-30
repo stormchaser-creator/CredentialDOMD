@@ -1,8 +1,10 @@
 // Known sections and the fields each one really stores.
 //
-// Lives in its own module, with no imports, so pure code (customCategories.js)
-// and plain node tests can read it without loading Vera's model clients.
-// assistant.js re-exports it, so existing imports keep working.
+// Lives in its own module, importing only the identifier gate (pure, no
+// imports of its own), so pure code (customCategories.js) and plain node
+// tests can read it without loading Vera's model clients. assistant.js
+// re-exports it, so existing imports keep working.
+import { identifierReason } from "./identifierGate.js";
 
 export const SECTION_FIELDS = {
   // Lifecycle keys (ticket 2c819309) are real columns on these three tables
@@ -13,14 +15,140 @@ export const SECTION_FIELDS = {
   healthRecords: ["category", "type", "name", "dateAdministered", "expirationDate", "result", "resultValue", "resultUnits", "referenceRange", "collectedDate", "reportedDate", "lab", "specimenId", "orderedBy", "lotNumber", "facility", "notes"],
   education: ["type", "name", "institution", "startDate", "graduationDate", "fieldOfStudy", "honors", "notes"],
   cme: ["title", "category", "hours", "date", "provider", "certificateNumber", "topics", "notes"],
-  workHistory: ["type", "position", "employer", "city", "state", "startDate", "endDate", "current", "description", "notes"],
+  workHistory: ["type", "position", "employer", "city", "state", "startDate", "endDate", "current", "description", "reasonForLeaving", "notes"],
   screenings: ["type", "name", "agency", "requestedBy", "assignment", "fileNumber", "orderDate", "reportDate", "result", "expirationDate", "components", "notes"],
   professionalPhotos: ["name", "dateTaken", "notes"],
   publications: ["name", "citation", "year", "sortOrder", "doi", "pmid", "url", "notes"],
-  memberships: ["organization", "role", "startDate", "endDate", "notes"],
+  // cost is the form's Annual Dues and expirationDate its Renewal Due; both
+  // are columns (professional_memberships.cost, .expiration_date).
+  memberships: ["organization", "name", "role", "cost", "startDate", "expirationDate", "endDate", "notes"],
   locumContracts: ["facility", "location", "agency", "billTo", "coveragePeriods", "payModel", "dayRate", "callRateGrid", "callStipend", "stipendHours", "overageHourlyRate", "orientationHourlyRate", "orientationFee", "hourlyRate", "incrementMinutes", "minCallMinutes", "notes"],
 };
 
+// The SECTION_FIELDS columns that are not text, as production's
+// information_schema lists them (read 2026-09-29, SELECT only). Postgres
+// rejects the WHOLE row when one of these holds a value it cannot read
+// ("$310" in a numeric, "2027-01" in a date), and a rejected insert is queued
+// and fails again on every replay, so the record never reaches the cloud.
+// tests/section-fields.test.mjs checks this against that read.
+export const FIELD_TYPES = {
+  licenses: { issuedDate: "date", expirationDate: "date", dateUnknown: "boolean" },
+  privileges: { appointmentDate: "date", expirationDate: "date", dateUnknown: "boolean" },
+  insurance: { effectiveDate: "date", expirationDate: "date", dateUnknown: "boolean" },
+  healthRecords: { dateAdministered: "date", expirationDate: "date", collectedDate: "date", reportedDate: "date" },
+  education: { startDate: "date", graduationDate: "date" },
+  cme: { hours: "numeric", date: "date" },
+  workHistory: { startDate: "date", endDate: "date", current: "boolean" },
+  screenings: { orderDate: "date", reportDate: "date", expirationDate: "date" },
+  professionalPhotos: { dateTaken: "date" },
+  publications: { sortOrder: "integer" },
+  memberships: { cost: "numeric", startDate: "date", expirationDate: "date", endDate: "date" },
+  locumContracts: {
+    dayRate: "numeric", callStipend: "numeric", stipendHours: "numeric", overageHourlyRate: "numeric",
+    orientationHourlyRate: "numeric", orientationFee: "numeric", hourlyRate: "numeric",
+    incrementMinutes: "integer", minCallMinutes: "integer",
+  },
+};
+
+// A date column takes "YYYY-MM-DD" that survives a round trip. A pattern
+// alone is not enough: JavaScript rolls "2026-02-30" into March, while
+// Postgres rejects it, and a rejected date rejects the whole record.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export function isValidIsoDate(s) {
+  if (typeof s !== "string" || !ISO_DATE.test(s)) return false;
+  const t = Date.parse(s + "T00:00:00Z");
+  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
+}
+
+function dateOrNull(v) {
+  const s = typeof v === "string" ? v.trim() : "";
+  return isValidIsoDate(s) ? s : null;
+}
+
+// Money and counts as a plain number: "$1,310" and "1310.00" read, "310/yr",
+// "about 300" and "" do not (Number("") is 0, so no bare Number()).
+function numberOrNull(v) {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v !== "string") return null;
+  const s = v.replace(/[$,\s]/g, "");
+  return /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(s) ? Number(s) : null;
+}
+
+function booleanOrNull(v) {
+  if (typeof v === "boolean") return v;
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return s === "true" || s === "yes" ? true : s === "false" || s === "no" ? false : null;
+}
+
+/** The value a typed column can store, or null when it cannot read this one. */
+export function columnValue(section, key, value) {
+  const type = FIELD_TYPES[section]?.[key];
+  if (!type) return value;
+  if (type === "date") return dateOrNull(value);
+  if (type === "boolean") return booleanOrNull(value);
+  const n = numberOrNull(value);
+  return type === "integer" && !Number.isInteger(n) ? null : n;
+}
+
+// A field named like a date (`date`, or ending in `Date`, plus a contract's
+// term bounds) is held to the date rule even where FIELD_TYPES has no entry
+// for it, so a date column added later cannot take "next spring" whole.
+const isDateField = (section, key) => key === "date" || /Date$/.test(key) || (section === "locumContracts" && (key === "termStart" || key === "termEnd"));
+
+/**
+ * The value a known field may be sent as, or undefined when it does not fit
+ * its column (a month-only "2027-03" in a date column, "1.5 hrs" in a numeric
+ * one). Money and counts may carry "$" and thousands commas.
+ */
+export function fieldValueFits(section, key, value) {
+  if (FIELD_TYPES[section]?.[key]) {
+    const stored = columnValue(section, key, value);
+    return stored == null ? undefined : stored;
+  }
+  if (isDateField(section, key)) return isValidIsoDate(value) ? value : undefined;
+  return value;
+}
+
+const label = (k) => k.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase());
+
+/**
+ * Split proposed fields into (known fields, customFields) for a section so
+ * a stray key can never break the cloud insert: extras become customFields,
+ * and so does a known field's value its column cannot store (dues "310/yr",
+ * a renewal "2027-01", "1.5 hrs" of CME), kept as written under a readable
+ * label so nothing the physician said is lost. It used to pass any value
+ * through, and the card showed done while the cloud refused the record on
+ * every replay. Here rather than in assistant.js so plain node tests can run it.
+ *
+ * Every field and every customField passes the identifier gate first, the
+ * one packRecord and the scan split apply: a Social Security or taxpayer
+ * number, a full date of birth, a medical record, account or encounter
+ * number, or a patient identifier is dropped and listed in `withheld`
+ * ({ label, reason }), never kept, never sent to the cloud's custom_fields
+ * column and never offered to the field proposal queue. Vera's add and edit
+ * of a built-in record used to trust her prompt alone for this (a W-9 or an
+ * application page put "SSN" in customFields).
+ */
+export function splitFields(section, fields = {}, customFields = {}) {
+  const known = new Set(SECTION_FIELDS[section] || []);
+  const clean = {}, extra = {}, withheld = [];
+  const blocked = (name, v) => {
+    const why = identifierReason(name, typeof v === "string" ? v : JSON.stringify(v) ?? "");
+    if (why) withheld.push({ label: name, reason: why });
+    return !!why;
+  };
+  for (const [k, v] of Object.entries(customFields || {})) {
+    if (!blocked(k, v)) extra[k] = v;
+  }
+  for (const [k, v] of Object.entries(fields || {})) {
+    if (v == null || v === "") continue;
+    if (blocked(label(k), v)) continue;
+    const fits = known.has(k) ? fieldValueFits(section, k, v) : undefined;
+    if (fits !== undefined) clean[k] = fits;
+    else extra[label(k)] = String(v);
+  }
+  return { clean, extra: Object.keys(extra).length ? extra : null, withheld };
+}
 // Every synced collection (the keys of TABLE_MAP in src/lib/supabase.js),
 // listed here so pure code can tell a real section from one a model invented.
 // tests/collection-registry.test.mjs fails if this drifts from TABLE_MAP.

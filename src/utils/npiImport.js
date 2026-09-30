@@ -5,7 +5,7 @@
 // in plain node. The transport lives in npiLookup.js.
 
 // Credential and generational tails that are not part of the name the
-// registry knows: "Eric Whitney, DO", "John Smith Jr.", "Jane Roe MD PhD".
+// registry knows: "Rowan Testa, DO", "John Smith Jr.", "Jane Roe MD PhD".
 const NAME_TAILS = /^(jr|sr|ii|iii|iv|md|do|phd|dds|dmd|mph|mba|facs|faans|facc|facog|faap|rn|pa|pa-c|np)\.?,?$/i;
 
 const cleanToken = (t) => String(t || "").replace(/[.,]+$/g, "").replace(/^[.,]+/g, "").trim();
@@ -27,11 +27,11 @@ export function splitName(full) {
   let tokens;
   const segs = raw.split(",").map(s => s.trim()).filter(Boolean);
   if (segs.length >= 2 && words(segs[0]).length === 1 && !words(segs[1]).every(isTail)) {
-    // "Whitney, Eric W." (family name first). Anything after the second
+    // "Testa, Rowan E." (family name first). Anything after the second
     // comma is a credential tail.
     tokens = [...words(segs[1]).filter(t => !isTail(t)), ...words(segs[0])];
   } else {
-    // "Eric W. Whitney, DO" or "Eric Whitney MD": drop the tail tokens only
+    // "Rowan E. Testa, DO" or "Rowan Testa MD": drop the tail tokens only
     // while a first and last name remain, so a real surname like "Do" stays.
     tokens = words(segs[0]);
     while (tokens.length > 2 && isTail(tokens[tokens.length - 1])) tokens.pop();

@@ -1,13 +1,19 @@
 import { memo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { renewalView } from "../../utils/renewalRoute";
+import { TAP_MIN } from "../shared/actionButton.js";
 
 /**
- * The door out of a warning, kept to one line on every licence card:
- * "How to renew", the short cycle, and the portal button only when the
- * licence is urgent. Tapping the line opens the board's portal and the state
- * guide, the full cycle, the due date and the stored fee, which is labelled
- * with when it was last researched because it is not live data.
+ * The door out of a warning on every licence card: "How to renew", the short
+ * cycle, and the portal button only when the licence is urgent. Tapping the
+ * line opens the board's portal and the state guide, the full cycle, the due
+ * date and the stored fee, which is labelled with when it was last researched
+ * because it is not live data.
+ *
+ * The words are never cut. When the line and "Renew online" do not fit side
+ * by side, the button moves under the line (the row wraps; the label's basis
+ * is its own width, not 0), and a line wider than the card wraps its words.
+ * It used to be one line with an ellipsis, which on a phone card read "Ho...".
  *
  * The board and portal follow the physician's degree (src/utils/renewalRoute.js),
  * the same selection Vera uses, so a DO is never sent to an MD-only page.
@@ -21,6 +27,7 @@ function RenewalInfo({ item, defaultExpanded = false, alertable = true }) {
   const stop = (e) => e.stopPropagation();
   const linkStyle = (primary) => ({
     padding: "8px 12px", borderRadius: 9, textDecoration: "none", fontSize: 12.5,
+    display: "inline-flex", alignItems: "center", minHeight: TAP_MIN, boxSizing: "border-box",
     ...(primary
       ? { backgroundColor: T.accent, color: "#fff", fontWeight: 800 }
       : { border: `1px solid ${T.border}`, color: T.accent, fontWeight: 700 }),
@@ -29,19 +36,19 @@ function RenewalInfo({ item, defaultExpanded = false, alertable = true }) {
 
   return (
     <div style={{ marginTop: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: 8, rowGap: 4, minWidth: 0 }}>
         <button
           type="button"
           aria-expanded={expanded}
           onClick={(e) => { stop(e); setExpanded(x => !x); }}
           style={{
-            flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6,
+            flex: "1 1 auto", minWidth: 0, minHeight: TAP_MIN, display: "flex", alignItems: "center", gap: 6,
             padding: "4px 0", border: "none", background: "none", cursor: "pointer",
             textAlign: "left", fontFamily: "inherit", fontSize: 12.5,
             color: view.urgent ? (T.warning || "#f59e0b") : T.textMuted,
           }}
         >
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
             <span style={{ fontWeight: 700 }}>How to renew</span>
             {view.cycleShort ? ` \u{B7} ${view.cycleShort}` : ""}
           </span>

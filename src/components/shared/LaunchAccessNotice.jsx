@@ -2,6 +2,7 @@ import { useApp } from "../../context/AppContext";
 import { canReviewBillingOffer, lastAnswer, OUTDATED_MESSAGE } from "../../utils/limitedLaunchAccess.js";
 import { scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { actionButtonStyle } from "./actionButton.js";
+import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 
 // OUTDATED_MESSAGE, with its first sentence in bold.
 const OUTDATED_PARTS = [OUTDATED_MESSAGE.slice(0, OUTDATED_MESSAGE.indexOf(".") + 1), OUTDATED_MESSAGE.slice(OUTDATED_MESSAGE.indexOf(".") + 2)];
@@ -69,7 +70,7 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
     copy = `Practice access until ${until(access.practiceTrial.endsAt)}. Practice does not charge automatically. Your Credential membership continues separately.`;
   } else if (trialMembership && !access.capabilities.practice.write) {
     title = access.practiceTrial.state === "expired" ? "Your Practice trial has ended" : "Your Credential membership continues";
-    copy = "Your Credential membership continues. Saved Practice records remain available to read and export. Contact support about adding Practice; we will review the available options and charges with you before any billing change.";
+    copy = `Your Credential membership continues. Saved Practice records remain available to read and export. Contact support about adding Practice. ${MEMBERSHIP_COPY.practiceSupportReview}`;
   } else if (!access.capabilities.credential.write || !access.capabilities.practice.write) {
     title = access.freeBeta?.state === "expired" ? "Your free beta has ended" : "Saved records are available";
     copy = "You can keep viewing and exporting saved records. To make changes to features outside your membership, review an offer and choose whether to purchase.";

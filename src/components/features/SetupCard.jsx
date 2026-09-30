@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useSetupState } from "./setup/useSetupState";
-import { homeCardForm, ladderState, boardCounts, tier1Regressed, CARD_FORM, LADDER } from "../../utils/setupTasks";
+import { homeCardForm, ladderState, setupSurfaceCounts, tier1Regressed, CARD_FORM, LADDER } from "../../utils/setupTasks";
+import { reminderLeadDays } from "../../utils/reminderPreferences";
 
 /**
  * The Home card. Five forms, and the physician only ever sees one of them.
@@ -46,7 +47,7 @@ export default function SetupCard({ onOpenSetup }) {
   }, [form, stampTier1Done]);
 
   if (moment === "open") {
-    const days = Number(s.reminderLeadDays) || 90;
+    const days = reminderLeadDays(s.reminderLeadDays);
     return (
       <div style={{
         marginBottom: 20, backgroundColor: T.card, border: `2px solid ${T.accent}`,
@@ -93,13 +94,13 @@ export default function SetupCard({ onOpenSetup }) {
   }
 
   // Form D is the terminal state, and it is the only form Home ever shows
-  // again once Tier 1 is stamped. Two things it can say: everything is
-  // resolved, counted across the whole board rather than Tier 1 alone
-  // ("Setup · 15 of 15"), or something that was finished has come undone,
-  // named. Either way it is one line of navigation, never a prompt.
+  // again once Tier 1 is stamped. Two things it can say: something that was
+  // finished has come undone, named, or the count every other Setup surface
+  // shows (setupSurfaceCounts: Tier 1 while it is unfinished). Either way it
+  // is one line of navigation, never a prompt.
   if (form === CARD_FORM.D) {
     const regressed = tier1Regressed(setup);
-    const all = boardCounts(setup);
+    const all = setupSurfaceCounts(setup);
     // Finished means gone. A completed list has nothing to say on a dashboard
     // a physician opens every day, and Setup is still one tap away under More
     // and at the top of the Credentials rail. The line stays only while
@@ -148,13 +149,16 @@ export default function SetupCard({ onOpenSetup }) {
       marginBottom: 20, backgroundColor: T.card, border: `2px solid ${T.accent}`,
       borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1,
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      {/* "Not now" and "Open setup" are text buttons, but still a thumb's
+          target: at least 32 px tall (HOME-001). */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ fontSize: 15, fontWeight: 800, color: T.text, margin: 0, fontVariantNumeric: "tabular-nums" }}>
           Setup · {t1.done} of {t1.total}
         </h3>
         <button onClick={() => snooze(14)} style={{
           border: "none", background: "transparent", color: T.textDim,
           fontSize: 12, fontWeight: 600, cursor: "pointer",
+          minHeight: 32, padding: "0 0 0 12px", margin: "-6px 0",
         }}>Not now</button>
       </div>
 
@@ -192,7 +196,8 @@ export default function SetupCard({ onOpenSetup }) {
       )}
 
       <button onClick={() => onOpenSetup?.(null)} style={{
-        marginTop: 10, border: "none", background: "transparent", padding: 0,
+        marginTop: 4, border: "none", background: "transparent", padding: "0 12px 0 0",
+        minHeight: 32, marginBottom: -6,
         color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",
       }}>Open setup {"›"}</button>
     </div>

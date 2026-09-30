@@ -225,6 +225,27 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     assert.equal(tomorrow.byProfile[uid(3)].sent, true, 'and the next morning it goes again');
     assert.equal(sent.length, 2);
   });
+
+  // NOTIFY-001: dayDiff rounded (expiry at 00:00Z minus the 13:00Z run time),
+  // so every count was a day short: a credential expiring today was listed
+  // under EXPIRED as "1 day ago" and counted as expired in the subject line.
+  await t.test('day counts are whole UTC dates: today, in 1 day, in 30 days; nothing expired', async () => {
+    mock.timers.setTime(at('2026-10-01T13:00:03.000Z'));
+    const rows = [['lic-today', '2026-10-01'], ['lic-tomorrow', '2026-10-02'], ['lic-month', '2026-10-31'], ['lic-lapsed', '2026-09-30']]
+      .map(([id, exp]) => ({ id, user_id: uid(4), type: 'State Medical License', state: 'ZZ', expiration_date: exp }));
+    globalThis.__reminders.db = createDb({ profiles: [profile(4)], licenses: rows, alert_acks: [], notification_log: [] });
+    const res = await globalThis.__reminders.handler(new Request('https://fn.test/send-reminders', {
+      method: 'POST', headers: { 'x-hook-secret': HOOK, 'content-type': 'application/json' }, body: JSON.stringify({ dry_run: true }),
+    }));
+    const { results: [result] } = await res.json();
+    assert.match(result.text, /Oct 1, 2026 \(today\)/);
+    assert.match(result.text, /Oct 2, 2026 \(in 1 day\)/);
+    assert.match(result.text, /Oct 31, 2026 \(in 30 days\)/);
+    assert.match(result.text, /Sep 30, 2026 \(1 day ago\)/, 'yesterday is the one expired item');
+    assert.equal(result.headline, '1 expired, 3 coming up');
+    const expired = result.text.slice(result.text.indexOf('EXPIRED'), result.text.indexOf('Due within 30 days'));
+    assert.doesNotMatch(expired, /Oct 1, 2026/, 'today is not listed as expired');
+  });
 });
 
 // ── The migration and rollback on a real PostgreSQL ──────────────────────

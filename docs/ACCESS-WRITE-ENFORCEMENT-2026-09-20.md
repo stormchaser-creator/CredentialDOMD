@@ -35,6 +35,8 @@ All tests below used synthetic data; no provider, credential, deployment or live
 | `node scripts/send-throttle.test.mjs` | 474 passed |
 | `git diff --check` | Clean |
 
+> Note 2026-09-30 (QA OPS-012): `tests/access-policy/postgres-write-enforcement.py` applies the migrations pinned when it was written, not the whole chain. No later migration redefines a function it exercises as of this note. It now runs in CI (`npm run test:pg-suites`, after `npm test`), and that runner prints every function a later, unapplied migration redefines, so a pass there is not evidence for the current SQL of those functions.
+
 The handler tests bundle the real AI, CallSync and inbound sources plus the real helper. Mocked I/O records attempted provider calls and content writes; denied requests make neither. The SQL tests apply the exact migration twice, compare existing ownership/read/delete policy definitions, and exercise missing/forged role claims, foreign aliases, old/new document scopes, metadata delete/recreate, service writes, support attachments, preferences, signup INSERT, trusted activation and account-deletion cleanup. The existing AI spending fixture supplies a verified synthetic subject and an explicit disabled-policy snapshot; the spending/counting assertions remain unchanged.
 
 Reviewed source SHA256 values:

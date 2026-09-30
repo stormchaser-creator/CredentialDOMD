@@ -14,6 +14,8 @@ const SAFE_ERROR_CODES = new Set([
   "subscription_already_exists", "checkout_owner_mismatch", "checkout_offer_already_selected",
   "checkout_unavailable", "checkout_pending", "founding_capacity_pending", "bundle_unavailable", "quote_mismatch", "catalog_unavailable",
   "checkout_needs_reconciliation", "invalid_request", "request_too_large",
+  // The billing portal for an account that never had a subscription (404).
+  "billing_account_not_found",
 ]);
 // Where a request stopped, for the failure report (ticket fe321c16). Never
 // a server message, token or address: only one of these words.
@@ -112,7 +114,10 @@ function validateProfileInitialization(value, accountId) {
       : !object(value.continuity) || value.continuity.state !== "bound" || !uuid(value.continuity.id)
         || value.continuity.sourceIssuer !== "https://dynamic-goshawk-87.clerk.accounts.dev"
         || typeof value.continuity.sourceSubject !== "string" || !/^user_[A-Za-z0-9]{1,120}$/.test(value.continuity.sourceSubject)
-        || value.continuity.sourceSubject === accountId)) throw unavailable("continuity_unavailable");
+        || value.continuity.sourceSubject === accountId)
+    // When the server deleted this account's data (migration 20260930020000):
+    // present only after a deletion, and then a timestamp, nothing else.
+    || ("dataDeletedAt" in value && !date(value.dataDeletedAt))) throw unavailable("continuity_unavailable");
   return structuredClone(value);
 }
 
@@ -197,7 +202,12 @@ export function createLimitedLaunchClient({
   }
   return {
     async initializeProfile() {
-      const value = await request("initialize-clerk-profile");
+      // This app drops its device copy for a receipt's dataDeletedAt before it
+      // replays or pushes anything (ensureProfile). initialize-clerk-profile
+      // refuses an account whose data was deleted to a build that does not
+      // say so (426 app_update_required), since that build would push its
+      // pre-deletion copy back.
+      const value = await request("initialize-clerk-profile", { honorsDataDeletion: true });
       try { return validateProfileInitialization(value, accountId); }
       catch (error) { throw unavailable(error?.code, 200); }
     },

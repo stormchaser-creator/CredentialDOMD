@@ -105,7 +105,9 @@ node --test tests/billing/limited-launch.test.mjs tests/billing/readiness.test.m
 python3 tests/billing/postgres-limited-launch.py
 ```
 
-The Python suite starts PostgreSQL 17 under `/private/tmp` with a private Unix socket and no TCP listener, applies the exact migration, exercises concurrent claims, then destroys the fixture. It uses synthetic identities and payments. This is not evidence of a real Stripe checkout/webhook, Clerk mailbox integration or applied production migration.
+The Python suite starts PostgreSQL (PG_BIN, default PostgreSQL 17) under `/tmp` with a private Unix socket and no TCP listener, applies the exact migration, exercises concurrent claims, then destroys the fixture. It uses synthetic identities and payments. This is not evidence of a real Stripe checkout/webhook, Clerk mailbox integration or applied production migration.
+
+> Note 2026-09-30 (QA OPS-012): `tests/billing/postgres-limited-launch.py` applies the migrations pinned when it was written, not the whole chain. Since then `limited_billing_eligibility`, `credentialdo_access_snapshot`, `create_limited_billing_preview`, `claim_limited_billing_checkout` and `settle_limited_billing_subscription` were redefined (continuity evidence, beta-deferred billing, checkout offer switch, founding practice included) and the suite does not apply those. It now runs in CI (`npm run test:pg-suites`, after `npm test`), and that runner prints every function a later, unapplied migration redefines, so a pass there is not evidence for the current SQL of those functions.
 
 Follow-up validation: 58 JavaScript tests and 46 disposable PostgreSQL checks pass. A separate private offline harness also verifies the real Stripe 15.12.0 SDK's request serialization and HMAC verification against synthetic provider responses and the exact four migrations. It covers all four owner-observed sandbox price IDs plus the separate historical-free-beta → first-paid-Core path. The harness performs no provider requests, reads no credentials, and creates no real customers or subscriptions; its catalog IDs are observed, while its provider responses are fixtures.
 

@@ -10,10 +10,10 @@
  * or text upload), the blocks it states with times are read here too, and
  * any time the model left out is filled from them (withStatedTimes). Reads:
  *
- *   September 25, 2026 (4pm) to September 28, 2026 (7am)
- *   Nov 5, 2026 at 6:00 AM through Nov 12, 2026 at 6:00 AM
- *   9/25/2026 4pm - 9/28/2026 7am
- *   2026-09-25 16:00 to 2026-09-28 07:00
+ *   October 16, 2026 (4pm) to October 19, 2026 (7am)
+ *   Nov 12, 2026 at 6:00 AM through Nov 19, 2026 at 6:00 AM
+ *   10/16/2026 4pm - 10/19/2026 7am
+ *   2026-10-16 16:00 to 2026-10-19 07:00
  *
  * Only what the text states: a block without a stated time is left to the
  * model, and nothing is guessed.
@@ -125,7 +125,7 @@ const isoDay = (v) => { const m = String(v ?? "").trim().match(ISO_DAY); return 
  *    inbox, which has no local clock) it carries none.
  *
  * `day` turns a scanned date into "YYYY-MM-DD" ("" when it is none);
- * docPrefill passes its isoDate, which also reads "September 25, 2026".
+ * docPrefill passes its isoDate, which also reads "October 16, 2026".
  */
 export function normalizeCoveragePeriods(periods, { text = "", zone = "", day = isoDay } = {}) {
   let out = (Array.isArray(periods) ? periods : [])

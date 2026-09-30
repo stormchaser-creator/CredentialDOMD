@@ -88,7 +88,7 @@ function fixture({ signup = true, profileReady = true, clerkUser = OWNER, memory
     // `makeClient` swaps in production's own client, given the fake clock and Clerk.
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: args => (makeClient ? makeClient(args, { later, clerk: () => clerk }) : client) },
     '../utils/accessRefreshFailure.js': refreshFailure,
-    '../lib/errorReport.js': { reportError: (...args) => reports.push(args) },
+    '../lib/errorReport.js': { reportError: (...args) => reports.push(args), reportUnlessLeaving: (...args) => reports.push(args) },
   };
   const module = { exports: {} };
   vm.runInNewContext(code, {

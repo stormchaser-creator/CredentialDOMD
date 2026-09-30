@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import { useApp } from "../../../context/AppContext";
 import Modal from "../../shared/Modal";
 import { formatDate } from "../../../utils/helpers";
+import { docMime } from "../../../utils/inboxDocs";
 import { callDayStartHour, hourLabel, DEFAULT_CALL_DAY_START_HOUR } from "../../../utils/billing";
 import { coveragePeriodText } from "../../../utils/coverageBlocks";
 
@@ -9,7 +10,7 @@ const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimu
 
 // Case logs don't carry a contractId — they link back through the RVU entry
 // that created them, or by facility name. Facility strings drift between
-// sources ("Intermountain Good Samaritan Hospital" vs "… (Rightsourcing)"),
+// sources ("Mercy General Hospital" vs "… (staffing vendor)"),
 // so match on the normalized core name.
 const normFacility = (s) => String(s || "").toLowerCase().replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim();
 const facilityMatches = (a, b) => {
@@ -22,7 +23,7 @@ const facilityMatches = (a, b) => {
  * what was billed and collected, the days and hours on the ground, the
  * RVUs logged, and the cases done while there.
  */
-function ContractSummary({ contract, onClose, docs = [], onOpenDoc }) {
+function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = null, openError = null }) {
   const { data, theme: T } = useApp();
 
   const s = useMemo(() => {
@@ -115,6 +116,14 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc }) {
           contract.callStipend && contract.splitAtDayStart === true ? "calls crossing the start of the call day are split" : null,
         ].filter(Boolean).join(" · ")}
       </div>
+      {/* The call rate grid, so a misread rate or hospital can be spotted and fixed on the agreement. */}
+      {Array.isArray(contract.callRateGrid) && contract.callRateGrid.length > 0 && (
+        <div aria-label="Call rate grid" style={{ marginTop: 6, fontSize: 12.5, color: T.textMuted, lineHeight: 1.6 }}>
+          {contract.callRateGrid.map((r, i) => (
+            <div key={i}>Call at {r.hospital || "unnamed hospital"}: {money(r.primary)} primary · {money(r.backup)} backup</div>
+          ))}
+        </div>
+      )}
       {contract.notes && (
         <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 6, whiteSpace: "pre-wrap" }}>{contract.notes}</div>
       )}
@@ -123,20 +132,30 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc }) {
         <>
           {heading(`Agreement documents (${docs.length})`)}
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            {docs.map(doc => (
-              <button key={doc.id} onClick={() => onOpenDoc && onOpenDoc(doc)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
-                  borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input,
-                  color: T.text, fontSize: 12, fontWeight: 600, cursor: doc.data ? "pointer" : "default", textAlign: "left",
-                }}>
-                {doc.type?.startsWith("image/") && doc.data
-                  ? <img src={doc.data} alt={doc.name} style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, flexShrink: 0 }} />
-                  : <span style={{ fontSize: 16 }}>{doc.data ? "📕" : "⏳"}</span>}
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{doc.name}</span>
-                <span style={{ fontSize: 11, color: T.accent, flexShrink: 0 }}>{doc.data ? "view" : "syncing…"}</span>
-              </button>
-            ))}
+            {docs.map(doc => {
+              // On this device, or fetchable from account storage on the tap.
+              const openable = !!(doc.data || doc.storagePath);
+              const offline = !doc.data && typeof navigator !== "undefined" && navigator.onLine === false;
+              const label = openingId === doc.id ? "opening…"
+                : doc.data ? "view"
+                : !doc.storagePath ? "not uploaded"
+                : offline ? "unavailable offline" : "view";
+              return (
+                <button key={doc.id} onClick={() => openable && onOpenDoc && onOpenDoc(doc)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
+                    borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                    color: T.text, fontSize: 12, fontWeight: 600, cursor: openable ? "pointer" : "default", textAlign: "left",
+                  }}>
+                  {docMime(doc).startsWith("image/") && doc.data
+                    ? <img src={doc.data} alt={doc.name} style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, flexShrink: 0 }} />
+                    : <span style={{ fontSize: 16 }}>{openable ? "📕" : "⏳"}</span>}
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{doc.name}</span>
+                  <span style={{ fontSize: 11, color: T.accent, flexShrink: 0 }}>{label}</span>
+                </button>
+              );
+            })}
+            {openError && <div role="alert" style={{ fontSize: 12.5, fontWeight: 600, color: T.danger }}>{openError}</div>}
           </div>
         </>
       )}
@@ -148,7 +167,7 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc }) {
             const paid = s.paidOf(inv);
             const total = parseFloat(inv.totalAmount) || 0;
             const status = paid >= total - 0.005 ? { t: "PAID", c: "#22c55e" }
-              : paid > 0.005 ? { t: `PARTIAL — ${money(total - paid)} due`, c: "#f97316" }
+              : paid > 0.005 ? { t: `PARTIAL: ${money(total - paid)} due`, c: "#f97316" }
               : { t: "UNPAID", c: "#ef4444" };
             return (
               <div key={inv.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
@@ -208,7 +227,7 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc }) {
 
       {s.invoices.length === 0 && s.cases.length === 0 && s.encounters.length === 0 && s.workDays.size === 0 && (
         <div style={{ fontSize: 13, color: T.textMuted, marginTop: 12 }}>
-          Nothing logged against this agreement yet — work log entries, RVU entries, and invoices will all roll up here.
+          Nothing logged against this agreement yet. Work log entries, RVU entries, and invoices will all roll up here.
         </div>
       )}
     </Modal>

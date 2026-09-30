@@ -37,6 +37,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import {
   TOOL_VERSION, ARCHIVE_FORMAT, ARCHIVE_NAME_RE,
   readManagementToken, readPassphrase, managementClient, storageClient,
@@ -212,10 +213,20 @@ async function exportDdl(sql, catalog) {
     add('types', d.typname, `CREATE DOMAIN public.${qIdent(d.typname)} AS ${d.base}${d.typnotnull ? ' NOT NULL' : ''}${d.typdefault ? ` DEFAULT ${d.typdefault}` : ''}${d.checks ? ` ${d.checks}` : ''};`);
   }
 
-  // Sequences.
+  // Sequences. Not the ones an identity column owns (deptype 'i'): the
+  // table's GENERATED ... AS IDENTITY makes its own on restore, and a copy
+  // made here first would take its name, leaving the identity on _seq1 and
+  // the setval on an orphan. The restore sets identity sequences from the
+  // loaded rows instead (QA OPS-003).
   const sequences = await sql(`
-    select sequencename, data_type, start_value, min_value, max_value, increment_by, cycle, cache_size, last_value
-      from pg_sequences where schemaname = 'public' order by 1`);
+    select s.sequencename, s.data_type, s.start_value, s.min_value, s.max_value, s.increment_by, s.cycle, s.cache_size, s.last_value
+      from pg_sequences s
+     where s.schemaname = 'public'
+       and not exists (select 1 from pg_depend d
+                        where d.classid = 'pg_class'::regclass
+                          and d.objid = (quote_ident(s.schemaname) || '.' || quote_ident(s.sequencename))::regclass
+                          and d.deptype = 'i')
+     order by 1`);
   for (const s of sequences) {
     add('sequences', s.sequencename,
       `CREATE SEQUENCE IF NOT EXISTS public.${qIdent(s.sequencename)} AS ${s.data_type} INCREMENT BY ${s.increment_by} MINVALUE ${s.min_value} MAXVALUE ${s.max_value} START WITH ${s.start_value} CACHE ${s.cache_size}${s.cycle ? ' CYCLE' : ''};`);
@@ -367,6 +378,9 @@ async function exportDdl(sql, catalog) {
     const list = statements.filter((s) => s.section === sec);
     if (!list.length) continue;
     sqlText.push(`-- ==== ${sec} (${list.length})`);
+    // Functions are listed by name, not by what they call; as pg_dump does,
+    // do not check bodies at CREATE (the restore sets this per statement).
+    if (sec === 'functions') sqlText.push('SET check_function_bodies = off;', '');
     for (const s of list) sqlText.push(`-- ${s.name}`, s.sql, '');
   }
   return {
@@ -828,8 +842,13 @@ async function runVerify() {
   }
 }
 
-if (flag('--help') || flag('-h')) {
-  process.stdout.write('usage: offsite-backup.mjs [--verify [--archive <file>] [--sample <n>]]\n');
-  process.exit(2);
+export { exportCatalog, exportDdl, exportData };
+
+// Run only as a script: tests import the export functions above.
+if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === fs.realpathSync(fileURLToPath(import.meta.url))) {
+  if (flag('--help') || flag('-h')) {
+    process.stdout.write('usage: offsite-backup.mjs [--verify [--archive <file>] [--sample <n>]]\n');
+    process.exit(2);
+  }
+  process.exitCode = flag('--verify') ? await runVerify() : await runBackup();
 }
-process.exitCode = flag('--verify') ? await runVerify() : await runBackup();

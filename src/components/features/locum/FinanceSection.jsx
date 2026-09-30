@@ -8,11 +8,15 @@ import TaxPrep from "./TaxPrep";
  * the CPA gets) and what's owed (the multistate tax estimate + payment
  * tracker built on top of it).
  */
-function FinanceSection() {
+function FinanceSection({ initialTab } = {}) {
   const { theme: T } = useApp();
-  const [tab, setTab] = useState("tax");
-  const TabBtn = ({ id, label }) => (
-    <button onClick={() => setTab(id)} style={{
+  // "finance:deductions" (a filed receipt's Open Deductions, Home search)
+  // opens the ledger itself; anything else opens on Tax Prep.
+  const [tab, setTab] = useState(initialTab === "deductions" ? "deductions" : "tax");
+  // A render helper, not a component declared in render (which would remount
+  // each time; react-hooks/static-components).
+  const tabBtn = (id, label) => (
+    <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)} style={{
       flex: 1, padding: "10px", borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
       border: `1px solid ${tab === id ? T.accent : T.border}`,
       backgroundColor: tab === id ? (T.accentDim || "rgba(16,185,129,0.14)") : "transparent",
@@ -22,8 +26,8 @@ function FinanceSection() {
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <TabBtn id="tax" label="Tax Prep" />
-        <TabBtn id="deductions" label="Deductions" />
+        {tabBtn("tax", "Tax Prep")}
+        {tabBtn("deductions", "Deductions")}
       </div>
       {tab === "tax" ? <TaxPrep /> : <DeductionMemo />}
     </div>

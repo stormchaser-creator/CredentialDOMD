@@ -69,12 +69,12 @@ function NotificationBanner({ onOpenCenter }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <EmailIcon />
-                  <input type="email" placeholder="Email address" value={inlineEmail} onChange={e => setInlineEmail(e.target.value)}
+                  <input type="email" aria-label="Email address" placeholder="Email address" value={inlineEmail} onChange={e => setInlineEmail(e.target.value)}
                     style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: `1px solid ${T.inputBorder}`, backgroundColor: T.input, color: T.text, fontSize: 14, outline: "none" }} />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <TextMsgIcon />
-                  <input type="tel" placeholder="Phone number" value={inlinePhone} onChange={e => setInlinePhone(e.target.value)}
+                  <input type="tel" aria-label="Phone number" placeholder="Phone number" value={inlinePhone} onChange={e => setInlinePhone(e.target.value)}
                     style={{ flex: 1, padding: "8px 12px", borderRadius: 10, border: `1px solid ${T.inputBorder}`, backgroundColor: T.input, color: T.text, fontSize: 14, outline: "none" }} />
                 </div>
                 <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
@@ -137,7 +137,7 @@ function NotificationBanner({ onOpenCenter }) {
       <div style={{ margin: "10px 16px", padding: "10px 14px", borderRadius: 14, backgroundColor: T.input, border: `1px solid ${T.border}`, opacity: 0.8 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: 12, color: T.textMuted }}>{alerts.count} alert{alerts.count > 1 ? "s" : ""} snoozed &middot; next check in {snzDays}d</span>
-          <button onClick={onOpenCenter} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 11, cursor: "pointer" }}>View</button>
+          <button onClick={onOpenCenter} style={{ padding: "0 10px", minHeight: 32, borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 11, cursor: "pointer" }}>View</button>
         </div>
       </div>
     );
@@ -154,10 +154,10 @@ function NotificationBanner({ onOpenCenter }) {
           <AlertIcon />
           <span style={{ fontSize: 14, fontWeight: 700, color: fgColor }}>{alertSummary}</span>
         </div>
-        <button onClick={snooze} style={{ padding: "2px 8px", borderRadius: 6, border: "none", backgroundColor: "rgba(0,0,0,0.08)", color: T.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Snooze</button>
+        <button onClick={snooze} style={{ padding: "0 10px", minHeight: 32, margin: "-6px 0", borderRadius: 6, border: "none", backgroundColor: "rgba(0,0,0,0.08)", color: T.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Snooze</button>
       </div>
       <div style={{ fontSize: 12, color: T.text, marginBottom: 4, lineHeight: 1.3 }}>
-        {sendIsDue || fingerprintChanged ? "Notification due \u2014 send yourself an alert:" : "Alerts active. Renew credentials to clear."}
+        {sendIsDue || fingerprintChanged ? "Notification due. Send yourself an alert:" : "Alerts active. Renew credentials to clear."}
       </div>
       <div style={{ fontSize: 10, color: T.textDim, marginBottom: 8 }}>Checking {freqLabel}{alerts.closestDays <= 30 ? " (escalated)" : ""} until resolved</div>
       <div style={{ display: "flex", gap: 6 }}>

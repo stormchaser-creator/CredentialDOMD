@@ -2,9 +2,10 @@ import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
 import { EmailIcon, TextMsgIcon, AlertIcon } from "../shared/Icons";
-import { generateAlerts, buildNotificationMessage, composeEmail, textAlert } from "../../utils/notifications";
-import { getItemLabel, formatDate, MS_PER_DAY } from "../../utils/helpers";
-import { emailRemindersOn } from "../../utils/reminderPreferences";
+import { generateAlerts, buildNotificationMessage, composeEmail, textAlert, recentNotifications } from "../../utils/notifications";
+import { getItemLabel, formatDate } from "../../utils/helpers";
+import { daysUntilDate } from "../../utils/dateDays.js";
+import { emailRemindersOn, reminderLeadDays } from "../../utils/reminderPreferences";
 
 function NotificationCenter({ open, onClose }) {
   const { data, updateSettings, addItem, theme: T } = useApp();
@@ -57,7 +58,7 @@ function NotificationCenter({ open, onClose }) {
               </div>
               <div style={{ fontSize: 13, color: T.text }}>
                 {alerts.expired.length > 0 && <span style={{ fontWeight: 600 }}>{alerts.expired.length} expired &middot; </span>}
-                {alerts.soon.length > 0 && <span>{alerts.soon.length} expiring within {s.reminderLeadDays || 90} days &middot; </span>}
+                {alerts.soon.length > 0 && <span>{alerts.soon.length} expiring within {reminderLeadDays(s.reminderLeadDays)} days &middot; </span>}
                 {alerts.cmeIssues.length > 0 && <span>{alerts.cmeIssues.length} state{alerts.cmeIssues.length > 1 ? "s" : ""} with CME gaps</span>}
               </div>
             </div>
@@ -83,7 +84,7 @@ function NotificationCenter({ open, onClose }) {
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, textTransform: "uppercase", marginBottom: 6 }}>Expiring Soon</div>
                 {alerts.soon.map((item, i) => {
-                  const daysLeft = Math.ceil((new Date(item.expirationDate) - now) / MS_PER_DAY);
+                  const daysLeft = daysUntilDate(item.expirationDate, now);
                   return (
                     <div key={i} style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -170,8 +171,8 @@ function NotificationCenter({ open, onClose }) {
             {(data.notificationLog || []).length > 0 && (
               <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 12, marginTop: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>Notification History</div>
-                {(data.notificationLog || []).slice(-5).reverse().map((log, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 12, color: T.textMuted }}>
+                {recentNotifications(data.notificationLog).map((log, i) => (
+                  <div key={log.id || i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 12, color: T.textMuted }}>
                     <span>{new Date(log.date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                     <span style={{ textTransform: "capitalize" }}>{log.method} &middot; {log.alertCount} alert{log.alertCount !== 1 ? "s" : ""}</span>
                   </div>

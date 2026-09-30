@@ -33,10 +33,13 @@ test("the actions are the migrations' own list: the first five, then the three a
   assert.deepEqual([...CORRECTION_ACTIONS], actions(WIDENED));
 });
 
-test("an emailed document is one with an inbox type, or a MIME type only email-inbound writes", () => {
+test("an emailed document is one with an inbox type, or the origin email-inbound stamps; never a MIME type alone", () => {
   assert.equal(arrivedByEmail({ type: "email-inbox" }), true);
   assert.equal(arrivedByEmail({ type: "request-attachment-inbox", linkedTo: "x:y" }), true);
-  assert.equal(arrivedByEmail({ type: "application/pdf", mimeType: "application/pdf", linkedTo: "licenses:l" }), true);
+  assert.equal(arrivedByEmail({ type: "application/pdf", mimeType: "application/pdf", origin: "email", linkedTo: "licenses:l" }), true, "filed on arrival");
+  // The sync layer writes mime_type for every app upload too, so a reloaded
+  // upload carries mimeType (INTAKE-003): that is not email.
+  assert.equal(arrivedByEmail({ type: "application/pdf", mimeType: "application/pdf", linkedTo: "licenses:l" }), false, "a reloaded app upload");
   assert.equal(arrivedByEmail({ type: "application/pdf", linkedTo: "licenses:l" }), false, "the app's own upload");
   assert.equal(arrivedByEmail(null), false);
   assert.equal(sectionOf({ type: "email-inbox" }), "inbox");
@@ -85,8 +88,10 @@ test("an emailed document moved out of the inbox, or to another record, is recor
     action: "move_document", request_id: null, inbound_email_id: null,
     before: { section: "inbox", scanType: "agreement", kind: "document" }, after: { section: "locumContracts" },
   });
-  const filed = { id: "d", type: "application/pdf", mimeType: "application/pdf", linkedTo: "customRecords:r1" };
+  const filed = { id: "d", type: "application/pdf", mimeType: "application/pdf", origin: "email", linkedTo: "customRecords:r1" };
   assert.equal(relinkCorrection(filed, "locumContracts:c1").action, "relink_document");
+  const reloadedUpload = { id: "u", type: "application/pdf", mimeType: "application/pdf", linkedTo: "" };
+  assert.equal(relinkCorrection(reloadedUpload, "licenses:l"), null, "linking a reloaded app upload is not a correction of intake");
   assert.equal(relinkCorrection(filed, "customRecords:r2"), null, "same section is not a correction");
   assert.equal(relinkCorrection({ id: "d", type: "application/pdf", linkedTo: "licenses:l" }, "cme:c"), null, "an upload is not intake's doing");
   assert.equal(relinkCorrection(filed, "").after.section, "unlinked");

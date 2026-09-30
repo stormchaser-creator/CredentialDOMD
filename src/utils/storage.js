@@ -1,5 +1,5 @@
 import { DEFAULT_DATA } from "../constants/defaults";
-import { BASE_KEYS, scopedKey, purgeForSignOut } from "./storageScope";
+import { BASE_KEYS, scopedKey, purgeForSignOut, localCopyCurrent } from "./storageScope";
 import { loadDeviceKeys, EXPORT_REDACT_FIELDS, sanitizeCachedBlob, stripDeviceFields } from "../lib/supabase";
 
 const ENV_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
@@ -161,12 +161,32 @@ export async function loadData(userId) {
   return { ...DEFAULT_DATA };
 }
 
+// Whether the last cache write failed because this device's storage is full.
+// The offline copy is then older than what is on screen, and a physician who
+// opens the app offline would see it without being told; AppContext shows it.
+let cacheFull = false;
+const cacheListeners = new Set();
+export function onCacheFullChange(listener) {
+  cacheListeners.add(listener);
+  return () => cacheListeners.delete(listener);
+}
+export function isCacheFull() { return cacheFull; }
+function setCacheFull(next) {
+  if (cacheFull === next) return;
+  cacheFull = next;
+  for (const listener of cacheListeners) { try { listener(next); } catch { /* a listener must not stop a save */ } }
+}
+
 // Save to localStorage as backup cache (Supabase writes happen per-operation
 // in AppContext). `userId` is the Clerk id the data belongs to; with none
 // there is nowhere safe to put it, so nothing is written.
 export async function saveData(data, userId) {
   const key = scopedKey(BASE_KEYS.data, userId);
   if (!key) return false;
+  // Records this tab loaded before this device purged the account's copy (a
+  // data deletion) never go back into the cache: the next load's self-heal
+  // push would send them up again. See LOCAL_FENCE_KEY in storageScope.js.
+  if (!localCopyCurrent(userId)) return false;
   // Keep the cached blob small and secret-free:
   //  - document bytes are re-fetched from Storage on demand, so drop them once
   //    a doc is safely uploaded (a doc with no storagePath still holds its only
@@ -194,11 +214,13 @@ export async function saveData(data, userId) {
     return value;
   });
   let saved = false;
+  let full = false;
   try {
     localStorage.setItem(key, json);
     saved = true;
   } catch (err) {
     if (err?.name === "QuotaExceededError" || err?.code === 22) {
+      full = true;
       console.warn("CredentialDOMD: localStorage quota exceeded.");
     }
   }
@@ -208,6 +230,7 @@ export async function saveData(data, userId) {
       saved = true;
     }
   } catch { /* unavailable */ }
+  setCacheFull(full && !saved);
   return saved;
 }
 

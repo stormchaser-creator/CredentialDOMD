@@ -1,47 +1,72 @@
-import { complianceFor } from "./compliance";
-import { getItemLabel, formatDate, MS_PER_DAY, mailtoHref } from "./helpers";
+import { complianceFor, alertingStates } from "./compliance";
+import { getItemLabel, formatDate, mailtoHref } from "./helpers";
 import { scrubSsn } from "./outgoingText.js";
 import { smsBody, alertTextBody, alertCutNotice } from "./shareText";
 import { isAlertable } from "./lifecycle";
+import { reminderLeadDays } from "./reminderPreferences.js";
+import { alertRecords } from "./alertItems.js";
+import { daysUntilDate, localToday } from "./dateDays.js";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
  *  yet" is a real state (e.g. waiting on the board to extend privileges). */
 export function activeAckFor(data, itemId) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   return (data.alertAcks || []).find(a => a.itemId === itemId && a.until && a.until >= today) || null;
+}
+
+/**
+ * The most recent sends, newest first. loadFromSupabase returns the log
+ * newest first and addItem appends a new send at the end, so position says
+ * nothing: sort by when it was sent (or created).
+ */
+export function recentNotifications(log, n = 5) {
+  const at = (entry) => Date.parse(entry?.date || entry?.createdAt || 0) || 0;
+  return [...(Array.isArray(log) ? log : [])].filter(Boolean).sort((a, b) => at(b) - at(a)).slice(0, n);
+}
+
+/**
+ * Every record that can raise a renewal alert, tagged with its section: the
+ * one list Home's alerts, the Notification Center (and so the bell) and the
+ * reminder email walk (src/utils/alertItems.js alertRecords: the credentials,
+ * travel documents and screenings, ended memberships left out). Copies had
+ * drifted, and memberships' 'Renewal Due' showed on Home but never in the
+ * Notification Center (NOTIFY-002).
+ */
+export function alertableCreds(data) {
+  return alertRecords(data);
 }
 
 export function generateAlerts(data) {
   const now = new Date();
-  const lead = data.settings.reminderLeadDays || 90;
+  // The same clamp (7..365, blank 90) send-reminders applies.
+  const lead = reminderLeadDays(data.settings.reminderLeadDays);
 
-  const allCreds = [
-    ...data.licenses.map(l => ({ ...l, _sec: "licenses", _cat: "License" })),
-    ...data.cme.map(c => ({ ...c, _sec: "cme", _cat: "CME" })),
-    ...data.privileges.map(p => ({ ...p, _sec: "privileges", _cat: "Privilege" })),
-    ...data.insurance.map(i => ({ ...i, _sec: "insurance", _cat: "Insurance" })),
-    ...(data.caseLogs || []).map(c => ({ ...c, _sec: "caseLogs", _cat: "Case" })),
-    ...(data.healthRecords || []).map(h => ({ ...h, _sec: "healthRecords", _cat: "Health" })),
-    ...(data.education || []).map(e => ({ ...e, _sec: "education", _cat: "Education" })),
-    // Records in the physician's own categories warn like any credential.
-    ...(data.customRecords || []).filter(r => r && r.id).map(r => ({ ...r, _sec: "customRecords", _cat: r.categoryName || "Record" })),
-  ];
+  const allCreds = alertableCreds(data);
 
   // Historical, superseded, pending-confirmation and date-unknown records
   // never alert (src/utils/lifecycle.js). A prior residency policy entered
   // with its real dates used to raise a critical "expired" alert.
   const alertable = allCreds.filter(isAlertable);
-  const expired = alertable.filter(i => i.expirationDate && new Date(i.expirationDate) < now && !activeAckFor(data, i.id));
+  // Local calendar days (src/utils/dateDays.js), not UTC midnight.
+  const daysOf = (i) => daysUntilDate(i.expirationDate, now);
+  const expired = alertable.filter(i => i.expirationDate && daysOf(i) < 0 && !activeAckFor(data, i.id));
+  // The exact complement of `expired`. It used to test ceil of a negative
+  // fraction, -0, against >= 0, which put the same item in both lists on its
+  // expiration day (a bell count of 2 for one DEA).
   const soon = alertable.filter(i => {
     if (!i.expirationDate) return false;
     if (activeAckFor(data, i.id)) return false;
-    const d = Math.ceil((new Date(i.expirationDate) - now) / MS_PER_DAY);
-    return d >= 0 && d <= lead;
+    const d = daysOf(i);
+    return d != null && d >= 0 && d <= lead;
   });
 
-  const deg = data.settings.degreeType;
-  const allStates = [data.settings.primaryState, ...(data.settings.additionalStates || [])].filter(Boolean);
+  // The states the ring counts: every state a medical license that can
+  // alert is held in, and the primary and picked ones where no license is
+  // held. A license awaiting confirmation or whose date is not known yet is
+  // a Resolve task, never an alert, so its state's CME raises none either,
+  // picked or not (compliance.js alertingStates).
+  const allStates = alertingStates(data.settings.primaryState, data.settings.additionalStates, data.licenses);
   const cmeIssues = [];
 
   allStates.forEach(st => {
@@ -56,7 +81,11 @@ export function generateAlerts(data) {
       if (!comp.totalMet && !comp.noGeneralReq) issues.push(`${comp.totalEarned}/${comp.totalRequired} total hrs`);
       if (!comp.cat1Met && comp.cat1Required > 0) issues.push(`Cat 1: ${comp.cat1Earned}/${comp.cat1Required} hrs`);
       comp.topicResults.filter(t => !t.met).forEach(t => issues.push(`${t.topic}: ${t.earned}/${t.required} hrs`));
-      if (issues.length) cmeIssues.push({ state: st, issues, daysLeft: comp.daysLeft });
+      // The renewal date the gap counts toward, when a license anchors it:
+      // a fixed date, unlike daysLeft, which changes every day.
+      const end = comp.windowAnchored && comp.windowEnd instanceof Date ? comp.windowEnd : null;
+      const renewal = end ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}` : null;
+      if (issues.length) cmeIssues.push({ state: st, issues, daysLeft: comp.daysLeft, renewal });
     }
   });
 
@@ -64,7 +93,7 @@ export function generateAlerts(data) {
   if (count === 0) return null;
 
   const closestDays = soon.length > 0
-    ? Math.min(...soon.map(s => Math.ceil((new Date(s.expirationDate) - now) / MS_PER_DAY)))
+    ? Math.min(...soon.map(daysOf))
     : Infinity;
 
   // CME shortfalls escalate as the license renewal approaches.
@@ -88,7 +117,10 @@ export function generateAlerts(data) {
   const fpParts = [
     ...expired.map(i => `exp:${i._sec}:${i.expirationDate}`),
     ...soon.map(i => `soon:${i._sec}:${i.expirationDate}`),
-    ...cmeIssues.map(ci => `cme:${ci.state}:${ci.issues.length}:${ci.daysLeft ?? "x"}`),
+    // By state, issue count and renewal date, never daysLeft: a countdown in
+    // the fingerprint changed it every day, and the banner's snooze (which
+    // holds while the fingerprint is unchanged) ended the next morning.
+    ...cmeIssues.map(ci => `cme:${ci.state}:${ci.issues.length}:${ci.renewal ?? "x"}`),
   ];
   const fingerprint = fpParts.sort().join("|");
 
@@ -120,7 +152,7 @@ export function buildNotificationMessage(data, alerts) {
   if (alerts.soon.length > 0) {
     lines.push("", `\u23f0 EXPIRING SOON (${alerts.soon.length}):`);
     alerts.soon.forEach(item => {
-      const daysLeft = Math.ceil((new Date(item.expirationDate) - now) / MS_PER_DAY);
+      const daysLeft = daysUntilDate(item.expirationDate, now);
       const urgency = daysLeft <= 14 ? "URGENT" : daysLeft <= 30 ? "Soon" : "";
       lines.push(`  \u{23f3} ${getItemLabel(item, data.settings.name, item._sec)}: ${fmtDate(item.expirationDate)} (${daysLeft} day${daysLeft !== 1 ? "s" : ""})${urgency ? ` ${urgency}` : ""}`);
       if (item.state) lines.push(`    State: ${item.state}`);

@@ -3,13 +3,15 @@ import { createClient } from "@supabase/supabase-js";
 // Extensions are explicit on purpose: node resolves these specifiers as
 // written, which is what lets scripts/device-secrets.test.mjs import the real
 // redaction and the real hydration allowlist instead of a copy of them.
-import { STORAGE_KEY } from "../constants/defaults.js";
-import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId } from "../utils/storageScope.js";
+import { STORAGE_KEY, LOCAL_ONLY_SETTINGS } from "../constants/defaults.js";
+import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId, adoptedLocalFence, localCopyCurrent, localFence } from "../utils/storageScope.js";
 import { foundingFromProfile } from "../utils/founding.js";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
-import { createContinuityBinding, recoverContinuity, PRODUCTION_CLERK_ISSUER } from "../utils/continuityRecovery.js";
+import { createContinuityBinding, recoverContinuity, continuitySourceSubject, PRODUCTION_CLERK_ISSUER } from "../utils/continuityRecovery.js";
+import { accountDataDeletedAt, honorAccountDataDeletion } from "../utils/dataDeletion.js";
 import { getLockCode, saveLockCode, configureSecretContinuity } from "../utils/secretBox.js";
 import { profileInitializationError } from "../utils/profileIssueDiagnostics.js";
+import { classifyWriteError, writeErrorCode, PERMANENT_RETRY_LIMIT, REQUIRED_COLUMN_DEFAULTS, withRequiredDefaults, documentMime, isUuid, INTEGER_COLUMNS, toIntegerOrNull } from "../utils/syncRules.js";
 
 // The typeof guard is the same one src/constants/defaults.js carries, and for
 // the same reason: this module owns redactForExport, which the export paths and
@@ -88,7 +90,10 @@ function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = tr
       || (globalThis.window?.Clerk?.session || null) !== session) throw accountChangedError();
   };
   guard();
-  const owner = { accountId, guard, check: guard, db: null };
+  // The purge fence this tab's records were loaded under when the write
+  // began (storageScope.js LOCAL_FENCE_KEY). A write that fails after this
+  // device purged the account's copy is not queued for replay.
+  const owner = { accountId, guard, check: guard, db: null, fence: adoptedLocalFence(accountId) };
   if (supabase && cloud) owner.db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     accessToken: async () => {
       owner.check();
@@ -116,13 +121,76 @@ function guardRecord(owner, key, item, previous, existing = false) {
   if (!accessAuthority.allowsMutation(key, item, before, owner.accountId)) throw membershipWriteError();
 }
 
-function recordContext(key, item, previous, existing = false, authUserId) {
+function recordContext(key, item, previous, existing = false, authUserId, { keepOnRefusal = false } = {}) {
   const owner = writeContext(authUserId);
   const before = previous || accessAuthority.previousRecord(key, item?.id, owner.accountId);
-  owner.check = () => guardRecord(owner, key, item, before, existing);
-  owner.check();
+  const needed = accessAuthority.mutationScopes(key, item, before);
+  // guardRecord's rule for an update of unknown provenance (see there).
+  if (existing && key === "documents" && !before) needed.push("credential", "practice");
+  // The scopes this write was decided on. A write that is queued carries
+  // them, so replay decides it on the same ones (replayScopes): a delete
+  // queues only the id, and the record is no longer on this device to ask.
+  owner.scopes = [...new Set(needed)];
+  return authorizeOwner(owner, () => guardRecord(owner, key, item, before, existing),
+    options => accessAuthority.statusFor(owner.scopes, owner.accountId, options), { keepOnRefusal });
+}
+
+// Writes made while the membership answer is being re-checked. The owner of a
+// write whose answer is only old, or whose last check failed, inside the grace
+// after an active one (limitedLaunchAccess writeStatus "verify"), waits for
+// the check it starts (shared by every write waiting then, and decided at the
+// same moment as the change held on the device, holdForAccess):
+//   allowed        the write goes on as any allowed one, under `strict`;
+//   unconfirmed    owner.awaitingAccess: the caller queues it for replay, which
+//                  sends it only once a fresh answer allows it (and the
+//                  database's write policies still decide it then);
+//   refused        owner.authorized rejects with membershipWriteError, and
+//                  nothing is sent or queued. With `keepOnRefusal` (a record
+//                  of work that already left the app: an invoice sent), it
+//                  is queued instead and never taken back: marked refused
+//                  (owner.accessRefused) when the answer is read-only, as
+//                  replay marks a kept save a later answer refuses, and sent
+//                  if the membership allows changes again.
+// While it waits, and when it is only queued, owner.check guards the
+// identity alone. An allowed write keeps the synchronous path it always had:
+// owner.authorized is null.
+function authorizeOwner(owner, strict, status, { keepOnRefusal = false } = {}) {
+  owner.guard();
+  const now = status();
+  if (now.status === "refuse") throw membershipWriteError(now.reason);
+  owner.authorized = null;
+  if (now.status === "allow") { owner.check = strict; owner.check(); return owner; }
+  owner.check = owner.guard;
+  owner.authorized = accessAuthority.verify().then(at => {
+    owner.guard();
+    const settled = status({ at, settled: true });
+    if (settled.status === "refuse") {
+      if (keepOnRefusal !== true) throw membershipWriteError(settled.reason);
+      owner.awaitingAccess = true;
+      owner.accessRefused = settled.reason === "read_only";
+      return;
+    }
+    if (settled.status === "allow") { owner.check = strict; owner.check(); return; }
+    owner.awaitingAccess = true;
+  });
+  // Awaited by the caller; a rejection it never reaches is not unhandled.
+  owner.authorized.catch(() => {});
   return owner;
 }
+// Marks an op queued for want of a membership answer (the notice counts them,
+// and a fresh answer replays them without waiting for the next load).
+const AWAITING_ACCESS = Object.freeze({ awaitingAccess: true });
+// A kept record of work already done outside the app that the answer refused
+// (authorizeOwner keepOnRefusal): queued as replay marks a refused kept save.
+const KEPT_REFUSED = Object.freeze({ awaitingAccess: true, accessRefused: true });
+/** True when this write is to be queued rather than sent (see authorizeOwner). */
+async function heldForAccess(owner) {
+  if (!owner.authorized) return false;
+  await owner.authorized;
+  return owner.awaitingAccess === true;
+}
+/** What a write held by heldForAccess is queued with. */
+const heldMeta = owner => (owner.accessRefused === true ? KEPT_REFUSED : AWAITING_ACCESS);
 
 function guardSettings(owner, settings) {
   owner.guard();
@@ -248,7 +316,11 @@ function refuseUnsynced(collectionKey) {
 export const COLLECTION_KEYS = Object.keys(TABLE_MAP);
 
 // Fields to skip when writing to Supabase (not in DB schema)
-const SKIP_FIELDS = new Set(["data"]); // document base64 data stays local
+// document base64 data stays local; fileMissing is this device's note that
+// Storage had no file for the row (AppContext reconcileDocumentFiles);
+// pendingUpload is its note that the bytes here are a file given again
+// ("Upload it again") that has not reached Storage yet.
+const SKIP_FIELDS = new Set(["data", "file_missing", "pending_upload"]);
 
 // Columns only a server function writes. The app reads them with select * and
 // shows them, but never sends them back: every write here carries the whole
@@ -259,14 +331,61 @@ const SKIP_FIELDS = new Set(["data"]); // document base64 data stays local
 export const SERVER_OWNED_FIELDS = Object.freeze({
   // send-invoice-email, after a confirmed send.
   invoices: Object.freeze(["last_emailed_at", "last_emailed_to"]),
+  // email-inbound, on the documents it creates (migration 20260929230000).
+  documents: Object.freeze(["origin"]),
 });
 
-/** The row the app may write for `item`: snake_case, without device-only or server-owned fields. */
-function clientRow(collectionKey, item) {
-  const row = toSnakeObj(item);
+/**
+ * The row the app may write for `item`: snake_case, without device-only or
+ * server-owned fields.
+ *
+ * A NOT NULL column with no default (cme.category, education.type... see
+ * REQUIRED_COLUMN_DEFAULTS in utils/syncRules.js) left blank rejects the WHOLE
+ * row, and the record then lived on one device only. `mode` "insert" (an
+ * insert or an upsert, which may create the row) fills a blank one with its
+ * default; "update" leaves a blank one out, so a select cleared back to
+ * "Select..." cannot take the rest of the edit down with it. Rows already
+ * queued on a device pass through here on replay, so they land too.
+ */
+function clientRow(collectionKey, item, mode = "insert") {
+  const row = toSnakeObj(mode === "insert" ? withRequiredDefaults(collectionKey, item) : item);
   for (const f of SKIP_FIELDS) delete row[f];
   for (const f of SERVER_OWNED_FIELDS[collectionKey] || []) delete row[f];
+  if (mode === "update") {
+    for (const k of Object.keys(REQUIRED_COLUMN_DEFAULTS[collectionKey] || {})) {
+      const col = camelToSnake(k);
+      if (Object.hasOwn(row, col) && row[col] == null) delete row[col];
+    }
+  }
+  if (collectionKey === "shareLog") repairShareLogRow(row, mode);
+  // An integer column (publications.sort_order) given "1.5" or "abc" rejected
+  // the whole row, so a publication's edit lived on one device. Rounded here,
+  // or left empty, so rows already queued land too.
+  for (const col of INTEGER_COLUMNS[collectionKey] || []) {
+    if (Object.hasOwn(row, col)) row[col] = toIntegerOrNull(row[col]);
+  }
+  // documents.mime_type is NOT NULL. A row that carries its storage path but
+  // not its type (a self-heal push of a document whose bytes were already
+  // stripped from the cache) is given one rather than refused whole.
+  if (collectionKey === "documents" && mode === "insert" && row.storage_path && !row.mime_type) row.mime_type = documentMime(item);
   return row;
+}
+
+// A share_log row cached or queued in an old shape is repaired here, on every
+// way out (insert, update, replay, self-heal), rather than refused on every
+// load: Vera's packet share wrote shared_at (the column is sent_at) and no
+// section (NOT NULL), and two paths wrote a method the CHECK does not allow
+// ("copy" is "clipboard"). Same rules as recordWrite.js shareLogShape, which
+// new entries already pass through. A missing section is filled only where
+// the row may be created ("insert"); an update leaves the stored one alone.
+const SHARE_LOG_METHOD_ALIASES = { copy: "clipboard", download: "share" };
+function repairShareLogRow(row, mode = "insert") {
+  if (Object.hasOwn(row, "shared_at")) {
+    if (row.sent_at == null) row.sent_at = row.shared_at;
+    delete row.shared_at;
+  }
+  if (mode === "insert" && !row.section) row.section = "documents";
+  if (SHARE_LOG_METHOD_ALIASES[row.method]) row.method = SHARE_LOG_METHOD_ALIASES[row.method];
 }
 
 // ─── Profile / Settings ──────────────────────────────────────
@@ -288,6 +407,9 @@ const SETTINGS_TO_PROFILE = {
   theme: "theme",
   fontSize: "font_size",
   showDashboardCredentials: "show_dashboard_credentials",
+  // The July residency began (PGY 1), for the case log's year labels. Blank
+  // means plain academic years. Migration 20260929221000.
+  trainingStartYear: "training_start_year",
   // apiKey / anthropicApiKey are deliberately NOT here: AI keys live on the
   // device only (see deviceKeys below), never in Postgres.
   taxPrep: "tax_prep",
@@ -385,11 +507,40 @@ export function profileRowToSettings(row) {
  * their own default (SettingsSection reads `s.coderModel || "opus"` and
  * `s.assistantModel || "gemini"`).
  *
+ * birthMonthDay (the ACCME learner match field) is here by design, not by
+ * accident: a birth date is an identifier, and identifiers stay on the
+ * device. It came back blank on every online load until it was listed, and
+ * the CME Passport card then said a detail was missing. The trade-off is that
+ * a second device does not see it.
+ *
  * Device keys are not here. They are local-only too, but loadFromSupabase
  * hydrates them from the per-user device slot (loadDeviceKeys), which is a
  * stronger place than the cached settings blob.
  */
-export const LOCAL_ONLY_SETTINGS = ["assistantModel", "coderModel"];
+// birthMonthDay (SYNC-015, SETTINGS-008) had the same fate with no column at
+// all: the Settings birthday reset on every online load and the CME reporting
+// card called it missing. It is part of a date of birth, identifiers stay on
+// the device (no-PHI design), and the Privacy Policy's Profile list does not
+// include it, so it is kept here rather than given a profiles column.
+// The list lives in constants/defaults.js so storageScope.js, which cannot
+// import this module, keeps the same keys when a session ends.
+export { LOCAL_ONLY_SETTINGS };
+
+/**
+ * The settings a JSON backup may put back (Data & Backup > Restore). Derived
+ * from the sync map and the local-only list, so a setting added to either is
+ * restorable without anyone remembering a third list; the hand-kept one had
+ * drifted and silently dropped the tax prep, the setup board and more. Left
+ * out: the admin panels' "seen" stamps and the reminder bookkeeping (when the
+ * last reminder went, a snooze, the alert fingerprint), which describe this
+ * device's past, not the physician's data; and the switches that send
+ * something (utils/restoreBackup.js MESSAGE_SWITCHES: acknowledgements to
+ * requesters, the monthly backup, reminder emails, texts and alerts), which
+ * stay as the physician has them now instead of going back to the file's.
+ */
+const NOT_RESTORED_SETTINGS = new Set(["adminInboxSeenAt", "adminMessagesSeenAt", "adminErrorsSeenAt", "lastNotified", "snoozedUntil", "alertsFingerprint",
+  "ackRequests", "backupMonthly", "notifyEmail", "notifyText", "notifyBrowser"]);
+export const RESTORABLE_SETTINGS = Object.freeze([...Object.keys(SETTINGS_TO_PROFILE), ...LOCAL_ONLY_SETTINGS].filter((k) => !NOT_RESTORED_SETTINGS.has(k)));
 
 /**
  * Cloud settings, plus the local-only keys the cloud never stored.
@@ -611,6 +762,10 @@ export function loadDeviceKeys(authUserId, { adopt = true } = {}) {
 export function saveDeviceKeys(authUserId, updates) {
   if (!authUserId || !updates) return;
   if (!DEVICE_KEY_FIELDS.some(f => f in updates)) return;
+  // Not from a tab whose records predate a purge of this account's copy on
+  // this device (storageScope.js LOCAL_FENCE_KEY): Delete All My Data cleared
+  // the AI keys and the lock code, and a stale tab must not put them back.
+  if (!localCopyCurrent(authUserId)) return;
   let cur = {};
   try { cur = JSON.parse(localStorage.getItem(deviceKeySlot(authUserId)) || "{}") || {}; } catch { /* ignore */ }
   for (const f of DEVICE_KEY_FIELDS) {
@@ -637,79 +792,412 @@ const pendingOpsSlot = (authUserId) =>
   authUserId ? `${BASE_KEYS.pendingOps}:${authUserId}` : null;
 const PENDING_OPS_CAP = 500;
 
-function queuePendingOp(op, collectionKey, payload, owner) {
+// ─── Refused writes ──────────────────────────────────────────
+// A row the database refuses for a reason that never goes away (a blank
+// required column, a value of the wrong type, a column the table lacks) used
+// to be saved on this device, queued, and replayed on every load for ever,
+// while the physician was told nothing: the record was simply missing on
+// every other device and from the monthly backup. Such a refusal is now
+// reported (table and error code only, never a value), shown to the
+// physician by record, and retried at most PERMANENT_RETRY_LIMIT times per app
+// version. Nothing is ever deleted: a later version, or the physician fixing
+// the record, can still make it land.
+const APP_BUILD = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
+const syncIssues = new Map(); // accountId -> Map("collection:id" -> { collectionKey, id, code })
+const syncListeners = new Set();
+let rejectionReporter = null;
+
+/** Where a refused write is reported (the app passes errorReport's reportError). */
+export function setWriteRejectionReporter(fn) {
+  rejectionReporter = typeof fn === "function" ? fn : null;
+}
+
+/** Called with the account id whenever that account's queue or refused records change. */
+export function onSyncChange(listener) {
+  syncListeners.add(listener);
+  return () => syncListeners.delete(listener);
+}
+
+function notifySync(accountId) {
+  for (const listener of syncListeners) { try { listener(accountId); } catch { /* a listener must not stop a write */ } }
+}
+
+/** The records of this account the cloud refused in this session. */
+export function syncIssuesFor(accountId) {
+  return [...(syncIssues.get(accountId)?.values() || [])];
+}
+
+function recordIdOf(payload) {
+  return payload && typeof payload === "object" ? payload.id : payload;
+}
+
+/**
+ * Note the outcome of one write for one record and return how its error is
+ * classified (null on success). A permanent refusal is reported once per
+ * session (errorReport dedupes) and listed for the physician; a later write
+ * of the same record that lands clears it.
+ */
+function noteWriteOutcome(owner, collectionKey, id, error, { report = true } = {}) {
+  const accountId = owner.accountId;
+  const key = `${collectionKey}:${id}`;
+  const issues = syncIssues.get(accountId);
+  if (!error) {
+    if (issues?.delete(key)) notifySync(accountId);
+    return null;
+  }
+  const kind = classifyWriteError(error);
+  if (kind === "permanent" && id) {
+    const code = writeErrorCode(error);
+    if (report) {
+      try { rejectionReporter?.(`Cloud write rejected: ${TABLE_MAP[collectionKey] || collectionKey} ${code}`); } catch { /* reporting never blocks */ }
+    }
+    const next = issues || new Map();
+    next.set(key, { collectionKey, id, code });
+    syncIssues.set(accountId, next);
+    notifySync(accountId);
+  }
+  return kind;
+}
+
+/** What a failed write adds to its queued op, so replay knows how to treat it. */
+function failureMeta(error, kind = classifyWriteError(error)) {
+  return error ? { code: writeErrorCode(error), permanent: kind === "permanent" } : {};
+}
+
+// Queued writes a later full-row write of the same record replaces: an
+// earlier full row (upsert) or a narrow patch of it.
+const SUPERSEDED_OPS = new Set(["upsert", "patch"]);
+const supersedes = (op, collectionKey, id) => SUPERSEDED_OPS.has(op?.op) && op.collectionKey === collectionKey && recordIdOf(op.payload) === id;
+
+function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
   // A device-only collection is never queued: a queued op is a promise to
   // send it later.
   if (op !== "settings" && !isSyncedCollection(collectionKey)) return;
   owner.check();
   const key = pendingOpsSlot(owner.accountId);
   if (!key) return; // no account context yet — nothing safe to namespace under
+  // Begun from records this tab loaded before this device purged the
+  // account's copy (Delete All My Data here, or a server deletion honored
+  // here): queuing it would replay a deleted record into the reopened
+  // account, and the recorded deletion stamp would stop the next load from
+  // purging it. Dropped instead.
+  if (!localCopyCurrent(owner.accountId, owner.fence)) return;
   try {
     const cur = JSON.parse(localStorage.getItem(key) || "[]");
-    const arr = Array.isArray(cur) ? cur : [];
-    arr.push({ op, collectionKey, payload, ts: Date.now(), queueId: crypto.randomUUID() });
+    let arr = Array.isArray(cur) ? cur : [];
+    // A document's queued save carries its file. A second save of the same
+    // document replaces the first instead of queueing the file again (two
+    // copies of a 4 MB data URL filled an iPhone's storage); the file rides
+    // along if the newer save lacks it.
+    const id = recordIdOf(payload);
+    // Queued behind a save of the same record that is waiting for a
+    // membership answer (an edit whose UPDATE found no row because the add is
+    // still queued): it waits for the same answer, and goes up with it.
+    if (!meta.awaitingAccess && id && arr.some(o => o?.awaitingAccess === true && o.collectionKey === collectionKey && recordIdOf(o.payload) === id)) meta = { ...meta, ...AWAITING_ACCESS };
+    if (op === "upsert" && collectionKey === "documents" && id && arr.some(o => supersedes(o, collectionKey, id))) {
+      const bytes = payload.data || arr.filter(o => supersedes(o, collectionKey, id)).map(o => o.payload?.data).filter(Boolean).at(-1);
+      arr = arr.filter(o => !supersedes(o, collectionKey, id));
+      if (bytes && !payload.data) payload = { ...payload, data: bytes };
+    }
+    // The scopes the write was decided on (recordContext), for replay.
+    const scopes = op !== "settings" && Array.isArray(owner.scopes) && owner.scopes.length ? { scopes: owner.scopes } : {};
+    arr.push({ op, collectionKey, payload, ts: Date.now(), queueId: crypto.randomUUID(), ...scopes, ...meta });
     // Bound the queue so one permanently-failing op can't grow without limit.
     localStorage.setItem(key, JSON.stringify(arr.slice(-PENDING_OPS_CAP)));
-  } catch { /* storage unavailable — best effort */ }
+  } catch (err) {
+    // Storage full (a queued document carries its file): the write could not
+    // be kept for another try. Said, never silent.
+    if ((err?.name === "QuotaExceededError" || err?.code === 22) && op !== "settings") {
+      try { rejectionReporter?.(`Pending write not kept: ${TABLE_MAP[collectionKey] || collectionKey} storage_full`); } catch { /* reporting never blocks */ }
+      const id = recordIdOf(payload);
+      if (id) {
+        const issues = syncIssues.get(owner.accountId) || new Map();
+        issues.set(`${collectionKey}:${id}`, { collectionKey, id, code: "storage_full" });
+        syncIssues.set(owner.accountId, issues);
+      }
+    }
+  }
+  notifySync(owner.accountId);
 }
 
-// Low-level, non-queuing writes used by the replay pass. They return a bool so
-// replay can drop only the ops that actually landed and keep the rest.
-async function sbUpsertRow(userId, collectionKey, item, owner) {
-  if (!item?.id) return true; // nothing addressable — drop it
+// Queued writes that would put a record back: a delete or a tombstone of the
+// same record removes them, and replay skips them for a tombstoned id.
+const RECORD_WRITE_OPS = new Set(["upsert", "favorite", "patch"]);
+// A restore's un-delete (clearTombstones) that could not reach the ledger is
+// queued too, as one op per collection holding its ids ({ ids }): one op per
+// record could push other queued writes past PENDING_OPS_CAP. A later delete
+// of one of those records takes it out of the op.
+const UNDELETE_OP = "untombstone";
+const undeleteIds = (op) => (Array.isArray(op?.payload?.ids) ? op.payload.ids : []);
+
+/**
+ * Drop this record's queued writes. A document saved while the upload failed
+ * sat in the queue with its full data URL; deleting it (a patient chart the
+ * read flagged, say) succeeded against nothing, and the next load's replay
+ * uploaded the file and re-created the row behind the tombstone.
+ */
+function dropQueuedWrites(owner, collectionKey, id) {
+  const slot = pendingOpsSlot(owner.accountId);
+  if (!slot || !id) return;
+  noteWriteOutcome(owner, collectionKey, id, null);
+  try {
+    const cur = JSON.parse(localStorage.getItem(slot) || "[]");
+    if (!Array.isArray(cur)) return;
+    let changed = false;
+    const kept = cur.flatMap(op => {
+      if (op?.collectionKey !== collectionKey) return [op];
+      if (RECORD_WRITE_OPS.has(op.op) && recordIdOf(op.payload) === id) { changed = true; return []; }
+      if (op.op !== UNDELETE_OP || !undeleteIds(op).includes(id)) return [op];
+      changed = true;
+      const ids = undeleteIds(op).filter(x => x !== id);
+      return ids.length ? [{ ...op, payload: { ids } }] : [];
+    });
+    if (!changed) return;
+    if (kept.length) localStorage.setItem(slot, JSON.stringify(kept));
+    else localStorage.removeItem(slot);
+  } catch { /* storage unavailable: replay skips it by its tombstone */ }
+  notifySync(owner.accountId);
+}
+
+/**
+ * A full-row write of this record landed: the record's writes queued before
+ * it (ts <= startedAt) are stale. A refused add the physician then fixed used
+ * to stay queued after the fix landed: it failed on every load, was parked,
+ * and listed the record as "Not saved to your account" for ever, and the one
+ * retry each new app version gives a parked op could put its old values over
+ * the fix. Writes queued after this one started are newer and are kept.
+ */
+function dropSupersededWrites(owner, collectionKey, id, startedAt) {
+  const slot = pendingOpsSlot(owner.accountId);
+  if (!slot || !id) return;
+  try {
+    const raw = localStorage.getItem(slot);
+    if (!raw) return;
+    const cur = JSON.parse(raw);
+    if (!Array.isArray(cur)) return;
+    const kept = cur.filter(op => !(supersedes(op, collectionKey, id) && !(Number(op.ts) > startedAt)));
+    if (kept.length === cur.length) return;
+    if (kept.length) localStorage.setItem(slot, JSON.stringify(kept));
+    else localStorage.removeItem(slot);
+  } catch { return; /* storage unavailable: replay drops them once a later write lands */ }
+  notifySync(owner.accountId);
+}
+
+// Writes of a record still in flight, by account, collection and id: adds,
+// live edits, stars and replayed queued writes. A delete waits for the add it
+// undoes instead of deleting nothing and letting the add land after. Every
+// other write of a record takes its turn (takeRecordTurn), so a replayed
+// older copy never lands over a newer add, edit or star (replayForOwner).
+const inFlightInserts = new Map();
+const flightKey = (owner, collectionKey, id) => `${owner.accountId}\u0000${collectionKey}\u0000${id}`;
+async function settleInsert(owner, collectionKey, id) {
+  const pending = inFlightInserts.get(flightKey(owner, collectionKey, id));
+  if (!pending) return;
+  await pending.catch(() => {});
+  owner.check();
+}
+/**
+ * A turn to write this record, taken at once, in call order: `ready` (null
+ * when nothing was in flight) settles once every write of it taken before has
+ * landed, and anything waiting on the record waits for this one too until
+ * `done` is called. Always call `done`.
+ */
+function takeRecordTurn(owner, collectionKey, id) {
+  const key = flightKey(owner, collectionKey, id);
+  const before = inFlightInserts.get(key) || null;
+  const ready = before ? before.then(() => {}, () => {}) : null;
+  let land;
+  const landing = new Promise(resolve => { land = resolve; });
+  const entry = ready ? Promise.all([ready, landing]).then(() => {}) : landing;
+  inFlightInserts.set(key, entry);
+  return { ready, done: () => { land(); if (inFlightInserts.get(key) === entry) inFlightInserts.delete(key); } };
+}
+
+// Low-level, non-queuing writes used by the replay pass. Each returns null when
+// the write landed and the error when it did not, so replay can drop only the
+// ops that landed, keep the rest, and tell a refusal from an outage.
+const UPLOAD_FAILED = Object.freeze({ code: "upload_failed", message: "Document file upload failed" });
+async function sbUpsertRow(userId, collectionKey, item, owner, queuedAt) {
+  if (!item?.id) return null; // nothing addressable — drop it
   const table = tableName(collectionKey);
   const row = clientRow(collectionKey, item);
   row.user_id = userId;
   row.created_at = row.created_at || new Date().toISOString();
-  row.updated_at = row.updated_at || new Date().toISOString();
+  // A queued add carries no updatedAt. Stamped with the time it was queued,
+  // never the time it is replayed: replayed "now", a failed add looked newer
+  // than an edit made after it, and the self-heal then kept the old cloud
+  // copy over the edit on every device.
+  row.updated_at = row.updated_at || new Date(Number(queuedAt) || Date.now()).toISOString();
   if (collectionKey === "documents" && item.data) {
     const path = await uploadForOwner(item, owner);
-    if (!path) return false;
+    if (!path) return UPLOAD_FAILED;
     row.storage_path = path;
-    row.mime_type = item.type || null;
+    row.mime_type = documentMime(item);
     row.size_bytes = item.size || null;
   }
   const { error } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
-  return !error;
+  return error || null;
 }
+// A star that matched no row did not land: the record's add has not reached
+// the cloud yet (it is queued, or still in flight). PostgREST reports that as
+// success, so the star was lost and the replayed add then landed unstarred.
+const NO_ROW = Object.freeze({ code: "no_row", message: "No row matched" });
 async function sbFavoriteRow(userId, collectionKey, item, owner) {
-  if (!item?.id) return true; // nothing addressable — drop it
+  if (!item?.id) return null; // nothing addressable — drop it
   const table = tableName(collectionKey);
-  const { error } = await writeRequest(owner, () => owner.db
+  const { data, error } = await writeRequest(owner, () => owner.db
     .from(table)
     .update({ favorite: !!item.favorite })
     .eq("id", item.id)
-    .eq("user_id", userId));
-  return !error;
+    .eq("user_id", userId)
+    .select("id"));
+  if (error) return error;
+  return Array.isArray(data) && data.length === 0 ? NO_ROW : null;
 }
-async function sbDeleteRow(userId, collectionKey, itemId, owner) {
-  if (!itemId) return true;
+
+/**
+ * Queue a star. A queued save of the same record carries the star too, so the
+ * record lands starred whatever order replay meets them in.
+ */
+function queueFavorite(owner, collectionKey, payload, meta) {
+  const slot = pendingOpsSlot(owner.accountId);
+  try {
+    const cur = JSON.parse(localStorage.getItem(slot) || "[]");
+    if (Array.isArray(cur) && cur.some(op => op?.op === "upsert" && op.collectionKey === collectionKey && recordIdOf(op.payload) === payload.id)) {
+      localStorage.setItem(slot, JSON.stringify(cur.map(op => (op?.op === "upsert" && op.collectionKey === collectionKey && recordIdOf(op.payload) === payload.id
+        ? { ...op, payload: { ...op.payload, favorite: payload.favorite } } : op))));
+    }
+  } catch { /* storage unavailable: the favorite op below still carries it */ }
+  queuePendingOp("favorite", collectionKey, payload, owner, meta);
+}
+
+/**
+ * A star of this record landed. The record's writes queued before it began
+ * (ts <= startedAt) still hold the old star: a full row carries the new one
+ * from now on, and a queued star is dropped. Otherwise replay, reading the
+ * queue after the star, sent the older row (favorite and all) over it.
+ */
+function settleQueuedStar(owner, collectionKey, payload, startedAt) {
+  const slot = pendingOpsSlot(owner.accountId);
+  if (!slot || !payload?.id) return;
+  try {
+    const raw = localStorage.getItem(slot);
+    if (!raw) return;
+    const cur = JSON.parse(raw);
+    if (!Array.isArray(cur)) return;
+    let changed = false;
+    const next = cur.flatMap(op => {
+      if (op?.collectionKey !== collectionKey || recordIdOf(op.payload) !== payload.id || Number(op.ts) > startedAt) return [op];
+      if (op.op === "favorite") { changed = true; return []; }
+      if (op.op !== "upsert" || !op.payload || typeof op.payload !== "object" || op.payload.favorite === payload.favorite) return [op];
+      changed = true;
+      return [{ ...op, payload: { ...op.payload, favorite: payload.favorite } }];
+    });
+    if (!changed) return;
+    if (next.length) localStorage.setItem(slot, JSON.stringify(next));
+    else localStorage.removeItem(slot);
+  } catch { return; /* storage unavailable */ }
+  notifySync(owner.accountId);
+}
+// `target` is the record id, or for a document { id, storagePath }: its file
+// is removed first (documentObjectPaths: the stored path when it has the
+// exact shape user_<id>/<this doc id>, and <sign-in id>/<id>), and a failed
+// removal keeps the op queued. An op queued before the path rode along holds
+// only the id, so the path is read from the row before the row goes; a failed
+// read keeps the op queued too.
+async function sbDeleteRow(userId, collectionKey, target, owner) {
+  const itemId = recordIdOf(target);
+  if (!itemId) return null;
   const table = tableName(collectionKey);
+  if (collectionKey === "documents") {
+    let stored = target && typeof target === "object" ? target.storagePath : null;
+    if (!stored) {
+      const { data: row, error: readErr } = await writeRequest(owner, () => owner.db.from(table)
+        .select("storage_path").eq("id", itemId).eq("user_id", userId).maybeSingle());
+      if (readErr) return readErr;
+      stored = row?.storage_path || null;
+    }
+    const rmErr = await removeDocumentObject(owner, itemId, stored);
+    if (rmErr) return rmErr;
+  }
   const { error } = await writeRequest(owner, () => owner.db.from(table).delete().eq("id", itemId).eq("user_id", userId));
-  return !error;
+  return error || null;
 }
+// A partial write (the link sweep's { id, linkedTo }): replayed as an UPDATE of
+// those columns only. Replayed as an upsert, INSERT ... ON CONFLICT checked the
+// NOT NULL columns (documents.name, mime_type, storage_path) before it found
+// the conflict, so it failed with 23502 on every load although the row
+// existed. A patch for a row that no longer exists is simply done.
+async function sbPatchRow(userId, collectionKey, item, owner) {
+  if (!item?.id) return null;
+  const table = tableName(collectionKey);
+  const row = clientRow(collectionKey, item, "update");
+  delete row.user_id;
+  delete row.created_at;
+  row.updated_at = new Date().toISOString();
+  const { error } = await writeRequest(owner, () => owner.db.from(table).update(row).eq("id", item.id).eq("user_id", userId));
+  return error || null;
+}
+
+// An "upsert" queued by an older version for a partial document write (no
+// name: the link sweep sent only id and linkedTo) can never insert. It is
+// replayed as the patch it always was.
+const isLegacyPartialDocument = (op) => op.op === "upsert" && op.collectionKey === "documents"
+  && op.payload && typeof op.payload === "object" && !op.payload.name && !op.payload.data;
+
 async function sbTombstoneRow(userId, collectionKey, itemId, owner) {
-  if (!itemId) return true;
+  if (!itemId) return null;
   const { error } = await writeRequest(owner, () => owner.db.from("deleted_items").upsert(
     { item_id: itemId, user_id: userId, collection: collectionKey },
     { onConflict: "item_id" }
   ));
-  return !error;
+  return error || null;
+}
+
+async function sbUntombstoneRows(userId, itemIds, owner) {
+  const { error } = await writeRequest(owner, () => owner.db.from("deleted_items").delete().eq("user_id", userId).in("item_id", itemIds));
+  return error || null;
 }
 
 // Replay the queued writes for this account, in order, dropping each only on
 // success. Call after the profile is known and BEFORE loadFromSupabase, so the
 // replayed rows are part of the cloud snapshot the merge then reads back.
 const replayInFlight = new Map();
-export function replayPendingOps(profileId, authUserId = getActiveUserId() || clerkSub()) {
+// `tombstones` (the account's deleted ids, when the caller read them) makes
+// replay drop a queued write that would re-create a record deleted anywhere.
+export function replayPendingOps(profileId, authUserId = getActiveUserId() || clerkSub(), { tombstones = null } = {}) {
   const key = pendingOpsSlot(authUserId);
   if (replayInFlight.has(key)) return replayInFlight.get(key);
-  const task = replayForOwner(profileId, authUserId).finally(() => replayInFlight.delete(key));
+  const task = oneTabAtATime(key, () => replayForOwner(profileId, authUserId, tombstones)).finally(() => replayInFlight.delete(key));
   replayInFlight.set(key, task);
   return task;
 }
 
-async function replayForOwner(profileId, authUserId) {
+// One tab of this browser replays an account's queue at a time (the Web Locks
+// API; the queue is in localStorage, which every tab shares). Two tabs that
+// read the same queue each sent every op in it, and one could land an older
+// copy after the other had sent a newer one. A tab that finds another
+// replaying sends nothing and does not wait: that tab is sending these ops,
+// and a tab frozen in the background mid-replay must never hold up this
+// one's load. The next answer or load replays whatever is still queued.
+// Without the API (an older browser), each tab replays as it always did.
+async function oneTabAtATime(key, run) {
+  const locks = globalThis.navigator?.locks;
+  if (!key || typeof locks?.request !== "function") return run();
+  let ran = false;
+  try {
+    return await locks.request(`credentialdomd:replay:${key}`, { ifAvailable: true }, lock => {
+      if (!lock) return { refused: [], skipped: true };
+      ran = true;
+      return run();
+    });
+  } catch (error) {
+    if (ran) throw error;
+    return run(); // the lock manager itself failed: replay as before
+  }
+}
+
+async function replayForOwner(profileId, authUserId, tombstones = null) {
   if (!supabase || !profileId) return;
   let owner;
   try { owner = writeContext(authUserId); }
@@ -722,69 +1210,228 @@ async function replayForOwner(profileId, authUserId) {
   // Give legacy operations identities before awaiting. Remove only completed
   // IDs from a fresh read, preserving appended work (including identical rows).
   ops = ops.map(op => ({ ...op, queueId: op.queueId || crypto.randomUUID() }));
-  try { localStorage.setItem(key, JSON.stringify(ops)); } catch { return; }
+  const written = JSON.stringify(ops);
+  try { localStorage.setItem(key, written); } catch { return; }
+  // The queue as read belongs to the device's current purge fence. Another
+  // tab purging the account's copy mid-replay (a data deletion) ends it: the
+  // rest of these ops are writes from before that deletion.
+  const fence = localFence(owner.accountId);
   const completed = new Set();
-  for (const op of ops) {
+  // Failed ops stay queued with their attempt count and error code. A write
+  // refused as permanent is parked after PERMANENT_RETRY_LIMIT attempts: kept,
+  // shown, and tried again only by a newer app version, which may have fixed
+  // the row's shape.
+  const failed = new Map();
+  // An op as the queue holds it now, or null when it was taken out since this
+  // pass read the queue (the record was deleted, or a newer full write of it
+  // landed): sending it would put an older copy back. Read from storage before
+  // every send, because other tabs of this browser change the same queue (a
+  // live edit landing there takes this record's older copies out), and a star
+  // that landed meanwhile rewrites the record's queued row (settleQueuedStar).
+  // Parsed again only when the stored queue changed.
+  let seenRaw = written, live = new Map(ops.map(op => [op.queueId, op]));
+  const queuedNow = op => {
+    let raw;
+    try { raw = localStorage.getItem(key); } catch { return op; /* unreadable: sent as read */ }
+    if (raw !== seenRaw) {
+      let current;
+      try { current = JSON.parse(raw || "[]"); } catch { return op; }
+      seenRaw = raw;
+      live = new Map((Array.isArray(current) ? current : []).filter(item => item?.queueId).map(item => [item.queueId, item]));
+    }
+    return live.get(op.queueId) || null;
+  };
+  // Saves kept for want of a membership answer (awaitingAccess) that the
+  // answer now refuses outright (the membership is read-only: writeStatus
+  // "read_only", not an answer that is only old) are marked accessRefused.
+  // They stay queued and on this device: the queue holds only the new copy
+  // (a delete, only the id), so nothing here could put the old one back, and
+  // what the member typed (an invoice that already went out) is kept. The
+  // notice says they were not saved instead of promising a sync, the caller
+  // reports them (the result's `refused`), and a later answer that allows
+  // them again sends them and takes the mark off.
+  const refusedNow = new Map(), allowedAgain = new Set();
+  for (const [index, op] of ops.entries()) {
     try { owner.guard(); } catch { break; }
+    if (localFence(owner.accountId) !== fence) break;
+    if (!queuedNow(op)) continue;
     // Queued before collections were checked (identityVault from the
     // 2026-09-18 live window): dropped from the queue without being sent.
     if (op.op !== "settings" && !isSyncedCollection(op.collectionKey)) { completed.add(op.queueId); continue; }
-    // Keep denied operations in their original account queue for a later authorized sync.
-    const permitted = op.op === "settings" ? allowsSettingsChange(op.payload)
-      : accessAuthority.allowsMutation(op.collectionKey, typeof op.payload === "object" ? op.payload : { id: op.payload }, null, owner.accountId);
-    const documentReplayAllowed = op.collectionKey !== "documents" || ["credential", "practice"].every(scope => accessAuthority.allows(scope, "write", owner.accountId));
-    if (!permitted || !documentReplayAllowed) continue;
-    const item = typeof op.payload === "object" ? op.payload : { id: op.payload };
-    const previous = accessAuthority.previousRecord(op.collectionKey, item?.id, owner.accountId);
+    // Deleted since it was queued (on this device or another): sending it
+    // would re-create the record behind its tombstone.
+    if (tombstones?.has?.(recordIdOf(op.payload)) && RECORD_WRITE_OPS.has(op.op)) { completed.add(op.queueId); continue; }
+    if (op.parkedBuild && op.parkedBuild === APP_BUILD) {
+      // Parked: still listed for the physician, not sent or reported again.
+      if (op.permanent && op.op !== "settings") noteWriteOutcome(owner, op.collectionKey, recordIdOf(op.payload), { code: op.code || "unknown" }, { report: false });
+      continue;
+    }
+    // Keep denied operations in their original account queue for a later
+    // authorized sync. Decided on the scopes the write that queued it was
+    // decided on (replayScopes), and refused or marked refused only for one of
+    // those: a Credential-only member's kept save of a document filed to a
+    // licence is not held back, nor called refused, for want of Practice.
+    const needed = op.op === "settings" ? null : replayScopes(op, owner.accountId);
+    const writes = () => needed.every(scope => accessAuthority.allows(scope, "write", owner.accountId));
+    const permitted = op.op === "settings" ? allowsSettingsChange(op.payload) : writes();
+    if (!permitted) {
+      if (op.awaitingAccess === true && op.accessRefused !== true && replayRefusal(op, needed, owner.accountId) === "read_only") {
+        refusedNow.set(op.queueId, op.op === "settings" ? "settings" : op.collectionKey);
+      }
+      continue;
+    }
+    if (op.accessRefused === true) allowedAgain.add(op.queueId);
     owner.check = op.op === "settings" ? () => guardSettings(owner, op.payload)
-      : () => {
-        guardRecord(owner, op.collectionKey, item, previous, true);
-        if (op.collectionKey === "documents" && !["credential", "practice"].every(scope => accessAuthority.allows(scope, "write", owner.accountId))) throw membershipWriteError();
-      };
-    let ok = false;
+      : () => { owner.guard(); if (!writes()) throw membershipWriteError(); };
+    let error = null;
+    // This record's turn. A live save or star of it made while this is sent
+    // waits for it to land, so the newer copy lands last. One already in
+    // flight lands first: when it was a full write it took this older copy
+    // out of the queue, and when it was a star it put itself into the copy,
+    // so what is sent is the op as the queue holds it after that.
+    const recordId = RECORD_WRITE_OPS.has(op.op) ? recordIdOf(op.payload) : null;
+    const turn = recordId ? takeRecordTurn(owner, op.collectionKey, recordId) : null;
     try {
-      if (op.op === "upsert") {
-        ok = await sbUpsertRow(profileId, op.collectionKey, op.payload, owner);
+      if (turn?.ready) {
+        await turn.ready;
+        try { owner.guard(); } catch { break; }
+        if (localFence(owner.accountId) !== fence) break;
+      }
+      const current = queuedNow(op);
+      if (!current) continue;
+      const payload = current.payload;
+      if (op.op === "patch" || isLegacyPartialDocument(op)) {
+        error = await sbPatchRow(profileId, op.collectionKey, payload, owner);
+      } else if (op.op === "upsert") {
+        error = await sbUpsertRow(profileId, op.collectionKey, payload, owner, op.ts);
       } else if (op.op === "favorite") {
-        ok = await sbFavoriteRow(profileId, op.collectionKey, op.payload, owner);
+        error = await sbFavoriteRow(profileId, op.collectionKey, payload, owner);
+        // No row: kept only while a save of that record is still waiting in
+        // the queue (it replays and carries the star). With none left the
+        // record is gone (deleted on another device), and the star is dropped
+        // rather than retried for ever.
+        if (error === NO_ROW) {
+          const id = recordIdOf(op.payload);
+          const waiting = ops.some(o => o.op === "upsert" && o.collectionKey === op.collectionKey && recordIdOf(o.payload) === id && !completed.has(o.queueId));
+          if (!waiting) error = null;
+        }
       } else if (op.op === "delete") {
-        ok = await sbDeleteRow(profileId, op.collectionKey, op.payload, owner);
-        if (ok) ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload, owner);
+        error = await sbDeleteRow(profileId, op.collectionKey, payload, owner);
+        if (!error) error = await sbTombstoneRow(profileId, op.collectionKey, recordIdOf(payload), owner);
       } else if (op.op === "settings") {
         // Reapply the queued settings patch to the profile row. Later queued
         // patches overwrite earlier ones in replay order, which is the same
         // last-wins the live path has.
-        try {
-          const row = settingsToProfileRow(op.payload || {});
-          row.updated_at = new Date().toISOString();
-          const { error } = await writeRequest(owner, () => owner.db.from("profiles").update(row).eq("id", profileId));
-          // A duplicate email (profiles_email_unique_key, 20260903e) is the one
-          // failure retrying cannot fix: another account holds that address and
-          // still will next time. Replay everything else rather than dropping
-          // the physician's whole queued patch over one refused field.
-          if (error && error.code === "23505" && "email" in row) {
-            const { email: _refused, ...rest } = row;
-            const retry = await writeRequest(owner, () => owner.db.from("profiles").update(rest).eq("id", profileId));
-            ok = !retry.error;
-          } else {
-            ok = !error;
-          }
-        } catch { ok = false; }
+        const row = settingsToProfileRow(payload || {});
+        row.updated_at = new Date().toISOString();
+        const first = await writeRequest(owner, () => owner.db.from("profiles").update(row).eq("id", profileId));
+        error = first.error || null;
+        // A duplicate email (profiles_email_unique_key, 20260903e) is the one
+        // failure retrying cannot fix: another account holds that address and
+        // still will next time. Replay everything else rather than dropping
+        // the physician's whole queued patch over one refused field.
+        if (error && error.code === "23505" && "email" in row) {
+          const { email: _refused, ...rest } = row;
+          const retry = await writeRequest(owner, () => owner.db.from("profiles").update(rest).eq("id", profileId));
+          error = retry.error || null;
+        }
       } else if (op.op === "tombstone") {
-        ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload, owner);
-      } else {
-        ok = true; // unknown op shape — discard rather than retry forever
+        error = await sbTombstoneRow(profileId, op.collectionKey, payload, owner);
+      } else if (op.op === UNDELETE_OP) {
+        // A restore brought these records back while the ledger was out of
+        // reach. Once their markers are gone, a save of one later in this
+        // pass is no longer "deleted since it was queued", and the load that
+        // follows pushes this device's restored copies up instead of hiding
+        // them.
+        const ids = undeleteIds(current).filter(isUuid);
+        for (let i = 0; i < ids.length && !error; i += 100) error = await sbUntombstoneRows(profileId, ids.slice(i, i + 100), owner);
+        if (!error) for (const id of ids) tombstones?.delete?.(id);
       }
-    } catch { ok = false; }
-    if (ok) completed.add(op.queueId);
+      // An unknown op shape falls through with no error: discarded rather
+      // than retried for ever.
+    } catch (thrown) {
+      // An account change stops the pass; anything else is an outage.
+      if (thrown?.code === "membership_account_changed") break;
+      error = thrown || { message: "replay failed" };
+    } finally {
+      turn?.done();
+    }
+    if (!error) {
+      completed.add(op.queueId);
+      if (op.op !== "settings") noteWriteOutcome(owner, op.collectionKey, recordIdOf(op.payload), null);
+      // A full row landed: the same record's earlier queued rows and patches
+      // are stale (a refused add the physician has since fixed, say). They
+      // leave the queue now instead of failing, being parked and listing
+      // the record as not saved on every later load.
+      const id = recordIdOf(op.payload);
+      if (id && op.op === "upsert" && !isLegacyPartialDocument(op)) {
+        for (const earlier of ops.slice(0, index)) {
+          if (supersedes(earlier, op.collectionKey, id)) { completed.add(earlier.queueId); failed.delete(earlier.queueId); }
+        }
+      }
+      continue;
+    }
+    const kind = op.op === "settings" ? classifyWriteError(error)
+      : noteWriteOutcome(owner, op.collectionKey, recordIdOf(op.payload), error);
+    const attempts = (Number(op.attempts) || 0) + 1;
+    const permanent = kind === "permanent";
+    failed.set(op.queueId, {
+      attempts, code: writeErrorCode(error), permanent,
+      parkedBuild: permanent && attempts >= PERMANENT_RETRY_LIMIT ? APP_BUILD : undefined,
+    });
   }
+  const refused = new Set();
   try {
     const current = JSON.parse(localStorage.getItem(key) || "[]");
-    if (!Array.isArray(current)) return;
-    const remaining = current.filter(op => !completed.has(op.queueId));
+    if (!Array.isArray(current)) return { refused: [] };
+    const remaining = current.filter(op => !completed.has(op.queueId))
+      .map(op => failed.has(op.queueId) ? { ...op, ...failed.get(op.queueId) } : op)
+      .map(op => {
+        if (refusedNow.has(op.queueId)) { refused.add(refusedNow.get(op.queueId)); return { ...op, accessRefused: true }; }
+        if (!allowedAgain.has(op.queueId)) return op;
+        const { accessRefused: _allowedAgain, ...rest } = op;
+        return rest;
+      });
     if (remaining.length) localStorage.setItem(key, JSON.stringify(remaining));
     else localStorage.removeItem(key);
   } catch { /* ignore */ }
+  notifySync(owner.accountId);
+  // The sections of the saves marked refused by this pass, for the report.
+  return { refused: [...refused] };
+}
+
+// Why a queued op may not be sent now, as the membership answer says
+// (writeStatus reason, "read_only" when the answer refuses it outright), or
+// null when it may be, or the authority cannot say. `needed`: replayScopes.
+function replayRefusal(op, needed, accountId) {
+  if (typeof accessAuthority.statusFor !== "function") return null;
+  const result = op.op === "settings" ? accessAuthority.settingsStatus(op.payload, accountId)
+    : accessAuthority.statusFor(needed, accountId);
+  return result?.status === "refuse" ? result.reason : null;
+}
+
+// The scopes a queued op is sent under: the ones the write that queued it was
+// decided on (recordContext; op.scopes), with the record as it was then. A
+// delete, a tombstone or a star queues only the id, and the record is gone
+// from this device (or never said where it was filed), so nothing here could
+// work them out again. A save's payload is the record, so where it is filed
+// counts too. An op queued without them (by an older version) is decided as a
+// live update of it is: by the record on this device, and on both scopes for
+// a document whose record is not known (guardRecord's unknown provenance).
+const SCOPES = ["credential", "practice"];
+const RECORD_PAYLOAD_OPS = new Set(["upsert", "patch"]);
+function replayScopes(op, accountId) {
+  const item = op.payload && typeof op.payload === "object" ? op.payload : { id: op.payload };
+  const previous = accessAuthority.previousRecord(op.collectionKey, item.id, accountId) || null;
+  const recorded = Array.isArray(op.scopes) && op.scopes.length > 0 && op.scopes.every(scope => SCOPES.includes(scope)) ? op.scopes : null;
+  if (recorded) {
+    return RECORD_PAYLOAD_OPS.has(op.op)
+      ? [...new Set([...recorded, ...accessAuthority.mutationScopes(op.collectionKey, item, previous || item)])]
+      : [...recorded];
+  }
+  const needed = accessAuthority.mutationScopes(op.collectionKey, item, previous);
+  if (op.collectionKey === "documents" && !previous) needed.push(...SCOPES);
+  return [...new Set(needed)];
 }
 
 // ─── Beta access gate ────────────────────────────────────────
@@ -803,6 +1450,16 @@ export async function touchLastSeen() {
 }
 
 // ─── Ensure profile exists (now uses auth user id) ──────────
+// The bound development identity of a continuity account, from the
+// authenticated binding ensureProfile validated this session, by production
+// subject. Delete All My Data purges that old namespace on this device too:
+// it holds the same member's development-era copy (license and DEA numbers,
+// vault), and every other device of the member purges it for the deletion.
+const boundContinuitySources = new Map();
+export function boundContinuitySource(userId) {
+  return (userId && boundContinuitySources.get(userId)) || null;
+}
+
 export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
   if (!supabase || !userId) return null;
   const owner = writeContext(userId);
@@ -820,12 +1477,29 @@ export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
       owner.check();
       initializedProfileId = receipt.profileId;
       configureSecretContinuity(null);
+      let binding = null;
+      boundContinuitySources.delete(userId);
       if (receipt.continuity) {
         stage = "binding";
-        const binding = createContinuityBinding(receipt, { subject: userId, issuer: PRODUCTION_CLERK_ISSUER,
+        binding = createContinuityBinding(receipt, { subject: userId, issuer: PRODUCTION_CLERK_ISSUER,
           session, authenticatedAt, isCurrent: () => {
             try { owner.check(); return globalThis.window?.Clerk?.session === session; } catch { return false; }
           } });
+        boundContinuitySources.set(userId, continuitySourceSubject(binding, userId));
+      }
+      // The server deleted this account's data (Delete All My Data on another
+      // device, or the deletion 7 days after a cancellation) and has reopened
+      // it empty. Everything this device holds for it predates that, so it
+      // goes BEFORE recovery can copy the old development-era copy across and
+      // before AppContext replays the queue or pushes a stale cache back up.
+      // Once per stamp; see src/utils/dataDeletion.js.
+      if (receipt.dataDeletedAt) {
+        stage = "purge";
+        await honorAccountDataDeletion(userId, receipt.dataDeletedAt,
+          { sourceSubject: binding ? continuitySourceSubject(binding, userId) : null });
+        owner.check();
+      }
+      if (binding) {
         stage = "recovery";
         let recovered;
         try { recovered = await recoverContinuity(binding); }
@@ -883,6 +1557,20 @@ export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
   throw new Error("Your account could not be initialized. Please try again.");
 }
 
+// The account's data-deletion stamp, read on its own: deleted_at while a
+// wiped account is still closed, data_deleted_at once it has reopened
+// (migration 20260930020000). AppContext asks each time the app returns to
+// the foreground, so a device left open while Delete All My Data ran on
+// another one stops showing the deleted records. Two columns of the member's
+// own row; RLS limits it to that row. Throws on a failed read.
+export async function readAccountDataDeletion(authUserId) {
+  if (!supabase || !authUserId) return null;
+  const { data, error } = await supabase.from("profiles")
+    .select("deleted_at,data_deleted_at").eq("auth_user_id", authUserId).maybeSingle();
+  if (error) throw error;
+  return accountDataDeletedAt(data);
+}
+
 // ─── Load all data from Supabase ─────────────────────────────
 export async function loadFromSupabase(userId) {
   if (!supabase || !userId) return null;
@@ -902,6 +1590,12 @@ export async function loadFromSupabase(userId) {
   // Fetch all collections in parallel. PostgREST caps any single response at
   // 1,000 rows — a career case log blows straight past that, so every
   // collection pages until a short page says it has everything.
+  //
+  // The order must be total. created_at alone ties (a restore stamps a whole
+  // batch with one time), and Postgres promises no order among ties between
+  // two LIMIT/OFFSET queries, so a row in a tie at the 1,000 boundary could
+  // come back on both pages or on neither. id (the primary key) breaks every
+  // tie; duplicates are dropped as well, in case a row moved between pages.
   const fetchAll = async (key) => {
     const PAGE = 1000;
     let rows = [];
@@ -911,10 +1605,20 @@ export async function loadFromSupabase(userId) {
         .select("*")
         .eq("user_id", profileId)
         .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
         .range(start, start + PAGE - 1);
       if (error) return { data: rows.length ? rows : null, error };
       rows = rows.concat(data || []);
-      if (!data || data.length < PAGE) return { data: rows, error: null };
+      if (!data || data.length < PAGE) {
+        const seen = new Set();
+        const unique = rows.filter((r) => {
+          if (r?.id == null) return true;
+          if (seen.has(r.id)) return false;
+          seen.add(r.id);
+          return true;
+        });
+        return { data: unique, error: null };
+      }
     }
   };
   const collections = COLLECTION_KEYS;
@@ -953,11 +1657,73 @@ export async function loadFromSupabase(userId) {
 }
 
 // ─── Save settings to Supabase ───────────────────────────────
+// A profile field saves on every keystroke. Those saves went out side by
+// side, one PATCH each, and whichever the server committed last won: a save
+// held up on a slow network landed after the one for the next letter, and
+// the profile kept "Spanis" for "Spanish" and a phone number short a digit
+// (SETTINGS-007). Saves for one profile now go out one at a time, in the
+// order they were made. A save still waiting whose every field a later save
+// also carries is not sent when that later save is allowed as it stands:
+// the later one writes the newer values, so typing never builds a backlog of
+// one request per letter.
+const settingsLines = new Map();
+function inProfileOrder(key, fields, replaces, send) {
+  let line = settingsLines.get(key);
+  if (!line) settingsLines.set(key, line = { tail: Promise.resolve(), waiting: [] });
+  const turn = { fields: new Set(fields), superseded: false };
+  if (replaces) for (const earlier of line.waiting) if ([...earlier.fields].every(f => turn.fields.has(f))) earlier.superseded = true;
+  line.waiting.push(turn);
+  const run = line.tail.then(() => {
+    line.waiting.splice(line.waiting.indexOf(turn), 1);
+    return turn.superseded ? null : send();
+  });
+  // A save that fails does not hold up the next one.
+  const tail = run.then(() => {}, () => {});
+  line.tail = tail;
+  tail.then(() => { if (line.tail === tail) settingsLines.delete(key); });
+  return run;
+}
+
+// A save that has had no answer for this long ends as a failed one: its
+// request is cancelled, it is queued for the next load like any save the
+// network lost, and the saves waiting behind it go on. With no limit, one
+// PATCH stalled on a captive portal or a dead cellular link held every later
+// change to the profile (the rest of the field, the theme, the notification
+// switches) in memory, neither sent nor queued, and a reload lost them all.
+export const SETTINGS_SEND_LIMIT_MS = 15_000;
+function settingsRequest(owner, build) {
+  const controller = new AbortController();
+  let timer;
+  const expired = new Promise(resolve => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve({ data: null, error: { code: "settings_timeout", message: "The save had no answer and was cancelled." } });
+    }, SETTINGS_SEND_LIMIT_MS);
+  });
+  return writeRequest(owner, () => Promise.race([build(controller.signal), expired])).finally(() => clearTimeout(timer));
+}
+
 export async function saveSettings(userId, settings, authUserId) {
   const owner = writeContext(authUserId);
-  owner.check = () => guardSettings(owner, settings);
-  owner.check();
-  saveDeviceKeys(owner.accountId, settings);
+  authorizeOwner(owner, () => guardSettings(owner, settings), options => accessAuthority.settingsStatus(settings, owner.accountId, options));
+  // The identity and the membership decision are taken now, when the change
+  // was made, and an allowed change's device keys (never sent) are kept now
+  // too; only the sending waits its turn.
+  const allowedNow = !owner.authorized;
+  if (allowedNow) saveDeviceKeys(owner.accountId, settings);
+  return inProfileOrder(`${owner.accountId}\u0000${userId || ""}`, Object.keys(settings || {}), allowedNow,
+    () => sendSettings(owner, userId, settings, allowedNow));
+}
+
+async function sendSettings(owner, userId, settings, deviceKeysSaved) {
+  if (owner.authorized && await heldForAccess(owner)) {
+    // Kept on this device while membership could not be confirmed: its
+    // device keys are saved here, and the rest is queued like an offline edit.
+    saveDeviceKeys(owner.accountId, settings);
+    queuePendingOp("settings", "settings", redactForExport(settings), owner, AWAITING_ACCESS);
+    return null;
+  }
+  if (!deviceKeysSaved) saveDeviceKeys(owner.accountId, settings);
   if (!supabase || !userId) {
     // Offline (or before the profile loads) a settings edit has nowhere to
     // go and used to vanish on the next cloud merge. Queue it like any other
@@ -972,11 +1738,12 @@ export async function saveSettings(userId, settings, authUserId) {
   row.updated_at = new Date().toISOString();
   // Read the row back so a server-enforced value (e.g. the identity lock on
   // email) is surfaced instead of being silently cached as whatever we sent.
-  const { data, error } = await writeRequest(owner, () => owner.db
+  const { data, error } = await settingsRequest(owner, signal => owner.db
     .from("profiles")
     .update(row)
     .eq("id", userId)
     .select()
+    .abortSignal(signal)
     .maybeSingle());
   owner.check();
   if (error) {
@@ -987,11 +1754,14 @@ export async function saveSettings(userId, settings, authUserId) {
     // refused, and the caller is told which field did not save.
     if (error.code === "23505" && "email" in row) {
       const { email: refused, ...rest } = row;
-      const retry = await writeRequest(owner, () => owner.db.from("profiles").update(rest).eq("id", userId).select().maybeSingle());
+      const retry = await settingsRequest(owner, signal => owner.db.from("profiles").update(rest).eq("id", userId).select().abortSignal(signal).maybeSingle());
       owner.check();
       if (!retry.error) {
         console.warn("That email is on another CredentialDOMD account, so it was not saved. Everything else was.", { refused });
-        return { savedExcept: "email" };
+        forgetQueuedSettings(owner, Object.keys(settings).filter(k => k !== "email"));
+        // The row as stored, so the caller can put the address it still holds
+        // back on screen without another read.
+        return { ...(retry.data ? profileRowToSettings(retry.data) : {}), savedExcept: "email" };
       }
       console.warn("Failed to save settings:", retry.error.message);
       const clean = redactForExport(settings); delete clean.email;
@@ -1006,7 +1776,39 @@ export async function saveSettings(userId, settings, authUserId) {
   if (data && "email" in row && data.email !== row.email) {
     console.warn("Settings email was not accepted by the server (identity lock?):", { sent: row.email, stored: data.email });
   }
+  forgetQueuedSettings(owner, Object.keys(settings));
   return data ? profileRowToSettings(data) : null;
+}
+
+// A value a save has just stored is newer than the same field in a settings
+// patch queued before it (a keystroke whose save failed on a network blip).
+// Replayed on the next load, that patch would put the older text back, the
+// same "Spanis" by another road (SETTINGS-007). The stored fields leave the
+// queued patches; a patch left with nothing is dropped.
+function forgetQueuedSettings(owner, fields) {
+  const slot = pendingOpsSlot(owner.accountId);
+  if (!slot || !fields.length) return;
+  try {
+    const queued = JSON.parse(localStorage.getItem(slot) || "[]");
+    if (!Array.isArray(queued)) return;
+    let changed = false;
+    const kept = [];
+    for (const op of queued) {
+      if (op?.op !== "settings" || !op.payload || typeof op.payload !== "object") { kept.push(op); continue; }
+      const stale = fields.filter(field => Object.hasOwn(op.payload, field));
+      if (!stale.length) { kept.push(op); continue; }
+      changed = true;
+      const rest = { ...op.payload };
+      for (const field of stale) delete rest[field];
+      if (Object.keys(rest).length) kept.push({ ...op, payload: rest });
+    }
+    if (!changed) return;
+    if (kept.length) localStorage.setItem(slot, JSON.stringify(kept));
+    else localStorage.removeItem(slot);
+  } catch { return; /* the queue stays as it was */ }
+  // The notice counts queued changes; without this it went on saying one had
+  // not reached the account after it had, for the rest of the session.
+  notifySync(owner.accountId);
 }
 
 // ─── Document file storage (bucket: documents, path: <clerkSub>/<docId>) ──
@@ -1034,9 +1836,95 @@ export function documentStoragePath(docId) {
   return sub ? `${sub}/${docId}` : null;
 }
 
-export async function uploadDocumentFile(item, authUserId) {
+/**
+ * Put a document that is on this device only into the cloud: its file (when
+ * the bytes are here) and then its whole row, with storage_path, mime_type
+ * and size, as one upsert. Returns the storage path only when BOTH landed.
+ *
+ * The self-heal used to upload the bytes and then UPDATE a row that did not
+ * exist (0 rows, no error), and set storagePath locally anyway, after which
+ * the cache dropped the only local bytes: the file sat in Storage with no
+ * row, on no other device. A document whose bytes were uploaded but whose row
+ * never landed (storagePath, no data) gets its row the same way.
+ *
+ * The row carries the copy's own times, never "now". A copy never edited on
+ * this device (no updatedAt) only creates a missing row: stamped "now" and
+ * upserted whole, a phone's stale copy (unfiled, old name) replaced the row
+ * another device had filed, looked newer than that filing, and every device
+ * then took it. When the row is already there it stands, and null is
+ * returned (nothing of this copy was written).
+ */
+export async function uploadDocumentFile(item, authUserId, userId) {
   const owner = recordContext("documents", item, undefined, true, authUserId);
-  return uploadForOwner(item, owner);
+  // Kept on this device while membership could not be confirmed: its
+  // pendingUpload mark (or the next load's self-heal) sends it later.
+  if (owner.authorized && await heldForAccess(owner)) return null;
+  if (!supabase || !userId || !item?.id) return null;
+  const startedAt = Date.now();
+  const row = clientRow("documents", item);
+  row.user_id = userId;
+  const own = row.created_at || row.uploaded_at || new Date(startedAt).toISOString();
+  row.created_at = own;
+  const insertOnly = !row.updated_at;
+  if (insertOnly) row.updated_at = own;
+  if (item.data) {
+    const path = await uploadForOwner(item, owner);
+    if (!path) return null;
+    row.storage_path = path;
+    row.size_bytes = item.size || null;
+  }
+  if (!row.storage_path) return null; // no bytes anywhere: no row can be made
+  row.mime_type = documentMime(item);
+  const { data, error } = await writeRequest(owner, () => (insertOnly
+    ? owner.db.from("documents").upsert(row, { onConflict: "id", ignoreDuplicates: true }).select("id")
+    : owner.db.from("documents").upsert(row, { onConflict: "id" })));
+  owner.check();
+  noteWriteOutcome(owner, "documents", item.id, error);
+  if (error) return null;
+  // Insert-only, and the row was there already: it stands as it is.
+  if (insertOnly && Array.isArray(data) && data.length === 0) return null;
+  dropSupersededWrites(owner, "documents", item.id, startedAt);
+  return row.storage_path;
+}
+
+/**
+ * Where a document's file is in Storage. Uploads write `<account>/<doc id>`,
+ * but a document uploaded before the Clerk continuity bind lives under the
+ * SOURCE account's id, which the row's storage_path records. That path is
+ * used only in the exact shape `user_<id>/<this doc id>` (no dot segments,
+ * no empty segment); anything else falls back to the current account's path.
+ * Storage RLS (continuity_documents_owner) still decides which prefixes this
+ * session may remove, so a forged path reaches nothing it could not already.
+ * Both paths are returned when they differ: a self-heal can re-upload a
+ * pre-bind file under the current account, and either copy must go.
+ */
+export function documentObjectPaths(itemId, accountId, storagePath) {
+  const id = String(itemId || "");
+  if (!id) return [];
+  const paths = [];
+  if (typeof storagePath === "string" && !storagePath.includes("..") && !storagePath.includes("//") && !storagePath.includes("\\")) {
+    const m = storagePath.match(/^(user_[A-Za-z0-9]+)\/([^/]+)$/);
+    if (m && m[2] === id) paths.push(storagePath);
+  }
+  if (accountId) {
+    const canonical = `${accountId}/${id}`;
+    if (!paths.includes(canonical)) paths.push(canonical);
+  }
+  return paths;
+}
+
+// The removal's error, or null. A caller keeps the delete queued on an error
+// (deleteItem, sbDeleteRow), so the file is retried rather than orphaned.
+async function removeDocumentObject(owner, itemId, storagePath) {
+  const paths = documentObjectPaths(itemId, owner.accountId, storagePath);
+  if (!paths.length) return null;
+  const { data: removed, error: rmErr } = await writeRequest(owner, () => owner.db.storage.from("documents").remove(paths));
+  owner.check();
+  if (rmErr) return rmErr;
+  // Storage answers a path that matched nothing with an empty list and no
+  // error; that is a miss, not a success, and is said so it can be swept.
+  if (Array.isArray(removed) && removed.length === 0) console.warn(`Document file delete found nothing at ${paths.join(", ")} (object may orphan)`);
+  return null;
 }
 
 async function uploadForOwner(item, owner) {
@@ -1045,41 +1933,147 @@ async function uploadForOwner(item, owner) {
   const path = `${owner.accountId}/${item.id}`;
   const blob = dataUrlToBlob(item.data);
   if (!blob) return null;
+  // The same type the row records, so the stored object and the row agree.
   const { error } = await writeRequest(owner, () => owner.db.storage.from("documents")
-    .upload(path, blob, { contentType: item.type || blob.type, upsert: true }));
+    .upload(path, blob, { contentType: documentMime(item), upsert: true }));
   owner.check();
   if (error) { console.warn("Document file upload failed:", error.message); return null; }
   return path;
 }
 
-// Blob variant. downloadDocumentFile below re-encodes the same bytes as a
-// base64 data URL, which costs roughly five copies of the file in memory once
-// the caller decodes it again. Anything that only needs a File should use this.
-export async function downloadDocumentBlob(storagePath) {
-  if (!supabase || !storagePath) return null;
-  const { data, error } = await supabase.storage.from("documents").download(storagePath);
-  if (error || !data) return null;
-  return data;
+/**
+ * Ask the server for the next invoice number (allocate_invoice_number,
+ * migration 20260929210000): kind "INV" or "EXP", day as YYYYMMDD (the
+ * device's local day), atLeast the device's own next suffix. Resolves to
+ * { data, error } like any rpc. Returns null when there is no cloud client
+ * (local development), so the caller works the number out on the device.
+ */
+export function allocateInvoiceNumberRpc(kind, day, atLeast) {
+  if (!supabase) return null;
+  return supabase.rpc("allocate_invoice_number", { p_kind: kind, p_day: day, p_at_least: atLeast });
 }
 
-export async function downloadDocumentFile(storagePath) {
-  if (!supabase || !storagePath) return null;
-  const { data, error } = await supabase.storage.from("documents").download(storagePath);
-  if (error || !data) return null;
-  return await new Promise((resolve) => {
+/**
+ * The file as a Blob, or null. downloadDocumentFile below re-encodes the same
+ * bytes as a base64 data URL, which costs roughly five copies of the file in
+ * memory once the caller decodes it again. Anything that only needs a File
+ * should use this. `signal` aborts the request (the certificate prefetch's
+ * time budget). With { detail: true } it says why not, like
+ * downloadDocumentFile: { blob } | { missing: true } | { failed: true }.
+ */
+export async function downloadDocumentBlob(storagePath, { signal, detail = false } = {}) {
+  const answer = (value) => (detail ? value : value.blob || null);
+  if (!supabase || !storagePath) return answer({ failed: true });
+  const { data, error } = await fetchDocumentFile(storagePath, signal);
+  if (error || !data) return answer((await isMissingObject(error)) ? { missing: true } : { failed: true });
+  return answer({ blob: data });
+}
+
+// Document files are read through their own client, which never sends the
+// anon key. The shared client falls back to `Bearer <anon key>` whenever
+// Clerk cannot mint a token (a token refresh that failed, a network blip,
+// window.Clerk.session briefly null), and the documents bucket's policies
+// are `to authenticated` only, so Storage answers that request exactly as it
+// answers a deleted object: HTTP 400, statusCode 404, "Object not found". No
+// body can tell the two apart, and a file read as missing tells the member to
+// upload it again or delete the entry. So a download without the member's
+// token is never sent: this token callback throws instead, and the helpers
+// say "failed" (tried again later). Made on the first download.
+let documentFilesClient = null;
+function documentFiles() {
+  documentFilesClient ||= createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    accessToken: async () => {
+      const token = await getClerkSupabaseToken();
+      if (!token) throw new Error("No signed-in session to download this file with.");
+      return token;
+    },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  return documentFilesClient.storage.from("documents");
+}
+
+// { data, error } like storage-js, never a throw: a download that could not
+// be sent is an error (so "failed"), whatever threw it.
+async function fetchDocumentFile(storagePath, signal) {
+  try {
+    return await documentFiles().download(storagePath, {}, signal ? { signal } : undefined);
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
+// Storage answers a missing object with HTTP 400 and { statusCode: "404",
+// error: "not_found", message: "Object not found" } (or a plain 404). A
+// download asks storage-js not to parse the answer (noResolveJson), so its
+// error is not that body: storage-js 2.97 hands back a StorageUnknownError
+// whose message is "{}" (JSON.stringify of a Response) and whose
+// originalError is the unread Response. The facts are in that body, so it is
+// read here; a missing object and an expired session are both HTTP 400 and
+// only the body tells them apart. Without this every missing file read as
+// "failed" and was asked for again on every load (and CME showed "{}").
+async function storageErrorFacts(error) {
+  if (!error) return null;
+  const res = error.originalError;
+  if (res && typeof res.status === "number" && typeof res.text === "function") {
+    let body = null;
+    try { body = JSON.parse(await res.text()); } catch { /* no body, or not JSON */ }
+    return { status: res.status, statusCode: body?.statusCode, code: body?.error ?? body?.code, message: body?.message };
+  }
+  return { status: error.status, statusCode: error.statusCode, code: typeof error.error === "string" ? error.error : undefined, message: error.message };
+}
+
+async function isMissingObject(error) {
+  const facts = await storageErrorFacts(error);
+  if (!facts) return false;
+  return String(facts.statusCode) === "404" || facts.status === 404
+    || /object not found|not_found|no ?such ?key/i.test(`${facts.message || ""} ${facts.code || ""}`);
+}
+
+/**
+ * The file as a data URL, or null. With { detail: true } it says why not:
+ * { dataUrl } | { missing: true } (Storage has no such object: re-trying will
+ * not help) | { failed: true } (offline, expired session: retried later). A
+ * download that failed used to leave the document "Fetching" for ever.
+ */
+export async function downloadDocumentFile(storagePath, { detail = false } = {}) {
+  const answer = (value) => (detail ? value : value.dataUrl || null);
+  if (!supabase || !storagePath) return answer({ failed: true });
+  const { data, error } = await fetchDocumentFile(storagePath);
+  if (error || !data) return answer((await isMissingObject(error)) ? { missing: true } : { failed: true });
+  const dataUrl = await new Promise((resolve) => {
     const r = new FileReader();
     r.onload = (e) => resolve(e.target.result);
     r.onerror = () => resolve(null);
     r.readAsDataURL(data);
   });
+  return answer(dataUrl ? { dataUrl } : { failed: true });
 }
 
 // ─── Collection CRUD ─────────────────────────────────────────
-export async function insertItem(userId, collectionKey, item) {
+// Answers with the document's storage path once its file AND its row are both
+// saved (AppContext records it on the device: utils/docStoragePath.js), and
+// null when the write was queued or failed. Other collections answer null.
+// `keepOnRefusal`: the record of work already done outside the app (an
+// invoice that went out), kept and queued even when the check it waits for
+// refuses it (authorizeOwner).
+export async function insertItem(userId, collectionKey, item, { keepOnRefusal = false } = {}) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
-  const owner = recordContext(collectionKey, item);
+  const owner = recordContext(collectionKey, item, undefined, false, undefined, { keepOnRefusal });
+  // The record's turn: a delete, edit or star of it waits for this add, and
+  // this add waits for a replayed queued write of the same id in flight.
+  const turn = takeRecordTurn(owner, collectionKey, item?.id);
+  try {
+    if (turn.ready) { await turn.ready; owner.check(); }
+    return await insertForOwner(userId, collectionKey, item, owner);
+  } finally { turn.done(); }
+}
+
+async function insertForOwner(userId, collectionKey, item, owner) {
+  // Kept on this device while membership could not be confirmed: queued.
+  if (owner.authorized && await heldForAccess(owner)) { queuePendingOp("upsert", collectionKey, item, owner, heldMeta(owner)); return null; }
   // No cloud target yet (offline / local dev): queue so it isn't lost.
-  if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return; }
+  if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return null; }
+  const startedAt = Date.now();
   const table = tableName(collectionKey);
   // Without fields not in DB, or written only by the server
   const row = clientRow(collectionKey, item);
@@ -1089,40 +2083,81 @@ export async function insertItem(userId, collectionKey, item) {
   // Documents: push the file bytes to Storage and record where they live.
   if (collectionKey === "documents" && item.data) {
     const path = await uploadForOwner(item, owner);
-    if (!path) { queuePendingOp("upsert", collectionKey, item, owner); return; }
+    if (!path) { queuePendingOp("upsert", collectionKey, item, owner); return null; }
     row.storage_path = path;
-    row.mime_type = item.type || null;
+    // Never null: a file the browser typed as "" (an Office file on iOS or
+    // Windows, a .heic) used to upload its bytes and then have its row refused.
+    row.mime_type = documentMime(item);
     row.size_bytes = item.size || null;
   }
   const { error } = await writeRequest(owner, () => owner.db.from(table).insert(row));
   owner.check();
+  const kind = noteWriteOutcome(owner, collectionKey, item.id, error);
   if (error) {
     console.warn(`Failed to insert ${collectionKey}:`, error.message);
-    queuePendingOp("upsert", collectionKey, item, owner);
+    queuePendingOp("upsert", collectionKey, item, owner, failureMeta(error, kind));
+    return null;
   }
+  dropSupersededWrites(owner, collectionKey, item.id, startedAt);
+  // A document's storage path, once its file and row both landed: the caller
+  // records it so the cached copy can drop the bytes (utils/storage saveData).
+  return row.storage_path || null;
 }
 
-export async function updateItem(userId, collectionKey, item, previous, authUserId) {
+// `partial`: `item` carries only some columns (the link sweep's { id,
+// linkedTo }). It is queued as a narrow "patch", never as an upsert, which
+// could not insert a row from a few columns and so failed for ever.
+export async function updateItem(userId, collectionKey, item, previous, authUserId, { partial = false, keepOnRefusal = false } = {}) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
-  const owner = recordContext(collectionKey, item, previous, true, authUserId);
-  if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return; }
-  const table = tableName(collectionKey);
-  const row = clientRow(collectionKey, item);
-  delete row.user_id;
-  delete row.created_at;
-  row.updated_at = new Date().toISOString();
-  const { error } = await writeRequest(owner, () => owner.db
-    .from(table)
-    .update(row)
-    .eq("id", item.id)
-    .eq("user_id", userId));
-  owner.check();
-  if (error) {
-    console.warn(`Failed to update ${collectionKey}:`, error.message);
-    // Replay as an upsert: if the row was never inserted (a failed add), the
-    // update would no-op, so upsert recovers both cases.
-    queuePendingOp("upsert", collectionKey, item, owner);
-  }
+  const owner = recordContext(collectionKey, item, previous, true, authUserId, { keepOnRefusal });
+  const retryOp = partial ? "patch" : "upsert";
+  if (owner.authorized && await heldForAccess(owner)) { queuePendingOp(retryOp, collectionKey, item, owner, heldMeta(owner)); return; }
+  if (!supabase || !userId) { queuePendingOp(retryOp, collectionKey, item, owner); return; }
+  // The record's add may still be uploading (a document is read before it is
+  // stored, so its card can be saved the moment the upload starts). Sent
+  // first, the UPDATE matched no row, the whole document (file included) was
+  // queued, and the add then landed with the values from before the edit.
+  // And a queued older copy of this record that replay is sending lands
+  // first. This edit's turn lasts until it has landed and taken the record's
+  // older queued copies out of the queue: a replay that reaches one of them
+  // meanwhile waits for it, then finds the copy gone (replayForOwner).
+  const turn = takeRecordTurn(owner, collectionKey, item.id);
+  try {
+    if (turn.ready) { await turn.ready; owner.check(); }
+    const table = tableName(collectionKey);
+    const row = clientRow(collectionKey, item, "update");
+    delete row.user_id;
+    delete row.created_at;
+    const startedAt = Date.now();
+    row.updated_at = new Date(startedAt).toISOString();
+    const { data, error } = await writeRequest(owner, () => owner.db
+      .from(table)
+      .update(row)
+      .eq("id", item.id)
+      .eq("user_id", userId)
+      .select("id"));
+    owner.check();
+    // No error and no row: the record's add never reached the cloud (its
+    // insert is still queued). The edit used to report success here and be
+    // lost; the queued add then replayed the old values. Queue the edit behind
+    // the add, so replay ends on the edit.
+    if (!error && Array.isArray(data) && data.length === 0) {
+      // A partial write cannot create the row; the record's own add carries it.
+      if (!partial) queuePendingOp("upsert", collectionKey, item, owner);
+      return;
+    }
+    const kind = noteWriteOutcome(owner, collectionKey, item.id, error);
+    if (error) {
+      console.warn(`Failed to update ${collectionKey}:`, error.message);
+      // Replay as an upsert: if the row was never inserted (a failed add), the
+      // update would no-op, so upsert recovers both cases. A partial write
+      // replays as a patch.
+      queuePendingOp(retryOp, collectionKey, item, owner, failureMeta(error, kind));
+    } else if (!partial) {
+      // The whole record landed: its earlier queued writes are stale.
+      dropSupersededWrites(owner, collectionKey, item.id, startedAt);
+    }
+  } finally { turn.done(); }
 }
 
 // A star is not an edit.
@@ -1137,28 +2172,53 @@ export async function setFavorite(userId, collectionKey, item, favorite, authUse
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const payload = { id: item?.id, favorite: !!favorite };
   const owner = recordContext(collectionKey, { ...item, favorite: !!favorite }, item, true, authUserId);
-  if (!supabase || !userId) { queuePendingOp("favorite", collectionKey, payload, owner); return; }
-  const ok = await sbFavoriteRow(userId, collectionKey, payload, owner);
-  owner.check();
-  if (!ok) {
-    console.warn(`Failed to set favorite on ${collectionKey}`);
-    queuePendingOp("favorite", collectionKey, payload, owner);
-  }
+  if (owner.authorized && await heldForAccess(owner)) { queueFavorite(owner, collectionKey, payload, AWAITING_ACCESS); return; }
+  if (!supabase || !userId) { queueFavorite(owner, collectionKey, payload); return; }
+  // The record's turn. Its add may still be in flight (a star sent first
+  // matches no row), or replay may be sending a queued older copy of it: the
+  // star waits for either to land. A replayed copy that reaches the record
+  // while the star is in flight waits for the star, and then carries it.
+  const turn = takeRecordTurn(owner, collectionKey, payload.id);
+  try {
+    if (turn.ready) { await turn.ready; owner.check(); }
+    const startedAt = Date.now();
+    const error = await sbFavoriteRow(userId, collectionKey, payload, owner);
+    owner.check();
+    if (error) {
+      console.warn(`Failed to set favorite on ${collectionKey}`);
+      queueFavorite(owner, collectionKey, payload, error === NO_ROW ? {} : failureMeta(error));
+      return;
+    }
+    settleQueuedStar(owner, collectionKey, payload, startedAt);
+  } finally { turn.done(); }
 }
 
 export async function deleteItem(userId, collectionKey, itemId, previous) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, previous || { id: itemId }, previous, true);
-  if (!supabase || !userId) { queuePendingOp("delete", collectionKey, itemId, owner); return; }
+  const held = !!owner.authorized && await heldForAccess(owner);
+  // The add this delete undoes may still be uploading. Deleting first matched
+  // nothing, and the add then landed behind the tombstone.
+  await settleInsert(owner, collectionKey, itemId);
+  dropQueuedWrites(owner, collectionKey, itemId);
+  // A document's file is where its row says it is. The path is NOT always
+  // <this sign-in>/<id>: a continuity-migrated account's files sit under its
+  // old sign-in id, and removing the computed path deleted nothing while the
+  // row and the tombstone went, leaving the credential file in Storage. RLS
+  // limits a removal to this account's own prefixes, so a stored path cannot
+  // reach another account's files. The queued op carries the path, so a
+  // delete made offline removes the file on replay too (it used to delete
+  // only the row).
+  const before = previous || accessAuthority.previousRecord(collectionKey, itemId, owner.accountId);
+  const payload = collectionKey === "documents" ? { id: itemId, storagePath: before?.storagePath || `${owner.accountId}/${itemId}` } : itemId;
+  if (held) { queuePendingOp("delete", collectionKey, payload, owner, AWAITING_ACCESS); return; }
+  if (!supabase || !userId) { queuePendingOp("delete", collectionKey, payload, owner); return; }
+  let fileError = null;
   if (collectionKey === "documents") {
-    const path = `${owner.accountId}/${itemId}`;
-    // Await the removal so a failure is visible (and can be swept) instead of
+    // Await the removal so a failure is visible (and retried) instead of
     // silently orphaning the stored object.
-    if (path) {
-      const { error: rmErr } = await writeRequest(owner, () => owner.db.storage.from("documents").remove([path]));
-      owner.check();
-      if (rmErr) console.warn("Document file delete failed (object may orphan):", rmErr.message);
-    }
+    fileError = await removeDocumentObject(owner, itemId, before?.storagePath);
+    if (fileError) console.warn("Document file delete failed (queued to retry):", fileError.message);
   }
   const table = tableName(collectionKey);
   const { error } = await writeRequest(owner, () => owner.db
@@ -1167,9 +2227,9 @@ export async function deleteItem(userId, collectionKey, itemId, previous) {
     .eq("id", itemId)
     .eq("user_id", userId));
   owner.check();
-  if (error) {
-    console.warn(`Failed to delete ${collectionKey}:`, error.message);
-    queuePendingOp("delete", collectionKey, itemId, owner);
+  if (error || fileError) {
+    if (error) console.warn(`Failed to delete ${collectionKey}:`, error.message);
+    queuePendingOp("delete", collectionKey, payload, owner, failureMeta(error || fileError));
   }
 }
 
@@ -1178,11 +2238,18 @@ export async function bulkSync(userId, collectionKey, items, authUserId) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = writeContext(authUserId);
   const previous = items.map(item => accessAuthority.previousRecord(collectionKey, item?.id, owner.accountId));
-  owner.check = () => items.forEach((item, index) => guardRecord(owner, collectionKey, item, previous[index], true));
-  owner.check();
+  authorizeOwner(owner, () => items.forEach((item, index) => guardRecord(owner, collectionKey, item, previous[index], true)),
+    options => accessAuthority.statusFor(items.flatMap((item, index) => [
+      ...accessAuthority.mutationScopes(collectionKey, item, previous[index]),
+      ...(collectionKey === "documents" && !previous[index] ? ["credential", "practice"] : []),
+    ]), owner.accountId, options));
+  // Kept on this device while membership could not be confirmed: none of
+  // these rows went up (the caller counts them; the next load pushes them).
+  if (owner.authorized && await heldForAccess(owner)) return items.length;
   if (!supabase || !userId || !items.length) return;
   const table = tableName(collectionKey);
-  const now = new Date().toISOString();
+  const startedAt = Date.now();
+  const now = new Date(startedAt).toISOString();
   const rows = items.map((item) => {
     const row = clientRow(collectionKey, item);
     row.user_id = userId;
@@ -1192,16 +2259,28 @@ export async function bulkSync(userId, collectionKey, items, authUserId) {
   });
   const { error } = await writeRequest(owner, () => owner.db.from(table).upsert(rows, { onConflict: "id" }));
   owner.check();
-  if (error) {
-    // One bad row must not strand the rest — retry each row alone so the
-    // failure is contained to the row that actually has the problem.
-    console.warn(`Bulk sync ${collectionKey} failed (${error.message}) — retrying row-by-row`);
+  if (!error) {
     for (const row of rows) {
-      const { error: e2 } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
-      owner.check();
-      if (e2) console.warn(`Row ${row.id} of ${collectionKey} still failing:`, e2.message);
+      noteWriteOutcome(owner, collectionKey, row.id, null);
+      dropSupersededWrites(owner, collectionKey, row.id, startedAt);
     }
+    return 0;
   }
+  // One bad row must not strand the rest — retry each row alone so the
+  // failure is contained to the row that actually has the problem.
+  console.warn(`Bulk sync ${collectionKey} failed (${error.message}) — retrying row-by-row`);
+  let failed = 0;
+  for (const row of rows) {
+    const { error: e2 } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
+    owner.check();
+    // The self-heal push is how a refused record comes back every load, so
+    // a refusal here is reported and listed like one on the save itself.
+    noteWriteOutcome(owner, collectionKey, row.id, e2 || null);
+    if (e2) { failed += 1; console.warn(`Row ${row.id} of ${collectionKey} still failing:`, e2.message); }
+    else dropSupersededWrites(owner, collectionKey, row.id, startedAt);
+  }
+  // How many rows did not land, for a caller that must say so (a restore).
+  return failed;
 }
 
 // ─── Deletion ledger ─────────────────────────────────────────
@@ -1212,6 +2291,10 @@ export async function recordTombstone(userId, collectionKey, itemId, previous) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, previous || { id: itemId }, previous, true);
   if (!itemId) return;
+  const held = !!owner.authorized && await heldForAccess(owner);
+  await settleInsert(owner, collectionKey, itemId);
+  dropQueuedWrites(owner, collectionKey, itemId);
+  if (held) { queuePendingOp("tombstone", collectionKey, itemId, owner, AWAITING_ACCESS); return; }
   if (!supabase || !userId) { queuePendingOp("tombstone", collectionKey, itemId, owner); return; }
   const { error } = await writeRequest(owner, () => owner.db.from("deleted_items").upsert(
     { item_id: itemId, user_id: userId, collection: collectionKey },
@@ -1220,8 +2303,52 @@ export async function recordTombstone(userId, collectionKey, itemId, previous) {
   owner.check();
   if (error) {
     console.warn("Failed to record deletion:", error.message);
-    queuePendingOp("tombstone", collectionKey, itemId, owner);
+    queuePendingOp("tombstone", collectionKey, itemId, owner, failureMeta(error));
   }
+}
+
+/**
+ * Un-delete: remove these ids from the deletion ledger, for a backup restore
+ * that brings them back. Without it the restore upserted each record while
+ * its tombstone stayed, so every load hid it again (row and tombstone both in
+ * the database). Queued deletes and tombstones of the same ids are dropped
+ * too, or a later replay would delete them again. Returns true only when the
+ * ledger was cleared (or there was nothing to clear).
+ *
+ * With `collectionKey`, what could not be cleared (offline, no profile yet, a
+ * failed request) is queued like any failed write, and the next load's replay
+ * clears it before the ledger is read: the restored records the caller kept
+ * on this device are then pushed up by the self-heal. Without it they stayed
+ * behind their markers, and the next load hid them for good although the
+ * restore had said to open the app again online to retry.
+ */
+export async function clearTombstones(userId, ids, authUserId, { collectionKey } = {}) {
+  const owner = writeContext(authUserId);
+  const wanted = [...new Set(ids || [])].filter(isUuid);
+  if (!wanted.length) return true;
+  const slot = pendingOpsSlot(owner.accountId);
+  try {
+    const cur = JSON.parse(localStorage.getItem(slot) || "[]");
+    if (Array.isArray(cur)) {
+      const set = new Set(wanted);
+      const kept = cur.filter(op => !((op?.op === "delete" || op?.op === "tombstone") && set.has(recordIdOf(op.payload))));
+      if (kept.length !== cur.length) {
+        if (kept.length) localStorage.setItem(slot, JSON.stringify(kept)); else localStorage.removeItem(slot);
+        notifySync(owner.accountId);
+      }
+    }
+  } catch { /* storage unavailable */ }
+  const queueRest = (rest, error) => {
+    if (isSyncedCollection(collectionKey)) queuePendingOp(UNDELETE_OP, collectionKey, { ids: rest }, owner, failureMeta(error));
+  };
+  if (!supabase || !userId) { queueRest(wanted, null); return false; }
+  for (let i = 0; i < wanted.length; i += 100) {
+    const chunk = wanted.slice(i, i + 100);
+    const error = await sbUntombstoneRows(userId, chunk, owner);
+    owner.check();
+    if (error) { queueRest(wanted.slice(i), error); return false; }
+  }
+  return true;
 }
 
 export async function listTombstones(userId) {
@@ -1231,12 +2358,22 @@ export async function listTombstones(userId) {
   const PAGE = 1000;
   const ids = new Set();
   for (let start = 0; ; start += PAGE) {
+    // item_id is unique (the upsert conflicts on it): a total order, so no
+    // tombstone is skipped or read twice across pages.
     const { data, error } = await supabase
       .from("deleted_items")
       .select("item_id")
       .eq("user_id", userId)
+      .order("item_id", { ascending: true })
       .range(start, start + PAGE - 1);
-    if (error || !data) break;
+    // A ledger that could not be read is not an empty ledger. Returning the
+    // partial set let the self-heal push this device's copies of records
+    // deleted on another device straight back up.
+    if (error || !Array.isArray(data)) {
+      const failure = new Error("The deletion ledger could not be read.");
+      failure.code = "tombstones_unavailable";
+      throw failure;
+    }
     for (const r of data) ids.add(r.item_id);
     if (data.length < PAGE) break;
   }
@@ -1251,6 +2388,7 @@ const deletionContexts = new WeakSet();
 export function createDataDeletionContext(authUserId, profileId, { offline = false, isCurrent, onStart } = {}) {
   const owner = writeContext(authUserId, { cloud: !offline && !!profileId });
   owner.profileId = profileId || null;
+  owner.continuitySource = boundContinuitySource(authUserId);
   const guard = owner.guard;
   owner.check = () => {
     guard();
@@ -1360,7 +2498,9 @@ export async function requestAccountDeletion(owner) {
   }
   return res.data;
 }
-// The profile's deleted_at stamp then tells every device, on its next
-// sign-in, to drop the cache it holds from before the wipe (AppContext,
-// WIPE_SEEN_KEY). The stamp stays on the row; each device remembers which
-// one it has honored.
+// The account then stays closed until its owner signs in again, when
+// initialize-clerk-profile reopens it empty (migration 20260930020000). Its
+// deletion stamp (deleted_at, then data_deleted_at, and the sign-in receipt's
+// dataDeletedAt) tells every device to drop the copy it holds from before the
+// wipe, once (src/utils/dataDeletion.js, WIPE_SEEN_KEY). The reply carries
+// deleted_at so the device that asked records the wipe as already purged.

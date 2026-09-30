@@ -15,15 +15,9 @@
 import { useMemo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { complianceFor } from "../../../utils/compliance";
-import { STATE_REQS } from "../../../constants/stateRequirements";
-import { STATES } from "../../../constants/states";
+import { STATE_NAMES } from "../../../constants/states";
 import { isAlertable, isInactive } from "../../../utils/lifecycle";
-
-function daysUntil(dateStr) {
-  if (!dateStr) return null;
-  const ms = new Date(dateStr).getTime() - Date.now();
-  return Math.round(ms / (1000 * 60 * 60 * 24));
-}
+import { daysUntilDate as daysUntil } from "../../../utils/dateDays.js";
 
 function statusColor(days, T) {
   if (days == null) return T.textDim;
@@ -41,7 +35,7 @@ function statusLabel(days) {
   return `${days}d left`;
 }
 
-export default function MultiStateMatrix() {
+export default function MultiStateMatrix({ onAddLicense }) {
   const { data, theme: T } = useApp();
   const degreeType = data.settings?.degreeType || "";
 
@@ -69,8 +63,11 @@ export default function MultiStateMatrix() {
         /controlled.substance|csp|csl/i.test(l.type || l.name || "")
       );
 
-      // CME compliance for this state
+      // CME compliance for this state. The engine's own totals are the
+      // numbers to show: `totalRequired` already follows MD/DO and
+      // `totalEarned` is counted inside the license-anchored window.
       const cmeData = complianceFor(data, state);
+      const unmet = (cmeData?.topicResults || []).filter((t) => t.met === false);
 
       // Privileges in this state
       const privCount = (data.privileges || []).filter(
@@ -81,28 +78,18 @@ export default function MultiStateMatrix() {
         .map((p) => p.expirationDate)
         .sort()[0];
 
-      // State req lookup with MD/DO branching
-      const reqRoot = STATE_REQS[state];
-      const req = reqRoot
-        ? reqRoot.md || reqRoot.do
-          ? degreeType === "DO"
-            ? reqRoot.do || reqRoot.md
-            : reqRoot.md || reqRoot.do
-          : reqRoot
-        : null;
-
       return {
         state,
         medLicense,
         deaLicense,
         csPermit,
         cmeData,
-        req,
+        unmet,
         privCount,
         privEarliest,
       };
     });
-  }, [data, degreeType]);
+  }, [data]);
 
   if (stateRows.length === 0) {
     return (
@@ -118,7 +105,7 @@ export default function MultiStateMatrix() {
             border: "none", backgroundColor: T.accent, color: "#fff",
             fontSize: 13, fontWeight: 700, cursor: "pointer",
           }}
-          onClick={() => window.location.hash = "#credentials/licenses"}
+          onClick={() => onAddLicense?.()}
         >
           Add a license
         </button>
@@ -145,9 +132,10 @@ export default function MultiStateMatrix() {
           const licDays = row.medLicense && isAlertable(row.medLicense) ? daysUntil(row.medLicense.expirationDate) : null;
           const deaDays = row.deaLicense && isAlertable(row.deaLicense) ? daysUntil(row.deaLicense.expirationDate) : null;
           const privDays = daysUntil(row.privEarliest);
-          const cmeReq = row.req?.total || 0;
+          const cmeReq = row.cmeData?.totalRequired || 0;
+          const cmeEarned = row.cmeData?.totalEarned || 0;
           const cmePct = cmeReq > 0
-            ? Math.min(100, Math.round((row.cmeData?.totalHours || 0) / cmeReq * 100))
+            ? Math.min(100, Math.round(cmeEarned / cmeReq * 100))
             : 100;
           const cmePctColor =
             cmePct >= 100 ? "#10b981"
@@ -176,7 +164,7 @@ export default function MultiStateMatrix() {
                   <span style={{
                     fontSize: 11, color: T.textMuted,
                   }}>
-                    {STATES.find((s) => s.code === row.state)?.name || ""}
+                    {Object.hasOwn(STATE_NAMES, row.state) ? STATE_NAMES[row.state] : ""}
                   </span>
                 </div>
                 <span style={{
@@ -214,7 +202,7 @@ export default function MultiStateMatrix() {
                 <Cell
                   T={T}
                   label={`CME${cmeReq ? ` (${cmeReq} hr req)` : ""}`}
-                  value={`${row.cmeData?.totalHours || 0} / ${cmeReq || "—"} hrs`}
+                  value={`${cmeEarned} / ${cmeReq || "—"} hrs`}
                   status={cmeReq > 0 ? `${cmePct}%` : "No state CME req"}
                   statusColor={cmeReq > 0 ? cmePctColor : T.textDim}
                 />
@@ -229,7 +217,7 @@ export default function MultiStateMatrix() {
               </div>
 
               {/* CME topic gaps for this state */}
-              {row.cmeData?.unmet && row.cmeData.unmet.length > 0 && (
+              {row.unmet.length > 0 && (
                 <div style={{
                   marginTop: 10, padding: "6px 10px",
                   backgroundColor: "rgba(239,68,68,0.06)",
@@ -238,8 +226,8 @@ export default function MultiStateMatrix() {
                   fontSize: 11, color: T.text,
                 }}>
                   <strong style={{ color: "#ef4444" }}>Unmet topics:</strong>{" "}
-                  {row.cmeData.unmet.slice(0, 3).map((u) => u.topic).join(", ")}
-                  {row.cmeData.unmet.length > 3 && ` +${row.cmeData.unmet.length - 3} more`}
+                  {row.unmet.slice(0, 3).map((u) => u.topic).join(", ")}
+                  {row.unmet.length > 3 && ` +${row.unmet.length - 3} more`}
                 </div>
               )}
             </div>

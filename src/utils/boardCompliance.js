@@ -1,4 +1,4 @@
-import { ABMS_MOC, AOA_OCC, AOA_NATIONAL } from "../constants/boardRequirements";
+import { ABMS_MOC, AOA_OCC, AOA_NATIONAL } from "../constants/boardRequirements.js";
 
 /**
  * Board continuing-certification compliance — computes standing for every
@@ -22,10 +22,11 @@ export function aoaCycle(today = new Date()) {
   return { start, end: start + 2 };
 }
 
+// Rounded to hundredths where summed (see compliance.js round2).
 const hoursIn = (cme, from, to, pred = () => true) =>
-  cme
+  Math.round(cme
     .filter(c => c.date && c.date >= from && c.date <= to && pred(c))
-    .reduce((s, c) => s + (parseFloat(c.hours) || 0), 0);
+    .reduce((s, c) => s + (parseFloat(c.hours) || 0), 0) * 100) / 100;
 
 export function computeBoardCompliance(data) {
   const cme = data.cme || [];
@@ -184,6 +185,30 @@ export function boardIdsFromLicenses(licenses) {
     if (isAOA || !isABMS) scan(AOA_OCC, "AOA", text);
   }
   return [...out];
+}
+
+/**
+ * The boards a physician's standing is computed for: the ones picked in
+ * Settings plus the ones a Board Certification license record implies. Home
+ * used the picks alone while the CME page added the license-implied ones, so
+ * the two screens disagreed. A license-implied parent board (AOA:X, ABMS:X)
+ * is dropped when Settings already holds a discipline or subspecialty of X:
+ * a DO with an AOBS license and the Neurological Surgery discipline gets one
+ * Neurological Surgery card, not an extra Surgery card.
+ */
+export function effectiveBoardSpecialties(data) {
+  const picked = (data?.settings?.specialties || []).map(String);
+  const hasChildOf = (kind, code) => picked.some(id => id.startsWith(`${kind}-SUB:${code}:`));
+  const implied = boardIdsFromLicenses(data?.licenses).filter(id => {
+    const [kind, code] = id.split(":");
+    return !hasChildOf(kind, code);
+  });
+  return [...new Set([...picked, ...implied])];
+}
+
+/** computeBoardCompliance over effectiveBoardSpecialties: what every screen shows. */
+export function boardComplianceFor(data) {
+  return computeBoardCompliance({ ...data, settings: { ...(data?.settings || {}), specialties: effectiveBoardSpecialties(data) } });
 }
 
 /** The AOA national 120/3yr requirement, cycle-windowed — shown to every DO

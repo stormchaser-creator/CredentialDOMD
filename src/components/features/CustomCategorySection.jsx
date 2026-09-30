@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import CrudSection from "./CrudSection";
 import { useInputStyle } from "../shared/useInputStyle";
+import { TAP_MIN } from "../shared/actionButton.js";
 import {
   normalizeCategory, recordsIn, unsortedRecords, liveCategories, packRecord, moveRecord, updateRecord,
   buildCategory, fieldKey, sanitizeText, categoryKey, findCategory, ROLE_KEYS, LIMITS, FIELD_TYPES,
@@ -128,7 +129,10 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
     setMsg(`Moved to ${to.name}.`);
   };
 
-  const btn = { padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`, background: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
+  // Rename, Add a field, Hide category, the field editor's Save and Cancel,
+  // and Move to another category: at least TAP_MIN tall on a phone (29 px
+  // before, from the padding and a 12.5 px line alone).
+  const btn = { padding: "6px 10px", minHeight: TAP_MIN, borderRadius: 8, border: `1px solid ${T.border}`, background: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
   return (
     <div>
       {!unsorted && !credentialReadOnly && (
@@ -140,10 +144,10 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
       )}
       {editing && (
         <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
-          <input autoFocus value={draft} maxLength={editing === "rename" ? LIMITS.name : LIMITS.label} onChange={e => setDraft(e.target.value)}
+          <input autoFocus aria-label={editing === "rename" ? "Category name" : "Field name"} value={draft} maxLength={editing === "rename" ? LIMITS.name : LIMITS.label} onChange={e => setDraft(e.target.value)}
             placeholder={editing === "rename" ? "Category name" : "Field name, e.g. Badge number"} style={{ ...iS, flex: 1 }} />
           {editing === "field" && (
-            <select value={fieldType} onChange={e => setFieldType(e.target.value)} style={{ ...iS, width: 110 }}>
+            <select aria-label="Field type" value={fieldType} onChange={e => setFieldType(e.target.value)} style={{ ...iS, width: 110 }}>
               {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           )}
@@ -167,7 +171,7 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
         emptySub="Upload a document from Files, or ask Vera, and it can be filed here."
         renderExtra={(item) => others.length > 0 && !credentialReadOnly ? (
           moving === item.id ? (
-            <select autoFocus defaultValue="" onChange={e => e.target.value && move(item, e.target.value)} onBlur={() => setMoving(null)} style={{ ...iS, marginTop: 6 }}>
+            <select autoFocus aria-label="Move to another category" defaultValue="" onChange={e => e.target.value && move(item, e.target.value)} onBlur={() => setMoving(null)} style={{ ...iS, marginTop: 6 }}>
               <option value="" disabled>Move to...</option>
               {others.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
             </select>
@@ -218,13 +222,13 @@ export function NewCategoryPanel({ onCreated }) {
       <div style={{ fontSize: 13.5, color: T.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
         For a kind of document none of the built-in sections holds. Vera and the uploader can also create these, and they reuse the ones you make.
       </div>
-      <span style={label}>Name</span>
-      <input value={name} maxLength={LIMITS.name} onChange={e => setName(e.target.value)} placeholder="e.g. Hospital ID Badges" style={{ ...iS, marginBottom: 4 }} />
+      <span id="new-category-name" style={label}>Name</span>
+      <input aria-labelledby="new-category-name" value={name} maxLength={LIMITS.name} onChange={e => setName(e.target.value)} placeholder="e.g. Hospital ID Badges" style={{ ...iS, marginBottom: 4 }} />
       <div style={{ fontSize: 12, color: T.textDim, marginBottom: 12 }}>{clash ? `You already have "${clash.name}"${clash.archivedAt ? ", hidden" : ""}. This will open it${clash.archivedAt ? " and show it again" : ""}.` : "Plural and reusable, so the next one of these goes in the same place."}</div>
-      <span style={label}>Icon (optional)</span>
-      <input value={icon} maxLength={LIMITS.icon} onChange={e => setIcon(e.target.value)} placeholder="One emoji" style={{ ...iS, width: 120, marginBottom: 12 }} />
-      <span style={label}>Fields (optional)</span>
-      <textarea value={fieldText} onChange={e => setFieldText(e.target.value)} rows={3} placeholder="Badge number, Facility, Access level" style={{ ...iS, marginBottom: 4 }} />
+      <span id="new-category-icon" style={label}>Icon (optional)</span>
+      <input aria-labelledby="new-category-icon" value={icon} maxLength={LIMITS.icon} onChange={e => setIcon(e.target.value)} placeholder="One emoji" style={{ ...iS, width: 120, marginBottom: 12 }} />
+      <span id="new-category-fields" style={label}>Fields (optional)</span>
+      <textarea aria-labelledby="new-category-fields" value={fieldText} onChange={e => setFieldText(e.target.value)} rows={3} placeholder="Badge number, Facility, Access level" style={{ ...iS, marginBottom: 4 }} />
       <div style={{ fontSize: 12, color: T.textDim, marginBottom: 14 }}>Separate with commas. Every record already has a name, issuer, number, issued and expiry date.</div>
       {msg && <div style={{ fontSize: 13, color: T.danger, marginBottom: 10 }}>{msg}</div>}
       <button type="button" disabled={!name.trim() || !!credentialReadOnly} onClick={create} style={{

@@ -161,6 +161,8 @@ try {
     ok(`phone ledger lists ${p.id}`, phone.includes(`${money2(p.amount)}`) && (!p.note || phone.includes(` · ${p.note}`)));
   }
   ok("table 2 actions are edit and delete", (desk.match(/aria-label="Edit payment"/g) || []).length === payments.length && (desk.match(/aria-label="Delete payment"/g) || []).length === payments.length);
+  // PRAC-027: a payment recorded on a phone can be edited there too.
+  ok("phone ledger rows offer edit and delete", (phone.match(/aria-label="Edit payment"/g) || []).length === payments.length && (phone.match(/aria-label="Delete payment"/g) || []).length === payments.length);
   ok("copy around the tables is unchanged", ["Planning estimate.", "the unreimbursed share of a settled travel expense is deducted instead", "Filing profile", "Assumptions"].every(s => desk.includes(s)));
 
   // ── No filing profile: nothing is estimated on either shape ──

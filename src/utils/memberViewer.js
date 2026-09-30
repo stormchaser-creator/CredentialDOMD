@@ -11,8 +11,8 @@
 import { MEMBER_VIEW_SECTIONS, MEMBER_VIEW_PROFILE_FIELDS, memberViewSection } from "../../supabase/functions/_shared/memberView.mjs";
 import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring, plainDashes } from "./helpers.js";
 import { LIFECYCLE_LABELS, LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote } from "./lifecycle.js";
-import { complianceFor, findStateLicense, trackedStates } from "./compliance.js";
-import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel } from "./cmePresentation.js";
+import { complianceFor, findStateLicense, trackedStates, resolvePendingLicense } from "./compliance.js";
+import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, rollingWindowLabel } from "./cmePresentation.js";
 import { timedBlockLabel } from "./coverageBlocks.js";
 
 export const READ_ONLY_MESSAGE = "This is a read-only support view. Nothing can be changed here.";
@@ -126,8 +126,8 @@ function formatValue(field, value, snapshot) {
     case "list": return Array.isArray(value) ? value.map(String).join(", ") : String(value);
     case "lifecycle": return LIFECYCLE_LABELS[value] || String(value);
     case "contract": return contractLabel(snapshot, value);
-    // A coverage block with times reads as the app lists it ("Sep 25, 4:00 PM
-    // to Sep 28, 7:00 AM"); its end date is then when coverage ends.
+    // A coverage block with times reads as the app lists it ("Oct 16, 4:00 PM
+    // to Oct 19, 7:00 AM"); its end date is then when coverage ends.
     case "periods": return Array.isArray(value) ? value.map(period => timedBlockLabel(period) || [period.start || period.startDate || period.from, period.end || period.endDate || period.to].filter(Boolean).join(" to ") || [period.hospital, period.role, period.kind].filter(Boolean).join(", ")).filter(Boolean).join("; ") : "";
     case "doses": return Array.isArray(value) ? value.map(dose => [dose.doseNumber ? `Dose ${dose.doseNumber}` : "", dose.date ? formatDate(String(dose.date).slice(0, 10)) : "", dose.manufacturer, dose.lotNumber ? `lot ${dose.lotNumber}` : "", dose.facility].filter(Boolean).join(", ")).filter(Boolean).join("; ") : "";
     case "components": return Array.isArray(value) ? value.map(part => [part.name, part.scope, part.status, part.date].filter(Boolean).join(", ")).filter(Boolean).join("; ") : "";
@@ -250,7 +250,9 @@ export function stateCmeCards(snapshot) {
         primary: st === data.settings.primaryState,
         hoursLine: comp.noGeneralReq ? "Topic-specific" : totalHoursLabel(comp),
         status: comp.fullyCompliant ? "met" : comp.assessmentStatus === "needs-confirmation" ? "confirm" : "gaps",
-        renews: comp.windowAnchored ? `License renews ${formatDate(lic.expirationDate)}` : `No ${st} license on file, tracking a rolling ${comp.cycle}-yr window`,
+        // A licence still on the Resolve card is on file, just not dated: the
+        // member's card says which question is open, and so does this one.
+        renews: plainDashes(comp.windowAnchored ? `License renews ${formatDate(lic.expirationDate)}` : rollingWindowLabel(st, comp.cycle, lifecycleNote(resolvePendingLicense(data.licenses, st)))),
         daysLeft: dl,
         daysLabel: dl == null ? "" : dl <= 0 ? "OVERDUE" : `${dl} days`,
         urgency: dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok",

@@ -59,6 +59,11 @@ end
 $unschedule$;
 
 drop function if exists public.retry_ticket_reply_emails();
+-- 20260930031500's functions read the table; its own rollback runs first,
+-- and this drops them too rather than leave them pointing at nothing.
+drop function if exists public.ticket_reply_email_refusal(uuid, text);
+drop function if exists public.ticket_reply_email_payload_refused(uuid, text);
+drop function if exists public.ticket_reply_email_payload(uuid, text);
 drop table if exists public.ticket_reply_emails;
 
 notify pgrst, 'reload schema';

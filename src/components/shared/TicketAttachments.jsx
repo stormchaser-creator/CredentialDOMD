@@ -1,5 +1,10 @@
 import { useApp } from "../../context/AppContext";
 import { attachmentKind, attachmentLabel } from "../../utils/ticketAttachments";
+import { signedStorageLink } from "../../utils/storageLinks";
+
+// The Supabase URL the app talks to, which is also the one host the
+// Content-Security-Policy lets a signed screenshot load from (utils/appCsp.js).
+const SUPABASE_URL = (import.meta.env || {}).VITE_SUPABASE_URL;
 
 /**
  * What a ticket message carries, rendered from its signed links.
@@ -13,7 +18,7 @@ import { attachmentKind, attachmentLabel } from "../../utils/ticketAttachments";
  */
 export default function TicketAttachments({ urls, size = 160 }) {
   const { theme: T } = useApp();
-  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean).map(u => signedStorageLink(u, SUPABASE_URL));
   if (!list.length) return null;
 
   return (

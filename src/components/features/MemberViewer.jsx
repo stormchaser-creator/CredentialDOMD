@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TAP_MIN } from "../shared/actionButton";
 import { MEMBER_VIEW_WITHHELD_LINE, memberViewSection } from "../../../supabase/functions/_shared/memberView.mjs";
 import { createReadOnlyView, recordCard, recordDetails, profileDetails, documentsFor, groupSections, sectionRecords, homeSummary, formatCountdown, memberDisplayName, VIEWER_GROUPS, READ_ONLY_MESSAGE } from "../../utils/memberViewer.js";
 import { MEMBER_VIEW_MESSAGES, MEMBER_VIEW_MAX_FAILED_CHECKS } from "../../utils/memberViewClient.js";
@@ -153,7 +154,7 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
     const files = documentsFor(snapshot, key, item.id);
     return (
       <div key={item.id} style={{ ...card, borderColor: T.border, opacity: c.inactive ? 0.75 : 1 }}>
-        <button type="button" aria-expanded={open} onClick={() => setOpenRecord(open ? null : `${key}:${item.id}`)} style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
+        <button type="button" aria-expanded={open} onClick={() => setOpenRecord(open ? null : `${key}:${item.id}`)} style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: TAP_MIN }}>
           {c.showDot ? dot(c.color) : null}
           <span style={{ minWidth: 0, flex: 1 }}>
             {c.type && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>{c.type}</span>}

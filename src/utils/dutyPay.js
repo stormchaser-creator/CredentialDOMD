@@ -3,12 +3,13 @@
  *
  * Two prices, and they stack:
  *
- *   A day worked      the all-in invoiced day rate ($2,060.09)
- *   A call period     the A-2 grid rate for that hospital and role
+ *   A day worked      the all-in invoiced day rate
+ *   A call period     the A-2 grid rate for that hospital and role, or the
+ *                     call stipend when the agreement has no grid
  *
  * The day rate is a BUNDLED price. Appendix A calls it "the all-in invoiced
- * day rate" and derives it as $1,615.38 clinical + $187.19 leave component +
- * $257.51 scholarly — but that decomposition is how the number was built,
+ * day rate" and derives it from a clinical component, a leave component and
+ * a scholarly component. That decomposition is how the number was built,
  * not how it is billed, so it is not something to tick off day by day. A
  * weekday worked invoices one figure.
  *
@@ -40,6 +41,26 @@ export function gridRate(contract, hospital, role) {
   if (!row) return 0;
   const v = role === "backup" ? row.backup : row.primary;
   return Number(v) || 0;
+}
+
+/** True when the contract has a call rate grid with at least one row. */
+export function hasGrid(contract) {
+  return Array.isArray(contract?.callRateGrid) && contract.callRateGrid.length > 0;
+}
+
+/**
+ * What one call period pays. With a grid, the grid rate for that hospital
+ * and role, and $0 for a hospital the grid no longer names (the invoice asks
+ * before that goes out). Without a grid, the contract's call stipend: an
+ * agreement entered by hand has no grid, and its call still pays.
+ */
+export function callRate(contract, hospital, role) {
+  return hasGrid(contract) ? gridRate(contract, hospital, role) : (Number(contract?.callStipend) || 0);
+}
+
+/** Where a call period on a contract without a grid is logged. */
+export function defaultCallSite(contract) {
+  return String(contract?.shortName || contract?.facility || "").trim() || "On call";
 }
 
 export function hospitalsFor(contract) {
@@ -80,7 +101,7 @@ export function dutyDayPay(contract, duty) {
     const role = p.role === "backup" ? "backup" : "primary";
     lines.push({
       label: `On call: ${p.hospital} (${role})`,
-      amount: gridRate(contract, p.hospital, role),
+      amount: callRate(contract, p.hospital, role),
     });
   }
 
@@ -118,7 +139,7 @@ export function summarizeDuties(contract, duties) {
       const key = `${p.hospital}|${role}`;
       const cur = byHospital.get(key) || { hospital: p.hospital, role, periods: 0, amount: 0 };
       cur.periods += 1;
-      cur.amount += gridRate(contract, p.hospital, role);
+      cur.amount += callRate(contract, p.hospital, role);
       byHospital.set(key, cur);
     }
   }

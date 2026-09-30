@@ -72,7 +72,7 @@ eq("a confirmed row wins over a typed profile email on another account",
 eq("the sender is compared case-insensitively",
   chosenId({ from: "Name@Hospital.ORG", confirmed: [VICTIM] }), "victim");
 eq("a display name on the sender is stripped",
-  chosenId({ from: "Eric Whitney <name@hospital.org>", confirmed: [VICTIM] }), "victim");
+  chosenId({ from: "Rowan Testa <name@hospital.org>", confirmed: [VICTIM] }), "victim");
 
 // ── Pass 2: profiles.verified_email ─────────────────────────────────────────
 // The identity provider says the address is verified for this account, and only
@@ -271,14 +271,35 @@ for (const [label, input] of [
      /route_kept_on/.test(remove));
 }
 {
+  // Since migration 20260930020000 the close and the tombstone are one
+  // transaction (close_account_for_data_deletion): a failure between two
+  // separate calls left a tombstone without deleted_at and shut the member
+  // out for good.
   const del = readFileSync(new URL("../supabase/functions/delete-account/index.ts", import.meta.url), "utf8");
-  ok("deletion closes every claim in one call", /rpc\("apply_account_mailbox"/.test(del));
-  ok("terminally", /p_terminal: true/.test(del));
+  const sql = readFileSync(new URL("../supabase/migrations/20260930020000_reopen_after_data_deletion.sql", import.meta.url), "utf8");
+  const close = sql.slice(sql.indexOf("create or replace function public.close_account_for_data_deletion("));
+  const body = close.slice(0, close.indexOf("end $$;"));
+  ok("deletion closes the account in one call", /rpc\("close_account_for_data_deletion"/.test(del));
+  ok("with the tombstone patch in the same call", /p_patch: tombstonePatch\(/.test(del));
+  ok("the profile is not updated in a separate call", !/from\("profiles"\)\.update\(tombstonePatch/.test(del));
+  // A wipe the owner comes back from RELEASES its addresses (terminal claims
+  // are never claimable again, so the reopened account's own address and a
+  // re-added forward were refused for good). The account itself is closed by
+  // its tombstone until the reopen.
+  const release = body.indexOf("update public.mailbox_claims");
+  ok("the function releases every claim the account holds in one statement",
+     /update public\.mailbox_claims\s+set profile_id = null, proof = null,\s+event_ms = greatest\(event_ms, p_event_ms\), updated_at = now\(\)\s+where profile_id = p_profile;/.test(body));
+  ok("and never closes them terminally", !/terminal_at\s*=/.test(body) && !/apply_account_mailbox\(/.test(body));
+  ok("under the mailbox domain lock and the profile fence, in the domain's lock order",
+     body.indexOf("mailbox_domain_lock()") > 0
+     && body.indexOf("mailbox_domain_lock()") < body.indexOf("from public.profiles where id = p_profile for update")
+     && body.indexOf("from public.profiles where id = p_profile for update") < body.indexOf("from public.forwarding_addresses")
+     && body.indexOf("from public.forwarding_addresses") < release);
+  ok("the account tombstone is written before the routing moves",
+     body.indexOf("insert into public.account_tombstones") > 0 && body.indexOf("insert into public.account_tombstones") < release);
+  ok("the forwarding rows go with their routes", /delete from public\.forwarding_addresses where user_id = p_profile;/.test(body));
   ok("it no longer walks the claims one at a time", !/from\("mailbox_claims"\)[\s\S]{0,200}?\.eq\("profile_id", userId\)/.test(del));
-  ok("before the profile is tombstoned",
-     del.indexOf('rpc("apply_account_mailbox"') < del.indexOf("tombstonePatch(now)"));
-  ok("and anything but a clean terminal stops the deletion",
-     /refusing to tombstone with live routing/.test(del));
+  ok("before the profile is tombstoned", release > 0 && release < body.indexOf("execute format('update public.profiles"));
 }
 {
   const vm = readFileSync(new URL("../supabase/functions/clerk-webhook/verifiedMailbox.ts", import.meta.url), "utf8");

@@ -1,10 +1,11 @@
 import { memo, useMemo, useState } from "react";
+import { cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Field from "../../shared/Field";
 import Modal from "../../shared/Modal";
 import DeskTable from "../../shared/DeskTable";
-import { generateId, formatDate } from "../../../utils/helpers";
+import { generateId, formatDate, localDay } from "../../../utils/helpers";
 import { incomeByState, deductionTotal, estimate } from "../../../utils/taxEngine";
 import { allDeductions } from "../../../utils/deductions";
 import { paymentsForYear, collectedByState, jurisdictionRows, incomeTableRows, ledgerTotals } from "../../../utils/taxLedger";
@@ -63,11 +64,12 @@ function TaxPrep() {
   const totals = useMemo(() => ledgerTotals({ est, income, payments }), [est, income, payments]);
   const labelOf = (jid) => jurisdictions.find(j => j.id === jid)?.label || jid || "";
 
-  const today = new Date().toISOString().slice(0, 10);
+  // The local day: at 6 PM Pacific the UTC date is already tomorrow.
+  const today = localDay();
   const nextDue = FED.QUARTERLY_DUE.find(d => d >= today);
 
   const [payFor, setPayFor] = useState(null);
-  const [editPay, setEditPay] = useState(null); // desk ledger only: the payment row being edited
+  const [editPay, setEditPay] = useState(null); // the payment row being edited (phone ledger and desk table)
   const [payForm, setPayForm] = useState({});
   const openRecord = (jid) => { setPayFor(jid); setPayForm({ date: today, amount: "" }); };
   const openEdit = (p) => { setEditPay(p); setPayForm({ date: p.date, amount: String(p.amount ?? ""), note: p.note || "" }); };
@@ -226,7 +228,8 @@ function TaxPrep() {
             <span>{formatDate(p.date)}{p.note ? ` · ${p.note}` : ""}</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontVariantNumeric: "tabular-nums" }}>
               {money2(p.amount)}
-              <button onClick={() => removePayment(p)} style={{ padding: "2px 4px", borderRadius: 6, border: "none", backgroundColor: "transparent", color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+              <button aria-label="Edit payment" data-payment={p.id} onClick={() => openEdit(p)} style={{ padding: "2px 4px", borderRadius: 6, border: "none", backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", ...cardActionSize }}><EditIcon /></button>
+              <button aria-label="Delete payment" onClick={() => removePayment(p)} style={{ padding: "2px 4px", borderRadius: 6, border: "none", backgroundColor: "transparent", color: T.danger, cursor: "pointer", ...cardActionSize }}><TrashIcon /></button>
             </span>
           </div>
         ))}

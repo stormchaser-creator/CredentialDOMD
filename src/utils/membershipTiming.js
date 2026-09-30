@@ -33,6 +33,31 @@ export function quoteMatchesBetaWindow(quote, access) {
   return access.freeBeta?.state !== "active";
 }
 
+/**
+ * A paid membership's renewal, from the server's billingRenewal
+ * (20260930032000): whether it renews, or the date it ends after renewal was
+ * cancelled in the billing portal. Null when the server does not say.
+ */
+export function paidRenewalCopy(renewal) {
+  if (!renewal || typeof renewal.cancelAtPeriodEnd !== "boolean" || !Number.isFinite(Date.parse(renewal.periodEnd))) return null;
+  if (renewal.cancelAtPeriodEnd) {
+    return `Renewal is cancelled: your membership will not renew. It stays active until ${membershipDate(renewal.periodEnd)}. Your saved records remain available to read and export after it ends.`;
+  }
+  return `It renews on ${membershipDate(renewal.periodEnd)}.`;
+}
+
+/**
+ * The renewal line for an account's own membership: a paid membership only,
+ * and never beside lifetime access. An admin grants lifetime only once Stripe
+ * confirms cancel_at_period_end (adminLifetimeAccess), so until that period
+ * ends the snapshot still names the paid offer and a cancelled renewal, and
+ * "will not renew ... after it ends" would be false for that member.
+ */
+export function membershipRenewalCopy(access) {
+  if (!access?.purchasedOfferId || access.lifetime?.credential || access.lifetime?.practice) return null;
+  return paidRenewalCopy(access.billingRenewal);
+}
+
 export function scheduledMembershipCopy(scheduled) {
   if (scheduled.status === "canceling" && !scheduled.firstChargeCanceled) {
     return "Renewal cancellation is scheduled. Your first annual payment may still be due; check its status and cancellation details in the billing portal.";

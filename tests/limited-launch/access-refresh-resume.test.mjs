@@ -87,7 +87,7 @@ function fixture({ answers = [], initialAccount = ACCOUNT, memory = deviceMemory
     '../utils/launchInvitation.js': { clearLaunchInvitation() {} },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: () => client },
     '../utils/accessRefreshFailure.js': refreshFailure,
-    '../lib/errorReport.js': { reportError: (...args) => reports.push(args) },
+    '../lib/errorReport.js': { reportError: (...args) => reports.push(args), reportUnlessLeaving: (...args) => reports.push(args) },
   };
   const module = { exports: {} };
   vm.runInNewContext(code, {
@@ -366,4 +366,37 @@ test('an answer this build cannot read stops the retries and asks for a reload',
   await f.resume(['visibilitychange']);
   assert.equal(f.value.outdated, false);
   assert.equal(f.value.status, 'ready');
+});
+
+// QA3 (the owner's lost invoice): a save made on return from the share sheet
+// met the old answer before the resume check came back, and was refused. It
+// is now kept on the device and waits for that same check.
+test('a save that meets an old answer waits for the check the hook runs, sharing the one in flight', async () => {
+  const f = fixture();
+  await f.advance(0);
+  const pending = deferred();
+  f.queue.push(() => pending.promise);
+  f.suspend(ACCESS_REFRESH_MS + 60_000);
+  await f.resume(['visibilitychange']);
+  assert.equal(f.calls.length, 2, 'the resume check is in flight');
+  assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), false, 'the old answer alone authorizes nothing');
+  assert.equal(f.authority.writeStatus?.('practice')?.status, 'verify', 'a save now is kept, not refused');
+  let answered = false;
+  const waiting = f.authority.verify().then(() => { answered = true; });
+  await f.settle();
+  assert.equal(f.calls.length, 2, 'the save shares the check in flight');
+  assert.equal(answered, false, 'and waits for its answer');
+  pending.resolve(snapshot());
+  await f.settle();
+  await waiting;
+  assert.equal(answered, true);
+  assert.equal(f.authority.writeStatus('practice').status, 'allow');
+  // Old again with no check in flight: a waiting save starts one at once.
+  f.suspend(ACCESS_REFRESH_MS + 60_000);
+  await f.resume([]);
+  const again = f.authority.verify();
+  assert.equal(f.calls.length, 3, 'a check started for the save');
+  await f.settle();
+  await again;
+  assert.equal(f.authority.writeStatus('practice').status, 'allow');
 });

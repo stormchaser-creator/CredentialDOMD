@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { SearchIcon } from "../shared/Icons";
+import { dismissButtonStyle } from "../shared/actionButton";
 import { searchCPT } from "../../utils/cptSearch";
 import { aiCPTLookup } from "../../utils/cptAILookup";
 import { aiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -100,10 +101,11 @@ function CPTCodePicker({ value, onChange }) {
     fontSize: 13, fontWeight: 600, fontFamily: "monospace",
   };
 
+  // A 32 x 32 tap target around the ×, pulled back into the chip's padding
+  // so the chip is drawn the size it was and the × sits where it did.
   const chipRemoveStyle = {
-    background: "none", border: "none", color: T.accent,
-    cursor: "pointer", padding: 0, fontSize: 15, fontWeight: 700,
-    lineHeight: 1, marginLeft: 2,
+    ...dismissButtonStyle(T.accent), fontSize: 15,
+    margin: "-8px -11px -8px -10px",
   };
 
   return (
@@ -114,7 +116,7 @@ function CPTCodePicker({ value, onChange }) {
           {selectedCodes.map(code => (
             <span key={code} style={chipStyle}>
               {code}
-              <button type="button" onClick={() => removeCode(code)} style={chipRemoveStyle}>&times;</button>
+              <button type="button" aria-label={`Remove ${code}`} onClick={() => removeCode(code)} style={chipRemoveStyle}>&times;</button>
             </span>
           ))}
         </div>
@@ -130,6 +132,7 @@ function CPTCodePicker({ value, onChange }) {
         </span>
         <input
           type="text"
+          aria-label="Search CPT codes"
           value={query}
           onChange={e => handleSearch(e.target.value)}
           onFocus={() => { if (results.length) setShowDropdown(true); }}

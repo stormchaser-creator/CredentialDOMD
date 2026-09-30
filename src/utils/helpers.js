@@ -1,11 +1,34 @@
 // Extension spelled out so pure-node test scripts can import this module
 // (Vite resolves either way; node's ESM loader needs the ".js").
-import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
+import { CERTIFICATION_TYPE, isInherentlyNonExpiringLicense } from "../constants/credentialTypes.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
 import { scrubSsn, plainDashes } from "./outgoingText.js";
 import { LIFECYCLE_SECTIONS, lifecycleNote } from "./lifecycle.js";
+import { daysUntilDate } from "./dateDays.js";
 
 export const MS_PER_DAY = 86400000;
+
+/**
+ * The local calendar date as YYYY-MM-DD (src/utils/dateDays.js localToday).
+ * `new Date().toISOString().slice(0, 10)` is the UTC date, which is already
+ * tomorrow on a US evening: a case dictated at 6 pm in California was dated
+ * the next day.
+ */
+export { localToday as localISODate } from "./dateDays.js";
+
+/**
+ * The two letters an avatar shows when there is no photo: the first letter of
+ * each of the first two words of the member's name ("Nadia Navigate" is
+ * "NN"), and "MD" before a name is set. The top bar, the desk sidebar and
+ * Settings all draw it from here: the sidebar took the first two letters of
+ * the name instead ("NA"), so one member had two avatars on one screen
+ * (HOME-005).
+ */
+export function avatarInitials(name) {
+  const words = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "MD";
+  return words.slice(0, 2).map(w => Array.from(w)[0]).join("").toUpperCase();
+}
 
 export function generateId() {
   // Use cryptographically secure UUID when available
@@ -44,15 +67,53 @@ export function isNonExpiring(item, sectionKey) {
   // and a dated credential dropped out of the missing-date banner and out of
   // dateless() with it: invisible to the one system Tier 1 exists to feed.
   if (item.noExpiration === true && (sectionKey !== "licenses" || t === CERTIFICATION_TYPE || /board certification/i.test(t))) return true;
-  if (sectionKey === "licenses" && t === CERTIFICATION_TYPE) return true;
+  if (sectionKey === "licenses" && isInherentlyNonExpiringLicense(t)) return true;
   if (sectionKey === "insurance" && /health insurance|dental|vision|life insurance|disability/i.test(t)) return true;
   if (sectionKey === "healthRecords" && /immune|titer/i.test(String(item.name || "") + " " + String(item.category || "")) && !item.expirationDate) return true;
   return false;
 }
 
+/**
+ * Whether a work history record is the current position. The column is a
+ * boolean and every write now stores one (recordWrite.js), but a cached row
+ * from before may still hold the form's old "Yes"/"No", so every reader goes
+ * through here rather than testing `=== "Yes"` or plain truthiness (a
+ * cached "No" is a truthy string).
+ */
+export function isCurrentJob(v) {
+  return isTicked(v) || /^(current|present)$/i.test(String(v ?? "").trim());
+}
+
+/**
+ * The delete confirmation for a record with files attached. Deleting a record
+ * deletes the documents linked to it (AppContext deleteItemFn: the rows, their
+ * stored files and a tombstone), which the generic "Delete this item?" never
+ * said. `names`, when given, lists up to three of the files by name.
+ */
+export function deleteConfirmText(noun, fileCount = 0, { one = "attached file", many = "attached files", extra = "", names = [] } = {}) {
+  const n = Number(fileCount) || 0;
+  const tail = `${extra ? `${extra} ` : ""}This cannot be undone.`;
+  if (n <= 0) return `Delete this ${noun}? ${tail}`;
+  const word = n === 1 ? one : many;
+  const short = (n === 1 ? one : many).replace(/^attached /, "");
+  const listed = (Array.isArray(names) ? names : []).filter(Boolean);
+  const named = listed.length ? ` (${listed.slice(0, 3).join(", ")}${listed.length > 3 ? ", ..." : ""})` : "";
+  return `Delete this ${noun} and its ${n} ${word}${named}? The ${short} will be removed from Files too. ${tail}`;
+}
+
+/** A checkbox value: true, or a "Yes"/"true" a select used to store. */
+export function isTicked(v) {
+  if (v === true || v === 1) return true;
+  return /^(yes|true)$/i.test(String(v ?? "").trim());
+}
+
+// Countdowns compare local calendar days (src/utils/dateDays.js): a bare
+// YYYY-MM-DD parsed as UTC midnight expired a license at 5 pm Pacific on its
+// last valid day.
 export function getStatusColor(expDate, lead = 90) {
   if (!expDate) return "gray";
-  const days = Math.ceil((new Date(expDate) - new Date()) / MS_PER_DAY);
+  const days = daysUntilDate(expDate);
+  if (days == null) return "gray";
   if (days < 0) return "red";
   if (days <= 30) return "orange";
   if (days <= lead) return "amber";
@@ -61,7 +122,8 @@ export function getStatusColor(expDate, lead = 90) {
 
 export function getStatusLabel(expDate) {
   if (!expDate) return "No date";
-  const days = Math.ceil((new Date(expDate) - new Date()) / MS_PER_DAY);
+  const days = daysUntilDate(expDate);
+  if (days == null) return "No date";
   if (days < 0) return `Expired ${Math.abs(days)}d ago`;
   if (days === 0) return "Expires today";
   return `${days}d left`;
@@ -106,7 +168,7 @@ export function mailtoHref(email, subject, body) {
 
 export function daysUntil(dateStr) {
   if (!dateStr) return Infinity;
-  return Math.ceil((new Date(dateStr) - new Date()) / MS_PER_DAY);
+  return daysUntilDate(dateStr) ?? Infinity;
 }
 
 // plainDashes lives in outgoingText.js (dependency-free, so the edge
@@ -167,7 +229,7 @@ function getSectionFacts(item, section) {
     a("Position", item.position); a("Employer", item.employer);
     a("Location", [item.city, item.state].filter(Boolean).join(", "));
     a("Start Date", formatDate(item.startDate));
-    a("End Date", item.current === "Yes" ? "Current" : formatDate(item.endDate));
+    a("End Date", isCurrentJob(item.current) ? "Current" : formatDate(item.endDate));
     a("Reason for Leaving", item.reasonForLeaving); a("Description", item.description);
   } else if (section === "travelDocs") {
     a("Type", item.type); a("Provider", item.provider); a("Number", item.number);
@@ -297,13 +359,13 @@ export function plainLabel(item, physicianName, sectionKey) {
 
 /**
  * Descriptive label for lists. AI scans sometimes put the PHYSICIAN'S name in
- * item.name ("Eric Whitney"), which makes every row read the same. If name is
+ * item.name ("Rowan Testa"), which makes every row read the same. If name is
  * missing or just the physician's name, build a label from what the
  * credential actually is: type/title + state/facility/institution.
  */
 /**
  * A scanned credential often carries the PHYSICIAN'S name in its name field
- * ("WHITNEY, ERIC", "Eric E. Whitney, DO") — useless as a label. Detect any
+ * ("TESTA, ROWAN", "Rowan E. Testa, DO"), useless as a label. Detect any
  * variant of the person's name (case, commas, middle names/initials, degree
  * suffixes) and label by type + state instead.
  */
@@ -316,10 +378,10 @@ export function isPersonName(name, physicianName) {
   const a = nameWords(name), b = nameWords(physicianName);
   if (!a.length || !b.length) return false;
   // Every word of the shorter name must appear in the longer one, allowing
-  // middle initials to match full middle names ("e" ~ "edwin")
+  // middle initials to match full middle names ("e" ~ "ellis")
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   // Initials match full names in BOTH directions: a license reading
-  // "Eric Edwin Whitney" is the person whose profile says "Eric E. Whitney"
+  // "Rowan Ellis Testa" is the person whose profile says "Rowan E. Testa"
   const matches = (t, u) => t === u
     || (t.length === 1 && u.startsWith(t))
     || (u.length === 1 && t.startsWith(u));
@@ -335,7 +397,7 @@ export const PERSON_NAME_SECTIONS = Object.freeze(["licenses", "privileges", "in
 /**
  * The stricter test a write uses before it clears stored text. isPersonName
  * is a display heuristic: it lets an initial on either side match, so a lone
- * "ACLS" reads as "John A. Smith" and "Neurosurgery" as "N. Whitney". Hiding
+ * "ACLS" reads as "John A. Smith" and "Neurosurgery" as "N. Testa". Hiding
  * a title is cheap; erasing one on every save is not. Here the Display Name
  * must be the physician's name and nothing else:
  *   - two words or more (a lone "Mercy" or "Mayo" is a facility as often as
@@ -343,7 +405,7 @@ export const PERSON_NAME_SECTIONS = Object.freeze(["licenses", "privileges", "in
  *   - at least one word of two letters or more equal to one of the
  *     physician's (the surname, usually);
  *   - every word one of the physician's, or an initial of one of the
- *     physician's full words ("E. Whitney"). A full word matches one of the
+ *     physician's full words ("E. Testa"). A full word matches one of the
  *     physician's initials ("Jordan Alex Rivera" for "Jordan A. Rivera") only
  *     beside two exact full-word matches, so "Mercy Jones" is never read as
  *     "Mary M. Jones".
@@ -396,7 +458,7 @@ export function withoutPersonName(sectionKey, item, physicianName) {
 export function describeItem(item, physicianName, sectionKey) {
   const t = (v) => (v && String(v).trim()) || null;
   const notMe = (v) => (t(v) && !isPersonName(v, physicianName) ? String(v).trim() : null);
-  const join = (...parts) => parts.filter(Boolean).join(" — ");
+  const join = (...parts) => parts.filter(Boolean).join(", ");
 
   // Callers that know their section say so; the rest is inferred from the
   // fields only that section has, so alerts and share sheets match the cards.
@@ -462,7 +524,7 @@ export function describeItem(item, physicianName, sectionKey) {
   if (item.citation) return String(item.citation).split(".").slice(0, 2).join(".").slice(0, 90);
   const base = item.type || item.title || item.category || "Credential";
   const where = item.state || item.facility || item.institution || item.provider || "";
-  return where ? `${base} — ${where}` : base;
+  return where ? `${base}, ${where}` : base;
 }
 
 // Every share letter and message the app copies goes through here, so an
@@ -508,16 +570,52 @@ export function downscalePhoto(dataUrl, max = 512) {
   });
 }
 
+/** The device's local calendar day as YYYY-MM-DD (not the UTC day toISOString gives). */
+export function localDay(d = new Date()) {
+  const x = new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * The local day an invoice was sent (YYYY-MM-DD), or "" without one. sentAt
+ * is a moment: its first ten characters are the UTC day, which reads as the
+ * next day for an invoice sent on a US evening (and for one recorded with
+ * Mark as sent today). A plain YYYY-MM-DD is already a day, and localDay would
+ * move it back one in the Americas (it parses as UTC midnight). Every screen,
+ * the export and the printed "Issued" date read the day through this.
+ */
+export function sentDay(sentAt) {
+  if (!sentAt) return "";
+  const s = String(sentAt);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return Number.isNaN(new Date(s).getTime()) ? s.slice(0, 10) : localDay(s);
+}
+
 // Invoice numbers must never repeat — an AP department treats the number as
 // identity. Count-based numbering (invoices.length + 1) reissued a number
 // whenever an earlier invoice was deleted; this scans what actually exists.
-export function nextInvoiceNumber(invoices) {
-  const prefix = `INV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`;
-  let seq = (invoices || []).filter(i => String(i.number || "").startsWith(prefix)).length + 1;
+//
+// `kind` is the prefix: "INV" for work, "EXP" for an expense invoice, each
+// its own sequence, checked against the exact string that gets saved (an EXP
+// number used to be an INV one renamed after the check, so two expense
+// invoices on one day were both -01). The date is the physician's local day.
+// The next number is one past the highest suffix issued today, so a gap left
+// by a deleted invoice is never refilled; `retired` adds numbers no longer
+// on the list (deleted invoices) that must not come back either.
+export function nextInvoiceNumber(invoices, kind = "INV", { retired = [] } = {}) {
+  const prefix = `${kind}-${localDay().replaceAll("-", "")}-`;
+  const taken = new Set([...(invoices || []).map(i => String(i?.number || "")), ...retired.map(String)]);
+  let high = 0;
+  for (const n of taken) {
+    if (!n.startsWith(prefix)) continue;
+    const m = n.slice(prefix.length).match(/^(\d+)/);
+    if (m) high = Math.max(high, parseInt(m[1], 10));
+  }
+  let seq = high + 1;
   let num;
   do {
-    num = `${prefix}-${String(seq).padStart(2, "0")}`;
+    num = `${prefix}${String(seq).padStart(2, "0")}`;
     seq += 1;
-  } while ((invoices || []).some(i => i.number === num));
+  } while (taken.has(num));
   return num;
 }

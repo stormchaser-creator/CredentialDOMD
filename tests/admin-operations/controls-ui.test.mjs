@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import vm from 'node:vm';
 import * as controls from '../../src/utils/adminControls.js';
+import * as adminButton from '../../src/components/shared/adminButton.js';
 
 const accessSource = await readFile(new URL('../../src/components/pages/AdminAccessChange.jsx', import.meta.url), 'utf8');
 const historySource = await readFile(new URL('../../src/components/pages/AdminControlHistory.jsx', import.meta.url), 'utf8');
@@ -18,7 +19,7 @@ const receipt = () => ({ audit_id: AUDIT, duplicate: false, profile: { id: PROFI
 
 function fixture({ source = accessSource, initialChange = change() } = {}) {
   const hooks = [], effects = [], requests = [], saved = [];
-  let cursor = 0, closed = 0, sequence = 0, mounted = true, lateWrites = 0;
+  let cursor = 0, closed = 0, refreshed = 0, sequence = 0, mounted = true, lateWrites = 0;
   const equal = (a, b) => a && b && a.length === b.length && a.every((value, index) => value === b[index]);
   const react = {
     useState(initial) { const i = cursor++; if (!(i in hooks)) hooks[i] = typeof initial === 'function' ? initial() : initial; return [hooks[i], value => { if (!mounted) lateWrites++; hooks[i] = typeof value === 'function' ? value(hooks[i]) : value; }]; },
@@ -32,6 +33,7 @@ function fixture({ source = accessSource, initialChange = change() } = {}) {
   const window = { Clerk: { user: { id: 'user_Admin' }, session: { user: { id: 'user_Admin' } } } };
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }) },
     '../shared': { Modal: 'Modal' }, '../../utils/adminControls': controls, '../../lib/supabase': { supabase: db },
+    '../shared/adminButton': adminButton,
     '../../context/AppContext': { useApp: () => ({ user: { id: 'user_Admin' } }) },
   };
   const module = { exports: {} };
@@ -39,13 +41,13 @@ function fixture({ source = accessSource, initialChange = change() } = {}) {
     crypto: { randomUUID: () => `10000000-0000-4000-8000-${String(++sequence).padStart(12, '0')}` },
   });
   vm.runInContext(transformSync(source, { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, context);
-  const props = { change: initialChange, T: {}, onSaved: value => saved.push(value), onClose: () => closed++ };
+  const props = { change: initialChange, T: {}, onSaved: value => saved.push(value), onClose: () => closed++, onRefresh: () => refreshed++ };
   const render = () => { cursor = 0; let tree = module.exports.default(props); if (effects.length) { effects.splice(0).forEach(run => run()); cursor = 0; tree = module.exports.default(props); } return tree; };
   const text = node => { if (typeof node === 'string' || typeof node === 'number') return String(node); if (Array.isArray(node)) return node.map(text).join(''); return node?.props ? text(node.props.children) : ''; };
   const nodes = (tree = render()) => { const out = []; const visit = node => { if (Array.isArray(node)) node.forEach(visit); else if (node?.props) { out.push(node); visit(node.props.children); } }; visit(tree); return out; };
   const button = label => { const value = nodes().find(node => node.type === 'button' && text(node) === label); assert.ok(value, `Missing button ${label}`); return value; };
   return { requests, saved, window, render, text, nodes, button,
-    get closed() { return closed; }, get lateWrites() { return lateWrites; },
+    get closed() { return closed; }, get refreshed() { return refreshed; }, get lateWrites() { return lateWrites; },
     submit() { return nodes().find(node => node.type === 'button' && /Confirm:|Saving|Retry/.test(text(node))); },
     reason(value) { nodes().find(node => node.type === 'textarea').props.onChange({ target: { value } }); render(); },
     unmount() { for (const hook of hooks) hook?.cleanup?.(); mounted = false; },
@@ -139,4 +141,53 @@ test('control history failures do not misreport an empty audit log and unmounted
 test('the reason box is 16px so iPhone Safari does not zoom the page when it opens focused', () => {
   const f = fixture();
   assert.ok(f.nodes().find(node => node.type === 'textarea').props.style.fontSize >= 16);
+});
+
+// QA ADMIN-001: the server refuses a change whose reviewed row moved on (a
+// member opening the app changes profiles.updated_at). That refusal is
+// SQLSTATE PT409 (HTTP 409) since 20260930030000; before, it was 40001 and
+// PostgREST re-ran it forever, so the dialog sat on "Saving..." with Cancel
+// disabled. The answer now arrives, and the dialog must offer Refresh: a
+// Retry of the same reviewed request can never pass.
+const STALE = { error: { code: 'PT409', message: 'Account changed. Refresh and review it again', details: null, hint: null } };
+
+test('a stale-row refusal shows the refusal with Refresh, never Retry, and Refresh reloads the list', async () => {
+  const f = fixture(); f.reason('Pause at the verified member request');
+  const pending = f.submit().props.onClick();
+  f.requests[0].resolve(STALE); await pending;
+  const text = f.text(f.render());
+  assert.match(f.text(f.nodes().find(node => node.props.role === 'alert')), /Account changed\. Refresh and review it again/);
+  assert.match(text, /Nothing was changed\. This account changed after the list loaded\./);
+  assert.doesNotMatch(text, /Retry sends the same reviewed change/);
+  assert.equal(f.submit(), undefined, 'no Confirm or Retry button: re-sending the reviewed request is refused again');
+  assert.equal(f.button('Cancel').props.disabled, false, 'Cancel works once the refusal is back');
+  f.button('Refresh').props.onClick();
+  assert.equal(f.refreshed, 1); assert.equal(f.saved.length, 0); assert.equal(f.requests.length, 1);
+});
+
+test('an invitation that changed gets the same Refresh, and other failures keep Retry', async () => {
+  const invite = fixture({ initialChange: { kind: 'invite', action: 'set_status', status: 'revoked', row: { id: INVITE, email: 'synthetic@example.invalid', status: 'invited', profile_id: null, updated_at: '2026-09-24T10:00:00Z' } } });
+  invite.reason('Pause this unused synthetic invitation');
+  const first = invite.submit().props.onClick();
+  invite.requests[0].resolve({ error: { code: 'PT409', message: 'Invitation changed. Refresh and review it again' } }); await first;
+  assert.match(invite.text(invite.render()), /This invitation changed after the list loaded/);
+  invite.button('Refresh').props.onClick(); assert.equal(invite.refreshed, 1);
+  for (const error of [{ code: '40001', message: 'Account changed. Refresh and review it again' }, { code: '22023', message: 'Account already has that status' }, { message: 'Failed to fetch' }]) {
+    const f = fixture(); f.reason('Valid synthetic control reason');
+    const pending = f.submit().props.onClick(); f.requests[0].resolve({ error }); await pending;
+    assert.match(f.text(f.submit()), /Confirm:/, error.code || error.message);
+    assert.ok(!f.nodes().some(node => node.type === 'button' && f.text(node) === 'Refresh'), error.code || error.message);
+  }
+});
+
+test('the dialog names states the way the admin screens do: Active and Paused, never revoked', () => {
+  const pause = fixture();
+  assert.match(pause.text(pause.render()), /App access will change from Active to Paused\./);
+  const approve = fixture({ initialChange: { ...change(), status: 'active', row: { ...change().row, access_status: 'revoked' } } });
+  assert.match(approve.text(approve.render()), /App access will change from Paused to Active\./);
+  const pending = fixture({ initialChange: { ...change(), status: 'active', row: { ...change().row, access_status: 'pending' } } });
+  assert.match(pending.text(pending.render()), /App access will change from Pending to Active\./);
+  const invite = fixture({ initialChange: { kind: 'invite', action: 'set_status', status: 'revoked', row: { id: INVITE, email: 'synthetic@example.invalid', status: 'invited', profile_id: null, updated_at: '2026-09-24T10:00:00Z' } } });
+  assert.match(invite.text(invite.render()), /The invitation will change from Invited to Paused\./);
+  for (const f of [pause, approve, pending, invite]) assert.doesNotMatch(f.text(f.render()), /revoked/i);
 });

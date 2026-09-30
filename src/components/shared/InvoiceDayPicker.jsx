@@ -71,16 +71,17 @@ export default function InvoiceDayPicker({ days, selected, onChange, T }) {
   return (
     <>
       <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.45, marginBottom: 10 }}>
-        Pick the days this invoice covers — tap a week to take the whole Sun–Sat block,
+        Pick the days this invoice covers. Tap a week to take the whole Sun–Sat block,
         or tap single days. Anything unpicked stays for the next invoice.
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        {/* minHeight: at 7px padding and 12 px text they were 31 px tall. */}
         <button onClick={() => onChange(new Set(days.map(d => d.key)))} style={{
-          padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`,
+          padding: "7px 12px", minHeight: 32, borderRadius: 9, border: `1px solid ${T.border}`,
           backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
         }}>All days</button>
         <button onClick={() => onChange(new Set())} style={{
-          padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`,
+          padding: "7px 12px", minHeight: 32, borderRadius: 9, border: `1px solid ${T.border}`,
           backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
         }}>None</button>
       </div>

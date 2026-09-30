@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formatDate, mailtoHref } from "./helpers.js";
+import { formatDate, mailtoHref, localDay } from "./helpers.js";
 import {
   money, invoicePayment, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail,
   normalizeInvoiceText, invoiceTextOnlyShare, MAILTO_BODY_MAX,
@@ -55,7 +55,7 @@ const dayHeaderText = (day) => (day.window ? `${day.title}   \u{b7}   ${day.wind
  *  - a page that carries on a day opens with the column head and
  *    "<day> (continued)".
  * A day is not moved whole just because it would fit on a fresh page: on
- * the owner's Northfield invoice that left half of page 1 blank. Each page's
+ * a four-day stipend invoice that left half of page 1 blank. Each page's
  * rows are then drawn by one autoTable call.
  */
 function dayTable(doc, days, startY, M) {
@@ -208,7 +208,7 @@ export function buildInvoicePdf(inv) {
   doc.text(inv.number || "", W - M, 14, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.text(`Issued ${formatDate(inv.issuedDate || new Date().toISOString().slice(0, 10))}`, W - M, 20, { align: "right" });
+  doc.text(`Issued ${formatDate(inv.issuedDate || localDay())}`, W - M, 20, { align: "right" });
   if (inv.periodStart) {
     doc.text(
       `Service period ${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? " – " + formatDate(inv.periodEnd) : ""}`,

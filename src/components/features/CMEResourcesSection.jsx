@@ -5,6 +5,8 @@ import { SearchIcon, ExternalLinkIcon, GraduationIcon, CheckIcon } from "../shar
 import { CME_PROVIDERS } from "../../constants/cmeProviders";
 import { providerAoaLine } from "../../constants/creditEquivalence";
 import { complianceFor } from "../../utils/compliance";
+import { topicSources } from "../../utils/cmeTopicSources";
+import { compareProviders } from "../../utils/cmeProviderSort.js";
 
 const PRICING_COLORS = {
   free: { bg: "#dcfce7", color: "#15803d", label: "Free" },
@@ -128,22 +130,23 @@ function CMEResourcesSection({ initialTopicFilter }) {
     }
 
     // Sort: free first, then by topic relevance, then specialty boost
-    providers.sort((a, b) => {
-      const priceOrder = { free: 0, freemium: 1, paid: 2, subscription: 3, membership: 4 };
-      const aDiff = (priceOrder[a.pricing] || 5) - (priceOrder[b.pricing] || 5);
-      if (aDiff !== 0) return aDiff;
-      const aRel = a.topics.filter(t => unmetTopics.includes(t)).length;
-      const bRel = b.topics.filter(t => unmetTopics.includes(t)).length;
-      if (bRel !== aRel) return bRel - aRel;
-      const aSpec = specialtyProviderIds.has(a.id) ? 0 : 1;
-      const bSpec = specialtyProviderIds.has(b.id) ? 0 : 1;
-      return aSpec - bSpec;
-    });
+    providers.sort((a, b) => compareProviders(a, b, { unmetTopics, specialtyIds: specialtyProviderIds }));
 
     return providers;
   }, [viewMode, topicFilter, pricingFilter, searchQ, showMateAct, showStateSpecific, showDualAccredited, unmetTopics, deg, specialtyProviderIds]);
 
   const isFullyCompliant = perStateGaps.length > 0 && perStateGaps.every(g => g.fullyCompliant);
+  // The board-page fallback is for a topic no listed provider carries at all.
+  // When the topic has providers and another filter (pricing, a chip, the
+  // search box, For You's accreditation rule) emptied the list, saying the
+  // topic has none would be false.
+  const topicUncarried = !!topicFilter && !CME_PROVIDERS.some(p => p.topics.includes(topicFilter));
+  // "Show all providers" means every provider: each filter goes, not the
+  // topic alone, or the list it promises can still be empty.
+  const showAllProviders = () => {
+    setViewMode("all"); setSearchQ(""); setPricingFilter("all"); setTopicFilter(null);
+    setShowMateAct(false); setShowStateSpecific(false); setShowDualAccredited(false);
+  };
 
   return (
     <div>
@@ -159,6 +162,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
       <div style={{ position: "relative", marginBottom: 12 }}>
         <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.textDim }}><SearchIcon /></div>
         <input
+          aria-label="Search providers, topics"
           value={searchQ} onChange={e => setSearchQ(e.target.value)}
           placeholder="Search providers, topics..."
           data-desk-search=""
@@ -172,7 +176,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
           { id: "forYou", label: `For You${unmetTopics.length > 0 ? ` (${unmetTopics.length})` : ""}` },
           { id: "all", label: "All Providers" },
         ].map(m => (
-          <button key={m.id} onClick={() => { setViewMode(m.id); setTopicFilter(null); }} style={{
+          <button key={m.id} aria-pressed={viewMode === m.id} onClick={() => { setViewMode(m.id); setTopicFilter(null); }} style={{
             padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 22,
             border: `1px solid ${viewMode === m.id ? T.accent : T.border}`,
             backgroundColor: viewMode === m.id ? T.accent : "transparent",
@@ -189,7 +193,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
           { id: "paid", label: "Paid" },
           { id: "subscription", label: "Subscription" },
         ].map(p => (
-          <button key={p.id} onClick={() => setPricingFilter(p.id)} style={{
+          <button key={p.id} aria-pressed={pricingFilter === p.id} onClick={() => setPricingFilter(p.id)} style={{
             padding: "6px 12px", fontSize: 12, fontWeight: 600, borderRadius: 16,
             border: `1px solid ${pricingFilter === p.id ? T.accent : T.border}`,
             backgroundColor: pricingFilter === p.id ? T.accentGlow : "transparent",
@@ -213,7 +217,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
             {(unmetTopics.length > 0 ? unmetTopics : allRequiredTopics).map(topic => (
-              <button key={topic} onClick={() => setTopicFilter(topicFilter === topic ? null : topic)} style={{
+              <button key={topic} aria-pressed={topicFilter === topic} onClick={() => setTopicFilter(topicFilter === topic ? null : topic)} style={{
                 padding: "6px 12px", fontSize: 12, fontWeight: 600, borderRadius: 14,
                 border: topicFilter === topic ? "none" : `1px solid ${unmetTopics.includes(topic) ? T.warning : T.border}`,
                 backgroundColor: topicFilter === topic ? T.accent : (unmetTopics.includes(topic) ? T.warningDim : "transparent"),
@@ -263,9 +267,28 @@ function CMEResourcesSection({ initialTopicFilter }) {
       </p>
 
       {/* Provider list */}
-      {filteredProviders.length === 0 ? (
+      {filteredProviders.length === 0 && topicUncarried ? (
+        // A mandated topic no listed provider carries: send the member to the
+        // board page for that requirement instead of an empty list.
+        <div style={{ padding: "24px 18px", color: T.textDim, fontSize: 15, lineHeight: 1.55 }}>
+          <p style={{ margin: "0 0 10px" }}>No provider in this list carries {topicFilter} yet. Your state board&rsquo;s page says how to meet this requirement.</p>
+          {topicSources(topicFilter, allTrackedStates, deg).map(({ state, url }) => (
+            <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={{ display: "block", color: T.accent, fontWeight: 700, marginBottom: 8, overflowWrap: "anywhere" }}>
+              {state} board: {topicFilter}
+            </a>
+          ))}
+          <button type="button" onClick={showAllProviders} style={{
+            marginTop: 6, padding: "10px 16px", borderRadius: 10, border: `1px solid ${T.border}`,
+            backgroundColor: "transparent", color: T.text, fontSize: 16, fontWeight: 600, cursor: "pointer",
+          }}>Show all providers</button>
+        </div>
+      ) : filteredProviders.length === 0 ? (
         <div style={{ textAlign: "center", padding: "30px 18px", color: T.textDim, fontSize: 15 }}>
-          No providers match your filters. Try adjusting your search or filters.
+          <p style={{ margin: "0 0 10px" }}>No providers match your filters. Try adjusting your search or filters.</p>
+          <button type="button" onClick={showAllProviders} style={{
+            padding: "10px 16px", borderRadius: 10, border: `1px solid ${T.border}`,
+            backgroundColor: "transparent", color: T.text, fontSize: 16, fontWeight: 600, cursor: "pointer",
+          }}>Show all providers</button>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -300,7 +323,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
 
 function FilterChip({ label, active, onClick, T }) {
   return (
-    <button onClick={onClick} style={{
+    <button aria-pressed={!!active} onClick={onClick} style={{
       padding: "6px 12px", fontSize: 12, fontWeight: 600, borderRadius: 16,
       border: `1px solid ${active ? T.accent : T.border}`,
       backgroundColor: active ? T.accentGlow : "transparent",

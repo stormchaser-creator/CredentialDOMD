@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -60,6 +61,14 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
             claims = json.dumps({'role': who, 'sub': subject, **({'email': email} if email else {})}, separators=(',', ':'))
             return sql("begin;set local statement_timeout='30s';set local timezone='America/Los_Angeles';set local role " + who
                        + ';set local request.jwt.claims=' + quoted(claims) + ';' + statement + ';' + suffix, ok)
+
+        def refusal(expression, subject='user_Admin1'):
+            # SQLSTATE and message of a refused call, from psql's verbose error line.
+            claims = json.dumps({'role': 'authenticated', 'sub': subject}, separators=(',', ':'))
+            result = sql('\\set VERBOSITY verbose\nbegin;set local role authenticated;set local request.jwt.claims=' + quoted(claims)
+                         + ';select ' + expression + ';commit;', ok=False)
+            found = re.search(r'ERROR:\s+([0-9A-Z]{5}): ([^\n]*)', result.stderr)
+            return (found.group(1), found.group(2)) if result.returncode and found else (None, result.stderr or result.stdout)
 
         def value(expression, **kw):
             return json.loads(role('select to_jsonb((' + expression + '))', **kw).stdout.strip())
@@ -174,7 +183,7 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         # The 2026-09-25 follow-ups apply on top, twice each, and every check
         # below runs against the final definitions.
         for name in ['20260925110000_admin_access_regrant_guard.sql', '20260925111000_admin_operations_followups.sql',
-                     '20260925112000_support_reply_idempotency.sql']:
+                     '20260925112000_support_reply_idempotency.sql', '20260930030000_admin_refusals_not_retryable.sql']:
             followup = (ROOT / 'supabase/migrations' / name).read_text()
             sql(followup); sql(followup)
         check('migration is rerunnable and creates no audit actions', sql('select count(*) from admin_operations_audit').stdout.strip() == '0')
@@ -242,6 +251,13 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         check('identical retry returns same receipt without duplicate audit', value(expression)['duplicate'] is True and value('(select count(*) from admin_operations_audit)') == 1)
         check('request ID cannot change payload', role('select '+profile_call(3,'revoked',original,request), ok=False).returncode != 0)
         check('stale expected state denied', role('select '+profile_call(3,'revoked',original), ok=False).returncode != 0)
+        # QA ADMIN-001: PostgREST re-runs a 40001 transaction, so a stale-row
+        # refusal raised as 40001 looped forever holding the profile row. It is
+        # PT409 (HTTP 409, never re-run) and the message is unchanged.
+        check('stale account refusal is PT409, not a retryable SQLSTATE',
+              refusal(profile_call(3,'revoked',original)) == ('PT409', 'Account changed. Refresh and review it again'))
+        check('no admin_* function raises a class 40 (retryable) SQLSTATE',
+              sql("select count(*) from pg_proc where proname like 'admin\\_%' and prosrc ~* 'errcode\\s*=\\s*''40'").stdout.strip() == '0')
         check('linked invitation control denied', role('select '+invite_call(1001,'set_status','revoked'), ok=False).returncode != 0)
         check('linked invitation removal denied', role('select '+invite_call(1001,'remove'), ok=False).returncode != 0)
         for verb in ["delete from admin_operations_audit", "update admin_operations_audit set reason='tampered audit evidence'", "insert into admin_operations_audit select * from admin_operations_audit"]:
@@ -274,6 +290,8 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         paused = value(invite_call(1002,'set_status','revoked'))
         check('unlinked invitation pause is audited', paused['invite']['status'] == invite_state(1002)['status'] == 'revoked')
         check('stale invitation action denied', role('select '+invite_call(1002,'set_status','invited',inv_original),ok=False).returncode != 0)
+        check('stale invitation refusal is PT409, not a retryable SQLSTATE',
+              refusal(invite_call(1002,'set_status','invited',inv_original)) == ('PT409', 'Invitation changed. Refresh and review it again'))
         check('unlinked invitation cannot grant active access', role('select '+invite_call(1002,'set_status','active'),ok=False).returncode != 0)
         remove = invite_call(1003,'remove'); receipt = value(remove)
         check('unlinked invitation removal and replay retain audit', receipt['invite'] is None and value(remove)['duplicate'] is True
@@ -354,6 +372,15 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         sql(f"update profiles set access_status='revoked' where id='{pid(19)}'")
         check('once that account is paused the migration applies again', sql(regrant, ok=False).returncode == 0)
         sql(f"delete from admin_operations_audit where id='{synthetic}'")
+        # The regrant file just re-ran; restate the current bodies, then prove
+        # the rollback puts back exactly the 40001 refusal and re-applies cleanly.
+        refusals = (ROOT / 'supabase/migrations/20260930030000_admin_refusals_not_retryable.sql').read_text()
+        rollback = (ROOT / 'docs/rollback/20260930030000_admin_refusals_not_retryable.rollback.sql').read_text()
+        stale = dict(profile_state(14)); stale['updated'] = '2000-01-01T00:00:00+00:00'
+        sql(rollback); sql(rollback)
+        check('rollback restores the previous 40001 refusal', refusal(profile_call(14, 'revoked', stale))[0] == '40001')
+        sql(refusals)
+        check('re-applied after rollback the refusal is PT409 again', refusal(profile_call(14, 'revoked', stale))[0] == 'PT409')
 
         # Attention counts behind the tab labels and the Overview cards.
         sql(f"""update profiles set admin_inbox_seen_at=now()-interval '1 hour',admin_errors_seen_at=now()-interval '1 day' where id='{pid(1)}';

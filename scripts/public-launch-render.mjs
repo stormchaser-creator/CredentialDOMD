@@ -1,6 +1,31 @@
-import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
+import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation, FOUNDING_AVAILABILITY, FOUNDING_RATE_LOCK } from '../src/content/publicLaunch.mjs';
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+/**
+ * The page with every founding offer sentence in its visible text wrapped in
+ * the span public/membership-offer.js repaints for the live phase (BILL-004):
+ * the availability sentence (plans subtitle, home FAQ, membership cards,
+ * footers, help notes), the home FAQ's rate lock (its leading space inside,
+ * so a phase with no lock leaves no double space) and the founding rate
+ * paragraph. Only text between tags in the body changes, never a tag, an
+ * attribute or a script, and text already inside its span is left alone. The
+ * static words are unchanged; the markers are all that is added.
+ */
+export function markLiveOffer(html, view) {
+  const marks = [[escapeHtml(FOUNDING_AVAILABILITY), 'data-membership-availability'],
+    [escapeHtml(` ${FOUNDING_RATE_LOCK}`), 'data-membership-rate-lock'], [escapeHtml(view.foundingRate), 'data-membership-rate']];
+  const body = html.search(/<body\b/);
+  if (body < 0) return html;
+  const tokens = html.slice(body).split(/(<script\b[\s\S]*?<\/script>|<!--[\s\S]*?-->|<[^>]+>)/);
+  for (let i = 0; i < tokens.length; i += 2) {
+    const opened = i > 0 ? tokens[i - 1] : '';
+    for (const [sentence, attribute] of marks) {
+      if (!tokens[i].includes(sentence) || opened === `<span ${attribute}>`) continue;
+      tokens[i] = tokens[i].split(sentence).join(`<span ${attribute}>${sentence}</span>`);
+    }
+  }
+  return html.slice(0, body) + tokens.join('');
+}
 export function publicMembershipEndpoint(supabaseUrl) {
   if (!supabaseUrl) return null;
   const url = new URL(supabaseUrl);
@@ -68,7 +93,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
   if (!mode.enabled) return html;
   if (!minimumSlots[surface]) throw Error(`Unknown public launch surface: ${surface}`);
   const homeFaq = [
-    { name: 'Can I sign up now?', text: `Yes. Membership is open now. ${view.availability} That founding annual rate stays locked for life while membership remains continuously active.` },
+    { name: 'Can I sign up now?', text: `Yes. Membership is open now. ${view.availability} ${FOUNDING_RATE_LOCK}` },
     { name: 'Can my practice manager use this for our whole group?', text: view.teamAvailability },
   ];
   const counts = {};
@@ -165,7 +190,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
   if (/<form\b[^>]*class="[^"]*\bwl-form\b/.test(output) || /<fieldset\b[^>]*class="[^"]*\bguide-choice\b/.test(output)) {
     throw Error(`Unmigrated waitlist form/consent in ${surface}`);
   }
-  return output.replace(/<html\b/, '<html data-public-launch="founding-signup"')
+  return markLiveOffer(output, view).replace(/<html\b/, '<html data-public-launch="founding-signup"')
     .replace(/aria-label="Join the waitlist"/g, 'aria-label="Membership signup"')
     .replace("connect-src 'none'", offerEndpoint ? `connect-src ${escapeHtml(offerEndpoint)}` : "connect-src 'none'")
     .replace('</body>', `<script type="module" src="/membership-offer.js"${offerEndpoint ? ` data-membership-endpoint="${escapeHtml(offerEndpoint)}"` : ''}></script>\n</body>`);

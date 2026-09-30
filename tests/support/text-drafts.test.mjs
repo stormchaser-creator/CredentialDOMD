@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSupportTextDrafts, clearSupportTextDrafts, SUPPORT_DRAFT_BASE, SUPPORT_DRAFT_TTL, supportReceiptConfirmed, supportSubmissionError } from '../../src/utils/supportTextDrafts.js';
+import { createSupportTextDrafts, clearSupportTextDrafts, SUPPORT_DRAFT_BASE, SUPPORT_DRAFT_TTL, supportReceiptConfirmed, supportRequestHash, supportSubmissionError } from '../../src/utils/supportTextDrafts.js';
 import { purgeUserStorage, purgeForSignOut } from '../../src/utils/storageScope.js';
 const ID='11111111-1111-4111-8111-111111111111';
 export function memoryStorage() { const m=new Map();return { getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k),key:i=>[...m.keys()][i],get length(){return m.size;},m }; }
@@ -40,4 +40,19 @@ test('only receipt envelope confirms success, and 504/401 make no false delivery
  assert.equal(supportReceiptConfirmed({ok:true,id:ID}),true);
  assert.equal(await supportSubmissionError({context:{status:504}}),'We could not confirm receipt. Check Your tickets before retrying.');
  const auth=await supportSubmissionError({context:{status:401}});assert.doesNotMatch(auth,/You are signed out|not created|not sent/);assert.match(auth,/may need to sign in/);
+});
+
+// Review 2026-09-30 (QA SUPPORT-001): the key a draft was sent with survives
+// the component, so a retry after a reload is still the same request.
+test('a sent draft keeps its request key and digest through edits and a reload; confirmation clears both',()=>{
+ const f=fixture(),a=f.client('A');const KEY='33333333-3333-4333-8333-333333333333';const hash=supportRequestHash('["synthetic"]');
+ assert.match(hash,/^[0-9a-f]{28}$/);assert.equal(supportRequestHash('["synthetic"]'),hash);assert.notEqual(supportRequestHash('["synthetic."]'),hash);
+ a.save({...value,request:{id:KEY,hash}});assert.deepEqual(a.read().request,{id:KEY,hash});
+ a.save({...value,body:'Edited after the failed send'});assert.deepEqual(a.read().request,{id:KEY,hash},'an edit keeps it; the digest decides at the next send');
+ assert.deepEqual(f.client('A').read().request,{id:KEY,hash},'a new client (a reload) reads it back');
+ a.save({body:'Reply text',request:{id:KEY,hash}},ID);assert.deepEqual(a.read(ID).request,{id:KEY,hash});
+ a.save({...value,request:null});assert.equal(a.read().request,undefined,'null drops it');
+ for(const bad of [{id:'not-a-uuid',hash},{id:KEY,hash:'short'},{id:KEY},'text']){a.save({...value,request:bad});assert.equal(a.read().request,undefined);}
+ a.save({...value,request:{id:KEY,hash,extra:'x'}});assert.deepEqual(a.read().request,{id:KEY,hash},'only the two fields are kept');
+ assert.equal(a.clear('create',a.read().revision),true);assert.equal(a.read(),null);
 });

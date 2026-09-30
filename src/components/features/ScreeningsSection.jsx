@@ -1,17 +1,25 @@
-import { useState, useCallback, useEffect, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { pushModal, popModal } from "../../utils/deskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
+import { CARD_ACTION_GAP, cardActionSize } from "../shared/actionButton.js";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon, StarIcon } from "../shared/Icons";
 import { SCREENING_TYPES, SCREENING_RESULTS } from "../../constants/credentialTypes";
 import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
+import { docMime } from "../../utils/inboxDocs";
 import DocAttach from "./DocAttach";
+import { SECTION_FIELDS } from "../../utils/sectionFields.js";
 import { attachExistingDoc } from "../../utils/docPrefill";
+
+// Two fields side by side. A plain 1fr track cannot shrink below a date
+// input's own minimum (about 189 px in Chrome), so on a phone the second date
+// ran off the dialog's right edge; minmax(0, 1fr) splits the width.
+const PAIR = "minmax(0, 1fr) minmax(0, 1fr)";
 
 /**
  * Screenings — background checks, exclusion/sanction searches, and the
@@ -19,7 +27,7 @@ import { attachExistingDoc } from "../../utils/docPrefill";
  * for these constantly and they expire, so each report carries its own
  * checklist of searches plus the usual expiration tracking.
  */
-function ScreeningsSection({ onShare }) {
+function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, onAutoEditDone, onAutoEditClosed }) {
   const { data, addItem, editItem: editCtx, deleteItem, theme: T, toggleFavorite } = useApp();
   const starButton = (item) => {
     const on = item?.favorite === true;
@@ -27,14 +35,14 @@ function ScreeningsSection({ onShare }) {
       <button type="button" aria-pressed={on} title={on ? "Remove from Favorites" : "Add to Favorites"}
         aria-label={on ? "Remove from Favorites" : "Add to Favorites"}
         onClick={(e) => { e.stopPropagation(); toggleFavorite("screenings", item.id); }}
-        style={{ padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex",
+        style={{ padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", ...cardActionSize,
           backgroundColor: on ? T.accentDim : "transparent", color: on ? T.accent : T.textDim }}>
         <StarIcon filled={on} />
       </button>
     );
   };
   const iS = useInputStyle();
-  const items = data.screenings || [];
+  const items = useMemo(() => data.screenings || [], [data.screenings]);
 
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -62,13 +70,41 @@ function ScreeningsSection({ onShare }) {
     const byteStr = atob(doc.data.split(",")[1]);
     const arr = new Uint8Array(byteStr.length);
     for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-    window.open(URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" })), "_blank");
+    window.open(URL.createObjectURL(new Blob([arr], { type: docMime(doc) || "application/pdf" })), "_blank");
   };
 
   const openAdd = useCallback(() => { setForm({ components: [] }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item, components: item.components || [] }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
   useDeskAddShortcut(openAdd);
-  const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
+  // A form opened by a link from somewhere else (setup) owes a trip back.
+  const arrivedByLink = useRef(false);
+  const closeForm = useCallback(() => {
+    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]);
+    if (arrivedByLink.current) { arrivedByLink.current = false; onAutoEditClosed?.(); }
+  }, [onAutoEditClosed]);
+
+  // Opened from Home, search, Favorites or Vera: a view link shows the
+  // record's details, an edit link opens its form. The link is cleared even
+  // when the record is gone, so it cannot fire later.
+  //
+  // The opens below set state in an effect on purpose: the link is a one-shot
+  // event from outside this section, and the effect both acts on it and tells
+  // the owner to clear it (onAuto*Done), which cannot happen during render.
+  // The same pattern CrudSection and HealthRecordsSection use for their links.
+  useEffect(() => {
+    if (!autoViewId) return;
+    const it = items.find(x => x && x.id === autoViewId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot deep link, cleared by the owner in the same effect
+    if (it) setViewItem(it);
+    onAutoViewDone?.();
+  }, [autoViewId, items, onAutoViewDone]);
+  useEffect(() => {
+    if (!autoEditId) return;
+    const it = items.find(x => x && x.id === autoEditId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot deep link, cleared by the owner in the same effect
+    if (it) { arrivedByLink.current = true; openEdit(it); }
+    onAutoEditDone?.();
+  }, [autoEditId, items, openEdit, onAutoEditDone]);
 
   const handleSave = useCallback(() => {
     const itemId = editItem ? editItem.id : generateId();
@@ -151,14 +187,14 @@ function ScreeningsSection({ onShare }) {
             {viewItem.notes && <div style={{ fontSize: 13, color: T.textMuted, marginTop: 12, whiteSpace: "pre-wrap" }}>{viewItem.notes}</div>}
             {docsFor(viewItem.id).length > 0 ? (
               <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Source documents — tap to view</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Source documents (tap to view)</div>
                 {docsFor(viewItem.id).map(doc => (
                   !doc.data ? (
                     <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input, color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
                       <span style={{ fontSize: 16 }}>{"⏳"}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} — downloading from cloud, check back shortly</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} is downloading from the cloud; check back shortly</span>
                     </div>
-                  ) : doc.type?.startsWith("image/") ? (
+                  ) : docMime(doc).startsWith("image/") ? (
                     <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
                       style={{ width: "100%", borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 8, cursor: "zoom-in", display: "block" }} />
                   ) : (
@@ -175,7 +211,7 @@ function ScreeningsSection({ onShare }) {
               </div>
             ) : (
               <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.warning}`, fontSize: 12.5, color: T.textMuted, lineHeight: 1.45 }}>
-                No source report attached yet — tap Edit and attach the screening report so it rides along when you send this.
+                No source report attached yet. Tap Edit and attach the screening report so it rides along when you send this.
               </div>
             )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
@@ -192,7 +228,7 @@ function ScreeningsSection({ onShare }) {
 
       {/* Full-screen picture viewer */}
       {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{
+        <div role="dialog" aria-modal="true" aria-label={lightbox.name || "Picture"} onClick={() => setLightbox(null)} style={{
           position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
           display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
         }}>
@@ -208,18 +244,18 @@ function ScreeningsSection({ onShare }) {
             {SCREENING_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </Field>
-        <Field label="Display name"><input value={form.name || ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={iS} placeholder="e.g. ScoutLogic Background Screening 2026" /></Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Field label="Screening agency"><input value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={iS} placeholder="e.g. ScoutLogic" /></Field>
+        <Field label="Display name"><input value={form.name || ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={iS} placeholder="e.g. Background Screening Report 2026" /></Field>
+        <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8 }}>
+          <Field label="Screening agency"><input value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={iS} placeholder="e.g. HireRight" /></Field>
           <Field label="File / report #"><input value={form.fileNumber || ""} onChange={e => setForm(f => ({ ...f, fileNumber: e.target.value }))} style={iS} /></Field>
         </div>
-        <Field label="Requested by"><input value={form.requestedBy || ""} onChange={e => setForm(f => ({ ...f, requestedBy: e.target.value }))} style={iS} placeholder="e.g. MPLT Healthcare, LLC" /></Field>
-        <Field label="Assignment / facility"><input value={form.assignment || ""} onChange={e => setForm(f => ({ ...f, assignment: e.target.value }))} style={iS} placeholder="e.g. Intermountain Health — Peaks Locum Tenens" /></Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <Field label="Requested by"><input value={form.requestedBy || ""} onChange={e => setForm(f => ({ ...f, requestedBy: e.target.value }))} style={iS} placeholder="e.g. the staffing agency or hospital" /></Field>
+        <Field label="Assignment / facility"><input value={form.assignment || ""} onChange={e => setForm(f => ({ ...f, assignment: e.target.value }))} style={iS} placeholder="e.g. the hospital and the assignment it is for" /></Field>
+        <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8 }}>
           <Field label="Ordered"><input type="date" value={form.orderDate || ""} onChange={e => setForm(f => ({ ...f, orderDate: e.target.value }))} style={iS} /></Field>
           <Field label="Reported"><input type="date" value={form.reportDate || ""} onChange={e => setForm(f => ({ ...f, reportDate: e.target.value }))} style={iS} /></Field>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8 }}>
           <Field label="Overall result">
             <select value={form.result || ""} onChange={e => setForm(f => ({ ...f, result: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
               <option value="">Select...</option>
@@ -234,14 +270,14 @@ function ScreeningsSection({ onShare }) {
             {(form.components || []).map((c, i) => (
               <div key={i} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: 8 }}>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <input value={c.name} onChange={e => setComp(i, "name", e.target.value)} placeholder="Search name" style={{ ...iS, minWidth: 0, flex: 2 }} />
-                  <button onClick={() => removeComp(i)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontWeight: 700, flexShrink: 0 }}>&times;</button>
+                  <input aria-label={`Search ${i + 1} name`} value={c.name} onChange={e => setComp(i, "name", e.target.value)} placeholder="Search name" style={{ ...iS, minWidth: 0, flex: 2 }} />
+                  <button aria-label={`Remove search ${i + 1}`} onClick={() => removeComp(i)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontWeight: 700, flexShrink: 0, ...cardActionSize }}>&times;</button>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
-                  <input value={c.scope || ""} onChange={e => setComp(i, "scope", e.target.value)} placeholder="Scope (e.g. CA-Riverside)" style={{ ...iS, minWidth: 0 }} />
-                  <input value={c.status || ""} onChange={e => setComp(i, "status", e.target.value)} placeholder="Status" style={{ ...iS, minWidth: 0 }} />
+                <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 6, marginTop: 6 }}>
+                  <input aria-label={`Search ${i + 1} scope`} value={c.scope || ""} onChange={e => setComp(i, "scope", e.target.value)} placeholder="Scope (e.g. CA-Riverside)" style={{ ...iS, minWidth: 0 }} />
+                  <input aria-label={`Search ${i + 1} status`} value={c.status || ""} onChange={e => setComp(i, "status", e.target.value)} placeholder="Status" style={{ ...iS, minWidth: 0 }} />
                 </div>
-                <input type="date" value={c.date || ""} onChange={e => setComp(i, "date", e.target.value)} style={{ ...iS, marginTop: 6 }} />
+                <input type="date" aria-label={`Search ${i + 1} date`} value={c.date || ""} onChange={e => setComp(i, "date", e.target.value)} style={{ ...iS, marginTop: 6 }} />
               </div>
             ))}
             <button onClick={addComp} style={{
@@ -252,7 +288,10 @@ function ScreeningsSection({ onShare }) {
         </Field>
 
         <Field label="Notes"><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 60, resize: "vertical" }} /></Field>
-        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} />
+        {/* Only screenings' own columns fill the form. The default classifier
+            reads a drug screen as a health record, and its category, lot and
+            dose keys have no column here: the whole screening was refused. */}
+        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} allowedKeys={SECTION_FIELDS.screenings} />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button onClick={closeForm} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
           <button onClick={handleSave} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{editItem ? "Save" : "Add"}</button>
@@ -262,7 +301,7 @@ function ScreeningsSection({ onShare }) {
       {/* List */}
       {items.length === 0 ? (
         <EmptyState icon={"🔎"} title="No screenings yet"
-          subtitle="Background checks, exclusion searches, drug screens — with every component search and its result."
+          subtitle="Background checks, exclusion searches and drug screens, with every component search and its result."
           onAction={openAdd} actionLabel="Add Screening" />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -291,14 +330,14 @@ function ScreeningsSection({ onShare }) {
                     )}
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: CARD_ACTION_GAP, flexShrink: 0 }}>
                   {item.result && (
                     <span style={{ fontSize: 11, fontWeight: 800, color: statusColor(item.result), textTransform: "uppercase", marginRight: 4 }}>{item.result}</span>
                   )}
                   {starButton(item)}
-                  <button onClick={(e) => { e.stopPropagation(); onShare?.(item, "screenings"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
-                  <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                  <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this screening?")) deleteItem("screenings", item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  <button aria-label="Share" onClick={(e) => { e.stopPropagation(); onShare?.(item, "screenings"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", ...cardActionSize }}><SendIcon /></button>
+                  <button aria-label="Edit" onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", ...cardActionSize }}><EditIcon /></button>
+                  <button aria-label="Delete" onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this screening?")) deleteItem("screenings", item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", ...cardActionSize }}><TrashIcon /></button>
                 </div>
               </div>
             );

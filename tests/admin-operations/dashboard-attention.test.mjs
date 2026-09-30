@@ -8,6 +8,7 @@ import { transformSync } from 'esbuild';
 import vm from 'node:vm';
 import * as adminData from '../../src/utils/adminData.js';
 import * as adminTicketDraft from '../../src/utils/adminTicketDraft.js';
+import * as adminButton from '../../src/components/shared/adminButton.js';
 
 const source = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
 const tick = () => new Promise(done => setImmediate(done));
@@ -31,7 +32,7 @@ function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitl
   };
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }) },
     '../../context/AppContext': { useApp: () => app }, '../../lib/supabase': { supabase: db }, '../../lib/admin': { useIsAdmin: () => true },
-    '../../utils/adminData': adminData, '../../utils/adminTicketDraft': adminTicketDraft };
+    '../../utils/adminData': adminData, '../../utils/adminTicketDraft': adminTicketDraft, '../shared/adminButton': adminButton };
   const injected = (full ? source : source.replace(anchor, anchor + '  globalThis.current = { TABS, selectTab, navigateReport, tab, ticketPreset, accountPreset, showArchived, setShowArchived, repliesSince }; return null;\n')) + '\nexport {AdminDashboardContent};';
   const module = { exports: {} };
   const ctx = vm.createContext({ module, exports: module.exports, require: name => imports[name] || {}, console, setTimeout: () => 0 });

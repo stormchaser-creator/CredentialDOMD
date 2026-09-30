@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { CameraIcon } from "../../shared/Icons";
 import { generateId } from "../../../utils/helpers";
@@ -234,13 +235,13 @@ export default function CaptureRun({
   };
 
   const stopRow = (
-    <div style={{ display: "flex", gap: 14, marginTop: 12 }}>
+    <div style={{ display: "flex", gap: 14, marginTop: 4 }}>
       <button onClick={advance} style={{
-        border: "none", background: "transparent", padding: 0, color: T.textDim,
+        border: "none", background: "transparent", padding: 0, minHeight: TAP_MIN, color: T.textDim,
         fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", fontFamily: "inherit",
       }}>Skip this one</button>
       <button onClick={() => onExit?.()} style={{
-        border: "none", background: "transparent", padding: 0, color: T.textDim,
+        border: "none", background: "transparent", padding: 0, minHeight: TAP_MIN, color: T.textDim,
         fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", fontFamily: "inherit",
       }}>Stop the run</button>
     </div>

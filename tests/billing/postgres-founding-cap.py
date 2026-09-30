@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-BIN = Path('/opt/homebrew/opt/postgresql@17/bin')
+BIN = Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 ENV = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
 checks = []
 parser = argparse.ArgumentParser(description=__doc__)
@@ -54,7 +54,7 @@ def mode(live):
     return 'true' if live else 'false'
 
 
-with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/private/tmp') as temp:
+with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/tmp') as temp:
     base = Path(temp)
     sock = base / 'socket'
     sock.mkdir()

@@ -22,7 +22,8 @@ import { composeWelcomeEmail, welcomeEmailFingerprint } from './app/utils/welcom
  *
  * Nothing here throws for an ordinary refusal; a store failure does throw,
  * and the webhook catches it without changing its answer to Stripe. Logs
- * carry fixed words only: never an id, an address or a provider message.
+ * carry fixed words only: never an id, an address or a provider message,
+ * each at its level (welcomeLogLevel): a normal outcome is not an error.
  *
  * deps:
  *   store.claimWelcome(subscriptionId, livemode, fingerprint) -> claim
@@ -31,17 +32,38 @@ import { composeWelcomeEmail, welcomeEmailFingerprint } from './app/utils/welcom
  *   deliver({ from, replyTo, to, subject, text, idempotencyKey })
  *     -> { status: 'sent', providerId } | { status: 'failed' | 'unknown', code }
  *   configured() -> false when no mail provider key is present
- *   log(entry)
+ *   log(entry, level) -> level is 'info', 'warn' or 'error' (welcomeConsoleLog)
  */
 const CODE = /^[a-z][a-z0-9_]{0,63}$/;
 const PROVIDER_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const ADDRESS = /^[^\s@<>",;]{1,64}@[^\s@<>",;]{1,190}\.[A-Za-z]{2,24}$/;
 
+// A normal day: the email is off, the purchase is not one it is for (paid
+// before the approval or over 72 hours ago, a gift, a free beta, an account or
+// subscription no longer active), it already went or is going, or it was sent.
+// Those were written as errors, about 75 lines a QA run, and buried the real
+// ones. Wording the owner has not approved, and a purchase given up on after
+// its retries, need the owner: warnings. Anything else is an error: a send
+// that failed or is unconfirmed, no mail key, an answer nobody expected.
+const ROUTINE = new Set(['sent', 'ready', 'disabled', 'no_purchase', 'before_approval', 'too_late', 'already_sent', 'in_progress',
+  'account_unavailable', 'not_active', 'gift', 'free_beta']);
+const NOTICE = new Set(['not_approved', 'gave_up']);
+const RANK = { info: 0, warn: 1, error: 2 };
+
+/** The level a welcome outcome or sweep state is logged at: 'info', 'warn' or 'error'. */
+export const welcomeLogLevel = (state) => (ROUTINE.has(state) ? 'info' : NOTICE.has(state) ? 'warn' : 'error');
+
+/** The functions' log: one JSON line at its level (console.info, console.warn or console.error). */
+export function welcomeConsoleLog(entry, level = 'error', out = console) {
+  const write = level === 'info' ? out.info : level === 'warn' ? out.warn : out.error;
+  write.call(out, JSON.stringify(entry));
+}
+
 export const welcomeIdempotencyKey = (subscriptionId, livemode) => `credentialdomd-welcome-${livemode ? 'live' : 'test'}-${subscriptionId}`;
 
 export function createWelcomeEmailSender({ store, recipient, deliver, configured = () => true, log = () => {} }) {
   const note = (state, code = null) => {
-    try { log({ event: 'welcome_email', state, ...(code ? { code } : {}) }); } catch { /* A log never changes the outcome. */ }
+    try { log({ event: 'welcome_email', state, ...(code ? { code } : {}) }, welcomeLogLevel(state)); } catch { /* A log never changes the outcome. */ }
     return { state, ...(code ? { code } : {}) };
   };
   return async function sendWelcome({ subscriptionId, livemode } = {}) {
@@ -90,7 +112,7 @@ export function createWelcomeEmailSender({ store, recipient, deliver, configured
  *   store.pendingWelcomes(livemode, fingerprint) -> { state, purchases: [subscriptionId] }
  *   send({ subscriptionId, livemode }) -> sendWelcome's answer
  *   now() and budgetMs: no new send starts after the budget is spent
- *   log(entry)
+ *   log(entry, level) -> as the sender's
  */
 const SUBSCRIPTION = /^sub_[A-Za-z0-9]+$/;
 
@@ -104,7 +126,11 @@ export function sameHookSecret(presented, expected) {
 
 export function createWelcomeEmailSweep({ secret, mode, store, send, now = () => Date.now(), budgetMs = 45000, log = () => {} }) {
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const note = (entry) => { try { log({ event: 'welcome_email_sweep', ...entry }); } catch { /* A log never changes the outcome. */ } };
+  // A run's level is its worst part: the state, and each purchase's outcome.
+  const note = (entry) => {
+    const level = [entry.state, ...Object.keys(entry.outcomes || {})].map(welcomeLogLevel).reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'info');
+    try { log({ event: 'welcome_email_sweep', ...entry }, level); } catch { /* A log never changes the outcome. */ }
+  };
   return async function sweep(req) {
     if (req.method !== 'POST') return reply(405, { error: 'POST only' });
     if (!sameHookSecret(req.headers.get('x-hook-secret'), secret())) return reply(401, { error: 'Not authorized' });

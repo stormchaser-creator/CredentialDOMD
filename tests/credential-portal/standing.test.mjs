@@ -221,8 +221,8 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     // Retrying the same request returns the same grant; a changed body is a conflict.
     assert.equal((await call(main.input, 'alice')).status, 200);
     assert.equal((await call({ ...main.input, purpose: 'Changed' }, 'alice')).status, 409);
-    const text = standingInvitationEmail({ physician: { name: 'Eric Whitney', degreeType: 'DO' }, purpose: 'Synthetic', accessEndsAt: '2026-10-25T12:00:00Z', allowDownload: false, link: 'https://credentialdomd.com/credential-access/#invite=x', replyTo: null }).text;
-    assert.match(text, /^Eric Whitney, DO has given you view access to their credential file\.\n/); assert.match(text, /Downloads are turned off/); assert.ok(text.split('\n').length > 10);
+    const text = standingInvitationEmail({ physician: { name: 'Rowan Testa', degreeType: 'DO' }, purpose: 'Synthetic', accessEndsAt: '2026-10-25T12:00:00Z', allowDownload: false, link: 'https://credentialdomd.com/credential-access/#invite=x', replyTo: null }).text;
+    assert.match(text, /^Rowan Testa, DO has given you view access to their credential file\.\n/); assert.match(text, /Downloads are turned off/); assert.ok(text.split('\n').length > 10);
   });
 
   await t.test('request-code answers before any lookup or mail work, identically for a match and a mismatch', async () => {
@@ -400,9 +400,9 @@ test('administrator access: standing grants on the real migrations', { timeout: 
   await t.test('the invitation states the end date AND time in the physician\'s own zone, named, not a bare UTC date', async () => {
     // A 30-day grant made at 7pm MDT on Sep 25 ends at 01:00 UTC on Oct 26:
     // a UTC date would tell the office "October 26", a day late.
-    const zoned = standingInvitationEmail({ physician: { name: 'Eric Whitney', degreeType: 'DO' }, purpose: 'Synthetic', accessEndsAt: '2026-10-26T01:00:00Z', allowDownload: true, link: 'https://credentialdomd.com/credential-access/#invite=x', replyTo: null, timeZone: 'America/Denver' }).text;
+    const zoned = standingInvitationEmail({ physician: { name: 'Rowan Testa', degreeType: 'DO' }, purpose: 'Synthetic', accessEndsAt: '2026-10-26T01:00:00Z', allowDownload: true, link: 'https://credentialdomd.com/credential-access/#invite=x', replyTo: null, timeZone: 'America/Denver' }).text;
     assert.match(zoned, /\nAccess ends: October 25, 2026 at 7:00 PM MDT\n/);
-    const unzoned = standingInvitationEmail({ physician: { name: 'Eric Whitney', degreeType: 'DO' }, purpose: 'Synthetic', accessEndsAt: '2026-10-26T01:00:00Z', allowDownload: true, link: 'x', replyTo: null, timeZone: 'Not/AZone' }).text;
+    const unzoned = standingInvitationEmail({ physician: { name: 'Rowan Testa', degreeType: 'DO' }, purpose: 'Synthetic', accessEndsAt: '2026-10-26T01:00:00Z', allowDownload: true, link: 'x', replyTo: null, timeZone: 'Not/AZone' }).text;
     assert.match(unzoned, /\nAccess ends: October 26, 2026 at 1:00 AM UTC\n/, 'an unknown zone falls back to UTC, named');
     assert.ok(!/[^\x00-\x7f]/.test(zoned + unzoned), 'plain ASCII (no narrow no-break space before PM)');
     // End to end: the zone the owner's browser sends reaches the email, and a resent link carries it too.

@@ -37,7 +37,7 @@ const fixture = (over = {}) => ({
       { id: 'C3', name: 'Old Stuff', icon: 'O', fields: [], archivedAt: '2026-01-01T00:00:00Z' },
     ],
     customRecords: [
-      { id: 'R1', categoryId: 'C1', categoryName: 'Hospital ID Badges', name: 'Penrose badge', issuer: 'Penrose Hospital', expirationDate: '2027-05-01', fieldValues: { badgeNumber: 'PX-4471' }, fieldLabels: { badgeNumber: 'Badge number' } },
+      { id: 'R1', categoryId: 'C1', categoryName: 'Hospital ID Badges', name: 'Juniper badge', issuer: 'Juniper Hospital', expirationDate: '2027-05-01', fieldValues: { badgeNumber: 'PX-4471' }, fieldLabels: { badgeNumber: 'Badge number' } },
       { id: 'R2', categoryId: 'C3', categoryName: 'Old Stuff', name: 'Old parking pass', fieldLabels: { lot: 'Lot' }, fieldValues: { lot: 'B' } },
     ],
   },
@@ -51,7 +51,7 @@ const render = (Component, props, over) => {
 test('a category shows its own records and the tools to manage it', () => {
   const html = render(Category, { categoryId: 'C1' });
   assert.match(html, /Hospital ID Badges/);
-  assert.match(html, /Penrose badge/);
+  assert.match(html, /Juniper badge/);
   assert.doesNotMatch(html, /Old parking pass/, 'another category\'s record must not appear here');
   for (const tool of ['Rename', 'Add a field', 'Hide category', 'Move to another category']) assert.match(html, new RegExp(tool));
 });
@@ -60,7 +60,7 @@ test('Unsorted records shows what a hidden category held, and cannot rename anyt
   const html = render(Category, { categoryId: 'unsorted', onOpenCategory() {} });
   assert.match(html, /Unsorted records/);
   assert.match(html, /Old parking pass/);
-  assert.doesNotMatch(html, /Penrose badge/);
+  assert.doesNotMatch(html, /Juniper badge/);
   assert.doesNotMatch(html, />Rename</);
   assert.match(html, /belong to a category that was hidden or removed/);
 });
@@ -71,13 +71,13 @@ test('a category id that no longer exists explains where its records went', () =
 
 test('a read-only account sees its records but no category tools', () => {
   const html = render(Category, { categoryId: 'C1' }, { canWriteCredential: false, credentialReadOnly: true });
-  assert.match(html, /Penrose badge/);
+  assert.match(html, /Juniper badge/);
   assert.doesNotMatch(html, /Hide category|Move to another category/);
 });
 
 test('a membership check in progress keeps the category tools; the write guard answers a tap (ticket fe321c16)', () => {
   const html = render(Category, { categoryId: 'C1' }, { canWriteCredential: false, credentialReadOnly: false });
-  assert.match(html, /Penrose badge/);
+  assert.match(html, /Juniper badge/);
   assert.match(html, /Hide category/);
 });
 

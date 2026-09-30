@@ -32,9 +32,14 @@ const SUBTABS = [
 
 export default function LocumDashboard({ initialSub, focusId, onFocusConsumed }) {
   const { theme: T, plan, isDevMode, limitedLaunch, practiceReadOnly } = useApp();
-  const [sub, setSub] = useState(initialSub || "work");
-  // Home search can land here on a specific sub-view (contracts, invoices...).
-  useEffect(() => { if (initialSub) setSub(initialSub); }, [initialSub]);
+  // Home search, a sync issue, Vera or a filed receipt ("Open Expenses") can
+  // land here on a specific sub-view. App passes whatever sub-page the
+  // navigation named; anything that is not one of these tabs opens Work.
+  const start = SUBTABS.some(t => t.id === initialSub) ? initialSub : undefined;
+  const [sub, setSub] = useState(start || "work");
+  // A later navigation to another sub-view, while Practice stays on screen.
+  const [landedOn, setLandedOn] = useState(start);
+  if (start !== landedOn) { setLandedOn(start); if (start) setSub(start); }
   useEffect(() => { if (focusId) onFocusConsumed?.(); }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [billDraft, setBillDraft] = useState(null);
 
@@ -50,21 +55,29 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
 
   return (
     <div>
-      {/* Sub-tab nav */}
+      {/* Sub-tab nav. Equal widths where they fit (a desk), but never
+          narrower than a label: with min-width 0 and an ellipsis every tab
+          got 45 px on a 375 px phone and "Invoices" and "Contracts" read
+          "Invoi..." and "Cont...". A flex item's own minimum is its label
+          now, so the long two take what they need and the rest share the
+          remainder; on a screen too narrow for all seven the strip scrolls
+          sideways instead of cutting a word. */}
       <div style={{
         display: "flex", gap: 4, marginBottom: 16,
         backgroundColor: T.input, borderRadius: 10, padding: 3,
+        overflowX: "auto", scrollbarWidth: "none",
       }}>
         {SUBTABS.map((t) => (
           <button
             key={t.id}
+            aria-pressed={sub === t.id}
             onClick={() => setSub(t.id)}
             style={{
-              flex: 1, minWidth: 0, padding: "8px 2px", borderRadius: 8, border: "none",
+              flex: 1, minHeight: 32, padding: "8px 2px", borderRadius: 8, border: "none",
               backgroundColor: sub === t.id ? T.card : "transparent",
               color: sub === t.id ? T.text : T.textMuted,
               fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
               boxShadow: sub === t.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
               transition: "all 0.15s",
             }}

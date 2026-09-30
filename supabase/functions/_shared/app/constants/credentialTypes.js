@@ -3,6 +3,15 @@
 // scripts/shared-app-modules.test.mjs fails when this copy drifts from its source.
 export const CERTIFICATION_TYPE = "Certification";
 
+// Licence-section types that never expire: a course or device certification,
+// and the licensing exams and the ECFMG certificate, which are passed or
+// granted once. They save without a date, are never chased for one, and a
+// leftover "not yet known" flag on them is not a question to resolve.
+export const NON_EXPIRING_LICENSE_TYPES = Object.freeze([CERTIFICATION_TYPE, "USMLE", "COMLEX", "ECFMG Certificate"]);
+export function isInherentlyNonExpiringLicense(type) {
+  return NON_EXPIRING_LICENSE_TYPES.includes(String(type || ""));
+}
+
 export const LICENSE_TYPES_MD = [
   "State Medical License",
   "DEA Registration",

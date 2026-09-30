@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, memo } from "react";
+import { TAP_MIN } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import EmptyState from "../shared/EmptyState";
@@ -11,7 +12,7 @@ import { planAccept, planDismiss, planUndo, withItem, recordAnswerCorrection } f
 import { useIntakeNotes, saveNote } from "../../hooks/useIntakeNotes";
 import { IntakeNoteCard } from "./IntakeNotes";
 import EmailPacketModal, { PACKET_FROM_ADDRESS, REQUEST_REPLIED_EVENT } from "./EmailPacketModal";
-import { ProposalChecklist, ApproveSendButton, ReviewButton, UnclearNote, canSendOnOneTap, proposalSummary, requesterMissing, unwrapInvoke } from "./RequestPacket";
+import { ProposalChecklist, ApproveSendButton, ReviewButton, UnclearNote, canSendOnOneTap, proposalSummary, requesterMissing, requesterName, unwrapInvoke } from "./RequestPacket";
 import { REQUESTS_CHANGED_EVENT } from "../../hooks/useNewRequestCount";
 import { useRequestProposals } from "../../hooks/useRequestProposals";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
@@ -174,14 +175,25 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
 
   const load = useCallback(async ({ quiet } = {}) => {
     if (!supabase) { setErr("Not connected to your account."); setLoading(false); return; }
+    // Only this physician's own requests. RLS lets an administrator read
+    // every member's rows (document_requests_admin_select), which listed
+    // other members' requests here as the owner's own. Nothing is read until
+    // the account has loaded its profile id; the effect below runs again then.
+    const profileId = userIdRef?.current || null;
+    if (!profileId) {
+      if (loaded) { setErr("Not connected to your account."); setLoading(false); }
+      return;
+    }
     if (!quiet) setLoading(true);
     setErr(null);
     try {
       const { data: list, error } = await supabase
         .from("document_requests")
         .select("*")
+        .eq("user_id", profileId)
         .order("received_at", { ascending: false });
       if (error) throw error;
+      if ((userIdRef?.current || null) !== profileId) return;
       setRows(list || []);
     } catch (e) {
       // A missing table means the backend half is not deployed yet; say so plainly.
@@ -191,7 +203,7 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userIdRef, loaded]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -341,9 +353,13 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
   // (email-inbound stores it as the placeholder), and the card once printed
   // the physician's own email in bold as the credentialer. Home and the
   // detail header already say "Requester not found"; so does the list now.
-  const fromLabel = (r) => r.from_name || (requesterMissing(r, senders) ? "Requester not found" : (r.from_addr || "Unknown sender"));
+  // A forward of the physician's own message names the physician in
+  // from_name; requesterName drops it, so that row says "Requester not
+  // found" too instead of naming the physician as who asked.
+  const fromLabel = (r) => requesterName(r, senders) || (requesterMissing(r, senders) ? "Requester not found" : (r.from_addr || "Unknown sender"));
   const askVera = (r) => {
-    const from = r.from_name ? `${r.from_name} <${r.from_addr}>` : (r.from_addr || "an unknown sender");
+    const who = requesterName(r, senders);
+    const from = who ? `${who} <${r.from_addr}>` : (r.from_addr || "an unknown sender");
     const q = `Build the document packet for this request from ${from} (${r.subject || "no subject"}):\n\n${r.body_text || ""}`;
     onAskVera?.(q, r);
   };
@@ -403,6 +419,7 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
     const fwd = String(open.forwarded_by || "").trim().toLowerCase();
     const replyTo = fwd && fwd !== realEmail.toLowerCase() && senders.includes(fwd) ? fwd : (realEmail || "your account email");
     const requesterGone = requesterMissing(open, senders);
+    const openRequester = requesterName(open, senders);
     // A request whose forward carried no From: line gets a "Requester's
     // email" field above the same green button, so the path is open, type,
     // one tap. It used to be a separate button that opened the hand-built
@@ -458,8 +475,8 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{open.subject || "(no subject)"}</div>
               <div style={{ fontSize: 13, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>
-                {open.from_name ? <><b style={{ color: T.text }}>{open.from_name}</b> · </> : null}
-                {requesterGone && !open.from_name
+                {openRequester ? <><b style={{ color: T.text }}>{openRequester}</b> · </> : null}
+                {requesterGone && !openRequester
                   ? <span style={{ color: T.warning, fontWeight: 600 }}>Requester not found in the forwarded email</span>
                   : open.from_addr}
               </div>
@@ -502,8 +519,8 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
             )}
             {proposal && open.status === "new" && (
               <div style={{ marginTop: 10 }}>
-                <div style={sectionLabel}>Cover note</div>
-                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={5} style={{
+                <div id="request-cover-note" style={sectionLabel}>Cover note</div>
+                <textarea aria-labelledby="request-cover-note" value={note} onChange={(e) => setNote(e.target.value)} rows={5} style={{
                   width: "100%", boxSizing: "border-box", minHeight: 96, resize: "vertical", padding: "9px 11px", borderRadius: 10,
                   border: `1px solid ${T.inputBorder}`, backgroundColor: T.input, color: T.text, fontSize: 13.5, lineHeight: 1.5, fontFamily: "inherit",
                 }} />
@@ -519,8 +536,8 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
             )}
             {requesterGone && open.status === "new" && !sent && (
               <div style={{ marginTop: 10, minWidth: 0 }}>
-                <div style={sectionLabel}>Requester's email</div>
-                <input type="email" value={typedAddr} onChange={(e) => setAddrDraft({ id: open.id, value: e.target.value })}
+                <div id="request-requester-email" style={sectionLabel}>Requester's email</div>
+                <input type="email" aria-labelledby="request-requester-email" value={typedAddr} onChange={(e) => setAddrDraft({ id: open.id, value: e.target.value })}
                   placeholder="credentialing@hospital.org" autoCapitalize="off" autoCorrect="off" spellCheck={false} inputMode="email"
                   style={{
                     width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 10,
@@ -650,9 +667,12 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
             and writes the reply. When every ask is clear, one tap here or on Home sends it; when anything is not, you review the draft first.{" "}
           </>
         )}
+        {/* A link inside the sentence: 32 px tall, its extra height taken
+            back by negative margins so the line it sits on does not grow. */}
         <button onClick={() => navigate("more", "settings")} style={{
           padding: 0, border: "none", background: "none", color: T.accent,
           font: "inherit", fontWeight: 700, cursor: "pointer", textDecoration: "underline",
+          display: "inline-flex", alignItems: "center", minHeight: TAP_MIN, margin: "-8px 0",
         }}>{routable.length > 0 ? "add another address in Settings" : "Open Settings, Email"}</button>.
       </div>
 
@@ -685,7 +705,7 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
           <div style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
             Sent to {sentInfo.to} with {sentInfo.attached} attachment{sentInfo.attached === 1 ? "" : "s"}.
           </div>
-          <button onClick={() => setSentInfo(null)} style={{ ...linkBtn, color: T.success, padding: 0, flexShrink: 0 }}>Dismiss</button>
+          <button onClick={() => setSentInfo(null)} style={{ ...linkBtn, color: T.success, padding: 0, flexShrink: 0, minHeight: TAP_MIN, margin: "-6px 0" }}>Dismiss</button>
         </div>
       )}
 

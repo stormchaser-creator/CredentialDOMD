@@ -265,6 +265,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
           initialSubject={subject}
           initialNote={withDocs}
           initialDocIds={linkedDocs.map(d => d.id)}
+          shareItem={{ id: item.id, name: item.name || item.type || item.title || item.category, section }}
         />
       )}
     </Modal>

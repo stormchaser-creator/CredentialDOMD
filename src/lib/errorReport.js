@@ -117,6 +117,70 @@ function post(payload) {
   } catch { /* nothing left to try */ }
 }
 
+// A page being left (reload, a navigation, closing the tab) aborts its own
+// reads, and a load or membership check that stops that way is the reader
+// leaving, not a failure (OPS-008: seven quick reloads by a signed-in member,
+// no fault, sent "Account load stopped" and "Membership check failed" to the
+// owner, by sendBeacon, which outlives the page). beforeunload opens a short
+// window, since a "Leave site?" prompt the member answers Stay keeps the page;
+// pagehide marks the page gone until a back-forward-cache pageshow restores it.
+const LEAVE_WINDOW_MS = 10000;
+const LEAVE_GRACE_MS = 1000;
+let leavingSince = null;
+let pageHidden = false;
+// Every pagehide, so a report held across one knows the page went (and came
+// back from the back-forward cache) while it waited.
+let pageHides = 0;
+let lifecycleWatched = false;
+
+function watchLifecycle() {
+  if (lifecycleWatched || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+  lifecycleWatched = true;
+  window.addEventListener("beforeunload", () => { leavingSince = Date.now(); });
+  window.addEventListener("pagehide", () => { pageHidden = true; pageHides += 1; });
+  window.addEventListener("pageshow", () => { pageHidden = false; leavingSince = null; });
+}
+
+/** True while the page is being left: after pagehide, or within a moment of beforeunload. */
+export function pageLeaving(now = Date.now()) {
+  return pageHidden || (leavingSince !== null && now - leavingSince >= 0 && now - leavingSince < LEAVE_WINDOW_MS);
+}
+
+/**
+ * reportError for a load or check that stopped, unless the page is being
+ * left. Sent a moment later, so the aborts a reload causes never reach the
+ * owner while a stop on a page that stays still does:
+ *   - after pagehide the page is gone (or in the back-forward cache), and the
+ *     report is dropped, even if the page comes back while it waits;
+ *   - inside beforeunload's window the page may yet go, so the report waits
+ *     the window out. A page that goes takes it along (its timer never runs);
+ *     a page still here was kept (Stay on a "Leave site?" prompt), and the
+ *     report goes then, late but not lost.
+ * `onDropped` runs when the report is dropped, so a caller that sends each
+ * code once (createAccessRefreshReporter) forgets it and reports the next
+ * failure with that code instead of counting a report nobody received.
+ */
+export function reportUnlessLeaving(err, kind = "error", extra = undefined, { onDropped } = {}) {
+  let hidesAtStart = 0;
+  const drop = () => {
+    try { if (typeof onDropped === "function") onDropped(); } catch { /* reporting must never throw */ }
+  };
+  const decide = () => {
+    try {
+      if (pageHidden || pageHides !== hidesAtStart) { drop(); return; }
+      const now = Date.now();
+      if (pageLeaving(now)) { setTimeout(decide, Math.max(0, leavingSince + LEAVE_WINDOW_MS - now)); return; }
+      reportError(err, kind, extra);
+    } catch { /* reporting must never throw */ }
+  };
+  try {
+    watchLifecycle();
+    hidesAtStart = pageHides;
+    if (pageHidden) { drop(); return; }
+    setTimeout(decide, LEAVE_GRACE_MS);
+  } catch { /* reporting must never throw */ }
+}
+
 /**
  * Report an error. `kind` is 'error' | 'unhandledrejection' | 'react'.
  * De-dupes identical kind+message within the session and caps volume.
@@ -155,6 +219,7 @@ export function reportError(err, kind = "error", extra = undefined) {
 export function install() {
   if (installed || typeof window === "undefined") return;
   installed = true;
+  watchLifecycle();
 
   window.addEventListener("error", (event) => {
     // Resource load failures (img/script) fire 'error' too but have no .error;
@@ -253,4 +318,4 @@ export class ErrorBoundary extends Component {
   }
 }
 
-export default { install, reportError, setErrorUser, ErrorBoundary };
+export default { install, reportError, reportUnlessLeaving, pageLeaving, setErrorUser, ErrorBoundary };

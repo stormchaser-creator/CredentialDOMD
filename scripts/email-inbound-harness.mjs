@@ -161,7 +161,7 @@ export const harness = {
   // The raw message's top-most Authentication-Results. The default is a
   // DMARC pass for the physician's domain; a forward that merely fails to
   // fail is "mx.resend.com; spf=pass smtp.mailfrom=attacker.example; dkim=none; dmarc=none".
-  rawAuth: "mx.resend.com; dmarc=pass header.from=elryx.com",
+  rawAuth: "mx.resend.com; dmarc=pass header.from=clinic.example",
   access: { credential: true, practice: true },   // what the membership snapshot answers
 };
 globalThis.__inboundHarness = harness;
@@ -256,7 +256,7 @@ export function resetWorld() {
   harness.ledger = { calls: [] };
   harness.failInsert = null;
   harness.failRemove = null;
-  harness.rawAuth = "mx.resend.com; dmarc=pass header.from=elryx.com";
+  harness.rawAuth = "mx.resend.com; dmarc=pass header.from=clinic.example";
   harness.access = { credential: true, practice: true };
 }
 

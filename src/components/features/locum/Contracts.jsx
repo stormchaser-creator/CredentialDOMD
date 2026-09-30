@@ -1,13 +1,15 @@
-import { useState, useCallback, useEffect, useMemo, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from "react";
+import { TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { pushModal, popModal } from "../../../utils/deskKeys";
+import { docMime } from "../../../utils/inboxDocs";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, EditIcon, TrashIcon, FileIcon } from "../../shared/Icons";
-import { generateId, formatDate } from "../../../utils/helpers";
+import { generateId, formatDate, deleteConfirmText } from "../../../utils/helpers";
 import DocAttach from "../DocAttach";
 import ContractSummary from "./ContractSummary";
 import { analyzeAgreement, analyzeAgreementText } from "../../../utils/documentScanner";
@@ -17,6 +19,9 @@ import { STATE_NAMES } from "../../../constants/states";
 import { isArchived } from "../../../utils/contractsForDate";
 import { callDayStartHour, hourLabel } from "../../../utils/billing";
 import { toClock, savedPeriod, periodProblem, coveragePeriodText, blockSummary, contractZone, deviceZone, validZone, isTimedPeriod } from "../../../utils/coverageBlocks";
+import { callPeriodsOf, callRate } from "../../../utils/dutyPay";
+import { resolveDocument } from "../../../utils/receiptFiles";
+import { downloadDocumentBlob } from "../../../lib/supabase";
 
 // The analyzer JSON goes through one normalizer so dates, dollar figures, and
 // coverage blocks land in the exact shape the form and the Work Log expect.
@@ -32,6 +37,42 @@ const US_ZONES = [
   ["America/Los_Angeles", "Pacific"], ["America/Anchorage", "Alaska"], ["Pacific/Honolulu", "Hawaii"],
 ];
 
+// The pay model decides where the contract is logged: a day rate on Days &
+// call, a call stipend or hourly rate as time on the Work tab. Until someone
+// picks one it is worked out from the rates, as it always was.
+const PAY_MODELS = [
+  ["stipend", "Call stipend (time on the Work tab)"],
+  ["hourly", "Hourly (time on the Work tab)"],
+  ["daily", "Day rate (days and call)"],
+];
+const derivedPayModel = (f) => (parseFloat(f.dayRate) ? "daily" : parseFloat(f.callStipend) ? "stipend" : "hourly");
+const MODEL_NAME = { daily: "Day rate", stipend: "Call stipend", hourly: "Hourly" };
+const MODEL_RATE = { daily: "day rate", stipend: "call stipend", hourly: "hourly rate" };
+
+/** Why the picked pay model cannot be saved with these rates, or "". */
+function payModelProblem(f) {
+  const model = f.payModel || derivedPayModel(f);
+  const rates = {
+    daily: parseFloat(f.dayRate) || (parseFloat(f.clinicalDayRate) || 0) + (parseFloat(f.scholarlyRate) || 0),
+    stipend: parseFloat(f.callStipend) || 0,
+    hourly: parseFloat(f.hourlyRate) || parseFloat(f.callHourlyRate) || 0,
+  };
+  if (!(model in rates) || rates[model]) return "";
+  const others = Object.keys(rates).filter(k => k !== model && rates[k]).map(k => MODEL_NAME[k]);
+  if (!others.length) return "";
+  return `Pay model is ${MODEL_NAME[model]}, but the ${MODEL_RATE[model]} is empty while ${others.join(" and ")} ${others.length === 1 ? "is" : "are"} set. Pick ${others.join(" or ")} under Pay model, or enter the ${MODEL_RATE[model]}.`;
+}
+
+/** The grid as saved: trimmed names, numeric rates, nameless rows dropped, null when empty. */
+const savedGrid = (rows) => {
+  const grid = (rows || []).map(r => ({ ...r, hospital: String(r?.hospital || "").trim(), primary: parseFloat(r?.primary) || 0, backup: parseFloat(r?.backup) || 0 }))
+    .filter(r => r.hospital);
+  return grid.length ? grid : null;
+};
+
+// Why an attached file could not be opened, by resolveDocument's reason.
+const OPEN_REASONS = { offline: "you are offline", never_uploaded: "it was never uploaded from the device that saved it", unavailable: "it could not be read from your account storage", corrupt: "the saved file could not be read", timeout: "the download timed out" };
+
 // Work-state hint reads from the tax engine's own list so it never promises a
 // state the estimator cannot model.
 const WORK_STATE_HINT = `Where the work physically happens. Tax Prep allocates this contract's income here; state tax is modeled today for ${MODELED_STATES.join(", ")} and the no-income-tax states (${NO_INCOME_TAX_STATES.join(", ")}). Other states show income only, no state tax estimate yet.`;
@@ -44,7 +85,7 @@ const WORK_STATE_HINT = `Where the work physically happens. Tax Prep allocates t
  * the terms and the paper live together.
  */
 function Contracts() {
-  const { data, setData, addItem, editItem: editCtx, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem: editCtx, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -111,6 +152,25 @@ function Contracts() {
       const end = formatDate(p.end);
       if (!window.confirm(`Block ${i + 1} was saved without times, so ${end} was its last call day (${blockSummary(was)}). With an end time, ${end} is the date coverage ends: ${blockSummary(p)}. If coverage runs through the morning after ${end}, change the end date to that morning. Save with ${end} as the date coverage ends?`)) return;
     }
+    // A pay model whose own rate is empty while another is set is a contract
+    // that bills nothing where it is logged (a day-rate contract turned hourly
+    // stayed "daily": $0 days, and no Work tab entry could bill it).
+    const modelProblem = payModelProblem(form);
+    if (modelProblem) { setFormError(modelProblem); return; }
+    const grid = savedGrid(form.callRateGrid);
+    // A renamed or removed grid row, or a new grid replacing the stipend,
+    // would reprice call days already logged under the old names at $0.
+    if (editItem) {
+      const after = { ...editItem, callRateGrid: grid, callStipend: parseFloat(form.callStipend) || 0 };
+      const lost = [];
+      for (const d of (data.dutyDays || []).filter(x => x.contractId === editItem.id)) {
+        for (const p of callPeriodsOf(d)) {
+          const role = p.role === "backup" ? "backup" : "primary";
+          if (callRate(editItem, p.hospital, role) > 0 && !callRate(after, p.hospital, role)) lost.push(p.hospital);
+        }
+      }
+      if (lost.length && !window.confirm(`${lost.length} logged call period${lost.length === 1 ? "" : "s"} (${[...new Set(lost)].join(", ")}) would price at $0 with this grid: no row matches ${lost.length === 1 ? "its" : "their"} hospital any more. Keep the old name, or save anyway?`)) return;
+    }
     setFormError(null);
     const itemId = editItem ? editItem.id : generateId();
     const starts = periods.map(p => p.start).filter(Boolean).sort();
@@ -123,8 +183,8 @@ function Contracts() {
       id: itemId,
       hourlyRate: parseFloat(form.hourlyRate) || 0,
       dayRate: parseFloat(form.dayRate) || 0,
-      payModel: form.payModel || (parseFloat(form.dayRate) ? "daily" : parseFloat(form.callStipend) ? "stipend" : "hourly"),
-      callRateGrid: form.callRateGrid || null,
+      payModel: form.payModel || derivedPayModel(form),
+      callRateGrid: grid,
       callHourlyRate: parseFloat(form.callHourlyRate) || 0,
       callStipend: parseFloat(form.callStipend) || 0,
       stipendHours: parseFloat(form.stipendHours) || 0,
@@ -160,7 +220,7 @@ function Contracts() {
       });
     }
     closeForm();
-  }, [form, editItem, editCtx, addItem, closeForm, attachedDocs, data.documents, blockZone]);
+  }, [form, editItem, editCtx, addItem, closeForm, attachedDocs, data.documents, data.dutyDays, blockZone]);
 
   // Files that could be this agreement, for "Use a document already uploaded".
   const existingDocs = useMemo(
@@ -176,8 +236,21 @@ function Contracts() {
   // Tap the contract name → everything it produced (invoices, cases, RVUs)
   const [summaryFor, setSummaryFor] = useState(null);
 
-  // View the original agreement: images full-screen, PDFs in a viewer sheet
+  // View the original agreement: images full-screen, PDFs in a viewer sheet.
+  // lightbox = { name, src, revoke }: src is the stored data URL, or an
+  // object URL for a file fetched from storage (revoked when it closes).
   const [lightbox, setLightbox] = useState(null);
+  // A file fetched from storage is shown through an object URL, released
+  // when the viewer closes or shows another file.
+  useEffect(() => {
+    if (!lightbox?.revoke) return;
+    const src = lightbox.src;
+    return () => URL.revokeObjectURL(src);
+  }, [lightbox]);
+  // The file being fetched from storage, so a second tap waits for it.
+  const [openingId, setOpeningId] = useState(null);
+  const openingRef = useRef(null);
+  const [openError, setOpenError] = useState(null);
   // Escape must close the lightbox, not the modal underneath it: capture
   // phase so this runs before Modal's own document-level Escape handler.
   // The lightbox is a modal layer too, so it joins the stack while up and
@@ -197,9 +270,40 @@ function Contracts() {
     const byteStr = atob(doc.data.split(",")[1]);
     const arr = new Uint8Array(byteStr.length);
     for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" }));
+    const url = URL.createObjectURL(new Blob([arr], { type: docMime(doc) || "application/pdf" }));
     window.open(url, "_blank");
   }, []);
+  // A file's bytes are on this device only when this device saved it or the
+  // background download at load finished. Otherwise it is fetched from
+  // account storage on the tap. A PDF's window is opened in the tap itself,
+  // before the download, because a browser blocks a window opened later.
+  const openDoc = useCallback(async (doc) => {
+    if (!doc) return;
+    setOpenError(null);
+    const isImage = docMime(doc).startsWith("image/");
+    if (doc.data) { if (isImage) setLightbox({ name: doc.name, src: doc.data }); else openPdfDoc(doc); return; }
+    if (openingRef.current) return;
+    openingRef.current = doc.id;
+    setOpeningId(doc.id);
+    const win = !isImage && doc.storagePath ? window.open("about:blank", "_blank") : null;
+    try {
+      const r = await resolveDocument(doc, { download: downloadDocumentBlob });
+      if (!r.file) {
+        win?.close?.();
+        setOpenError(`${doc.name || "The file"} could not be opened: ${OPEN_REASONS[r.reason] || OPEN_REASONS.unavailable}.`);
+        return;
+      }
+      const url = URL.createObjectURL(r.file);
+      if (isImage) setLightbox({ name: doc.name, src: url, revoke: true });
+      else {
+        if (win) win.location.href = url; else window.open(url, "_blank");
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+    } finally {
+      openingRef.current = null;
+      setOpeningId(null);
+    }
+  }, [openPdfDoc]);
 
   return (
     <div>
@@ -232,9 +336,9 @@ function Contracts() {
             {TAX_STATES.map(st => <option key={st} value={st}>{st}, {STATE_NAMES[st] || st}</option>)}
           </select>
         </Field>
-        <Field label="Location" hint="City / state of the facility"><input value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={iS} placeholder="e.g. Colorado Springs, CO" /></Field>
+        <Field label="Location" hint="City / state of the facility"><input value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={iS} placeholder="e.g. Boise, ID" /></Field>
         <Field label="Invoice recipient email" hint="Where invoices get sent"><input type="email" value={form.billTo || ""} onChange={e => setForm(f => ({ ...f, billTo: e.target.value }))} style={iS} placeholder="billing@hospital.org" /></Field>
-        <Field label="Coverage dates" hint={`Every scheduled block. Without times, a block's end date is your last call day: the 24-hour call that ends the next morning. A contract reading 'through Aug 10, ${hourLabel(callDayStartHour(form))}' ends Aug 9. Work that starts after that final ${hourLabel(callDayStartHour(form))} bills hourly with no stipend. ${form.splitAtDayStart === true ? "An entry that runs past it is split between the two call days (a side too short to earn a billing increment stays with the other side)." : "An entry that starts before it and runs past it counts whole toward Aug 9's call day: inside its stipend hours while any are left, then at the after-stipend rate."} When the agreement states times, add them and enter the date coverage actually ends: Sep 25 4:00 PM to Sep 28 7:00 AM is three call days, each turning over at 7:00 AM, and work before 4:00 PM on Sep 25 or after 7:00 AM on Sep 28 bills hourly with no stipend.`}>
+        <Field label="Coverage dates" hint={`Every scheduled block. Without times, a block's end date is your last call day: the 24-hour call that ends the next morning. A contract reading 'through Jun 8, ${hourLabel(callDayStartHour(form))}' ends Jun 7. Work that starts after that final ${hourLabel(callDayStartHour(form))} bills hourly with no stipend. ${form.splitAtDayStart === true ? "An entry that runs past it is split between the two call days (a side too short to earn a billing increment stays with the other side)." : "An entry that starts before it and runs past it counts whole toward Jun 7's call day: inside its stipend hours while any are left, then at the after-stipend rate."} When the agreement states times, add them and enter the date coverage actually ends: Oct 16 4:00 PM to Oct 19 7:00 AM is three call days, each turning over at 7:00 AM, and work before 4:00 PM on Oct 16 or after 7:00 AM on Oct 19 bills hourly with no stipend.`}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {(form.coveragePeriods || []).map((p, i) => {
               // One block: when it starts and when it ends, each a date and an
@@ -296,16 +400,46 @@ function Contracts() {
           <select value={String(callDayStartHour(form))} onChange={e => setForm(f => ({ ...f, dayStartHour: parseInt(e.target.value, 10) }))} style={{ ...iS, appearance: "auto" }}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
           </select>
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, fontSize: 14, color: T.text, cursor: "pointer" }}>
+          {/* The whole row is the checkbox's tap target: 6 px above and below
+              the line make it 33 px, where one 14 px line was 21. */}
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 2, padding: "6px 0", fontSize: 14, color: T.text, cursor: "pointer" }}>
             <input type="checkbox" checked={form.splitAtDayStart === true} onChange={e => setForm(f => ({ ...f, splitAtDayStart: e.target.checked }))} style={{ marginTop: 3 }} />
             <span>Split calls that cross the start of the call day</span>
           </label>
         </Field>
+        <Field label="Pay model" hint="Where the work is logged. Worked out from the rates below until you pick one; check it when the AI filled the form.">
+          <select aria-label="Pay model" value={form.payModel || derivedPayModel(form)} onChange={e => setForm(f => ({ ...f, payModel: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
+            {PAY_MODELS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
+        </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Field label="Day rate ($/day worked)" hint="Flat amount per day worked — leave blank if paid hourly"><input type="number" inputMode="decimal" value={form.dayRate ?? ""} onChange={e => setForm(f => ({ ...f, dayRate: e.target.value }))} style={iS} placeholder="2016.10" /></Field>
+          <Field label="Day rate ($/day worked)" hint="Flat amount per day worked; leave blank if paid hourly"><input type="number" inputMode="decimal" value={form.dayRate ?? ""} onChange={e => setForm(f => ({ ...f, dayRate: e.target.value }))} style={iS} placeholder="1875.40" /></Field>
           <Field label="Call stipend ($/day)" hint="Flat amount per on-call day"><input type="number" inputMode="decimal" value={form.callStipend ?? ""} onChange={e => setForm(f => ({ ...f, callStipend: e.target.value }))} style={iS} placeholder="3000" /></Field>
-          <Field label="Stipend covers (hours)" hint="Worked hours included before overage — 0 if the call rate includes none"><input type="number" inputMode="decimal" value={form.stipendHours ?? ""} onChange={e => setForm(f => ({ ...f, stipendHours: e.target.value }))} style={iS} placeholder="4" /></Field>
+          <Field label="Stipend covers (hours)" hint="Worked hours included before overage; 0 if the call rate includes none"><input type="number" inputMode="decimal" value={form.stipendHours ?? ""} onChange={e => setForm(f => ({ ...f, stipendHours: e.target.value }))} style={iS} placeholder="4" /></Field>
         </div>
+        {((form.payModel || derivedPayModel(form)) === "daily" || (form.callRateGrid || []).length > 0) && (
+          <Field label="Call rate grid" hint="Call pay by hospital and role, as the agreement lists it. Leave it empty when every call period pays the call stipend.">
+            {(form.callRateGrid || []).map((r, i) => {
+              const setRow = (key) => (e) => setForm(f => ({ ...f, callRateGrid: (f.callRateGrid || []).map((x, j) => (j === i ? { ...x, [key]: e.target.value } : x)) }));
+              return (
+                <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, paddingTop: i ? 10 : 0, borderTop: i ? `1px solid ${T.border}` : "none" }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input aria-label={`Hospital ${i + 1}`} value={r.hospital ?? ""} onChange={setRow("hospital")} style={{ ...iS, flex: 1, minWidth: 0 }} placeholder="e.g. Riverside Regional (RR)" />
+                    <button aria-label={`Remove hospital ${i + 1}`} onClick={() => setForm(f => ({ ...f, callRateGrid: (f.callRateGrid || []).filter((_, j) => j !== i) }))} style={{ padding: "0 12px", minHeight: TAP_MIN, borderRadius: 10, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 16, fontWeight: 700, flexShrink: 0 }}>Remove</button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    <input type="number" inputMode="decimal" aria-label={`Hospital ${i + 1} primary rate`} value={r.primary ?? ""} onChange={setRow("primary")} style={iS} placeholder="Primary $" />
+                    <input type="number" inputMode="decimal" aria-label={`Hospital ${i + 1} backup rate`} value={r.backup ?? ""} onChange={setRow("backup")} style={iS} placeholder="Backup $" />
+                  </div>
+                </div>
+              );
+            })}
+            <button onClick={() => setForm(f => ({ ...f, callRateGrid: [...(f.callRateGrid || []), { hospital: "", primary: "", backup: "" }] }))} style={{
+              width: "100%", padding: "10px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: "transparent",
+              color: T.accent, fontSize: 16, fontWeight: 700, cursor: "pointer",
+            }}>+ Add hospital</button>
+          </Field>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <Field label="After-stipend rate ($/hr)" hint="Hours beyond the stipend"><input type="number" inputMode="decimal" value={form.overageHourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, overageHourlyRate: e.target.value }))} style={iS} placeholder="300" /></Field>
           <Field label="Orientation rate ($/hr)" hint="If orientation is paid hourly"><input type="number" inputMode="decimal" value={form.orientationHourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, orientationHourlyRate: e.target.value }))} style={iS} placeholder="150" /></Field>
@@ -339,7 +473,7 @@ function Contracts() {
           <div style={{ fontSize: 13.5, color: T.textMuted, padding: "24px 0", textAlign: "center" }}>No archived agreements.</div>
         ) : (
           <EmptyState icon={"📝"} title="No agreements yet"
-            subtitle="Add your locum contract — facility, rates, and billing increment — and attach the signed agreement."
+            subtitle="Add your locum contract with its facility, rates, and billing increment, and attach the signed agreement."
             onAction={openAdd} actionLabel="Add Agreement" />
         )
       ) : (
@@ -364,12 +498,14 @@ function Contracts() {
                     ].filter(Boolean).join(" · ")}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-                  <button onClick={() => openEdit(item)} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                  <button onClick={() => toggleArchived(item)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                {/* 32 px targets, 6 px apart: at 29 px and 3 px apart a tap
+                    meant for edit could land on Archive, which asks nothing. */}
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button aria-label="Edit" onClick={() => openEdit(item)} style={{ padding: "6px 8px", minWidth: 32, minHeight: 32, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><EditIcon /></button>
+                  <button onClick={() => toggleArchived(item)} style={{ padding: "6px 10px", minHeight: 32, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                     {isArchived(item) ? "Unarchive" : "Archive"}
                   </button>
-                  <button onClick={() => { if (window.confirm("Delete this agreement? Work log entries keep their data.")) deleteItem("locumContracts", item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  <button aria-label="Delete agreement" onClick={() => { const files = linkedDocsFor(item.id); if (window.confirm(deleteConfirmText("agreement", linkedDocsFor(item.id).length, { extra: "Work log entries keep their data.", names: files.map(d => d.name || "file") }))) deleteItem("locumContracts", item.id); }} style={{ padding: "6px 8px", minWidth: 32, minHeight: 32, borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><TrashIcon /></button>
                 </div>
               </div>
             </div>
@@ -380,19 +516,21 @@ function Contracts() {
       {summaryFor && (
         <ContractSummary
           contract={summaryFor}
-          onClose={() => setSummaryFor(null)}
+          onClose={() => { setSummaryFor(null); setOpenError(null); }}
           docs={linkedDocsFor(summaryFor.id)}
-          onOpenDoc={(doc) => { if (!doc.data) return; if (doc.type?.startsWith("image/")) setLightbox(doc); else openPdfDoc(doc); }}
+          onOpenDoc={openDoc}
+          openingId={openingId}
+          openError={openError}
         />
       )}
 
       {/* Full-screen picture viewer for uploaded agreements */}
       {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{
+        <div role="dialog" aria-modal="true" aria-label={lightbox.name || "Picture"} onClick={() => setLightbox(null)} style={{
           position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
           display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
         }}>
-          <img src={lightbox.data} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+          <img src={lightbox.src} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
         </div>
       )}
     </div>

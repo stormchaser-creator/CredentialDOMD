@@ -7,7 +7,7 @@ import { aiAvailable } from "../../../utils/aiClient";
 import { deductionCategoryLabel } from "../../../utils/deductionCategoryLabel";
 import { agencyOptions, agencyForDate } from "../../../utils/contractsForDate";
 import * as XLSX from "xlsx";
-import { spreadsheetGuard } from "../../../utils/spreadsheetGuard";
+import { spreadsheetGuard, identifierColumn, spreadsheetRefusal } from "../../../utils/spreadsheetGuard";
 
 /**
  * StatementImport — turn the business card's statement into deduction lines.
@@ -29,7 +29,7 @@ const CATEGORIES = [
   "Other deductible expense",
 ];
 
-// Travel rows can also be billed to a locum agency (Work > Expenses), which
+// Travel rows can also be billed to a locum agency (Practice > Expenses), which
 // uses its own category vocabulary — map the ones that carry across.
 const BILLABLE_CATEGORY = {
   "Travel — lodging": "Hotel",
@@ -64,6 +64,10 @@ const RULES = [
 ];
 const categorize = (merchant) => (RULES.find(([re]) => re.test(merchant)) || [null, "Other deductible expense"])[1];
 
+// A transaction line starts with its date.
+const DATE_TEXT = /\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}/;
+const isTransaction = (r) => DATE_TEXT.test(String((r || [])[0] ?? ""));
+
 // A statement's header row: a date column plus a description or amount.
 const looksLikeHeader = (r) => {
   const h = (r || []).map(x => String(x ?? "").trim().toLowerCase());
@@ -94,7 +98,6 @@ function parseCsv(text) {
   // whose tenth merchant happens to read like a header keeps every row.
   const start = rows.slice(0, 10).findIndex(looksLikeHeader);
   const preamble = rows.slice(0, Math.max(start, 0));
-  const isTransaction = (r) => /\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}/.test(String(r[0] || ""));
   return parseGrid(start > 0 && !preamble.some(isTransaction) ? rows.slice(start) : rows);
 }
 
@@ -113,9 +116,12 @@ function parseExcel(arrayBuffer) {
     let start = grid.findIndex(looksLikeHeader);
     if (start < 0) {
       // No recognizable header: accept a sheet that has date-like first cells.
-      const dataRows = grid.filter(r => r && r.length >= 2 && (typeof r[0] === "number" || /\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}/.test(String(r[0]))));
+      const dataRows = grid.filter(r => r && r.length >= 2 && (typeof r[0] === "number" || DATE_TEXT.test(String(r[0]))));
       if (dataRows.length < 2) continue;
       start = grid.indexOf(dataRows[0]);
+      // The rows are read by position from here, so the header the parser
+      // did not recognise ("Service Date | Patient | Charge") is still judged.
+      refuseHeaderAbove(grid, start);
       const rows = grid.slice(start).map(r => r.map(cellToText));
       const parsed = parseGrid(rows);
       if (parsed.length) return parsed;
@@ -140,6 +146,29 @@ function cellToText(v) {
   return String(v).trim();
 }
 
+// The table header the parser reads is judged cell by cell (the guard reports
+// only a sheet's first hit, and the card's own "Account #" column must not
+// hide a later "Patient Name"). The card's account number is expected on a
+// statement and is never stored; any other identifier column refuses the
+// whole file before a row is read. Lines above a recognised header are not judged.
+function refuseIdentifierHeader(cells) {
+  for (const c of cells || []) {
+    const hit = identifierColumn([[[String(c ?? "").trim()]]]);
+    if (hit && hit.reason !== "an account number") throw new Error(spreadsheetRefusal(hit.column));
+  }
+}
+
+// A table whose header the parser does not recognise ("Service Date,Patient,
+// Charge" has no description or amount column) is read by position, so its
+// header is judged all the same: the nearest non-empty row above the first
+// transaction (and parseGrid's first row). A title or the bank's lines further
+// up are not.
+function refuseHeaderAbove(rows, first) {
+  for (let i = first - 1; i >= 0; i--) {
+    if ((rows[i] || []).some(c => String(c ?? "").trim())) return refuseIdentifierHeader(rows[i]);
+  }
+}
+
 function parseGrid(rows) {
   if (!rows.length) return [];
 
@@ -150,6 +179,12 @@ function parseGrid(rows) {
   let amtI = idx([/^amount$/, /amount/, /^debit/]);
   const creditI = idx([/^credit/]);
   const hasHeader = dateI >= 0 && (descI >= 0 || amtI >= 0);
+  if (hasHeader) refuseIdentifierHeader(rows[0]);
+  else {
+    // A first row that is not a transaction is a header or a title either way.
+    if (!isTransaction(rows[0])) refuseIdentifierHeader(rows[0]);
+    refuseHeaderAbove(rows, rows.findIndex(isTransaction));
+  }
   const body = hasHeader ? rows.slice(1) : rows;
   if (!hasHeader) { dateI = 0; descI = 1; amtI = rows[0].length - 1; }
 
@@ -194,7 +229,13 @@ function StatementImport({ open, onClose }) {
   const agencies = agencyOptions(data.locumContracts);
 
   const dedupKey = (d, a, m) => `${d}|${(parseFloat(a) || 0).toFixed(2)}|${String(m).toLowerCase().slice(0, 20)}`;
-  const existing = new Set((data.deductibles || []).map(x => dedupKey(x.date, x.amount, x.merchant || x.description)));
+  // A row billed to an agency on an earlier import was saved as a work expense
+  // (vendor), not a deduction; it is a duplicate too, or a re-import would
+  // deduct a reimbursed charge.
+  const existing = new Set([
+    ...(data.deductibles || []).map(x => dedupKey(x.date, x.amount, x.merchant || x.description)),
+    ...(data.travelExpenses || []).map(x => dedupKey(String(x.date || "").slice(0, 10), x.amount, x.vendor || x.description)),
+  ]);
 
   const toReview = async (txns) => {
     const seen = new Set();
@@ -237,8 +278,8 @@ function StatementImport({ open, onClose }) {
       // CSV and Excel are read here on the device and the file goes nowhere:
       // only each row's date, description and amount are kept. The bank's
       // own lines above the table ("Account Number:", "Statement Period:")
-      // are expected and never stored, so the spreadsheet guard, which
-      // judges a file on its way to storage or the AI, does not run here.
+      // are expected and never stored, so the whole-file spreadsheet guard
+      // does not run here; the table header itself is judged (parseGrid).
       if (/csv|text/.test(file.type) || /\.csv$/i.test(file.name)) {
         await toReview(parseCsv(await file.text()));
       } else if (/spreadsheet|ms-excel|officedocument\.spreadsheetml/.test(file.type) || /\.(xlsx|xls|xlsm)$/i.test(file.name)) {
@@ -266,7 +307,7 @@ function StatementImport({ open, onClose }) {
   const included = (rows || []).filter(r => r.include);
   const total = included.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
   // A row billed to an agency is reimbursed, so it is not also a deduction:
-  // it goes to Work Expenses only. Deducting it while excluding the
+  // it goes to Practice > Expenses only. Deducting it while excluding the
   // reimbursement from income would count the same dollar twice.
   const willBill = (r) => r.alsoBill && BILLABLE_CATEGORY[r.category] && (r.agency || "").trim();
   const billedCount = included.filter(willBill).length;
@@ -314,7 +355,7 @@ function StatementImport({ open, onClose }) {
       {!rows && (
         <>
           <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
-            Upload the business card's statement: CSV or Excel reads instantly on-device; PDF or a photo goes through the AI scanner. You review and categorize every line before anything is saved, and rows already in the ledger are flagged as duplicates.
+            Upload the business card's statement: CSV or Excel reads instantly on-device; PDF or a photo goes through the AI scanner. You review and categorize every line before anything is saved, and rows already recorded (as a deduction or a work expense) are flagged as duplicates.
           </div>
           <input type="file" ref={fileRef} accept=".csv,text/csv,.xlsx,.xls,.xlsm,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,image/*" style={{ display: "none" }}
             onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
@@ -325,7 +366,7 @@ function StatementImport({ open, onClose }) {
           {done != null && (
             <div style={{ fontSize: 13.5, fontWeight: 700, color: "#22c55e", marginTop: 12 }}>
               Added {done.count} deduction line{done.count === 1 ? "" : "s"} to the ledger. They're in the Deductions list and the tax estimate now.
-              {done.billed > 0 && ` ${done.billed} row${done.billed === 1 ? " was" : "s were"} sent to Work Expenses to invoice the agency instead, not deducted, since a reimbursed expense is not also a deduction.`}
+              {done.billed > 0 && ` ${done.billed} row${done.billed === 1 ? " was" : "s were"} sent to Practice > Expenses to invoice the agency instead, not deducted, since a reimbursed expense is not also a deduction.`}
             </div>
           )}
           {error && <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 12 }}>{error}</div>}
@@ -349,11 +390,11 @@ function StatementImport({ open, onClose }) {
                 backgroundColor: r.include ? T.input : "transparent", opacity: r.include ? 1 : 0.55,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="checkbox" checked={r.include} onChange={e => setRow(i, { include: e.target.checked })} style={{ width: 17, height: 17, flexShrink: 0 }} />
+                  <input type="checkbox" aria-label={`Import ${r.merchant || "this transaction"}${r.date ? `, ${r.date}` : ""}`} checked={r.include} onChange={e => setRow(i, { include: e.target.checked })} style={{ width: 17, height: 17, flexShrink: 0 }} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.merchant || "—"}
-                      {r.duplicate && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: T.warning, textTransform: "uppercase" }}>already in ledger</span>}
+                      {r.duplicate && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: T.warning, textTransform: "uppercase" }}>already recorded</span>}
                       {r.isCharge === false && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: T.textDim, textTransform: "uppercase" }}>payment / credit</span>}
                     </div>
                     <div style={{ fontSize: 11.5, color: T.textDim }}>{r.date}</div>
@@ -361,7 +402,7 @@ function StatementImport({ open, onClose }) {
                   <div style={{ fontSize: 13, fontWeight: 800, color: T.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{money(r.amount)}</div>
                 </div>
                 {r.include && (
-                  <select value={r.category} onChange={e => setRow(i, { category: e.target.value })} style={{
+                  <select aria-label="Category" value={r.category} onChange={e => setRow(i, { category: e.target.value })} style={{
                     width: "100%", marginTop: 6, padding: "7px 10px", borderRadius: 8, fontSize: 12.5,
                     border: `1px solid ${T.border}`, backgroundColor: T.card, color: T.text, appearance: "auto",
                   }}>
@@ -372,14 +413,14 @@ function StatementImport({ open, onClose }) {
                   <div style={{ marginTop: 6 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.textMuted, cursor: "pointer" }}>
                       <input type="checkbox" checked={r.alsoBill} onChange={e => setRow(i, { alsoBill: e.target.checked })} style={{ width: 15, height: 15, flexShrink: 0 }} />
-                      Bill to agency instead (Work Expenses)
+                      Bill to agency instead (Practice &gt; Expenses)
                     </label>
                     {r.alsoBill && (
                       <>
                         <div style={{ fontSize: 11, color: T.warning, marginTop: 4, lineHeight: 1.4 }}>
                           Recorded as a reimbursable expense to invoice, not a deduction. A reimbursed expense cannot also be deducted.
                         </div>
-                        <input list={`import-agencies-${i}`} value={r.agency} onChange={e => setRow(i, { agency: e.target.value })}
+                        <input list={`import-agencies-${i}`} aria-label="Agency name" value={r.agency} onChange={e => setRow(i, { agency: e.target.value })}
                           placeholder="Agency name" style={{
                             width: "100%", marginTop: 6, padding: "7px 10px", borderRadius: 8, fontSize: 12.5,
                             border: `1px solid ${T.border}`, backgroundColor: T.card, color: T.text,

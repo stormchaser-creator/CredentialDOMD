@@ -4,8 +4,9 @@ import { formatDate } from "./helpers.js";
 import { complianceFor, findStateLicense, cycleBucket } from "./compliance";
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
 import { STATE_NAMES } from "../constants/states";
-import { computeBoardCompliance, aoaNationalEntry } from "./boardCompliance";
+import { boardComplianceFor, aoaNationalEntry } from "./boardCompliance";
 import { cat1BucketLabel } from "../constants/creditEquivalence";
+import { resolveDocument } from "./receiptFiles.js";
 
 /**
  * Board-ready CME transcript PDF.
@@ -14,7 +15,8 @@ import { cat1BucketLabel } from "../constants/creditEquivalence";
  *   - State renewal: the cycle window, requirement-by-requirement standing
  *     (total, Category 1 minimum, every topic mandate, MATE Act when a DEA
  *     registration is on file), the entries inside the window, and each
- *     linked certificate image on its own page.
+ *     linked certificate: an image on its own page, a PDF as a separate
+ *     file in the same share.
  *   - Board continuing certification (ABMS MOC / AOA OCC): the board's
  *     window and count rule, the same entry table, the same certificates.
  *
@@ -54,10 +56,20 @@ const windowLabelText = (label) => {
 
 const IMAGE_TYPES = { "image/png": "PNG", "image/jpeg": "JPEG", "image/jpg": "JPEG", "image/webp": "WEBP", "image/gif": "GIF", "image/bmp": "BMP" };
 
+const EXT_TYPES = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", bmp: "image/bmp", heic: "image/heic", heif: "image/heif" };
+
 function mimeOf(doc) {
-  if (doc.type) return String(doc.type).toLowerCase();
-  const m = String(doc.data || "").match(/^data:(.*?)[;,]/);
-  return m ? m[1].toLowerCase() : "";
+  let mime = "";
+  if (doc.type && String(doc.type).includes("/")) mime = String(doc.type).toLowerCase();
+  if (!mime || mime === "application/octet-stream") {
+    const m = String(doc.data || "").match(/^data:(.*?)[;,]/);
+    if (m && m[1] && m[1] !== "application/octet-stream") mime = m[1].toLowerCase();
+  }
+  if (!mime || mime === "application/octet-stream") {
+    const ext = /\.([a-z0-9]+)$/i.exec(String(doc.name || ""))?.[1]?.toLowerCase();
+    if (ext && EXT_TYPES[ext]) mime = EXT_TYPES[ext];
+  }
+  return mime;
 }
 
 /** The compliance engine's own in-window test (cycleBucket), so the
@@ -80,26 +92,201 @@ export function certificatesFor(data, cmeId) {
 /**
  * Number every linked certificate (Cert 1, Cert 2 ...) in table order and
  * classify how it can ride in the PDF.
+ *
+ * A certificate's bytes are usually NOT in doc.data: saveData strips them
+ * once the file is in Storage, so on any device past its first save they are
+ * only in the cloud. `certFiles` is what prefetchCertificates fetched BEFORE
+ * the tap (a Map of doc id to { data } or { reason }); fetching inside the tap
+ * would cost the share sheet its user gesture.
  */
-function assignCertificates(data, entries) {
+function assignCertificates(data, entries, certFiles = null) {
   const certs = [];
   const rows = entries.map(c => {
     const refs = [];
-    for (const doc of certificatesFor(data, c.id)) {
+    for (const stored of certificatesFor(data, c.id)) {
       const ref = `Cert ${certs.length + 1}`;
+      const fetched = stored.data ? null : certFiles?.get?.(stored.id) || null;
+      const doc = fetched?.data ? { ...stored, data: fetched.data } : stored;
       const mime = mimeOf(doc);
-      let mode;
-      if (!doc.data) mode = "remote";               // synced metadata, bytes not on this device
+      let mode, reason = null;
+      if (!doc.data) {                              // bytes not on this device
+        mode = "remote";
+        reason = fetched?.reason || (doc.storagePath ? "pending" : "never_uploaded");
+      }
       else if (mime === "application/pdf") mode = "pdf";
       else if (IMAGE_TYPES[mime]) mode = "image";
       else if (mime.startsWith("image/")) mode = "convert"; // HEIC etc: try the canvas in the browser
       else mode = "other";
-      certs.push({ ref, doc, entry: c, mode, mime });
+      certs.push({ ref, doc, entry: c, mode, mime, reason });
       refs.push(ref);
     }
     return { entry: c, certRefs: refs };
   });
   return { rows, certs };
+}
+
+/**
+ * The certificate documents a set of transcript models would carry whose
+ * bytes are only in cloud storage: the certificates of entries inside the
+ * windows on offer, never every CME certificate the physician has ever saved
+ * (years of them, fetched on every visit, on hospital Wi-Fi or cellular).
+ */
+export function certificateDocsForModels(models) {
+  const docs = new Map();
+  for (const model of models || []) {
+    for (const c of model?.certs || []) {
+      if (c.mode === "remote" && c.doc?.storagePath && c.doc.id && !docs.has(c.doc.id)) docs.set(c.doc.id, c.doc);
+    }
+  }
+  return [...docs.values()];
+}
+
+const bytesToBase64 = (u8) => {
+  let bin = "";
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+
+// Downloads run a few at a time, so one slow certificate does not hold back
+// the rest.
+const PREFETCH_PARALLEL = 3;
+
+/** One certificate, cut off (and its request aborted) when the budget ends. */
+async function prefetchOne(doc, download, msLeft) {
+  if (msLeft <= 0) return { reason: "timeout" };
+  const ctrl = new AbortController();
+  let timer;
+  const expired = new Promise(resolve => { timer = setTimeout(() => { ctrl.abort(); resolve(null); }, msLeft); });
+  try {
+    const r = await resolveDocument(doc, {
+      signal: ctrl.signal,
+      download: (path) => Promise.race([Promise.resolve().then(() => download(path, { signal: ctrl.signal })), expired]),
+    });
+    if (!r.file) return { reason: r.reason || "unavailable" };
+    const u8 = new Uint8Array(await r.file.arrayBuffer());
+    return { data: `data:${r.file.type || "application/octet-stream"};base64,${bytesToBase64(u8)}` };
+  } catch {
+    return { reason: "corrupt" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Fetch certificate bytes ahead of the tap, under one time budget that also
+ * bounds each download: a stalled request is aborted when the budget ends
+ * rather than holding the caller indefinitely. Returns a Map of doc id to
+ * { data } (a data URL) or { reason } (why it could not be read: offline,
+ * timeout, unavailable, ...). The bytes are held by the caller, never written
+ * back to data.documents. `download(storagePath, { signal })`.
+ */
+export async function prefetchCertificates(docs, { download, budgetMs = 10000, now = () => Date.now() } = {}) {
+  const out = new Map();
+  const list = (Array.isArray(docs) ? docs : []).filter(d => d && d.id);
+  const deadline = now() + budgetMs;
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const doc = list[next++];
+      out.set(doc.id, await prefetchOne(doc, download, deadline - now()));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(PREFETCH_PARALLEL, list.length) }, worker));
+  return out;
+}
+
+// A certificate that timed out or was fetched offline is worth fetching
+// again later; one that was never uploaded or cannot be read is not.
+const RETRY_REASONS = new Set(["timeout", "offline"]);
+
+/**
+ * Session bookkeeping for a screen that fetches certificates while it is on
+ * screen (Home's Renewal packet). A document is settled once fetched or once
+ * it failed for good; one that timed out or was fetched offline waits until
+ * retryLater() (the next visit, or the connection coming back) and is then
+ * fetched again. One in flight is never fetched twice.
+ */
+export function certificateFetchTracker() {
+  const settled = new Set(), inFlight = new Set(), waiting = new Set();
+  return {
+    toFetch: (docs) => (docs || []).filter(d => d?.id && !settled.has(d.id) && !inFlight.has(d.id) && !waiting.has(d.id)),
+    started: (docs) => { for (const d of docs || []) inFlight.add(d.id); },
+    finished: (docs, fetched) => {
+      for (const d of docs || []) {
+        inFlight.delete(d.id);
+        const r = fetched?.get?.(d.id);
+        if (r?.data || (r?.reason && !RETRY_REASONS.has(r.reason))) settled.add(d.id);
+        else waiting.add(d.id);
+      }
+    },
+    retryLater: () => waiting.clear(),
+  };
+}
+
+const NOT_INCLUDED_WHY = {
+  offline: "this device is offline",
+  timeout: "they had not finished downloading to this device",
+  pending: "they had not finished downloading to this device",
+  unavailable: "they could not be read from your account storage",
+  never_uploaded: "they were never uploaded from the device that saved them",
+  corrupt: "the saved file could not be read",
+  format: "that file type cannot go in a transcript",
+  convert: "this device could not convert the photo format to a page",
+  share_limit: "the share sheet on this device could not carry them with the transcript",
+  share_failed: "the share sheet did not open and this device downloads only one file at a time",
+};
+
+// A model is "delivered" once shareTranscriptPdf has built and sent it: it
+// then says how the PDF certificates went (pdfDelivery), and a photo that
+// still needs converting is one this device could not convert.
+const isDelivered = (model) => !!model?.pdfDelivery;
+const pdfsLeftOut = (model) => model?.pdfDelivery === "omitted";
+// The PDF certificates leave the device with the transcript (in the share,
+// or downloaded beside it), and its index says so.
+const pdfsGoWith = (model) => model?.pdfDelivery === "share" || model?.pdfDelivery === "download";
+
+function whyNotIncluded(c, model) {
+  if (c.mode === "other") return "format";
+  if (c.mode === "convert") return "convert";
+  if (c.mode === "pdf") return model?.pdfOmittedWhy || "share_limit";
+  return c.reason;
+}
+
+/**
+ * One sentence for the physician naming the certificates that are not in the
+ * packet and why, or "" when every one is in it. Pass the model
+ * shareTranscriptPdf returned: only it knows what the share or download
+ * actually carried.
+ */
+export function certificatesNotIncludedMessage(model) {
+  const missing = certificateSummary(model).missing;
+  if (!missing.length) return "";
+  const names = missing.slice(0, 3).map(c => c.doc?.name || c.ref).join(", ");
+  const more = missing.length > 3 ? ` and ${missing.length - 3} more` : "";
+  const why = [...new Set(missing.map(c => NOT_INCLUDED_WHY[whyNotIncluded(c, model)] || "they could not be read"))].join("; ");
+  const n = missing.length;
+  return `${n} certificate${n === 1 ? " is" : "s are"} not in this packet (${names}${more}) because ${why}. Open ${n === 1 ? "it" : "them"} from Documents to send separately.`;
+}
+
+/**
+ * What a model's certificates come to: embedded pages, attached PDFs, photos
+ * that may not convert (before the build), and what is not included. On a
+ * delivered model a photo that stayed unconverted, and a PDF the share could
+ * not carry, are not included.
+ */
+export function certificateSummary(model) {
+  const certs = model?.certs || [];
+  const delivered = isDelivered(model);
+  const pdfOut = pdfsLeftOut(model);
+  return {
+    total: certs.length,
+    pages: certs.filter(c => c.mode === "image").length,
+    mayNotConvert: delivered ? 0 : certs.filter(c => c.mode === "convert").length,
+    files: pdfOut ? 0 : certs.filter(c => c.mode === "pdf").length,
+    missing: certs.filter(c => c.mode === "remote" || c.mode === "other"
+      || (c.mode === "convert" && delivered)
+      || (c.mode === "pdf" && pdfOut)),
+  };
 }
 
 function physicianBlock(data) {
@@ -113,7 +300,7 @@ function physicianBlock(data) {
  * Everything the state transcript needs, or { error } with a sentence the
  * UI can show instead of producing an empty PDF.
  */
-export function stateTranscriptModel(data, state) {
+export function stateTranscriptModel(data, state, { certFiles = null } = {}) {
   if (!state) return { error: "Pick a state first. Add a state medical license or set your primary state in Settings." };
   const deg = data.settings?.degreeType || "";
   const comp = complianceFor(data, state);
@@ -129,7 +316,7 @@ export function stateTranscriptModel(data, state) {
   }
   const req = getStateEntry(state, deg) || {};
   const lic = findStateLicense(data.licenses, state);
-  const { rows, certs } = assignCertificates(data, entries);
+  const { rows, certs } = assignCertificates(data, entries, certFiles);
   const source = req.source || "State medical board rule";
   return {
     kind: "state",
@@ -175,14 +362,14 @@ export function stateTranscriptModel(data, state) {
 
 /** Boards that can get their own transcript: the same cards Home shows. */
 export function boardTranscriptOptions(data) {
-  const list = computeBoardCompliance(data).filter(b => !b.followsParent);
+  const list = boardComplianceFor(data).filter(b => !b.followsParent);
   if (data.settings?.degreeType === "DO" && (data.cme || []).length > 0 && !list.some(b => b.source === "AOA")) {
     list.unshift(aoaNationalEntry(data));
   }
   return list;
 }
 
-export function boardTranscriptModel(data, board) {
+export function boardTranscriptModel(data, board, { certFiles = null } = {}) {
   if (!board) return { error: "Pick a board first. Choose your board specialties in Settings." };
   // Same string-compare window the board engine uses (dates are YYYY-MM-DD).
   const entries = (data.cme || [])
@@ -198,7 +385,7 @@ export function boardTranscriptModel(data, board) {
   const counts = isABMS
     ? (c) => (c.category || "").includes("AMA PRA Category 1")
     : () => true;
-  const { rows, certs } = assignCertificates(data, entries);
+  const { rows, certs } = assignCertificates(data, entries, certFiles);
   const source = isABMS
     ? `ABMS ${board.code} continuing certification, ${board.unit || "AMA PRA Category 1"}`
     : `AOA ${board.code === "AOA" ? "national CME requirement" : `${board.code} OCC`}, ${board.windowLabel || "3-year cycle"}`;
@@ -311,6 +498,23 @@ function drawKeyValue(doc, y, label, value) {
   const lines = doc.splitTextToSize(value || "", W - 120);
   doc.text(lines, M + 120, y);
   return y + Math.max(1, lines.length) * 12 + 2;
+}
+
+/**
+ * The certificate index printed under the activities table, written for the
+ * reader (a board, a credentialing office): what is in this packet and what
+ * is not. "On file" used to promise a page that never came.
+ */
+export function certificateIndexNote(model) {
+  if (!model.certs.length) return "No certificate files are linked to these entries. Attach certificates to CME entries in Documents to include them.";
+  const ONREQUEST = "not included; available from the physician on request";
+  const label = (c) => {
+    if (c.mode === "image") return "embedded on a following page";
+    if (c.mode === "convert") return `${ONREQUEST} (image format could not be embedded)`;
+    if (c.mode === "pdf") return pdfsGoWith(model) ? "sent as a separate PDF file with this transcript" : ONREQUEST;
+    return ONREQUEST;
+  };
+  return `Certificates: ${model.certs.map(c => `${c.ref} = ${c.doc.name || "certificate"} (${label(c)})`).join("; ")}.`;
 }
 
 /**
@@ -430,18 +634,7 @@ export function buildTranscriptPdf(model, { today = new Date() } = {}) {
 
   // ── Certificate index + notes ──
   const notes = [];
-  if (model.certs.length) {
-    const label = (c) => {
-      if (c.mode === "image") return "embedded on a following page";
-      if (c.mode === "convert") return "image on file; format not embeddable here";
-      if (c.mode === "pdf") return "PDF on file";
-      if (c.mode === "remote") return "on file in cloud storage; not on this device";
-      return "file on record";
-    };
-    notes.push(`Certificates: ${model.certs.map(c => `${c.ref} = ${c.doc.name || "certificate"} (${label(c)})`).join("; ")}.`);
-  } else {
-    notes.push("No certificate files are linked to these entries. Attach certificates to CME entries in Documents to include them.");
-  }
+  notes.push(certificateIndexNote(model));
   if (model.rows.some(r => r.counted === false)) notes.push(`* Listed but not counted toward ${model.countRule}.`);
   notes.push(...(model.footnotes || []));
   doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...MUTED);
@@ -540,29 +733,87 @@ async function prepareCertificateImages(model) {
   return { ...model, certs };
 }
 
-export async function transcriptPdfFile(model) {
-  const prepared = await prepareCertificateImages(model);
-  const doc = buildTranscriptPdf(prepared);
-  const blob = doc.output("blob");
-  return new File([blob], model.fileName, { type: "application/pdf" });
+const dataUrlBytes = (dataUrl) => {
+  const bin = atob(String(dataUrl).slice(String(dataUrl).indexOf(",") + 1));
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+};
+
+/** The PDF certificates as files, named by their index ref so the reader can match them. */
+export function pdfCertificateFiles(model) {
+  return (model?.certs || []).filter(c => c.mode === "pdf" && c.doc?.data).map(c => {
+    const name = String(c.doc.name || "certificate.pdf").replace(/[\\/:*?"<>|]+/g, " ").trim() || "certificate.pdf";
+    return new File([dataUrlBytes(c.doc.data)], `${c.ref} - ${/\.pdf$/i.test(name) ? name : `${name}.pdf`}`, { type: "application/pdf" });
+  });
 }
 
-/** Share sheet where it can take files, download otherwise (the CV pattern). */
-export async function shareTranscriptPdf(model) {
-  const file = await transcriptPdfFile(model);
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ title: file.name, files: [file] });
-      return "share";
-    } catch (err) {
-      if (err?.name === "AbortError") return null;
-    }
-  }
+// iOS and iPadOS take one programmatic download at a time: a second <a
+// download> click made without a fresh tap is dropped. iPadOS reports itself
+// as a Mac, so a Mac with a touch screen counts too.
+const downloadsOneAtATime = (nav) => {
+  const ua = String(nav?.userAgent || "");
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && Number(nav?.maxTouchPoints) > 1);
+};
+
+const downloadFile = (file) => {
   const url = URL.createObjectURL(file);
   const a = document.createElement("a");
   a.href = url;
   a.download = file.name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  return "download";
+};
+
+/**
+ * Share sheet where it can take files, download otherwise (the CV pattern).
+ * PDF certificates travel as separate files in the same share (or download)
+ * as the transcript; the transcript's certificate index says which, decided
+ * before the PDF is built so it never promises a file the share cannot carry.
+ *
+ * A share can still fail after the build (on iOS the tap's gesture has
+ * expired by the time the PDF is ready, and the share target can refuse the
+ * files). The fallback downloads instead, and the transcript it downloads
+ * says what that download carries: where the device takes several downloads
+ * the PDF certificates are downloaded beside it and listed as sent with it;
+ * where it takes one (iOS, iPadOS) the transcript is rebuilt to list them as
+ * not included, and the physician is told which. The transcript never says a
+ * certificate went with it when it did not.
+ *
+ * Returns null when the physician cancelled the share sheet, otherwise
+ * { method: "share" | "download", model }: model is what was actually sent
+ * (images converted, pdfDelivery set), for certificatesNotIncludedMessage.
+ */
+export async function shareTranscriptPdf(model) {
+  const certFiles = pdfCertificateFiles(model);
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  const probe = new File([new Uint8Array([37, 80, 68, 70])], model.fileName, { type: "application/pdf" });
+  const canShare = (files) => { try { return !!nav?.canShare && nav.canShare({ files }); } catch { return false; } };
+  const shareOne = canShare([probe]);
+  const shareAll = certFiles.length > 0 && canShare([probe, ...certFiles]);
+  const pdfDelivery = !certFiles.length ? "none" : shareAll ? "share" : shareOne ? "omitted" : "download";
+  const prepared = await prepareCertificateImages({ ...model, pdfDelivery });
+  const pdfOf = (m) => new File([buildTranscriptPdf(m).output("blob")], model.fileName, { type: "application/pdf" });
+  const file = pdfOf(prepared);
+  if (shareOne) {
+    try {
+      await nav.share({ title: file.name, files: pdfDelivery === "share" ? [file, ...certFiles] : [file] });
+      return { method: "share", model: prepared };
+    } catch (err) {
+      if (err?.name === "AbortError") return null;
+    }
+  }
+  // Downloading. After a failed share the index was written for the share,
+  // so it is rewritten for what this download can actually carry.
+  let sent = prepared, sentFile = file;
+  if (shareOne && certFiles.length) {
+    const oneAtATime = downloadsOneAtATime(nav);
+    sent = oneAtATime
+      ? { ...prepared, pdfDelivery: "omitted", pdfOmittedWhy: "share_failed" }
+      : { ...prepared, pdfDelivery: "download" };
+    if (pdfsGoWith(sent) !== pdfsGoWith(prepared)) sentFile = pdfOf(sent);
+  }
+  downloadFile(sentFile);
+  if (pdfsGoWith(sent)) certFiles.forEach(downloadFile);
+  return { method: "download", model: sent };
 }

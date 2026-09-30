@@ -4,8 +4,11 @@ import { COLLECTION_KEYS, downloadDocumentFile } from "../../lib/supabase";
 import { downloadBlob } from "../../utils/credentialExport";
 import { invoicePdfFile, invoiceTextPdfFile } from "../../utils/invoicePdf";
 import { callDayStartHour } from "../../utils/billing";
+import { sentDay } from "../../utils/helpers";
 import { archiveSections, documentDetail, documentLabel } from "../../utils/readOnlyArchive.js";
 import { actionButtonStyle } from "../shared/actionButton.js";
+import { credentialOnlyMembership, renewalPaymentFailed } from "../../utils/limitedLaunchAccess.js";
+import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 
 /**
  * An expiry never removes the physician's file, attachments, or invoice
@@ -13,7 +16,7 @@ import { actionButtonStyle } from "../shared/actionButton.js";
  * a membership check in progress keeps the normal screens (ticket fe321c16).
  */
 export default function ReadOnlyRecords({ scope }) {
-  const { data, theme: T, navigate, isDesktop } = useApp();
+  const { data, theme: T, navigate, isDesktop, limitedLaunch, manage } = useApp();
   const [message, setMessage] = useState(null);
   // Every array in data used to be listed, Protected Identity included: its
   // legal names and notes printed in full, and "Download saved records"
@@ -21,6 +24,14 @@ export default function ReadOnlyRecords({ scope }) {
   // never part of this view (archiveSections).
   const { sections, saved } = archiveSections(data, scope, COLLECTION_KEYS);
   const button = primary => actionButtonStyle(T, { primary, isDesktop });
+  // A Credential-only member (the Practice trial over, or never included):
+  // their membership is active, Practice is simply not part of it. Founding
+  // Credential, the bundle and lifetime include Practice and never land here
+  // this way; a lapsed beta keeps the expiry sentence below.
+  const access = limitedLaunch?.access;
+  const credentialOnly = scope === "practice" && credentialOnlyMembership(access);
+  const trialEnded = credentialOnly && access.practiceTrial?.state === "expired" && access.practiceTrial.endsAt
+    ? new Date(access.practiceTrial.endsAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : null;
   const small = { ...button(false), minHeight: 40, padding: "8px 14px" };
   const exportRecords = () => {
     downloadBlob(new Blob([JSON.stringify(saved, null, 2)], { type: "application/json" }), `credentialdomd-${scope}-records.json`);
@@ -43,7 +54,7 @@ export default function ReadOnlyRecords({ scope }) {
         number: record.number, physician: data.settings.name || "Physician", npi: data.settings.npi, email: data.settings.email,
         facility: contract.facility, agency: contract.agency, location: contract.location, billTo: contract.billTo,
         periodStart: record.periodStart, periodEnd: record.periodEnd, terms: record.terms, lines: record.lines,
-        totalMin: record.totalMinutes, total, paid, balance: record.writeOffAt ? 0 : Math.max(0, total - paid), issuedDate: record.sentAt?.slice(0, 10),
+        totalMin: record.totalMinutes, total, paid, balance: record.writeOffAt ? 0 : Math.max(0, total - paid), issuedDate: sentDay(record.sentAt) || undefined,
         // The call-day window its day blocks print: lines saved before the
         // day layout do not carry it, so it comes from the agreement, as on
         // every resend (invoiceDocumentArgs).
@@ -63,7 +74,20 @@ export default function ReadOnlyRecords({ scope }) {
   </li>;
   return <section className="cmd-archive" style={{ color: T.text }}>
     <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 6px" }}>{scope === "practice" ? "Practice" : "Credential"} saved records</h2>
-    <p style={{ color: T.textMuted, lineHeight: 1.6, margin: "0 0 12px", fontSize: 14 }}>These records are read-only. You can view and download them. Membership expiry does not delete your data.</p>
+    {credentialOnly ? <div style={{ margin: "0 0 12px" }}>
+      <p style={{ color: T.textMuted, lineHeight: 1.6, margin: "0 0 8px", fontSize: 14 }}>
+        {trialEnded && `Your Practice trial ended on ${trialEnded}. `}Your Credential membership continues. Practice is not part of it, so these Practice records are read-only. You can view and download them.
+      </p>
+      <p style={{ color: T.textMuted, lineHeight: 1.6, margin: "0 0 8px", fontSize: 14 }}>
+        <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}
+      </p>
+      <button type="button" style={button(false)} onClick={() => navigate("more", "settings")}>Profile &amp; settings</button>
+    </div>
+      : <p style={{ color: T.textMuted, lineHeight: 1.6, margin: "0 0 12px", fontSize: 14 }}>These records are read-only. You can view and download them. Membership expiry does not delete your data.</p>}
+    {renewalPaymentFailed(limitedLaunch?.access) && <div role="status" style={{ margin: "0 0 12px" }}>
+      <p style={{ color: T.text, lineHeight: 1.6, margin: "0 0 8px", fontSize: 14 }}>{MEMBERSHIP_COPY.renewalPaymentFailed}</p>
+      <button type="button" style={button(true)} onClick={() => manage?.()}>Update payment method</button>
+    </div>}
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
       <button type="button" style={button(true)} onClick={exportRecords}>Download saved records</button>
       <button type="button" style={button(false)} onClick={() => navigate("more", "export")}>All export options</button>

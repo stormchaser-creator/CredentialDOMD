@@ -26,7 +26,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "./renewalLinks.json" with { type: "json" };
-import { remindable, reminderLabel } from "../_shared/reminderRows.mjs";
+import { remindable, reminderLabel, withCurrentCategoryNames } from "../_shared/reminderRows.mjs";
 import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
 import { reminderEmailDecision, reminderFingerprint } from "../_shared/reminderCadence.mjs";
 
@@ -42,12 +42,24 @@ const TABLES: { table: string; label: string }[] = [
   { table: "screenings", label: "Screenings" },
   { table: "professional_memberships", label: "Memberships" },
   { table: "travel_docs", label: "Travel documents" },
+  // Records in the member's own categories (a permit, a badge) alert in the
+  // app like any credential (src/utils/alertItems.js credentialRecords), so
+  // the digest names them too. The label is only the fallback for a record
+  // with neither a name nor a category, and is the app's own ("Your
+  // categories", App.jsx search results).
+  { table: "custom_records", label: "Your categories" },
 ];
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-const dayDiff = (iso: string) => Math.round((new Date(iso + "T00:00:00Z").getTime() - Date.now()) / 86400000);
+// Whole UTC calendar days from `today` (the run's date) to `iso`: 0 for
+// today, N for N days out, as the app's daysUntil counts them. It used to
+// subtract the current time, so at the 13:00Z run every count was a day
+// short and a credential expiring today was listed as EXPIRED "1 day ago".
+// The run fires at 13:00Z (06:00 PT, 09:00 ET), when the UTC date is the
+// member's local date across the US.
+const dayDiff = (iso: string, today: string) => Math.round((Date.parse(iso + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86400000);
 const fmt = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 function firstName(name: string | null, email: string) {
@@ -96,12 +108,21 @@ serve(async (req) => {
         .gte("expiration_date", lo)
         .lte("expiration_date", hi);
       if (error) { console.error("query failed", t.table, error.message); continue; }
-      for (const r of (data || []) as any[]) {
+      let rows = (data || []) as any[];
+      // A record keeps the category name it was saved under; the app shows
+      // the category's name today, so the email reads it too. If this read
+      // fails, the saved names stand.
+      if (t.table === "custom_records" && rows.length) {
+        const { data: cats, error: catError } = await db.from("custom_categories").select("id, name").eq("user_id", p.id);
+        if (catError) console.error("query failed", "custom_categories", catError.message);
+        rows = withCurrentCategoryNames(rows, cats || []);
+      }
+      for (const r of rows) {
         if (!r.expiration_date || acked.has(r.id)) continue;
         // Historical, superseded, pending-confirmation and date-unknown
         // records never trigger a reminder (ticket 2c819309).
-        if (!remindable(r)) continue;
-        items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
+        if (!remindable(r, { table: t.table, today })) continue;
+        items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date, today), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
       }
     }
     if (!items.length) { results.push({ profile: p.id, sent: false, reason: "nothing due" }); continue; }

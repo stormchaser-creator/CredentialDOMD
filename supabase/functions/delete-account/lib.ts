@@ -61,7 +61,30 @@ export const COLLECTION_TABLES: string[] = [
  * emailed from the server (user_id). member_view_grants and member_view_events
  * are the support access the physician allowed and its log (profile_id).
  */
-export interface UserTable { table: string; column: string; optional?: boolean }
+const DAY_MS = 24 * 60 * 60 * 1000;
+/**
+ * How many days of issued invoice numbers a deletion keeps.
+ * allocate_invoice_number (20260929210000) takes a day within 2 days of the
+ * server's UTC date, both when it issued a number and after the account
+ * reopens. So a number it could issue again has a day no earlier than 2 days
+ * before the deletion's, and was reserved on a UTC day no earlier than 4
+ * days before the deletion's: within 5 days of the deletion. A sixth day
+ * covers the edge function's clock against the database's.
+ */
+export const INVOICE_NUMBER_KEEP_DAYS = 6;
+
+export interface UserTable {
+  table: string;
+  column: string;
+  optional?: boolean;
+  /**
+   * Rows whose `column` is at or after `days` before the deletion stay; only
+   * older ones are counted and deleted (keepRecentBefore). For a ledger whose
+   * recent rows are what stops the account being handed something again
+   * after it reopens.
+   */
+  keepRecent?: { column: string; days: number };
+}
 export const USER_TABLES: UserTable[] = [
   { table: "assistant_log", column: "user_id" },
   { table: "support_tickets", column: "user_id" },
@@ -117,7 +140,34 @@ export const USER_TABLES: UserTable[] = [
   // summaries, source quotes), 2026-09-28. optional for the same reason:
   // migration 20260928170000 arrives with the email-inbound deploy.
   { table: "intake_proposals", column: "user_id", optional: true },
+  // Every invoice number the server issued to the account
+  // (allocate_invoice_number, 2026-09-29). The profile row is tombstoned, not
+  // deleted, so its ON DELETE CASCADE never runs. optional for the same
+  // reason as above: migration 20260929210000 may land after this function.
+  //
+  // The numbers the allocator could still hand out again are KEPT. The
+  // account reopens at its owner's next sign-in (20260930020000) with the
+  // same profile id, and allocate_invoice_number picks the next number from
+  // this ledger and the invoices, both emptied by a full delete: the member
+  // who sent INV-<day>-01 and -02 to a billing office, deleted their data
+  // and built an invoice the same day was given INV-<day>-01 again. The
+  // allocator issues a number only for a day within 2 days of the server's
+  // date, so a number reserved more than 5 days before the deletion can never
+  // be issued again and goes; the last INVOICE_NUMBER_KEEP_DAYS days' numbers
+  // (numbers only: no amount, recipient or invoice) stay under the tombstoned
+  // profile.
+  { table: "invoice_number_reservations", column: "user_id", optional: true, keepRecent: { column: "reserved_at", days: INVOICE_NUMBER_KEEP_DAYS } },
 ];
+
+/**
+ * The cut for a keepRecent table at `nowMs`: rows with `column` before
+ * `before` (an ISO instant) are counted and deleted, the rest stay. Null for
+ * every other table, which is deleted whole.
+ */
+export function keepRecentBefore(t: UserTable, nowMs: number): { column: string; before: string } | null {
+  if (!t.keepRecent) return null;
+  return { column: t.keepRecent.column, before: new Date(nowMs - t.keepRecent.days * DAY_MS).toISOString() };
+}
 
 /**
  * True for the error PostgREST gives when a table does not exist:
@@ -237,6 +287,7 @@ export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
   specialties: null,
   professional_summary: null,
   cv_highlights: null,
+  training_start_year: null,
   profile_photo: null,
   tax_prep: null,
   // preferences and reminder state
@@ -292,8 +343,14 @@ export const PROFILE_KEEP_COLUMNS = ["id", "auth_user_id", "created_at", "access
 /**
  * The full UPDATE for the profiles row at `now`. The cancellation schedule is
  * consumed here: data_deletion_date goes to null so the daily job cannot run
- * the same deletion twice, and deleted_at is what the app reads on the next
- * sign-in to drop a device cache that predates the wipe.
+ * the same deletion twice. deleted_at keeps the account closed until its
+ * owner signs in again; initialize_clerk_profile then reopens it empty and
+ * moves the stamp to data_deleted_at (migration 20260930020000), which every
+ * device of that member compares to drop a local copy that predates the wipe.
+ * index.ts hands it to close_account_for_data_deletion, which applies it in
+ * the same transaction as the account tombstone and the mailbox release; a
+ * key that is not a profiles column fails the whole close there instead of
+ * being skipped.
  */
 export function tombstonePatch(now: string): Record<string, unknown> {
   return { ...PROFILE_TOMBSTONE_PATCH, cancelled_at: null, data_deletion_date: null, deleted_at: now, updated_at: now };

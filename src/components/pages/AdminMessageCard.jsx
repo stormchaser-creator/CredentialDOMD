@@ -7,7 +7,24 @@ import { Modal } from "../shared";
  * Home-dashboard card for admin_messages: notes from Eric, individually or
  * broadcast. Mirrors NotificationBanner's card placement/styling but has its
  * own Supabase fetch since these aren't derived from local data.
+ *
+ * A message's activity is the later of when it was sent and Eric's newest
+ * answer in this member's thread (admin_message_replies, is_admin_reply).
+ * An answer to the member's reply is a reply row, not a new message, so
+ * without it the card never showed that Eric had written back.
  */
+function withActivity(messages, answers) {
+  const latest = {};
+  for (const r of answers || []) {
+    if (!latest[r.message_id] || r.created_at > latest[r.message_id].created_at) latest[r.message_id] = r;
+  }
+  return (messages || []).map((m) => {
+    const answer = latest[m.id];
+    const answered = answer && new Date(answer.created_at) > new Date(m.created_at);
+    return { ...m, activity_at: answered ? answer.created_at : m.created_at, latest_answer: answered ? answer : null };
+  }).sort((a, b) => new Date(b.activity_at) - new Date(a.activity_at));
+}
+
 function AdminMessageCard() {
   const { theme: T, userIdRef, updateSettings, data } = useApp();
   const myProfileId = userIdRef.current;
@@ -22,14 +39,22 @@ function AdminMessageCard() {
 
   const refresh = () => {
     if (!supabase || !myProfileId) return;
-    supabase.from("my_admin_messages").select("*").limit(20)
-      .then(({ data: rows, error }) => { if (!error) setMessages(rows || []); setLoaded(true); });
+    Promise.all([
+      supabase.from("my_admin_messages").select("*").limit(20),
+      supabase.from("admin_message_replies").select("message_id, body, created_at")
+        .eq("user_id", myProfileId).eq("is_admin_reply", true)
+        .order("created_at", { ascending: false }).limit(50),
+    ]).then(([{ data: rows, error }, answers]) => {
+      // Without the answers the card still shows the messages themselves.
+      if (!error) setMessages(withActivity(rows, answers.error ? [] : answers.data));
+      setLoaded(true);
+    }, () => setLoaded(true));
   };
 
   useEffect(() => { refresh(); }, [myProfileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const seenAt = data?.settings?.adminMessagesSeenAt;
-  const unseen = messages.filter(m => !seenAt || new Date(m.created_at) > new Date(seenAt));
+  const unseen = messages.filter(m => !seenAt || new Date(m.activity_at) > new Date(seenAt));
 
   const openDetail = async (m) => {
     setOpenMsg(m); setDetailMsg("");
@@ -56,6 +81,7 @@ function AdminMessageCard() {
     const { data: rows } = await supabase.from("admin_message_replies").select("*")
       .eq("message_id", openMsg.id).eq("user_id", myProfileId).order("created_at");
     setThread(rows || []);
+    refresh();
   };
 
   if (!loaded || messages.length === 0) return null;
@@ -74,7 +100,7 @@ function AdminMessageCard() {
           <div style={{
             fontSize: 12, color: T.textMuted, marginTop: 2,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>{messages[0].subject || messages[0].body}</div>
+          }}>{messages[0].latest_answer ? messages[0].latest_answer.body : (messages[0].subject || messages[0].body)}</div>
         </div>
         {unseen.length > 0 && (
           <span style={{ width: 9, height: 9, borderRadius: 999, backgroundColor: T.accent, flexShrink: 0 }} />
@@ -93,7 +119,9 @@ function AdminMessageCard() {
                   fontSize: 12, color: T.textMuted, marginTop: 3, lineHeight: 1.4,
                   display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
                 }}>{m.body}</div>
-                <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{new Date(m.created_at).toLocaleString()}</div>
+                <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>
+                  {m.latest_answer ? `Eric replied ${new Date(m.latest_answer.created_at).toLocaleString()}` : new Date(m.created_at).toLocaleString()}
+                </div>
               </div>
             ))}
           </div>
@@ -123,7 +151,7 @@ function AdminMessageCard() {
                 ))}
               </div>
             )}
-            <textarea value={replyBody} onChange={e => setReplyBody(e.target.value)}
+            <textarea aria-label="Reply" value={replyBody} onChange={e => setReplyBody(e.target.value)}
               placeholder="Reply to Eric"
               style={{
                 width: "100%", minHeight: 80, marginTop: 12, padding: "10px 12px", borderRadius: 10,

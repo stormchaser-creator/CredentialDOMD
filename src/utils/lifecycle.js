@@ -22,7 +22,7 @@
 //
 // Pure: plain node tests and the edge-function copies mirror it.
 
-import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
+import { isInherentlyNonExpiringLicense } from "../constants/credentialTypes.js";
 
 export const LIFECYCLE_SECTIONS = Object.freeze(["licenses", "privileges", "insurance"]);
 export const LIFECYCLE_STATUSES = Object.freeze(["active", "provisional", "pending_confirmation", "superseded", "historical"]);
@@ -79,7 +79,7 @@ const isBoardCertType = (type) => /board certification/i.test(type || "");
  */
 export function dateUnknownApplies(sectionKey, item) {
   const type = String(item?.type || "");
-  if (sectionKey === "licenses") return type !== CERTIFICATION_TYPE && !(item?.noExpiration === true && isBoardCertType(type));
+  if (sectionKey === "licenses") return !isInherentlyNonExpiringLicense(type) && !(item?.noExpiration === true && isBoardCertType(type));
   if (sectionKey === "insurance") return !PERSONAL_COVERAGE_RE.test(type);
   return true;
 }
@@ -157,7 +157,7 @@ export function normalizeLifecycle(sectionKey, item, previous = null) {
   if (has("noExpiration")) {
     const type = String(out.type || "");
     out.noExpiration = out.noExpiration === true
-      && (sectionKey !== "licenses" || type === CERTIFICATION_TYPE || isBoardCertType(type));
+      && (sectionKey !== "licenses" || isInherentlyNonExpiringLicense(type) || isBoardCertType(type));
   }
   if (out.dateUnknown === true) {
     const date = typeof out.expirationDate === "string" ? out.expirationDate.trim() : out.expirationDate;

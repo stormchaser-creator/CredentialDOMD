@@ -2,6 +2,26 @@ import { assertLimitedPrice } from './limitedLaunchCatalog.mjs';
 import { assertDeferredSubscription } from './limitedBillingTiming.mjs';
 
 const id = value => typeof value === 'string' ? value : value?.id;
+/**
+ * The $0 opening invoice of a deferred (free-beta) subscription. Checkout sets
+ * billing_cycle_anchor at the beta end with proration_behavior none, so Stripe
+ * finalizes a $0 subscription_create invoice and marks it paid at once. It is
+ * not a payment: it proves no paid year and must settle as a scheduled
+ * membership (no proof) instead of being refused. True only for that exact
+ * invoice while the subscription is still in its free period ending at the
+ * anchor; every other paid invoice goes to verifiedLimitedPayment.
+ */
+export function deferredOpeningInvoice({ account, subscription: sub, invoice, billingAnchor, livemode }) {
+  if (billingAnchor === null || billingAnchor === undefined) return false;
+  const periodEnd = sub?.current_period_end ?? sub?.items?.data?.[0]?.current_period_end;
+  const invoiceSub = id(invoice?.subscription) || id(invoice?.parent?.subscription_details?.subscription);
+  return invoice?.status === 'paid' && invoice.paid === true && invoice.billing_reason === 'subscription_create' && invoice.currency === 'usd'
+    && invoice.amount_paid === 0 && invoice.amount_due === 0 && invoice.amount_remaining === 0 && invoice.total === 0
+    && (invoice.total_discount_amounts == null || (Array.isArray(invoice.total_discount_amounts) && invoice.total_discount_amounts.length === 0))
+    && periodEnd === billingAnchor && sub.status === 'active' && invoiceSub === sub.id
+    && account?.livemode === livemode && invoice.livemode === livemode && sub.livemode === livemode
+    && id(invoice.customer) === account.stripe_customer_id && id(sub.customer) === account.stripe_customer_id;
+}
 /** Inputs are fresh provider reads performed only after verified webhook signature. */
 export function verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote, livemode }) {
   assertLimitedPrice(sub.items?.data?.[0]?.price, offer, livemode, { allowInactive: true, pinnedPriceId: quote.price_id });

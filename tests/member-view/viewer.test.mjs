@@ -33,7 +33,7 @@ const snapshot = () => memberView.shapeSnapshot({
       { id: uuid(12), type: 'Medical License', state: 'CA', expiration_date: day(-30), lifecycle_status: 'historical' },
     ],
     cme: [{ id: uuid(20), title: 'Opioid prescribing', category: 'Category 1', hours: 2.5, date: day(-10) }],
-    customRecords: [{ id: uuid(30), category_id: uuid(31), category_name: 'Hospital ID Badges', name: 'Penrose badge', field_labels: { badgeNumber: 'Badge number' }, field_values: { badgeNumber: 'PX-1182' } }],
+    customRecords: [{ id: uuid(30), category_id: uuid(31), category_name: 'Hospital ID Badges', name: 'Juniper badge', field_labels: { badgeNumber: 'Badge number' }, field_values: { badgeNumber: 'PX-1182' } }],
   },
   documents: [{ id: uuid(40), name: 'DEA certificate.pdf', mime_type: 'application/pdf', size_bytes: 20480, linked_to: `licenses:${uuid(11)}`, uploaded_at: '2026-09-01T12:00:00Z' }],
 });
@@ -191,7 +191,7 @@ test('Home shows each state\'s CME exactly as the member\'s Home computes it, no
   const ca = cards.find(c => c.st === 'CA');
   assert.equal(ca.primary, true);
   assert.equal(ca.comp.totalEarned, 40, 'the current cycle only: the 174 hours from five years ago do not count');
-  assert.equal(cards.find(c => c.st === 'NY').renews, 'No NY license on file, tracking a rolling ' + cards.find(c => c.st === 'NY').comp.cycle + '-yr window');
+  assert.equal(cards.find(c => c.st === 'NY').renews, 'No NY license on file, so the app tracks a rolling ' + cards.find(c => c.st === 'NY').comp.cycle + '-yr window', 'the member\'s card\'s words');
   // Drawn on the viewer's Home, with the member's labels.
   const html = markup({ opened: { ...opened(), snapshot: snap } });
   const home = html.match(/data-member-view-cme=""[\s\S]*?On file/)?.[0] || '';
@@ -202,6 +202,34 @@ test('Home shows each state\'s CME exactly as the member\'s Home computes it, no
   assert.ok(html.includes(totalHoursLabel(complianceFor(data, 'CA'))));
   assert.doesNotMatch(html, /214|CME hours recorded/, 'no all-time total anywhere');
   assert.doesNotMatch(html, /—/);
+});
+
+test('a licence on the Resolve card: the viewer says what the member\'s card says, not "No CO license on file"', async () => {
+  const { rollingWindowLabel } = await import('../../src/utils/cmePresentation.js');
+  const { lifecycleNote } = await import('../../src/utils/lifecycle.js');
+  // As the database hands them to admin-member-view. Synthetic records only.
+  const snap = memberView.shapeSnapshot({
+    profile: { id: uuid(1), name: 'Synthetic Physician', degree_type: 'MD', primary_state: 'TX', additional_states: ['CO'], reminder_lead_days: 90 },
+    collections: { licenses: [
+      { id: uuid(10), type: 'State Medical License', state: 'TX', license_number: 'SYN-TX', expiration_date: day(800) },
+      { id: uuid(11), type: 'State Medical License', state: 'CO', license_number: 'SYN-CO', date_unknown: true, npi_imported: true },
+      { id: uuid(12), type: 'State Medical License', state: 'UT', license_number: 'SYN-UT', expiration_date: day(20), lifecycle_status: 'pending_confirmation' },
+      { id: uuid(13), type: 'State Medical License', state: 'NM', license_number: 'SYN-NM', expiration_date: day(-400), lifecycle_status: 'historical' },
+    ] },
+  });
+  const cards = memberViewer.stateCmeCards(snap);
+  const card = st => cards.find(c => c.st === st);
+  assert.equal(card('CO').renews, `CO license: date not yet known, so the app tracks a rolling ${card('CO').comp.cycle}-yr window`);
+  assert.equal(card('UT').renews, `UT license: pending confirmation, so the app tracks a rolling ${card('UT').comp.cycle}-yr window`);
+  // The member's Home builds the same words from the same helpers (App.jsx renderStateCard).
+  const co = snap.sections.licenses.find(l => l.state === 'CO');
+  assert.equal(card('CO').renews, rollingWindowLabel('CO', card('CO').comp.cycle, lifecycleNote(co)));
+  assert.match(card('TX').renews, /^License renews /);
+  assert.equal(card('NM'), undefined, 'a historical licence holds no state');
+  const html = markup({ opened: { ...opened(), snapshot: snap } });
+  assert.ok(html.includes(card('CO').renews), 'drawn on the viewer\'s Home');
+  assert.doesNotMatch(html, /No (CO|UT) license on file/);
+  assert.doesNotMatch(html, /\u2014/);
 });
 
 // ─── Identifiers the app's own gate withholds ─────────────────────────────
@@ -540,16 +568,16 @@ test('the member\'s log shows the view and each file opened: who, when, what and
   process.env.TZ = 'America/Denver';
   t.after(() => { if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone; });
   const events = [
-    { id: uuid(91), created_at: '2026-09-25T15:04:00Z', event: 'file_opened', actor_name: 'Eric Whitney', reason: 'Ticket 4411: CME hours on Home look wrong', document_name: 'DEA certificate.pdf' },
-    { id: uuid(90), created_at: '2026-09-25T15:02:00Z', event: 'view_started', actor_name: 'Eric Whitney', reason: 'Ticket 4411: CME hours on Home look wrong', document_name: null },
+    { id: uuid(91), created_at: '2026-09-25T15:04:00Z', event: 'file_opened', actor_name: 'Morgan Hale', reason: 'Ticket 4411: CME hours on Home look wrong', document_name: 'DEA certificate.pdf' },
+    { id: uuid(90), created_at: '2026-09-25T15:02:00Z', event: 'view_started', actor_name: 'Morgan Hale', reason: 'Ticket 4411: CME hours on Home look wrong', document_name: null },
   ];
   const card = await mountCard(memberClient({ events }));
   const text = card.pageText();
-  assert.match(text, /Eric Whitney \(CredentialDOMD support\) opened the file "DEA certificate\.pdf"\./);
-  assert.match(text, /Eric Whitney \(CredentialDOMD support\) opened your account, read-only\./);
+  assert.match(text, /Morgan Hale \(CredentialDOMD support\) opened the file "DEA certificate\.pdf"\./);
+  assert.match(text, /Morgan Hale \(CredentialDOMD support\) opened your account, read-only\./);
   assert.equal(text.match(/Reason: Ticket 4411: CME hours on Home look wrong/g).length, 2);
   assert.match(text, /Sep 25, 2026/);
-  assert.deepEqual(viewLogLine(events[0]).text, 'Eric Whitney (CredentialDOMD support) opened the file "DEA certificate.pdf".');
+  assert.deepEqual(viewLogLine(events[0]).text, 'Morgan Hale (CredentialDOMD support) opened the file "DEA certificate.pdf".');
   const empty = await mountCard(memberClient());
   assert.match(empty.pageText(), /No one from support has viewed your account\./);
 });

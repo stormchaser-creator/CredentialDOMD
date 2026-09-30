@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from "react";
+import { TAP_MIN, cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Modal from "../../shared/Modal";
@@ -52,7 +53,7 @@ function Forecast() {
       if (kind === "call") return Math.round(call || day);
       return Math.round(day + call);
     }
-    // Stipend model (Penrose / Good Sam / Sanford): call days price from the
+    // Stipend model (the locum stipend agreements): call days price from the
     // historical CALL-day average (stipend + overage), never the blended
     // number that orientation and sign-out days drag down.
     const k = kindAvgs[cid] || { callAvg: 0, dayAvg: 0 };
@@ -147,7 +148,7 @@ function Forecast() {
       for (const p of periods) {
         if (!p.start) continue;
         // A block with times holds the call days between its start and end
-        // moments (Sep 25 4:00 PM to Sep 28 7:00 AM: Sep 25, 26 and 27).
+        // moments (Oct 16 4:00 PM to Oct 19 7:00 AM: Oct 16, 17 and 18).
         let dates;
         if (isTimedPeriod(p)) {
           dates = blockCallDays(timedBlock(p));
@@ -161,13 +162,17 @@ function Forecast() {
           for (let i = 0; i < span; i++) { dates.push(iso(d)); d.setDate(d.getDate() + 1); }
         }
         if (dates.length > 62 || dates.length < 1) continue;
+        // Each loaded day is estimated as the day editor would suggest for
+        // it: a Day on a day-rate agreement at its day rate. The blended
+        // average fell back to the call stipend before the day rate, so a
+        // $2,000/day agreement with a $1,500 stipend loaded every day at $1,500.
+        const kind = c.payModel === "daily" ? "day" : "call";
+        const expected = suggestFor(c.id, kind) || 0;
         for (const date of dates) {
           if (!have.has(`${c.id}|${date}`)) {
             // Refused: stop, and report only what was loaded.
             if (addItem("scheduleDays", {
-              id: generateId(), date, contractId: c.id,
-              kind: c.payModel === "daily" ? "day" : "call",
-              expected: avgOf[c.id] || 0,
+              id: generateId(), date, contractId: c.id, kind, expected,
             }) === false) { refused = true; break load; }
             added++;
           }
@@ -181,16 +186,18 @@ function Forecast() {
       ? `Loaded ${added} coverage day${added === 1 ? "" : "s"}. The rest were not saved; load again once connected.`
       : added > 0
         ? `Loaded ${added} coverage day${added === 1 ? "" : "s"} from your agreements. Tap any day to adjust the amount.`
-        : "All coverage dates are already on the calendar. Multi-year blocks (ANMG) are skipped; tap individual days to add those.");
+        : "All coverage dates are already on the calendar. Multi-year agreements are skipped; tap individual days to add those.");
     setTimeout(() => setLoadMsg(null), 8000);
   };
 
-  // Initials, not first words — "Intermountain" blew the grid past the
-  // screen edge on a phone, and Eric knows Arrowhead as ANMG.
+  // The contract's own short name, else initials, not first words: a long
+  // first word blew the grid past the screen edge on a phone, and a group is
+  // known by its short name.
   const facilityShort = (cid) => {
-    const f = (contracts.find(c => c.id === cid)?.facility || "?").replace(/\(.*?\)/g, "").trim();
-    if (/intermountain.*samaritan/i.test(f)) return "IM: GS";
-    if (/arrowhead/i.test(f)) return "ANMG";
+    const contract = contracts.find(c => c.id === cid);
+    const short = String(contract?.shortName || "").trim();
+    if (short) return short;
+    const f = (contract?.facility || "?").replace(/\(.*?\)/g, "").trim();
     const words = f.split(/\s+/).filter(Boolean);
     return words.length >= 2 ? words.map(w => w[0]).join("").toUpperCase().slice(0, 4) : f.slice(0, 5);
   };
@@ -212,11 +219,11 @@ function Forecast() {
       {/* Calendar */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "12px 12px 8px", boxShadow: T.shadow1, marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <button onClick={() => nav(-1)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>‹</button>
+          <button aria-label="Previous month" onClick={() => nav(-1)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800, ...cardActionSize }}>‹</button>
           <div style={{ fontSize: 15, fontWeight: 800, color: T.text }}>
             {first.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
           </div>
-          <button onClick={() => nav(1)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>›</button>
+          <button aria-label="Next month" onClick={() => nav(1)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800, ...cardActionSize }}>›</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
           {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
@@ -282,7 +289,7 @@ function Forecast() {
       {/* Reconciliation: month by month, was the estimate right? */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1, marginBottom: 10 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-          Estimated vs billed — {year}
+          Estimated vs billed, {year}
         </div>
         {outlook.months.filter(x => x.hasData).map(x => {
           const name = new Date(year, parseInt(x.key.slice(5), 10) - 1, 1).toLocaleDateString("en-US", { month: "short" });
@@ -300,7 +307,7 @@ function Forecast() {
         })}
         {outlook.months.every(x => !x.hasData) && (
           <div style={{ fontSize: 12.5, color: T.textMuted }}>
-            Nothing scheduled yet — load your contract dates above, or tap any calendar day.
+            Nothing scheduled yet. Load your contract dates above, or tap any calendar day.
           </div>
         )}
         <div style={{ fontSize: 11, color: T.textDim, marginTop: 6 }}>
@@ -407,11 +414,11 @@ function Forecast() {
           const c = contracts.find(x => x.id === form?.contractId);
           const day = parseFloat(c?.dayRate) || 0;
           const call = parseFloat(c?.callStipend) || 0;
-          if (day) return `Contract rates: day ${money(day)} · day + call ${money(day + call)} — the type above sets the price.`;
+          if (day) return `Contract rates: day ${money(day)} · day + call ${money(day + call)}. The type above sets the price.`;
           const k = kindAvgs[form?.contractId] || {};
           if (k.callAvg) return `Call days here have averaged ${money(k.callAvg)} (stipend ${money(call)} + overage)${k.dayAvg ? `; non-call days ${money(k.dayAvg)}` : ""}. The type above sets the price.`;
-          if (call) return `Call stipend ${money(call)} per call day — no history yet, so the stipend is the starting point.`;
-          return avgOf[form?.contractId] ? `This contract has averaged ${money(avgOf[form?.contractId])} per worked day.` : "No history yet — contract rate used as the starting point.";
+          if (call) return `Call stipend ${money(call)} per call day. With no history yet, the stipend is the starting point.`;
+          return avgOf[form?.contractId] ? `This contract has averaged ${money(avgOf[form?.contractId])} per worked day.` : "No history yet, so the contract rate is the starting point.";
         })()}>
           <input type="number" inputMode="decimal" value={form?.expected ?? ""} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={iS} />
         </Field>
@@ -428,7 +435,7 @@ function Forecast() {
           <button onClick={saveDay} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>Save day</button>
         </div>
         {(schedByDate[editDay] || []).length > 1 && (
-          <button onClick={() => setForm(null)} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: T.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Back to all entries for this day</button>
+          <button onClick={() => setForm(null)} style={{ width: "100%", minHeight: TAP_MIN, marginTop: 0, background: "transparent", border: "none", color: T.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Back to all entries for this day</button>
         )}
         </>)}
       </Modal>
@@ -479,7 +486,7 @@ function Forecast() {
                   </div>
                   {r.priorDayCoverage > 0 && (
                     <div style={{ fontSize: 10.5, color: T.textDim, fontStyle: "italic", padding: "3px 0 0 44px" }}>
-                      Not logged separately here — {money(r.priorDayCoverage)} billed under {shortDate(r.prevDate)}'s call day (pre-7am hours roll to the prior day by design)
+                      Not logged separately here: {money(r.priorDayCoverage)} billed under {shortDate(r.prevDate)}'s call day (pre-7am hours roll to the prior day by design)
                     </div>
                   )}
                 </div>

@@ -2,13 +2,13 @@
  * What a forward to docs@credentialdomd.com is FOR.
  *
  * Until 2026-09-25 every docs@ forward was read as a document request. A
- * physician forwarded Sanford Health Plan's credentialing approval letter to
- * keep it; the matcher took the signature line "E. Whitney, DO" for a
- * lettered list item, stored a request whose only ask was "Whitney, DO",
- * emailed the physician "I could not tell from your email what you meant by:
- * Whitney, DO", and left the letter itself unfiled. With a DMARC-passing
- * forward, docs@ would also have told Sanford "we received your request"
- * about a letter Sanford had sent.
+ * physician forwarded a health plan's credentialing approval letter to keep
+ * it; the matcher took the signature line "E. <surname>, DO" for a lettered
+ * list item, stored a request whose only ask was "<surname>, DO", emailed the
+ * physician "I could not tell from your email what you meant by: <surname>,
+ * DO", and left the letter itself unfiled. With a DMARC-passing forward,
+ * docs@ would also have told the plan "we received your request" about a
+ * letter the plan had sent.
  *
  * So each email is read for intent first:
  *   "request"   a credentialer asking for documents (the flow that existed)
@@ -154,7 +154,7 @@ export function currentMessage(body) {
     if (/^begin forwarded message/i.test(t)) return true;
     if (/^_{8,}\s*$/.test(t)) return true;
     // A From: header counts only as the start of a quoted block, i.e. when
-    // another header follows it, so a "From: Sanford" line in a letter does not.
+    // another header follows it, so a "From: <sender>" line in a letter does not.
     if (/^[*_]*\s*from\s*[*_]*\s*:/i.test(t)) {
       return lines.slice(i + 1, i + 5).some((n) => /^[*_]*\s*(?:sent|date|to|subject)\s*[*_]*\s*:/i.test(n.trim()));
     }

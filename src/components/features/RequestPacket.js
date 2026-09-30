@@ -93,13 +93,28 @@ export function requesterMissing(request, ownAddresses) {
 }
 
 /**
+ * Who asked, by name: from_name, except when the row's address is the
+ * physician's own (see requesterMissing). A physician who forwards a message
+ * they sent, or a thread whose top message is their own reply, gets a row
+ * whose first From: line is "Their Name <their own address>", so from_name
+ * is the physician's name and not a requester's. "" then. A name with no
+ * address at all is still the requester's name.
+ */
+export function requesterName(request, ownAddresses) {
+  const name = String(request?.from_name || "").trim();
+  const addr = String(request?.from_addr || "").trim();
+  if (addr && requesterMissing(request, ownAddresses)) return "";
+  return name;
+}
+
+/**
  * "Casey Example, osterly-health.example": the person, then where they write
  * from. "Requester not found" when the row holds no requester (see
- * requesterMissing), rather than the physician's own address in the bold
- * slot that says who asked.
+ * requesterMissing), rather than the physician's own name or address in the
+ * bold slot that says who asked.
  */
 export function requesterLine(request, ownAddresses) {
-  const name = String(request?.from_name || "").trim();
+  const name = requesterName(request, ownAddresses);
   const addr = String(request?.from_addr || "").trim();
   if (!name && requesterMissing(request, ownAddresses)) return "Requester not found";
   const at = addr.indexOf("@");
@@ -136,6 +151,10 @@ export const HOME_NO_MATCH_REASON = "No documents could be matched from this ema
 // was handed it without a review. Every screen that offers the button checks
 // oneTapReady first and leads with Review; this is the backstop.
 export const REVIEW_FIRST_REASON = "Tap Review and check the draft first.";
+// A forward that was not positively authenticated (email-inbound stamps
+// proposal.verified false): the address it came from can be forged, and with
+// it the requester the packet would go to. Same words as reviewReason.
+export const UNVERIFIED_FORWARD_NOTE = "This forward could not be verified as coming from you. Check who is asking before you send anything.";
 
 /** May this request's packet go on one tap, unread? (requestPacket.js oneTapReady) */
 export const canSendOnOneTap = (request) => oneTapReady(request?.proposal);
@@ -189,10 +208,15 @@ export function approveBlockedReason(request, accountEmail, ownAddresses, docIds
  * the screen said it was attached. An empty note travels as "" and is sent
  * as no note.
  */
-export function approveBody(request, { docIds, text } = {}) {
+export function approveBody(request, { docIds, text, reviewed } = {}) {
   const ids = Array.isArray(docIds) ? docIds : (Array.isArray(request?.proposal?.docIds) ? request.proposal.docIds : []);
   const note = typeof text === "string" ? text : String(request?.proposal?.coverNote ?? "");
-  return { request_id: request?.id, approve: true, cc_self: true, doc_ids: ids.map(String), text: note };
+  const body = { request_id: request?.id, approve: true, cc_self: true, doc_ids: ids.map(String), text: note };
+  // Sent from the request's own screen, with the draft in view. The server
+  // refuses an approve of an unverified forward's packet without it, so an
+  // older installed app cannot send one on one tap (send-packet-email).
+  if (reviewed === true) body.reviewed = true;
+  return body;
 }
 
 /**
@@ -337,7 +361,7 @@ export function ApproveSendButton({ request, T, accountEmail, ownAddresses, docI
     setPhase("sending");
     setError(null);
     try {
-      const result = await send(approveBody(request, { docIds: ids, text: noteText }));
+      const result = await send(approveBody(request, { docIds: ids, text: noteText, reviewed: reviewed === true }));
       setSentTo(String(result?.to || request?.from_addr || ""));
       setPhase("sent");
       if (onSent) onSent(result);
@@ -412,6 +436,7 @@ export function UnclearNote({ request, T, onSayNotOnFile, canEdit = true }) {
   }, label);
   return h("div", { style: { marginTop: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${T.warning}`, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 } },
     h("div", { style: { fontSize: 12, fontWeight: 700, color: T.warning, textTransform: "uppercase", letterSpacing: 0.4 } }, "Check before sending"),
+    proposal.verified === false ? line(UNVERIFIED_FORWARD_NOTE, "v") : null,
     unclearEmail ? line(reviewReason(proposal), "x") : null,
     ...unclear.map((i, n) => line(`"${String(i.ask || "")}": not recognised. What did they mean? The draft says nothing about it.`, `u${n}`)),
     missing.length ? line(`Not on file: ${missing.map((i) => `"${String(i.ask || "")}"`).join(", ")}. The draft says nothing about ${missing.length === 1 ? "it" : "them"}.`, "m",

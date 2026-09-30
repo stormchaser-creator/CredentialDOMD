@@ -14,7 +14,11 @@
 // send-ticket-reply's emailed_at claim is set, so it is sent exactly once; a
 // reply stored before the migration is never retried; and reconcile.mjs, the
 // hourly runner's step, alerts the owner once about a reply still not emailed
-// an hour after it was stored. pg_cron is a stand-in too.
+// an hour after it was stored. pg_cron is a stand-in too. With it,
+// 20260930031500: the first try's email body is stored once, so every retry
+// sends the same bytes under the reply's one Resend Idempotency-Key; a body
+// Resend refused outright is forgotten; and a reply recorded as emailed on a
+// 409 invalid_idempotent_request is marked, and reconcile.mjs reports it once.
 //
 // Synthetic ids, text and addresses only. Own ports: node --test runs files in
 // parallel.
@@ -30,7 +34,7 @@ import { agentReplyBody, labeledBody, EMAIL_ATTEMPTED, EMAIL_OWN_TICKET, emailSt
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
 import { postReplySQL } from '../../scripts/ticket-fix/reply.mjs';
 import { main as postReply } from '../../scripts/ticket-fix/post-reply.mjs';
-import { reconcile, unsentReplies } from '../../scripts/ticket-fix/reconcile.mjs';
+import { reconcile, unsentReplies, unconfirmedReplies } from '../../scripts/ticket-fix/reconcile.mjs';
 import { tempRepo, privateDir, liveBuild, uuid, signForTest } from './helpers.mjs';
 
 const PORT = '58321';
@@ -43,6 +47,8 @@ const EMAIL = read('supabase/migrations/20260929134100_support_reply_email.sql')
 const EMAIL_ROLLBACK = read('docs/rollback/20260929134100_support_reply_email.rollback.sql');
 const RETRY = read('supabase/migrations/20260929150000_support_reply_email_retry.sql');
 const RETRY_ROLLBACK = read('docs/rollback/20260929150000_support_reply_email_retry.rollback.sql');
+const FROZEN = read('supabase/migrations/20260930031500_support_reply_email_frozen.sql');
+const FROZEN_ROLLBACK = read('docs/rollback/20260930031500_support_reply_email_frozen.rollback.sql');
 // The notifier's SQL lives in scripts/signup-notify.py (signup-notify.sh runs
 // it); take the query it really sends, with a fixed window start.
 const NOTIFIER = spawnSync('python3', ['-c', "import importlib.util,sys;spec=importlib.util.spec_from_file_location('sn',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);print(m.query_sql('2026-01-01T00:00:00Z',[]))", fileURLToPath(new URL('../../scripts/signup-notify.py', import.meta.url))], { encoding: 'utf8' }).stdout;
@@ -375,7 +381,7 @@ const FAKE_CRON = `
 // One member ticket per reply (the agent answers a ticket once), and one the admin owns.
 const R = {
   before: uuid(0xd101), agent: uuid(0xd102), admin: uuid(0xd103), secret: uuid(0xd104), spent: uuid(0xd105), old: uuid(0xd106),
-  broken: uuid(0xd107), gone: uuid(0xd108), late: uuid(0xd109), recent: uuid(0xd10a), after: uuid(0xd10b), adminOwn: uuid(0xd1ff),
+  broken: uuid(0xd107), gone: uuid(0xd108), late: uuid(0xd109), recent: uuid(0xd10a), after: uuid(0xd10b), frozen: uuid(0xd10c), frozenEmpty: uuid(0xd10d), refused: uuid(0xd10e), adminOwn: uuid(0xd1ff),
 };
 const RETRY_SEED = `
   insert into public.profiles (id, email, auth_user_id) values
@@ -563,6 +569,100 @@ test('a reply whose email fails is sent by the retry, exactly once; one still no
     } finally { state.cleanup(); ledger.cleanup(); }
   });
 
+  await t.test("20260930031500 stores a reply's first email body once, for send-ticket-reply alone; it needs 20260929150000 and rolls back cleanly", async () => {
+    const early = pg.tryRun(FROZEN, { db: 'bare' });
+    assert.equal(early.ok, false);
+    assert.match(early.err, /apply 20260929150000_support_reply_email_retry\.sql first/);
+    for (const pass of ['first', 'second']) { const r = pg.tryRun(FROZEN); assert.ok(r.ok, `${pass}: ${r.err}`); }
+    const id = await reply(R.frozen, 'Synthetic answer whose first email body is stored.');
+    const store = (message, body) => pg.tryRun(`set role service_role; select coalesce(public.ticket_reply_email_payload('${message}', ${body === null ? 'null' : text(body)}), '<null>')`, { user: 'authenticator' });
+    const first = '{"to":["member@example.test"],"subject":"Re: Synthetic retry fixture (CredentialDOMD)"}';
+    assert.deepEqual(store(id, first), { ok: true, out: first, err: '' }, 'the first try stores its body and gets it back');
+    assert.equal(store(id, '{"to":["member.moved@example.test"],"subject":"renamed"}').out, first, 'a later try gets the first body back');
+    assert.equal(store(id, null).out, first);
+    assert.equal(pg.sql(`select payload from public.ticket_reply_emails where message_id = '${id}'`), first);
+    assert.equal(store(ids.before, first).out, '<null>', 'a reply stored before 20260929150000 has no record: nothing stored');
+    assert.equal(pg.sql(`select count(*) from public.ticket_reply_emails where message_id = '${ids.before}'`), '0');
+    const empty = store(await reply(R.frozenEmpty, 'Synthetic answer offered an empty body.'), '');
+    assert.equal(empty.ok, false, 'an empty body is refused');
+    assert.match(empty.err, /ticket_reply_emails_payload_check/);
+    for (const role of ['anon', 'authenticated']) {
+      assert.equal(pg.sql(`select has_function_privilege('${role}', 'public.ticket_reply_email_payload(uuid,text)', 'EXECUTE')`), 'f', role);
+      const denied = pg.tryRun(asApp(role, 'sub-member', `select public.ticket_reply_email_payload('${id}', '{}')`), { user: 'authenticator' });
+      assert.equal(denied.ok, false, role);
+      assert.match(denied.err, /permission denied/);
+    }
+    assert.equal(pg.sql(`select not has_table_privilege('service_role', 'public.ticket_reply_emails', 'UPDATE')
+      and not has_column_privilege('service_role', 'public.ticket_reply_emails', 'payload', 'UPDATE')`), 't', 'written only through the function');
+
+    // Review 2026-09-29, second pass: a body Resend refused outright is
+    // forgotten, so the next try stores and sends the current one.
+    const forget = (message, body) => pg.tryRun(`set role service_role; select coalesce(public.ticket_reply_email_payload_refused('${message}', ${text(body)})::text, '<null>')`, { user: 'authenticator' });
+    assert.deepEqual(forget(id, '{"to":["member.moved@example.test"]}'), { ok: true, out: '<null>', err: '' }, 'only the body that was refused');
+    assert.equal(pg.sql(`select payload from public.ticket_reply_emails where message_id = '${id}'`), first);
+    assert.equal(forget(id, first).out, 'true');
+    assert.equal(pg.sql(`select coalesce(payload, '<null>') from public.ticket_reply_emails where message_id = '${id}'`), '<null>');
+    assert.equal(forget(id, first).out, '<null>', 'twice is a no-op');
+    const corrected = '{"to":["member.moved@example.test"],"subject":"Re: Synthetic retry fixture (CredentialDOMD)"}';
+    assert.equal(store(id, corrected).out, corrected, 'the next try stores the current body');
+    assert.equal(forget(ids.before, first).out, '<null>', 'a reply with no record: nothing to forget');
+
+    // A reply recorded as emailed on 409 invalid_idempotent_request is marked.
+    const marked = await reply(R.refused, 'Synthetic answer an earlier try sent with other bytes.');
+    const mark = (message, refusal) => pg.tryRun(`set role service_role; select coalesce(public.ticket_reply_email_refusal('${message}', ${text(refusal)})::text, '<null>')`, { user: 'authenticator' });
+    assert.equal(pg.sql(`select coalesce(refusal, '<null>') || '|' || (refused_at is null) from public.ticket_reply_emails where message_id = '${marked}'`), '<null>|true');
+    assert.equal(mark(marked, 'invalid_idempotent_request').out, 'true');
+    const refusedAt = pg.sql(`select refused_at from public.ticket_reply_emails where message_id = '${marked}'`);
+    assert.ok(refusedAt, 'stamped');
+    assert.equal(mark(marked, 'invalid_idempotent_request').out, 'true');
+    assert.equal(pg.sql(`select refusal || '|' || (refused_at = '${refusedAt}') from public.ticket_reply_emails where message_id = '${marked}'`), 'invalid_idempotent_request|true', 'the first time stands');
+    const other = mark(marked, 'validation_error');
+    assert.equal(other.ok, false, 'no other refusal is a mark');
+    assert.match(other.err, /ticket_reply_emails_refusal_check/);
+    assert.equal(mark(ids.before, 'invalid_idempotent_request').out, '<null>', 'a reply with no record cannot be marked');
+    const half = pg.tryRun(`update public.ticket_reply_emails set refused_at = null where message_id = '${marked}'`);
+    assert.equal(half.ok, false, 'a mark always has its time');
+    for (const fn of ['ticket_reply_email_payload_refused(uuid,text)', 'ticket_reply_email_refusal(uuid,text)']) {
+      assert.equal(pg.sql(`select has_function_privilege('service_role', 'public.${fn}', 'EXECUTE')`), 't', fn);
+      for (const role of ['anon', 'authenticated']) {
+        assert.equal(pg.sql(`select has_function_privilege('${role}', 'public.${fn}', 'EXECUTE')`), 'f', `${role} ${fn}`);
+        const denied = pg.tryRun(asApp(role, 'sub-member', `select public.${fn.replace('(uuid,text)', '')}('${marked}', 'invalid_idempotent_request')`), { user: 'authenticator' });
+        assert.equal(denied.ok, false, `${role} ${fn}`);
+        assert.match(denied.err, /permission denied/);
+      }
+    }
+    assert.equal(pg.sql(`select not has_column_privilege('service_role', 'public.ticket_reply_emails', 'refusal', 'UPDATE')
+      and not has_column_privilege('service_role', 'public.ticket_reply_emails', 'refused_at', 'UPDATE')`), 't', 'marked only through the function');
+
+    // reconcile.mjs reports the mark once, emailed_at set or not.
+    assert.equal(deliver(marked), true, 'send-ticket-reply kept the claim');
+    const state = privateDir('reply-email-unconfirmed-');
+    const ledger = privateDir('reply-email-unconfirmed-ledger-');
+    const sent = [];
+    try {
+      const run = () => reconcile({ query, state: state.dir, ledgers: [ledger.dir], send: async message => { sent.push(message); return true; } });
+      const unconfirmed = () => sent.filter(m => m.includes('is recorded as emailed'));
+      const result = await run();
+      assert.equal(result.unconfirmed, 1);
+      assert.deepEqual(unconfirmed().map(m => m.match(/\(message ([0-9a-f]{8})\)/)[1]), [marked.slice(0, 8)]);
+      assert.ok(unconfirmed()[0].startsWith(`CredentialDOMD support: a reply on ticket ${R.refused.slice(0, 8)} (message ${marked.slice(0, 8)}) is recorded as emailed, but Resend did not send its last try`), unconfirmed()[0]);
+      assert.match(fs.readFileSync(path.join(state.dir, 'alerts.log'), 'utf8'), new RegExp(`ALERT reply_email_unconfirmed message=${marked.slice(0, 8)} ticket=${R.refused.slice(0, 8)} attempts=1`));
+      assert.equal((await run()).unconfirmed, 1);
+      assert.equal(unconfirmed().length, 1, 'each mark is reported once');
+    } finally { state.cleanup(); ledger.cleanup(); }
+
+    for (const pass of ['first', 'second']) { const r = pg.tryRun(FROZEN_ROLLBACK); assert.ok(r.ok, `rollback ${pass}: ${r.err}`); }
+    assert.equal(pg.sql(`select to_regprocedure('public.ticket_reply_email_payload(uuid,text)') is null
+      and to_regprocedure('public.ticket_reply_email_payload_refused(uuid,text)') is null
+      and to_regprocedure('public.ticket_reply_email_refusal(uuid,text)') is null
+      and not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'ticket_reply_emails'
+                       and column_name in ('payload', 'refusal', 'refused_at'))`), 't');
+    assert.deepEqual(await unconfirmedReplies(query), [], 'reconcile skips the mark once the column is gone');
+    assert.equal(record(id), '1|true', 'the retry record itself is kept');
+    const again = pg.tryRun(FROZEN);
+    assert.ok(again.ok, again.err);
+  });
+
   await t.test('the rollback restores the one-call trigger and removes the job, the function and the table; 20260929134100 rolls back only after it', async () => {
     const early = pg.tryRun(EMAIL_ROLLBACK);
     assert.equal(early.ok, false);
@@ -572,12 +672,16 @@ test('a reply whose email fails is sent by the retry, exactly once; one still no
     pg.sql(RETRY_ROLLBACK);
     assert.equal(pg.sql(`select pg_get_functiondef('public.notify_ticket_reply()'::regprocedure)`), notifyBefore, 'the trigger function is 20260929134100\'s again');
     assert.equal(pg.sql('select count(*) from cron.job'), '0');
-    assert.equal(pg.sql(`select to_regclass('public.ticket_reply_emails') is null and to_regprocedure('public.retry_ticket_reply_emails()') is null`), 't');
+    assert.equal(pg.sql(`select to_regclass('public.ticket_reply_emails') is null and to_regprocedure('public.retry_ticket_reply_emails()') is null
+      and to_regprocedure('public.ticket_reply_email_payload(uuid,text)') is null
+      and to_regprocedure('public.ticket_reply_email_payload_refused(uuid,text)') is null
+      and to_regprocedure('public.ticket_reply_email_refusal(uuid,text)') is null`), 't', '20260930031500\'s functions go with the table');
+    assert.deepEqual(await unconfirmedReplies(query), [], 'and reconcile skips both checks');
     const id = await reply(R.after, 'Synthetic answer after the rollback.');
     assert.equal(callsFor(id).length, 1, '20260929134100 still calls once');
     const back = pg.tryRun(EMAIL_ROLLBACK);
     assert.ok(back.ok, back.err);
-    for (const file of [EMAIL, RETRY]) { const r = pg.tryRun(file); assert.ok(r.ok, r.err); }
+    for (const file of [EMAIL, RETRY, FROZEN]) { const r = pg.tryRun(file); assert.ok(r.ok, r.err); }
     assert.equal(pg.sql('select count(*) from cron.job'), '1');
   });
 });

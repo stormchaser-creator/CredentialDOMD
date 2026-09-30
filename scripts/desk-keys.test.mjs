@@ -130,11 +130,11 @@ try {
 }
 
 // ── Every modal layer joins the stack (repair round). No DOM here, so the
-// three sheets that are not built on shared/Modal and the five lightboxes
+// two sheets that are not built on shared/Modal and the five lightboxes
 // are checked at the source: each registers on the stack while up and
 // answers Escape the same way Modal.jsx does. ──
 const src = (rel) => fs.readFileSync(path.join(here, "..", rel), "utf8");
-for (const rel of ["src/components/pages/PricingModal.jsx", "src/components/pages/SupportModal.jsx", "src/components/pages/TeamSection.jsx"]) {
+for (const rel of ["src/components/pages/PricingModal.jsx", "src/components/pages/SupportModal.jsx"]) {
   const s = src(rel);
   ok(`${rel}: joins the modal stack while open`, /pushModal\(t\);/.test(s) && /return \(\) => popModal\(t\);/.test(s) && /\}, \[open\]\);/.test(s));
   ok(`${rel}: Escape answers only on top at desk width`, /if \(isDesktop && !isTopModal\(token\.current\)\) return;/.test(s));

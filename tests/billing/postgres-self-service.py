@@ -2,7 +2,7 @@
 """Exact signup migration in disposable PG17, private Unix socket, no TCP/provider."""
 import concurrent.futures, hashlib, json, os, subprocess, tempfile
 from pathlib import Path
-BIN=Path('/opt/homebrew/opt/postgresql@17/bin'); ROOT=Path(__file__).resolve().parents[2]
+BIN=Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin'); ROOT=Path(__file__).resolve().parents[2]
 ENV={k:v for k,v in os.environ.items() if not k.startswith('PG')}; checks=[]
 def check(name,ok):
  if not ok:raise AssertionError(name)
@@ -10,7 +10,7 @@ def check(name,ok):
 def lit(value):return "'"+json.dumps(value,separators=(',',':')).replace("'","''")+"'::jsonb"
 def digest(value):return hashlib.sha256(json.dumps(value,separators=(',',':')).encode()).hexdigest()
 ids={key:f'10000000-0000-4000-8000-{index:012d}' for index,key in enumerate('abcdefg',1)}
-with tempfile.TemporaryDirectory(prefix='signup-test-',dir='/private/tmp') as temp:
+with tempfile.TemporaryDirectory(prefix='signup-test-',dir='/tmp') as temp:
  root=Path(temp);sock=root/'socket';sock.mkdir()
  def run(*args,**kw):return subprocess.run([str(a) for a in args],text=True,capture_output=True,env=ENV,**kw)
  r=run(BIN/'initdb','-D',root/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8');assert r.returncode==0,r.stderr

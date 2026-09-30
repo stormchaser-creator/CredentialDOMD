@@ -16,8 +16,14 @@
  *                   never disagree with the rest of the page about what counts
  * @param untilFor   (id) => the acknowledgement's end date, or null/undefined
  * @param formatDate how to render that date for a human
+ * @param openAction the ring's needs-action items that are not snoozed
+ *                   (openActionItems). While any remain there is no clear
+ *                   state to show: the ring on the same screen lists an
+ *                   undated licence or a CME state that is due, which `urgent`
+ *                   never holds. Returns null then.
  */
-export function clearStateBanner(snoozed, untilFor, formatDate = (d) => d) {
+export function clearStateBanner(snoozed, untilFor, formatDate = (d) => d, { openAction = [] } = {}) {
+  if (Array.isArray(openAction) && openAction.length > 0) return null;
   const items = Array.isArray(snoozed) ? snoozed : [];
   if (!items.length) {
     return { title: "All Clear", detail: "No renewals are due, and nothing is set aside." };
@@ -31,4 +37,14 @@ export function clearStateBanner(snoozed, untilFor, formatDate = (d) => d) {
     title: "Nothing to do today",
     detail: `${items.length} item${items.length === 1 ? "" : "s"} you set aside${when}.`,
   };
+}
+
+/**
+ * The ring's needs-action items (standingScore) that are not merely snoozed:
+ * an undated record that needs a date, a CME state that is due or awaiting
+ * confirmation, a renewal in its window nobody set aside.
+ */
+export function openActionItems(needsAction, snoozed) {
+  const snoozedIds = new Set((Array.isArray(snoozed) ? snoozed : []).map(s => s?.id));
+  return (Array.isArray(needsAction) ? needsAction : []).filter(n => !snoozedIds.has(n?.item?.id));
 }

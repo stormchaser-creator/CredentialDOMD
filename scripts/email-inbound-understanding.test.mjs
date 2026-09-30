@@ -221,6 +221,7 @@ test("a delivery ('please see the attached approval letter') is filed, with no r
   const [priv] = rows("privileges");
   assert.equal(priv.facility, "Fernwick Example Hospital");
   assert.equal(rows("documents")[0].linked_to, `privileges:${priv.id}`);
+  assert.equal(rows("documents")[0].origin, "email", "the app can tell a forward from its own upload (INTAKE-003)");
   const text = toPhysician()[0].text;
   assert.match(text, /^Got it\. Here is where it went:\n\nFiled: Fernwick Example Hospital courtesy privileges -> Privileges/);
   assert.ok(!text.includes("Nothing was asked"), "a delivery keeps the filing reply");
@@ -268,6 +269,32 @@ test("a request with no attachment, every ask matched with high confidence: one 
   assert.deepEqual(p.docIds, ["doc-board", "doc-bls"]);
   assert.match(toPhysician()[0].text, /Packet ready: 2 documents\. Open the app and tap Approve and send\./);
   assert.equal(harness.gemini.length, 0, "nothing to scan");
+});
+
+test("the same request from a forward that cannot be verified: never one tap, the proposal says so, and the physician is not told to Approve and send", async () => {
+  // INTAKE-004: no DMARC and no aligned DKIM, so the From: may be forged and
+  // the requester in the forwarded text chosen by the forger.
+  seedCredentials();
+  harness.rawAuth = AUTH_NONE;
+  const r = await sendCase(NO_ATTACHMENT);
+  assert.equal(r.body.intent, "request");
+  assert.equal(r.body.one_tap, false);
+  const p = rows("document_requests")[0].proposal;
+  assert.equal(p.verified, false);
+  assert.equal(p.source, "model", "the model still read it; only one tap is withheld");
+  const text = toPhysician()[0].text;
+  assert.ok(!/Approve and send/.test(text), text);
+  assert.ok(!/Got it\./.test(text), text);
+  assert.match(text, /^A forward that could not be verified as coming from you/);
+  assert.match(text, /Open the app and tap Review\./);
+  assert.match(text, /DMARC/, "the physician is told what fixes it, even with nothing filed");
+  assert.equal(toOthers().length, 0, "no acknowledgement on an unverified forward");
+});
+
+test("a verified forward's proposal records that it was verified", async () => {
+  seedCredentials();
+  await sendCase(NO_ATTACHMENT);
+  assert.equal(rows("document_requests")[0].proposal.verified, true);
 });
 
 test("a medium-confidence reading of the same request is never one tap", async () => {
@@ -758,4 +785,33 @@ test("forwards that only fail to fail: never an admin's, a small daily allowance
   assert.ok(reserves.every((x) => x.args.p_scope === "anthropic_intake_unverified" && x.args.p_limit === 5));
   assert.equal(ledger("reserve_ai_spend").length, 5, "an unproven forward is never an admin's: every call is held against the month");
   assert.equal(toOthers().length, 0);
+});
+
+// ── documents.origin before its migration ────────────────────────────────────
+// Functions deploy by hand and a migration-only push runs no CI, so this
+// function can go out before migration 20260929230000 adds documents.origin,
+// or stay after its rollback drops it. PostgREST then refuses every documents
+// insert that names origin, and every forwarded file was thrown away. It is
+// kept without origin instead (the app reads that as an upload); any other
+// refusal still counts as a failed file.
+const NO_ORIGIN = { message: "Could not find the 'origin' column of 'documents' in the schema cache", code: "PGRST204" };
+
+test("with no documents.origin column, a forwarded file is still kept and filed, without origin", async () => {
+  harness.failInsert = (table, list) => (table === "documents" && "origin" in list[0] ? NO_ORIGIN : null);
+  const r = await sendCase(DELIVERY);
+  assert.equal(r.body.intent, "delivery");
+  const docs = rows("documents");
+  assert.equal(docs.length, 1, "the file is kept");
+  assert.equal(docs[0].origin, undefined);
+  const [priv] = rows("privileges");
+  assert.equal(docs[0].linked_to, `privileges:${priv.id}`);
+  assert.ok(!/could not be saved/.test(toPhysician()[0].text), toPhysician()[0].text);
+});
+
+test("any other refusal of the documents insert is still a failed file, tried once", async () => {
+  let tries = 0;
+  harness.failInsert = (table) => (table === "documents" ? (tries++, { message: "new row violates check constraint", code: "23514" }) : null);
+  await sendCase(DELIVERY);
+  assert.equal(rows("documents").length, 0);
+  assert.equal(tries, 1, "not retried");
 });

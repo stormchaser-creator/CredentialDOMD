@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TAP_MIN } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { edgeErrorMessage } from "../../utils/edgeError";
@@ -7,7 +8,7 @@ import { ScreenshotAttach } from "../shared";
 import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
 import { scrubSsn } from "../../utils/outgoingText.js";
 import TicketAttachments from "../shared/TicketAttachments";
-import { createSupportTextDrafts, supportReceiptConfirmed, supportSubmissionError } from "../../utils/supportTextDrafts";
+import { createSupportTextDrafts, supportReceiptConfirmed, supportRequestHash, supportSubmissionError } from "../../utils/supportTextDrafts";
 import { SUPPORT_OPERATIONS_ENABLED, createSupportOperationsClient, supportActorLabel, supportMessageFromTeam } from "../../utils/supportOperationsClient";
 
 const CATEGORIES = [
@@ -27,10 +28,40 @@ const PRIORITIES = [
   { id: "urgent", label: "Urgent (license expires soon)" },
 ];
 
+// One request key per composed ticket or reply (QA SUPPORT-001/-002). A retry
+// of the same text and files after a lost response reuses the key, so
+// create-ticket and reply-ticket answer with the row already saved instead of
+// filing it twice; any change to what was composed is a new request. The ref
+// is cleared only once the server confirms receipt. The key also goes into
+// the text draft with a digest of what was sent (`saved`), because the draft
+// outlives this component: after a reload the restored text, sent again with
+// the same files, is still the same request (review 2026-09-30).
+function requestKey(ref, parts, saved) {
+  const fingerprint = JSON.stringify(parts);
+  if (ref.current?.fingerprint !== fingerprint) {
+    const hash = supportRequestHash(fingerprint);
+    const id = saved?.hash === hash ? saved.id : globalThis.crypto?.randomUUID?.() ?? null;
+    ref.current = { fingerprint, hash, id };
+  }
+  return ref.current;
+}
+const draftRequest = (request) => (request?.id ? { id: request.id, hash: request.hash } : undefined);
+const filesFingerprint = (files) => files.map((f) => [f.name || "", f.data?.length || 0, f.data?.slice(-64) || ""]);
+
 const STATUS_LABEL = {
   open: "Open", in_progress: "In progress", waiting_user: "Waiting on you",
   resolved: "Resolved", closed: "Closed",
 };
+
+// What reply-ticket says the ticket looks like after a member's reply: the
+// state it read back from the database (a reply on a resolved, closed,
+// archived or waiting ticket reopens it in the same write), on a retry of a
+// reply that already landed too. An older function only says reopened.
+function repliedTicketState(data) {
+  const t = data?.ticket;
+  if (t && Object.hasOwn(STATUS_LABEL, t.status)) return { status: t.status, resolved_at: t.resolved_at ?? null, archived_at: t.archived_at ?? null };
+  return data?.reopened === true ? { status: "open", resolved_at: null, archived_at: null } : null;
+}
 
 function statusColor(s) {
   if (s === "open")         return "#0ea5e9";
@@ -101,6 +132,8 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
   const closeTimer = useRef(null);
   // The ticket a reply email linked to: opened once, when the list first loads.
   const pendingTicket = useRef(null);
+  const createRequest = useRef(null);
+  const replyRequest = useRef(null);
   const [ownProfileId, setOwnProfileId] = useState(null);
   const [tab, setTab] = useState(initialTab);
   const [subject, setSubject] = useState("");
@@ -162,9 +195,9 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
     setCreateDraftSaved(result.saved ? (result.draft ? true : null) : false);
     return result.draft?.revision || null;
   };
-  const saveReplyDraft = (text) => {
+  const saveReplyDraft = (text, request) => {
     if (SUPPORT_OPERATIONS_ENABLED || !openTicket) return null;
-    const result = drafts.save({ body: text }, openTicket.id);
+    const result = drafts.save({ body: text, request }, openTicket.id);
     setReplyDraftSaved(result.saved ? (result.draft ? true : null) : false);
     return result.draft?.revision || null;
   };
@@ -318,22 +351,32 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
     if (!SUPPORT_OPERATIONS_ENABLED && (!session || window.Clerk?.user?.id !== user?.id)) { setReplyMsg("Sign in to this account before sending. Your text has not been sent."); return; }
     const requestId = threadRequest.current;
     const current = () => requestId === threadRequest.current && (SUPPORT_OPERATIONS_ENABLED || (window.Clerk?.session === session && window.Clerk?.user?.id === user?.id));
-    const savedRevision = saveReplyDraft(reply);
+    const request = SUPPORT_OPERATIONS_ENABLED ? null
+      : requestKey(replyRequest, [openTicket.id, scrubSsn(text), filesFingerprint(replyAttachment)], drafts.read(openTicket.id)?.request);
+    const savedRevision = saveReplyDraft(reply, draftRequest(request));
     setReplying(true); setReplyMsg("");
     try {
+      // A resolved, closed, archived or waiting ticket reopens when its owner
+      // writes back; reply-ticket answers with the state it now has.
+      let ticketState = null;
       if (SUPPORT_OPERATIONS_ENABLED) await operations.reply({ ticketId: openTicket.id, body: scrubSsn(text) });
       else {
+        const key = request.id;
         const res = await supabase.functions.invoke("reply-ticket", {
         body: {
           ticket_id: openTicket.id, body: scrubSsn(text),
+          ...(key ? { client_request_id: key } : {}),
           ...attachmentsPayload(replyAttachment),
         },
         });
         if (res.error) throw res.error;
         if (!supportReceiptConfirmed(res.data)) throw new Error("The server did not confirm this reply.");
+        replyRequest.current = null;
         if (savedRevision) drafts.clear(openTicket.id, savedRevision);
+        ticketState = repliedTicketState(res.data);
       }
       if (!current()) return;
+      if (ticketState) setOpenTicket((t) => (t ? { ...t, ...ticketState } : t));
       setReply(""); setReplyAttachment([]); setReplyDraftSaved(null);
       setReplyMsg("Reply received.");
       loadTickets();
@@ -459,7 +502,10 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
 
     const session = window.Clerk?.session;
     if (!SUPPORT_OPERATIONS_ENABLED && (!session || window.Clerk?.user?.id !== user?.id)) { setError("Sign in to this account before sending. Your text has not been sent."); return; }
-    const savedRevision = saveCreateDraft();
+    const sentCategory = category === "feedback" ? "other" : category;
+    const request = SUPPORT_OPERATIONS_ENABLED ? null
+      : requestKey(createRequest, [scrubSsn(subj), scrubSsn(body.trim()), sentCategory, priority, filesFingerprint(attachment)], drafts.read()?.request);
+    const savedRevision = saveCreateDraft({ request: draftRequest(request) });
     setSubmitting(true); setError("");
     const requestId = ++actionRequest.current;
     const current = () => requestId === actionRequest.current && (SUPPORT_OPERATIONS_ENABLED || (window.Clerk?.session === session && window.Clerk?.user?.id === user?.id));
@@ -469,18 +515,21 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
       // number typed into it is taken out on the way (outgoingText.js).
       if (SUPPORT_OPERATIONS_ENABLED) await operations.create({ subject: scrubSsn(subj), body: scrubSsn(body.trim()), category, priority });
       else {
+        const key = request.id;
         const res = await supabase.functions.invoke("create-ticket", {
         body: {
           subject: scrubSsn(subj),
           body: scrubSsn(body.trim()),
-          category: category === "feedback" ? "other" : category,
+          category: sentCategory,
           priority,
           context_page: contextPage || window.location.pathname,
+          ...(key ? { client_request_id: key } : {}),
           ...attachmentsPayload(attachment),
         },
         });
         if (res.error) throw res.error;
         if (!supportReceiptConfirmed(res.data)) throw new Error("The server did not confirm this ticket.");
+        createRequest.current = null;
         if (savedRevision) drafts.clear("create", savedRevision);
         shortfall = ticketAttachmentShortfall(res.data);
       }
@@ -508,7 +557,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
   const pendingReply = SUPPORT_OPERATIONS_ENABLED && openTicket && operations.replyDraft(openTicket.id);
 
   const tabBtn = (id, label) => (
-    <button key={id} disabled={submitting} onClick={() => { setTab(id); leaveThread(); if (SUPPORT_OPERATIONS_ENABLED && id === "new") restoreCreateDraft(); }} style={{
+    <button key={id} aria-pressed={tab === id} disabled={submitting} onClick={() => { setTab(id); leaveThread(); if (SUPPORT_OPERATIONS_ENABLED && id === "new") restoreCreateDraft(); }} style={{
       flex: 1, padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
       backgroundColor: tab === id ? T.card : "transparent",
       color: tab === id ? T.text : T.textMuted, fontSize: 13, fontWeight: 700,
@@ -536,18 +585,19 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
       {pendingCreate && <p role="status" style={{ fontSize: 12, color: T.textMuted }}>Your previous submission has not been confirmed. Its text is saved below so you can retry the same request. You can also check Your tickets.</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Category</label>
-        <select value={category} disabled={submitting || !!pendingCreate} onChange={(e) => { setCategory(e.target.value); saveCreateDraft({ category: e.target.value }); }} style={inputStyle}>
+        <label htmlFor="support-category" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Category</label>
+        <select id="support-category" value={category} disabled={submitting || !!pendingCreate} onChange={(e) => { setCategory(e.target.value); saveCreateDraft({ category: e.target.value }); }} style={inputStyle}>
           {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
 
-        <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Priority</label>
-        <select value={priority} disabled={submitting || !!pendingCreate} onChange={(e) => { setPriority(e.target.value); saveCreateDraft({ priority: e.target.value }); }} style={inputStyle}>
+        <label htmlFor="support-priority" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Priority</label>
+        <select id="support-priority" value={priority} disabled={submitting || !!pendingCreate} onChange={(e) => { setPriority(e.target.value); saveCreateDraft({ priority: e.target.value }); }} style={inputStyle}>
           {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
 
-        <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Subject</label>
+        <label htmlFor="support-subject" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Subject</label>
         <input
+          id="support-subject"
           value={subject}
           disabled={submitting || !!pendingCreate}
           onChange={(e) => { setSubject(e.target.value); saveCreateDraft({ subject: e.target.value }); }}
@@ -556,8 +606,9 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
           style={inputStyle}
         />
 
-        <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>What happened</label>
+        <label htmlFor="support-body" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>What happened</label>
         <textarea
+          id="support-body"
           value={body}
           disabled={submitting || !!pendingCreate}
           maxLength={10000}
@@ -683,7 +734,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
   const renderThread = () => (
     <>
       <button onClick={leaveThread} style={{
-        background: "none", border: "none", padding: 0, marginBottom: 8, cursor: "pointer",
+        background: "none", border: "none", padding: 0, minHeight: TAP_MIN, margin: "-8px 0 0", cursor: "pointer",
         color: T.accent, fontSize: 13, fontWeight: 700,
       }}>{"←"} All tickets</button>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -717,6 +768,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
       </div>
 
       <textarea
+        aria-label="Add to this ticket"
         value={reply}
         disabled={replying || threadLoading || !!pendingReply}
         maxLength={10000}
@@ -770,7 +822,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
       backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
+      <div role="dialog" aria-modal="true" aria-label="Help and feedback" onClick={(e) => e.stopPropagation()} style={{
         width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto",
         backgroundColor: T.card, borderRadius: "20px 20px 0 0",
         padding: "20px 18px",

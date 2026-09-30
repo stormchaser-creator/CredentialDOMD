@@ -4,6 +4,7 @@ import { isDea, isBoard } from "./setupTasks.js";
 import { redactForExport } from "../lib/supabase.js";
 import { isIdentityLink, withoutIdentityRecords } from "./pausedApplicationRecords.js";
 import { lifecycleSummary, isDateUnknown } from "./lifecycle.js";
+import { isCurrentJob } from "./helpers.js";
 
 /**
  * Section key to the folder its documents belong in. This is the ONE list:
@@ -175,7 +176,7 @@ export function buildCredentialRows(data) {
       "License/Cert #": "",
       "Issue Date": wh.startDate || "",
       "Expiration Date": wh.endDate || "",
-      Status: wh.current ? "Current" : "Past",
+      Status: isCurrentJob(wh.current) ? "Current" : "Past",
       State: wh.state || "",
       Notes: wh.title || wh.position || "",
     });

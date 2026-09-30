@@ -1,5 +1,5 @@
 // Extensions spelled out so pure-node test scripts can import this module.
-import { formatDate } from "./helpers.js";
+import { formatDate, isCurrentJob } from "./helpers.js";
 import { isOnCv, lifecycleOf } from "./lifecycle.js";
 import { websiteLabel } from "./contactFormat.js";
 
@@ -27,8 +27,8 @@ const STATE_NAMES = {
   WI: "Wisconsin", WY: "Wyoming", DC: "District of Columbia",
 };
 
-  // Build CV content — section order and presentation follow Eric's real CV
-  // (Whitney CV 2026): summary → experience → education → medical student →
+  // Build CV content. Section order and presentation follow a working
+  // physician's CV: summary → experience → education → medical student →
   // languages → license block → privileges → publications → organizations →
   // professional development. Dates ride inline in parentheses, as on paper.
 export function buildCvContent(data, template = "clinical") {
@@ -48,7 +48,7 @@ export function buildCvContent(data, template = "clinical") {
       const dt = new Date(str + (str.length === 10 ? "T12:00:00" : ""));
       return isNaN(dt) ? str : dt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     };
-    const isTrue = (v) => v === true || v === "true" || v === 1;
+    const isTrue = isCurrentJob;
     // Scanned credentials often get saved under the physician's OWN name, which
     // reads as nonsense on a CV — those fall back to the credential type.
     const ownWords = String(s.name || "").toLowerCase().replace(/[^a-z ]/g, "").split(/\s+/).filter(w => w.length > 2);
@@ -304,9 +304,9 @@ export function buildCvContent(data, template = "clinical") {
       if (items.length > 0) sections.push({ type: "section", title: "Continual Professional Development", items });
     }
 
-    // Clinical template extras — credentialing packets want these; the paper CV
-    // format stays untouched for the other templates
-    if (template === "clinical") {
+    // Clinical and locum extras: credentialing packets and locum agencies
+    // want these; the paper CV format stays untouched for the academic one.
+    if (template === "clinical" || template === "locum") {
       const cvPolicies = (data.insurance || []).filter(isOnCv);
       if (cvPolicies.length > 0) {
         sections.push({
@@ -334,5 +334,27 @@ export function buildCvContent(data, template = "clinical") {
       }
     }
 
-    return sections;
+    return template === "locum" ? locumCompact(sections) : sections;
+}
+
+/**
+ * The Locum Tenens CV: the compact version a staffing agency screens on.
+ * What lets a physician work somewhere comes first (licences, board
+ * certification, DEA, privileges, and the named courses such as a robot
+ * certification or a skills course, which agencies screen for), then where
+ * they have worked (employers, roles and dates, without the descriptions),
+ * training, and the liability insurance and references every agency asks
+ * for. Publications, organizations and student activities stay on the full
+ * CV. The course section lists named courses only, never the CME log.
+ */
+const LOCUM_SECTIONS = [
+  "Professional Summary", "License", "Hospital Privileges", "Continual Professional Development",
+  "Professional Experience", "Education", "Languages", "Professional Liability Insurance", "Professional References",
+];
+function locumCompact(sections) {
+  const byTitle = new Map(sections.filter(x => x.type !== "header").map(x => [x.title, x]));
+  const kept = LOCUM_SECTIONS.map(t => byTitle.get(t)).filter(Boolean).map(x => (x.title === "Professional Experience"
+    ? { ...x, items: x.items.map(item => ({ ...item, detail: "" })) }
+    : x));
+  return [...sections.filter(x => x.type === "header"), ...kept];
 }

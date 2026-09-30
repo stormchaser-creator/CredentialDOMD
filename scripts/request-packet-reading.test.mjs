@@ -40,10 +40,13 @@ for (const [name, m] of COPIES) {
   });
 
   test(`${name}: when the words and the model agree, a matched ask may still go on one tap`, () => {
-    const p = m.buildProposal(REQ, catalogue, PHYSICIAN, NOW, read([{ quote: "a copy of your board certificate", kind: "board_cert" }]));
+    // email-inbound stamps verified from the forward's authentication.
+    const p = { ...m.buildProposal(REQ, catalogue, PHYSICIAN, NOW, read([{ quote: "a copy of your board certificate", kind: "board_cert" }])), verified: true };
     assert.deepEqual([p.items[0].kind, p.items[0].ruleKind, p.items[0].modelKind], ["board_cert", "board_cert", undefined]);
     assert.equal(m.oneTapReady(p), true);
     assert.equal(m.reviewReason(p), "");
+    // The same proposal from a forward that was not authenticated is not.
+    assert.equal(m.oneTapReady({ ...p, verified: false }), false);
     // A proposal from before ruleKind existed is not one tap.
     const legacy = { ...p, items: p.items.map(({ ruleKind: _r, ...it }) => it) };
     assert.equal(m.oneTapReady(legacy), false);

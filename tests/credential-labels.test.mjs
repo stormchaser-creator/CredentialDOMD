@@ -13,6 +13,7 @@ import {
   namesOnlyThePhysician, clearsPersonName,
 } from '../src/utils/helpers.js';
 import { prepareRecord } from '../src/utils/recordWrite.js';
+import { localToday } from '../src/utils/dateDays.js';
 import { STATES } from '../src/constants/states.js';
 import { getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES } from '../src/constants/credentialTypes.js';
 
@@ -71,7 +72,13 @@ test('the review card refuses an unmatched licence state or type instead of savi
   assert.match(issues('privilege', { type: 'Hospital Privileges', state: 'Colo' }, PRIVILEGE_TYPES).stateIssue, /reads "Colo"/);
   assert.equal(issues('insurance', { type: 'Professional Liability' }, INSURANCE_TYPES).typeIssue, null);
   assert.match(issues('insurance', { type: ' ' }, INSURANCE_TYPES).typeIssue, /Select the type/, 'type is NOT NULL: a blank one would reject the row');
-  assert.deepEqual(issues('cme', { title: 'x' }, []), { typeIssue: null, stateIssue: null });
+  // DOCS-002: category and education type are NOT NULL too. A scan
+  // reclassified to CME, Health or Education arrives without one.
+  assert.match(issues('cme', { title: 'x' }, []).typeIssue, /Select the CME category/);
+  assert.deepEqual(issues('cme', { title: 'x', category: 'AMA PRA Category 1' }, []), { typeIssue: null, stateIssue: null });
+  assert.match(issues('healthRecord', { name: 'x', category: ' ' }, []).typeIssue, /Select the category/);
+  assert.match(issues('education', { institution: 'x' }, []).typeIssue, /Select the type/);
+  assert.equal(issues('education', { type: 'Residency' }, []).typeIssue, null);
 });
 
 test("the physician's own name is recognised in every form a scan writes it", () => {
@@ -88,7 +95,7 @@ test('a person-name Display Name is dropped at save, and the canonical title app
   const saved = prepareRecord('licenses', DEA[0], PHYSICIAN);
   assert.equal(saved.name, null);
   assert.equal(saved.licenseNumber, 'FX0000001', 'nothing else changes');
-  assert.equal(describeItem(saved, PHYSICIAN, 'licenses'), 'DEA Registration \u{2014} CO');
+  assert.equal(describeItem(saved, PHYSICIAN, 'licenses'), 'DEA Registration, CO');
   assert.equal(prepareRecord('licenses', DEA[2], PHYSICIAN), DEA[2], 'a real display name is kept, untouched');
   const ref = { id: 'r', name: 'Jordan Rivera', degree: 'MD' };
   assert.equal(prepareRecord('peerReferences', ref, PHYSICIAN), ref, 'on a reference the person IS the record');
@@ -101,17 +108,17 @@ test('a save clears only a Display Name that IS the physician, never a credentia
   // specialty the CV prints, a carrier, a facility.
   const keep = [
     ['licenses', { type: 'Certification', name: 'ACLS' }, 'John A. Smith'],
-    ['licenses', { type: 'Board Certification (ABMS)', name: 'Neurosurgery' }, 'N. Whitney'],
-    ['licenses', { type: 'ECFMG Certificate', name: 'ECFMG' }, 'Eric E. Whitney, DO'],
-    ['licenses', { type: 'Other', name: 'Epic' }, 'Eric E. Whitney, DO'],
+    ['licenses', { type: 'Board Certification (ABMS)', name: 'Neurosurgery' }, 'N. Testa'],
+    ['licenses', { type: 'ECFMG Certificate', name: 'ECFMG' }, 'Rowan E. Testa, DO'],
+    ['licenses', { type: 'Other', name: 'Epic' }, 'Rowan E. Testa, DO'],
     ['insurance', { type: 'Medical Malpractice (Occurrence)', name: 'MedPro' }, 'Mark M. Smith'],
     ['privileges', { type: 'Surgical Privileges', name: 'Mercy' }, 'Mary M. Jones'],
     ['privileges', { type: 'Surgical Privileges', name: 'Mercy Jones' }, 'Mary M. Jones'],
     ['privileges', { type: 'Surgical Privileges', name: 'Mayo' }, 'John Mayo'],
     ['education', { type: 'Fellowship', name: 'Skull Base Fellowship' }, 'Samuel B. Foster'],
     // On a certification the name is the content, whatever it says.
-    ['licenses', { type: 'Board Certification (AOA)', name: 'Eric Whitney' }, 'Eric Whitney'],
-    ['licenses', { type: 'Certification', name: 'WHITNEY, ERIC' }, 'Eric E. Whitney, DO'],
+    ['licenses', { type: 'Board Certification (AOA)', name: 'Rowan Testa' }, 'Rowan Testa'],
+    ['licenses', { type: 'Certification', name: 'TESTA, ROWAN' }, 'Rowan E. Testa, DO'],
   ];
   for (const [sec, rec, who] of keep) {
     const item = { id: 'x', ...rec };
@@ -120,9 +127,9 @@ test('a save clears only a Display Name that IS the physician, never a credentia
   }
   // Each of these is the physician's own name, however the document wrote it.
   const clear = [
-    ['licenses', { type: 'DEA Registration', name: 'WHITNEY, ERIC' }, 'Eric E. Whitney, DO'],
-    ['licenses', { type: 'State Medical License', name: 'E. Whitney' }, 'Eric Whitney'],
-    ['licenses', { type: 'DEA Registration', name: 'Eric E. Whitney, DO' }, 'Eric E. Whitney, DO'],
+    ['licenses', { type: 'DEA Registration', name: 'TESTA, ROWAN' }, 'Rowan E. Testa, DO'],
+    ['licenses', { type: 'State Medical License', name: 'R. Testa' }, 'Rowan Testa'],
+    ['licenses', { type: 'DEA Registration', name: 'Rowan E. Testa, DO' }, 'Rowan E. Testa, DO'],
     ['licenses', { type: 'DEA Registration', name: 'Jordan Alex Rivera DO' }, PHYSICIAN],
     ['privileges', { type: 'Surgical Privileges', name: 'jones, mary m' }, 'Mary M. Jones'],
     ['travelDocs', { type: 'Passport', name: 'Mark Smith' }, 'Mark M. Smith'],
@@ -130,10 +137,10 @@ test('a save clears only a Display Name that IS the physician, never a credentia
   for (const [sec, rec, who] of clear) {
     assert.equal(prepareRecord(sec, { id: 'x', ...rec }, who).name, null, `${sec} "${rec.name}" for ${who}`);
   }
-  assert.equal(namesOnlyThePhysician('Whitney', 'Eric Whitney'), false, 'a lone surname could be a facility');
+  assert.equal(namesOnlyThePhysician('Testa', 'Rowan Testa'), false, 'a lone surname could be a facility');
   assert.equal(namesOnlyThePhysician('Cher', 'Cher'), true, 'unless the physician has a one-word name');
-  assert.equal(namesOnlyThePhysician('E. W.', 'Eric Whitney'), false, 'initials alone name nobody');
-  assert.equal(namesOnlyThePhysician('Eric Whitney', ''), false);
+  assert.equal(namesOnlyThePhysician('R. T.', 'Rowan Testa'), false, 'initials alone name nobody');
+  assert.equal(namesOnlyThePhysician('Rowan Testa', ''), false);
   // The scan merge and the detail view use the same strict test, not the display heuristic.
   const crud = read('src/components/features/CrudSection.jsx');
   assert.doesNotMatch(crud, /isPersonName\(/, 'the loose display test never decides what a form or a detail view drops');
@@ -166,8 +173,10 @@ test('the notification message lists each DEA by type and state', async () => {
   const out = await build({ entryPoints: [`${root}src/utils/notifications.js`], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent' });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);
-  const past = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
-  const soon = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  // Local calendar dates: expirations count local days (src/utils/dateDays.js),
+  // and a UTC date is a day ahead every evening in the US.
+  const past = (n) => localToday(new Date(Date.now() - n * 86400000));
+  const soon = (n) => localToday(new Date(Date.now() + n * 86400000));
   const alerts = { expired: [{ ...DEA[0], _sec: 'licenses', expirationDate: past(3) }], soon: [{ ...DEA[1], _sec: 'licenses', expirationDate: soon(20) }], cmeIssues: [], effectiveFreqDays: 7 };
   const msg = mod.exports.buildNotificationMessage({ settings: SETTINGS }, alerts);
   assert.match(msg.body, /DEA Registration, CO/);

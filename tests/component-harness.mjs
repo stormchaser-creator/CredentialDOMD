@@ -55,6 +55,8 @@ export async function mountComponent(path, { modules = {}, app = {}, props = {},
     useCallback(fn, deps) { return react.useMemo(() => fn, deps); },
     useEffect(fn, deps) { const i = cursor++; if (!hooks[i] || !deps || !same(hooks[i].deps, deps)) { const old = hooks[i]; hooks[i] = { deps }; effects.push(() => { old?.cleanup?.(); const c = fn(); hooks[i].cleanup = typeof c === 'function' ? c : null; }); } },
     memo: c => c, forwardRef: c => c, Fragment: 'Fragment',
+    // For a component written with React.createElement rather than JSX.
+    createElement: (type, props, ...children) => ({ type, props: { ...(props || {}), children: children.length <= 1 ? children[0] : children }, key: props?.key }),
   };
   react.useLayoutEffect = react.useEffect;
   const jsx = (type, props, key) => ({ type, props, key });

@@ -1,262 +1,262 @@
 {
- "total": 21225,
- "totalMin": 2565,
+ "total": 20250,
+ "totalMin": 2430,
  "dayOverMin": {
-  "2026-09-25": 60,
-  "2026-09-26": 690,
-  "2026-09-27": 705,
-  "2026-09-28": 0
+  "2026-10-16": 60,
+  "2026-10-17": 630,
+  "2026-10-18": 660,
+  "2026-10-19": 0
  },
  "lines": [
   {
-   "date": "2026-09-25",
+   "date": "2026-10-16",
    "label": "On-call coverage (daily total)",
    "detail": "5h 00m logged, first 4h covered by the $3,000.00 stipend, 1h 00m beyond @ $300.00/hr (+$300.00)",
    "amount": 3300,
-   "_sort": "2026-09-25~0"
+   "_sort": "2026-10-16~0"
   },
   {
-   "date": "2026-09-25",
+   "date": "2026-10-16",
    "label": "Orientation",
-   "detail": "8:30 AM–11:00 AM · 150 min @ $300.00/hr",
-   "amount": 750,
-   "_sort": "2026-09-25~1~2026-09-25 13:30:00+00"
+   "detail": "9:00 AM–11:30 AM · 150 min @ $250.00/hr",
+   "amount": 625,
+   "_sort": "2026-10-16~1~2026-10-16 14:00:00+00"
   },
   {
-   "date": "2026-09-25",
+   "date": "2026-10-16",
    "label": "Orientation",
-   "detail": "11:30 AM–3:30 PM · 240 min @ $300.00/hr",
-   "amount": 1200,
-   "_sort": "2026-09-25~1~2026-09-25 16:30:00+00"
+   "detail": "12:00 PM–3:30 PM · 210 min @ $250.00/hr",
+   "amount": 875,
+   "_sort": "2026-10-16~1~2026-10-16 17:00:00+00"
   },
   {
    "date": null,
-   "label": "· Rounding: Consults and family meetings. OR planning",
+   "label": "· Rounding: Ward list and handoff notes",
    "detail": "3:30 PM–7:30 PM · 240 min",
    "amount": null,
    "flag": "included",
-   "_sort": "2026-09-25~1~2026-09-25 20:30:00+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: Consult C",
-   "detail": "10:45 PM–11:00 PM · 15 min",
-   "amount": null,
-   "flag": "+$75.00",
-   "_sort": "2026-09-25~1~2026-09-26 03:46:29.078+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: Phone consult J",
-   "detail": "1:00 AM–1:15 AM · 15 min",
-   "amount": null,
-   "flag": "+$75.00",
-   "_sort": "2026-09-25~1~2026-09-26 06:10:23.323+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: Phone call E",
-   "detail": "1:45 AM–2:00 AM · 15 min",
-   "amount": null,
-   "flag": "+$75.00",
-   "_sort": "2026-09-25~1~2026-09-26 06:45:54.21+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: ED call K",
-   "detail": "2:00 AM–2:15 AM · 15 min",
-   "amount": null,
-   "flag": "+$75.00",
-   "_sort": "2026-09-25~1~2026-09-26 07:05:37.69+00"
-  },
-  {
-   "date": "2026-09-26",
-   "label": "On-call coverage (daily total)",
-   "detail": "15h 30m logged, first 4h covered by the $3,000.00 stipend, 11h 30m beyond @ $300.00/hr (+$3,450.00)",
-   "amount": 6450,
-   "_sort": "2026-09-26~0"
-  },
-  {
-   "date": null,
-   "label": "· Rounding: Rounds. Notes. Family meetings",
-   "detail": "7:30 AM–9:30 AM · 120 min",
-   "amount": null,
-   "flag": "included",
-   "_sort": "2026-09-26~1~2026-09-26 12:30:00+00"
-  },
-  {
-   "date": null,
-   "label": "· Procedure: Case R",
-   "detail": "9:30 AM–11:30 AM · 120 min",
-   "amount": null,
-   "flag": "included",
-   "_sort": "2026-09-26~1~2026-09-26 14:30:00+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: Rounds and notes",
-   "detail": "11:30 AM–12:30 PM · 60 min",
-   "amount": null,
-   "flag": "+$300.00",
-   "_sort": "2026-09-26~1~2026-09-26 16:30:00+00"
-  },
-  {
-   "date": null,
-   "label": "· Procedure: Case T",
-   "detail": "12:30 PM–6:00 PM · 330 min",
-   "amount": null,
-   "flag": "+$1,650.00",
-   "_sort": "2026-09-26~1~2026-09-26 17:30:00+00"
-  },
-  {
-   "date": null,
-   "label": "· Procedure: Case Q",
-   "detail": "6:00 PM–8:45 PM · 165 min",
-   "amount": null,
-   "flag": "+$825.00",
-   "_sort": "2026-09-26~1~2026-09-26 23:00:00+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: Phone call I. ",
-   "detail": "10:30 PM–10:45 PM · 15 min",
-   "amount": null,
-   "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 03:37:36.51+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: Consult D",
-   "detail": "10:45 PM–11:00 PM · 15 min",
-   "amount": null,
-   "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 03:52:22.652+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: ED consult L",
-   "detail": "11:15 PM–11:30 PM · 15 min",
-   "amount": null,
-   "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 04:15:42.33+00"
-  },
-  {
-   "date": null,
-   "label": "· Call: Consult M",
-   "detail": "12:00 AM–12:15 AM · 15 min",
-   "amount": null,
-   "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 05:11:41.263+00"
+   "_sort": "2026-10-16~1~2026-10-16 20:30:00+00"
   },
   {
    "date": null,
    "label": "· Call: Consult A",
-   "detail": "3:00 AM–3:15 AM · 15 min",
+   "detail": "10:30 PM–10:45 PM · 15 min",
    "amount": null,
    "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 08:06:38.64+00"
+   "_sort": "2026-10-16~1~2026-10-17 03:31:12.417+00"
   },
   {
    "date": null,
-   "label": "· Call: Consult B",
-   "detail": "3:15 AM–3:30 AM · 15 min",
+   "label": "· Call: Phone consult B",
+   "detail": "12:45 AM–1:00 AM · 15 min",
    "amount": null,
    "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 08:17:17.169+00"
+   "_sort": "2026-10-16~1~2026-10-17 05:52:40.105+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: Phone call C",
+   "detail": "1:30 AM–1:45 AM · 15 min",
+   "amount": null,
+   "flag": "+$75.00",
+   "_sort": "2026-10-16~1~2026-10-17 06:38:05.66+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: ED call D",
+   "detail": "2:15 AM–2:30 AM · 15 min",
+   "amount": null,
+   "flag": "+$75.00",
+   "_sort": "2026-10-16~1~2026-10-17 07:21:47.9+00"
+  },
+  {
+   "date": "2026-10-17",
+   "label": "On-call coverage (daily total)",
+   "detail": "14h 30m logged, first 4h covered by the $3,000.00 stipend, 10h 30m beyond @ $300.00/hr (+$3,150.00)",
+   "amount": 6150,
+   "_sort": "2026-10-17~0"
+  },
+  {
+   "date": null,
+   "label": "· Rounding: Rounds and notes",
+   "detail": "7:15 AM–9:15 AM · 120 min",
+   "amount": null,
+   "flag": "included",
+   "_sort": "2026-10-17~1~2026-10-17 12:15:00+00"
+  },
+  {
+   "date": null,
+   "label": "· Procedure: Case F",
+   "detail": "9:15 AM–11:15 AM · 120 min",
+   "amount": null,
+   "flag": "included",
+   "_sort": "2026-10-17~1~2026-10-17 14:15:00+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: Rounds follow-up",
+   "detail": "11:15 AM–12:00 PM · 45 min",
+   "amount": null,
+   "flag": "+$225.00",
+   "_sort": "2026-10-17~1~2026-10-17 16:15:00+00"
+  },
+  {
+   "date": null,
+   "label": "· Procedure: Case G",
+   "detail": "12:00 PM–5:00 PM · 300 min",
+   "amount": null,
+   "flag": "+$1,500.00",
+   "_sort": "2026-10-17~1~2026-10-17 17:00:00+00"
+  },
+  {
+   "date": null,
+   "label": "· Procedure: Case H",
+   "detail": "5:00 PM–7:30 PM · 150 min",
+   "amount": null,
+   "flag": "+$750.00",
+   "_sort": "2026-10-17~1~2026-10-17 22:00:00+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: Phone call I. ",
+   "detail": "10:00 PM–10:15 PM · 15 min",
+   "amount": null,
+   "flag": "+$75.00",
+   "_sort": "2026-10-17~1~2026-10-18 03:12:03.2+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: Consult J",
+   "detail": "10:30 PM–10:45 PM · 15 min",
+   "amount": null,
+   "flag": "+$75.00",
+   "_sort": "2026-10-17~1~2026-10-18 03:41:55.87+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: ED consult K",
+   "detail": "11:15 PM–11:30 PM · 15 min",
+   "amount": null,
+   "flag": "+$75.00",
+   "_sort": "2026-10-17~1~2026-10-18 04:20:14.301+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: Consult L",
+   "detail": "12:30 AM–12:45 AM · 15 min",
+   "amount": null,
+   "flag": "+$75.00",
+   "_sort": "2026-10-17~1~2026-10-18 05:37:48.02+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: Consult M",
+   "detail": "2:45 AM–3:00 AM · 15 min",
+   "amount": null,
+   "flag": "+$75.00",
+   "_sort": "2026-10-17~1~2026-10-18 07:49:31.5+00"
   },
   {
    "date": null,
    "label": "· Call: Consult N",
-   "detail": "3:45 AM–4:00 AM · 15 min",
+   "detail": "3:15 AM–3:30 AM · 15 min",
    "amount": null,
    "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 08:54:29.544+00"
+   "_sort": "2026-10-17~1~2026-10-18 08:26:09.144+00"
+  },
+  {
+   "date": null,
+   "label": "· Call: Consult O",
+   "detail": "4:00 AM–4:15 AM · 15 min",
+   "amount": null,
+   "flag": "+$75.00",
+   "_sort": "2026-10-17~1~2026-10-18 09:05:52.73+00"
   },
   {
    "date": null,
    "label": "· Call: Patient care",
-   "detail": "4:15 AM–4:30 AM · 15 min",
+   "detail": "5:15 AM–5:30 AM · 15 min",
    "amount": null,
    "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 09:16:06.021+00"
+   "_sort": "2026-10-17~1~2026-10-18 10:18:26.6+00"
   },
   {
    "date": null,
-   "label": "· Call: Phone call H",
-   "detail": "6:45 AM–7:00 AM · 15 min",
+   "label": "· Call: Phone call P",
+   "detail": "6:30 AM–6:45 AM · 15 min",
    "amount": null,
    "flag": "+$75.00",
-   "_sort": "2026-09-26~1~2026-09-27 11:45:32.308+00"
+   "_sort": "2026-10-17~1~2026-10-18 11:33:40.012+00"
   },
   {
-   "date": "2026-09-27",
+   "date": "2026-10-18",
    "label": "On-call coverage (daily total)",
-   "detail": "15h 45m logged, first 4h covered by the $3,000.00 stipend, 11h 45m beyond @ $300.00/hr (+$3,525.00)",
-   "amount": 6525,
-   "_sort": "2026-09-27~0"
+   "detail": "15h 00m logged, first 4h covered by the $3,000.00 stipend, 11h 00m beyond @ $300.00/hr (+$3,300.00)",
+   "amount": 6300,
+   "_sort": "2026-10-18~0"
   },
   {
    "date": null,
-   "label": "· Rounding: Consults. Notes. Family meetings. Chart review. Sign out",
-   "detail": "7:30 AM–11:30 AM · 240 min",
+   "label": "· Rounding: Consults. Notes. Chart review. Sign out",
+   "detail": "7:00 AM–11:00 AM · 240 min",
    "amount": null,
    "flag": "included",
-   "_sort": "2026-09-27~1~2026-09-27 12:30:00+00"
+   "_sort": "2026-10-18~1~2026-10-18 12:00:00+00"
   },
   {
    "date": null,
-   "label": "· Procedure: Case P. Notes and consults",
-   "detail": "11:30 AM–3:00 PM · 210 min",
+   "label": "· Procedure: Case Q. Notes and consults",
+   "detail": "11:00 AM–2:15 PM · 195 min",
    "amount": null,
-   "flag": "+$1,050.00",
-   "_sort": "2026-09-27~1~2026-09-27 16:30:00+00"
+   "flag": "+$975.00",
+   "_sort": "2026-10-18~1~2026-10-18 16:00:00+00"
   },
   {
    "date": null,
-   "label": "· Procedure: Case S. Consults. ",
-   "detail": "3:00 PM–8:15 PM · 315 min",
+   "label": "· Procedure: Case R. Consults. ",
+   "detail": "2:15 PM–7:00 PM · 285 min",
    "amount": null,
-   "flag": "+$1,575.00",
-   "_sort": "2026-09-27~1~2026-09-27 20:00:00+00"
+   "flag": "+$1,425.00",
+   "_sort": "2026-10-18~1~2026-10-18 19:15:00+00"
   },
   {
    "date": null,
-   "label": "· Call: Phone call G",
-   "detail": "10:45 PM–11:00 PM · 15 min",
+   "label": "· Call: Phone call S",
+   "detail": "10:15 PM–10:30 PM · 15 min",
    "amount": null,
    "flag": "+$75.00",
-   "_sort": "2026-09-27~1~2026-09-28 03:53:10.677+00"
+   "_sort": "2026-10-18~1~2026-10-19 03:24:37.5+00"
   },
   {
    "date": null,
    "label": "· Call: Phone call",
-   "detail": "1:15 AM–1:30 AM · 15 min",
+   "detail": "1:45 AM–2:00 AM · 15 min",
    "amount": null,
    "flag": "+$75.00",
-   "_sort": "2026-09-27~1~2026-09-28 06:24:27.711+00"
+   "_sort": "2026-10-18~1~2026-10-19 06:47:12.09+00"
   },
   {
    "date": null,
-   "label": "· Call: Phone call F",
-   "detail": "5:30 AM–5:45 AM · 15 min",
+   "label": "· Call: Phone call T",
+   "detail": "5:00 AM–5:15 AM · 15 min",
    "amount": null,
    "flag": "+$75.00",
-   "_sort": "2026-09-27~1~2026-09-28 10:31:55.251+00"
+   "_sort": "2026-10-18~1~2026-10-19 10:02:58.33+00"
   },
   {
    "date": null,
    "label": "· Sign-out: Consults and sign out",
-   "detail": "6:30 AM–8:45 AM · 135 min",
+   "detail": "6:15 AM–8:30 AM · 135 min",
    "amount": null,
    "flag": "+$675.00",
-   "_sort": "2026-09-27~1~2026-09-28 11:30:00+00"
+   "_sort": "2026-10-18~1~2026-10-19 11:15:00+00"
   },
   {
-   "date": "2026-09-28",
+   "date": "2026-10-19",
    "label": "On-call coverage (daily total)",
    "detail": "on-call coverage · no calls required",
    "amount": 3000,
-   "_sort": "2026-09-28~0"
+   "_sort": "2026-10-19~0"
   }
  ]
 }

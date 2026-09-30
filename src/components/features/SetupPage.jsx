@@ -4,7 +4,8 @@ import { useInputStyle } from "../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../constants/states";
 import { generateId, downscalePhoto } from "../../utils/helpers";
 import Modal from "../shared/Modal";
-import { isDea, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
+import { deskRailStyle } from "../shared/deskSticky.js";
+import { isDea, currentDeaRecords, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
 import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine, packetPendingLine } from "../../utils/credentialExport";
 import { FREE_BETA_LABEL } from "../../constants/beta";
 import { useSetupState } from "./setup/useSetupState";
@@ -15,7 +16,8 @@ import HeadshotCropModal from "./setup/HeadshotCropModal";
 import PublicRecordReview from "./PublicRecordReview";
 import CvImportReview from "./CvImportReview";
 import { canFillFromPublicRecord } from "../../utils/publicRecord";
-import { emailRemindersOn } from "../../utils/reminderPreferences";
+import { emailRemindersOn, reminderLeadDays } from "../../utils/reminderPreferences";
+import { emailProblem } from "../../utils/contactFormat";
 import CMEImport from "./CMEImport";
 import EmailPacketModal from "./EmailPacketModal";
 
@@ -36,6 +38,11 @@ import EmailPacketModal from "./EmailPacketModal";
  */
 
 const GLYPH = 22;
+// The least a Setup control may be, so a thumb finds it on a phone: the
+// "…" row menu, its choices and the drawer's Skip for now / Does not apply
+// to me were 21 to 31px tall, the text links 16px, the Packet ready header
+// 19px (SETTINGS-001).
+const SETUP_TAP_MIN = 36;
 /** Stable empty field list for the runs that write nothing onto the record. */
 const NO_FIELDS = [];
 /** Stable empty preselection: EmailPacketModal re-sorts on identity change. */
@@ -98,7 +105,7 @@ function IdentityDrawer() {
   const [name, setName] = useState(s.name || user?.fullName || "");
 
   const chip = (label, active, onClick) => (
-    <button key={label} onClick={onClick} style={{
+    <button key={label} aria-pressed={active} onClick={onClick} style={{
       flex: 1, padding: "12px 0", borderRadius: 12,
       border: `2px solid ${active ? T.accent : T.border}`,
       backgroundColor: active ? T.accentDim : "transparent",
@@ -108,8 +115,9 @@ function IdentityDrawer() {
 
   return (
     <div>
-      <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Full name, as it appears on your license</label>
+      <label htmlFor="setup-full-name" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Full name, as it appears on your license</label>
       <input
+        id="setup-full-name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         onBlur={() => { if (name.trim() !== (s.name || "")) updateSettings({ name: name.trim() }); }}
@@ -117,13 +125,14 @@ function IdentityDrawer() {
         autoComplete="name"
         style={{ ...iS, marginTop: 4, marginBottom: 12 }}
       />
-      <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Degree</label>
-      <div style={{ display: "flex", gap: 8, margin: "4px 0 12px" }}>
+      <label id="setup-degree-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Degree</label>
+      <div role="group" aria-labelledby="setup-degree-label" style={{ display: "flex", gap: 8, margin: "4px 0 12px" }}>
         {chip("MD", s.degreeType === "MD", () => updateSettings({ degreeType: "MD" }))}
         {chip("DO", s.degreeType === "DO", () => updateSettings({ degreeType: "DO" }))}
       </div>
-      <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Primary state of practice</label>
+      <label htmlFor="setup-primary-state" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Primary state of practice</label>
       <select
+        id="setup-primary-state"
         value={s.primaryState || ""}
         onChange={(e) => updateSettings({ primaryState: e.target.value })}
         style={{ ...iS, marginTop: 4, appearance: "auto" }}
@@ -184,7 +193,7 @@ function LicensesDrawer({ onAddByHand }) {
  * drawer renders the public-record screen, so the row is never navigated away
  * from and a half-ticked list is never lost to a back button.
  */
-function CvDrawer({ onDeclareNone }) {
+export function CvDrawer({ onDeclareNone }) {
   const { theme: T } = useApp();
   const [importing, setImporting] = useState(false);
 
@@ -207,18 +216,21 @@ function CvDrawer({ onDeclareNone }) {
         backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer",
       }}>Upload my CV</button>
       <button onClick={onDeclareNone} style={{
-        marginTop: 10, border: "none", background: "transparent", padding: 0,
+        marginTop: 2, border: "none", background: "transparent", padding: 0, minHeight: SETUP_TAP_MIN,
         color: T.textDim, fontSize: 13, fontWeight: 700, cursor: "pointer",
       }}>I would rather type it in</button>
     </div>
   );
 }
 
-function DeaDrawer({ onDeclareNone }) {
+export function DeaDrawer({ onDeclareNone }) {
   const { data, addItem, theme: T } = useApp();
   const iS = useInputStyle();
   const s = data.settings || {};
-  const existing = (data.licenses || []).filter(isDea);
+  // Current registrations only: a historical or superseded DEA is kept for
+  // the record, and the task (which ignores it) still wants a current one.
+  const existing = currentDeaRecords(data.licenses);
+  const hasEarlier = (data.licenses || []).some(isDea) && !existing.length;
   const [form, setForm] = useState({ licenseNumber: "", state: s.primaryState || "", expirationDate: "" });
 
   const add = () => {
@@ -251,19 +263,22 @@ function DeaDrawer({ onDeclareNone }) {
 
   return (
     <div>
-      <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>DEA number</label>
-      <input value={form.licenseNumber} onChange={(e) => setForm((f) => ({ ...f, licenseNumber: e.target.value }))} placeholder="e.g. BW1234563" style={{ ...iS, marginTop: 4, marginBottom: 10 }} />
+      {hasEarlier && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 8, lineHeight: 1.5 }}>
+        Your earlier registration is kept as historical. Add the current one below.
+      </div>}
+      <label htmlFor="setup-dea-number" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>DEA number</label>
+      <input id="setup-dea-number" value={form.licenseNumber} onChange={(e) => setForm((f) => ({ ...f, licenseNumber: e.target.value }))} placeholder="e.g. BW1234563" style={{ ...iS, marginTop: 4, marginBottom: 10 }} />
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <div style={{ flex: 1 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>State</label>
-          <select value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} style={{ ...iS, marginTop: 4, appearance: "auto" }}>
+          <label htmlFor="setup-dea-state" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>State</label>
+          <select id="setup-dea-state" value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} style={{ ...iS, marginTop: 4, appearance: "auto" }}>
             <option value="">Choose</option>
             {STATES.map((st) => <option key={st} value={st}>{st}</option>)}
           </select>
         </div>
         <div style={{ flex: 1 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Expires</label>
-          <input type="date" value={form.expirationDate} onChange={(e) => setForm((f) => ({ ...f, expirationDate: e.target.value }))} style={{ ...iS, marginTop: 4 }} />
+          <label htmlFor="setup-dea-expires" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Expires</label>
+          <input id="setup-dea-expires" type="date" value={form.expirationDate} onChange={(e) => setForm((f) => ({ ...f, expirationDate: e.target.value }))} style={{ ...iS, marginTop: 4 }} />
         </div>
       </div>
       <button onClick={add} disabled={!form.licenseNumber.trim() || !form.expirationDate} style={{
@@ -273,42 +288,72 @@ function DeaDrawer({ onDeclareNone }) {
         cursor: form.licenseNumber.trim() && form.expirationDate ? "pointer" : "not-allowed",
       }}>Add my DEA</button>
       <button onClick={onDeclareNone} style={{
-        marginTop: 10, border: "none", background: "transparent", padding: 0,
+        marginTop: 2, border: "none", background: "transparent", padding: 0, minHeight: SETUP_TAP_MIN,
         color: T.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline",
       }}>I do not hold a DEA registration</button>
     </div>
   );
 }
 
-function RemindersDrawer() {
-  const { data, updateSettings, user, theme: T } = useApp();
+export function RemindersDrawer() {
+  const { data, updateSettings, user, theme: T, settingsRefusal, clearSettingsRefusal } = useApp();
   const iS = useInputStyle();
   const s = data.settings || {};
-  const [email, setEmail] = useState(s.email || user?.email || "");
-  const lead = String(s.reminderLeadDays || 90);
+  // Only the saved address fills the field. The sign-in address used to be
+  // pre-filled and looked saved, but it was written only on blur, so a member
+  // who flipped the switch and picked a lead time left no address on file.
+  // It is offered as the placeholder and a one-tap button instead. null
+  // means "not editing": the field shows what is saved.
+  const [draft, setDraft] = useState(null);
+  const email = draft ?? s.email ?? "";
+  const loginEmail = user?.email || "";
+  const refused = settingsRefusal?.field === "email" ? settingsRefusal.address : null;
+  const problem = email.trim() ? emailProblem(email.trim()) : "";
+  const commitEmail = (value) => {
+    const next = String(value ?? "").trim();
+    if (next && emailProblem(next)) return;
+    setDraft(null);
+    if (next !== (s.email || "")) updateSettings({ email: next });
+  };
+  const lead = String(reminderLeadDays(s.reminderLeadDays));
   // Blank means on, as in Settings and send-reminders (utils/reminderPreferences.js).
   const emailOn = emailRemindersOn(s.notifyEmail);
 
   return (
     <div>
-      <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Where the warning goes</label>
+      <label htmlFor="setup-reminder-email" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Where the warning goes</label>
       <input
+        id="setup-reminder-email"
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        onBlur={() => { if (email.trim() !== (s.email || "")) updateSettings({ email: email.trim() }); }}
+        onChange={(e) => { if (refused) clearSettingsRefusal?.(); setDraft(e.target.value); }}
+        onBlur={(e) => commitEmail(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") commitEmail(e.target.value); }}
         type="email"
         inputMode="email"
         autoComplete="email"
-        placeholder="you@example.com"
-        style={{ ...iS, marginTop: 4, marginBottom: 12 }}
+        placeholder={loginEmail || "you@example.com"}
+        style={{ ...iS, marginTop: 4, marginBottom: refused || problem ? 4 : 12 }}
       />
+      {(refused || problem) && <div role="alert" style={{ fontSize: 12.5, color: T.danger, marginBottom: 10, lineHeight: 1.45 }}>
+        {refused ? `${refused} is on another CredentialDOMD account, so it was not saved.` : problem}
+      </div>}
+      {!s.email && !draft && loginEmail && !refused && (
+        <button type="button" onClick={() => commitEmail(loginEmail)} style={{
+          display: "block", border: "none", background: "transparent", padding: "0 0 12px", color: T.accent,
+          fontSize: 16, fontWeight: 700, cursor: "pointer", textAlign: "left",
+        }}>Use {loginEmail}</button>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Email reminders</div>
+        {/* The button is the tap target, 52 x SETUP_TAP_MIN; the 52 x 30
+            track is drawn inside it. The track alone was 30 px tall. */}
         <button onClick={() => updateSettings({ notifyEmail: !emailOn })} aria-label="Email reminders" style={{
-          width: 52, height: 30, borderRadius: 15, border: "none",
-          backgroundColor: emailOn ? T.accent : T.border, position: "relative", cursor: "pointer",
+          width: 52, minHeight: SETUP_TAP_MIN, margin: "-3px 0", padding: 0, border: "none",
+          backgroundColor: "transparent", cursor: "pointer", display: "flex", alignItems: "center", flexShrink: 0,
         }}>
-          <span style={{ position: "absolute", top: 3, left: emailOn ? 25 : 3, width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", transition: "left .15s" }} />
+          <span aria-hidden="true" style={{ display: "block", width: 52, height: 30, flexShrink: 0, borderRadius: 15, backgroundColor: emailOn ? T.accent : T.border, position: "relative" }}>
+            <span style={{ position: "absolute", top: 3, left: emailOn ? 25 : 3, width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", transition: "left .15s" }} />
+          </span>
         </button>
       </div>
       <div style={{ padding: "12px 0 0" }}>
@@ -650,7 +695,7 @@ function Legend({ T }) {
 
 /* ─── Rows ─────────────────────────────────────────────────────── */
 
-function TaskRow({ task, open, onToggle, onSkip, onNa, onRestore, T, asRail }) {
+export function TaskRow({ task, open, onToggle, onSkip, onNa, onRestore, T, asRail }) {
   const [menu, setMenu] = useState(false);
   const resolved = task.status === "done" || task.status === "documented" || task.status === "na";
   const est = task.status === "pending" ? estimateLabel(task) : "";
@@ -665,7 +710,7 @@ function TaskRow({ task, open, onToggle, onSkip, onNa, onRestore, T, asRail }) {
         opacity: task.status === "na" ? 0.55 : 1,
       }}>
         <button onClick={onToggle} style={{
-          display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0,
+          display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, minHeight: SETUP_TAP_MIN,
           border: "none", background: "transparent", padding: 0, textAlign: "left",
           cursor: "pointer", fontFamily: "inherit",
         }}>
@@ -693,6 +738,8 @@ function TaskRow({ task, open, onToggle, onSkip, onNa, onRestore, T, asRail }) {
         <button onClick={() => setMenu((m) => !m)} aria-label={`More for ${task.label}`} style={{
           border: "none", background: "transparent", color: T.textDim,
           fontSize: 18, fontWeight: 800, cursor: "pointer", padding: "0 4px", flexShrink: 0,
+          minWidth: SETUP_TAP_MIN, minHeight: SETUP_TAP_MIN, borderRadius: 8,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
         }}>{"…"}</button>
       </div>
 
@@ -708,10 +755,10 @@ function TaskRow({ task, open, onToggle, onSkip, onNa, onRestore, T, asRail }) {
   );
 }
 
-function MenuBtn({ children, onClick, T }) {
+export function MenuBtn({ children, onClick, T }) {
   return (
     <button onClick={onClick} style={{
-      padding: "7px 12px", borderRadius: 999, border: `1px solid ${T.border}`,
+      minHeight: SETUP_TAP_MIN, padding: "7px 12px", borderRadius: 999, border: `1px solid ${T.border}`,
       backgroundColor: T.input, color: T.textMuted, fontSize: 12.5, fontWeight: 700,
       cursor: "pointer", fontFamily: "inherit",
     }}>{children}</button>
@@ -764,7 +811,10 @@ export default function SetupPage({
   // null = follow Tier 1 (folded until it completes). Once tapped either
   // way, the physician's choice wins: the packet is folded, never locked.
   const [packetOpen, setPacketOpen] = useState(null);
-  const [seeded, setSeeded] = useState(initialTask);
+  // null, not initialTask: the return trip from a deep link remounts this
+  // page with initialTask already set, and the branch below must run on that
+  // first render too, or the drawer comes back folded away (SETTINGS-018).
+  const [seeded, setSeeded] = useState(null);
 
   const t1 = setup.counts.tier1;
   const t2 = setup.counts.tier2;
@@ -815,11 +865,13 @@ export default function SetupPage({
         <button onClick={() => { skip(task.id); setOpen(null); }} style={{
           border: "none", background: "transparent", padding: 0, color: T.textDim,
           fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline",
+          minHeight: SETUP_TAP_MIN,
         }}>Skip for now</button>
       )}
       <button onClick={() => { markNa(task.id); setOpen(null); }} style={{
         border: "none", background: "transparent", padding: 0, color: T.textDim,
         fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline",
+        minHeight: SETUP_TAP_MIN,
       }}>Does not apply to me</button>
     </div>
   );
@@ -862,8 +914,9 @@ export default function SetupPage({
     }}>
       <span style={{ flex: 1, fontSize: 12.5, color: T.textMuted, lineHeight: 1.45 }}>{narration}</span>
       <button onClick={ackNarration} style={{
-        border: "none", background: "transparent", padding: 0, color: T.accent,
+        border: "none", background: "transparent", padding: "0 4px", color: T.accent,
         fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
+        minHeight: SETUP_TAP_MIN, margin: "-8px -4px",
       }}>Got it</button>
     </div>
   ) : null;
@@ -958,10 +1011,12 @@ export default function SetupPage({
   // page was saying "10 of 10 done" with the ten items one tap away, and the
   // owner of the app could not tell what the ten were.
   const packetCollapsed = packetOpen === null ? (!t1.complete && !t2.complete) : !packetOpen;
+  // The whole header is the control that opens the packet; with no padding
+  // it was 19 px tall on a phone (SETTINGS-001).
   const packetHeader = (
     <button onClick={() => setPacketOpen(packetCollapsed)} style={{
-      display: "flex", alignItems: "baseline", gap: 8, width: "100%",
-      border: "none", background: "transparent", padding: 0, marginBottom: 2,
+      display: "flex", alignItems: "baseline", gap: 8, width: "100%", minHeight: SETUP_TAP_MIN,
+      border: "none", background: "transparent", padding: "8px 0", marginBottom: 2,
       cursor: "pointer", textAlign: "left", fontFamily: "inherit",
     }}>
       <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: T.text }}>{TIER2_COPY.header}</h3>
@@ -1009,8 +1064,16 @@ export default function SetupPage({
   const packetSum = useMemo(() => (t2.complete ? packetSummary(data) : null), [t2.complete, data]);
   const packetDocIds = useMemo(() => (emailOpen ? packetDocuments(data).map((d) => d.id) : EMPTY_IDS), [emailOpen, data]);
 
+  // Both ways in (the card's Download and the Send sheet's whole-packet
+  // link) hold while a linked file is still coming back to this device: the
+  // ZIP is written from the bytes here, and a partial packet must never be
+  // handed over silently. The summary is read fresh, because the sheet can
+  // call this after packetSum was computed, and the refusal shows on the
+  // card (the sheet closes before it calls).
   const downloadPacket = async () => {
     if (zipBusy) return;
+    const pending = packetPendingLine(packetSummary(data));
+    if (pending) { setZipError(pending); return; }
     setZipBusy(true);
     setZipError(null);
     try {
@@ -1040,7 +1103,7 @@ export default function SetupPage({
       open={emailOpen}
       onClose={() => setEmailOpen(false)}
       initialDocIds={packetDocIds}
-      onDownloadPacket={downloadPacket}
+      onDownloadPacket={packetSum && !packetPendingLine(packetSum) ? downloadPacket : undefined}
     />
   );
 
@@ -1061,7 +1124,9 @@ export default function SetupPage({
       <div>
         {header}
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-          <div style={{ width: 300, flexShrink: 0, position: "sticky", top: 72 }}>
+          {/* Sticks under the top bar and scrolls on its own: twenty task rows
+              are taller than a laptop window (src/components/shared/deskSticky.js). */}
+          <div style={deskRailStyle(300)}>
             {progressStrip}
             {narrationRow}
             {nextCard}

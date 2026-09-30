@@ -35,7 +35,7 @@ eq("same send cooldown", SEND_COOLDOWN_MINUTES, server.SEND_COOLDOWN_MINUTES);
 eq("the requests inbox", REQUESTS_INBOX, "docs@credentialdomd.com");
 eq("the cme inbox", CME_INBOX, "cme@credentialdomd.com");
 
-for (const raw of ["Eric Whitney <Eric@Hospital.ORG>", "  NAME@Hospital.org \n", "<a@b.co>", "", null, "nope"]) {
+for (const raw of ["Rowan Testa <Rowan@Hospital.ORG>", "  NAME@Hospital.org \n", "<a@b.co>", "", null, "nope"]) {
   eq(`normalizes like the server: ${JSON.stringify(raw)}`, normalizeAddress(raw), server.normalizeEmail(raw));
 }
 for (const e of ["name@hospital.org", "first.last+cme@sub.hospital.co.uk", "a_b-c@x-y.io",
@@ -59,7 +59,7 @@ const serverSays = (over) => server.refuseAdd({
 eq("an empty box is not a complaint", P(""), null);
 eq("whitespace only is not a complaint", P("   "), null);
 eq("a good address passes", P("name@hospital.org"), null);
-eq("a display name is accepted and normalized", P("Whit <name@hospital.org>"), null);
+eq("a display name is accepted and normalized", P("Rowan <name@hospital.org>"), null);
 
 eq("malformed", P("nope"), serverSays({ email: "nope" }));
 eq("our own domain", P("me@credentialdomd.com"), serverSays({ email: "me@credentialdomd.com" }));
@@ -72,7 +72,7 @@ eq("a subdomain of ours", P("me@mail.credentialdomd.com"), serverSays({ email: "
 // control that restores their routing. Adding it has to be allowed.
 eq("the account address may be added", P(account), null);
 eq("the account address in another case may be added", P("NAME@Gmail.com"), null);
-eq("the account address with a display name may be added", P("Whit <name@gmail.com>"), null);
+eq("the account address with a display name may be added", P("Rowan <name@gmail.com>"), null);
 ok("the branch that refused it is gone from the module (the sentence survives only in the comment saying why)",
   !/return "That is already the email on your account/.test(read("../src/utils/forwardingAddresses.js")));
 
@@ -240,7 +240,7 @@ ok("and agree once the account address is confirmed", (() => {
 // reached them, and offered a challenge email for a mailbox the server
 // already trusts.
 ok("the account mailbox is verified when the provider verified that same address",
-  accountMailboxVerified("Whit <NAME@Gmail.com>", "name@gmail.com"));
+  accountMailboxVerified("Rowan <NAME@Gmail.com>", "name@gmail.com"));
 ok("a different verified mailbox does not verify the account address",
   !accountMailboxVerified("other@hospital.org", "name@gmail.com"));
 ok("no verified column, no claim", !accountMailboxVerified(null, "name@gmail.com"));
@@ -254,7 +254,7 @@ eq("a provider-verified mailbox that is NOT the account address adds nothing",
   routableSenders(account, [], { accountVerified: accountMailboxVerified("someone@else.org", account) }), []);
 
 eq("rowForAddress finds the row whatever the case or display name",
-  rowForAddress("Whit <NAME@Gmail.com>", [{ id: "me", email: "name@gmail.com", verified_at: null }])?.id, "me");
+  rowForAddress("Rowan <NAME@Gmail.com>", [{ id: "me", email: "name@gmail.com", verified_at: null }])?.id, "me");
 eq("rowForAddress has nothing to find", rowForAddress("nobody@x.org", confirmedOnly), undefined);
 eq("rowForAddress with no address at all", rowForAddress("", confirmedOnly), undefined);
 

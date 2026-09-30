@@ -32,11 +32,22 @@ export const SIGN_IN_PROFILE_OPTIONS = {
   } },
 };
 
-export function openSignInMethods(clerk, userId) {
-  if (!SMS_SIGN_IN_ENABLED) return;
+/**
+ * Clerk's own account screen, for the signed-in account only: password and
+ * sign-in email (add, verify by code, make primary), with the delete and
+ * username sections hidden. Not an SMS feature, so it is never gated on
+ * SMS_SIGN_IN_ENABLED. A primary-address change reaches profiles.verified_email
+ * through clerk-webhook user.updated.
+ */
+export function openAccountSecurity(clerk, userId) {
   if (!userId || clerk.user?.id !== userId) {
     throw new Error("Your sign-in changed. Refresh the page before managing sign-in methods.");
   }
   try { clerk.openUserProfile(SIGN_IN_PROFILE_OPTIONS); }
   catch { throw new Error("Account security could not open. Refresh the page and try again."); }
+}
+
+export function openSignInMethods(clerk, userId) {
+  if (!SMS_SIGN_IN_ENABLED) return;
+  openAccountSecurity(clerk, userId);
 }

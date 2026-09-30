@@ -28,8 +28,8 @@ function Schedule() {
         : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
       for (const p of periods) {
         if (!p.start) continue;
-        // A block with times runs between its start and end moments (Sep 25
-        // 4:00 PM to Sep 28 7:00 AM: three call days, on site through Sep 28).
+        // A block with times runs between its start and end moments (Oct 16
+        // 4:00 PM to Oct 19 7:00 AM: three call days, on site through Oct 19).
         const span = timedSpan(p);
         const end = span ? span.end : (p.end || p.start);
         const days = span ? blockCallDays(timedBlock(p)).length : Math.round((new Date(end) - new Date(p.start)) / 86400000) + 1;
@@ -49,7 +49,7 @@ function Schedule() {
         <Forecast />
         <CallSyncPanel />
         <EmptyState icon={"🗓️"} title="No scheduled coverage"
-          subtitle="Add coverage dates to your agreements (Contracts tab) — every scheduled block shows up here." />
+          subtitle="Add coverage dates to your agreements (Contracts tab) and every scheduled block shows up here." />
       </div>
     );
   }

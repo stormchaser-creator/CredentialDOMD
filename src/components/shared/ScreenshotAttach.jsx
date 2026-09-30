@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { TAP_MIN } from "./actionButton";
 import { useApp } from "../../context/AppContext";
 import { readTicketAttachment } from "../../utils/imageAttachment";
 import {
@@ -50,12 +51,21 @@ export default function ScreenshotAttach({ value, onChange, style }) {
     onChange(images.filter((_, n) => n !== i));
   };
 
+  // The 22 px badge is drawn where it was, centred in a 32 x 32 tap target
+  // (the badge alone was the whole target, 22 x 22 on a phone).
   const removeButton = (img, i) => (
     <button onClick={() => removeAt(i)} aria-label={`Remove ${img.name || `attachment ${i + 1}`}`} style={{
-      position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: 11,
-      border: `1px solid ${T.border}`, backgroundColor: T.card, color: T.textMuted,
-      fontSize: 13, fontWeight: 800, cursor: "pointer", lineHeight: 1, padding: 0,
-    }}>&times;</button>
+      position: "absolute", top: -11, right: -11, width: TAP_MIN, height: TAP_MIN, padding: 0,
+      border: "none", backgroundColor: "transparent", cursor: "pointer",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <span style={{
+        width: 22, height: 22, borderRadius: 11, boxSizing: "border-box",
+        border: `1px solid ${T.border}`, backgroundColor: T.card, color: T.textMuted,
+        fontSize: 13, fontWeight: 800, lineHeight: 1,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>&times;</span>
+    </button>
   );
 
   return (

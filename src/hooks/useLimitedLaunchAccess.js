@@ -3,7 +3,7 @@ import { accessAuthority, ACCESS_REFRESH_MS, LIMITED_LAUNCH_ACCESS_ENABLED, PUBL
 import { clearLaunchInvitation } from "../utils/launchInvitation.js";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
 import { createAccessRefreshReporter, describeAccessRefreshFailure } from "../utils/accessRefreshFailure.js";
-import { reportError } from "../lib/errorReport.js";
+import { reportUnlessLeaving } from "../lib/errorReport.js";
 
 // A phone resumed from the background often fails its first check (Clerk's
 // token and the network are still waking up), so a failed check is tried again
@@ -19,10 +19,13 @@ export const ACCESS_REFRESH_LEAD_MS = 60000;
 // ("invalid") or was built without the service settings ("config").
 const PERMANENT_PHASES = new Set(["invalid", "config"]);
 
-const reportRefreshFailure = createAccessRefreshReporter(reportError);
+// A check the page aborts as it is being left (a reload) is not a failure and
+// is not reported (OPS-008); reportUnlessLeaving drops it, and the reporter
+// then forgets the code, so the next real failure with it is still reported.
+const reportRefreshFailure = createAccessRefreshReporter(reportUnlessLeaving);
 // An enrollment failure used to vanish into enrollmentError; it is reported
 // once per session per code, under its own name.
-const reportEnrollmentFailure = createAccessRefreshReporter(reportError, { label: "Membership enrollment failed", event: "access_enrollment_failed" });
+const reportEnrollmentFailure = createAccessRefreshReporter(reportUnlessLeaving, { label: "Membership enrollment failed", event: "access_enrollment_failed" });
 // An answer that arrives while Clerk reports another account, or none, is not
 // taken. That is a failed check like any other: retried on the schedule and
 // reported, never a silent return that leaves the first answer missing.
@@ -81,7 +84,8 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
       // Retrying cannot fix a build that cannot read the answer: no backoff,
       // and the page asks for a reload instead of saying it is reconnecting.
       const outdated = PERMANENT_PHASES.has(describeAccessRefreshFailure(error).phase);
-      accessAuthority.suspendWrites({ outdated });
+      // Only a failed check: a save inside the grace is kept on the device.
+      accessAuthority.suspendWrites({ outdated, checkFailed: true });
       const run = failures.current, now = clock();
       if (run.count === 0) run.since = now;
       run.count += 1;
@@ -150,10 +154,12 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
     };
   }, [active, accountId, check]);
   // A refused save asks for an answer now (alertWriteRefused), whatever the
-  // retry schedule had reached, so "try again in a moment" holds.
+  // retry schedule had reached, so "try again in a moment" holds. A save kept
+  // on the device while the answer is old waits on this same check
+  // (accessAuthority.verify), so it gets the check's promise.
   useEffect(() => {
     if (!active) return;
-    return accessAuthority.setRecheck(() => { backoff.current = 0; void check(); });
+    return accessAuthority.setRecheck(() => { backoff.current = 0; return check(); });
   }, [active, check]);
   // A failed check is retried with backoff until one succeeds. Each failure
   // sets a new result, which schedules the next try; success, an account

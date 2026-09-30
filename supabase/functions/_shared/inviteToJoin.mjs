@@ -123,8 +123,8 @@ export function inviteSender(profile) {
   const degree = clean(profile?.degree_type);
   if (!name || name.length > 80 || !NAME.test(name)) return null;
   const suffix = DEGREE.test(degree) && !new RegExp(`(?:,|\\s)${degree.replace(/\./g, '\\.')}$`, 'i').test(name) ? `, ${degree}` : '';
-  // Sign with first and last name only ("Eric Edwin Whitney" -> "Eric
-  // Whitney"), the way every other CredentialDOMD email is signed.
+  // Sign with first and last name only ("Rowan Ellis Testa" -> "Rowan
+  // Testa"), the way every other CredentialDOMD email is signed.
   const displayName = `${signingName(name)}${suffix}`;
   const verified = normalizeInviteEmail(profile?.verified_email || '');
   const typed = normalizeInviteEmail(profile?.email || '');

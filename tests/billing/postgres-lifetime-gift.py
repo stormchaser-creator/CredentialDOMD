@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-BIN = Path('/opt/homebrew/opt/postgresql@17/bin')
+BIN = Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 ENV = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
 checks = []
 
@@ -28,7 +28,7 @@ def subject(n): return f'user_Gift{n}'
 def text(value): return "'" + str(value).replace("'", "''") + "'"
 
 
-with tempfile.TemporaryDirectory(prefix='gift-', dir='/private/tmp') as tmp:
+with tempfile.TemporaryDirectory(prefix='gift-', dir='/tmp') as tmp:
     base = Path(tmp); sock = base / 's'; sock.mkdir()
     run = lambda *a, **k: subprocess.run([str(x) for x in a], text=True, capture_output=True, env=ENV, **k)
     assert run(BIN / 'initdb', '-D', base / 'data', '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8').returncode == 0

@@ -1,9 +1,10 @@
 import { memo, useMemo, useState } from "react";
+import { cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
 import DeskTable from "../../shared/DeskTable";
-import { formatDate } from "../../../utils/helpers";
+import { formatDate, sentDay } from "../../../utils/helpers";
 import { SendIcon, TrashIcon, ExternalLinkIcon, DollarIcon, UndoIcon } from "../../shared/Icons";
 import { invoiceSubject, shareInvoiceText, invoicePdfFile } from "../../../utils/invoicePdf";
 import InvoiceLinesTable from "../../shared/InvoiceLinesTable";
@@ -139,6 +140,11 @@ function Invoices({ onOpenContract }) {
           </div>
         </div>
       ))}
+      {/* An invoice that went out with no record (ticket "Invoicce") leaves its
+          work here; this is the way back to recording it. */}
+      <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.45 }}>
+        Already sent one of these? Open it, build the invoice for the days you sent, tap Mark as sent and enter the number printed on the copy you sent.
+      </div>
     </div>
   );
 
@@ -215,15 +221,29 @@ function Invoices({ onOpenContract }) {
     const payments = [...(payFor.payments || []), { amount: amt, date: payDate, note: payNote.trim() }];
     const total = parseFloat(payFor.totalAmount) || 0;
     const paid = payments.reduce((s2, p2) => s2 + (parseFloat(p2.amount) || 0), 0);
-    editItem("invoices", {
+    // Refused (membership being re-checked): the form stays open with the
+    // amount, date and note typed in it, to save again; editItem has said why.
+    if (editItem("invoices", {
       ...payFor,
       payments,
       // paidAt = settled in full; a partial payment leaves it open
       paidAt: paid >= total - 0.005 ? (payFor.paidAt || new Date().toISOString()) : null,
-    });
+    }) === false) return;
     setPayFor(null);
   };
-  const markUnpaid = (inv) => editItem("invoices", { ...inv, paidAt: null, payments: [] });
+  // Reopen takes back the LAST payment only, after saying which one. The
+  // ledger before it (dates, check numbers) is money that did arrive, and
+  // Tax Prep counts it as income. A legacy invoice settled by paidAt alone
+  // has no ledger: reopening clears paidAt.
+  const markUnpaid = (inv) => {
+    const payments = inv.payments || [];
+    const last = payments[payments.length - 1];
+    const ask = last
+      ? `Reopen ${inv.number}? This removes the ${money(last.amount)} payment recorded ${last.date ? formatDate(last.date) : "without a date"}${last.note ? ` (${last.note})` : ""}. Earlier payments stay.`
+      : `Reopen ${inv.number}? It goes back to ${money(inv.totalAmount)} owed.`;
+    if (!window.confirm(ask)) return;
+    editItem("invoices", { ...inv, payments: payments.slice(0, -1), paidAt: null });
+  };
   const writeOffBalance = (inv) => editItem("invoices", { ...inv, writeOffAt: new Date().toISOString() });
   const undoWriteOff = (inv) => editItem("invoices", { ...inv, writeOffAt: null });
 
@@ -348,7 +368,13 @@ function Invoices({ onOpenContract }) {
     // A day-rate invoice bills duty days, not time entries — release those too
     const mineDuty = (data.dutyDays || []).filter(x => x.invoiceId === inv.id);
     const mineExp = (data.travelExpenses || []).filter(x => x.invoiceId === inv.id);
-    const n = mine.length + mineDuty.length;
+    // Everything the delete releases, named: an expense invoice releases
+    // expenses (it has no work entries), a day-rate one days.
+    const parts = [];
+    if (mine.length) parts.push(`${mine.length} work entr${mine.length === 1 ? "y" : "ies"}`);
+    if (mineDuty.length) parts.push(`${mineDuty.length} day${mineDuty.length === 1 ? "" : "s"}`);
+    if (mineExp.length) parts.push(`${mineExp.length} expense${mineExp.length === 1 ? "" : "s"}`);
+    const released = mine.length + mineDuty.length + mineExp.length;
     // Two invoices can share a call day (stipend billed on one, late-logged
     // work on the other). Deleting only one of them makes the stipend math
     // unrecoverable — the fix is always to delete both and regenerate.
@@ -356,9 +382,20 @@ function Invoices({ onOpenContract }) {
     const shared = (data.workLog || []).some(x =>
       x.invoiceId && x.invoiceId !== inv.id && x.contractId === inv.contractId && myDays.has(callDayOf(x)));
     const warn = shared
-      ? `Careful: another invoice also bills work on the same call day(s). Deleting just this one breaks the stipend math for those days — delete BOTH invoices and regenerate one invoice instead. Delete anyway?`
-      : `Delete invoice ${inv.number}? Its ${n} ${mineDuty.length ? `day${n === 1 ? "" : "s"}` : `work entr${n === 1 ? "y" : "ies"}`} become unbilled again.`;
+      ? `Careful: another invoice also bills work on the same call day(s). Deleting just this one breaks the stipend math for those days. Delete BOTH invoices and regenerate one invoice instead. Delete anyway?`
+      : `Delete invoice ${inv.number}?${parts.length ? ` Its ${parts.join(" and ")} become${released === 1 ? "s" : ""} unbilled again.` : ""}`;
     if (!window.confirm(warn)) return;
+    // The one-time orientation fee is billed once per contract
+    // (orientationBilled). Deleting the invoice that carried it must let the
+    // regenerated invoice bill it again, unless another invoice still does.
+    // Older lines carry no kind, and legacy invoices only text.
+    const hasFee = (x) => (x.lines || []).some(l => l.kind === "orientationFee" || l.label === "Orientation (one-time)")
+      || (!x.lines && String(x.text || "").includes("Orientation (one-time)"));
+    const feeContract = contracts.find(x => x.id === inv.contractId);
+    if (feeContract?.orientationBilled && hasFee(inv)
+      && !(data.invoices || []).some(x => x.id !== inv.id && x.contractId === inv.contractId && hasFee(x))) {
+      editItem("locumContracts", { ...feeContract, orientationBilled: false });
+    }
     for (const e of (data.workLog || []).filter(x => x.invoiceId === inv.id)) {
       // Zero-minute markers exist only as this invoice's billing record —
       // remove them; real work entries just become unbilled again.
@@ -465,7 +502,7 @@ function Invoices({ onOpenContract }) {
 
       <Modal open={showMonths} onClose={() => setShowMonths(false)} title="Billed by month">
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 10 }}>
-          Strictly by the day the work was done — an invoice spanning two months splits between them.
+          Strictly by the day the work was done: an invoice spanning two months splits between them.
         </div>
         {byMonth.map(([k, amt]) => (
           <div key={k} style={{
@@ -486,7 +523,7 @@ function Invoices({ onOpenContract }) {
 
       <div style={{ marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.text }}>Invoices</h3>
-        <div style={{ fontSize: 12, color: T.textMuted }}>Record each payment as it lands — partials count too.</div>
+        <div style={{ fontSize: 12, color: T.textMuted }}>Record each payment as it lands. Partials count too.</div>
       </div>
 
       {/* Outstanding vs paid — tappable, like every bubble in this app */}
@@ -503,7 +540,7 @@ function Invoices({ onOpenContract }) {
           const list = showList === "outstanding" ? outstanding : paidList;
           if (!list.length) {
             return <div style={{ fontSize: 13.5, color: T.textMuted, padding: "8px 0" }}>
-              {showList === "outstanding" ? "Nothing outstanding — every invoice is settled." : "No invoices fully paid yet."}
+              {showList === "outstanding" ? "Nothing outstanding. Every invoice is settled." : "No invoices fully paid yet."}
             </div>;
           }
           return (
@@ -524,7 +561,7 @@ function Invoices({ onOpenContract }) {
                       <div style={{ fontSize: 11.5, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {billNameOf(inv)}
                         {showList === "outstanding"
-                          ? (inv.sentAt ? ` · sent ${formatDate(inv.sentAt.slice(0, 10))}${age >= 1 ? ` · ${age}d ago` : ""}` : "")
+                          ? (inv.sentAt ? ` · sent ${formatDate(sentDay(inv.sentAt))}${age >= 1 ? ` · ${age}d ago` : ""}` : "")
                           : (inv.paidAt ? ` · paid ${formatDate(inv.paidAt.slice(0, 10))}` : "")}
                         {showList === "outstanding" && paidOf(inv) > 0.005 && ` · ${money(paidOf(inv))} received`}
                       </div>
@@ -555,7 +592,7 @@ function Invoices({ onOpenContract }) {
           <>
             <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>
               {billNameOf(viewInv)}
-              {viewInv.sentAt && ` · sent ${formatDate(viewInv.sentAt.slice(0, 10))}`}
+              {viewInv.sentAt && ` · sent ${formatDate(sentDay(viewInv.sentAt))}`}
               {viewInv.paidAt && ` · paid ${formatDate(viewInv.paidAt.slice(0, 10))}`}
             </div>
             {viewInv.lastEmailedAt && (
@@ -585,7 +622,7 @@ function Invoices({ onOpenContract }) {
                 backgroundColor: T.input, border: `1px solid ${T.border}`, borderRadius: 10,
                 padding: 12, fontFamily: "monospace", fontSize: 12, color: T.text, whiteSpace: "pre-wrap",
               }}>
-                {viewInv.text || `Invoice ${viewInv.number} — ${money(viewInv.totalAmount)}`}
+                {viewInv.text || `Invoice ${viewInv.number}: ${money(viewInv.totalAmount)}`}
               </div>
             )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
@@ -613,18 +650,18 @@ function Invoices({ onOpenContract }) {
               {paidOf(payFor) > 0 && ` · ${money(paidOf(payFor))} already received`}
               {` · ${money(balanceOf(payFor))} open`}
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Amount received</div>
-            <input type="number" inputMode="decimal" value={payAmt} onChange={e => setPayAmt(e.target.value)}
+            <div id="invoice-payment-amount" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Amount received</div>
+            <input type="number" inputMode="decimal" aria-labelledby="invoice-payment-amount" value={payAmt} onChange={e => setPayAmt(e.target.value)}
               style={{ width: "100%", padding: "12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16, boxSizing: "border-box", marginBottom: 10 }} />
-            <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Date received</div>
-            <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
+            <div id="invoice-payment-date" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Date received</div>
+            <input type="date" aria-labelledby="invoice-payment-date" value={payDate} onChange={e => setPayDate(e.target.value)}
               style={{ width: "100%", padding: "12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16, boxSizing: "border-box", marginBottom: 10 }} />
-            <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Note (check #, remittance, what it covered)</div>
-            <input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="optional"
+            <div id="invoice-payment-note" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Note (check #, remittance, what it covered)</div>
+            <input aria-labelledby="invoice-payment-note" value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="optional"
               style={{ width: "100%", padding: "12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16, boxSizing: "border-box", marginBottom: 12 }} />
             {parseFloat(payAmt) > balanceOf(payFor) + 0.005 && (
               <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, marginBottom: 10 }}>
-                That's more than the open balance — double-check the amount.
+                That's more than the open balance. Double-check the amount.
               </div>
             )}
             <button onClick={savePayment} disabled={!(parseFloat(payAmt) > 0)} style={{
@@ -632,11 +669,11 @@ function Invoices({ onOpenContract }) {
               backgroundColor: parseFloat(payAmt) > 0 ? (T.success || "#22c55e") : T.border,
               color: "#fff", fontSize: 15, fontWeight: 800, cursor: parseFloat(payAmt) > 0 ? "pointer" : "default",
             }}>
-              {payFor && parseFloat(payAmt) >= balanceOf(payFor) - 0.005 ? "Record — settles the invoice" : "Record partial payment"}
+              {payFor && parseFloat(payAmt) >= balanceOf(payFor) - 0.005 ? "Record and settle the invoice" : "Record partial payment"}
             </button>
             <button onClick={() => {
               if (!payFor) return;
-              if (window.confirm(`Write off the remaining ${money(balanceOf(payFor))} on ${payFor.number}? It closes the invoice without counting as money received — won't count toward income.`)) {
+              if (window.confirm(`Write off the remaining ${money(balanceOf(payFor))} on ${payFor.number}? It closes the invoice without counting as money received, so it won't count toward income.`)) {
                 writeOffBalance(payFor);
                 setPayFor(null);
               }
@@ -682,7 +719,7 @@ function Invoices({ onOpenContract }) {
             ) },
             { key: "sentAt", label: "Sent", type: "date", width: "12%", render: inv => (
               <>
-                <div style={deskMain}>{inv.sentAt ? formatDate(inv.sentAt.slice(0, 10)) : "\u2014"}</div>
+                <div style={deskMain}>{inv.sentAt ? formatDate(sentDay(inv.sentAt)) : "\u2014"}</div>
                 {inv.lastEmailedAt && <div style={deskSub} title={lastEmailedNote(inv)}>emailed {formatDate(inv.lastEmailedAt)}</div>}
               </>
             ) },
@@ -762,7 +799,7 @@ function Invoices({ onOpenContract }) {
                     {billNameOf(inv)}
                   </div>
                   <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
-                    Sent {inv.sentAt ? formatDate(inv.sentAt.slice(0, 10)) : "—"}
+                    Sent {inv.sentAt ? formatDate(sentDay(inv.sentAt)) : "—"}
                     {inv.periodStart && ` · work ${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? "–" + formatDate(inv.periodEnd) : ""}`}
                     {isPaid && inv.paidAt && ` · paid ${formatDate(inv.paidAt.slice(0, 10))}`}
                     {writtenOff && ` · written off ${formatDate(inv.writeOffAt.slice(0, 10))}`}
@@ -814,9 +851,9 @@ function Invoices({ onOpenContract }) {
                   backgroundColor: T.shareGlow, color: T.share, fontSize: 12, fontWeight: 700, cursor: "pointer",
                   display: "inline-flex", alignItems: "center", gap: 5,
                 }}><SendIcon /> Resend</button>
-                <button onClick={(ev) => { ev.stopPropagation(); removeInvoice(inv); }} style={{
+                <button aria-label="Delete invoice" onClick={(ev) => { ev.stopPropagation(); removeInvoice(inv); }} style={{
                   padding: "8px 10px", borderRadius: 10, border: "none",
-                  backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex", alignItems: "center",
+                  backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", ...cardActionSize,
                 }}><TrashIcon /></button>
               </div>
             </div>

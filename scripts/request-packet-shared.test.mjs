@@ -67,7 +67,7 @@ ok("the real requests actually attach something (the parity is not two empties)"
 const asks = [
   "Copy of your current DEA", "every DEA", "DEA controlled substance registration", "CSR", "Board certificate", "ABMS", "AOA",
   "State license", "medical license", "copy of your Colorado license", "CA license", "MD license", "West Virginia license",
-  "all state licenses", "Diploma", "Residency certificate", "fellowship certificate", "MPLT COI", "COI", "Malpractice",
+  "all state licenses", "Diploma", "Residency certificate", "fellowship certificate", "Ridgeway COI", "COI", "Malpractice",
   "certificate of insurance", "liability", "claims history", "MMR dose #2", "Hep B", "varicella", "Tdap", "TB form", "PPD",
   "quantiferon", "chest x-ray", "flu", "covid", "drug screen", "urine", "titers", "immunizations", "vaccination record",
   "background check", "OIG", "SAM", "exclusion", "Photo ID", "government ID", "driver's license", "Passport", "headshot", "photo",
@@ -96,14 +96,14 @@ for (const a of asks) {
 const bodies = [
   "- DEA\n- CSR\nFrom: me\n- board certificate",
   "DEA and CSR please",
-  "Hi Dr. Whitney, can you send your DEA, CSR and board certificate?\n\nThanks,\nT",
+  "Hi Dr. Testa, can you send your DEA, CSR and board certificate?\n\nThanks,\nT",
   "Still missing:\n- Immunizations:\n   o MMR\n   o Varicella titer\n- OIG / SAM\n- BLS/ACLS",
   "CAUTION: external sender, do not click links.\n\n1. Copy of ID\n2. Passport\n\n> quoted\n> - DEA",
   "Confidentiality Notice: if you are not the intended recipient, do not copy. Please send documents.",
   "- Life support cards (BLS/ACLS)\n- Immunization records: MMR, Varicella, Hep B, Tdap\n- Colorado and North Dakota licenses\n- Copy of your DEA and CSR for the state of Colorado\n- Residency diploma\n- Livescan",
   "- Signed attestation form (attached)\n- W-9\n- Licenses - Colorado, North Dakota",
   // One-line bodies the rules cannot name, and a sign-off name under one.
-  "CAQH ID", "Tax ID", "DEA and CSR please\nTonya", "Hi Dr. Whitney,\nCAQH ID\nThanks",
+  "CAQH ID", "Tax ID", "DEA and CSR please\nTamsin", "Hi Dr. Testa,\nCAQH ID\nThanks",
   "", null, undefined,
 ];
 for (const b of bodies) eq(`parseAsks agrees on ${String(JSON.stringify(b)).slice(0, 50)}`, server.parseAsks(b, "Re: Fwd: docs"), client.parseAsks(b, "Re: Fwd: docs"));

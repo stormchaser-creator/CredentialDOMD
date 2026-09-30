@@ -1,5 +1,6 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
+import { adaptsToWidth, fitDeskColumns, DESK_STATUS_WIDTH } from "./deskTableFit";
 
 /**
  * Shared desk-width table. Screens whose records are line items render this
@@ -25,6 +26,13 @@ import { useApp } from "../../context/AppContext";
  *     render?(item)  cell content (default: String(item[key]))
  *     color?(item)   text color override (e.g. a status-colored Expires)
  *     width?         fixed column width (tableLayout is fixed)
+ *     minWidth?      px it can shrink to with its text wrapping (fitting)
+ *     priority?      present: left out when the table is narrow, lowest
+ *                    first (fitting, src/components/shared/deskTableFit.js)
+ *     outranksActions?
+ *                    before this optional column is left out, the actions
+ *                    cell goes compact (fitting)
+ *     wrap?          text wraps onto more lines instead of being cut short
  *     align?         "left" (default) | "right"
  *   }]
  *   items          the SAME record array the cards read
@@ -33,6 +41,9 @@ import { useApp } from "../../context/AppContext";
  *   actions?(item) trailing quick-actions cell content
  *   actionsWidth?  width of that cell (default 122, room for three icon
  *                  buttons; a fourth needs about 154)
+ *   compactActionsWidth?
+ *                  the width it may drop to when the table is narrow, its
+ *                  buttons wrapping onto two lines (fitting)
  *   onRowClick?(item)
  *
  * Grouping (all optional; without groupBy the table is one flat run):
@@ -62,13 +73,49 @@ import { useApp } from "../../context/AppContext";
  * real height, already divided by the active FONT_ZOOM, as
  * --desk-sticky-top on the zoomed content wrapper (a plain 56px inside a
  * zoomed subtree scales with the zoom and drifts off the bar at L/XL/XXL).
+ *
+ * Fitting: when a column carries a minWidth or a priority, the table
+ * measures the CSS pixels it has (its own, inside the zoom) and shows the
+ * richest set of columns that fits, per deskTableFit.js, so a column it
+ * keeps is never squeezed until its text is cut. A table whose columns carry
+ * neither keeps exactly the layout described above.
  */
 export default function DeskTable({
-  columns, items, defaultSort, status, actions, onRowClick, actionsWidth = 122,
+  columns, items, defaultSort, status, actions, onRowClick, actionsWidth = 122, compactActionsWidth,
   groupBy, groupDir = "asc", groupKeys, subtotal, groupHeader,
 }) {
   const { theme: T } = useApp();
   const [sort, setSort] = useState(defaultSort || null);
+  const adaptive = adaptsToWidth(columns);
+  const boxRef = useRef(null);
+  const unitRef = useRef(null);
+  const [boxWidth, setBoxWidth] = useState(null);
+  useLayoutEffect(() => {
+    const box = boxRef.current, unit = unitRef.current;
+    if (!adaptive || !box || !unit || typeof ResizeObserver === "undefined") return undefined;
+    // The box against a 100px probe inside it: both come back in the same
+    // units whatever the browser does with the text-size zoom, so the ratio
+    // is the table's own CSS pixels, the units its column widths are in.
+    // The 2px are the box's border.
+    const measure = () => {
+      const per100 = unit.getBoundingClientRect().width;
+      if (!(per100 > 0)) return;
+      const width = Math.floor((box.getBoundingClientRect().width / per100) * 100) - 2;
+      setBoxWidth((was) => (was === width ? was : width));
+    };
+    // Measured before the first paint too, so the unfitted table never shows.
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [adaptive]);
+  const hasStatus = !!status;
+  const fit = useMemo(
+    () => fitDeskColumns(columns, adaptive ? boxWidth : null, { status: hasStatus, actionsWidth, compactActionsWidth }),
+    [columns, adaptive, boxWidth, hasStatus, actionsWidth, compactActionsWidth],
+  );
+  const shown = fit.columns;
+  const actionsCellWidth = fit.actionsWidth;
 
   const sorted = useMemo(() => {
     if (!sort) return items;
@@ -140,6 +187,8 @@ export default function DeskTable({
     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
     verticalAlign: "middle",
   });
+  // A wrapping column shows all of its text on more lines, never "QA…".
+  const wrapStyle = (col) => (col.wrap ? { whiteSpace: "normal", overflowWrap: "anywhere", textOverflow: "clip" } : null);
   const numStyle = (col) => (col.type === "number" || col.type === "date" ? { fontVariantNumeric: "tabular-nums" } : null);
 
   const renderSubtotal = (group, idx) => {
@@ -148,8 +197,8 @@ export default function DeskTable({
     if (!sub) return null;
     const cells = sub.cells || {};
     // The label spans every leading column that carries no subtotal cell.
-    let firstCell = columns.findIndex((c) => cells[c.key] !== undefined);
-    if (firstCell < 0) firstCell = columns.length;
+    let firstCell = shown.findIndex((c) => cells[c.key] !== undefined);
+    if (firstCell < 0) firstCell = shown.length;
     const base = {
       ...tdStyle(idx), backgroundColor: T.input, fontWeight: 800,
     };
@@ -159,7 +208,7 @@ export default function DeskTable({
         {firstCell > 0 && (
           <td colSpan={firstCell} style={{ ...base, fontWeight: 700 }}>{sub.label}</td>
         )}
-        {columns.slice(firstCell).map((col) => (
+        {shown.slice(firstCell).map((col) => (
           <td
             key={col.key}
             style={{ ...base, textAlign: col.align || "left", ...numStyle(col) }}
@@ -176,7 +225,7 @@ export default function DeskTable({
     if (!groupHeader || group.key == null || !group.items.length) return null;
     const content = groupHeader(group.key, group.items);
     if (content == null) return null;
-    const span = columns.length + (status ? 1 : 0) + (actions ? 1 : 0);
+    const span = shown.length + (status ? 1 : 0) + (actions ? 1 : 0);
     return (
       <tr key={`header:${group.key}`} className="cmd-desk-group">
         <td colSpan={span} style={{
@@ -189,15 +238,17 @@ export default function DeskTable({
 
   let rowIdx = 0;
   return (
-    <div style={{
+    <div ref={boxRef} style={{
       backgroundColor: T.card, border: `1px solid ${T.border}`,
       borderRadius: 14, boxShadow: T.shadow1, overflowX: "clip",
+      ...(adaptive ? { position: "relative" } : null),
     }}>
+      {adaptive && <div ref={unitRef} aria-hidden="true" style={{ position: "absolute", top: 0, left: 0, width: 100, height: 0, visibility: "hidden", pointerEvents: "none" }} />}
       <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, tableLayout: "fixed" }}>
         <thead>
           <tr>
-            {status && <th style={{ ...thStyle, width: 40, cursor: "default", borderTopLeftRadius: 14 }} aria-label="Status" />}
-            {columns.map((col, ci) => (
+            {status && <th style={{ ...thStyle, width: DESK_STATUS_WIDTH, cursor: "default", borderTopLeftRadius: 14 }} aria-label="Status" />}
+            {shown.map((col, ci) => (
               <th
                 key={col.key}
                 onClick={() => toggleSort(col)}
@@ -206,7 +257,7 @@ export default function DeskTable({
                   width: col.width,
                   textAlign: col.align || "left",
                   ...(ci === 0 && !status ? { borderTopLeftRadius: 14 } : null),
-                  ...(ci === columns.length - 1 && !actions ? { borderTopRightRadius: 14 } : null),
+                  ...(ci === shown.length - 1 && !actions ? { borderTopRightRadius: 14 } : null),
                 }}
               >
                 {col.label}
@@ -217,7 +268,7 @@ export default function DeskTable({
                 )}
               </th>
             ))}
-            {actions && <th style={{ ...thStyle, width: actionsWidth, textAlign: "right", cursor: "default", borderTopRightRadius: 14 }}>Actions</th>}
+            {actions && <th style={{ ...thStyle, width: actionsCellWidth, textAlign: "right", cursor: "default", borderTopRightRadius: 14 }}>Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -234,7 +285,7 @@ export default function DeskTable({
                     style={{ cursor: onRowClick ? "pointer" : "default" }}
                   >
                     {status && <td style={{ ...tdStyle(idx), overflow: "visible" }}>{status(item)}</td>}
-                    {columns.map((col) => (
+                    {shown.map((col) => (
                       <td
                         key={col.key}
                         style={{
@@ -242,6 +293,7 @@ export default function DeskTable({
                           textAlign: col.align || "left",
                           ...(col.color ? { color: col.color(item) } : null),
                           ...numStyle(col),
+                          ...wrapStyle(col),
                         }}
                       >
                         {col.render ? col.render(item) : (item[col.key] != null && item[col.key] !== "" ? String(item[col.key]) : "—")}

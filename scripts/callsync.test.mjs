@@ -60,7 +60,7 @@ const vevent = (id, date, hosp, ct, role, phone = "(909) 555-0100") => [
 ];
 const calendar = (events) => [
   "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ANMG CallSync//On-Call Schedule//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
-  "X-WR-CALNAME:On-Call Schedule \u2014 Eric Whitney",
+  "X-WR-CALNAME:On-Call Schedule \u2014 Rowan Testa",
   "BEGIN:VTIMEZONE", "TZID:America/Los_Angeles", "END:VTIMEZONE",
   ...events.flat(), "END:VCALENDAR",
 ].map(fold).join("\r\n") + "\r\n";
@@ -102,32 +102,32 @@ eq("duplicate events collapse to one shift", shiftsFromICS(calendar([vevent("x",
 // ─── Contract detection + pricing ─────────────────────────────
 const ANMG = {
   id: "c-anmg", facility: "Arrowhead Neurosurgical Medical Group", shortName: "ANMG", payModel: "daily",
-  dayRate: 2060.09, callStipend: 0,
+  dayRate: 1875.4, callStipend: 0,
   callRateGrid: [
     { hospital: "Arrowhead Regional Medical Center (ARMC)", primary: 1250, backup: 500 },
     { hospital: "Riverside Community Hospital", primary: 1500, backup: 600 },
     { hospital: "EMC", primary: 2500, backup: 1000 },
   ],
 };
-const PENROSE = { id: "c-pen", facility: "Penrose Hospital", callStipend: 3000 };
+const JUNIPER = { id: "c-jun", facility: "Juniper Hospital", callStipend: 3000 };
 const OLD_ANMG = { ...ANMG, id: "c-anmg-old", customFields: { archivedAt: "2026-01-01T00:00:00Z" } };
-eq("ANMG found by short name", detectContract([PENROSE, ANMG])?.id, "c-anmg");
-eq("ANMG found by facility", detectContract([PENROSE, { id: "z", facility: "Arrowhead Neurosurgical" }])?.id, "z");
+eq("ANMG found by short name", detectContract([JUNIPER, ANMG])?.id, "c-anmg");
+eq("ANMG found by facility", detectContract([JUNIPER, { id: "z", facility: "Arrowhead Neurosurgical" }])?.id, "z");
 eq("active ANMG beats archived", detectContract([OLD_ANMG, ANMG])?.id, "c-anmg");
 eq("archived ANMG when it is the only one", detectContract([OLD_ANMG])?.id, "c-anmg-old");
-eq("no ANMG, null", detectContract([PENROSE]), null);
+eq("no ANMG, null", detectContract([JUNIPER]), null);
 eq("no contracts, null", detectContract(undefined), null);
 
 eq("grid row by parenthesized abbreviation", gridHospitalFor(ANMG, "ARMC"), "Arrowhead Regional Medical Center (ARMC)");
 eq("grid row by initials", gridHospitalFor(ANMG, "RCH"), "Riverside Community Hospital");
 eq("grid row by exact string", gridHospitalFor(ANMG, "emc"), "EMC");
 eq("unknown hospital, null", gridHospitalFor(ANMG, "RUHS"), null);
-eq("no grid, null", gridHospitalFor(PENROSE, "ARMC"), null);
+eq("no grid, null", gridHospitalFor(JUNIPER, "ARMC"), null);
 eq("primary priced from the grid", expectedForShift(ANMG, shifts[1]), 1250);
 eq("backup priced from the grid", expectedForShift(ANMG, shifts[2]), 600);
 eq("unknown hospital falls back to the stipend", expectedForShift({ ...ANMG, callStipend: 800 }, { hospital: "RUHS", role: "primary" }), 800);
 eq("nothing known prices at zero", expectedForShift(ANMG, { hospital: "RUHS", role: "primary" }), 0);
-eq("stipend contract prices from the stipend", expectedForShift(PENROSE, shifts[1]), 3000);
+eq("stipend contract prices from the stipend", expectedForShift(JUNIPER, shifts[1]), 3000);
 
 // ─── Planning ─────────────────────────────────────────────────
 let nextId = 0;
@@ -139,7 +139,7 @@ eq("feed window, pulled in by a couple of days", WINDOW, { start: "2026-06-03", 
 const priced = (shift) => expectedForShift(ANMG, shift);
 const base = { contractId: ANMG.id, expectedFor: priced, dayRate: ANMG.dayRate, today: TODAY, window: WINDOW, makeId };
 
-const hand = { id: "hand-1", date: "2026-09-05", contractId: ANMG.id, kind: "day", expected: 2060 };
+const hand = { id: "hand-1", date: "2026-09-05", contractId: ANMG.id, kind: "day", expected: 1875 };
 const vacation = { id: "vac-1", date: "2026-09-12", kind: "vacation", note: "family" };
 
 const first = planSync({ ...base, shifts, scheduleDays: [hand, vacation] });
@@ -213,15 +213,15 @@ ok("keyless synced row untouched", !eleventh.removals.some(e => e.id === "legacy
 // rate plus the grid call amount, not call alone.
 const addedFuture = first.adds.find(e => e.sourceKey === "2026-09-12|armc|nsx|primary");
 eq("nothing logged for the date: day+call, the day rate plus the grid", addedFuture, {
-  id: addedFuture.id, date: "2026-09-12", contractId: "c-anmg", kind: "day+call", expected: 3310,
+  id: addedFuture.id, date: "2026-09-12", contractId: "c-anmg", kind: "day+call", expected: 3125,
   note: "ARMC NSx primary call (CallSync)", source: CALLSYNC_SOURCE, sourceKey: "2026-09-12|armc|nsx|primary",
 });
 
 // A hand-made day+call already covers the date (the physician logged the
 // whole day themselves): a sync must add nothing there, and a stale synced
 // entry from before they logged it by hand comes off — the double-count
-// this ticket reported (a $3060 hand entry plus a redundant synced call).
-const handDayCall = { id: "hdc-1", date: "2026-09-05", contractId: ANMG.id, kind: "day+call", expected: 3310 };
+// this ticket reported (a day+call hand entry plus a redundant synced call).
+const handDayCall = { id: "hdc-1", date: "2026-09-05", contractId: ANMG.id, kind: "day+call", expected: 3125 };
 const staleSynced = { id: "stale-1", date: "2026-09-05", contractId: ANMG.id, kind: "call", expected: 1250, source: CALLSYNC_SOURCE, sourceKey: "2026-09-05|armc|nsx|primary" };
 const twelfth = planSync({ ...base, shifts, scheduleDays: [handDayCall, staleSynced] });
 eq("hand day+call fully covers both shifts that date: nothing added there", twelfth.adds.map(e => e.sourceKey).sort(), [
@@ -230,22 +230,22 @@ eq("hand day+call fully covers both shifts that date: nothing added there", twel
 eq("stale synced entry under a now hand-covered date is removed", twelfth.removals.map(e => e.id), ["stale-1"]);
 
 // The physician already logged the call by hand (the exact-duplicate case
-// this ticket reported, a $1000 hand call next to a $1000 synced call): the
+// this ticket reported, a hand call next to the same synced call): the
 // sync must not add a second call, only the day that is still missing.
 const handCallOnly = { id: "hc-1", date: "2026-09-05", contractId: ANMG.id, kind: "call", expected: 1250 };
 const thirteenth = planSync({ ...base, shifts: [shifts[1]], scheduleDays: [handCallOnly] });
 const dayAdded = thirteenth.adds.find(e => e.sourceKey === "2026-09-05|armc|nsx|primary");
 eq("hand already has the call: sync fills only the missing day", dayAdded, {
-  id: dayAdded.id, date: "2026-09-05", contractId: "c-anmg", kind: "day", expected: 2060,
+  id: dayAdded.id, date: "2026-09-05", contractId: "c-anmg", kind: "day", expected: 1875,
   note: "ARMC NSx primary call (CallSync)", source: CALLSYNC_SOURCE, sourceKey: "2026-09-05|armc|nsx|primary",
 });
 
 // A stipend contract has no day rate to add; a hand-made call already
 // covers the date, so the sync adds nothing at all.
-const penroseHandCall = { id: "ph-1", date: "2026-09-05", contractId: PENROSE.id, kind: "call", expected: 3000 };
+const juniperHandCall = { id: "ph-1", date: "2026-09-05", contractId: JUNIPER.id, kind: "call", expected: 3000 };
 const fourteenth = planSync({
-  contractId: PENROSE.id, expectedFor: (s) => expectedForShift(PENROSE, s), dayRate: 0,
-  shifts: [shifts[1]], scheduleDays: [penroseHandCall], today: TODAY, window: WINDOW, makeId,
+  contractId: JUNIPER.id, expectedFor: (s) => expectedForShift(JUNIPER, s), dayRate: 0,
+  shifts: [shifts[1]], scheduleDays: [juniperHandCall], today: TODAY, window: WINDOW, makeId,
 });
 eq("stipend contract, hand already logged the call: nothing added", fourteenth.adds.length, 0);
 

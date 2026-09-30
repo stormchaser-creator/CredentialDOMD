@@ -255,10 +255,16 @@ optional.
 
 Things to decide or watch:
 
-* **Retention.** Nothing deletes old ZIPs. Twelve months of a 600 MB account is
-  7 GB of storage. Add a monthly cleanup (drop objects and rows past, say, 6
-  months) when the first account gets large, or leave it and watch the storage
-  bill.
+* **Retention.** The app keeps the 3 newest monthly periods per user. Cron job
+  `prune-backups` (1st, 13:30 UTC) runs `public.prune_old_backups()`, which
+  fires the `prune-backups` edge function with the vault hook secret. That
+  function removes the older ZIPs through the Storage API and deletes a
+  `backups` row only once its file is gone (a failed removal keeps the row for
+  next month). Never delete backup files with SQL on `storage.objects`: that
+  removes the metadata row and leaves the bytes in the bucket, billed and
+  invisible (QA OPS-001, migration `20260930010000`). Deploy
+  `prune-backups --no-verify-jwt` before applying that migration; check it
+  with body `{"dry_run": true}` and the hook secret.
 * **Wall clock.** A very large account may not finish inside one invocation.
   Lower `BACKUP_PART_MAX_BYTES` so each part is quicker, or raise the function
   timeout on the project.

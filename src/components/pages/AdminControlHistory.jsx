@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { adminButtonStyle } from '../shared/adminButton';
 
 export default function AdminControlHistory({ T }) {
   const [rows, setRows] = useState([]);
@@ -27,7 +28,7 @@ export default function AdminControlHistory({ T }) {
   return <><section aria-label="Administrative control history" style={{ color: T.text }}>
     <h3>Control history</h3>
     <p style={{ fontSize: 13, color: T.textMuted }}>Recorded account and invitation access changes from the new controls. Existing lifetime and billing audit records remain in their own ledgers.</p>
-    <button disabled={loading} onClick={() => { setPage(0); setRevision(n => n + 1); }}>Refresh history</button>
+    <button disabled={loading} style={adminButtonStyle(T, { disabled: loading })} onClick={() => { setPage(0); setRevision(n => n + 1); }}>Refresh history</button>
     {loading ? <p role="status">Loading history…</p> : error ? <p role="alert">Control history is unavailable. {error}</p> : <>
       {!rows.length && <p>No changes recorded on this page.</p>}
       {rows.map(row => <article key={row.id} style={{ marginTop: 12, padding: 12, border: `1px solid ${T.border}`, borderRadius: 8, background: T.card, overflowWrap: 'anywhere' }}>
@@ -42,8 +43,8 @@ export default function AdminControlHistory({ T }) {
         </details>
       </article>)}
       <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-        <button disabled={page === 0} onClick={() => setPage(n => n - 1)}>Previous</button>
-        <span>Page {page + 1}</span><button disabled={!more} onClick={() => setPage(n => n + 1)}>Next</button>
+        <button disabled={page === 0} style={adminButtonStyle(T, { disabled: page === 0 })} onClick={() => setPage(n => n - 1)}>Previous</button>
+        <span>Page {page + 1}</span><button disabled={!more} style={adminButtonStyle(T, { disabled: !more })} onClick={() => setPage(n => n + 1)}>Next</button>
       </div>
     </>}
   </section>
@@ -75,7 +76,7 @@ function SupportViewHistory({ T }) {
   return <section aria-label="Support views" style={{ color: T.text, marginTop: 24 }}>
     <h3>Support views</h3>
     <p style={{ fontSize: 13, color: T.textMuted }}>Read-only views of a member&apos;s account that the member allowed, and each file opened. Each member sees their own rows in Settings.</p>
-    <button onClick={() => setRevision(n => n + 1)}>Refresh support views</button>
+    <button style={adminButtonStyle(T)} onClick={() => setRevision(n => n + 1)}>Refresh support views</button>
     {error ? <p role="alert">Support views are unavailable. {error}</p> : rows === null ? <p role="status">Loading support views…</p> : <>
       {!rows.length && <p>No support views recorded.</p>}
       {rows.map(row => <article key={row.id} style={{ marginTop: 12, padding: 12, border: `1px solid ${T.border}`, borderRadius: 8, background: T.card, overflowWrap: 'anywhere' }}>

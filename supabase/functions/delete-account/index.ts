@@ -27,14 +27,19 @@
  *           admin_message_replies, document_requests, inbound_emails,
  *           ai_usage, client_errors (by profile id and by Clerk id),
  *           user_events, backups, deleted_items, forwarding_addresses and
- *           forwarding_address_sends
+ *           forwarding_address_sends, and invoice_number_reservations
+ *           reserved more than INVOICE_NUMBER_KEEP_DAYS ago (the recent
+ *           numbers stay, so the reopened account is never issued a number
+ *           a billing office already holds; lib.ts says why)
  *   objects documents/<clerkId>/, documents/tickets/<id>/ for each ticket,
  *           backups/<clerkId>/ and backups/<profileId>/, plus any object a
  *           backups row still points at
  *   profile reduced to a tombstone: every synced column null, deleted_at set,
  *           cancelled_at and data_deletion_date cleared (the schedule is
  *           consumed). id and auth_user_id stay so Clerk's user.deleted
- *           webhook and the foreign keys keep working.
+ *           webhook and the foreign keys keep working. The tombstone, the
+ *           account tombstone and the release of every mailbox commit
+ *           together, in one transaction (close_account_for_data_deletion).
  *
  * Idempotent: a second run finds nothing, tombstones again, and returns the
  * same shape. Every run, dry or real, writes one account_deletions row with
@@ -42,7 +47,16 @@
  *
  * Response 200: { ok, dry_run, profile_id, requested_by, already_deleted,
  *                 tables: { <table>: n }, storage: { "<bucket>/<prefix>": n },
- *                 tombstoned }
+ *                 tombstoned, deleted_at }
+ *   deleted_at is the profile's new deleted_at (null on a dry run). The
+ *   device that asked for the deletion records it as the wipe it has already
+ *   purged for, so its next load does not purge what it writes after this.
+ *
+ * Afterwards: the account is empty and stays OPEN (owner decision
+ * 2026-09-29). It reads as closed until its owner signs in again, when
+ * initialize_clerk_profile reopens it (migration 20260930020000), moves this
+ * stamp to data_deleted_at and hands it to every device of that member, each
+ * of which purges its local copy once.
  *   Every ticket folder rolls up under one "documents/tickets/" key; the
  *   ticket count itself is tables.support_tickets.
  *
@@ -68,6 +82,7 @@ import {
   chunk,
   isMissingTableError,
   isSafePrefix,
+  keepRecentBefore,
   storagePrefixes,
   tombstonePatch,
   type UserTable,
@@ -89,19 +104,25 @@ const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 interface ProfileRow { id: string; auth_user_id: string | null; deleted_at: string | null }
-interface Footprint { tables: Record<string, number>; storage: Record<string, number>; tombstoned: boolean }
+interface Footprint { tables: Record<string, number>; storage: Record<string, number>; tombstoned: boolean; deletedAt: string | null }
 
 // optional: a table that may not exist yet (USER_TABLES says which). Only a
 // missing-relation error is skipped; anything else still stops the deletion.
-async function countRows(db: SupabaseClient, table: string, column: string, value: string, optional = false): Promise<number> {
-  const { count, error } = await db.from(table).select("*", { count: "exact", head: true }).eq(column, value);
+// olderThan: a keepRecent table's cut (lib.ts keepRecentBefore); only rows
+// older than it are counted and deleted.
+type OlderThan = { column: string; before: string } | null;
+
+async function countRows(db: SupabaseClient, table: string, column: string, value: string, optional = false, olderThan: OlderThan = null): Promise<number> {
+  const rows = db.from(table).select("*", { count: "exact", head: true }).eq(column, value);
+  const { count, error } = await (olderThan ? rows.lt(olderThan.column, olderThan.before) : rows);
   if (error && optional && isMissingTableError(error)) { console.warn(`delete-account: ${table} does not exist yet; nothing to count`); return 0; }
   if (error) throw new Error(`could not count ${table}: ${error.message}`);
   return count ?? 0;
 }
 
-async function deleteRows(db: SupabaseClient, table: string, column: string, value: string, optional = false): Promise<void> {
-  const { error } = await db.from(table).delete().eq(column, value);
+async function deleteRows(db: SupabaseClient, table: string, column: string, value: string, optional = false, olderThan: OlderThan = null): Promise<void> {
+  const rows = db.from(table).delete().eq(column, value);
+  const { error } = await (olderThan ? rows.lt(olderThan.column, olderThan.before) : rows);
   if (error && optional && isMissingTableError(error)) { console.warn(`delete-account: ${table} does not exist yet; nothing to delete`); return; }
   if (error) throw new Error(`could not delete from ${table}: ${error.message}`);
 }
@@ -180,10 +201,13 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
   const ticketIds = await listColumn(db, "support_tickets", "id", "user_id", userId);
 
   // 1. Count everything first, in both modes: the counts are the audit row.
+  //    A keepRecent table (the invoice number ledger) is counted and deleted
+  //    only below its cut, taken once so both passes use the same instant.
+  const startedMs = Date.now();
   const tables: Record<string, number> = {};
   const toCount: UserTable[] = [...COLLECTION_TABLES.map((table) => ({ table, column: "user_id" })), ...USER_TABLES];
   for (const batch of chunk(toCount, COUNT_BATCH)) {
-    const counts = await Promise.all(batch.map(({ table, column, optional }) => countRows(db, table, column, userId, optional === true)));
+    const counts = await Promise.all(batch.map((t) => countRows(db, t.table, t.column, userId, t.optional === true, keepRecentBefore(t, startedMs))));
     batch.forEach(({ table }, i) => { tables[table] = counts[i]; });
   }
   tables.support_messages += await ticketMessages(db, ticketIds, userId, false);
@@ -213,7 +237,7 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
   }
   if (strays) storage[`${BACKUPS_BUCKET}/(rows)`] = strays;
 
-  if (dryRun) return { tables, storage, tombstoned: false };
+  if (dryRun) return { tables, storage, tombstoned: false, deletedAt: null };
 
   // 2. Objects before rows: the rows carry the ticket ids and paths that
   //    name the objects, and a failure here leaves both for the retry.
@@ -223,44 +247,43 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
   //    tickets), then everything keyed by the profile id.
   await ticketMessages(db, ticketIds, userId, true);
   for (const t of COLLECTION_TABLES) await deleteRows(db, t, "user_id", userId);
-  for (const { table, column, optional } of USER_TABLES) await deleteRows(db, table, column, userId, optional === true);
+  for (const t of USER_TABLES) await deleteRows(db, t.table, t.column, userId, t.optional === true, keepRecentBefore(t, startedMs));
   for (const subject of ownedSubjects) await unresolvedErrors(db, subject, userId, true);
 
-  // 4. Every mailbox this account routed is closed TERMINALLY, before the
-  //    profile is tombstoned, in ONE transaction.
+  // 4. The account closes in ONE transaction (close_account_for_data_deletion,
+  //    migration 20260930020000): an account tombstone is written, every
+  //    mailbox this account routed is released with its forwarding row, and
+  //    the profile becomes a tombstone with deleted_at.
   //
-  //    Terminally, not merely released: a provider event for this account can
+  //    The ACCOUNT is closed as a fact: a provider event for this account can
   //    already be in flight, and an ordering rule can only refuse an event
-  //    that LOSES a comparison. Deletion is recorded as a fact so no event,
-  //    however new, reopens the address.
+  //    that LOSES a comparison, so until the owner signs in again every
+  //    mailbox writer answers terminal_account for it, however new the event.
+  //    The ADDRESSES are released, not closed terminally: a terminal address
+  //    is never claimable again, and the owner comes back to this account
+  //    (reopen_account_after_data_deletion), so their own Clerk primary and a
+  //    re-confirmed forwarding address must route to it again. Every claim
+  //    the account holds, of either kind, is released under the profile lock;
+  //    the first version walked the claims one at a time and missed a claim
+  //    created between the read and the writes, and CONFIRMED-only claims.
   //
-  //    One call, and that is the repair. The first version walked the claims
-  //    this account held and revoked them one at a time, which meant a claim
-  //    created between the read and the writes survived, and a CONFIRMED-only
-  //    claim was missed entirely by the webhook's version of the same walk.
-  //    apply_account_mailbox closes every claim the account holds, of either
-  //    kind, under the profile lock.
-  //
-  //    Runs BEFORE the tombstone so a failure leaves the account intact and
-  //    the run retryable, rather than half-erased with live routing.
-  {
-    const { data, error: mErr } = await db.rpc("apply_account_mailbox", {
-      p_profile: userId, p_event_ms: Date.now(), p_address: null, p_terminal: true,
-    });
-    if (mErr) throw new Error(`could not close the account's mailboxes: ${mErr.message}`);
-    const outcome = (data as { outcome?: string } | null)?.outcome;
-    if (outcome !== "terminal") {
-      throw new Error(`mailboxes did not close for deletion (${outcome}); refusing to tombstone with live routing`);
-    }
-  }
+  //    One transaction, not two calls. The mailbox close commits an account
+  //    tombstone; when the profile update after it failed as a separate call
+  //    (a database error, this function killed at its wall clock), the
+  //    tombstone stood without deleted_at, which reads as a provider closure,
+  //    and the member could never sign in again. Now a failure in either
+  //    rolls both back: the account stays open with its routing as it was,
+  //    and the run is retryable (the member presses Delete again; the daily
+  //    job retries a scheduled one). The mailbox clock is the deletion
+  //    stamp's own instant, so the wipe's tombstone is never later than it.
+  const eventMs = Date.now();
+  const { data: closed, error } = await db.rpc("close_account_for_data_deletion", {
+    p_profile: userId, p_event_ms: eventMs, p_patch: tombstonePatch(new Date(eventMs).toISOString()),
+  });
+  if (error) throw new Error(`could not close the account: ${error.message}`);
+  if (typeof closed !== "string" || !closed) throw new Error("the account closed without a deletion stamp");
 
-  // 5. The profile becomes a tombstone. The service-role JWT passes the
-  //    profiles_lock_identity trigger for email; auth_user_id is immutable.
-  const now = new Date().toISOString();
-  const { error } = await db.from("profiles").update(tombstonePatch(now)).eq("id", userId);
-  if (error) throw new Error(`could not tombstone the profile: ${error.message}`);
-
-  return { tables, storage, tombstoned: true };
+  return { tables, storage, tombstoned: true, deletedAt: closed };
 }
 
 serve(async (req) => {
@@ -318,6 +341,7 @@ serve(async (req) => {
     return json(200, {
       ok: true, dry_run: dryRun, profile_id: row.id, requested_by: requestedBy,
       already_deleted: alreadyDeleted, tables: out.tables, storage: out.storage, tombstoned: out.tombstoned,
+      deleted_at: out.deletedAt,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

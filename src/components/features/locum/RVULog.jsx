@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect, memo } from "react";
+import { cardActionSize } from "../../shared/actionButton";
+import { dictationErrorText } from "../../../utils/dictationErrors";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import EmptyState from "../../shared/EmptyState";
@@ -12,12 +14,34 @@ import { CPT_DESCS } from "../../../constants/cptDescs";
 import { CASE_CATEGORY_GROUPS } from "../../../constants/credentialTypes";
 import { categoryForCase } from "../../../utils/caseCategory";
 import { CASE_CATEGORY_HINTS } from "../../../constants/credentialTypes";
+import { identifierReason } from "../../../utils/identifierGate";
 
 const localDate = (d) => {
   const x = new Date(d);
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
 };
 const rvuOf = (enc) => (enc.codes || []).reduce((s, c) => s + (c.wRVU || 0) * (c.units || 1), 0);
+// Surgery-section CPTs (1xxxx-6xxxx): the codes that make a case log.
+const surgicalCodes = (codes) => (codes || []).filter(({ code }) => {
+  const n = parseInt(code, 10);
+  return Number.isFinite(n) && n >= 10000 && n < 70000;
+});
+// A case log's codes as save() writes them: "61312-80 x2".
+const caseCodeText = (codes) => (codes || []).map(c => {
+  const base = c.modifier ? `${c.code}-${c.modifier}` : c.code;
+  return (c.units || 1) > 1 ? `${base} x${c.units}` : base;
+}).join(", ");
+const caseRvu = (codes) => Math.round((codes || []).reduce((s2, c) => s2 + (c.wRVU || 0) * (c.units || 1), 0) * 100) / 100;
+// The codes and title an RVU entry writes on its case log. `fromAll`: the case
+// log came from "Add to case log" (no operative code) and lists every code.
+const caseLogCodes = (list, fromAll) => (fromAll ? list.map(c => (c.modifier ? `${c.code}-${c.modifier}` : c.code)).join(", ") : caseCodeText(list));
+const caseLogTitle = (list) => (list.length ? list[0].desc || `CPT ${list[0].code}` : "");
+// No patient identifiers leave the device: a description that carries one is
+// neither sent to the AI coder nor saved (encounters.spoken_text syncs).
+const identifierRefusal = (verb, text, again) => {
+  const why = identifierReason("", text || "");
+  return why ? `${verb}: the description contains ${why}. CredentialDOMD doesn't keep patient identifiers; remove it and ${again}.` : "";
+};
 // Assistant-at-surgery modifiers — appended by the physician, not the AI coder
 // (billing decides which applies; the app just needs to carry it on the code).
 const ASSIST_MODIFIERS = [
@@ -82,6 +106,8 @@ function RVULog() {
     return !!(c && !coversDate(c, date));
   }, [contracts, contractId, date]);
   const [saveNote, setSaveNote] = useState(null); // what the last save did
+  const [saveErr, setSaveErr] = useState(null);   // why the last save was refused
+  const [encErr, setEncErr] = useState(null);     // why an encounter edit was refused
   const [viewEnc, setViewEnc] = useState(null);   // encounter opened for detail/edit
   // The category the surgeon picks for an operative case before it lands in
   // the career case log — left blank ("Other") silently mis-tagged real
@@ -100,6 +126,9 @@ function RVULog() {
   const [encDraft, setEncDraft] = useState(null); // its editable copy
   const [encQ, setEncQ] = useState("");           // code search inside the modal
   const [encResults, setEncResults] = useState([]);
+  // Opening or closing an encounter never carries the last one's refusal.
+  const openEnc = (e) => { setEncErr(null); setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); setEncQ(""); setEncResults([]); };
+  const closeEnc = () => { setEncErr(null); setViewEnc(null); setEncDraft(null); };
   const [manualQ, setManualQ] = useState("");
   const [manualResults, setManualResults] = useState([]);
   const recRef = useRef(null);
@@ -111,7 +140,7 @@ function RVULog() {
   const toggleMic = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setErr("This browser doesn't expose the microphone to apps — use the mic key on your keyboard instead.");
+      setErr("This browser doesn't expose the microphone to apps. Use the mic key on your keyboard instead.");
       return;
     }
     if (listening) {
@@ -133,7 +162,8 @@ function RVULog() {
     rec.onend = () => setListening(false);
     rec.onerror = (ev) => {
       setListening(false);
-      if (ev.error === "not-allowed") setErr("Microphone permission denied — allow it in Settings, or use the keyboard mic.");
+      const m = dictationErrorText(ev.error);
+      if (m) setErr(m);
     };
     recRef.current = rec;
     setErr(null);
@@ -143,6 +173,8 @@ function RVULog() {
 
   const runCoder = useCallback(async () => {
     setErr(null);
+    const refused = identifierRefusal("Not sent", text, "try again");
+    if (refused) { setErr(refused); return; }
     setCoding(true);
     try {
       // The whole settings object, not just the Gemini key: the coder reads
@@ -185,6 +217,11 @@ function RVULog() {
 
   const save = useCallback(() => {
     if (!review?.items?.length) return;
+    // Checked again here: the text can change after Code it, and codes added
+    // by hand never went through the coder.
+    const refused = identifierRefusal("Not saved", text, "save again");
+    setSaveErr(refused || null);
+    if (refused) return;
     const encId = generateId();
     // A refused save (membership being re-checked) keeps the dictation and
     // the reviewed codes on screen to save again; addItem has said why.
@@ -201,10 +238,7 @@ function RVULog() {
     // Surgery-section CPTs (1xxxx-6xxxx) are cases, not rounding — they land
     // in the career case log automatically, missing role/category, and the
     // home dashboard nags until the surgeon completes them.
-    const surgical = review.items.filter(({ code }) => {
-      const n = parseInt(code, 10);
-      return Number.isFinite(n) && n >= 10000 && n < 70000;
-    });
+    const surgical = surgicalCodes(review.items);
     let caseLogged = false;
     if (surgical.length) {
       const wRvu = surgical.reduce((s2, c) => s2 + (c.wRVU || 0) * (c.units || 1), 0);
@@ -217,10 +251,7 @@ function RVULog() {
         date,
         title: surgical[0].desc || `CPT ${surgical[0].code}`,
         category: caseCategory || categoryForCase(surgical, text) || "Other",
-        cptCodes: surgical.map(c => {
-          const base = c.modifier ? `${c.code}-${c.modifier}` : c.code;
-          return (c.units || 1) > 1 ? `${base} x${c.units}` : base;
-        }).join(", "),
+        cptCodes: caseCodeText(surgical),
         wRvu: Math.round(wRvu * 100) / 100,
         facility: contracts.find(c2 => c2.id === contractId)?.facility || "",
         source: "RVU log",
@@ -354,6 +385,7 @@ function RVULog() {
       {/* Capture */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, marginBottom: 14, boxShadow: T.shadow1 }}>
         <textarea
+          aria-label="Describe the work to code"
           value={text}
           onChange={e => setText(e.target.value)}
           placeholder={'e.g. "New ED consult for acute subdural, high complexity, did a twist drill at the bedside. Two progress notes on the floor. Level 2 critical care 45 minutes on the ICU patient."'}
@@ -374,7 +406,7 @@ function RVULog() {
         {err && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600, color: T.danger }}>{err}</div>}
 
         {/* Type a code directly — works with or without the AI coder */}
-        <input value={manualQ} onChange={e => manualSearch(e.target.value)} inputMode="search"
+        <input aria-label="Type a CPT code or name to add it" value={manualQ} onChange={e => manualSearch(e.target.value)} inputMode="search"
           placeholder="Type a CPT code (e.g. 61312) or name to add it" style={{ ...iS, marginTop: 10 }} />
         {manualResults.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
@@ -417,15 +449,15 @@ function RVULog() {
                     display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
                     ...(isDesktop ? {} : { width: "100%", justifyContent: "flex-end" }),
                   }}>
-                  <select value={it.modifier || ""} onChange={e => setModifier(i, e.target.value)}
+                  <select aria-label={`Assistant surgeon modifier for ${it.code}`} value={it.modifier || ""} onChange={e => setModifier(i, e.target.value)}
                     style={{ ...iS, appearance: "auto", width: "auto", flexShrink: 0, padding: "4px 6px", fontSize: 11.5 }}
                     title="Assistant surgeon modifier">
                     {ASSIST_MODIFIERS.map(m => <option key={m.value} value={m.value}>{m.value ? `Mod ${m.value}` : "No modifier"}</option>)}
                   </select>
-                  <button onClick={() => setUnits(i, -1)} style={{ padding: "4px 9px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>−</button>
+                  <button aria-label={`Fewer units of ${it.code}`} onClick={() => setUnits(i, -1)} style={{ padding: "4px 9px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800, ...cardActionSize }}>−</button>
                   <span style={{ fontSize: 13, fontWeight: 800, color: T.text, minWidth: 14, textAlign: "center" }}>{it.units}</span>
-                  <button onClick={() => setUnits(i, 1)} style={{ padding: "4px 9px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>+</button>
-                  <button onClick={() => removeItem(i)} style={{ padding: "4px 8px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontWeight: 800 }}>×</button>
+                  <button aria-label={`More units of ${it.code}`} onClick={() => setUnits(i, 1)} style={{ padding: "4px 9px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800, ...cardActionSize }}>+</button>
+                  <button aria-label={`Remove ${it.code}`} onClick={() => removeItem(i)} style={{ padding: "4px 8px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontWeight: 800, ...cardActionSize }}>×</button>
                   </div>
                 </div>
               ))}
@@ -433,10 +465,10 @@ function RVULog() {
 
             {surgicalPreview.length > 0 && (
               <div style={{ marginTop: 10 }}>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: T.textMuted, display: "block", marginBottom: 4 }}>
+                <label htmlFor="rvu-case-category" style={{ fontSize: 11.5, fontWeight: 700, color: T.textMuted, display: "block", marginBottom: 4 }}>
                   Case log category, for the {surgicalPreview.length} operative code{surgicalPreview.length === 1 ? "" : "s"} landing there
                 </label>
-                <select value={caseCategory} onChange={e => setCaseCategory(e.target.value)} style={{ ...iS, appearance: "auto" }}>
+                <select id="rvu-case-category" value={caseCategory} onChange={e => setCaseCategory(e.target.value)} style={{ ...iS, appearance: "auto" }}>
                   <option value="">{suggestedCategory ? `${suggestedCategory} (read from the codes)` : "Other (the codes do not say; pick one)"}</option>
                   {CASE_CATEGORY_GROUPS.map(g => (
                     <optgroup key={g.header} label={g.header}>
@@ -456,9 +488,9 @@ function RVULog() {
               </div>
             )}
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...iS, minWidth: 0, flex: 1 }} />
+              <input type="date" aria-label="Date of service" value={date} onChange={e => setDate(e.target.value)} style={{ ...iS, minWidth: 0, flex: 1 }} />
               {contracts.length > 1 && (
-                <select value={contractId} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : setContractId(e.target.value))} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
+                <select aria-label="Agreement" value={contractId} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : setContractId(e.target.value))} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
                   {(() => {
                     const { covering, rest } = contractsForDate(pickableContracts(contracts, contractId, { showEnded, date }), date);
                     const hidden = hiddenEndedCount(contracts, contractId, { showEnded, date });
@@ -480,14 +512,15 @@ function RVULog() {
             <button onClick={save} style={{
               width: "100%", marginTop: 10, padding: "14px", borderRadius: 12, border: "none",
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",
-            }}>Save — {reviewTotal.toFixed(2)} wRVU</button>
+            }}>Save {reviewTotal.toFixed(2)} wRVU</button>
+            {saveErr && <div role="alert" style={{ marginTop: 8, fontSize: 13, fontWeight: 600, color: T.danger }}>{saveErr}</div>}
           </div>
         )}
         {saveNote && (
           <div style={{ marginTop: 10, padding: "11px 13px", borderRadius: 12, backgroundColor: T.accentDim, border: `1px solid ${T.accent}` }}>
             <div style={{ fontSize: 13, color: T.text, lineHeight: 1.45 }}>{saveNote.text}</div>
             {saveNote.encId && (
-              <select value={caseCategory} onChange={e => setCaseCategory(e.target.value)}
+              <select aria-label="Case log category" value={caseCategory} onChange={e => setCaseCategory(e.target.value)}
                 style={{ ...iS, appearance: "auto", marginTop: 8 }}>
                 <option value="">Other (pick one to skip fixing it later)</option>
                 {CASE_CATEGORY_GROUPS.map(g => (
@@ -512,7 +545,7 @@ function RVULog() {
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
             {[{ id: "all", label: "All" }, ...contracts.filter(c => encounters.some(e => e.contractId === c.id)).map(c => ({ id: c.id, label: c.shortName || (c.facility || "Contract").split(" ").slice(0, 2).join(" ") }))].map(ch => (
-              <button key={ch.id} onClick={() => setFltContract(ch.id)} style={{
+              <button key={ch.id} aria-pressed={fltContract === ch.id} onClick={() => setFltContract(ch.id)} style={{
                 padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
                 border: `1px solid ${fltContract === ch.id ? T.accent : T.border}`,
                 backgroundColor: fltContract === ch.id ? T.accentDim || "rgba(16,185,129,0.14)" : "transparent",
@@ -521,7 +554,7 @@ function RVULog() {
             ))}
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <select value={fltPeriod} onChange={e => setFltPeriod(e.target.value)} style={{ ...iS, appearance: "auto", minWidth: 0, flex: "0 0 auto", width: "auto" }}>
+            <select aria-label="Period" value={fltPeriod} onChange={e => setFltPeriod(e.target.value)} style={{ ...iS, appearance: "auto", minWidth: 0, flex: "0 0 auto", width: "auto" }}>
               <option value="7d">7 days</option>
               <option value="30d">30 days</option>
               <option value="90d">90 days</option>
@@ -530,7 +563,7 @@ function RVULog() {
               <option value="year">This year</option>
               <option value="all">All time</option>
             </select>
-            <input value={fltCode} onChange={e => setFltCode(e.target.value)} placeholder="Filter by code or description" style={{ ...iS, minWidth: 0, flex: 1 }} />
+            <input aria-label="Filter by code or description" value={fltCode} onChange={e => setFltCode(e.target.value)} placeholder="Filter by code or description" style={{ ...iS, minWidth: 0, flex: 1 }} />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 8, padding: "8px 12px", borderRadius: 10, backgroundColor: T.input }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textMuted }}>
@@ -562,8 +595,8 @@ function RVULog() {
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {list.map(e => (
                   <div key={e.id} role="button" tabIndex={0}
-                    onClick={() => { setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); setEncQ(""); setEncResults([]); }}
-                    onKeyDown={ev => { if (ev.key === "Enter") { setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); } }}
+                    onClick={() => openEnc(e)}
+                    onKeyDown={ev => { if (ev.key === "Enter") openEnc(e); }}
                     style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", boxShadow: T.shadow1, cursor: "pointer", textAlign: "left" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
@@ -577,7 +610,7 @@ function RVULog() {
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
                         <span style={{ fontSize: 13, fontWeight: 800, color: T.accent }}>{rvuOf(e).toFixed(2)}</span>
-                        <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this encounter?")) deleteItem("encounters", e.id); }} style={{ padding: "4px 6px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                        <button aria-label="Delete encounter" onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this encounter?")) deleteItem("encounters", e.id); }} style={{ padding: "4px 6px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", ...cardActionSize }}><TrashIcon /></button>
                       </div>
                     </div>
                   </div>
@@ -603,8 +636,8 @@ function RVULog() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {list.map(e => (
                     <div key={e.id} role="button" tabIndex={0}
-                      onClick={() => { setRvuDetail(null); setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); setEncQ(""); setEncResults([]); }}
-                      onKeyDown={ev => { if (ev.key === "Enter") { setRvuDetail(null); setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); } }}
+                      onClick={() => { setRvuDetail(null); openEnc(e); }}
+                      onKeyDown={ev => { if (ev.key === "Enter") { setRvuDetail(null); openEnc(e); } }}
                       style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", boxShadow: T.shadow1, cursor: "pointer", textAlign: "left" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                         <div style={{ minWidth: 0, flex: 1 }}>
@@ -628,14 +661,14 @@ function RVULog() {
       </Modal>
 
       {/* Tap an encounter → see everything in it and edit it in place */}
-      <Modal open={!!viewEnc} onClose={() => { setViewEnc(null); setEncDraft(null); }} title="Encounter">
+      <Modal open={!!viewEnc} onClose={closeEnc} title="Encounter">
         {encDraft && (
           <>
             <Field label="Date"><input type="date" value={encDraft.date || ""} onChange={ev => setEncDraft(d => ({ ...d, date: ev.target.value }))} style={iS} /></Field>
             {contracts.length > 0 && (
               <Field label="Facility / contract">
                 <select value={encDraft.contractId || ""} onChange={ev => (ev.target.value === SHOW_ENDED ? setShowEnded(true) : setEncDraft(d => ({ ...d, contractId: ev.target.value || null })))} style={{ ...iS, appearance: "auto" }}>
-                  <option value="">— none —</option>
+                  <option value="">None</option>
                   {pickableContracts(contracts, encDraft.contractId, { showEnded, date: encDraft.date }).map(c => <option key={c.id} value={c.id}>{c.shortName || c.facility}</option>)}
                   {hiddenEndedCount(contracts, encDraft.contractId, { showEnded, date: encDraft.date }) > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEndedCount(contracts, encDraft.contractId, { showEnded, date: encDraft.date }))}</option>}
                 </select>
@@ -646,24 +679,28 @@ function RVULog() {
               What was billed
             </div>
             {(encDraft.codes || []).map((c, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
+              // On a phone the code and its description take the first line and
+              // the controls sit under it, right-aligned, as the review list
+              // above does: on one line the description was squeezed to 0 px
+              // and the × ran past the dialog's edge at 375 px.
+              <div key={i} style={{ display: "flex", alignItems: "center", flexWrap: isDesktop ? "nowrap" : "wrap", gap: 8, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
                 <span style={{ fontSize: 13.5, fontWeight: 800, fontFamily: "monospace", color: T.accent, minWidth: 52, flexShrink: 0 }}>{c.code}</span>
-                <span style={{ fontSize: 12.5, color: T.text, flex: 1, minWidth: 0 }}>{c.desc || CPT_DESCS[c.code]?.d || "—"}</span>
-                <select value={c.modifier || ""} onChange={ev => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, modifier: ev.target.value } : x) }))}
-                  style={{ ...iS, appearance: "auto", width: "auto", flexShrink: 0, padding: "3px 6px", fontSize: 11.5 }}
+                <span style={{ fontSize: 12.5, color: T.text, flex: isDesktop ? 1 : "1 1 calc(100% - 60px)", minWidth: 0 }}>{c.desc || CPT_DESCS[c.code]?.d || "—"}</span>
+                <select aria-label={`Assistant surgeon modifier for ${c.code}`} value={c.modifier || ""} onChange={ev => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, modifier: ev.target.value } : x) }))}
+                  style={{ ...iS, appearance: "auto", width: "auto", flexShrink: 0, padding: "3px 6px", fontSize: 11.5, marginLeft: isDesktop ? 0 : "auto" }}
                   title="Assistant surgeon modifier">
                   {ASSIST_MODIFIERS.map(m => <option key={m.value} value={m.value}>{m.value ? `Mod ${m.value}` : "No modifier"}</option>)}
                 </select>
-                <button onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, units: Math.max(1, (x.units || 1) - 1) } : x) }))}
-                  style={{ padding: "3px 8px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>−</button>
+                <button aria-label={`Fewer units of ${c.code}`} onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, units: Math.max(1, (x.units || 1) - 1) } : x) }))}
+                  style={{ padding: "3px 8px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800, ...cardActionSize }}>−</button>
                 <span style={{ fontSize: 13, fontWeight: 800, color: T.text, minWidth: 14, textAlign: "center" }}>{c.units || 1}</span>
-                <button onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, units: (x.units || 1) + 1 } : x) }))}
-                  style={{ padding: "3px 8px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>+</button>
+                <button aria-label={`More units of ${c.code}`} onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, units: (x.units || 1) + 1 } : x) }))}
+                  style={{ padding: "3px 8px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800, ...cardActionSize }}>+</button>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: "#22c55e", fontVariantNumeric: "tabular-nums", minWidth: 44, textAlign: "right" }}>
                   {(((c.wRVU || CPT_DESCS[c.code]?.w) || 0) * (c.units || 1)).toFixed(2)}
                 </span>
-                <button onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.filter((_, j) => j !== i) }))}
-                  style={{ padding: "3px 7px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontWeight: 800 }}>×</button>
+                <button aria-label={`Remove ${c.code}`} onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.filter((_, j) => j !== i) }))}
+                  style={{ padding: "3px 7px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontWeight: 800, ...cardActionSize }}>×</button>
               </div>
             ))}
             <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", fontSize: 13.5, fontWeight: 800 }}>
@@ -673,7 +710,7 @@ function RVULog() {
               </span>
             </div>
 
-            <input value={encQ} inputMode="search" placeholder="Add a code — type a number or a name"
+            <input aria-label="Add a code" value={encQ} inputMode="search" placeholder="Add a code: type a number or a name"
               onChange={async ev => {
                 setEncQ(ev.target.value);
                 if (!ev.target.value.trim()) { setEncResults([]); return; }
@@ -703,31 +740,86 @@ function RVULog() {
 
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button onClick={() => {
+                // The note syncs too: no patient identifier in it.
+                const refused = identifierRefusal("Not saved", encDraft.note, "save again").replace("the description", "the note");
+                setEncErr(refused || null);
+                if (refused) return;
+                // The wRVU this editor shows (a stored 0 reads the catalog's
+                // figure), so a code logged at 0 is saved at what it showed.
+                const codes = (encDraft.codes || []).map(c => ({ code: c.code, desc: c.desc, units: c.units || 1, wRVU: c.wRVU || CPT_DESCS[c.code]?.w || 0, modifier: c.modifier || "" }));
                 // Refused: the edit stays open with its changes.
-                if (editItem("encounters", { ...encDraft, codes: (encDraft.codes || []).map(c => ({ code: c.code, desc: c.desc, units: c.units || 1, wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? 0, modifier: c.modifier || "" })) }) === false) return;
-                // A case log born from this RVU entry froze its facility at
-                // creation, so re-tagging the entry to another agreement used
-                // to leave the case at the old hospital. Move the linked case
-                // to the new agreement's facility (and date) so the two agree.
-                if (viewEnc && encDraft.contractId !== viewEnc.contractId) {
-                  const newFacility = contracts.find(c => c.id === encDraft.contractId)?.facility || "";
+                if (editItem("encounters", { ...encDraft, codes }) === false) return;
+                // A case log born from this RVU entry froze its codes, wRVU,
+                // date and facility at creation, so editing the entry left the
+                // case log saying 61312 after the entry said 61313. Carry every
+                // change over, in one write per case log, and none when
+                // nothing it shows changed. A description or codes the
+                // surgeon has edited in Case Logs are theirs: only a field
+                // still reading what this entry wrote follows it.
+                let leftAsIs = false;
+                const kept = new Set();
+                if (viewEnc) {
+                  const before = viewEnc.codes || [];
+                  const codesChanged = caseCodeText(before) !== caseCodeText(codes) || caseRvu(before) !== caseRvu(codes);
+                  const dateChanged = (encDraft.date || "") !== (viewEnc.date || "");
+                  const contractChanged = encDraft.contractId !== viewEnc.contractId;
+                  const opBefore = surgicalCodes(before);
+                  // Save writes a case log from the operative codes; "Add to
+                  // case log" from every code, also for an operative entry
+                  // whose case log was refused at Save. Decided per case log
+                  // from what it still shows: its codes, else its title or wRVU.
+                  const builtFromAll = (cl) => {
+                    if (!opBefore.length) return true;
+                    if (cl.cptCodes === caseLogCodes(opBefore, false)) return false;
+                    if (cl.cptCodes === caseLogCodes(before, true)) return true;
+                    const allTitle = before[0]?.desc || "Case from RVU log";
+                    if (allTitle !== caseLogTitle(opBefore) && cl.title === allTitle) return true;
+                    return caseRvu(before) !== caseRvu(opBefore) && cl.wRvu === caseRvu(before);
+                  };
                   for (const cl of (data.caseLogs || [])) {
-                    if (cl?.customFields?.["From RVU entry"] === encDraft.id) {
-                      editItem("caseLogs", { ...cl, facility: newFacility, date: encDraft.date || cl.date });
+                    if (cl?.customFields?.["From RVU entry"] !== encDraft.id) continue;
+                    const fromAll = builtFromAll(cl);
+                    const was = fromAll ? before : opBefore;
+                    const list = fromAll ? codes : surgicalCodes(codes);
+                    // "Add to case log" titles a first code with no description this way.
+                    const wroteTitle = (t) => t === caseLogTitle(was) || (fromAll && t === "Case from RVU log");
+                    const next = { ...cl };
+                    let changed = false;
+                    if (codesChanged) {
+                      if (list.length) {
+                        if (cl.cptCodes === caseLogCodes(was, fromAll)) next.cptCodes = caseLogCodes(list, fromAll);
+                        else kept.add("CPT codes");
+                        if (wroteTitle(cl.title)) next.title = caseLogTitle(list);
+                        else kept.add("description");
+                        next.wRvu = caseRvu(list);
+                        changed = true;
+                      } else leftAsIs = true;
                     }
+                    if (dateChanged || contractChanged) { next.date = encDraft.date || cl.date; changed = true; }
+                    if (contractChanged) next.facility = contracts.find(c => c.id === encDraft.contractId)?.facility || "";
+                    if (changed) editItem("caseLogs", next);
                   }
                 }
-                setViewEnc(null); setEncDraft(null);
+                if (leftAsIs) {
+                  setSaveNote({ text: "Saved. No operative code is left on this entry, so its case log was left as it was: edit or delete it in Case Logs.", encId: null });
+                  setTimeout(() => setSaveNote(null), 12000);
+                } else if (kept.size) {
+                  const what = ["description", "CPT codes"].filter(k => kept.has(k)).join(" and ");
+                  setSaveNote({ text: `Saved. The case log keeps the ${what} you edited in Case Logs. Its wRVU and date follow this entry.`, encId: null });
+                  setTimeout(() => setSaveNote(null), 12000);
+                }
+                closeEnc();
               }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" }}>Save changes</button>
-              <button onClick={() => { setViewEnc(null); setEncDraft(null); }} style={{ padding: "12px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
+              <button onClick={closeEnc} style={{ padding: "12px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
             </div>
+            {encErr && <div role="alert" style={{ marginTop: 8, fontSize: 13, fontWeight: 600, color: T.danger }}>{encErr}</div>}
           </>
         )}
       </Modal>
 
       <div style={{ marginTop: 14, fontSize: 11, color: T.textMuted, lineHeight: 1.5 }}>
         wRVU values from the CMS Physician Fee Schedule (CY2026 July release). AI-suggested codes
-        are a documentation aid — you approve every code before it saves. Not billing advice.
+        are a documentation aid, and you approve every code before it saves. Not billing advice.
       </div>
     </div>
   );

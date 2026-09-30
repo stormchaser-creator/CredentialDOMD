@@ -17,7 +17,7 @@
  * another account cannot read, count or export them.
  */
 
-import { BASE_KEYS, lsGetJSON, lsSet, lsRemove, scopedKey } from "./storageScope";
+import { BASE_KEYS, lsGetJSON, lsSet, lsRemove, scopedKey } from "./storageScope.js";
 
 function readVault() {
   const v = lsGetJSON(BASE_KEYS.vault);
@@ -77,10 +77,28 @@ export function exportVault() {
   return readVault();
 }
 
-/** Merge a previously exported vault back in (restore on a new device). */
+// A vault key is "<section>:<record id>"; its value is the note.
+const VAULT_KEY = /^[A-Za-z][A-Za-z0-9_]*:.+$/;
+
+/**
+ * Merge a previously exported vault back in (restore on a new device).
+ *
+ * Only real vault entries are taken: a "section:id" key with a non-empty
+ * string note. Any JSON object used to be merged whole, so picking the full
+ * backup by mistake put licenses, settings and _exportMeta into the vault,
+ * said "Private notes restored", and the next vault export carried the whole
+ * backup. Returns { ok: true, restored }, { ok: false, reason: "not-a-vault" }
+ * when nothing in the file is a vault entry, or { ok: false, reason: "storage" }
+ * when this browser's storage refused the write.
+ */
 export function importVault(obj) {
-  if (!obj || typeof obj !== "object") return false;
-  return writeVault({ ...readVault(), ...obj });
+  if (!obj || typeof obj !== "object" || Array.isArray(obj) || Object.getPrototypeOf(obj) !== Object.prototype) {
+    return { ok: false, reason: "not-a-vault" };
+  }
+  const entries = Object.entries(obj).filter(([k, v]) => VAULT_KEY.test(k) && typeof v === "string" && v.trim() !== "");
+  if (!entries.length) return { ok: false, reason: "not-a-vault" };
+  if (!writeVault({ ...readVault(), ...Object.fromEntries(entries) })) return { ok: false, reason: "storage" };
+  return { ok: true, restored: entries.length };
 }
 
 export function clearVault() {

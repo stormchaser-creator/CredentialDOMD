@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import threading
 
-BIN = Path('/opt/homebrew/opt/postgresql@17/bin')
+BIN = Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 MIGRATION = Path(__file__).resolve().parents[2] / 'supabase/migrations/20260918_founding_billing_readiness.sql'
 ENV = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
 results = []

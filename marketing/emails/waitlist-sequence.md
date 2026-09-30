@@ -104,7 +104,9 @@ Whit
 ### Wiring notes (for implementation once the Resend key exists)
 - {{position}}: row order by created_at in early_access_leads.
 - Email 1 fires from a DB trigger/webhook on insert; 2 and 3 from the schedule
-  runner (reuse the onboarding_queue machinery in send-onboarding-email).
+  runner. (The old send-onboarding-email function and its onboarding_queue were
+  never built in the database and were removed on 2026-09-29; a runner needs
+  its own migration.)
 - {{founding_offer}}: ERIC DECIDES before Email 4 exists. Placeholder until then.
 - Send domain: credentialdomd.com via Resend, SPF/DKIM through the Cloudflare
   token in keychain "Cloudflare CredentialDOMD".

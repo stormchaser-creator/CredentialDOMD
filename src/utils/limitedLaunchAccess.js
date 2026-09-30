@@ -6,6 +6,21 @@ export const LIMITED_LAUNCH_ACCESS_ENABLED = import.meta.env?.VITE_LIMITED_LAUNC
 // Separate rollout switch: existing personal invitations work while public enrollment is off.
 export const PUBLIC_SELF_SERVICE_SIGNUP_ENABLED = import.meta.env?.VITE_PUBLIC_SELF_SERVICE_SIGNUP_ENABLED === "true";
 export const ACCESS_REFRESH_MS = 5 * 60 * 1000;
+// A save that meets an answer older than ACCESS_REFRESH_MS, or a check that
+// failed, is not refused for that alone. It is kept on this device and waits
+// for a fresh check (writeStatus "verify", holdForAccess). Only while the last
+// ACTIVE answer is at most this old: a day covers a call shift on hospital
+// Wi-Fi and a phone left in another app, and bounds how long a device keeps
+// changes the server has not accepted. It authorizes nothing on the server:
+// a kept change is sent only by replay, only after a fresh answer allows it,
+// and the database's own write policies (credentialdo_scope_write_allowed,
+// credentialdo_current_scope_write_allowed, access_intake_write, the storage
+// policy) decide it at that moment. A membership that ended meanwhile is
+// refused there, whatever this device kept.
+export const WRITE_GRACE_MS = 24 * 60 * 60 * 1000;
+// How long a save waits for the check it started. The check itself gives up
+// after 9 s (limitedLaunchClient timeoutMs), so this is only a backstop.
+export const ACCESS_VERIFY_TIMEOUT_MS = 12000;
 const scopes = ["credential", "practice"];
 const operations = ["read", "write", "export"];
 const date = value => typeof value === "string" && Number.isFinite(Date.parse(value));
@@ -21,6 +36,22 @@ export function scopeForCollection(key, record) {
   }
   return PRACTICE_COLLECTIONS.has(key) ? "practice" : "credential";
 }
+
+const MANAGEABLE_SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due", "unpaid", "incomplete", "paused"];
+
+/**
+ * A subscription the member can open billing for: a paid or scheduled
+ * membership, or one whose payment failed (past_due, unpaid). Drives Manage
+ * Billing, Cancel Subscription and the card update; never access.
+ */
+export const hasManageableSubscription = access => !!(access?.purchasedOfferId || access?.scheduledMembership
+  // An incomplete subscription is a checkout still in progress: Resume
+  // checkout handles it, and it is not a paid subscription to manage.
+  || (access?.billingSubscriptionStatus && access.billingSubscriptionStatus !== "incomplete"));
+
+/** A paid membership whose renewal payment did not go through: the card needs updating. */
+export const renewalPaymentFailed = access => !!access && !access.purchasedOfferId && !access.scheduledMembership
+  && ["past_due", "unpaid"].includes(access.billingSubscriptionStatus);
 
 /** Validate the server contract before using it for any client permission. */
 export function validateAccessSnapshot(value) {
@@ -56,6 +87,17 @@ export function validateAccessSnapshot(value) {
     ? value.billingEnabled !== true || !["core", "core_locum"].includes(value.checkoutResumeOfferId)
     : value.checkoutResumeOfferId != null) throw new Error("Checkout resume information could not be verified.");
   if (value.pricePhase != null && !["founding", "earlybird", "standard"].includes(value.pricePhase)) throw new Error("Membership information could not be verified.");
+  // The live subscription's status while it can still be paid or managed
+  // (20260930002000); older servers leave it out. It never grants access.
+  if (value.billingSubscriptionStatus != null && !MANAGEABLE_SUBSCRIPTION_STATUSES.includes(value.billingSubscriptionStatus)) {
+    throw new Error("Membership information could not be verified.");
+  }
+  // Whether that subscription renews, and when its paid period ends
+  // (20260930032000); older servers leave it out. Display only.
+  if (value.billingRenewal != null && (typeof value.billingRenewal !== "object"
+    || typeof value.billingRenewal.cancelAtPeriodEnd !== "boolean" || !date(value.billingRenewal.periodEnd))) {
+    throw new Error("Membership information could not be verified.");
+  }
   if (value.freeBeta !== undefined) {
     const beta = value.freeBeta;
     if (!beta || !["none", "active", "expired"].includes(beta.state) || beta.autoCharges !== false
@@ -83,6 +125,15 @@ export function validateAccessSnapshot(value) {
 /** The active paid membership includes Practice: the bundle, or founding Credential. */
 const membershipIncludesPractice = access => access?.purchasedOfferId === "core_locum"
   || (access?.purchasedOfferId === "core" && access.practiceIncluded === true);
+
+/**
+ * An active Credential membership that Practice is not part of: bought
+ * without it (not founding, not the bundle) and no lifetime Practice. Its
+ * Practice records are read-only because of what was bought, not because the
+ * membership lapsed, and the way to Practice is to ask support. Display only.
+ */
+export const credentialOnlyMembership = access => access?.accessStatus === "active" && access.purchasedOfferId === "core"
+  && access.practiceIncluded !== true && access.lifetime?.practice !== true;
 
 /** Resume permits only the server's saved offer; it never grants product access. */
 export function canReviewBillingOffer(access, offerId) {
@@ -180,12 +231,31 @@ const deviceAnswers = {
 };
 const sameAnswer = (a, b) => !!a && !!b && scopes.every(scope => a[scope] === b[scope]);
 
+// What a write may do now: go ahead, be refused (with a reason code), or be
+// kept on this device while a fresh membership check decides it.
+const ALLOW = Object.freeze({ status: "allow", reason: null });
+const refuse = reason => ({ status: "refuse", reason });
+const pending = reason => ({ status: "verify", reason });
+/** One answer for several needs: any refusal refuses, then any wait waits. */
+export function combineWriteStatus(list) {
+  const all = [...(list || [])];
+  return all.find(item => item?.status === "refuse") || all.find(item => item?.status === "verify") || ALLOW;
+}
+
 /** In-memory write guard shared by UI and persistence; the server still enforces access. */
-export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED, now = () => globalThis.performance?.now() ?? Date.now(), currentAccount, memory = deviceAnswers } = {}) {
+export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED, now = () => globalThis.performance?.now() ?? Date.now(), currentAccount, memory = deviceAnswers,
+  wallClock = () => Date.now(), timers = { set: (fn, ms) => setTimeout(fn, ms), clear: id => clearTimeout(id) },
+  graceMs = WRITE_GRACE_MS, verifyTimeoutMs = ACCESS_VERIFY_TIMEOUT_MS } = {}) {
   let accountId = null, snapshot = null, receivedAt = 0, refreshFailed = false, records = null, previewSource = null;
   // The answer remembered for this account, why writes are suspended, and
   // how to start a membership check at once (set by the access hook).
   let remembered = null, outdated = false, recheck = null;
+  // When the last answer arrived by the wall clock too: the monotonic clock
+  // can stand still while a phone sleeps, so the grace counts whichever
+  // clock says more time has passed. The check writes are waiting on, and
+  // who hears about a new answer.
+  let receivedWall = 0, verifying = null, halted = false;
+  const answerListeners = new Set();
   const current = () => typeof currentAccount === "function" ? currentAccount() : accountId;
   const remember = value => {
     if (!value || sameAnswer(value, remembered)) return;
@@ -214,7 +284,7 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
     setPreviewSource(source) { previewSource = typeof source === "function" ? source : null; },
     reset(nextAccountId = null) {
       accountId = nextAccountId; snapshot = null; receivedAt = 0; refreshFailed = false; records = null; outdated = false;
-      remembered = null;
+      remembered = null; receivedWall = 0; verifying = null; halted = false;
       if (accountId) { try { remembered = memory?.read(accountId) || null; } catch { remembered = null; } }
     },
     registerRecords(expectedAccountId, value) {
@@ -224,15 +294,32 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
       if (!expectedAccountId || current() !== expectedAccountId || accountId !== expectedAccountId) return null;
       return records?.[key]?.find(record => record.id === id) || null;
     },
-    /** A failed check refuses writes until a fresh answer. `outdated`: this build cannot read the answer. */
-    suspendWrites({ outdated: stale = false } = {}) { refreshFailed = true; outdated = outdated || stale === true; },
+    /**
+     * A failed check refuses writes until a fresh answer. `outdated`: this
+     * build cannot read the answer. `checkFailed`: only the access hook's
+     * check failed (a bad connection), so a save inside the grace is kept on
+     * the device while a new check decides it (writeStatus "verify"). Without
+     * it this is a hard stop (an identity that could not be verified, a data
+     * deletion not confirmed): nothing is kept until a fresh answer.
+     */
+    suspendWrites({ outdated: stale = false, checkFailed = false } = {}) {
+      refreshFailed = true; outdated = outdated || stale === true;
+      if (checkFailed !== true) halted = true;
+    },
     /** True after a check this build could not read (an older app version); a reload is the fix. */
     outdated() { return outdated; },
     accept(expectedAccountId, value) {
       if (!expectedAccountId || current() !== expectedAccountId || accountId !== expectedAccountId) return false;
-      snapshot = validateAccessSnapshot(value); receivedAt = now(); refreshFailed = false; outdated = false;
+      snapshot = validateAccessSnapshot(value); receivedAt = now(); receivedWall = wallClock(); refreshFailed = false; outdated = false; halted = false;
       remember(accessAt(snapshot, receivedAt, receivedAt).entitled);
+      for (const listener of [...answerListeners]) { try { listener(expectedAccountId); } catch { /* a listener never stops an answer */ } }
       return true;
+    },
+    /** Called with the account id each time a fresh answer is taken; returns the unsubscribe. */
+    onAnswer(fn) {
+      if (typeof fn !== "function") return () => {};
+      answerListeners.add(fn);
+      return () => { answerListeners.delete(fn); };
     },
     /**
      * The answer this device remembered for the account, or null. Only for
@@ -272,9 +359,9 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
       try { recheck(); } catch { return false; }
       return true;
     },
-    state(expectedAccountId = accountId) {
+    state(expectedAccountId = accountId, at = now()) {
       if (!expectedAccountId || current() !== expectedAccountId || accountId !== expectedAccountId) return null;
-      const value = accessAt(snapshot, receivedAt, now());
+      const value = accessAt(snapshot, receivedAt, at);
       // A trial or beta that ends while the app is open changes the answer
       // the next launch should open on.
       if (value) remember(value.entitled);
@@ -313,14 +400,98 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
       return this.allows(scopeForCollection(key, record), "write", expectedAccountId)
         && (!existing || this.allows(scopeForCollection(key, existing), "write", expectedAccountId));
     },
+    /** The scopes allowsMutation asks about for this change. */
+    mutationScopes(key, record, previous) {
+      const existing = previous || records?.[key]?.find(item => item.id === record?.id);
+      if (key === "documents" && !existing && !record?.linkedTo) return [...scopes];
+      return [...new Set([scopeForCollection(key, record), ...(existing ? [scopeForCollection(key, existing)] : [])])];
+    },
+    /**
+     * What a write to `scope` may do now. "allow" is exactly allows(scope,
+     * "write"). A refusal carries why: "read_only" (the server's answer, a
+     * trial or beta that ran out included, says no), "outdated" (this build
+     * cannot read the answer), "no_answer" (none this session yet),
+     * "not_connected" (no check can run), "suspended" (writes were stopped
+     * outright, suspendWrites without checkFailed) or "grace_expired" (no
+     * active answer for WRITE_GRACE_MS). "verify": the answer is old or the last check
+     * failed, but the last one this session allowed this scope and is inside
+     * the grace. The write is kept on this device while a check decides it.
+     *
+     * `at` ({ now, wall }, from verify) evaluates at that moment, so every
+     * write waiting on one check is decided alike. `settled`: the check this
+     * write waited for is over. A write still unconfirmed then (the check
+     * failed, timed out, or answered in a form this build cannot read) stays
+     * "verify", which means: keep it on this device and queue it for replay.
+     */
+    writeStatus(scope, expectedAccountId = accountId, { at = null, settled = false } = {}) {
+      if (!enabled) return ALLOW;
+      if (!scopes.includes(scope)) return refuse("read_only");
+      const moment = at?.now ?? now();
+      const value = this.state(expectedAccountId, moment);
+      if (value?.capabilities?.[scope]?.write === true) return ALLOW;
+      if (!value) return refuse(outdated ? "outdated" : recheck ? "no_answer" : "not_connected");
+      if (value.needsRefresh !== true || value.entitled?.[scope] !== true) return refuse("read_only");
+      if (halted) return refuse("suspended");
+      const elapsed = Math.max(moment - receivedAt, (at?.wall ?? wallClock()) - receivedWall);
+      if (!(elapsed <= graceMs)) return refuse("grace_expired");
+      // Why it is still unconfirmed, for the operator's report.
+      if (settled) return pending(outdated ? "outdated" : refreshFailed ? "check_failed" : "check_timeout");
+      if (outdated) return refuse("outdated");
+      if (!recheck) return refuse("not_connected");
+      return pending(refreshFailed ? "check_failed" : "stale");
+    },
+    /** combineWriteStatus over writeStatus for each scope. */
+    statusFor(scopeList, expectedAccountId = accountId, options = {}) {
+      return combineWriteStatus([...new Set(scopeList || [])].map(scope => this.writeStatus(scope, expectedAccountId, options)));
+    },
+    /** allowsMutation as a writeStatus. */
+    mutationStatus(key, record, previous, expectedAccountId = accountId, options = {}) {
+      if (!enabled) return ALLOW;
+      return this.statusFor(this.mutationScopes(key, record, previous), expectedAccountId, options);
+    },
+    /** allowsSettingsChange as a writeStatus: preferences never need a membership. */
+    settingsStatus(updates, expectedAccountId = accountId, options = {}) {
+      if (!enabled) return ALLOW;
+      return this.statusFor(settingsScopes(updates), expectedAccountId, options);
+    },
+    /**
+     * Ask the server now, for writes waiting on an answer. Every write that
+     * asks while a check is under way shares it (and the access hook shares
+     * its own check in flight). Resolves with the moment it ended, { now,
+     * wall }, once the check has answered or failed, or after
+     * verifyTimeoutMs; never rejects. The writes then read writeStatus with
+     * that moment and `settled`.
+     */
+    verify() {
+      if (verifying) return verifying;
+      const round = new Promise(resolve => {
+        let started = null;
+        try { started = recheck ? recheck() : null; } catch { started = null; }
+        if (!started || typeof started.then !== "function") { resolve(); return; }
+        let timer = null, done = false;
+        const finish = () => { if (done) return; done = true; if (timer !== null) { try { timers.clear(timer); } catch { /* gone */ } } resolve(); };
+        try { timer = timers.set(finish, verifyTimeoutMs); } catch { timer = null; }
+        started.then(finish, finish);
+      }).then(() => ({ now: now(), wall: wallClock() }));
+      verifying = round;
+      round.then(() => { if (verifying === round) verifying = null; });
+      return round;
+    },
   };
 }
 
+// Theme and notification preferences remain usable while saved records are read-only.
+const READ_ONLY_PREFERENCES = new Set(["theme", "fontSize", "notifyBrowser", "notifyEmail", "notifyText", "notifyFreqDays", "alertsFingerprint", "lastNotified", "snoozedUntil"]);
+const settingsScopes = updates => (Object.keys(updates || {}).every(key => READ_ONLY_PREFERENCES.has(key)) ? [] : ["credential"]);
+
 export const accessAuthority = createAccessAuthority({ currentAccount: () => globalThis.window?.Clerk?.user?.id || null });
 
-export function membershipWriteError() {
+export function membershipWriteError(reason = null) {
   const error = new Error("This record is read-only. Your saved records and exports are still available.");
   error.code = "membership_read_only";
+  // Why (writeStatus): a record the server answered read-only, or a
+  // membership not confirmed for longer than the grace.
+  if (reason) error.reason = reason;
   return error;
 }
 
@@ -331,6 +502,12 @@ export const RECONNECTING_MESSAGE = "Reconnecting, try again in a moment.";
 export const NOT_CONNECTED_MESSAGE = "Changes can't be saved until you reconnect.";
 // A build that cannot read the server's answer never recovers on its own.
 export const OUTDATED_MESSAGE = "This version of the app is out of date. Reload to continue.";
+// No active answer for longer than WRITE_GRACE_MS: nothing new is kept on the
+// device until one arrives.
+export const GRACE_EXPIRED_MESSAGE = "Your membership has not been confirmed for over a day, so this change was not saved. Check your connection and try again.";
+// A change kept on this device while the check ran, which then answered that
+// the membership no longer allows it: the change is taken back.
+export const READ_ONLY_AFTER_CHECK_MESSAGE = "Your membership no longer allows changes here, so your last change was not kept. Your saved records and exports are still available.";
 
 /** The scopes a change to this record needs: both for a new file not filed to anything. */
 export function scopesForWrite(key, record, previous = null) {
@@ -360,6 +537,8 @@ export function accessVerifying(authority = accessAuthority, scope = null) {
 export function writeRefusalMessage(authority = accessAuthority, scope = null) {
   if (authority?.enabled && authority.outdated?.() === true) return OUTDATED_MESSAGE;
   if (!accessVerifying(authority, scope)) return membershipWriteError().message;
+  if (authority?.enabled && typeof authority.statusFor === "function"
+    && authority.statusFor(scope == null ? scopes : [scope].flat()).reason === "grace_expired") return GRACE_EXPIRED_MESSAGE;
   return authority.canCheck?.() === false ? NOT_CONNECTED_MESSAGE : RECONNECTING_MESSAGE;
 }
 
@@ -368,13 +547,53 @@ export function requestAccessCheck(authority = accessAuthority) {
   return authority?.requestCheck?.() === true;
 }
 
+// ─── What the operator sees ─────────────────────────────────
+// Every refused save and every save kept on the device for want of an answer
+// is reported to client_errors (the app passes errorReport's reportError):
+// the event, a reason code and the section (a collection name such as
+// "invoices"), never a record, a value or an id. Refusals were alerted on the
+// device only, so the owner never saw the save his invoice lost. Once per
+// session per event, reason and section, as the membership-check failures
+// are, so an import of a hundred refused records sends one row.
+let writeAccessReporter = null;
+const writeAccessReported = new Set();
+const SECTION = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+/** Where refused and kept saves are reported: fn(message, extra). A new reporter starts a new session's once-each. */
+export function setWriteAccessReporter(fn) {
+  writeAccessReporter = typeof fn === "function" ? fn : null;
+  writeAccessReported.clear();
+}
+export function reportWriteAccess(event, reason, section = null) {
+  const code = typeof reason === "string" && /^[a-z_]{1,40}$/.test(reason) ? reason : "unknown";
+  const where = typeof section === "string" && SECTION.test(section) ? section : null;
+  const key = `${event}|${code}|${where ?? ""}`;
+  if (writeAccessReported.has(key)) return false;
+  writeAccessReported.add(key);
+  const label = event === "write_refused" ? "Save refused" : "Save kept on device awaiting membership check";
+  try { writeAccessReporter?.(`${label} (${code}${where ? `, ${where}` : ""})`, { event, reason: code, section: where }); } catch { /* reporting never blocks a save */ }
+  return true;
+}
+
+/** Why a save for `scope` (one, a list, or any) is refused, as writeStatus says. */
+export function writeRefusalReason(authority = accessAuthority, scope = null) {
+  if (!authority?.enabled) return "unknown";
+  if (authority.outdated?.() === true) return "outdated";
+  if (typeof authority.statusFor !== "function") return accessVerifying(authority, scope) ? "verifying" : "read_only";
+  const result = authority.statusFor(scope == null ? scopes : [scope].flat());
+  // Refused by the caller's own check while writeStatus would keep it: a
+  // momentary refusal, like any made while the check runs.
+  return result.status === "refuse" ? result.reason : "verifying";
+}
+
 // Once per burst: an import of many records refused while reconnecting says
 // so once, not once per record. Measured from when the message was closed.
 // "Try again in a moment" is made true by asking for a fresh answer now,
-// whatever the retry schedule had reached.
+// whatever the retry schedule had reached. Every refusal is reported
+// (reportWriteAccess), `section` naming the collection.
 const REFUSAL_QUIET_MS = 3000;
 let refusalShownAt = -Infinity;
-export function alertWriteRefused({ authority = accessAuthority, scope = null, alert = message => globalThis.window?.alert?.(message), now = () => Date.now() } = {}) {
+export function alertWriteRefused({ authority = accessAuthority, scope = null, section = null, alert = message => globalThis.window?.alert?.(message), now = () => Date.now() } = {}) {
+  reportWriteAccess("write_refused", writeRefusalReason(authority, scope), section);
   const verifying = authority?.outdated?.() !== true && accessVerifying(authority, scope);
   if (verifying) requestAccessCheck(authority);
   if (now() - refusalShownAt < REFUSAL_QUIET_MS) return false;
@@ -384,20 +603,130 @@ export function alertWriteRefused({ authority = accessAuthority, scope = null, a
 }
 
 /**
- * Before work that has to end in a saved record (an invoice sent from the
- * share sheet), ask whether the write would be allowed now. A refusal is
- * explained exactly as a refused save is, and nothing is started.
+ * Would a save needing `scope` (one or a list) be kept? Resolves true when it
+ * is allowed now, false when it is refused now. An answer that is only old,
+ * or a failed check (writeStatus "verify"), is settled first: this waits for
+ * the check (authority.verify, shared with any in flight) and reads the
+ * answer it left, as the save's own round would (holdForAccess). Allowed,
+ * true. Still unconfirmed because the check failed or timed out, true: the
+ * save will be kept on this device and queued. Refused (read-only, the grace
+ * ran out), false. Never alerts and never rejects.
  */
-export function writeAllowedNow(scope, options = {}) {
+export async function settleWriteAccess(scope, authority = accessAuthority) {
+  if (!authority?.enabled) return true;
+  const needed = [...new Set([scope].flat().filter(Boolean))];
+  if (!needed.length) return true;
+  if (typeof authority.statusFor !== "function") return needed.every(name => authority.allows(name, "write"));
+  const now = authority.statusFor(needed);
+  if (now.status !== "verify") return now.status === "allow";
+  let at = null;
+  try { at = await authority.verify(); } catch { at = null; }
+  return authority.statusFor(needed, undefined, { at, settled: true }).status !== "refuse";
+}
+
+/**
+ * Before work outside the app that cannot be taken back and has to end in a
+ * saved record (an invoice sent through the share sheet or copied to be
+ * pasted into an email): the work starts only once the save is known to be
+ * kept. An answer that is only old is not taken on trust, because the check
+ * could answer read-only after the invoice had gone out, and its record
+ * would then be refused: settleWriteAccess waits for the check first. A
+ * refusal is explained exactly as a refused save is, and nothing is started.
+ * prepareWriteCheck, when the invoice preview opens, has usually brought the
+ * answer back before the tap, so the share sheet opens at once.
+ */
+export async function confirmWriteAllowed(scope, options = {}) {
   const authority = options.authority || accessAuthority;
   if (authority.allows(scope, "write")) return true;
+  if (await settleWriteAccess(scope, authority)) return true;
   alertWriteRefused({ ...options, authority, scope });
   return false;
 }
 
+/**
+ * The save option for the record of work that already left the app once
+ * confirmWriteAllowed let it go (an invoice sent, and the entries it billed):
+ * AppContext addItem/editItem keep it even when the membership check it then
+ * waits for answers read-only (holdForAccess `keep`).
+ */
+export const SENT_WORK = Object.freeze({ keepOnRefusal: true });
+
+/**
+ * Start now the check confirmWriteAllowed would wait for (the answer is only
+ * old, or the last check failed), so its answer is likely back before the
+ * tap that needs it. True when one was started or joined.
+ */
+export function prepareWriteCheck(scope, authority = accessAuthority) {
+  if (!authority?.enabled || typeof authority.statusFor !== "function" || typeof authority.verify !== "function") return false;
+  if (authority.statusFor([scope].flat()).status !== "verify") return false;
+  void authority.verify();
+  return true;
+}
+
+// ─── Saves kept while membership is re-checked ───────────────
+// A save that meets an old answer, or a failed check, inside the grace
+// (writeStatus "verify") is applied on this device at once, as an allowed one
+// is, so a form closes and a timer stops the way it always did. The caller
+// hands over how to take it back. Every save waiting at the same time shares
+// one check (authority.verify); when it ends each is decided with the same
+// moment, as its cloud write is (lib/supabase.js):
+//   allowed    nothing more here; its cloud write goes on by itself;
+//   unconfirmed (the check failed or timed out) it stays on this device, its
+//              cloud write is queued for replay (the "saved on this device,
+//              will sync" notice), and that is reported;
+//   refused    (the server answered read-only, or the grace ran out) it is
+//              taken back, newest first, the member told once and each
+//              refusal reported. Except with `keep`: the change records work
+//              already done outside the app (an invoice that went out), which
+//              taking it back would not undo, only hide (its entries would
+//              show unbilled and could be billed again). It stays on this
+//              device, its cloud write is queued marked refused
+//              (lib/supabase.js), which the page's notice says, and the
+//              refusal is reported.
+const heldRounds = new WeakMap();
+export function holdForAccess({ scopes: needed = scopes, accountId = null, section = null, undo = null, quiet = false, keep = false } = {}, authority = accessAuthority, { alert = message => globalThis.window?.alert?.(message) } = {}) {
+  let round = heldRounds.get(authority);
+  if (!round) {
+    round = { entries: [] };
+    heldRounds.set(authority, round);
+    const settle = at => {
+      if (heldRounds.get(authority) === round) heldRounds.delete(authority);
+      settleHeldRound(round.entries, at, authority, alert);
+    };
+    round.done = authority.verify().then(settle, () => settle(null));
+  }
+  round.entries.push({ needed: [...new Set(needed)], accountId, section, undo, quiet: quiet === true, keep: keep === true });
+  return round.done;
+}
+
+function settleHeldRound(entries, at, authority, alert) {
+  const refused = [];
+  for (const entry of entries) {
+    // Signed out, or another account, meanwhile: its own writes stop on the
+    // identity guards, and nothing is said to whoever is here now.
+    if (entry.accountId && authority.serves?.(entry.accountId) === false) continue;
+    const result = authority.statusFor(entry.needed, entry.accountId || undefined, { at, settled: true });
+    if (result.status === "allow") continue;
+    if (result.status === "verify") { reportWriteAccess("write_queued_for_access", result.reason, entry.section); continue; }
+    refused.push({ entry, result });
+  }
+  if (!refused.length) return;
+  for (const { entry } of [...refused].reverse()) {
+    if (entry.keep) continue;
+    try { entry.undo?.(); } catch { /* one undo never stops the others */ }
+  }
+  for (const { entry, result } of refused) reportWriteAccess("write_refused", result.reason, entry.section);
+  // Only what someone typed and was taken back is announced: a "seen" stamp
+  // is not, and a kept record of work done is told by the notice instead.
+  const said = refused.filter(({ entry }) => !entry.quiet && !entry.keep);
+  if (!said.length) return;
+  const reasons = said.map(({ result }) => result.reason);
+  const message = reasons.includes("read_only") ? READ_ONLY_AFTER_CHECK_MESSAGE
+    : reasons.includes("grace_expired") ? GRACE_EXPIRED_MESSAGE : writeRefusalMessage(authority);
+  try { alert(message); } catch { /* no window */ }
+}
+
 // A backup restore or direct collection replacement is checked as one operation.
-// Theme and notification preferences remain usable while saved records are read-only.
-const READ_ONLY_PREFERENCES = new Set(["theme", "fontSize", "notifyBrowser", "notifyEmail", "notifyText", "notifyFreqDays", "alertsFingerprint", "lastNotified", "snoozedUntil"]);
 export function allowsSettingsChange(updates, authority = accessAuthority) {
   return !authority.enabled || Object.keys(updates || {}).every(key => READ_ONLY_PREFERENCES.has(key))
     || authority.allows("credential", "write");
@@ -424,6 +753,34 @@ export function allowsDataChange(previous, next, authority = accessAuthority) {
     }
   }
   return true;
+}
+
+/**
+ * allowsDataChange as a writeStatus, with the scopes it needs (for
+ * holdForAccess) and the first section it changes (for the report). "allow"
+ * exactly when allowsDataChange is true.
+ */
+export function dataChangeStatus(previous, next, authority = accessAuthority) {
+  const needed = new Set();
+  let section = null;
+  const touch = (key, list) => { section ??= key; for (const scope of list) needed.add(scope); };
+  for (const key of new Set([...Object.keys(previous || {}), ...Object.keys(next || {})])) {
+    if (sameValue(previous?.[key], next?.[key])) continue;
+    if (key === "settings") {
+      const changed = [...new Set([...Object.keys(previous?.settings || {}), ...Object.keys(next?.settings || {})])].filter(name => !sameValue(next?.settings?.[name], previous?.settings?.[name]));
+      touch(key, settingsScopes(Object.fromEntries(changed.map(name => [name, true]))));
+      continue;
+    }
+    if (!Array.isArray(previous?.[key]) && !Array.isArray(next?.[key])) { touch(key, ["credential"]); continue; }
+    const before = new Map((previous?.[key] || []).map(item => [item.id, item]));
+    const after = new Map((next?.[key] || []).map(item => [item.id, item]));
+    for (const id of new Set([...before.keys(), ...after.keys()])) {
+      if (sameValue(before.get(id), after.get(id))) continue;
+      touch(key, authority.mutationScopes(key, after.get(id) || before.get(id), before.get(id)));
+    }
+  }
+  const result = authority.enabled ? authority.statusFor([...needed]) : ALLOW;
+  return { ...result, scopes: [...needed], section };
 }
 export function assertRecordWrite(key, record, previous) {
   if (!accessAuthority.allowsMutation(key, record, previous)) throw membershipWriteError();

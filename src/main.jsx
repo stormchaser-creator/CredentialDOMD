@@ -5,13 +5,24 @@ import { ClerkProvider, useUser } from "@clerk/clerk-react";
 import App from "./App";
 import { install as installErrorReporting, ErrorBoundary, setErrorUser } from "./lib/errorReport";
 import "./styles/base.css";
+import { sweepLapsedQueues, sweepSignOutIntents, watchSignOutIntents } from "./utils/storageScope";
 import { SIGN_IN_LOCALIZATION } from "./utils/signInMethods";
+import { appContentSecurityPolicy } from "./utils/appCsp";
 
 // Global error sink (window.onerror + unhandledrejection -> report-error
 // function -> public.client_errors). Installed before anything renders so a
 // crash inside Clerk or App init is still captured.
 captureLaunchInvitation();
 installErrorReporting();
+// Writes a lapsed session left on this device whose account never came back
+// (utils/storageScope.js purgeUserStorage) go after their time limit.
+sweepLapsedQueues();
+// A Sign out's marker names its account, so it is removed right after the
+// purge; tabs keep what they need in memory. Note other tabs' markers as
+// they are written, and remove any a closed tab left past its two minutes
+// (utils/storageScope.js SIGNOUT_INTENT_BASE).
+watchSignOutIntents();
+sweepSignOutIntents();
 
 // Attaches the Clerk user id to error reports once auth resolves. Lives
 // inside ClerkProvider so it can use the hook without touching App.
@@ -31,57 +42,12 @@ if (!CLERK_PUBLISHABLE_KEY) {
   console.error("CredentialDOMD: VITE_CLERK_PUBLISHABLE_KEY is not set. Auth will not work.");
 }
 
-// Inject Content Security Policy in production only (Vite dev mode uses inline scripts)
+// Inject Content Security Policy in production only (Vite dev mode uses inline scripts).
+// The policy itself is utils/appCsp.js, so a node test reads what ships.
 if (import.meta.env.PROD) {
-  const connectSources = [
-    "'self'",
-    "https://generativelanguage.googleapis.com",
-    "https://npiregistry.cms.hhs.gov",
-    // NIH/NLM mirror of the NPI registry — used in production (NPPES has no CORS)
-    "https://clinicaltables.nlm.nih.gov",
-    // Clerk frontend API (the *.clerk.accounts.dev / *.clerk.com hosts the SDK calls)
-    "https://*.clerk.accounts.dev",
-    "https://*.clerk.com",
-    // Production Clerk lives on our own domain once the cutover lands.
-    "https://clerk.credentialdomd.com",
-    "https://accounts.credentialdomd.com",
-    "https://clerk-telemetry.com",
-    // Clerk's Smart CAPTCHA is Cloudflare Turnstile — its widget posts back here.
-    "https://challenges.cloudflare.com",
-    // A physician who pastes their own Anthropic key in Settings talks to
-    // Claude straight from the browser (aiClient.js points the SDK at
-    // api.anthropic.com and only routes through ai-proxy when there is no own
-    // key). Without this entry that direct path was blocked in production, so
-    // the one route that costs us nothing failed and only the proxy worked.
-    "https://api.anthropic.com",
-  ];
-  // Include the Supabase project URL if configured
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  if (supabaseUrl) {
-    connectSources.push(supabaseUrl);
-  }
-
   const csp = document.createElement("meta");
   csp.httpEquiv = "Content-Security-Policy";
-  csp.content = [
-    "default-src 'self'",
-    // Clerk injects a small bootstrap script that needs to run on the page.
-    // Cloudflare Turnstile (Clerk's CAPTCHA) ships its bootstrap from challenges.cloudflare.com.
-    "script-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.credentialdomd.com https://challenges.cloudflare.com",
-    "style-src 'self' 'unsafe-inline'",
-    "font-src 'self' data:",
-    "connect-src " + connectSources.join(" "),
-    "img-src 'self' data: blob: https://img.clerk.com",
-    // Turnstile renders the challenge in an iframe from challenges.cloudflare.com.
-    // blob: is a PDF this page built itself and shows in a frame: a receipt in
-    // Expenses, and a file opened in the read-only support view (ticket
-    // d45e857c). Only same-origin script can create a blob URL.
-    "frame-src blob: https://*.clerk.accounts.dev https://*.clerk.com https://clerk.credentialdomd.com https://accounts.credentialdomd.com https://challenges.cloudflare.com",
-    "worker-src 'self' blob:",
-    // index.html switches plain http://credentialdomd.com/app/ to https before
-    // this runs; any http:// request the app still makes is upgraded too.
-    "upgrade-insecure-requests",
-  ].join("; ");
+  csp.content = appContentSecurityPolicy(import.meta.env.VITE_SUPABASE_URL);
   document.head.prepend(csp);
 }
 

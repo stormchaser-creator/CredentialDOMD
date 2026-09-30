@@ -1,30 +1,36 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useUser, useClerk } from "@clerk/clerk-react";
-import { accessAuthority, accessVerifying, allowsDataChange, allowsSettingsChange, alertWriteRefused, scopesForWrite } from "../utils/limitedLaunchAccess.js";
+import { accessAuthority, accessVerifying, alertWriteRefused, dataChangeStatus, holdForAccess, reportWriteAccess, scopesForWrite, setWriteAccessReporter, settleWriteAccess, writeRefusalReason } from "../utils/limitedLaunchAccess.js";
+import { applyHeldQueue, changesBetween, revertChanges } from "../utils/heldChanges.js";
 import { DEFAULT_DATA } from "../constants/defaults";
-import { THEMES } from "../constants/themes";
+import { THEMES, themeNameOf, nextThemeName } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { useBillingReturn } from "../hooks/useBillingReturn.js";
-import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
-import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage, lsGet, lsSet, WIPE_SEEN_KEY, pendingOpCount, retireContinuityRecovery } from "../utils/storageScope";
+import { loadData, saveData, readCachedData, clearLocalData, onCacheFullChange, isCacheFull } from "../utils/storage";
+import { setActiveUserId, getActiveUserId, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, adoptLegacyStorage, hasLegacyStorage, lsGet, lsGetJSON, lsSetJSON, scopedKey, BASE_KEYS, WIPE_SEEN_KEY, LOCAL_FENCE_KEY, localFence, adoptLocalFence, localCopyCurrent, pendingOpCount, awaitingAccessOpCount, accessRefusedOpCount, deviceOnlyRecordCounts, retireContinuityRecovery } from "../utils/storageScope";
+import { repairStoredIds } from "../utils/idRepair.js";
+import { accountDataDeletedAt, honorAccountDataDeletion, sameDeletionStamp } from "../utils/dataDeletion.js";
 import { recordLastIdentity } from "../utils/offlineSession";
-import { resetSharedAiStatus } from "../utils/aiClient";
+import { noteMembershipStatus, resetSharedAiStatus } from "../utils/aiClient";
 import { configureSecretContinuity } from "../utils/secretBox.js";
 import { localFallbackReference, profileSupportReference } from "../utils/profileIssueDiagnostics.js";
 import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from "../utils/accountRecordsLoad.js";
-import { reportError } from "../lib/errorReport.js";
+import { reportError, reportUnlessLeaving } from "../lib/errorReport.js";
+import { DELETION_SUPPORT_REFERENCE } from "../utils/accountDeletionResult.js";
 import { vaultCount } from "../utils/privateVault";
-import { preservePausedApplicationRecords, pausedApplicationLinks, isDeviceOnlySection } from "../utils/pausedApplicationRecords.js";
+import { preservePausedApplicationRecords, pausedApplicationLinks, isDeviceOnlySection, DEVICE_ONLY_SECTIONS } from "../utils/pausedApplicationRecords.js";
 import { reconcileDocumentLinks } from "../utils/documentLinks.js";
 import { prepareRecord } from "../utils/recordWrite.js";
+import { withStoragePath } from "../utils/docStoragePath.js";
 import { trackedStates } from "../utils/compliance.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
-import { MS_PER_DAY } from "../utils/helpers";
+import { MS_PER_DAY, generateId } from "../utils/helpers";
 import {
   supabase,
   ensureProfile,
   invalidateAccountWrites,
   loadFromSupabase,
+  readAccountDataDeletion,
   insertItem as sbInsert,
   updateItem as sbUpdate,
   setFavorite as sbSetFavorite,
@@ -40,9 +46,21 @@ import {
   isCurrentDataDeletionContext,
   COLLECTION_KEYS,
   withLocalOnlySettings,
+  setWriteRejectionReporter,
+  onSyncChange,
+  syncIssuesFor,
 } from "../lib/supabase";
 
 const AppContext = createContext(null);
+
+// Storage paths this session found no file at (reconcileDocumentFiles): not
+// requested again until the app reloads.
+const missingDocumentFiles = new Set();
+
+// How often an open, visible tab asks whether the account's data was deleted
+// on another device, and the shortest gap between two focus-driven asks.
+const RECHECK_INTERVAL_MS = 3 * 60 * 1000;
+const RECHECK_MIN_GAP_MS = 30 * 1000;
 
 /**
  * Normalize Clerk's user → the `{ id, email }` shape the rest of the app
@@ -94,6 +112,9 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const [profileOwner, setProfileOwner] = useState(null);
   const [profileIssue, setProfileIssue] = useState(null);
   const [recordsLoadIssue, setRecordsLoadIssue] = useState(null);
+  // A setting the server refused while saving the rest, e.g. { field: "email",
+  // address } when the address is on another account. Shown by the field.
+  const [settingsRefusal, setSettingsRefusal] = useState(null);
   const [loadedFrom, setLoadedFrom] = useState(null); // "cloud" | "local"
   const userIdRef = useRef(null);
   // Clerk id the in-memory `data` was loaded for. The on-device cache is
@@ -101,6 +122,12 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // account's data under another's key.
   const dataOwnerRef = useRef(null);
   const dataLoadGeneration = useRef(0);
+  // { owner, stamp, fence }: the server data deletion the records in memory
+  // were loaded after (this device's WIPE_SEEN_KEY once that load had purged
+  // what it had to, null when none), and the device's purge fence at that
+  // moment (storageScope.js LOCAL_FENCE_KEY). A server deletion with another
+  // stamp, or a fence that has moved on, means they predate a purge.
+  const loadedDeletionRef = useRef(null);
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
 
@@ -145,9 +172,13 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // Remember who signed in on this device — the offline fallback identity.
   // Real, Clerk-verified sessions only; the offline session must never
   // re-record itself. Sign-out purges the slot with everything else.
+  // A new session also ends any earlier Sign out's claim on the session-end
+  // listener (purgeAfterSessionEnd), in this tab's memory and on the device,
+  // so a later expiry keeps what it keeps.
   useEffect(() => {
     if (offlineMode || !user?.id) return;
     try { recordLastIdentity(user); } catch { /* storage unavailable */ }
+    clearDeliberateSignOut(user.id);
   }, [offlineMode, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Every on-device key (file, vault, chat, timers) is namespaced by the
@@ -155,6 +186,86 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // this same pass (their useState initializers read storage) see the
   // right namespace. Idempotent, so StrictMode double-render is harmless.
   if (getActiveUserId() !== (user?.id || null)) setActiveUserId(user?.id || null);
+
+  // ─── Refused cloud writes ─────────────────────────────────
+  // A row the database refuses for good (a blank required field, a value of
+  // the wrong type) is reported to client_errors by table and code, and the
+  // record is named on screen until a later save of it lands. Also the count
+  // of writes still queued for this account (lib/supabase.js).
+  const [syncState, setSyncState] = useState({ issues: [], pending: 0, awaitingAccess: 0, accessRefused: 0 });
+  // The on-device copy could not be updated (storage full): what opens
+  // offline is older than what is on screen.
+  const [offlineCopyStale, setOfflineCopyStale] = useState(() => isCacheFull());
+  useEffect(() => onCacheFullChange(setOfflineCopyStale), []);
+  useEffect(() => { setWriteRejectionReporter((message) => reportError(message)); }, []);
+  // Refused saves, and saves kept on this device for want of a membership
+  // answer, reach client_errors too (event, reason code and section only).
+  useEffect(() => { setWriteAccessReporter((message, extra) => reportError(message, "error", extra)); }, []);
+  useEffect(() => {
+    const accountId = user?.id || null;
+    if (!accountId) { setSyncState({ issues: [], pending: 0, awaitingAccess: 0, accessRefused: 0 }); return undefined; }
+    const refresh = (changed) => {
+      if (changed && changed !== accountId) return;
+      setSyncState({ issues: syncIssuesFor(accountId), pending: pendingOpCount(accountId), awaitingAccess: awaitingAccessOpCount(accountId),
+        accessRefused: accessRefusedOpCount(accountId) });
+    };
+    refresh();
+    return onSyncChange(refresh);
+  }, [user?.id]);
+
+  // Saves kept on this device for want of a membership answer (queued
+  // awaitingAccess, lib/supabase.js) go up as soon as a check answers, not at
+  // the next launch. Replay sends each only if that answer allows it. One the
+  // answer refuses (the membership is read-only now) is marked, so the notice
+  // says it was not saved instead of promising a sync, and it is reported.
+  //
+  // Nothing goes up that predates a data deletion. Delete All My Data on
+  // another device empties the account AND its deletion ledger, so every save
+  // queued here before it would come back as a new record. As on a load
+  // (utils/dataDeletion.js), the account's deletion stamp is read first: a
+  // new one (or a purge by another tab here) sends nothing and loads the
+  // account again, which purges this device's copy before anything is
+  // replayed. A stamp that cannot be read sends nothing either; the next
+  // answer or the next load asks again. Then the deletion ledger, so nothing
+  // deleted since is put back.
+  useEffect(() => {
+    if (offlineMode || !user?.id || !accessAuthority.enabled) return undefined;
+    const ownerId = user.id;
+    let running = false;
+    return accessAuthority.onAnswer((accountId) => {
+      if (running || accountId !== ownerId) return;
+      const waiting = awaitingAccessOpCount(ownerId);
+      if (waiting === 0) return;
+      // Every kept save is marked refused already and this answer allows no
+      // change: nothing to send and nothing new to mark.
+      if (accessRefusedOpCount(ownerId) >= waiting
+        && !["credential", "practice"].some(scope => accessAuthority.allows(scope, "write", ownerId))) return;
+      const profileId = userIdRef.current;
+      const under = loadedDeletionRef.current?.owner === ownerId ? loadedDeletionRef.current : null;
+      const current = () => dataOwnerRef.current === ownerId && getActiveUserId() === ownerId
+        && userIdRef.current === profileId && loadedDeletionRef.current === under;
+      if (!profileId || !under || !current()) return;
+      // This device purged since these records loaded (another tab honored a
+      // deletion, or ran Delete All My Data): no request needed.
+      const purgedHere = () => !sameDeletionStamp(under.stamp ?? null, lsGet(WIPE_SEEN_KEY, ownerId))
+        || !localCopyCurrent(ownerId, under.fence ?? null);
+      const loadAgain = () => { setLoaded(false); void loadDataForUser(ownerId); };
+      running = true;
+      void (async () => {
+        try {
+          if (purgedHere()) { loadAgain(); return; }
+          const stamp = await readAccountDataDeletion(ownerId);
+          if (!current()) return;
+          if ((stamp && !sameDeletionStamp(under.stamp ?? null, stamp)) || purgedHere()) { loadAgain(); return; }
+          const tombstones = await listTombstones(profileId);
+          if (!current() || purgedHere()) return;
+          const replayed = await replayPendingOps(profileId, ownerId, { tombstones });
+          for (const section of replayed?.refused || []) reportWriteAccess("write_refused", "read_only", section);
+        } catch { /* the stamp, the ledger or the network: the next answer, or the next load, tries again */ }
+        finally { running = false; }
+      })();
+    });
+  }, [offlineMode, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Load data when user changes (sign in / sign out) ─────
   useEffect(() => {
@@ -185,19 +296,84 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // Involuntary sign-out (session expiry, revocation from the Clerk
   // dashboard, "sign out of all devices"): the provider unmounts, but the
   // Clerk listener fires first, so purge this account's on-device keys
-  // right there. The vault is kept: those patient notes exist nowhere else
-  // and a token timing out must not destroy them; the namespaced key is
-  // unreadable to any other account. The Sign out button purges it too.
+  // right there. What exists nowhere else is kept: the private vault,
+  // Protected Identity, the Answer Bank and the settings with no cloud
+  // column (the file is cut down to those), the unsynced-edits queue (for a limited time, storageScope.js
+  // KEPT_QUEUE_MAX_AGE_MS) and the running timer. A token timing out must
+  // not destroy them, and every key is unreadable to any other account. The
+  // Sign out button marks itself first, so its own listener call (and other
+  // tabs') purges the way it always did, after warning. See
+  // purgeAfterSessionEnd.
   useEffect(() => {
     if (offlineMode || !clerkLoaded || !user?.id || typeof clerk?.addListener !== "function") return;
     const ownerId = user.id;
     const unsub = clerk.addListener((e) => {
       if ((e?.user?.id || null) !== ownerId) {
-        purgeUserStorage(ownerId, { keepVault: true }).catch(() => {});
+        purgeAfterSessionEnd(ownerId).catch(() => {});
       }
     });
     return () => { try { unsub?.(); } catch { /* already gone */ } };
   }, [clerkLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Delete All My Data run on another device while this one stays open: the
+  // records on screen predate it, and so does anything this tab would write
+  // back. Read the account's deletion stamp (two columns of the member's own
+  // profile row) and, when the records in memory were loaded before it, load
+  // the account again, which purges this device's copy before anything is
+  // shown, replayed or pushed. Asked when the app returns to the foreground,
+  // when its window gets the focus back or the connection returns (at most
+  // every 30 seconds), and every 3 minutes while it is visible, so a tab left
+  // open in its own window or on a second screen is caught too. Another tab
+  // on this device that purged moves WIPE_SEEN_KEY or the purge fence: that
+  // needs no request, is checked first, and arrives here at once as a storage
+  // event, so that tab drops what it shows straight away.
+  useEffect(() => {
+    if (offlineMode || !loaded || !user?.id || typeof document === "undefined") return;
+    const ownerId = user.id;
+    let checking = false, serverAskedAt = 0;
+    const current = () => dataOwnerRef.current === ownerId && getActiveUserId() === ownerId && window.Clerk?.user?.id === ownerId;
+    const loadAgain = () => { setLoaded(false); void loadDataForUser(ownerId); };
+    const loadedUnder = () => (loadedDeletionRef.current?.owner === ownerId ? loadedDeletionRef.current : null);
+    // This device purged since these records loaded (another tab honored a
+    // deletion, or ran Delete All My Data): no request needed.
+    const purgedHere = () => {
+      const under = loadedUnder();
+      return !sameDeletionStamp(under?.stamp ?? null, lsGet(WIPE_SEEN_KEY, ownerId))
+        || !localCopyCurrent(ownerId, under ? under.fence ?? null : undefined);
+    };
+    const check = async ({ server = true, throttle = false } = {}) => {
+      if (checking) return;
+      checking = true;
+      try {
+        if (purgedHere()) { if (current()) loadAgain(); return; }
+        if (!server || document.visibilityState !== "visible") return;
+        if (throttle && Date.now() - serverAskedAt < RECHECK_MIN_GAP_MS) return;
+        serverAskedAt = Date.now();
+        const stamp = await readAccountDataDeletion(ownerId);
+        // A storage event that arrived during the read was not checked on its own.
+        if (((stamp && !sameDeletionStamp(loadedUnder()?.stamp ?? null, stamp)) || purgedHere()) && current()) loadAgain();
+      } catch { /* offline, or the stamp column is not deployed yet: the next check or load asks again */ }
+      finally { checking = false; }
+    };
+    const onVisible = () => { void check(); };
+    const onFocus = () => { void check({ throttle: true }); };
+    const watched = new Set([scopedKey(WIPE_SEEN_KEY, ownerId), scopedKey(LOCAL_FENCE_KEY, ownerId)]);
+    const onStorage = (event) => { if (event?.key == null || watched.has(event.key)) void check({ server: false }); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onFocus);
+    window.addEventListener("storage", onStorage);
+    const timer = setInterval(() => { void check({ throttle: true }); }, RECHECK_INTERVAL_MS);
+    // A purge by another tab while this one was loading: caught now, without a request.
+    void check({ server: false });
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onFocus);
+      window.removeEventListener("storage", onStorage);
+      clearInterval(timer);
+    };
+  }, [offlineMode, loaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadDataForUser(authUserId) {
     const generation = ++dataLoadGeneration.current;
@@ -219,25 +395,68 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         setProfileOwner(authUserId);
         loadStage = "records";
         setProfileIssue(null);
-        // The server wiped this account (Delete All My Data on another
-        // device, or the deletion 7 days after a cancellation) and took the
-        // tombstone ledger with it. A device that has not yet purged for THIS
-        // wipe still holds a copy that predates it: drop it BEFORE the
-        // pending-op replay and the self-heal push below can send it back up.
-        // The stamp is per device, so a second device with a stale cache
-        // purges too, however many sign-ins the first one has done since.
-        // The private vault stays; it exists nowhere else and never touched
-        // the server.
-        if (profile.deleted_at && lsGet(WIPE_SEEN_KEY, authUserId) !== profile.deleted_at) {
-          try { await purgeUserStorage(authUserId, { keepVault: true, retireRecovery: true }); }
-          catch (error) { if (error.code === "continuity_retirement_unavailable") throw error; }
+        // The server deleted this account's data (Delete All My Data on
+        // another device, or the deletion 7 days after a cancellation) and
+        // took the tombstone ledger with it; the account is open and empty
+        // now (owner decision 2026-09-29). A device that has not yet purged
+        // for THIS deletion still holds a copy that predates it: drop it,
+        // vault, queued writes and device keys included, BEFORE the pending-op
+        // replay and the self-heal push below can send it back up. The stamp
+        // is per device, so every device purges once, however many sign-ins
+        // the first one has done since. ensureProfile has usually done this
+        // already from the sign-in receipt; this reads the row itself, which
+        // also covers the path without continuity. src/utils/dataDeletion.js.
+        const dataDeletedAt = accountDataDeletedAt(profile);
+        if (dataDeletedAt) {
+          // Records already in memory in this session (an open tab loading
+          // again) were loaded before this deletion: stop showing them and
+          // stop every edit and cache write from them before going on.
+          const inMemoryStamp = loadedDeletionRef.current?.owner === authUserId ? loadedDeletionRef.current.stamp : null;
+          if (dataOwnerRef.current === authUserId && !sameDeletionStamp(inMemoryStamp, dataDeletedAt)) {
+            dataOwnerRef.current = null;
+            setLoaded(false);
+            setData(DEFAULT_DATA);
+          }
+          await honorAccountDataDeletion(authUserId, dataDeletedAt);
           if (!current()) return;
-          lsSet(WIPE_SEEN_KEY, profile.deleted_at, authUserId);
         }
+        // What this device has purged for, now that this load has purged what
+        // it had to: the records it reads from here on belong to it. Taken
+        // here, not at the end, so a purge by another tab while this load runs
+        // leaves them fenced instead of adopted.
+        const loadedUnder = { owner: authUserId, stamp: lsGet(WIPE_SEEN_KEY, authUserId), fence: localFence(authUserId) };
+        // Records this device saved with an id the cloud can never accept
+        // (manual deduction lines were "ded-..."): renamed to real uuids, with
+        // their document links, queued writes and private notes, BEFORE the
+        // replay and the self-heal push below try to send them again.
+        try {
+          await repairStoredIds({
+            readCached: () => readCachedData(authUserId), saveCached: (blob) => saveData(blob, authUserId),
+            readQueue: () => lsGetJSON(BASE_KEYS.pendingOps, authUserId), writeQueue: (ops) => lsSetJSON(BASE_KEYS.pendingOps, ops, authUserId),
+            readVault: () => lsGetJSON(BASE_KEYS.vault, authUserId), writeVault: (vault) => lsSetJSON(BASE_KEYS.vault, vault, authUserId),
+            makeId: generateId,
+          });
+        } catch { /* storage unavailable: the rows stay listed as refused */ }
+        if (!current()) return;
         // Replay any writes that never reached the cloud (offline edits and
         // deletes, transient failures) BEFORE reading back, so the snapshot we
-        // merge already reflects them.
-        try { await replayPendingOps(profile.id, authUserId); } catch { /* offline */ }
+        // merge already reflects them. With something queued, the deletion
+        // ledger is read first: a queued save of a record deleted since (a
+        // patient chart the read flagged, a record deleted on another device)
+        // is dropped instead of re-created behind its tombstone. When the
+        // ledger cannot be read, the queue waits for the next load.
+        if (pendingOpCount(authUserId) > 0) {
+          let replayTombstones = null;
+          try { replayTombstones = await listTombstones(profile.id); } catch { /* unread: replay waits */ }
+          if (!current()) return;
+          if (replayTombstones) {
+            try {
+              const replayed = await replayPendingOps(profile.id, authUserId, { tombstones: replayTombstones });
+              // Saves kept for want of a membership answer that the answer now refuses (lib/supabase.js accessRefused).
+              for (const section of replayed?.refused || []) reportWriteAccess("write_refused", "read_only", section);
+            } catch { /* offline */ }
+          }
+        }
         if (!current()) return;
         let sbData;
         try {
@@ -296,15 +515,29 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // another device.
           merged.settings = withLocalOnlySettings(merged.settings, local?.settings);
 
-          // Deletion ledger: anything deleted anywhere stays deleted.
-          let tombstones = new Set();
-          try { tombstones = await listTombstones(profileId); } catch { /* offline */ }
+          // Deletion ledger: anything deleted anywhere stays deleted. A ledger
+          // that could not be read stops the load like a failed collection
+          // read: without it, a record on this device only is either an
+          // unsent save or a delete made elsewhere, and pushing it would undo
+          // the delete.
+          let tombstones;
+          try { tombstones = await listTombstones(profileId); }
+          catch { if (!current()) return; throw accountRecordsLoadError(); }
           if (!current()) return;
           if (tombstones.size > 0) {
             for (const key of COLLECTION_KEYS) {
               if (merged[key]?.length) merged[key] = merged[key].filter(x => !tombstones.has(x?.id));
             }
           }
+
+          // Deletes and stars this device keeps for want of a membership
+          // answer (refused ones included) stay as the member left them: the
+          // account still holds the record, or its old star, until they go
+          // up, and the merge above put that back on screen although the
+          // notice says the change stays on this device. Read after the
+          // replay, so only what is still waiting counts. utils/heldChanges.js.
+          const heldQueue = applyHeldQueue(merged, lsGetJSON(BASE_KEYS.pendingOps, authUserId), COLLECTION_KEYS);
+          merged = heldQueue.data;
 
           // These two unfinished editors have no cloud/restore registration.
           // Keep only this account's cached rows, respecting the deletion
@@ -325,22 +558,52 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
               if (localItems.length === 0) continue;
               const cloudById = new Map((merged[key] || []).map(x => [x?.id, x]));
               const toPush = [];
+              // A document on this device only whose file never uploaded has
+              // no storage path, and documents.storage_path is NOT NULL: no
+              // row push can create it. It is kept in the merge, and
+              // reconcileDocumentFiles below uploads the file and writes the
+              // whole row in one step.
+              const keepLocal = [];
               for (const x of localItems) {
-                if (!x?.id || tombstones.has(x.id)) continue;
+                if (!x?.id || tombstones.has(x.id) || heldQueue.deleted.has(x.id)) continue;
                 const cloud = cloudById.get(x.id);
-                if (!cloud) { toPush.push(x); continue; } // never reached the cloud
+                if (!cloud) { // never reached the cloud
+                  if (key === "documents" && !x.storagePath) keepLocal.push(x);
+                  else toPush.push(x);
+                  continue;
+                }
                 // A local edit whose cloud write failed is newer than the cloud
                 // row; push it so the edit isn't silently reverted on next load.
                 const localT = x.updatedAt ? Date.parse(x.updatedAt) : 0;
                 const cloudT = cloud.updatedAt ? Date.parse(cloud.updatedAt) : 0;
-                if (localT && localT > cloudT) toPush.push(x);
+                // A document with bytes here and no storage path, whose row
+                // exists. The file upload (it writes the whole row; a row
+                // push cannot) takes it only when this copy is newer, or when
+                // the bytes are a file given again ("Upload it again") that
+                // has not reached Storage: then the row keeps the cloud's
+                // details and gets the new file. Any other such copy was saved
+                // before this device learned the path (an older version never
+                // recorded it): the cloud row, perhaps filed or renamed on
+                // another device since, stands, and the bytes are re-attached
+                // below. Taken as newer, the stale copy used to replace the row
+                // and unfile the document on every device.
+                if (key === "documents" && !x.storagePath && x.data) {
+                  if (localT && localT > cloudT) keepLocal.push(x);
+                  else if (x.pendingUpload) keepLocal.push({ ...cloud, data: x.data, type: x.type, size: x.size, storagePath: undefined, fileMissing: undefined, pendingUpload: true });
+                  continue;
+                }
+                // A document edit keeps the cloud's file location if this copy
+                // never learned it.
+                if (localT && localT > cloudT) toPush.push(key === "documents" && !x.storagePath ? { ...x, storagePath: cloud.storagePath } : x);
               }
-              if (toPush.length > 0) {
+              if (toPush.length > 0 || keepLocal.length > 0) {
                 // Replace-in-place for rows already present, append the missing.
                 const byId = new Map();
                 for (const x of (merged[key] || [])) byId.set(x?.id, x);
-                for (const x of toPush) byId.set(x.id, x);
+                for (const x of [...toPush, ...keepLocal]) byId.set(x.id, x);
                 merged[key] = [...byId.values()];
+              }
+              if (toPush.length > 0) {
                 bulkSync(profileId, key, toPush, authUserId).catch(() => {});
                 pushed += toPush.length;
               }
@@ -361,11 +624,13 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // claims. See src/utils/documentLinks.js.
           const linkPass = reconcileDocumentLinks(merged, COLLECTION_KEYS, pausedApplicationLinks(merged));
           merged.documents = linkPass.documents;
+          // Partial writes: a failure is queued as a narrow patch, never an
+          // upsert that could not insert a row from two columns.
           for (const d of linkPass.cleared) {
-            sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }, d, authUserId).catch(() => {});
+            sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }, d, authUserId, { partial: true }).catch(() => {});
           }
           for (const d of linkPass.relinked) {
-            sbUpdate(profileId, "documents", { id: d.id, linkedTo: d.linkedTo }, d, authUserId).catch(() => {});
+            sbUpdate(profileId, "documents", { id: d.id, linkedTo: d.linkedTo }, d, authUserId, { partial: true }).catch(() => {});
           }
 
           // A cloud document row carries metadata only (bytes live in Storage).
@@ -384,6 +649,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           }
 
           dataOwnerRef.current = authUserId;
+          loadedDeletionRef.current = loadedUnder;
+          adoptLocalFence(authUserId, loadedUnder.fence);
           setData(merged);
           setLoadedFrom("cloud");
           setLoaded(true);
@@ -407,13 +674,15 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         dataOwnerRef.current = null;
         userIdRef.current = null;
         setProfileOwner(null);
+        // Not reported when the page is being left: a reload aborts its own
+        // reads, and that is the member leaving, not a failure (OPS-008).
         if (err.code === "account_records_unavailable") {
-          reportError(`Account records load stopped (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}).`);
+          reportUnlessLeaving(`Account records load stopped (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}).`);
           setRecordsLoadIssue({ accountId: authUserId, supportReference: ACCOUNT_RECORDS_SUPPORT_REFERENCE });
         } else {
           const supportReference = profileSupportReference(err);
           // Report only the allowlisted reference, never the underlying error.
-          reportError(`Account load stopped (${supportReference}).`);
+          reportUnlessLeaving(`Account load stopped (${supportReference}).`);
           setProfileIssue({ accountId: authUserId, supportReference, message: (err.recoveryConflict
             ? "An existing device copy needs a recovery review. Your saved data has not been overwritten. Please contact support."
             : "Your account identity could not be verified. Your existing records have not changed. Reload to try again.")
@@ -430,7 +699,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       // page says so with a Reload button. Tell the operator once per session,
       // with fixed vocabulary only (the stage, and an allowlisted error code or
       // browser error name), never the underlying message.
-      reportError(`Account load used this device's copy (${localFallbackReference(loadStage, err)}).`);
+      reportUnlessLeaving(`Account load used this device's copy (${localFallbackReference(loadStage, err)}).`);
     }
 
     // Fallback to this account's own local copy (offline)
@@ -442,18 +711,29 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       if (!current()) return;
       try {
         if (doc.data && !doc.storagePath) {
-          const path = await uploadDocumentFile(doc, authUserId);
+          // The file AND its whole row, in one step (lib/supabase.js). The
+          // path is set here only once both landed: a storagePath makes the
+          // cache drop these bytes, which may be the only copy.
+          const path = await uploadDocumentFile(doc, authUserId, profileId);
           if (!current()) return;
           if (path) {
-            const updated = { ...doc, storagePath: path };
+            const updated = { ...doc, storagePath: path, pendingUpload: undefined };
             setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? updated : x) }) : d);
-            sbUpdate(profileId, "documents", { id: doc.id, storagePath: path }, doc, authUserId).catch(() => {});
           }
         } else if (!doc.data && doc.storagePath) {
-          const dataUrl = await downloadDocumentFile(doc.storagePath);
+          // Storage has no file for this row: say so on the document (in state
+          // only, never an edit) and stop asking for it this session. It used
+          // to read "Fetching the file" for ever and be requested every load.
+          const markMissing = () => setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? { ...x, fileMissing: true } : x) }) : d);
+          if (missingDocumentFiles.has(doc.storagePath)) { markMissing(); continue; }
+          const got = await downloadDocumentFile(doc.storagePath, { detail: true });
           if (!current()) return;
+          const dataUrl = typeof got === "string" ? got : got?.dataUrl;
           if (dataUrl) {
-            setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? { ...x, data: dataUrl } : x) }) : d);
+            setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? { ...x, data: dataUrl, fileMissing: undefined } : x) }) : d);
+          } else if (got?.missing) {
+            missingDocumentFiles.add(doc.storagePath);
+            markMissing();
           }
         }
       } catch { /* per-file best effort — retried on next load */ }
@@ -461,6 +741,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }
 
   async function loadLocalData(authUserId, current) {
+    const loadedUnder = { owner: authUserId || null, stamp: lsGet(WIPE_SEEN_KEY, authUserId), fence: localFence(authUserId) };
     const d = await loadData(authUserId);
     if (!current()) return;
     if (d._userId) {
@@ -468,6 +749,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       delete d._userId;
     }
     dataOwnerRef.current = authUserId || null;
+    loadedDeletionRef.current = loadedUnder;
+    if (authUserId) adoptLocalFence(authUserId, loadedUnder.fence);
     setData(d);
     setLoadedFrom("local");
     setLoaded(true);
@@ -478,6 +761,19 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // Shared-AI status is per account; the next user must re-check.
     try { resetSharedAiStatus(); } catch { /* ignore */ }
     const ownerId = user?.id || getActiveUserId();
+    // Protected Identity and the Answer Bank exist only in this device's copy
+    // of the file (DEVICE_ONLY_SECTIONS), so the purge below erases them for
+    // good unless a full JSON backup holds them. Name them before that point.
+    // Counted from the disk copies too, not memory alone: the identity-check
+    // failure screen and the membership check hold empty defaults while the
+    // disk still has the rows, and both offer Sign out.
+    const onDevice = await deviceOnlyRecordCounts(ownerId, dataRef.current);
+    const deviceOnly = Object.entries(DEVICE_ONLY_SECTIONS)
+      .map(([key, label]) => [label, onDevice[key] || 0])
+      .filter(([, count]) => count > 0);
+    if (deviceOnly.length && typeof window !== "undefined" && !window.confirm(
+      `Signing out erases the ${deviceOnly.map(([label, count]) => `${count} ${label} record${count === 1 ? "" : "s"}`).join(" and ")} kept only on this device. Save a full JSON backup under More, Data & Backup first${onDevice.identityVault ? "; its SSN and date of birth stay encrypted with your lock code" : ""}. Sign out anyway?`
+    )) return;
     // The vault is erased with everything else on sign-out and those notes
     // exist nowhere else, so say so once when there is something to lose.
     const n = vaultCount();
@@ -498,6 +794,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // signed in with their in-memory data and actionable explanation intact.
     try { retireContinuityRecovery(ownerId); }
     catch (error) { window.alert(error.message); return; }
+    // Deliberate: Clerk's session-end listener (here and in other tabs) must
+    // purge everything, not keep what it keeps for an expired session. The
+    // marker's key names this account; the purge below removes it, and every
+    // tab keeps what it noted in memory (storageScope.js SIGNOUT_INTENT_BASE).
+    markDeliberateSignOut(ownerId);
     invalidateAccountWrites(ownerId);
     // The membership authority serves nobody from here on. A check still in
     // flight can otherwise land while Clerk still reports this account and
@@ -545,9 +846,16 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const generation = dataLoadGeneration.current;
     const cacheGeneration = cacheWriteGeneration.current;
     saveTimer.current = setTimeout(() => {
-      if (owner && dataOwnerRef.current === owner && getActiveUserId() === owner
-        && dataLoadGeneration.current === generation
-        && cacheWriteGeneration.current === cacheGeneration) saveData(data, owner);
+      if (!owner || dataOwnerRef.current !== owner || getActiveUserId() !== owner
+        || dataLoadGeneration.current !== generation
+        || cacheWriteGeneration.current !== cacheGeneration) return;
+      // Not over a copy this device purged since these records loaded (a
+      // server data deletion honored by another tab, or Delete All My Data
+      // run in one): records loaded before it must not be written back for
+      // the self-heal push to send up again (src/utils/dataDeletion.js).
+      const loadedUnder = loadedDeletionRef.current?.owner === owner ? loadedDeletionRef.current : null;
+      if (sameDeletionStamp(loadedUnder?.stamp ?? null, lsGet(WIPE_SEEN_KEY, owner))
+        && localCopyCurrent(owner, loadedUnder ? loadedUnder.fence ?? null : undefined)) saveData(data, owner);
     }, 300);
     return () => clearTimeout(saveTimer.current);
   }, [data, loaded]);
@@ -556,6 +864,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout: sbCheckout, manage: sbManage, setMockPlan, isDevMode, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly } = useSubscription(user ?? null, { profileReady: !offlineMode && profileOwner === user?.id });
   // Back from Stripe (?billing=complete|canceled): confirm the purchase, or say nothing was charged.
   const billingReturn = useBillingReturn(limitedLaunch, user?.id);
+  // A membership that turns active while the app is open (back from Checkout
+  // before Stripe's events land, an invitation activated) asks ai-proxy again,
+  // so the shared AI it includes is on without a reload (BILL-003).
+  const membershipStatus = limitedLaunch.access?.accessStatus ?? null;
+  useEffect(() => { noteMembershipStatus(membershipStatus); }, [membershipStatus]);
 
   // Enrollment may finish after the initial cloud load. Retry the owner-bound
   // replay/self-heal once when protected write scopes become available.
@@ -573,7 +886,21 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   accessAuthority.registerRecords(dataOwnerRef.current, data);
 
   // Check before replacing local state, so a denied restore never overwrites saved data.
-  const guardedSetData = useCallback((updater) => {
+  //
+  // A change the membership answer allows now is applied. One that meets an
+  // answer that is only old (the app spent a few minutes in Mail or the share
+  // sheet, where no check runs) or a check that failed on a bad connection,
+  // inside the grace after an active answer, is applied too, and the check it
+  // starts decides it (holdForAccess): its cloud write waits for that check
+  // (lib/supabase.js) and goes up, or is queued "saved on this device, will
+  // sync", or, when the server answers read-only, the change is taken back
+  // here. Only a real refusal returns false. `section` names the collection
+  // for the operator's report; `quiet`: nobody typed it (a "seen" stamp), so
+  // taking it back is not announced. `keepOnRefusal`: the change records work
+  // already done outside the app (an invoice that went out), so a refusal by
+  // that check never takes it back: it stays here, its cloud write is queued
+  // marked refused, and the notice says so (lib/supabase.js authorizeOwner).
+  const guardedSetData = useCallback((updater, { section = null, quiet = false, keepOnRefusal = false } = {}) => {
     if (!user?.id || dataOwnerRef.current !== user.id || getActiveUserId() !== user.id
       || (!offlineMode && window.Clerk?.user?.id !== user.id)) return false;
     if (!accessAuthority.enabled) {
@@ -588,10 +915,28 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const before = dataRef.current;
     // An updater receives its own copy: in-place changes cannot alter saved data before authorization.
     const next = typeof updater === "function" ? updater(structuredClone(before)) : updater;
-    if (!allowsDataChange(before, next)) return false;
+    const access = dataChangeStatus(before, next);
+    if (access.status === "refuse") return false;
     dataRef.current = next;
     accessAuthority.registerRecords(dataOwnerRef.current, next);
     setData(next);
+    if (access.status === "verify") {
+      const ownerId = user.id;
+      const changes = changesBetween(before, next);
+      holdForAccess({
+        scopes: access.scopes, accountId: ownerId, section: section || access.section, quiet, keep: keepOnRefusal === true,
+        // Taken back only in this account's records, and only where nothing
+        // has changed them since.
+        undo: () => {
+          if (dataOwnerRef.current !== ownerId || getActiveUserId() !== ownerId) return;
+          const restored = revertChanges(dataRef.current, changes);
+          if (restored === dataRef.current) return;
+          dataRef.current = restored;
+          accessAuthority.registerRecords(ownerId, restored);
+          setData(restored);
+        },
+      });
+    }
     return true;
   }, [user?.id, offlineMode]);
   // Account deletion is an explicit data-rights operation, independent of membership.
@@ -618,11 +963,60 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     clearTimeout(saveTimer.current);
     saveTimer.current = null;
     cacheWriteGeneration.current += 1;
+    // The empty records replacing the old ones come after this device's
+    // purge: they, and what the member adds to them, may be written to the
+    // local copy again under the fence the deletion moved.
+    loadedDeletionRef.current = { owner: owner.accountId, stamp: lsGet(WIPE_SEEN_KEY, owner.accountId), fence: localFence(owner.accountId) };
+    adoptLocalFence(owner.accountId, loadedDeletionRef.current.fence);
     dataRef.current = next;
     setData(before => {
       if (!isCurrentDataDeletionContext(owner)) return before;
       return dataOwnerRef.current === owner.accountId && getActiveUserId() === owner.accountId ? next : before;
     });
+    return true;
+  }, []);
+  // The server deletion leaves the account empty and closed until its owner
+  // signs in again, when initialize-clerk-profile reopens it (migration
+  // 20260930020000). Load it again right away, so this device goes on with
+  // an open, empty account instead of one that refuses every write until the
+  // next reload. deletedAt is the stamp delete-account answered with and this
+  // device has already purged for (honorAccountDataDeletion); the empty
+  // records in memory count as loaded after it.
+  const reopenAfterAccountDeletion = useCallback((owner, deletedAt) => {
+    if (offlineMode || !deletedAt || !isCurrentDataDeletionContext(owner)) return false;
+    if (dataOwnerRef.current !== owner.accountId || getActiveUserId() !== owner.accountId) return false;
+    loadedDeletionRef.current = { owner: owner.accountId, stamp: deletedAt, fence: localFence(owner.accountId) };
+    setLoaded(false);
+    void loadDataForUser(owner.accountId);
+    return true;
+  }, [offlineMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The server step of Delete All My Data did not confirm, and reading the
+  // account back found no new deletion stamp either (or could not ask). The
+  // server may still finish it: its reply can be lost on a dropped
+  // connection while the function runs on. Anything the member added here
+  // now would be purged as pre-deletion data by the next load that learns
+  // the stamp, so nothing is added: writes stop, the records go, and the app
+  // asks for a reload, which reads the account again. This tab keeps its old
+  // purge fence, so nothing it still holds reaches the local copy either.
+  // `message` (deletionUnconfirmedMessage) is what the stopped screen shows:
+  // what may still be on the servers, what to do, and the support reference,
+  // which the operator also gets here.
+  const holdAfterUnconfirmedDeletion = useCallback((owner, message) => {
+    if (!isCurrentDataDeletionContext(owner)) return false;
+    if (dataOwnerRef.current !== owner.accountId || getActiveUserId() !== owner.accountId) return false;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    cacheWriteGeneration.current += 1;
+    dataLoadGeneration.current += 1;
+    accessAuthority.suspendWrites();
+    dataOwnerRef.current = null;
+    userIdRef.current = null;
+    dataRef.current = DEFAULT_DATA;
+    setProfileOwner(null);
+    setProfileIssue({ accountId: owner.accountId, supportReference: DELETION_SUPPORT_REFERENCE, message });
+    setData(DEFAULT_DATA);
+    setLoadedFrom(null);
+    reportError(`Delete All My Data held: the server step did not confirm (${DELETION_SUPPORT_REFERENCE}).`);
     return true;
   }, []);
 
@@ -644,60 +1038,126 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [offlineMode, sbManage]);
 
   // Theme. An unknown stored theme (e.g. the recycled 'arctic' profile
-  // default) falls back to the app's real default, dark — not light.
-  const theme = useMemo(() => THEMES[data.settings.theme] || THEMES.dark || THEMES.light, [data.settings.theme]);
+  // default) is the app's real default, dark, everywhere: what renders, what
+  // the indicators say and what the toggle flips from (themeNameOf).
+  const themeName = themeNameOf(data.settings.theme);
+  const isDark = themeName === "dark";
+  const theme = useMemo(() => THEMES[themeName], [themeName]);
 
   const toggleTheme = useCallback(() => {
     const ownerId = dataOwnerRef.current, profileId = userIdRef.current;
     if (!ownerId || getActiveUserId() !== ownerId) return;
     setData(d => {
       if (getActiveUserId() !== ownerId || dataOwnerRef.current !== ownerId) return d;
-      const newTheme = d.settings.theme === "dark" ? "light" : "dark";
+      const newTheme = nextThemeName(d.settings.theme);
       sbSaveSettings(profileId, { theme: newTheme }, ownerId).catch(() => {});
       return { ...d, settings: { ...d.settings, theme: newTheme } };
     });
   }, []);
 
   // Convenience CRUD helpers
-  const updateSection = useCallback((key, updater) => {
-    return guardedSetData(d => ({ ...d, [key]: updater(d[key]) }));
+  // `keepOnRefusal` (addItem, editItem): see guardedSetData.
+  const updateSection = useCallback((key, updater, { keepOnRefusal = false } = {}) => {
+    return guardedSetData(d => ({ ...d, [key]: updater(d[key]) }), { section: key, keepOnRefusal });
   }, [guardedSetData]);
 
   const updateSettings = useCallback((updates) => {
-    if (!allowsSettingsChange(updates)) {
-      // Refused only because membership is being re-checked: say so, unless
-      // all it carried was a "seen" timestamp nobody typed.
-      if (accessVerifying(accessAuthority, "credential") && Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"))) alertWriteRefused({ scope: "credential" });
+    if (accessAuthority.enabled && accessAuthority.settingsStatus(updates).status === "refuse") {
+      // A "seen" timestamp nobody typed is neither said nor reported.
+      if (Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"))) {
+        // Refused only because membership is being re-checked: say so. A
+        // read-only membership is shown on the page already; it is reported.
+        if (accessVerifying(accessAuthority, "credential")) alertWriteRefused({ scope: "credential", section: "settings" });
+        else reportWriteAccess("write_refused", writeRefusalReason(accessAuthority, "credential"), "settings");
+      }
       return false;
     }
-    if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }))) return false;
-    sbSaveSettings(userIdRef.current, updates, user?.id).catch(() => {});
+    const previousEmail = dataRef.current?.settings?.email ?? "";
+    const quiet = !Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"));
+    if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }), { section: "settings", quiet })) return false;
+    sbSaveSettings(userIdRef.current, updates, user?.id).then(result => {
+      // An address another account holds is refused and everything else
+      // saved (saveSettings). Put back the address the profile still holds,
+      // unless something newer was typed meanwhile, and say why.
+      if (result?.savedExcept !== "email" || !Object.hasOwn(updates || {}, "email")) return;
+      const refused = updates.email;
+      const stored = typeof result.email === "string" ? result.email : previousEmail;
+      guardedSetData(d => d.settings.email === refused ? { ...d, settings: { ...d.settings, email: stored } } : d);
+      setSettingsRefusal({ field: "email", address: refused, accountId: user?.id || null });
+    }).catch(() => {});
     return true;
   }, [guardedSetData, user?.id]);
+  const clearSettingsRefusal = useCallback(() => setSettingsRefusal(null), []);
 
   // A device-only section (Protected Identity) is saved to this device's
   // cache and nowhere else: none of the four helpers below calls the cloud
   // for it. src/lib/supabase.js refuses those keys too, as a second wall.
   // Every add and edit is shaped once here (src/utils/recordWrite.js), so no
   // path in (forms, the scanner, Vera, importers) can skip a storage rule.
-  const addItem = useCallback((key, raw) => {
+  // `keepOnRefusal`: the record of work already done outside the app (an
+  // invoice that went out, and the entries it billed). A membership check
+  // this save waits for that answers read-only no longer takes it back
+  // (guardedSetData); a save refused at once still returns false.
+  const addItem = useCallback((key, raw, { keepOnRefusal = false } = {}) => {
     const item = prepareRecord(key, raw, dataRef.current?.settings?.name);
-    if (!updateSection(key, items => [...(items || []), item])) { alertWriteRefused({ scope: scopesForWrite(key, item) }); return false; }
+    if (!updateSection(key, items => [...(items || []), item], { keepOnRefusal })) { alertWriteRefused({ scope: scopesForWrite(key, item), section: key }); return false; }
     if (isDeviceOnlySection(key)) return true;
-    // Sync to Supabase
-    sbInsert(userIdRef.current, key, item).catch(() => {});
+    // Sync to Supabase. A document's file and row landed: record where the
+    // file lives (SYNC-017, SHARE-003) through updateSection, never editItem
+    // (a path is not an edit and must not stamp updatedAt), and only while the
+    // same account and profile are signed in. The cached copy then drops the
+    // bytes (saveData); kept, four 3 MB uploads filled localStorage and froze
+    // the offline copy, and the email sheet called the file still uploading.
+    const ownerId = dataOwnerRef.current;
+    const profileId = userIdRef.current;
+    sbInsert(profileId, key, item, ...(keepOnRefusal ? [{ keepOnRefusal: true }] : [])).then((path) => {
+      if (key !== "documents" || !path || !ownerId) return;
+      if (dataOwnerRef.current !== ownerId || getActiveUserId() !== ownerId || userIdRef.current !== profileId) return;
+      updateSection("documents", docs => withStoragePath(docs, item.id, path));
+    }).catch(() => {});
   }, [updateSection]);
 
-  const editItem = useCallback((key, raw) => {
+  // Whether addItem would accept this record now, without adding it. For a
+  // caller that must do something costly or irreversible first (the Files
+  // upload reads a file before storing it, so a patient chart never reaches
+  // the server) and must not do it for a save that would be refused.
+  const canAddItem = useCallback((key, raw) => {
+    if (!user?.id || dataOwnerRef.current !== user.id || getActiveUserId() !== user.id
+      || (!offlineMode && window.Clerk?.user?.id !== user.id)) return false;
+    if (!accessAuthority.enabled) return true;
+    const before = dataRef.current;
+    const item = prepareRecord(key, raw, before?.settings?.name);
+    // An answer that is only old does not stop it: the add will be kept on
+    // this device while a check decides it, as any save is (guardedSetData).
+    return dataChangeStatus(before, { ...before, [key]: [...(before[key] || []), item] }).status !== "refuse";
+  }, [user?.id, offlineMode]);
+
+  // canAddItem for work outside the app that cannot be taken back (the AI
+  // read of a file: the file leaves the device and the read is paid for). An
+  // answer that is only old is settled first (settleWriteAccess), so the work
+  // never runs for a save the check then refuses. True: allowed, or kept on
+  // this device because the check could not answer. False: refused; the
+  // caller says why (alertWriteRefused), as it does for canAddItem.
+  const confirmCanAddItem = useCallback(async (key, raw) => {
+    if (!canAddItem(key, raw)) return false;
+    if (!accessAuthority.enabled) return true;
+    const before = dataRef.current;
+    const item = prepareRecord(key, raw, before?.settings?.name);
+    const access = dataChangeStatus(before, { ...before, [key]: [...(before[key] || []), item] });
+    if (access.status !== "verify") return access.status === "allow";
+    return settleWriteAccess(access.scopes);
+  }, [canAddItem]);
+
+  const editItem = useCallback((key, raw, { keepOnRefusal = false } = {}) => {
     const previous = (dataRef.current[key] || []).find(record => record.id === raw?.id);
     const item = prepareRecord(key, raw, dataRef.current?.settings?.name, previous || null);
     // Stamp the edit time so the self-heal pass can tell a newer local edit
     // (whose cloud write may have failed) from an older cloud row.
     const stamped = { ...item, updatedAt: new Date().toISOString() };
-    if (!updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x))) { alertWriteRefused({ scope: scopesForWrite(key, stamped, previous) }); return false; }
+    if (!updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x), { keepOnRefusal })) { alertWriteRefused({ scope: scopesForWrite(key, stamped, previous), section: key }); return false; }
     if (isDeviceOnlySection(key)) return true;
     // Sync to Supabase
-    sbUpdate(userIdRef.current, key, stamped, previous, user?.id).catch(() => {});
+    sbUpdate(userIdRef.current, key, stamped, previous, user?.id, ...(keepOnRefusal ? [{ keepOnRefusal: true }] : [])).catch(() => {});
   }, [updateSection, user?.id]);
 
   // Star or unstar a record.
@@ -714,7 +1174,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const favorite = !(current.favorite === true);
     const next = { ...current, favorite };
     if (!updateSection(key, items => (items || []).map(x => x.id === id ? next : x))) {
-      alertWriteRefused({ scope: scopesForWrite(key, next, current) }); return false;
+      alertWriteRefused({ scope: scopesForWrite(key, next, current), section: key }); return false;
     }
     sbSetFavorite(userIdRef.current, key, next, favorite, user?.id).catch(() => {});
     return true;
@@ -724,13 +1184,18 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const before = dataRef.current;
     const target = (before[key] || []).find(item => item.id === id);
     const linkedDocs = key === "documents" ? [] : (before.documents || []).filter(doc => doc.linkedTo === `${key}:${id}`);
-    if (!accessAuthority.allowsMutation(key, target || { id }, target)
-      || linkedDocs.some(doc => !accessAuthority.allowsMutation("documents", doc, doc))) {
-      alertWriteRefused({ scope: scopesForWrite(key, target || { id }, target) }); return false;
+    // The same answer as any save: refused, allowed, or kept on this device
+    // while a check decides it (guardedSetData below holds it).
+    const access = accessAuthority.enabled
+      ? accessAuthority.statusFor([...accessAuthority.mutationScopes(key, target || { id }, target),
+        ...linkedDocs.flatMap(doc => accessAuthority.mutationScopes("documents", doc, doc))])
+      : null;
+    if (access?.status === "refuse") {
+      alertWriteRefused({ scope: scopesForWrite(key, target || { id }, target), section: key }); return false;
     }
     const next = { ...before, [key]: (before[key] || []).filter(item => item.id !== id) };
     if (linkedDocs.length) next.documents = (before.documents || []).filter(doc => !linkedDocs.includes(doc));
-    if (!guardedSetData(next)) return false;
+    if (!guardedSetData(next, { section: key })) return false;
     const profileId = userIdRef.current;
     for (const doc of linkedDocs) {
       sbDelete(profileId, "documents", doc.id, doc).catch(() => {});
@@ -757,17 +1222,18 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [onNavigate]);
 
   const value = useMemo(() => ({
-    data, setData: guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, loaded, loadedFrom,
-    recordsLoadIssue: recordsLoadIssue?.accountId === user?.id ? recordsLoadIssue : null, theme, toggleTheme, isDesktop,
-    updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn, toggleFavorite,
-    allTrackedStates, navigate, userIdRef,
+    data, setData: guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, loaded, loadedFrom,
+    recordsLoadIssue: recordsLoadIssue?.accountId === user?.id ? recordsLoadIssue : null, theme, themeName, isDark, toggleTheme, isDesktop,
+    updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItem: deleteItemFn, toggleFavorite,
+    settingsRefusal: settingsRefusal?.accountId === user?.id ? settingsRefusal : null, clearSettingsRefusal,
+    allTrackedStates, navigate, userIdRef, syncIssues: syncState.issues, pendingWrites: syncState.pending, awaitingAccessWrites: syncState.awaitingAccess, accessRefusedWrites: syncState.accessRefused, offlineCopyStale,
     // Auth
     user, authChecked, offlineMode,
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
     isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null, billingReturn }, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly,
-  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, profileIssue, recordsLoadIssue, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

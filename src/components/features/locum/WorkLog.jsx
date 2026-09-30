@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
+import { dictationErrorText } from "../../../utils/dictationErrors";
 import { useApp } from "../../../context/AppContext";
 import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
@@ -10,14 +11,19 @@ import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
-import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
+import { generateId, formatDate, copyToClipboard, localDay, sentDay } from "../../../utils/helpers";
+import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
+import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint } from "../../../utils/invoiceRecord";
+import { allocateInvoiceNumberRpc } from "../../../lib/supabase";
 import { invoiceSubject } from "../../../utils/invoicePdf";
 import { invoiceCoverNotice } from "../../../utils/invoiceCover";
 import { invoicePlainText } from "../../../utils/invoiceLayout";
 import { exportInvoice } from "../../../utils/invoiceExport";
-import { writeAllowedNow } from "../../../utils/limitedLaunchAccess.js";
+import { confirmWriteAllowed, prepareWriteCheck, SENT_WORK, writeRefusalMessage, accessAuthority } from "../../../utils/limitedLaunchAccess.js";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import InvoiceLinesTable from "../../shared/InvoiceLinesTable";
+import InvoiceMarkSent, { UnrecordedNotes } from "../../shared/InvoiceMarkSent";
+import useUnrecordedInvoices, { useUnloadWarning } from "../../shared/useUnrecordedInvoices";
 import { parseWorkDictation } from "../../../utils/workDictation";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import DeskTable from "../../shared/DeskTable";
@@ -84,7 +90,9 @@ function roundUp(rawMin, increment, minimum) {
   return Math.max(minimum || 0, Math.ceil(rawMin / inc) * inc || inc);
 }
 
-function fmtClock(totalSec) {
+function fmtClock(sec) {
+  // Never a negative clock: a start a moment ahead of the last tick reads 00:00.
+  const totalSec = Math.max(0, Math.floor(sec) || 0);
   const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
   return (h ? `${h}:` : "") + `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
@@ -99,7 +107,7 @@ function fmtHM(m) {
 }
 
 function WorkLog({ billDraft, onBillDraftDone }) {
-  const { data, addItem, editItem, deleteItem, theme: T, isDesktop } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, isDesktop, user, userIdRef } = useApp();
   const iS = useInputStyle();
 
   // Memoized so a missing section is one stable empty list, not a new one on
@@ -140,7 +148,26 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const [manual, setManual] = useState({});
   const [invoicePreview, setInvoicePreview] = useState(null); // { text, entryIds, total, contract }
   const [invoicePick, setInvoicePick] = useState(null); // { days: [{key, amount, items}], selected: Set } — day selection before an invoice builds
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState(false); // false, or how the invoice went ("clipboard", "share-pdf"...)
+  // The number of the preview already recorded as an invoice. Read and set
+  // synchronously, so a second tap that was waiting on the clipboard (or a
+  // Send after Copy) cannot record the same invoice twice.
+  const recordedRef = useRef(null);
+  // A Send or Copy in progress: null, "checking" (waiting for the membership
+  // check, confirmWriteAllowed) or "out" (the file or text on its way). Send,
+  // Copy and Mark as sent wait for it. Which preview it was tapped in: one
+  // closed or rebuilt while it waited sends nothing.
+  const [sending, setSending] = useState(null);
+  const previewSeqRef = useRef(0);
+  // Making sure an invoice that went out is recorded (utils/invoiceRecord.js):
+  // one that went out with its record refused ({ number, method, sentAt,
+  // tries, why }: tries counts refused Record as sent taps), what the last
+  // send came to when it recorded nothing ({ text, shared }: shared is the
+  // number a share sheet was handed), and the open Mark as sent form
+  // ({ number, day, from, at, problem, tries }).
+  const [unrecorded, setUnrecorded] = useState(null);
+  const [sendNote, setSendNote] = useState(null);
+  const [markSent, setMarkSent] = useState(null);
   const [notice, setNotice] = useState(null);
   const showNotice = useCallback((msg) => {
     setNotice(msg);
@@ -169,6 +196,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     || pickable.find(c => c.id === lastLoggedContractId)
     || pickable[0]
     || contracts.find(c => !isArchived(c)) || contracts[0] || null;
+
+  // Invoices for this agreement that went out unrecorded and were left
+  // behind (closed, reloaded): kept on the device until they are on the
+  // Invoices tab. Leaving the page while one is on screen asks first.
+  const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id });
+  useUnloadWarning(!!unrecorded);
 
   // Tap-anywhere detail view for a work entry
   const [viewEntry, setViewEntry] = useState(null);
@@ -232,7 +265,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
   const beginDictation = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { showNotice("Dictation isn't available in this browser — use Log past time and the mic key on your keyboard."); return; }
+    if (!SR) { showNotice("Dictation isn't available in this browser. Use Log past time and the mic key on your keyboard."); return; }
     dictTextRef.current = "";
     setDictTranscript("");
     const rec = new SR();
@@ -247,7 +280,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       setDictTranscript((finals + " " + interim).trim());
     };
     rec.onend = () => setDictating(false);
-    rec.onerror = () => setDictating(false);
+    rec.onerror = (ev) => { setDictating(false); const m = dictationErrorText(ev?.error); if (m) showNotice(m); };
     dictRecRef.current = rec;
     rec.start();
     setDictating(true);
@@ -278,7 +311,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       // Never lose the words — fall back to a prefilled note
       setManual({ type: "Call", date: localDate(new Date()), exact: true, description: words });
       setShowManual(true);
-      showNotice(err2.message || "Couldn't structure that — your words are in the billing note, fill in the rest.");
+      showNotice(err2.message || "Couldn't structure that. Your words are in the billing note; fill in the rest.");
     }
     setDictBusy(false);
     setDictTranscript("");
@@ -286,11 +319,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
   const startTimer = useCallback((type) => {
     if (!contract) return;
-    const t = { contractId: contract.id, type, startedAt: new Date().toISOString() };
+    // `now` only moves on the running timer's tick, so it was as old as the
+    // page (or the last timer's final tick) and the first render read
+    // now - startedAt < 0: "-1:-1:-1". Start the clock at the start.
+    const started = Date.now();
+    const t = { contractId: contract.id, type, startedAt: new Date(started).toISOString() };
+    setNow(started);
     setTimer(t); saveTimer(t);
     rememberContract(contract.id);
     if (!inScheduledCoverage(contract, deriveCallDay(t.startedAt, contract))) {
-      showNotice(`Heads up: today isn't inside a scheduled coverage block for ${contract.facility || "this contract"} — make sure you're logging against the right agreement (see the Schedule tab).`);
+      showNotice(`Heads up: today isn't inside a scheduled coverage block for ${contract.facility || "this contract"}. Make sure you're logging against the right agreement (see the Schedule tab).`);
     }
   }, [contract, rememberContract, inScheduledCoverage, showNotice]);
 
@@ -391,7 +429,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       Math.max(1, Math.round((end - start) / 60000)), c);
     // A stray tap shouldn't turn seconds into a billed increment
     if ((end - start) < 120000 && !window.confirm(
-      `Only ${Math.round((end - start) / 1000)} seconds on the clock — logging bills ${f.billed} min. Log it? (Cancel keeps the timer running.)`
+      `Only ${Math.round((end - start) / 1000)} seconds on the clock, and logging bills ${f.billed} min. Log it? (Cancel keeps the timer running.)`
     )) return;
     const newId = generateId();
     // One row, or one per piece when the contract splits at the call-day
@@ -420,7 +458,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (c?.payModel === "daily") {
       // A timer that predates this contract going day-rate: the row is kept
       // for the record but prices at $0 — the money lives in Days & call.
-      showNotice(`${c.facility || "This contract"} pays per day and call period, not clock time — the timed entry was saved for your records but bills $0. Log the day or call period on Days & call.`);
+      showNotice(`${c.facility || "This contract"} pays per day and call period, not clock time. The timed entry was saved for your records but bills $0. Log the day or call period on Days & call.`);
     } else if (timer.type !== "Orientation") {
       noticeSaved(c, rows);
     }
@@ -437,7 +475,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       (!startIso && dateStr && dateStr > localDate(new Date()));
     if (!future) return true;
     return window.confirm(
-      `${formatDate(dateStr)}${startIso ? " at " + fmtTime(startIso) : ""} hasn't happened yet — that usually means the date is wrong. Save it as future time anyway?`
+      `${formatDate(dateStr)}${startIso ? " at " + fmtTime(startIso) : ""} hasn't happened yet, which usually means the date is wrong. Save it as future time anyway?`
     );
   }, []);
 
@@ -476,8 +514,8 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       // alert, not the notice banner: the banner renders under the open
       // modal and auto-clears — the user would never see it.
       window.alert(editOrig && billableContracts.length
-        ? "This entry's original contract is no longer on file — pick a contract in the dropdown before saving."
-        : "This needs a time-priced contract to bill against — add one on the Contracts tab.");
+        ? "This entry's original contract is no longer on file. Pick a contract in the dropdown before saving."
+        : "This needs a time-priced contract to bill against. Add one on the Contracts tab.");
       return;
     }
     if (!manual.date) return;
@@ -606,11 +644,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     // The identifier note goes to this device, keyed to the entry — the
     // synced row carries an empty string.
     if (manual.privateNote?.trim()) setPrivate("workLog", newId, manual.privateNote);
+    // A finished to-do is marked done now that its work entry exists, and
+    // points at it (task_notes.work_log_id; the first piece of a split entry).
+    const task = manual.fromTaskId && (data.taskNotes || []).find(t => t.id === manual.fromTaskId);
+    if (task && !task.completedAt) editItem("taskNotes", { ...task, completedAt: new Date().toISOString(), workLogId: newId });
     if (type !== "CallDay" && type !== "Orientation") noticeSaved(target, rows);
 
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, billableContracts, timeContracts, manual, entries, addItem, addRows, editItem, deleteItem, rememberContract, noticeSaved, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
+  }, [contract, contracts, billableContracts, timeContracts, manual, entries, addItem, addRows, editItem, deleteItem, rememberContract, noticeSaved, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices, data.taskNotes]);
 
   // A finished to-do arrives with the times HE typed on the finish form —
   // use them as given rather than re-deriving anything from timestamps.
@@ -638,6 +680,8 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       privateNote: billDraft.privateNote || "", // held in state only; vaulted on save
       exact: true,
       pickDate: false,
+      // The to-do this came from: marked done once the entry is saved.
+      fromTaskId: billDraft.taskId || null,
     });
     setShowManual(true);
     onBillDraftDone?.();
@@ -879,7 +923,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const days = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]))
       .map(([key, v]) => ({ key, amount: v.amount, items: entryCount.get(key) || 0 }));
     if (!days.length) {
-      showNotice("Nothing here prices into an invoice line — usually a leftover coverage marker on a contract whose stipend terms changed. Check the entry list.");
+      showNotice("Nothing here prices into an invoice line. It is usually a leftover coverage marker on a contract whose stipend terms changed. Check the entry list.");
       return;
     }
     // Future-dated days (a coverage marker logged ahead) list but start
@@ -929,15 +973,19 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (daySet) {
       const withheld = unbilled.filter(e => daySet.has(callDayOf(e)) && waitsForContainer(e, daySet)).length;
       if (withheld > 0 && !window.confirm(
-        `${withheld} ${withheld === 1 ? "entry" : "entries"} on the picked days happened inside a covering entry whose day isn't picked — ${withheld === 1 ? "it" : "they"} will ride on that day's invoice instead (already covered, $0). Build this invoice without ${withheld === 1 ? "it" : "them"}?`
+        `${withheld} ${withheld === 1 ? "entry" : "entries"} on the picked days happened inside a covering entry whose day isn't picked, so ${withheld === 1 ? "it" : "they"} will ride on that day's invoice instead (already covered, $0). Build this invoice without ${withheld === 1 ? "it" : "them"}?`
       )) return;
     }
     const s = data.settings || {};
     const physician = s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician";
-    const num = nextInvoiceNumber(data.invoices);
+    // The server's number arrives a moment after the preview opens (it is
+    // never issued twice); until then the device's own shows, and Send and
+    // Copy wait (utils/invoiceNumber.js).
+    const reserved = reserveInvoiceNumber(data.invoices, "INV", { rpc: allocateInvoiceNumberRpc, account: userIdRef?.current || user?.id, online: typeof navigator === "undefined" || navigator.onLine !== false });
+    const num = reserved.number;
     const billing = computeBilling(contract, selEntries, true, contractEntries, data.invoices, daySet);
     if (!billing.lines.length) {
-      showNotice("Nothing billable in the days picked — entries that ride inside another entry wait for that entry's day, so pick both days together.");
+      showNotice("Nothing billable in the days picked. Entries that ride inside another entry wait for that entry's day, so pick both days together.");
       return;
     }
     // The invoiced period is the chosen days — including empty stipend days
@@ -955,31 +1003,57 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       (contract.minCallMinutes ? `, ${contract.minCallMinutes}-min minimum per call` : "");
     // The text invoice reads the same day blocks and day totals as the PDF,
     // Word and Excel files (utils/invoiceLayout.js).
-    const text = invoicePlainText({
-      number: num, physician, npi: s.npi, email: s.email,
+    const textArgs = {
+      physician, npi: s.npi, email: s.email,
       facility: contract.facility, agency: contract.agency,
       periodStart: dates[0], periodEnd: dates[dates.length - 1], terms: termsText,
       lines: billing.lines, total: billing.total, dayStartHour: callDayStartHour(contract),
-    });
+    };
+    const text = invoicePlainText({ number: num, ...textArgs });
+    recordedRef.current = null;
+    previewSeqRef.current += 1;
+    setSending(null);
+    setSent(false); // a fresh preview never inherits a stale ✓
+    setUnrecorded(null); setSendNote(null); setMarkSent(null);
+    // Send waits for a membership answer that is only old (confirmWriteAllowed):
+    // asked now, while the invoice is read, so the tap finds it back.
+    prepareWriteCheck("practice");
+    if (reserved.pending) {
+      reserved.done.then(final => setInvoicePreview(p => (p && p.number === num && p.numberPending
+        ? { ...p, number: final, text: invoicePlainText({ number: final, ...p.textArgs }), numberPending: false }
+        : p)));
+    }
     setInvoicePreview({
-      text, entryIds: selEntries.map(e => e.id), total: billing.total,
+      text, textArgs, numberPending: reserved.pending, entryIds: selEntries.map(e => e.id), total: billing.total,
       number: num, orientationIncluded: billing.orientationIncluded,
       lines: billing.lines, totalMin: billing.totalMin, terms: termsText,
       periodStart: dates[0] || null, periodEnd: dates[dates.length - 1] || null,
       emptyStipendDays: billing.emptyStipendDays || [],
       dayOverMin: billing.dayOverMin || {},
     });
-  }, [contract, unbilled, data.settings, data.invoices, computeBilling, contractEntries, waitsForContainer, showNotice]);
+  }, [contract, unbilled, data.settings, data.invoices, computeBilling, contractEntries, waitsForContainer, showNotice, user?.id, userIdRef]);
 
-  const markBilledAndLog = useCallback((method) => {
-    if (!invoicePreview) return;
+  // Record the invoice in the preview as sent, and mark what it bills. `method`
+  // is how it went ("share-pdf", "download-xlsx", "clipboard", or "marked"
+  // for Mark as sent). `number` and `sentAt` default to the preview's number
+  // and now; Mark as sent passes the ones on the copy that was sent. True once
+  // recorded (or already recorded); false when nothing was recorded.
+  const markBilledAndLog = useCallback((method, { number: asNumber, sentAt: asSentAt, retry = false } = {}) => {
+    if (!invoicePreview || invoicePreview.numberPending) return false;
+    if (recordedRef.current) return true; // already recorded
+    const number = asNumber || invoicePreview.number;
+    const sentAt = asSentAt || new Date().toISOString();
     const invId = generateId();
     // The invoice record goes first: if it is refused (the membership check
     // went stale while the share sheet was open), nothing is marked billed,
     // the preview stays, and the physician is told the invoice went out.
+    // The invoice has already gone out, so the record and the entries it
+    // billed are kept (SENT_WORK): a membership check these saves wait for
+    // that answers read-only no longer takes them back, which left the
+    // entries unbilled and billable a second time.
     const recorded = addItem("invoices", {
       id: invId,
-      number: invoicePreview.number,
+      number,
       contractId: contract.id,
       // The period is the days that were PICKED for this invoice — the
       // preview computed it; the wider unbilled pool is irrelevant here.
@@ -990,23 +1064,52 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       totalAmount: invoicePreview.total,
       dayOverMin: invoicePreview.dayOverMin || {},
       method,
-      sentAt: new Date().toISOString(),
+      sentAt,
       paidAt: null,
-      text: invoicePreview.text,
+      // The text carries the number the invoice went out under.
+      text: number === invoicePreview.number ? invoicePreview.text : invoicePlainText({ number, ...invoicePreview.textArgs }),
       lines: invoicePreview.lines,
       terms: invoicePreview.terms,
-    });
+    }, SENT_WORK);
+    // The invoice has left the device, so its number is spent even when the
+    // record was refused: the next preview must never carry it on other
+    // lines. This open preview keeps it, so Record as sent still records it.
+    // A number typed into Mark as sent is spent for this account too.
+    invoiceNumberUsed(number, number === invoicePreview.number ? undefined : (userIdRef?.current || user?.id || ""));
     if (recorded === false) {
-      // An alert: the notice banner sits under this open preview.
-      window.alert(`Invoice ${invoicePreview.number} went out but is not on the Invoices tab yet, and its entries are still unbilled. Tap Copy once connected to record it.`);
-      return;
+      // Said in the preview every time: addItem's alert is quiet for a few
+      // seconds after the last one closed, so a quick second tap would
+      // otherwise change nothing on screen.
+      const why = writeRefusalMessage(accessAuthority, "practice");
+      // Mark as sent keeps its form open with what was typed.
+      if (method === MARKED_SENT) {
+        setMarkSent(f => (f ? { ...f, tries: (f.tries || 0) + 1, problem: recordRefusedNotice((f.tries || 0) + 1, why) } : f));
+        return false;
+      }
+      // An invoice that went out stays on screen, unrecorded, until Record
+      // as sent saves it; closing asks first. The device remembers it too,
+      // for a reload or a closed app.
+      setUnrecorded(u => ({ number, method, sentAt, tries: retry ? (u?.tries || 0) + 1 : 0, why }));
+      if (!retry) {
+        rememberUnrecorded({
+          number, sentAt, kind: "INV", contractId: contract.id, total: invoicePreview.total,
+          periodStart: invoicePreview.periodStart || null, periodEnd: invoicePreview.periodEnd || null,
+        });
+        // An alert as well: it may have been refused while the physician was
+        // in another app, and the banner alone could go unread.
+        window.alert(notRecordedMessage(number));
+      }
+      return false;
     }
+    recordedRef.current = number;
+    forgetUnrecorded(number);
+    setUnrecorded(null); setSendNote(null); setMarkSent(null);
     if (invoicePreview.orientationIncluded && contract) {
-      editItem("locumContracts", { ...contract, orientationBilled: true });
+      editItem("locumContracts", { ...contract, orientationBilled: true }, SENT_WORK);
     }
     for (const id of invoicePreview.entryIds) {
       const e = entries.find(x => x.id === id);
-      if (e) editItem("workLog", { ...e, invoiceId: invId });
+      if (e) editItem("workLog", { ...e, invoiceId: invId }, SENT_WORK);
     }
     // Empty stipend days billed on this invoice get a zero-minute marker
     // stamped with the invoice id so they can never bill twice. A day whose
@@ -1023,20 +1126,56 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         id: generateId(), createdAt: new Date().toISOString(),
         contractId: contract.id, type: "CallDay", date, callDay: date,
         startTime: null, endTime: null, durationMin: 0, billedMin: 0,
-        description: "Stipend billed — no calls required", privateNote: "",
+        description: "Stipend billed, no calls required", privateNote: "",
         invoiceId: invId,
-      });
+      }, SENT_WORK);
     }
-    setSent(true);
+    if (method === MARKED_SENT) showNotice(`${number} is on the Invoices tab as sent ${formatDate(localDay(sentAt))}, and its entries are billed.`);
+    setSent(method || true);
     setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
-  }, [invoicePreview, entries, editItem, addItem, contract]);
+    return true;
+  }, [invoicePreview, entries, editItem, addItem, contract, showNotice, user?.id, userIdRef, rememberUnrecorded, forgetUnrecorded]);
+
+  // Mark as sent: an invoice that went out some other way (or whose send the
+  // share sheet did not report), recorded under the number and date on the
+  // copy that was sent. Nothing is sent.
+  const recordMarkedSent = useCallback(() => {
+    if (!invoicePreview || !markSent) return;
+    const number = String(markSent.number ?? "").trim();
+    const problem = markSentProblem({ number, day: markSent.day, invoices: data.invoices, today: localDay() });
+    if (problem) { setMarkSent(f => (f ? { ...f, problem } : f)); return; }
+    markBilledAndLog(MARKED_SENT, { number, sentAt: markedSentAt(markSent) });
+  }, [invoicePreview, markSent, data.invoices, markBilledAndLog]);
+
+  // What Mark as sent opens with. This preview's number only when its file
+  // went to a share sheet that closed without reporting a send: a rebuilt
+  // preview's number is a new one no agency holds. Otherwise the newest
+  // invoice from this agreement that went out unrecorded, said as such, or
+  // an empty number to type from the copy that was sent.
+  const markSentStart = () => {
+    if (invoicePreview && sendNote?.shared === invoicePreview.number) return { number: invoicePreview.number, day: localDay() };
+    const last = leftUnrecorded[leftUnrecorded.length - 1];
+    if (last) return { number: last.number, day: sentDay(last.sentAt), from: unrecordedHint(last), at: last.sentAt };
+    return { number: "", day: localDay() };
+  };
+
+  // Closing a preview that holds an invoice that went out unrecorded asks
+  // first: once closed, nothing on screen says it went out.
+  const closePreview = useCallback(() => {
+    if (unrecorded && !recordedRef.current && !window.confirm(closeUnrecordedQuestion(unrecorded.number))) return;
+    previewSeqRef.current += 1; // a Send or Copy still waiting for the membership check stops
+    setSending(null);
+    setInvoicePreview(null); setUnrecorded(null); setSendNote(null); setMarkSent(null);
+  }, [unrecorded]);
 
   // Deleting a piece of a split entry deletes the whole entry: the pieces are
   // one piece of work. A billed piece stays, and so does the rest with it.
   const deleteEntry = useCallback((e) => {
     const pieces = splitGroupOf(e, entries);
     if (pieces.length < 2) {
-      if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id);
+      // The private note goes with the entry, and only once the entry is
+      // gone: a refused delete keeps both.
+      if (window.confirm("Delete this entry?") && deleteItem("workLog", e.id) !== false) removePrivate("workLog", e.id);
       return;
     }
     const billed = pieces.find(x => x.invoiceId);
@@ -1065,18 +1204,62 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   }, [data.settings, contract]);
 
   const [fmtOpen, setFmtOpen] = useState(false);
+  // Runs a Send or Copy (`go`) once the membership check lets it. An invoice
+  // that goes out has to be recorded, so it never goes out while the record
+  // would be refused, nor on an answer that is only old: the check that
+  // answer needs comes back first (prepareWriteCheck, when the preview
+  // opened, usually has it back already). Send, Copy and Mark as sent wait
+  // meanwhile. Nothing goes out once the invoice was recorded while the check
+  // ran (the unrecorded banner's Record as sent), or the preview closed.
+  const whenWriteAllowed = useCallback(async (go) => {
+    const opened = previewSeqRef.current;
+    setSending("checking");
+    try {
+      if (!(await confirmWriteAllowed("practice"))) return;
+      if (recordedRef.current || previewSeqRef.current !== opened) return;
+      setSending("out");
+      await go();
+    } finally {
+      // A preview opened since has its own.
+      if (previewSeqRef.current === opened) setSending(null);
+    }
+  }, []);
   const sendInvoice = useCallback(async (format) => {
-    // An invoice that goes out has to be recorded, so it never goes out
-    // while the record would be refused.
-    if (!writeAllowedNow("practice")) return;
-    const args = pdfArgsFor(invoicePreview);
-    // PDF / Word / Excel, physician's choice — share sheet, download fallback
-    const how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
-    if (how === null) return; // user cancelled the share sheet
-    const coverMsg = invoiceCoverNotice(how);
-    if (coverMsg) showNotice(coverMsg);
-    markBilledAndLog(`${how.startsWith("share") ? "share" : "download"}-${format}`);
-  }, [invoicePreview, markBilledAndLog, pdfArgsFor, showNotice]);
+    // Already recorded (copied or sent): a second send would go out as a
+    // second invoice with the same number. One Send or Copy at a time.
+    if (sent || sending || recordedRef.current || invoicePreview?.numberPending) return;
+    await whenWriteAllowed(async () => {
+      setSendNote(null);
+      const args = pdfArgsFor(invoicePreview);
+      // PDF / Word / Excel, physician's choice — share sheet, download fallback
+      let how;
+      try {
+        how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
+      } catch (err) {
+        // A file that could not be built used to fail with nothing said.
+        setSendNote({ text: sendFailedNotice(err), shared: null });
+        return;
+      }
+      // The share sheet closed without reporting a send: usually a cancel, but
+      // not always, so the preview says how to record one that did go out.
+      if (how === null) { setSendNote({ text: shareClosedNotice(invoicePreview.number), shared: invoicePreview.number }); return; }
+      const coverMsg = invoiceCoverNotice(how);
+      if (coverMsg) showNotice(coverMsg);
+      markBilledAndLog(`${how.startsWith("share") ? "share" : "download"}-${format}`);
+    });
+  }, [invoicePreview, markBilledAndLog, pdfArgsFor, showNotice, sent, sending, whenWriteAllowed]);
+
+  // Copy: billed only once the text is really on the clipboard. An alert,
+  // not the notice: the notice sits under this preview.
+  const copyInvoice = useCallback(async () => {
+    if (sent || sending || recordedRef.current || invoicePreview?.numberPending) return;
+    await whenWriteAllowed(async () => {
+      let ok = false;
+      try { ok = await copyToClipboard(invoicePreview.text); } catch { ok = false; }
+      if (!ok) { window.alert("Could not copy the invoice. Nothing was marked billed. Use Send invoice… instead, or try again."); return; }
+      markBilledAndLog("clipboard");
+    });
+  }, [invoicePreview, markBilledAndLog, sent, sending, whenWriteAllowed]);
 
   if (contracts.length === 0) {
     return (
@@ -1085,10 +1268,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     );
   }
 
-  const elapsed = timer ? Math.floor((now - new Date(timer.startedAt)) / 1000) : 0;
+  const elapsed = timer ? Math.max(0, Math.floor((now - new Date(timer.startedAt)) / 1000)) : 0;
   const timerContract = timer ? (contracts.find(c => c.id === timer.contractId) || contract) : contract;
+  // The same call Stop & Log makes (stopTimer), so the card shows what will
+  // be saved: an orientation span rounded at both ends, and the rounded
+  // minutes (not the ceiling) for everything else.
   const liveBilled = timer && timerContract
-    ? roundUp(Math.max(1, Math.ceil(elapsed / 60)), timerContract.incrementMinutes || 15, timer.type === "Call" ? (timerContract.minCallMinutes || 15) : 0)
+    ? finalizeEntry(timer.type, timer.startedAt, new Date(now).toISOString(),
+      Math.max(1, Math.round((now - new Date(timer.startedAt)) / 60000)), timerContract).billed
     : 0;
 
   // One picker, always — what changes underneath it is the ENGINE. A
@@ -1098,10 +1285,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   // neither gets stranded behind the swap.)
   const picker = contracts.length > 0 && (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 4 }}>
+      <div id="work-log-contract" style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 4 }}>
         Logging against
       </div>
-      <select value={contract?.id || ""} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : rememberContract(e.target.value))} style={{ ...iS, appearance: "auto" }}>
+      <select aria-labelledby="work-log-contract" value={contract?.id || ""} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : rememberContract(e.target.value))} style={{ ...iS, appearance: "auto" }}>
         {pickableContracts(contracts, contract?.id, { showEnded }).map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
         {hiddenEndedCount(contracts, contract?.id, { showEnded }) > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEndedCount(contracts, contract?.id, { showEnded }))}</option>}
       </select>
@@ -1142,14 +1329,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             </div>
             <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.45, marginBottom: 8 }}>
               This agreement pays per day and call period, not clock time. Unbilled rows here never
-              reach an invoice — log each as a day or call period above, then delete it. A row already
+              reach an invoice. Log each as a day or call period above, then delete it. A row already
               on a sent invoice stays for the record; delete that invoice first to release it.
             </div>
             {strandedRows.map(e => (
               <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: `1px solid ${T.border}` }}>
                 <div style={{ minWidth: 0, flex: 1, fontSize: 12.5, color: T.text }}>
                   <span style={{ fontWeight: 700 }}>{formatDate(e.date)}</span>
-                  {" · "}{e.type}{e.description ? ` — ${e.description}` : ""}
+                  {" · "}{e.type}{e.description ? `: ${e.description}` : ""}
                   {e.billedMin ? ` · ${e.billedMin}m` : ""}
                 </div>
                 {e.invoiceId ? (
@@ -1214,15 +1401,17 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             {/* Notes DURING the call — billing note goes on the invoice,
                 private note is yours alone and never appears on it */}
             <textarea
+              aria-label="Billing note (shows on the invoice)"
               value={timer.note || ""}
               onChange={e => setTimer(t => { const nt = { ...t, note: e.target.value }; saveTimer(nt); return nt; })}
-              placeholder="Billing note — shows on the invoice (e.g. ED consult, head CT review)"
+              placeholder="Billing note, shown on the invoice (e.g. ED consult, head CT review)"
               style={{ ...iS, minHeight: 56, resize: "vertical", textAlign: "left", marginBottom: 8 }}
             />
             <textarea
+              aria-label="Private note (only you see this)"
               value={timer.privateNote || ""}
               onChange={e => setTimer(t => { const nt = { ...t, privateNote: e.target.value }; saveTimer(nt); return nt; })}
-              placeholder="🔒 Private note — only you see this, never on the invoice"
+              placeholder="🔒 Private note: only you see this, never on the invoice"
               style={{ ...iS, minHeight: 44, resize: "vertical", textAlign: "left", marginBottom: 12, borderStyle: "dashed" }}
             />
             <button onClick={stopTimer} style={{
@@ -1237,7 +1426,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
               backgroundColor: "transparent", color: T.textMuted,
               fontSize: 13, fontWeight: 700, cursor: "pointer",
             }}>
-              Discard — started by mistake
+              Discard (started by mistake)
             </button>
           </>
         ) : (
@@ -1264,7 +1453,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                 }}>
                   {left >= 0
                     ? `Stipend day · ${fmtH(used)} of ${contract.stipendHours}h used · ${fmtH(left)} left`
-                    : `Stipend day · ${fmtH(-left)} past the ${contract.stipendHours}h — billing at ${money(contract.overageHourlyRate || 0)}/hr`}
+                    : `Stipend day · ${fmtH(-left)} past the ${contract.stipendHours}h, billing at ${money(contract.overageHourlyRate || 0)}/hr`}
                 </div>
               );
             })()}
@@ -1273,7 +1462,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
               fontSize: 18, fontWeight: 800, cursor: "pointer", marginBottom: 8,
             }}>
-              📞 Got a call — start timer
+              📞 Got a call? Start the timer
             </button>
             <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
               {["Procedure", "Rounding", "Orientation"].map(t2 => (
@@ -1295,24 +1484,28 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                   padding: "10px 12px", borderRadius: 12, backgroundColor: T.input,
                   border: `1px solid #ef4444`, fontSize: 13.5, color: T.text, minHeight: 44, lineHeight: 1.45,
                 }}>
-                  {dictTranscript || "Listening — say what you did, with times…"}
+                  {dictTranscript || "Listening. Say what you did, with times…"}
                 </div>
                 <button onClick={finishDictation} style={{
                   width: "100%", marginTop: 6, padding: "13px", borderRadius: 12, border: "none",
                   background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff",
                   fontSize: 15, fontWeight: 800, cursor: "pointer",
-                }}>{"◼"} Done — build the entry</button>
+                }}>{"◼"} Done, build the entry</button>
               </div>
             ) : (
               <button onClick={beginDictation} disabled={dictBusy} style={{
                 width: "100%", marginTop: 8, padding: "12px", borderRadius: 12,
                 border: `1px solid ${T.accent}`, backgroundColor: "transparent",
                 color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer",
-              }}>{dictBusy ? "Building the entry…" : "🎤 Dictate an entry — say what you did"}</button>
+              }}>{dictBusy ? "Building the entry…" : "🎤 Dictate an entry: say what you did"}</button>
             )}
           </>
         )}
       </div>
+
+      {/* An invoice from this agreement that went out without a record and
+          was left behind: said here until it is recorded or forgotten. */}
+      {!invoicePreview && UnrecordedNotes({ T, list: leftUnrecorded, what: "its entries", onForget: forgetUnrecorded })}
 
       {/* Unbilled summary + invoice CTA — never for a day-rate contract,
           whose invoicing lives in duty days, not the time engine. Gated on
@@ -1367,7 +1560,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
               style={{ ...iS, appearance: "auto" }}>
               {manual.editId && manual.contractId && !billableContracts.some(c => c.id === manual.contractId) && (
                 <option value={manual.contractId} disabled>
-                  {(contracts.find(c => c.id === manual.contractId)?.facility || "Original contract")} (day-rate — time doesn't bill here)
+                  {(contracts.find(c => c.id === manual.contractId)?.facility || "Original contract")} (day rate; time doesn't bill here)
                 </option>
               )}
               {manualOptions.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
@@ -1440,7 +1633,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
         {/* Call coverage: the window the stipend buys */}
         {manual.type === "CallDay" && (
-          <Field label="Covered window" hint="Coverage start — the stipend covers the hours from here; work after the window bills separately">
+          <Field label="Covered window" hint="Coverage start. The stipend covers the hours from here; work after the window bills separately">
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
               <Field label="Start"><input type="time" value={manual.start || ""} onChange={e => setManual(m2 => ({ ...m2, start: e.target.value }))} style={{ ...iS, minWidth: 0 }} /></Field>
               <Field label="End"><input type="time" value={manual.end || ""} onChange={e => setManual(m2 => ({ ...m2, end: e.target.value }))} style={{ ...iS, minWidth: 0 }} /></Field>
@@ -1461,12 +1654,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         </>
         )}
 
-        <Field label="Billing note (optional)" hint="Shows on the invoice — line breaks are kept"><textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45 }} placeholder="e.g. ED consult — head CT review" /></Field>
-        <Field label="Private note (optional)" hint="Stays on THIS device — never uploaded, never on invoices">
+        <Field label="Billing note (optional)" hint="Shows on the invoice, line breaks kept"><textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45 }} placeholder="e.g. ED consult, head CT review" /></Field>
+        <Field label="Private note (optional)" hint="Stays on THIS device: never uploaded, never on invoices">
           <input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed" }} placeholder="🔒 e.g. patient name / MRN reminder" />
           {looksLikePHI(manual.privateNote) && (
             <div style={{ fontSize: 11, marginTop: 4, fontWeight: 600, color: T.textDim }}>
-              🔒 Contains {looksLikePHI(manual.privateNote).join(" and ")} — kept on this device only, never uploaded.
+              🔒 Contains {looksLikePHI(manual.privateNote).join(" and ")}, so it is kept on this device only, never uploaded.
             </div>
           )}
         </Field>
@@ -1496,13 +1689,13 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                 background: invoicePick.selected.size ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
                 color: "#fff", fontSize: 15, fontWeight: 800, cursor: invoicePick.selected.size ? "pointer" : "default",
               }}>
-              Invoice {invoicePick.selected.size} day{invoicePick.selected.size === 1 ? "" : "s"} — {money(pickTotal)}
+              Invoice {invoicePick.selected.size} day{invoicePick.selected.size === 1 ? "" : "s"}: {money(pickTotal)}
             </button>
           </>
         )}
       </Modal>
 
-      <Modal open={!!invoicePreview} onClose={() => setInvoicePreview(null)} title="Invoice preview">
+      <Modal open={!!invoicePreview} onClose={closePreview} title="Invoice preview">
         {invoicePreview && (
           <>
             <div style={{
@@ -1519,19 +1712,25 @@ function WorkLog({ billDraft, onBillDraftDone }) {
               <InvoiceLinesTable inv={{ lines: invoicePreview.lines, total: invoicePreview.total, dayStartHour: callDayStartHour(contract) }} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setFmtOpen(true)} style={{
+              <button disabled={!!sent || !!invoicePreview.numberPending || !!sending} onClick={() => { if (!sent && !sending && !recordedRef.current && !invoicePreview.numberPending) setFmtOpen(true); }} style={{
                 flex: 2, padding: "14px", borderRadius: 12, border: "none",
-                background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
-                fontSize: 15, fontWeight: 800, cursor: "pointer",
-              }}>{sent ? "Sent ✓" : "Send invoice…"}</button>
-              <button onClick={async () => { if (!writeAllowedNow("practice")) return; await copyToClipboard(invoicePreview.text); markBilledAndLog("clipboard"); }} style={{
+                background: sent || invoicePreview.numberPending || sending ? T.border : "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
+                fontSize: 15, fontWeight: 800, cursor: sent || invoicePreview.numberPending ? "default" : sending ? "wait" : "pointer",
+              }}>{sent ? "Sent ✓" : sending === "checking" ? "Checking your membership…" : "Send invoice…"}</button>
+              <button disabled={!!sent || !!invoicePreview.numberPending || !!sending} onClick={copyInvoice} style={{
                 flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${T.border}`,
-                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
-              }}>Copy</button>
+                backgroundColor: "transparent", color: sent || sending ? T.textMuted : T.text, fontSize: 16, fontWeight: 700, cursor: sent ? "default" : sending ? "wait" : "pointer",
+              }}>{sent === "clipboard" ? "Copied ✓" : "Copy"}</button>
             </div>
             <div style={{ fontSize: 12, color: T.textMuted, marginTop: 8, textAlign: "center" }}>
-              Sending marks these entries as billed.
+              {invoicePreview.numberPending ? "Reserving the invoice number…" : "Sending marks these entries as billed."}
             </div>
+            {!sent && InvoiceMarkSent({
+              T, iS, pending: unrecorded, note: sendNote?.text, start: markSentStart(),
+              form: markSent, setForm: setMarkSent, today: localDay(), waiting: invoicePreview.numberPending || !!sending,
+              onRecordPending: () => unrecorded && markBilledAndLog(unrecorded.method, { number: unrecorded.number, sentAt: unrecorded.sentAt, retry: true }),
+              onRecordMarked: recordMarkedSent,
+            })}
             <InvoiceFormatChooser open={fmtOpen} onClose={() => setFmtOpen(false)}
               onPick={(f) => { setFmtOpen(false); sendInvoice(f); }} />
           </>
@@ -1563,12 +1762,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
               const a2 = amountForEntry(e, c2);
               const o2 = c2 ? overMinFor(e, c2) : 0;
               const cont2 = e.type !== "CallDay" && e.type !== "Orientation" && c2 ? containerFor(e, c2) : null;
-              if (cont2) return ["Amount", `$0.00 — no separate charge (during ${cont2.type} ${fmtTime(cont2.startTime)}–${fmtTime(cont2.endTime)})`];
+              if (cont2) return ["Amount", `$0.00, no separate charge (during ${cont2.type} ${fmtTime(cont2.startTime)}–${fmtTime(cont2.endTime)})`];
               const cov = e.type !== "CallDay" && e.type !== "Orientation" && c2
                 && (c2.callStipend || 0) > 0 && isStipendDay(c2, callDayOf(e), entries) && a2 === 0 && o2 === 0;
-              if (cov) return ["Amount", "$0.00 — included in the day's stipend"];
+              if (cov) return ["Amount", "$0.00, included in the day's stipend"];
               if (o2 > 0 && !((c2?.overageHourlyRate || 0) > 0)) {
-                return ["Amount", `$0.00 — ${o2}m beyond the stipend, but no after-stipend rate is set on this contract`];
+                return ["Amount", `$0.00: ${o2}m beyond the stipend, but no after-stipend rate is set on this contract`];
               }
               return ["Amount", money(a2)];
             })(),
@@ -1599,7 +1798,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           daily total (on stipend days the money lives at the day level) */}
       {contractEntries.length === 0 ? (
         <EmptyState icon={"📞"} title="Nothing logged yet"
-          subtitle="Tap the timer when you get a call — it does the math for you." />
+          subtitle="Tap the timer when you get a call and it does the math for you." />
       ) : isDesktop ? (
         /* Desk width: the same day groups as one table, most recent day
            first, rows in clock order within the day, and a subtotal row per
@@ -1755,12 +1954,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                     }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: T.text, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                          {isCoverage ? "🏥 Stipend day" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
+                          {isCoverage ? "🏥 Stipend day" : `${e.type}${e.description ? `: ${e.description}` : ""}`}
                           {e.invoiceId && <span style={{ fontSize: 11, fontWeight: 700, color: T.success, marginLeft: 6 }}>BILLED</span>}
                         </div>
                         <div style={{ fontSize: 12, color: T.textDim }}>
                           {isCoverage
-                            ? `marks this as a call day — the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
+                            ? `marks this as a call day; the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
                             : `${e.startTime ? `${billedSpan(e, contract)} · ` : ""}${e.billedMin || e.durationMin || 0} min${splitPieceNote(e, entries) ? ` · ${splitPieceNote(e, entries)}` : ""}`}
                         </div>
                         {getPrivate("workLog", e.id) && (
@@ -1796,14 +1995,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                           </>
                         )}
                       </div>
-                      <button onClick={(ev) => { ev.stopPropagation(); openEditEntry(e); }} style={{
-                        padding: "5px 7px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent",
-                        color: T.textMuted, cursor: "pointer", display: "flex", flexShrink: 0,
+                      {/* 32 x 32 targets: at 5px 7px padding they were 30 x 26 and 28 x 24. */}
+                      <button aria-label="Edit entry" onClick={(ev) => { ev.stopPropagation(); openEditEntry(e); }} style={{
+                        padding: "5px 7px", minWidth: 32, minHeight: 32, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent",
+                        color: T.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                       }}><EditIcon /></button>
                       {!e.invoiceId && (
-                        <button onClick={(ev) => { ev.stopPropagation(); deleteEntry(e); }} style={{
-                          padding: "5px 7px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim,
-                          color: T.danger, cursor: "pointer", display: "flex", flexShrink: 0,
+                        <button aria-label="Delete entry" onClick={(ev) => { ev.stopPropagation(); deleteEntry(e); }} style={{
+                          padding: "5px 7px", minWidth: 32, minHeight: 32, borderRadius: 8, border: "none", backgroundColor: T.dangerDim,
+                          color: T.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                         }}><TrashIcon /></button>
                       )}
                     </div>

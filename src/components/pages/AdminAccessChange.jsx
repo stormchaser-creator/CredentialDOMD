@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from '../shared';
-import { adminControlRequest, submitAdminControl } from '../../utils/adminControls';
+import { accessChangeSummary, adminControlRequest, submitAdminControl } from '../../utils/adminControls';
 import { supabase } from '../../lib/supabase';
 
-export default function AdminAccessChange({ change, T, onClose, onSaved }) {
+export default function AdminAccessChange({ change, T, onClose, onSaved, onRefresh }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The server refused because the reviewed row changed (PT409): the same
+  // request can never pass, so the only way on is Refresh.
+  const [stale, setStale] = useState(false);
   const inFlight = useRef(false);
   const pending = useRef(null);
   const mounted = useRef(true);
@@ -31,7 +34,7 @@ export default function AdminAccessChange({ change, T, onClose, onSaved }) {
   const title = change.action === 'remove' ? 'Remove invitation' : change.status === 'revoked' ? 'Pause app access' : change.kind === 'invite' ? 'Restore invitation' : 'Approve app access';
   const save = async () => {
     if (inFlight.current) return;
-    inFlight.current = true; setBusy(true); setError('');
+    inFlight.current = true; setBusy(true); setError(''); setStale(false);
     try {
       if (!pending.current) {
         const requestId = crypto.randomUUID();
@@ -42,22 +45,26 @@ export default function AdminAccessChange({ change, T, onClose, onSaved }) {
       const reviewed = pending.current;
       const receipt = await submitAdminControl(supabase, reviewed.change, reviewed.reason, reviewed.requestId);
       if (mounted.current) { onSaved(receipt); onClose(); }
-    } catch (failure) { if (mounted.current) setError(failure.message || 'Could not save this change.'); }
+    } catch (failure) { if (mounted.current) { setError(failure.message || 'Could not save this change.'); setStale(Boolean(failure.stale)); } }
     finally { inFlight.current = false; if (mounted.current) setBusy(false); }
   };
+  const refreshList = () => { if (!inFlight.current) (onRefresh || onClose)(); };
   return <Modal open onClose={() => { if (!inFlight.current) onClose(); }} title={title}>
     <div style={{ color: T.text, fontSize: 14, lineHeight: 1.5 }}>
       <p><strong>{change.row.name || change.row.email || 'Account'}</strong><br />{change.row.email}</p>
-      <p>{change.action === 'remove' ? 'This removes an unclaimed invitation.' : `App access will change from ${change.row.access_status || change.row.status} to ${change.status}.`}</p>
+      <p>{accessChangeSummary(change)}</p>
       <p style={{ color: T.textMuted }}>This changes the app access gate. Membership entitlement is checked separately. It does not cancel billing, issue a refund, or grant lifetime membership.</p>
       <label htmlFor="admin-control-reason" style={{ display: 'block', fontWeight: 700 }}>Reason for this change</label>
       <textarea ref={reasonRef} id="admin-control-reason" value={reason} onChange={event => setReason(event.target.value)} disabled={busy || submitted} minLength={10} maxLength={500} rows={4} style={{ width: '100%', boxSizing: 'border-box', marginTop: 6, padding: 10, borderRadius: 8, background: T.input, color: T.text, border: `1px solid ${T.border}`, fontSize: 16, fontFamily: 'inherit' }} />
       <p style={{ color: T.textMuted, fontSize: 12 }}>Use 10–500 characters. The reason and before/after state are recorded in Control history. Do not include passwords or clinical details.</p>
-      {submitted && error && <p>Retry sends the same reviewed change and reason. If this record has changed, close this dialog and refresh the section before reviewing a new change.</p>}
+      {submitted && error && !stale && <p>Retry sends the same reviewed change and reason. If this record has changed, close this dialog and refresh the section before reviewing a new change.</p>}
+      {stale && <p>Nothing was changed. This {change.kind === 'invite' ? 'invitation' : 'account'} changed after the list loaded. Refresh to load it again, then review it before you choose.</p>}
       {error && <p role="alert" style={{ color: T.danger || '#ef4444' }}>{error}</p>}
       <div style={{ display: 'flex', gap: 8 }}>
-        <button disabled={busy} onClick={onClose}>Cancel</button>
-        <button disabled={busy || reason.trim().length < 10} onClick={save} style={{ padding: '8px 12px', background: T.accent, color: '#fff', border: 0, borderRadius: 8 }}>{busy ? 'Saving…' : `Confirm: ${title.toLowerCase()}`}</button>
+        <button disabled={busy} onClick={onClose} style={{ padding: '8px 12px', minHeight: 32, background: 'transparent', color: T.text, border: `1px solid ${T.border}`, borderRadius: 8 }}>Cancel</button>
+        {stale
+          ? <button onClick={refreshList} style={{ padding: '8px 12px', background: T.accent, color: '#fff', border: 0, borderRadius: 8 }}>Refresh</button>
+          : <button disabled={busy || reason.trim().length < 10} onClick={save} style={{ padding: '8px 12px', background: T.accent, color: '#fff', border: 0, borderRadius: 8 }}>{busy ? 'Saving…' : `Confirm: ${title.toLowerCase()}`}</button>}
       </div>
     </div>
   </Modal>;

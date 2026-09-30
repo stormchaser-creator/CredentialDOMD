@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from '../../supabase/functions/_shared/accessPolicy.mjs';
-import { validateAccessSnapshot, accessAt, canReviewBillingOffer } from '../../src/utils/limitedLaunchAccess.js';
+import { validateAccessSnapshot, accessAt, canReviewBillingOffer, renewalPaymentFailed, hasManageableSubscription } from '../../src/utils/limitedLaunchAccess.js';
 import { isPinnedBetaChargeDate, membershipDate, quoteMatchesBetaWindow } from '../../src/utils/membershipTiming.js';
 
 // The fixtures stand on 2030-10-01 12:00 UTC (the snapshot's evaluatedAt; the
@@ -64,7 +64,7 @@ const built = await build({ stdin: { contents: 'export {default as Membership} f
         : path === 'clerk' ? 'export const useUser = () => ({user:globalThis.__betaUI.context.user,isSignedIn:true});'
           : path === 'admin' ? 'export const isAdminUser = () => false; export const useAdminPreviewRefresh = () => {};'
       : path === 'client' ? 'export const createLimitedLaunchClient = ({accountId}) => {globalThis.__betaUI.clients.push(accountId); return globalThis.__betaUI.client;};'
-        : path === 'access' ? 'export const LIMITED_LAUNCH_ACCESS_ENABLED = true; export const canReviewBillingOffer = (...args) => globalThis.__betaUI.canReview(...args); export const accessAuthority = {state: id => id === globalThis.__betaUI.context.user.id ? globalThis.__betaUI.context.limitedLaunch.access : null}; export const membershipReadOnly = () => false; export const lastAnswer = () => null; export const OUTDATED_MESSAGE = "This version of the app is out of date. Reload to continue.";'
+        : path === 'access' ? 'export const LIMITED_LAUNCH_ACCESS_ENABLED = true; export const canReviewBillingOffer = (...args) => globalThis.__betaUI.canReview(...args); export const renewalPaymentFailed = (...args) => globalThis.__betaUI.renewal(...args); export const hasManageableSubscription = (...args) => globalThis.__betaUI.manageable(...args); export const accessAuthority = {state: id => id === globalThis.__betaUI.context.user.id ? globalThis.__betaUI.context.limitedLaunch.access : null}; export const membershipReadOnly = () => false; export const lastAnswer = () => null; export const OUTDATED_MESSAGE = "This version of the app is out of date. Reload to continue.";'
           : 'export const supabase = null; export const generateCredentialZip = () => {throw Error("No export during test");}; export const downloadBlob = generateCredentialZip;' }));
   } }],
 });
@@ -75,7 +75,7 @@ function fixture() {
     limitedLaunch: { enabled: true, publicSignupEnabled: true, access: snapshot(), refresh: async () => {} },
     manage: () => calls.push(['portal']), navigate: () => {}, hasSubscription: false,
   };
-  const state = { context, calls, clients, canReview: canReviewBillingOffer, client: {
+  const state = { context, calls, clients, canReview: canReviewBillingOffer, renewal: renewalPaymentFailed, manageable: hasManageableSubscription, client: {
     quote: async ({ offerId }) => { calls.push(['quote', offerId]); return quoteFor(offerId); },
     checkout: async input => { calls.push(['checkout', input]); return { url: 'https://checkout.stripe.com/c/pay/synthetic' }; },
   } };

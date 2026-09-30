@@ -478,7 +478,7 @@ const initializationFixture = (bound = true) => ({ schemaVersion: 1, state: boun
   profileId: '00000000-0000-4000-8000-000000000001', subject: 'user_synthetic_a', issuer: 'https://clerk.credentialdomd.com',
   continuity: bound ? { id: '00000000-0000-4000-8000-000000000002', state: 'bound', sourceSubject: 'user_legacyA', sourceIssuer: 'https://dynamic-goshawk-87.clerk.accounts.dev' } : null });
 
-test('identity initializer sends only an empty body and accepts exact authenticated current or bound receipts', async () => {
+test('identity initializer says only that it honors a data deletion, and accepts exact authenticated current or bound receipts', async () => {
   for (const bound of [true, false]) {
     let request, tokenArgs;
     const receipt = initializationFixture(bound);
@@ -486,7 +486,7 @@ test('identity initializer sends only an empty body and accepts exact authentica
     session.getToken = async (...args) => { tokenArgs = args; return 'synthetic-default-token'; };
     assert.deepEqual(await client.initializeProfile(), receipt);
     assert.ok(request[0].endsWith('/initialize-clerk-profile'));
-    assert.equal(request[1].body, '{}');
+    assert.equal(request[1].body, '{"honorsDataDeletion":true}');
     assert.deepEqual(tokenArgs, []);
     assert.equal(request[1].headers.Authorization, 'Bearer synthetic-default-token');
   }

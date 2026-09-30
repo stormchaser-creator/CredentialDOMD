@@ -4,6 +4,15 @@ import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
 import { mailtoHref } from "../../utils/helpers";
 import { peerHeadsUp, smsCutNotice } from "../../utils/shareText";
+import { TAP_MIN, CARD_ACTION_GAP } from "../shared/actionButton.js";
+
+// The two heads-up buttons under a reference's phone card: 28 px tall at
+// padding 4px 10px, under the app's 32 px floor (CRED-041).
+const headsUpButton = (backgroundColor, color) => ({
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+  minHeight: TAP_MIN, padding: "6px 12px", borderRadius: 8, border: "none",
+  backgroundColor, color, fontSize: 12, fontWeight: 600, cursor: "pointer",
+});
 
 function PeerNotify({ peer }) {
   const { data, theme: T } = useApp();
@@ -37,19 +46,11 @@ function PeerNotify({ peer }) {
 
   return (
     <>
-      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-        <button onClick={handleEmail} style={{
-          padding: "4px 10px", borderRadius: 8, border: "none",
-          backgroundColor: T.accentDim, color: T.accent,
-          fontSize: 12, fontWeight: 600, cursor: "pointer",
-        }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: CARD_ACTION_GAP, marginTop: 6 }}>
+        <button onClick={handleEmail} style={headsUpButton(T.accentDim, T.accent)}>
           {"\u2709\ufe0f"} Email Heads-Up
         </button>
-        <button onClick={handleText} style={{
-          padding: "4px 10px", borderRadius: 8, border: "none",
-          backgroundColor: T.successDim || "rgba(34,197,94,0.1)", color: T.success || "#22c55e",
-          fontSize: 12, fontWeight: 600, cursor: "pointer",
-        }}>
+        <button onClick={handleText} style={headsUpButton(T.successDim || "rgba(34,197,94,0.1)", T.success || "#22c55e")}>
           {"\ud83d\udcac"} Text Heads-Up
         </button>
       </div>

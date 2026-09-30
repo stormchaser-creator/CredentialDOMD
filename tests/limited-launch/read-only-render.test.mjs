@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('../..', import.meta.url));
 // Render the real components with synthetic account data and no network/provider.
 const bundled = await build({
-  stdin: { contents: 'export {default as Archive} from "./src/components/features/ReadOnlyRecords.jsx"; export {default as Notice} from "./src/components/shared/LaunchAccessNotice.jsx"; export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as OfflineBanner} from "./src/components/shared/OfflineBanner.jsx";', resolveDir: root, loader: 'jsx' },
+  stdin: { contents: 'export {default as Archive} from "./src/components/features/ReadOnlyRecords.jsx"; export {default as Notice} from "./src/components/shared/LaunchAccessNotice.jsx"; export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as OfflineBanner} from "./src/components/shared/OfflineBanner.jsx"; export {default as OfflineUnavailable} from "./src/components/shared/OfflineUnavailable.jsx";', resolveDir: root, loader: 'jsx' },
   bundle: true, define: {'import.meta.env':'{}'}, platform: 'node', format: 'cjs', write: false, jsx: 'automatic', external: ['react', 'react/jsx-runtime'],
   plugins: [{ name: 'synthetic-account', setup(builder) {
     builder.onResolve({ filter: /context\/AppContext$/ }, () => ({ path: 'context', namespace: 'fixture' }));
@@ -25,7 +25,7 @@ const bundled = await build({
 });
 const mod = { exports: {} };
 new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(require, mod, mod.exports);
-const { Archive, Notice, Membership, OfflineBanner } = mod.exports;
+const { Archive, Notice, Membership, OfflineBanner, OfflineUnavailable } = mod.exports;
 const capability = write => ({ read: true, write, export: true });
 const fixture = () => ({
   user: { id: 'user_synthetic' }, theme: { text: '#111', textMuted: '#666', border: '#aaa', card: '#fff', bg: '#eee' },
@@ -283,6 +283,11 @@ test('offline under limited launch: the archive, and copy that says changes cann
   assert.doesNotMatch(archive, /Record payment|Delete/);
   // Without limited launch an offline edit is queued and does sync.
   assert.match(render(OfflineBanner, { limitedLaunch: false }), /Changes will sync when you reconnect\./);
+  // SYNC-005: the Vera / Admin placeholder says the same as the banner.
+  const vera = render(OfflineUnavailable, { T: value.theme, feature: 'Vera', detail: 'Vera answers through the cloud AI service.', limitedLaunch: true });
+  assert.match(vera, /Changes can&#x27;t be saved until you reconnect\./);
+  assert.doesNotMatch(vera, /sync/i);
+  assert.match(render(OfflineUnavailable, { T: value.theme, feature: 'Vera', detail: '', limitedLaunch: false }), /will sync when you reconnect/);
 });
 
 test('an out-of-date build asks for a reload instead of saying it is reconnecting', () => {

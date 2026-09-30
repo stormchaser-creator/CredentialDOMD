@@ -85,7 +85,7 @@ export function autoDeductions(data, year) {
     items.push({
       source: "auto", date: exp.date,
       category: /meals/i.test(exp.category || "") ? "Meals (50% deductible, travel)" : "Unreimbursed travel expense",
-      description: `${exp.category || "Expense"}${exp.vendor ? ` — ${exp.vendor}` : ""}${inv.number ? ` (${inv.number})` : ""}`,
+      description: `${exp.category || "Expense"}${exp.vendor ? `, ${exp.vendor}` : ""}${inv.number ? ` (${inv.number})` : ""}`,
       amount: unreimbursed, taxYear: y,
     });
   });
@@ -101,4 +101,33 @@ export function allDeductions(data, year) {
     .map((m) => ({ ...m, source: m.source || "manual" }));
   return [...autoDeductions(data, y), ...manual]
     .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
+// One CSV cell, always quoted with inner quotes doubled, so a comma in a
+// category ("Equipment (computer, capitalize or Section 179)") or a
+// description never shifts the columns a CPA reads. A text cell that starts
+// like a formula (=, +, -, @) is prefixed with ' so a spreadsheet shows it
+// instead of running it: descriptions come from imported statements. Numbers
+// are left as numbers, so a negative amount stays -12.5.
+function csvCell(v) {
+  let s = v == null ? "" : String(v);
+  if (typeof v !== "number" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+/**
+ * The deduction ledger as a CSV file's text: Date, Category, Description,
+ * Amount, Source. `label` turns a stored category into its shown name. The
+ * byte-order mark lets Excel read the dashes in the travel categories.
+ */
+export function deductionsCsv(items, label = (c) => c) {
+  const headers = ["Date", "Category", "Description", "Amount", "Source"];
+  const rows = (items || []).map(i => [
+    i.date || "",
+    label(i.category) || "",
+    i.description || "",
+    Number.isFinite(parseFloat(i.amount)) ? parseFloat(i.amount) : "",
+    i.source || "",
+  ]);
+  return "﻿" + [headers, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }

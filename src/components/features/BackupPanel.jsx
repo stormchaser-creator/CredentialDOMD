@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
+import { TAP_MIN } from "../shared/actionButton";
 
 /**
  * Monthly server-built backup.
@@ -188,10 +189,12 @@ function BackupPanel() {
     <div style={card}>
       <div style={{ ...body, marginBottom: 12 }}>
         Once a month the server packages your whole account into one ZIP file: every record,
-        every document you uploaded, a CSV of each section for spreadsheets, and a JSON file
-        this app can import back. The file is kept in private storage and you get an email
-        when it is ready. Download it from this screen; the email carries no link to the file.
-        Large accounts arrive as more than one file.
+        every document you uploaded, a CSV of each section for spreadsheets, and a JSON copy
+        of every record. Loading that JSON back into the app is not a one-tap feature yet: if
+        you ever need it, write to support and we will do it with you. For a file you can
+        restore yourself, use Export it yourself below. The ZIP is kept in private storage and
+        you get an email when it is ready. Download it from this screen; the email carries no
+        link to the file. Large accounts arrive as more than one file.
       </div>
       <div style={{ ...body, marginBottom: 14 }}>
         Your private notes are never in it. Patient names and MRNs stay in this browser and
@@ -215,20 +218,27 @@ function BackupPanel() {
                   : "Off. Nothing is built and nothing is emailed"}
               </div>
             </div>
+            {/* The button is the tap target, 44 x TAP_MIN; the 44 x 24 track
+                is drawn inside it, as Settings' switches are (ToggleRow). The
+                track alone was the whole target, 24 px tall on a phone. */}
             <button
               onClick={() => updateSettings({ backupMonthly: !monthlyOn })}
               aria-label="Monthly backup"
               aria-pressed={monthlyOn}
               style={{
-                flexShrink: 0, width: 44, height: 24, borderRadius: 12, border: "none",
-                backgroundColor: monthlyOn ? T.accent : T.border, cursor: "pointer",
-                position: "relative", transition: "background 0.2s",
+                flexShrink: 0, width: 44, minHeight: TAP_MIN, padding: 0, border: "none",
+                backgroundColor: "transparent", cursor: "pointer", display: "flex", alignItems: "center",
               }}
             >
-              <div style={{
-                width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff", position: "absolute",
-                top: 3, left: monthlyOn ? 23 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-              }} />
+              <span aria-hidden="true" style={{
+                display: "block", width: 44, height: 24, flexShrink: 0, borderRadius: 12,
+                backgroundColor: monthlyOn ? T.accent : T.border, position: "relative", transition: "background 0.2s",
+              }}>
+                <span style={{
+                  display: "block", width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff", position: "absolute",
+                  top: 3, left: monthlyOn ? 23 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                }} />
+              </span>
             </button>
           </div>
 

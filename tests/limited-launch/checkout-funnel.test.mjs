@@ -13,7 +13,7 @@ import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from '../../supabase/functions/_shared/accessPolicy.mjs';
-import { canReviewBillingOffer } from '../../src/utils/limitedLaunchAccess.js';
+import { canReviewBillingOffer, renewalPaymentFailed } from '../../src/utils/limitedLaunchAccess.js';
 import { BILLING_RETURN_COPY, clearBillingReturn, membershipLanded, readBillingReturn, withoutBillingReturn } from '../../src/utils/billingReturn.js';
 import { createCheckoutFailureReporter } from '../../src/utils/checkoutFailure.js';
 
@@ -49,7 +49,7 @@ const built = await build({
       context: 'export const useApp = () => globalThis.__funnel.context;',
       client: 'export const createLimitedLaunchClient = () => globalThis.__funnel.client;',
       // As the real authority: no answer while Clerk reports another account or none.
-      access: 'export const canReviewBillingOffer = (...args) => globalThis.__funnel.canReview(...args); export const accessAuthority = { state: id => id === globalThis.__funnel.context.user.id && globalThis.window.Clerk?.user?.id === id ? globalThis.__funnel.context.limitedLaunch.access : null };',
+      access: 'export const canReviewBillingOffer = (...args) => globalThis.__funnel.canReview(...args); export const renewalPaymentFailed = (...args) => globalThis.__funnel.renewal(...args); export const accessAuthority = { state: id => id === globalThis.__funnel.context.user.id && globalThis.window.Clerk?.user?.id === id ? globalThis.__funnel.context.limitedLaunch.access : null };',
       report: 'export const reportError = (...args) => { globalThis.__funnel.reports.push(args); };',
     }[path] }));
   } }],
@@ -86,7 +86,7 @@ function fixture() {
   const calls = [], redirects = [], reports = [];
   const context = { user: { id: owner }, theme: THEME, isDesktop: false, manage() {},
     limitedLaunch: { enabled: true, publicSignupEnabled: true, access: snapshot(), refresh: async () => { calls.push(['refresh']); } } };
-  const state = { context, calls, reports, redirects, canReview: canReviewBillingOffer, client: {
+  const state = { context, calls, reports, redirects, canReview: canReviewBillingOffer, renewal: renewalPaymentFailed, client: {
     quote: async ({ offerId }) => { calls.push(['quote', offerId]); return quoteFor(offerId); },
     checkout: async input => { calls.push(['checkout', input]); return { url: 'https://checkout.stripe.com/c/pay/synthetic' }; },
   } };

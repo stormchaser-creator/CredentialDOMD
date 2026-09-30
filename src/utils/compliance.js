@@ -1,6 +1,7 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
 import { topicApplicability } from "./conditionalCme.js";
-import { isAlertable, isInactive } from "./lifecycle.js";
+import { isAlertable, isInactive, needsResolution } from "./lifecycle.js";
+import { daysUntilDate, parseDay } from "./dateDays.js";
 
 /**
  * CME compliance engine — cycle-windowed.
@@ -94,6 +95,22 @@ function inWindow(entry, start, end) {
   return cycleBucket(entry, start, end) === "in";
 }
 
+/**
+ * Entries split the way the engine counts them: `inWin` (counted) and
+ * `outWin`, each tagged with its `_bucket` ("before", "after", "undated").
+ * Home's CME math modal lists from this so an entry dated on the window's
+ * first day is counted there as it is in the total (it used to parse the date
+ * as UTC midnight and list it as outside the window in US time zones).
+ */
+export function splitByCycle(entries, start, end) {
+  const inWin = [], outWin = [];
+  for (const c of entries || []) {
+    const b = cycleBucket(c, start, end);
+    if (b === "in") inWin.push(c); else outWin.push({ ...c, _bucket: b });
+  }
+  return { inWin, outWin };
+}
+
 // Whole months from `a` to `b`. Used only for state first-cycle rules, whose
 // tiers are written in months ("issued 12 to 18 months before expiration").
 function wholeMonthsBetween(a, b) {
@@ -154,6 +171,14 @@ function firstCycleAllowance(rule, licenseIssued, windowEnd) {
   return null;
 }
 
+/**
+ * Hours to hundredths. Every sum of CME hours is rounded where it is made,
+ * before any comparison: 0.1 + 0.2 summed to 0.30000000000000004 on the
+ * cards, and 0.7 + 0.2 + 0.1 of a one-hour topic came to 0.9999999999999999
+ * and read as unmet.
+ */
+export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
 export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const entry = getStateEntry(state, degreeType);
   const degreeUnknown = !["MD", "DO"].includes(degreeType) && !!hasSeparateBoards(state);
@@ -194,7 +219,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const windowed = (cmeEntries || []).filter(c => inWindow(c, windowStart, windowEnd));
 
   const hours = (c) => parseFloat(c.hours) || 0;
-  const totalHrs = windowed.reduce((s, c) => s + hours(c), 0);
+  const totalHrs = round2(windowed.reduce((s, c) => s + hours(c), 0));
 
   // ── Category 1 counting ──
   // What counts toward the Category 1 minimum is DATA (`cat1Accepted`: the
@@ -210,9 +235,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     : degreeType === "DO"
       ? (oneAOnly ? ["AOA Category 1-A"] : ["AOA Category 1-A", "AOA Category 1-B", "AMA PRA Category 1"])
       : ["AMA PRA Category 1"];
-  const cat1Hrs = windowed
+  const cat1Hrs = round2(windowed
     .filter(c => cat1Keywords.some(k => c.category === k))
-    .reduce((s, c) => s + hours(c), 0);
+    .reduce((s, c) => s + hours(c), 0));
 
   // ── Topic mandates: hour-based bars + zero-hour checklist items ──
   // Most topics are per renewal cycle (default: counted in `windowed`). A
@@ -243,7 +268,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const tagged = pool.filter(c => (c.topics || []).includes(t.topic)
       && (!t.acceptedCategories || t.acceptedCategories.includes(c.category)));
     const informational = t.informational === true;
-    const earned = informational ? null : tagged.reduce((s, c) => s + hours(c), 0);
+    const earned = informational ? null : round2(tagged.reduce((s, c) => s + hours(c), 0));
     const checklist = !informational && !(t.hours > 0);
     // Per-topic provenance, falling back to the rule set's own citation and
     // URL. `citeInherited` / `sourceInherited` are what let the UI say "this
@@ -292,9 +317,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   // ── MATE Act (one-time, DEA registrants) — lifetime, not windowed ──
   let mate = null;
   if (opts.hasDEA) {
-    const mateHrs = (cmeEntries || [])
+    const mateHrs = round2((cmeEntries || [])
       .filter(c => (c.topics || []).some(t => MATE_TOPICS.includes(t)))
-      .reduce((s, c) => s + hours(c), 0);
+      .reduce((s, c) => s + hours(c), 0));
     mate = { required: MATE_HOURS, earned: mateHrs, met: mateHrs >= MATE_HOURS };
   }
 
@@ -315,11 +340,11 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     totalRequired,
     totalEarned: totalHrs,
     totalMet,
-    hoursRemaining: Math.max(0, totalRequired - totalHrs),
+    hoursRemaining: round2(Math.max(0, totalRequired - totalHrs)),
     cat1Required,
     cat1Earned: cat1Hrs,
     cat1Met,
-    cat1Remaining: Math.max(0, cat1Required - cat1Hrs),
+    cat1Remaining: round2(Math.max(0, cat1Required - cat1Hrs)),
     cat1OneAOnly: oneAOnly,
     // The exact credit-type strings counted toward the Category 1 minimum,
     // and whether they came from state data (`cat1Accepted`) or the fallback
@@ -442,9 +467,24 @@ export function findStateLicense(licenses, state) {
     l && l.state === state && /medical license/i.test(l.type || "") && l.expirationDate && isAlertable(l)
   );
   if (candidates.length === 0) return null;
-  const future = candidates.filter(l => new Date(l.expirationDate) >= new Date());
+  // Local calendar days: a licence is in force through its whole last day.
+  const future = candidates.filter(l => (daysUntilDate(l.expirationDate) ?? -1) >= 0);
   const pool = future.length ? future : candidates;
-  return pool.sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate))[0];
+  return pool.sort((a, b) => (parseDay(a.expirationDate) || 0) - (parseDay(b.expirationDate) || 0))[0];
+}
+
+/**
+ * The medical licence held in a state that is still a Resolve task (pending
+ * confirmation, date not yet known), or null. When no licence anchors a
+ * state's window, its card names this one ("CO license: date not yet known")
+ * instead of saying no licence is on file (cmePresentation.js
+ * rollingWindowLabel). Home's state card and the support viewer's copy of it
+ * both read it here, so the two never disagree.
+ */
+export function resolvePendingLicense(licenses, state) {
+  return (licenses || []).find(l =>
+    l && l.state === state && /medical license/i.test(l.type || "") && needsResolution(l, "licenses")
+  ) || null;
 }
 
 /**
@@ -461,6 +501,38 @@ export function trackedStates(primaryState, additionalStates, licenses) {
     if (l.state && /medical license/i.test(l.type || "")) states.add(l.state);
   }
   return [...states];
+}
+
+/**
+ * The tracked states whose CME counts in the Home ring and can raise an alert
+ * (the ring, the bell, the banner). A licence awaiting confirmation or whose
+ * date is not known yet keeps its state tracked (the CME page, the state card
+ * and Vera still show it), but it is a question for the Resolve card, never
+ * an alert and never in the ring. With no alertable licence to anchor the
+ * window, that state's CME reads as due today (daysLeft null), so letting it
+ * in lowered the ring and listed "<ST> CME review records" for a record the
+ * member had just marked as not known yet (HOME-013).
+ *
+ * So a state counts when a medical licence held there can alert, or when it
+ * is the primary or a Settings pick and no medical licence is held there at
+ * all. Once a licence is held in a state, the licence decides, whatever the
+ * saved picks say: settings.additionalStates also carries every state the
+ * NPI import found (npiImport.js additionalStatesAfterImport) and every state
+ * tracked when Set Primary was tapped, and Settings offers no way to remove a
+ * state a licence holds. Keeping those picks let an imported CO licence
+ * marked "date not yet known" hold the ring down with "CO CME review
+ * records" all the same.
+ */
+export function alertingStates(primaryState, additionalStates, licenses) {
+  // Per state: true once a held medical licence there can alert, false while
+  // every one held there is a Resolve task. Historical and superseded
+  // licences are not held (trackedStates).
+  const held = new Map();
+  for (const l of licenses || []) {
+    if (!l || isInactive(l) || !l.state || !/medical license/i.test(l.type || "")) continue;
+    held.set(l.state, held.get(l.state) === true || isAlertable(l));
+  }
+  return trackedStates(primaryState, additionalStates, licenses).filter(st => held.get(st) !== false);
 }
 
 /** DEA registration detection (drives the MATE Act line). */
@@ -486,8 +558,6 @@ export function complianceFor(data, state) {
 }
 
 
-const DAY_MS = 86400000;
-
 /**
  * Standing score for the Home ring. Every tracked item is either in good
  * standing or needs action; the ring is the share in good standing.
@@ -510,7 +580,7 @@ export function standingScore({ items = [], missingRequired = [], stateComps = [
   for (const it of tracked) {
     if (it.expirationDate) {
       total += 1;
-      const days = Math.ceil((new Date(it.expirationDate) - now) / DAY_MS);
+      const days = daysUntilDate(it.expirationDate, now) ?? NaN;
       if (days > leadDays) good += 1; else needsAction.push({ item: it, days });
     } else if (missingIds.has(it.id)) {
       total += 1;

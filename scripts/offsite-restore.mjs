@@ -33,6 +33,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import {
   readManagementToken, readPassphrase, managementClient, storageClient,
@@ -179,13 +180,44 @@ function describe({ manifest, ddl, catalog, index }, phases, tableFilter) {
 
 // ------------------------------------------------------------------ apply
 
+// Functions are archived in name order, not dependency order, and a
+// LANGUAGE sql body is checked at CREATE: admin_operations_can_read() would
+// fail because current_profile_id() comes later, and its policies with it.
+// pg_dump turns body checks off; so does this, inside every function
+// statement's own text, because a retried statement and every management
+// API call or psql process is a new session (QA OPS-003). Applied here, at
+// restore time, so archives written before the fix restore too.
+function statementText(s) {
+  return s.section === 'functions' ? `SET check_function_bodies = off;\n${s.sql}` : s.sql;
+}
+
+// Identity columns in an archived table. GENERATED ALWAYS ('a') refuses an
+// explicit id without OVERRIDING SYSTEM VALUE; both kinds need their
+// sequence moved past the loaded ids afterwards.
+function identityColumns(entry) {
+  return (entry?.columns || []).filter((c) => c.identity === 'a' || c.identity === 'd').map((c) => ({ name: c.name, always: c.identity === 'a' }));
+}
+
+// Archives written before the fix also carry each identity column's own
+// sequence (Postgres names it <table>_<column>_seq). Creating it before the
+// table would take that name and leave the setval on an orphan, so those
+// statements are skipped; applyData sets the real one from the rows.
+function identitySequenceNames(catalog) {
+  const names = new Set();
+  for (const [key, entry] of Object.entries(catalog || {})) {
+    if (!key.startsWith('public.')) continue;
+    for (const c of identityColumns(entry)) names.add(`${entry.name}_${c.name}_seq`);
+  }
+  return names;
+}
+
 async function runStatements(sql, statements, label, summary, { tolerate = false } = {}) {
   let ran = 0;
   let skipped = 0;
   let failed = 0;
   const runOne = async (s) => {
     try {
-      await sql(s.sql);
+      await sql(statementText(s));
       ran += 1;
     } catch (e) {
       const msg = String(e.message || e);
@@ -198,7 +230,7 @@ async function runStatements(sql, statements, label, summary, { tolerate = false
     const batch = statements.slice(i, i + DDL_BATCH);
     if (batch.length === 1) { await runOne(batch[0]); continue; }
     try {
-      await sql(batch.map((s) => s.sql).join('\n'));
+      await sql(batch.map(statementText).join('\n'));
       ran += batch.length;
     } catch {
       // Isolate the statement that failed; the rest of the batch still runs.
@@ -209,10 +241,11 @@ async function runStatements(sql, statements, label, summary, { tolerate = false
   return { ran, skipped, failed };
 }
 
-async function applySchema(sql, ddl, summary) {
+async function applySchema(sql, ddl, summary, catalog = {}) {
   const early = ddl.sections.filter((s) => !['sequence_values', 'foreign_keys', 'foreign_keys_external'].includes(s));
+  const identitySequences = identitySequenceNames(catalog);
   for (const section of early) {
-    const list = ddl.statements.filter((s) => s.section === section);
+    const list = ddl.statements.filter((s) => s.section === section && !(section === 'sequences' && identitySequences.has(s.name)));
     if (list.length) await runStatements(sql, list, section, summary);
   }
 }
@@ -278,6 +311,8 @@ async function applyData(sql, tmp, manifest, ddl, catalog, tableFilter, summary)
       if (dropped) summary.notes.push(`${table}: ${dropped} archived column(s) do not exist on the target and were left out`);
       const lines = await readNdjsonLines(path.join(tmp, t.file));
       const colList = cols.map(qIdent).join(', ');
+      const identity = identityColumns(catalog[key]).filter((c) => cols.includes(c.name));
+      const overriding = identity.some((c) => c.always) ? ' OVERRIDING SYSTEM VALUE' : '';
       let chunk = [];
       let chunkBytes = 0;
       let tableInserted = 0;
@@ -285,7 +320,7 @@ async function applyData(sql, tmp, manifest, ddl, catalog, tableFilter, summary)
         if (!chunk.length) return;
         const json = `[${chunk.join(',')}]`;
         const stmt = `WITH ins AS (
-  INSERT INTO public.${qIdent(table)} (${colList})
+  INSERT INTO public.${qIdent(table)} (${colList})${overriding}
   SELECT ${colList} FROM jsonb_populate_recordset(NULL::public.${qIdent(table)}, ${dollarQuote(json)}::jsonb)
   ON CONFLICT DO NOTHING RETURNING 1
 ) SELECT count(*) AS inserted FROM ins`;
@@ -304,6 +339,17 @@ async function applyData(sql, tmp, manifest, ddl, catalog, tableFilter, summary)
         chunkBytes += line.length;
       }
       await flush();
+      // The identity sequence follows the loaded ids, resolved through
+      // pg_get_serial_sequence (never by name), so the next insert does not
+      // collide with an archived id.
+      for (const c of identity) {
+        const max = `(SELECT max(${qIdent(c.name)}) FROM public.${qIdent(table)})`;
+        try {
+          await sql(`SELECT setval(pg_get_serial_sequence(${dollarQuote(`public.${qIdent(table)}`)}, ${dollarQuote(c.name)}), greatest(${max}, 1), ${max} IS NOT NULL) AS v`);
+        } catch (e) {
+          summary.failures.push(`data/${table}: identity sequence for ${c.name} not set: ${String(e.message).replace(/^POST [^:]+: /, '').slice(0, 200)}`);
+        }
+      }
       inserted += tableInserted;
       tablesDone += 1;
       say(`data: ${table}: ${tableInserted}/${lines.length} rows inserted (rest already present or failed)`);
@@ -320,8 +366,10 @@ async function applyData(sql, tmp, manifest, ddl, catalog, tableFilter, summary)
   }
   say(`data: ${tablesDone}/${order.length} tables, ${inserted} rows inserted`);
 
-  // Sequences catch up, then the foreign keys go on.
-  const seqs = ddl.statements.filter((s) => s.section === 'sequence_values');
+  // Sequences catch up, then the foreign keys go on. An identity column's own
+  // sequence was set above from its rows (see identitySequenceNames).
+  const identitySequences = identitySequenceNames(catalog);
+  const seqs = ddl.statements.filter((s) => s.section === 'sequence_values' && !identitySequences.has(s.name));
   if (seqs.length) await runStatements(sql, seqs, 'sequence_values', summary);
   const fks = ddl.statements.filter((s) => s.section === 'foreign_keys');
   if (fks.length) await runStatements(sql, fks, 'foreign_keys', summary);
@@ -424,7 +472,7 @@ async function main() {
       storage = storageClient(await mgmt.projectUrl(target), serviceKey);
     }
 
-    if (phases.includes('schema')) await applySchema(sql, ddl, summary);
+    if (phases.includes('schema')) await applySchema(sql, ddl, summary, catalog);
     if (storage && (phases.includes('objects') || phases.includes('data'))) await applyBuckets(storage, tmp, summary);
     if (phases.includes('data')) await applyData(sql, tmp, manifest, ddl, catalog, tableFilter, summary);
     if (storage && phases.includes('cron')) await applyCron(sql, tmp, summary);
@@ -441,4 +489,9 @@ async function main() {
   }
 }
 
-process.exitCode = await main();
+export { psqlExecutor, runStatements, applySchema, applyData };
+
+// Run only as a script: tests import the functions above.
+if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === fs.realpathSync(fileURLToPath(import.meta.url))) {
+  process.exitCode = await main();
+}

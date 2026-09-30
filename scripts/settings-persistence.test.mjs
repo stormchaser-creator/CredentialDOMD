@@ -72,6 +72,29 @@ for (const k of LOCAL_ONLY_SETTINGS) {
   ok(`${k} is deliberately absent from DEFAULT_SETTINGS`, !(k in DEFAULT_SETTINGS));
 }
 
+// SYNC-015: every setting must have a home. birthMonthDay was in
+// DEFAULT_SETTINGS with no profiles column and no local-only listing, so the
+// next online load merged "" over it and cached that: the birthday reset.
+const { DEVICE_KEY_FIELDS, profileRowToSettings: fromRow } = await import("../src/lib/supabase.js");
+const synced = new Set(Object.keys(fromRow(Object.fromEntries(Object.keys(settingsToProfileRow(DEFAULT_SETTINGS)).map((c) => [c, "x"])))));
+for (const k of Object.keys(DEFAULT_SETTINGS)) {
+  ok(`${k} is synced, local-only or a device key`, synced.has(k) || LOCAL_ONLY_SETTINGS.includes(k) || DEVICE_KEY_FIELDS.includes(k));
+}
+ok("the birthday is kept on this device (part of a date of birth)", LOCAL_ONLY_SETTINGS.includes("birthMonthDay"));
+eq("and survives a cloud load", withLocalOnlySettings({ name: "Alex Reyes" }, { birthMonthDay: "07-14" }).birthMonthDay, "07-14");
+// SETTINGS-008: the birth month and day had no profile column, so
+// settingsToProfileRow dropped it and every online load rebuilt settings
+// without it: the field read blank again and the CME reporting card said it
+// was missing. It stays on this device (the Privacy Policy's Profile list
+// does not include it), carried through a cloud load like the model choices.
+ok("birthMonthDay is on the local-only list", LOCAL_ONLY_SETTINGS.includes("birthMonthDay"));
+{
+  const cloud = { ...DEFAULT_SETTINGS, ...profileRowToSettings({ name: "Alex Reyes", npi: "1234567890" }) };
+  eq("the birth month and day survives an online load", withLocalOnlySettings(cloud, { birthMonthDay: "07-14" }).birthMonthDay, "07-14");
+  eq("a cleared birthday stays cleared", withLocalOnlySettings(cloud, { birthMonthDay: "" }).birthMonthDay, "");
+  eq("it is never sent to the profile row", Object.keys(settingsToProfileRow({ birthMonthDay: "07-14", name: "Alex Reyes" })), ["name"]);
+}
+
 // ── The fix: carry the named keys, and only them ────────────────────────────
 const cloud = { name: "Alex Reyes", theme: "dark", primaryState: "NC" };
 const local = { name: "Alex Reyes", theme: "light", assistantModel: "opus", coderModel: "gemini" };

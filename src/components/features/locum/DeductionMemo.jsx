@@ -19,13 +19,14 @@
 
 import { deductionCategoryLabel } from "../../../utils/deductionCategoryLabel";
 import { useState, useMemo } from "react";
+import { cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
-import { autoDeductions } from "../../../utils/deductions";
+import { allDeductions, deductionsCsv } from "../../../utils/deductions";
+// A real uuid: every synced table keys rows by one, and the old
+// "ded-<ms>-<random>" id was refused (22P02) on every save and replay.
+import { generateId } from "../../../utils/helpers";
 import StatementImport from "./StatementImport";
 
-function makeId() {
-  return `ded-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 const CATEGORIES = [
   "License renewal fee",
@@ -71,14 +72,11 @@ export default function DeductionMemo() {
   const [form, setForm] = useState(BLANK_FORM);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
 
-  // Auto-derived deductibles — shared with the tax estimator
-  const auto = useMemo(() => autoDeductions(data, yearFilter), [data, yearFilter]);
-
-  // Manual deductibles for the selected year
-  const manual = (data.deductibles || []).filter((d) => d.taxYear === yearFilter);
-
-  const all = [...auto, ...manual.map((m) => ({ ...m, source: "manual" }))]
-    .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  // Auto-derived deductibles plus the stored lines, each keeping the source
+  // it was saved with ("manual", "card import", "receipt scan"): the list and
+  // the CPA's CSV said "manual" for a line read off a card statement. The
+  // same ledger the tax estimator reads.
+  const all = useMemo(() => allDeductions(data, yearFilter), [data, yearFilter]);
 
   const total = all.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
 
@@ -96,8 +94,13 @@ export default function DeductionMemo() {
     if (!form.description?.trim()) { setFormMsg("Add a description (what you bought)."); return; }
     if (!amt || isNaN(amt)) { setFormMsg("Add the amount, digits only (for example 2499.00)."); return; }
     const taxYear = form.taxYear || String(form.date || "").slice(0, 4) || yearFilter;
-    // addItem = local + cloud; setData was local-only and entries never synced
-    addItem("deductibles", { id: makeId(), ...form, description: form.description.trim(), amount: Math.round(amt * 100) / 100, taxYear, source: "manual" });
+    // addItem = local + cloud; setData was local-only and entries never synced.
+    // Refused (membership being re-checked): addItem has said why; the form
+    // stays open with the line typed in it, to add again.
+    if (addItem("deductibles", { id: generateId(), ...form, description: form.description.trim(), amount: Math.round(amt * 100) / 100, taxYear, source: "manual" }) === false) {
+      setFormMsg("Not saved yet. Your entry is still here.");
+      return;
+    }
     setFormMsg("");
     setSavedMsg(`Added ${form.description.trim()}, $${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${taxYear}).`);
     setTimeout(() => setSavedMsg(""), 6000);
@@ -112,16 +115,8 @@ export default function DeductionMemo() {
   };
 
   const exportCSV = () => {
-    const headers = ["Date", "Category", "Description", "Amount", "Source"];
-    const rows = all.map((i) => [
-      i.date || "",
-      deductionCategoryLabel(i.category) || "",
-      `"${(i.description || "").replace(/"/g, '""')}"`,
-      i.amount,
-      i.source,
-    ]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    // Every cell quoted: a comma in a category name used to shift the columns.
+    const blob = new Blob([deductionsCsv(all, deductionCategoryLabel)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -155,6 +150,7 @@ export default function DeductionMemo() {
           backgroundColor: T.accent, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0,
         }}>Import statement</button>
         <select
+          aria-label="Tax year"
           value={yearFilter}
           onChange={(e) => setYearFilter(e.target.value)}
           style={{
@@ -288,11 +284,11 @@ export default function DeductionMemo() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{i.description}</div>
                 <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
                   {deductionCategoryLabel(i.category)} · {i.date}
-                  {i.source === "auto" && (
+                  {i.source && i.source !== "manual" && (
                     <span style={{
                       marginLeft: 6, fontSize: 10, padding: "1px 6px",
                       borderRadius: 6, backgroundColor: T.input, color: T.textMuted,
-                    }}>auto</span>
+                    }}>{i.source}</span>
                   )}
                 </div>
               </div>
@@ -300,13 +296,14 @@ export default function DeductionMemo() {
                 <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
                   ${parseFloat(i.amount).toFixed(2)}
                 </span>
-                {i.source === "manual" && i.id && (
+                {i.source !== "auto" && i.id && (
                   <button
+                    aria-label={`Remove ${i.description || "deduction"}`}
                     onClick={() => removeManual(i.id)}
                     style={{
                       padding: "2px 8px", borderRadius: 6, border: "none",
                       backgroundColor: T.input, color: "#ef4444",
-                      fontSize: 11, fontWeight: 600, cursor: "pointer",
+                      fontSize: 11, fontWeight: 600, cursor: "pointer", ...cardActionSize,
                     }}
                   >
                     ✕
@@ -348,14 +345,14 @@ function DeductionForm({ form, setForm, onSave, onCancel, msg, T }) {
         New deduction line
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <select style={inputStyle} value={form.category} onChange={update("category")}>
+        <select style={inputStyle} aria-label="Category" value={form.category} onChange={update("category")}>
           {CATEGORIES.map((c) => <option key={c} value={c}>{deductionCategoryLabel(c)}</option>)}
         </select>
-        <input style={inputStyle} placeholder="Description (e.g., Texas medical license app fee)" value={form.description} onChange={update("description")} />
+        <input style={inputStyle} aria-label="Description" placeholder="Description (e.g., Texas medical license app fee)" value={form.description} onChange={update("description")} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 8 }}>
-          <input style={inputStyle} type="date" value={form.date} onChange={update("date")} />
-          <input style={inputStyle} type="text" inputMode="decimal" placeholder="Amount (2499.00)" value={form.amount} onChange={update("amount")} />
-          <input style={inputStyle} placeholder="Year" maxLength={4} value={form.taxYear} onChange={update("taxYear")} />
+          <input style={inputStyle} type="date" aria-label="Date" value={form.date} onChange={update("date")} />
+          <input style={inputStyle} type="text" inputMode="decimal" aria-label="Amount" placeholder="Amount (2499.00)" value={form.amount} onChange={update("amount")} />
+          <input style={inputStyle} aria-label="Tax year" placeholder="Year" maxLength={4} value={form.taxYear} onChange={update("taxYear")} />
         </div>
       </div>
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: T.danger || "#ef4444", marginTop: 8 }}>{msg}</div>}

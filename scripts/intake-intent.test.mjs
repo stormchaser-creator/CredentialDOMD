@@ -1,9 +1,9 @@
 // supabase/functions/_shared/intakeIntent.mjs: is a docs@ forward a request,
 // a document to keep, or both?
 //
-// The case that started it is first: Sanford Health Plan's credentialing
-// approval letter (body verbatim from production, 2026-09-25), which was read
-// as a request for "Whitney, DO". Then every request fixture the packet
+// The case that started it is first: a health plan's credentialing approval
+// letter (a synthetic letter shaped like the one that arrived on 2026-09-25),
+// which was read as a request for "<surname>, DO". Then every request fixture the packet
 // matcher is tested on, which must stay requests with or without a file.
 // Run: node --test scripts/intake-intent.test.mjs
 import { test } from "node:test";
@@ -12,20 +12,20 @@ import { readFileSync } from "node:fs";
 import { classifyIntent, attachmentRole, currentMessage } from "../supabase/functions/_shared/intakeIntent.mjs";
 import { REQUEST_1, REQUEST_2, REQUESTS } from "./request-packet.test.mjs";
 
-const SANFORD = readFileSync(new URL("./fixtures/intake/sanford-approval-body.txt", import.meta.url), "utf8");
-const SANFORD_SUBJECT = "Sanford Health Plan Initial Application Approval Letter for Eric";
+const PLAN_LETTER = readFileSync(new URL("./fixtures/intake/health-plan-approval-body.txt", import.meta.url), "utf8");
+const PLAN_SUBJECT = "Prairie Health Plan Initial Application Approval Letter for Rowan";
 
-test("Sanford's approval letter is a delivery", () => {
-  const r = classifyIntent({ subject: SANFORD_SUBJECT, body: SANFORD, attachmentNames: ["Letter330567.pdf"], attachmentCount: 1 });
+test("a health plan's approval letter is a delivery", () => {
+  const r = classifyIntent({ subject: PLAN_SUBJECT, body: PLAN_LETTER, attachmentNames: ["Letter704218.pdf"], attachmentCount: 1 });
   assert.equal(r.intent, "delivery");
   assert.equal(r.requestScore, 0);
   assert.ok(r.reasons.join(" ").includes("approval letter"), r.reasons.join(" | "));
   // As it arrived: the forward's own subject, Fwd: and all.
-  assert.equal(classifyIntent({ subject: `Fwd: ${SANFORD_SUBJECT} E. Whitney, DO`, body: SANFORD, attachmentNames: ["Letter330567.pdf"] }).intent, "delivery");
+  assert.equal(classifyIntent({ subject: `Fwd: ${PLAN_SUBJECT} E. Testa, DO`, body: PLAN_LETTER, attachmentNames: ["Letter704218.pdf"] }).intent, "delivery");
 });
 
 test("with no attachment, anything is a request (unchanged)", () => {
-  assert.equal(classifyIntent({ subject: SANFORD_SUBJECT, body: SANFORD, attachmentNames: [], attachmentCount: 0 }).intent, "request");
+  assert.equal(classifyIntent({ subject: PLAN_SUBJECT, body: PLAN_LETTER, attachmentNames: [], attachmentCount: 0 }).intent, "request");
   assert.equal(classifyIntent({ subject: "Congratulations", body: "Your privileges have been approved." }).intent, "request");
   assert.equal(classifyIntent({}).intent, "request");
 });
@@ -33,8 +33,8 @@ test("with no attachment, anything is a request (unchanged)", () => {
 const REAL_REQUESTS = Object.entries({ REQUEST_1, REQUEST_2, ...REQUESTS })
   // subjectOnly and empty have no body at all; with a file attached they are
   // a document sent with a title, which is the point of "delivery". The
-  // Sanford letter is the delivery the first test is about.
-  .filter(([name]) => !["subjectOnly", "empty", "sanfordApproval"].includes(name));
+  // health plan letter is the delivery the first test is about.
+  .filter(([name]) => !["subjectOnly", "empty", "healthPlanApproval"].includes(name));
 
 test("every request fixture stays a request, with or without an attachment", () => {
   assert.ok(REAL_REQUESTS.length >= 9);
@@ -100,7 +100,7 @@ On Mon, Sep 1, 2026 at 8:00 AM Credentialing <cred@hosp.example> wrote:
   assert.equal(classifyIntent({ subject: "", body, attachmentNames: ["letter.pdf"] }).intent, "delivery");
   assert.ok(!currentMessage(body).includes("DEA"));
   // A From: line alone is not a quoted block.
-  assert.ok(currentMessage("From: Sanford Health Plan\nPlease see the attached letter.").includes("Please see"));
+  assert.ok(currentMessage("From: Prairie Health Plan\nPlease see the attached letter.").includes("Please see"));
   assert.ok(!currentMessage("hello\nFrom: A <a@b.c>\nSent: Monday\nSubject: x\nplease send DEA").includes("DEA"));
 });
 
@@ -111,7 +111,7 @@ test("attachment names: forms and finished documents", () => {
   assert.equal(attachmentRole("Approval Letter.pdf"), "document");
   assert.equal(attachmentRole("Initial Application Approval Letter.pdf"), "document", "a letter about an application is a letter");
   assert.equal(attachmentRole("COI-2026.pdf"), "document");
-  assert.equal(attachmentRole("Letter330567.pdf"), "unknown");
+  assert.equal(attachmentRole("Letter704218.pdf"), "unknown");
   assert.equal(attachmentRole("scan0001.jpg"), "unknown");
 });
 
@@ -126,8 +126,8 @@ test("the count wins over the names when both are given", () => {
 // Every one of these came back "delivery" before the fix.
 test("an ordinary credentialing request with a file attached is never a delivery", () => {
   const cases = [
-    ["", "Please fill out the attached application and return it to me by Friday.", ["Whitney_Sanford.pdf"], "request"],
-    ["", "Attached is the reappointment paperwork for St. Mary's. Kindly complete and return it at your earliest convenience.", ["Whitney_Reappt_2026.pdf"], null],
+    ["", "Please fill out the attached application and return it to me by Friday.", ["Testa_Prairie.pdf"], "request"],
+    ["", "Attached is the reappointment paperwork for St. Mary's. Kindly complete and return it at your earliest convenience.", ["Testa_Reappt_2026.pdf"], null],
     ["", "Attached is your reappointment packet. Let me know if you have any questions.", ["Reappointment Packet.pdf"], null],
     ["", "Can we get a copy of your current DEA?", ["image001.png"], "request"],
     ["Missing items for your file", "Kindly send your current BLS card and a copy of your DEA certificate", ["x.pdf"], "request"],
@@ -145,7 +145,7 @@ test("an ordinary credentialing request with a file attached is never a delivery
 });
 
 test("'for your file' in a subject is where the credentialer keeps what they ask for, not a delivery", () => {
-  const r = classifyIntent({ subject: "Missing items for your file", body: "Hi Dr. Whitney, see the list below.\n- BLS card\n- DEA", attachmentNames: ["logo.png"] });
+  const r = classifyIntent({ subject: "Missing items for your file", body: "Hi Dr. Testa, see the list below.\n- BLS card\n- DEA", attachmentNames: ["logo.png"] });
   assert.equal(r.intent, "request");
   assert.ok(!r.reasons.join(" ").includes("for your records"), r.reasons.join(" | "));
   // In the body, "for your records" still means a document to keep.
@@ -159,9 +159,9 @@ test("a packet of forms is never a delivery, whatever the covering note says", (
 });
 
 test("with neither an ask nor a delivery, a third party's prose is a request and the physician's own note is a delivery", () => {
-  const body = "Hi Dr. Whitney, here is the paperwork from our office for the Penrose assignment next month.";
-  assert.equal(classifyIntent({ subject: "Penrose", body, attachmentNames: ["Penrose.pdf"], forwarded: true }).intent, "request");
-  assert.equal(classifyIntent({ subject: "Penrose", body, attachmentNames: ["Penrose.pdf"], forwarded: false }).intent, "delivery");
+  const body = "Hi Dr. Testa, here is the paperwork from our office for the Juniper assignment next month.";
+  assert.equal(classifyIntent({ subject: "Juniper", body, attachmentNames: ["Juniper.pdf"], forwarded: true }).intent, "request");
+  assert.equal(classifyIntent({ subject: "Juniper", body, attachmentNames: ["Juniper.pdf"], forwarded: false }).intent, "delivery");
   // Weak delivery words only, from a third party: file what is finished and keep the request.
   assert.equal(classifyIntent({ subject: "", body: "Here is your renewed license from the board office, thanks.", attachmentNames: ["x.pdf"], forwarded: true }).intent, "both");
   assert.equal(classifyIntent({ subject: "", body: "Here is your renewed license from the board office, thanks.", attachmentNames: ["x.pdf"], forwarded: false }).intent, "delivery");
@@ -192,6 +192,6 @@ test("attachment names: a form word wins over a document word", () => {
     assert.equal(attachmentRole(n), "form", n);
   }
   assert.equal(attachmentRole("Initial Application Approval Letter.pdf"), "document");
-  assert.equal(attachmentRole("Whitney items.pdf"), "unknown");
-  assert.equal(attachmentRole("Whitney_Privileges.pdf"), "unknown");
+  assert.equal(attachmentRole("Testa items.pdf"), "unknown");
+  assert.equal(attachmentRole("Testa_Privileges.pdf"), "unknown");
 });

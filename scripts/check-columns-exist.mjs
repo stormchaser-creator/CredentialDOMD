@@ -26,6 +26,10 @@ export const REQUIRED_COLUMNS = {
   // 20260925120000_call_day_split.sql (ticket 73202ae8)
   locum_contracts: ["split_at_day_start", "day_start_hour"],
   work_log: ["split_group_id"],
+  // 20260929221000_profiles_training_start_year.sql: Settings writes
+  // trainingStartYear through SETTINGS_TO_PROFILE, and one unknown column
+  // rejects the whole settings save.
+  profiles: ["training_start_year"],
   // Not listed: invoices.last_emailed_at / last_emailed_to
   // (20260925130000_invoice_email_sends.sql). send-invoice-email writes them
   // and the app only reads them; src/lib/supabase.js strips them from every

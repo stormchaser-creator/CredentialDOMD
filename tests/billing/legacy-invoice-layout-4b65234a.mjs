@@ -18,15 +18,15 @@ import { DEFAULT_CALL_DAY_START_HOUR, hourLabel, apportion } from "./legacy-bill
  *
  * Why it exists: a stipend day used to print as one "daily total" line with
  * its work listed underneath as "included" or "+$75.00", and nothing said
- * what a day came to or what "included" was worth (the owner's Northfield
+ * what a day came to or what "included" was worth (a stipend
  * invoice, Sep 2026). A call day now reads:
  *
- *   Fri, Sep 25, 2026 · call day 7:00 AM Sep 25 to 7:00 AM Sep 26
+ *   Fri, Oct 16, 2026 · call day 7:00 AM Oct 16 to 7:00 AM Oct 17
  *   24-hour call stipend   covers the first 4.00 h of work   4.00 h used of 4.00 h   $3,000.00
  *     Rounding: ...        3:30 PM–7:30 PM                    4.00 h                 in $3,000.00 stipend
  *   Callback beyond 4 h                                       1.00 h @ $300.00/hr    $300.00
- *     Call: ...            10:45 PM–11:00 PM                  0.25 h                 $75.00
- *   Total for Fri, Sep 25, 2026                                                      $5,250.00
+ *     Call: ...            10:30 PM–10:45 PM                  0.25 h                 $75.00
+ *   Total for Fri, Oct 16, 2026                                                      $4,800.00
  *
  * Presentation only. No amount is computed here: every dollar printed is a
  * line's own amount (or, for a work item, the dollars the engine already
@@ -127,11 +127,11 @@ const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const at = (key, add = 0) => { const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d + add, 12); };
-/** "Fri, Sep 25, 2026". */
+/** "Fri, Oct 16, 2026". */
 export const dayTitle = (key) => at(key).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 const shortDay = (key, add) => at(key, add).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const validHour = (h) => (Number.isInteger(h) && h >= 0 && h <= 23 ? h : null);
-/** "call day 7:00 AM Sep 25 to 7:00 AM Sep 26". */
+/** "call day 7:00 AM Oct 16 to 7:00 AM Oct 17". */
 export const callWindowText = (key, hour) => `call day ${hourLabel(hour)} ${shortDay(key, 0)} to ${hourLabel(hour)} ${shortDay(key, 1)}`;
 
 // ── Reading a line: its own fields, or its stored text ──

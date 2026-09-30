@@ -154,3 +154,32 @@ test("plain support@ is relayed exactly as before, with no reason line", async (
   assert.match(relay.text, /^From: Member Example <member@example\.test>\n/);
   assert.deepEqual(relay.reply_to, [MEMBER_MAIL]);
 });
+
+// QA 2026-09-29 (SUPPORT-002): a member writing back on a resolved or
+// "waiting on you" ticket needs support again, so the ticket reopens, the
+// same way a reply from the app does (reply-ticket). Follow-up 2026-09-30:
+// the reopen is trg_reopen_ticket_on_member_message, inside the insert
+// (tests/support/reopen-trigger-sql.test.mjs runs it on PostgreSQL). The
+// function's own second UPDATE could fail after the message was saved, and a
+// redelivery that hit the request key (23505) skipped it, so nothing repaired
+// it. The message must carry what the trigger keys on, and the function must
+// write nothing to the ticket itself.
+test("a reply is written as the owner's own message, which the database reopens the ticket on; the function writes no ticket update", async () => {
+  for (const status of ["resolved", "closed", "waiting_user", "in_progress", "open"]) {
+    resetWorld(); seed();
+    Object.assign(rows("support_tickets")[0], { status, resolved_at: status === "resolved" || status === "closed" ? "2026-09-20T00:00:00Z" : null });
+    const r = await reply();
+    assert.equal(r.body.filed, true, status);
+    const [message] = rows("support_messages");
+    assert.deepEqual({ author: message.author_id, admin: message.is_admin_reply }, { author: rows("support_tickets")[0].user_id, admin: false }, `${status}: the owner's own message, which the trigger reopens on`);
+    assert.deepEqual(harness.db.log.filter((e) => e.table === "support_tickets" && e.op !== "select"), [], `${status}: no second write to fail on its own`);
+  }
+  // A redelivery refused by the request key is answered as already added,
+  // and still writes nothing to the ticket.
+  resetWorld(); seed();
+  Object.assign(rows("support_tickets")[0], { status: "resolved", resolved_at: "2026-09-20T00:00:00Z" });
+  harness.failInsert = (table) => (table === "support_messages" ? { message: "duplicate key value violates unique constraint \"support_messages_client_request_uniq\"", code: "23505" } : null);
+  const again = await reply();
+  assert.equal(again.body.duplicate, true);
+  assert.deepEqual(harness.db.log.filter((e) => e.table === "support_tickets" && e.op !== "select"), []);
+});

@@ -9,6 +9,7 @@
  */
 
 import { callDayStartHour } from "./billing.js";
+import { sentDay } from "./helpers.js";
 
 // Payments are a ledger, not a flag: agencies sometimes pay an invoice in
 // pieces. Legacy invoices marked paid before the ledger existed count as
@@ -44,7 +45,8 @@ export function invoiceDocumentArgs(inv, contract, settings = {}, billName = "")
     totalMin: inv.totalMinutes, total: inv.totalAmount,
     // A resend can follow a payment: the document and cover must say so.
     paid: paidOf(inv), balance: balanceOf(inv),
-    issuedDate: inv.sentAt?.slice(0, 10),
+    // The local day it was sent, the same day its number carries.
+    issuedDate: sentDay(inv.sentAt) || undefined,
     // An expense invoice's cover says travel expenses, not physician services.
     kind: inv.kind,
     // The call-day window a day block prints (invoiceLayout.js). Lines saved

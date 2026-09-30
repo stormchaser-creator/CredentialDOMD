@@ -29,7 +29,7 @@ const eq = (n, got, want) => {
 const ok = (n, cond, extra = "") => { if (cond) pass++; else { fail++; console.log(`FAIL ${n} ${extra}`); } };
 
 const RAW = JSON.parse(readFileSync(new URL("./fixtures/cv/model-reply.json", import.meta.url), "utf8"));
-const SETTINGS = { name: "Daniel Logsdon", degreeType: "MD" };
+const SETTINGS = { name: "Daniel Marchetti", degreeType: "MD" };
 
 // ── Dates keep the precision the CV printed, and no more ───────────────────
 eq("a year becomes the first of that year", cvYearDate("2006"), "2006-01-01");
@@ -54,14 +54,14 @@ eq("null stays empty", cvYearDate(null), "");
 }
 
 // ── The physician's own name never becomes a credential label ──────────────
-ok("the physician's name is recognised", namesThePhysician("Daniel Logsdon", "Daniel Logsdon"));
-ok("with a degree after it too", namesThePhysician("Daniel Logsdon MD", "Daniel Logsdon"));
-ok("a school is not", !namesThePhysician("Keck School of Medicine of USC", "Daniel Logsdon"));
-ok("an empty name counts as unusable", namesThePhysician("", "Daniel Logsdon"));
+ok("the physician's name is recognised", namesThePhysician("Daniel Marchetti", "Daniel Marchetti"));
+ok("with a degree after it too", namesThePhysician("Daniel Marchetti MD", "Daniel Marchetti"));
+ok("a school is not", !namesThePhysician("Harlan University School of Medicine", "Daniel Marchetti"));
+ok("an empty name counts as unusable", namesThePhysician("", "Daniel Marchetti"));
 ok("and with no name on file nothing is claimed", !namesThePhysician("Anything", ""));
 
 // ── Normalising ────────────────────────────────────────────────────────────
-const secs = normalizeCvSections(RAW, { deg: "MD", name: "Daniel Logsdon" });
+const secs = normalizeCvSections(RAW, { deg: "MD", name: "Daniel Marchetti" });
 
 eq("the profile fields that survive", Object.keys(secs.settings).sort(),
   ["address", "degreeType", "email", "name", "npi", "phone", "professionalSummary", "specialties"]);
@@ -74,16 +74,16 @@ eq("every education type is one the form offers",
 // "Fellowship Certificate" shares the word that matters, so the physician does
 // not have to re-pick it.
 eq("a near miss lands on the option that shares its word",
-  secs.education.find((e) => e.institution === "Cleveland Clinic").type, "Fellowship Certificate");
+  secs.education.find((e) => e.institution === "Northgate Clinic").type, "Fellowship Certificate");
 eq("something with nothing in common still falls back",
   normalizeCvSections({ education: [{ type: "Sabbatical", institution: "X" }] }).education[0].type, "Other");
 eq("the physician's own name is replaced by a credential label",
-  secs.education[0].name, "Doctor of Medicine (MD) - Keck School of Medicine of USC");
+  secs.education[0].name, "Doctor of Medicine (MD) - Harlan University School of Medicine");
 // The profile may hold a short form of the name while the CV prints it in
 // full, so the CV's own statement of the name is tested too.
 eq("a full name on the CV is caught even when the profile holds a short form",
-  normalizeCvSections(RAW, { deg: "MD", name: "Dan Logsdon" }).education[0].name,
-  "Doctor of Medicine (MD) - Keck School of Medicine of USC");
+  normalizeCvSections(RAW, { deg: "MD", name: "Dan Marchetti" }).education[0].name,
+  "Doctor of Medicine (MD) - Harlan University School of Medicine");
 eq("a month-and-year start survives", secs.education[1].startDate, "2006-06-01");
 
 eq("every work type is one the form offers",
@@ -92,8 +92,8 @@ eq("Locums reaches Locum Tenens through the shared stem", secs.workHistory[1].ty
 eq("and an unrecognisable position type falls back",
   normalizeCvSections({ workHistory: [{ type: "Consultancy", employer: "X" }] }).workHistory[0].type, "Other");
 eq("a state written in full becomes its code", secs.workHistory[0].state, "CA");
-eq("current reads as the select's own Yes", secs.workHistory[0].current, "Yes");
-eq("and No when it is not", secs.workHistory[1].current, "No");
+eq("current reads as the column's own boolean", secs.workHistory[0].current, true);
+eq("and false when it is not", secs.workHistory[1].current, false);
 
 eq("a license with no expiration keeps the blank rather than inventing one",
   secs.licenses[0].expirationDate, "");
@@ -102,8 +102,8 @@ eq("a board certificate labelled with the physician gets a credential label",
 eq("an unmapped state is dropped rather than guessed", secs.licenses[2].state, "");
 
 eq("a publication with no short label borrows its citation",
-  secs.publications[1].name.startsWith("Logsdon D. Minimally invasive TLIF"), true);
-eq("a PMID keeps only digits", secs.publications[0].pmid, "33987654");
+  secs.publications[1].name.startsWith("Marchetti D. Minimally invasive TLIF"), true);
+eq("a PMID keeps only digits", secs.publications[0].pmid, "99000201");
 
 // ── Findings ───────────────────────────────────────────────────────────────
 const findings = cvFindings(RAW, { data: DEFAULT_DATA, settings: SETTINGS });
@@ -163,11 +163,11 @@ eq("and an empty selection writes nothing",
 
 // ── A profile row says what it would take away ─────────────────────────────
 {
-  const typed = { name: "Dan Logsdon", degreeType: "MD" };
+  const typed = { name: "Dan Marchetti", degreeType: "MD" };
   const marked = markAlreadyOnFile(findings, DEFAULT_DATA, typed);
   const nameRow = marked.find((f) => f.id === "cv:settings:name");
   eq("a profile row that overwrites something typed names it", nameRow.replaces, ["name"]);
-  eq("and the sentence quotes the current value", replacesLine(nameRow, typed), "Replaces your name (Dan Logsdon).");
+  eq("and the sentence quotes the current value", replacesLine(nameRow, typed), "Replaces your name (Dan Marchetti).");
   const degreeRow = marked.find((f) => f.id === "cv:settings:degreeType");
   ok("a value that matches what is on file replaces nothing", degreeRow.alreadyOnFile);
 }
@@ -204,12 +204,12 @@ eq("and an empty selection writes nothing",
     ok(`the generated CV carries ${want}`, titles.includes(want));
   }
   const text = JSON.stringify(cv);
-  ok("the employer read off the CV comes back out", text.includes("Arrowhead Regional Medical Center"));
-  ok("the medical school comes back out", text.includes("Keck School of Medicine of USC"));
-  ok("the citation comes back out verbatim", text.includes("Cureus. 2021;13(4):e14320"));
+  ok("the employer read off the CV comes back out", text.includes("Cedar Ridge Regional Medical Center"));
+  ok("the medical school comes back out", text.includes("Harlan University School of Medicine"));
+  ok("the citation comes back out verbatim", text.includes("Cureus. 2021;13(4):e99320"));
   ok("the license number comes back out", text.includes("35.123456"));
   ok("no credential is labelled with the physician's own name",
-    !/"primary":"Daniel Logsdon/.test(text));
+    !/"primary":"Daniel Marchetti/.test(text));
   eq("what was saved, grouped the way the screen showed it",
     savedSummary(plan).map((g) => g.section), GROUP_ORDER);
 }
@@ -221,7 +221,7 @@ ok("no em dash in the CV lead sentence", !leadNote(findings[0]).includes("—"))
 
 // ── The filename rule the setup row reads ──────────────────────────────────
 for (const [name, want] of [
-  ["Whitney CV 2026.pdf", true], ["logsdon-resume.docx", true], ["Résumé 2026.pdf", true],
+  ["Testa CV 2026.pdf", true], ["marchetti-resume.docx", true], ["Résumé 2026.pdf", true],
   ["curriculum vitae.pdf", true], ["curriculum_vitae.docx", true], ["cv.pdf", true],
   ["CA license.pdf", false], ["DEA certificate.pdf", false], ["archive.zip", false], ["recv.pdf", false],
 ]) {

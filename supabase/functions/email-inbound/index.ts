@@ -136,8 +136,12 @@
  *     Share Contact > Mail > contacts@ arrives here as a .vcf, every card in
  *     it is parsed (a multi-select share carries several), and a
  *     `peer_references` row is written per person with relationship "Other"
- *     and a note saying where it came from. Same sender matching and
- *     authentication as cme@. The reply names who was added.
+ *     and a note saying where it came from. Same sender matching as cme@,
+ *     and the same authentication as docs@: an explicit failure refuses the
+ *     message, and a card is written only on a positive pass (dmarc=pass,
+ *     or aligned SPF and DKIM). Any other forward's cards wait in the app
+ *     as an intake_proposals note to Add (stageContacts). The reply names
+ *     who was added, or who is waiting and why.
  *
  *   support+<ticket id>@credentialdomd.com   A reply to a support email.
  *     send-ticket-reply sets this as the reply_to of every support reply
@@ -154,7 +158,9 @@
  *     reached that ticket by email in the last 24 hours (an auto-responder
  *     that slips past the automated-mail check cannot loop with the agent).
  *     A redelivered message is added once (client_request_id is the ledger
- *     row). Anything else is relayed to the owner as below, with a line
+ *     row). The insert itself reopens a resolved, closed or waiting ticket
+ *     (trg_reopen_ticket_on_member_message, 20260930010200); this function
+ *     writes nothing else to the ticket. Anything else is relayed to the owner as below, with a line
  *     saying why it was not added. The ledger route stays "forward".
  *
  *   anything else (support@, hello@, whit@, privacy@, ...)   Mailbox relay.
@@ -255,8 +261,8 @@ import {
 // The facts an informational email states, entered as records: checked by
 // the host, planned against the file, written (a proven forward) or offered
 // in the app on one tap (any other). Nobody is emailed about them.
-import { existingForModel, corpusIndex, attachmentText, planRecords, sourceLine, withSource, fitItems, minimalItems, asWritten } from "../_shared/intakeFacts.mjs";
-import { recordFromFields, RECORD_SECTIONS } from "../_shared/app/utils/intakeRecords.js";
+import { existingForModel, corpusIndex, attachmentText, planRecords, sourceLine, withSource, fitItems, minimalItems, asWritten, itemsBytes } from "../_shared/intakeFacts.mjs";
+import { recordFromFields, RECORD_SECTIONS, sameReference } from "../_shared/app/utils/intakeRecords.js";
 import { admitUnderstanding, callUnderstanding, COUNT_TIMEOUT_MS, type Admission } from "../_shared/intakeModelCall.ts";
 // Word, Excel, CSV, text and RTF attachments are read here and screened for
 // patient records BEFORE they are stored, as the app screens them before upload.
@@ -1076,6 +1082,17 @@ interface StoredItem {
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.byteLength === b.byteLength && a.every((x, i) => x === b[i]);
 
 /**
+ * A write refused only because `column` does not exist. PostgREST answers
+ * PGRST204 "Could not find the 'origin' column of 'documents' in the schema
+ * cache"; Postgres itself 42703 'column "origin" ... does not exist'.
+ */
+function missingColumn(err: { code?: string; message?: string } | null, column: string): boolean {
+  if (!err || (err.code !== "PGRST204" && err.code !== "42703")) return false;
+  const m = String(err.message ?? "");
+  return m.includes(`'${column}'`) || m.includes(`"${column}"`);
+}
+
+/**
  * Copy downloaded files into the physician's Documents (Storage + documents
  * row with the given type, no linked_to). A file this user already has is not
  * stored again: same name and size, the app's rule, or, since email filing
@@ -1129,7 +1146,7 @@ async function storeAsDocuments(profile: MatchedProfile, files: Downloaded[], do
       failed++;
       continue;
     }
-    const { error: dErr } = await db.from("documents").insert({
+    const docRow = {
       id: docId,
       user_id: profile.id,
       name: f.filename,
@@ -1142,7 +1159,19 @@ async function storeAsDocuments(profile: MatchedProfile, files: Downloaded[], do
       created_at: now,
       updated_at: now,
       type: docType,
-    });
+    };
+    // origin is how the app tells a forwarded file from its own upload
+    // (intake corrections): mime_type is written for both. Migration
+    // 20260929230000 adds it. Functions deploy by hand and a migration-only
+    // push runs no CI, so this function can go out before the column exists
+    // (or stay after a rollback drops it): then the file is kept without
+    // origin, which the app reads as an upload, rather than every forwarded
+    // attachment being thrown away.
+    let { error: dErr } = await db.from("documents").insert({ ...docRow, origin: "email" });
+    if (dErr && missingColumn(dErr, "origin")) {
+      console.error(`documents.origin is missing (apply migration 20260929230000); kept ${docId} without it`);
+      ({ error: dErr } = await db.from("documents").insert(docRow));
+    }
     if (dErr) {
       console.error(`documents insert failed for ${docId}: ${dErr.message}`);
       // No row points at the object, so nothing in the app can ever delete
@@ -1319,6 +1348,16 @@ function unverifiedNote(results: FilingResult[], from: string): string {
   if (!results.some((r) => r.unverified)) return "";
   const domain = plainText(domainPart(from), 80) || "your address";
   return `Mail from ${domain} arrives without a DMARC pass or a DKIM signature for ${domain}, so a forward cannot be told apart from a forgery and nothing is filed automatically. Turning on DKIM signing and publishing SPF and DMARC for ${domain} (in Google Workspace: Admin > Apps > Gmail > Authenticate email) lets forwards be filed as they arrive.`;
+}
+
+/**
+ * The same explanation for a REQUEST from a forward that was not positively
+ * authenticated: nothing about it is sent on one tap until the domain can
+ * prove its mail. Used when no file carried unverifiedNote's version.
+ */
+function unverifiedRequestNote(from: string): string {
+  const domain = plainText(domainPart(from), 80) || "your address";
+  return `Mail from ${domain} arrives without a DMARC pass or a DKIM signature for ${domain}, so this forward cannot be told apart from a forgery and its reply is never offered on one tap. Turning on DKIM signing and publishing SPF and DMARC for ${domain} (in Google Workspace: Admin > Apps > Gmail > Authenticate email) lets verified forwards go on one tap.`;
 }
 
 type ScanOutcome = { scan: Scan | null; why: string };
@@ -1654,11 +1693,20 @@ CredentialDOMD
 https://credentialdomd.com`);
   }
 
-  const authFail = senderAuthFailure(authResultsFromHeaders(email));
+  // The evidence read the way docs@ reads it: an explicit failure in the raw
+  // top-most header OR the header map refuses the message outright, and a
+  // card is WRITTEN only on a positive pass (mayFileFrom). A reference goes
+  // on to credentialers (Vera's drafts, shares), and a forged From: on a
+  // domain with no DMARC fails nothing: such a card waits in the app for
+  // the physician to add (INTAKE-009). Not a hard refusal: a genuine share
+  // from a domain that cannot prove its mail would otherwise vanish.
+  const auth = await authResultsFrom(email);
+  const authFail = senderAuthFailure(auth.positive ?? "") || senderAuthFailure(auth.negative);
   if (authFail) {
     await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
     return json({ ok: true, route: "contacts", result: "rejected_auth" });
   }
+  const verified = mayFileFrom(auth, from);
 
   // The card arrives as an attachment from the share sheet. A few clients
   // paste it into the body instead, so the body is read when no file came.
@@ -1680,11 +1728,28 @@ https://credentialdomd.com`);
     if (cards.length >= MAX_CONTACTS_PER_EMAIL) break;
   }
 
+  // A card for someone already in the references (the same name, and the
+  // same email or phone when the card has either; intakeRecords.js
+  // sameReference) is not added again: the ledger dedupes only a redelivered
+  // message, and sending the same .vcf twice used to double every row. Not a
+  // unique index: two hand-entered references can share a name, and one
+  // refused row would fail the whole batch.
+  const { data: onFileRows, error: refErr } = await db.from("peer_references").select("id, name, email, phone").eq("user_id", profile.id);
+  if (refErr) throw new Error(`peer_references read: ${refErr.message}`);
+  const onFile = (onFileRows ?? []) as { name: string | null; email: string | null; phone: string | null }[];
+  const existing = cards.filter((c) => onFile.some((r) => sameReference(c, r)));
+  const fresh = cards.filter((c) => !existing.includes(c));
+  const alreadyNote = existing.length
+    ? `Already in your references, not added again: ${existing.map((c) => c.name || c.email || c.phone).filter(Boolean).join(", ")}.`
+    : "";
+
+  if (fresh.length && !verified) return await stageContacts(ledgerId, profile, from, fresh, skipped, replySubject, replyHeaders, messageId, alreadyNote);
+
   let added = 0;
   const names: string[] = [];
-  if (cards.length) {
+  if (fresh.length) {
     const now = new Date().toISOString();
-    const rows = cards.map((c) => ({
+    const rows = fresh.map((c) => ({
       id: crypto.randomUUID(),
       // user_id on every collection table is the PROFILE id, not the Clerk id
       // (the app writes it that way and RLS reads it with current_profile_id()).
@@ -1707,7 +1772,7 @@ https://credentialdomd.com`);
       return json({ ok: true, route: "contacts", result: "insert_failed" });
     }
     added = rows.length;
-    names.push(...cards.map((c) => c.name || c.email || c.phone).filter(Boolean));
+    names.push(...fresh.map((c) => c.name || c.email || c.phone).filter(Boolean));
   }
 
   let text: string;
@@ -1719,20 +1784,92 @@ Open References and set the relationship (colleague, chair, program director) an
     text = `Added ${added} peer references: ${names.join(", ")}.
 
 Open References and set the relationship on each one. That is the field a credentialing office always asks for, and a contact card never carries it.`;
+  } else if (existing.length) {
+    text = alreadyNote;
   } else {
     text = `No contact card was found in that email, so nothing was added.
 
 On an iPhone: Contacts, the person, Share Contact, then Mail, and send it to ${CONTACTS_ADDR}. The card travels as a .vcf attachment. A typed-out name and number in the body is not a card and cannot be read.`;
   }
+  if (added > 0 && alreadyNote) text += `\n\n${alreadyNote}`;
   if (skipped > 0) {
     text += `\n\n${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file) or count (10 per email).`;
   }
   text += `\n\nOpen the app: ${APP_URL} (References)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
 
   const r = await sendEmail({ from: FROM_CONTACTS, to: [from], subject: replySubject, headers: replyHeaders, text });
-  await finish(ledgerId, "done", `added ${added} reference${added === 1 ? "" : "s"}, skipped ${skipped}${r.ok ? "" : `, confirmation failed ${r.status}`}`,
+  await finish(ledgerId, "done", `added ${added} reference${added === 1 ? "" : "s"}, already on file ${existing.length}, skipped ${skipped}${r.ok ? "" : `, confirmation failed ${r.status}`}`,
     { attachment_count: added, profile_id: profile.id });
   return json({ ok: true, route: "contacts", added, skipped, confirmed: r.ok });
+}
+
+// The note on a reference a contact card added, as the app shows it.
+const CARD_NOTE = "From a contact card emailed to contacts@. Set the relationship and check the details.";
+
+/**
+ * contacts@ from a forward that was not positively authenticated: nothing is
+ * written to peer_references. Each card becomes a proposed record in an
+ * intake_proposals note (the one informational mail uses), which the app
+ * shows in More > Requests with Add, Edit and Dismiss; Add goes through the
+ * app's own addItem. Split into as many notes as the table's 4 KB cap needs.
+ * The physician is told the cards are waiting, and why.
+ */
+async function stageContacts(ledgerId: string, profile: MatchedProfile, from: string, cards: VCardContact[], skipped: number,
+  replySubject: string, replyHeaders: Record<string, string>, messageId: string, alreadyNote = "") {
+  const items = cards.map((c, i) => ({
+    key: `r${i + 1}`, kind: "record", section: "peerReferences", op: "add", recordId: null, state: "proposed",
+    fields: Object.fromEntries(Object.entries({
+      name: plainText(c.name, 120), institution: plainText(c.institution, 120), email: plainText(c.email, 120),
+      phone: plainText(c.phone, 40), relationship: "Other", notes: CARD_NOTE,
+    }).filter(([, v]) => v)),
+  }));
+  const chunks: typeof items[] = [];
+  for (const it of items) {
+    const last = chunks[chunks.length - 1];
+    if (last && itemsBytes([...last, it]) <= 3800) last.push(it); else chunks.push([it]);
+  }
+  const now = new Date().toISOString();
+  const sender = plainText(domainPart(from), 120) || "a contact card";
+  // The cards each note actually holds, so the reply names the ones saved
+  // and the ones to send again, whichever note failed (not the first N).
+  const saved: typeof items = [], unsaved: typeof items = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const summary = `${chunk.length === 1 ? "a contact card" : `${chunk.length} contact cards`} to add to your references`;
+    const { error } = await db.from("intake_proposals").insert({
+      user_id: profile.id, inbound_email_id: ledgerId,
+      message_id: `${String(messageId || ledgerId).slice(0, 900)}${i ? `#${i + 1}` : ""}`,
+      sender, summary, verified: false, status: "new", items: chunk, created_at: now, updated_at: now,
+    });
+    // A redelivered webhook finds its note already there.
+    if (error && error.code !== PG_UNIQUE_VIOLATION) {
+      console.error(`contacts: intake note failed for ${profile.id}: ${error.message}`);
+      unsaved.push(...chunk);
+    } else {
+      saved.push(...chunk);
+    }
+  }
+  const staged = saved.length, notSaved = unsaved.length;
+  if (staged === 0) {
+    await finish(ledgerId, "failed", `not verified; staging failed for ${cards.length} card${cards.length === 1 ? "" : "s"}`, { profile_id: profile.id });
+    return json({ ok: true, route: "contacts", result: "stage_failed" });
+  }
+  const who = (list: typeof items) => list.map((it) => it.fields.name || it.fields.email || it.fields.phone).filter(Boolean);
+  const names = who(saved), missed = who(unsaved);
+  const domain = plainText(domainPart(from), 80) || "your address";
+  let text = `${staged === 1 ? `The contact card for ${names[0]} is` : `${staged} contact cards (${names.join(", ")}) are`} waiting for you in the app, under More > Requests. Tap Add to put ${staged === 1 ? "it" : "each one"} in your peer references.
+
+This email could not be verified as coming from you, so nothing was added automatically. Mail from ${domain} arrives without a DMARC pass or a DKIM signature for ${domain}; publishing SPF and DMARC and turning on DKIM signing for ${domain} lets cards be added as they arrive.`;
+  if (notSaved > 0) {
+    text += `\n\n${notSaved === 1 ? "One more card" : `${notSaved} more cards`}${missed.length ? ` (${missed.join(", ")})` : ""} could not be saved. Send ${notSaved === 1 ? "that card" : "those cards"} again.`;
+  }
+  if (alreadyNote) text += `\n\n${alreadyNote}`;
+  if (skipped > 0) text += `\n\n${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file) or count (10 per email).`;
+  text += `\n\nOpen the app: ${APP_URL}#requests\n\nCredentialDOMD\nhttps://credentialdomd.com`;
+  const r = await sendEmail({ from: FROM_CONTACTS, to: [from], subject: replySubject, headers: replyHeaders, text });
+  await finish(ledgerId, "done", `not verified, staged ${staged} card${staged === 1 ? "" : "s"} for the app${notSaved ? `, ${notSaved} not saved` : ""}, skipped ${skipped}${r.ok ? "" : `, confirmation failed ${r.status}`}`,
+    { profile_id: profile.id });
+  return json({ ok: true, route: "contacts", added: 0, staged, skipped, verified: false, confirmed: r.ok });
 }
 
 // ─── Route: docs@ / requests@ / packets@ ──────────────────────────────────────
@@ -2414,6 +2551,11 @@ https://credentialdomd.com`);
       reading.method === "model" ? { asks: reading.asks, confidence: reading.confidence, unclear: reading.unclear }
         : (reading.unclear ? { unclear: true } : null),
     );
+    // Whether the forward was positively authenticated travels with the
+    // proposal. oneTapReady needs it true: an unverified forward can be a
+    // forgery whose "requester" the forger chose, so its packet always
+    // leads with Review (the app, the summary below, and send-packet-email).
+    proposal.verified = mayFile;
     const now = new Date().toISOString();
     const { error: uErr } = await db.from("document_requests")
       .update({ proposal, proposal_at: now, updated_at: now }).eq("id", requestId);
@@ -2434,13 +2576,17 @@ https://credentialdomd.com`);
   if (notKept) notes.push(notKept);
   const filedLines = filing.flatMap((f) => f.lines);
   if (filedLines.length) notes.push(`From the same email:\n${filedLines.join("\n")}`);
-  const unverified = unverifiedNote(filing, from);
+  // Said even when nothing was filed: this summary goes to the address the
+  // forward claimed, and the physician there needs to know why the request
+  // is not one tap and what fixes it.
+  const unverified = unverifiedNote(filing, from) || (mayFile ? "" : unverifiedRequestNote(from));
   if (unverified) notes.push(unverified);
 
   let text = physicianSummaryText({
     requesterName, requesterAddr: fromAddr, requesterFound: parsed.found, proposal, appUrl: APP_URL,
     oneTap: proposal ? oneTapReady(proposal) : false, review: proposal ? reviewReason(proposal) : "",
     unclear: reading.unclear ? { about: reading.summary, mentions: reading.mentions } : null,
+    unverified: !mayFile,
   });
   if (notes.length) text += `\n\n${notes.join("\n")}`;
   text += `\n\nCredentialDOMD\nhttps://credentialdomd.com`;
@@ -2781,6 +2927,11 @@ async function handleTicketReply(ledgerId: string, emailId: string, from: string
   if (insertErr?.code === "42501") return relay("the database refused it as a support reply");
   if (insertErr && insertErr.code !== PG_UNIQUE_VIOLATION) throw new Error(`ticket reply insert: ${insertErr.message}`);
   const savedId = (saved as { id?: string } | null)?.id ?? null;
+  // The member wrote back, so the ticket needs support again. The insert
+  // reopened it (trg_reopen_ticket_on_member_message, 20260930010200: the
+  // owner's own message, not a support reply) or failed with it, so there is
+  // no second write here to fail on its own, and a redelivery that hits the
+  // request key (23505) finds the ticket already open.
   const detail = `${TICKET_FILED} ${short}${savedId ? ` as message ${savedId.slice(0, 8)}` : " (already added)"}`;
   await finish(ledgerId, "done", detail, { profile_id: profile.id });
   return json({ ok: true, route: "forward", ticket: ticket.id, filed: true, duplicate: !savedId, message_id: savedId });
