@@ -438,6 +438,21 @@ export function sessionFacts({ output = null, stderrText = '', secrets = [], std
     stderr_file: stderrFile,
   };
 }
+// The subscription's session or usage limit (2026-09-29). Once it is reached
+// every session exits 1 at once with a result like "You've hit your session
+// limit · resets 2pm (America/Los_Angeles)", and three such runs parked two
+// tickets that had nothing wrong with them. It says nothing about the ticket,
+// so run.mjs pauses the run (EXIT.usageLimit) and the shell counts nothing.
+// Only a failed session's CLI text is read: the result of a non-zero exit or
+// an is_error result, the errors list and the last stderr line, never a
+// model's answer, and only the "hit/reached" forms, never a warning that the
+// limit is near.
+export const USAGE_LIMIT = /\b(?:hit|reached|exceeded) your (?:[\w-]+ )?limit\b|\b(?:session|usage|weekly|daily|5-hour|opus) limit (?:reached|hit|exceeded)\b/i;
+export function usageLimitHit({ code = null, output = null, stderrText = '' } = {}) {
+  const texts = [...(Array.isArray(output?.errors) ? output.errors : []), String(stderrText ?? '').split('\n').map(l => l.trim()).filter(Boolean).at(-1)];
+  if (code !== 0 || output?.is_error === true) texts.push(output?.result);
+  return texts.some(t => typeof t === 'string' && USAGE_LIMIT.test(t));
+}
 // "exited 1 (error_max_budget_usd, 57 turns, $3.0096): Reached maximum budget ($3)"
 export function failureReason(head, facts) {
   const parts = [facts?.subtype, Number.isInteger(facts?.turns) ? `${facts.turns} turn${facts.turns === 1 ? '' : 's'}` : null,
@@ -469,7 +484,7 @@ async function keepStderr(file, text, dropped) {
 // reads are the session's Read tool calls, each with whether it succeeded;
 // session is sessionFacts() (subtype, cost, turns, last error line and the
 // stderr file). A failed session's reason carries the subtype, cost and
-// error line. input: text, or (the extractor) a ready stream-json message.
+// error line; usage_limit is true when the subscription's limit stopped it. input: text, or (the extractor) a ready stream-json message.
 // stderrFile: where the session's redacted stderr is kept (the runner puts it
 // under runs/<run>/sessions/, which outlives the run directory).
 export async function runSession({ claude, role, cwd, input, schema, settings, sessionDir, resume = null, timeoutMs, baseEnv = process.env, stderrFile = null, budget = null,
@@ -494,11 +509,13 @@ export async function runSession({ claude, role, cwd, input, schema, settings, s
   } finally { ACTIVE.delete(active); }
   const { result: output, reads, tail } = stream.end();
   const session = sessionFacts({ output, stderrText: err.text, secrets, stderrFile: kept });
+  // usage_limit: the subscription's limit stopped it (usageLimitHit).
+  const limit = () => (usageLimitHit({ code: r.code, output, stderrText: err.text }) ? { usage_limit: true } : {});
   if (r.timedOut) return { ok: false, reason: failureReason(`timed out after ${Math.round(timeoutMs / 1000)} s`, session), timedOut: true, raw: tail, reads, session };
-  if (r.code !== 0) return { ok: false, reason: failureReason(`exited ${r.code ?? r.signal ?? r.error}`, session), raw: tail, reads, session };
-  if (!output) return { ok: false, reason: failureReason('output is not JSON', session), raw: tail, reads, session };
+  if (r.code !== 0) return { ok: false, reason: failureReason(`exited ${r.code ?? r.signal ?? r.error}`, session), raw: tail, reads, session, ...limit() };
+  if (!output) return { ok: false, reason: failureReason('output is not JSON', session), raw: tail, reads, session, ...limit() };
   if (output.is_error || !output.structured_output || typeof output.structured_output !== 'object') {
-    return { ok: false, reason: failureReason('no structured result', session), output, raw: tail, reads, session };
+    return { ok: false, reason: failureReason('no structured result', session), output, raw: tail, reads, session, ...limit() };
   }
   return { ok: true, output, session_id: /^[0-9a-f-]{36}$/i.test(output.session_id || '') ? output.session_id : null, raw: tail, reads, session };
 }

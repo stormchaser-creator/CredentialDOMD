@@ -174,7 +174,10 @@ cd "$REPO" || exit 1
 # that changed the host's code or files outside its scope. Three in a row
 # park the ticket and alert the owner. Without this, one unrecordable ticket
 # burned 71 consecutive model runs (2026-09-20/21) with no alert, and a
-# ticket that always timed out would never have parked.
+# ticket that always timed out would never have parked. The one exception is
+# the subscription's session or usage limit (run.mjs exit 8): it says nothing
+# about the ticket, so it pauses the run and counts nothing (on 2026-09-29
+# three limit exits each parked two tickets that had nothing wrong).
 reject() {
   KEPT="$FAIL_DIR/$TICKET_ID-$(date '+%Y%m%dT%H%M%S').json"
   if [ -s "$OUTPUT" ] && /bin/cp "$OUTPUT" "$KEPT" 2>/dev/null; then
@@ -243,7 +246,10 @@ for TARGET in ${(f)TARGETS}; do
   # only. Its exit: 0 ready to record, 2 reply refused after two repairs, 3
   # model failed or timed out, 4 runner code changed, 5 files outside scope, 6
   # git state outside the worktree changed, 7 the checklist could not be
-  # extracted (the ticket is parked at once and the owner alerted: design G1).
+  # extracted (the ticket is parked at once and the owner alerted: design G1),
+  # 8 the subscription's session or usage limit stopped a session: paused,
+  # nothing counted, and no later target runs until the next scheduled run
+  # (every one of its sessions would fail the same way).
   # The 3-hour alarm is a backstop; every session and gate has its own limit
   # and run.mjs kills whole process groups when it is signalled.
   RUN_STARTED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -263,6 +269,10 @@ for TARGET in ${(f)TARGETS}; do
        echo "$(date '+%F %T') REJECTED — $TICKET_ID checklist not extracted; parked" >> "$LOG"
        node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why checklist --notify "$NOTIFY" >> "$LOG" 2>&1
        RC=1; break ;;
+    # The limit, not the ticket: no reject, the fail count untouched, and no
+    # later target this run (its sessions would hit the same limit).
+    8) echo "$(date '+%F %T') PAUSED — $TICKET_ID usage limit reached; nothing counted, the rest wait for the next run" >> "$LOG"
+       break ;;
     *) reject "host step failed (exit $WORK_RC)"; RC=1; break ;;
   esac
   RECORD_REPO=$(run_field record_repo) && BASE=$(run_field base) && RELEASE_FILE=$(run_field release_file) && CODE=$(run_field code_outcome) &&

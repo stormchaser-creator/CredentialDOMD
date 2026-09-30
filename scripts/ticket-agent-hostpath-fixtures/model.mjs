@@ -70,6 +70,14 @@ let input = '';
 for await (const chunk of process.stdin) input += chunk;
 const reply = value => console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, num_turns: 1, total_cost_usd: 0.01, session_id: SESSION, structured_output: value }));
 const scenario = process.env.SUPPORT_FIXTURE_SCENARIO;
+// The subscription's limit, as the CLI reported it on 2026-09-29: every
+// session exits 1 at once with this result. session_error: the same shape
+// with an ordinary error, which is a real failure.
+if (scenario === 'usage_limit' || scenario === 'session_error') {
+  console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: true, num_turns: 1, total_cost_usd: 0, session_id: SESSION,
+    result: scenario === 'usage_limit' ? "You've hit your session limit · resets 2pm (America/Los_Angeles)" : 'API Error: 500 Internal server error' }));
+  process.exit(1);
+}
 const marker = '\n\n## Untrusted support evidence supplied by the runner\n';
 // The host facts carry the frozen checklist ids and the attachments.
 const checklistIds = text => [...new Set([...String(text).matchAll(/"id": "(AC-\d+)"/g)].map(m => m[1]))];

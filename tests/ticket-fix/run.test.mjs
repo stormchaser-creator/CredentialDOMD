@@ -334,3 +334,94 @@ test('a verified_change is refused while nothing this run did is released: the w
     assert.match(repair[0].input, /Verified change needs this run's released fix/);
   } finally { r?.cleanup(); p.cleanup(); }
 });
+
+// The subscription's limit (2026-09-29): once it is reached every session
+// exits 1 at once ("You've hit your session limit · resets 2pm"), and three
+// such runs parked two tickets that had nothing wrong. A limited session
+// before the merge pauses the run (exit 8): nothing after it starts, the
+// worktree and branch go, no alert, and the shell counts nothing.
+const LIMITED = Object.freeze({ fail: "exited 1 (success, 1 turn, $0.0000): You've hit your session limit · resets 2pm (America/Los_Angeles)", usage_limit: true });
+
+test('a usage limit before the merge pauses the run (exit 8): no later session, no worktree or branch, no alert', async () => {
+  const p = project(), q = project(), w = project();
+  let r, s, t;
+  try {
+    r = await runStub(p, standardScript({ repro: () => ({ ...LIMITED }) }));
+    assert.equal(r.code, EXIT.usageLimit, r.logs.join('\n'));
+    assert.deepEqual(r.calls.map(c => c.role), ['extract', 'repro'], 'no worker after the limit');
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.status, 'paused');
+    assert.deepEqual(run.paused, { role: 'repro', detail: LIMITED.fail });
+    assert.deepEqual(run.sessions.map(x => [x.role, x.ok]), [['extract', true], ['repro', false]]);
+    assert.ok(r.logs.includes(`PAUSED — ${TICKET.slice(0, 8)} run ${NAME}: the repro session hit the subscription's usage limit (${LIMITED.fail}); nothing counted`), r.logs.join('\n'));
+    assert.equal(existsSync(run.worktree), false);
+    assert.equal(sh(p.repo, ['branch', '--list', 'agent/*']), '');
+    assert.deepEqual(r.sent, [], 'no alert');
+    // After the host committed a change, at its review: paused too, not refused.
+    s = await runStub(q, standardScript({ review: () => ({ ...LIMITED }) }));
+    assert.equal(s.code, EXIT.usageLimit, s.logs.join('\n'));
+    assert.deepEqual(s.calls.map(c => c.role), ['extract', 'repro', 'worker', 'review']);
+    assert.equal((await readRun(q.work, NAME)).status, 'paused');
+    assert.equal(sh(q.repo, ['branch', '--list', 'agent/*']), '');
+    assert.ok(!s.logs.some(l => l.startsWith('CODE REFUSED')), s.logs.join('\n'));
+    // The first session of all: the checklist is not frozen, so the next run extracts it.
+    t = await runStub(w, standardScript({ extract: () => ({ ...LIMITED }) }));
+    assert.equal(t.code, EXIT.usageLimit, t.logs.join('\n'));
+    assert.deepEqual(t.calls.map(c => c.role), ['extract']);
+    assert.equal(existsSync(path.join(w.state, 'checklists', `${TICKET}.json`)), false);
+  } finally { r?.cleanup(); s?.cleanup(); t?.cleanup(); p.cleanup(); q.cleanup(); w.cleanup(); }
+});
+
+test('a usage limit in the merge\'s re-review is a failed review: the change is held for the owner, not paused', async () => {
+  const p = project();
+  let r;
+  try {
+    let reviews = 0;
+    r = await runStub(p, standardScript({ review: () => {
+      if (++reviews > 1) return { ...LIMITED };
+      // Main changes the line next to the fix while the run is reviewed, so
+      // the rebased diff needs a new review in the merge.
+      const original = readFileSync(path.join(p.repo, 'src/format.js'), 'utf8');
+      p.moveMain({ 'src/format.js': original.replace("export const title = 'Synthetic summary line';", "export const title = 'Synthetic summary line, edited on main';") });
+      return approve();
+    } }), { verify: passedRelease, autoMerge: true });
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    assert.ok(reviews > 1, 'the merge asked for a new review');
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.status, 'held');
+    assert.match(run.merge_attempts.at(-1).reason, /review of the rebased diff did not approve/);
+    assert.equal(r.facts.code_outcome, 'held');
+    assert.ok(!r.logs.some(l => l.startsWith('PAUSED')), r.logs.join('\n'));
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+// Session limits (2026-09-29): a resume that changes code had the 600 s of a
+// structured-result repair, and a review revision timed out at 600 s.
+test('a resume that changes code gets reviseSeconds (1200 s); a structured-result repair keeps repairSeconds (600 s)', async () => {
+  const p = project(), q = project();
+  let r, s;
+  try {
+    // The reproduction's test repair and the review revision.
+    const passing = { 'tests/join.test.mjs': REPRO_FILES['tests/join.test.mjs'].replace("'first\\nsecond'", "'first second'") };
+    const reviews = [approve({ verdict: 'revise', missed_paths: [{ file: 'src/format.js', line: 2, snippet: "export const title = 'Synthetic summary line';", why: 'synthetic finding' }] }), approve()];
+    r = await runStub(p, standardScript({ repro: (opts, n) => { p.write(opts.cwd, n === 1 ? passing : REPRO_FILES); return { ...REPRO_RESULT_COPY }; }, review: () => reviews.shift() }));
+    assert.equal((await readRun(p.work, NAME)).status, 'held', r.logs.join('\n'));
+    assert.deepEqual(r.calls.filter(c => c.role === 'repro').map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 900000], [true, 1200000]]);
+    assert.deepEqual(r.calls.filter(c => c.role === 'worker').map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 1500000], [true, 1200000]]);
+    // A refused reply is repaired at 600 s; the gate repair after it has 1200 s.
+    const weakened = { 'tests/join.test.mjs': REPRO_FILES['tests/join.test.mjs'].replace("'first\\nsecond'", "'first second'") };
+    const change = { subject: 'Join summary lines with line breaks', tests: [] };
+    s = await runStub(q, standardScript({ worker: (opts, n) => {
+      if (n === 1) {
+        q.write(opts.cwd, { ...FIX_FILES, ...weakened });
+        return workerResult({ change, claims: [{ ac_id: 'AC-1', text: 'This was fixed in build c237149 and works on your iPhone.', evidence: { test: 'tests/format.test.mjs::the title is set' } }] });
+      }
+      if (n === 3) q.write(opts.cwd, { ...FIX_FILES, ...REPRO_FILES });
+      return workerResult({ change });
+    } }));
+    const worker = s.calls.filter(c => c.role === 'worker');
+    assert.match(worker[1].input, /^The trusted host refused the structured result/);
+    assert.match(worker[2].input, /^The host ran the gates on your change/);
+    assert.deepEqual(worker.map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 1500000], [true, 600000], [true, 1200000]]);
+  } finally { r?.cleanup(); s?.cleanup(); p.cleanup(); q.cleanup(); }
+});

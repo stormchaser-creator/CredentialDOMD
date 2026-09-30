@@ -381,6 +381,21 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         run, state, script, repo = scenario('timeout_park', parked=2, extra={'WORKER_SECONDS=1500': 'WORKER_SECONDS=2'})
         check('the third timeout parks the ticket and alerts the owner', execute(script).returncode != 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '3' and len(notified(run)) == 1 and 'parked' in notified(run)[0])
 
+        # The subscription's limit (2026-09-29): every session exits 1 with the
+        # CLI's limit text, and three such runs parked two tickets. Now the run
+        # pauses: nothing counted, no alert, and no later target this run.
+        run, state, script, repo = scenario('usage_limit', two_owners=True, parked=2)
+        check('a usage limit pauses the run and counts nothing: no rejection, no park, no alert', execute(script).returncode == 0 and count() == 0 and count(X) == 0 and
+              (state / 'failed' / f'{T}.count').read_text().strip() == '2' and 'PAUSED — ' + T + ' usage limit reached' in log(run) and 'REJECTED' not in log(run) and notified(run) == [], log(run)[-2500:])
+        check('the pause ends the run: the other ticket starts no session', [v['role'] for v in sessions(run)] == ['extract'] and not (state / 'failed' / f'{X}.count').exists(), sessions(run))
+        check('a paused run leaves no worktree and no branch', not any((run / 'work' / 'worktrees').iterdir()) and git_out(repo, 'branch', '--list', 'agent/*') == '')
+        again = execute(script)
+        check('another limited run still counts nothing', again.returncode == 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '2' and log(run).count('PAUSED — ' + T + ' usage limit reached') == 2 and notified(run) == [],
+              (again.returncode, (state / 'failed' / f'{T}.count').read_text(), notified(run), log(run)[-2500:]))
+        run, state, script, repo = scenario('session_error', parked=2)
+        check('a real session failure of the same shape still counts and parks', execute(script).returncode != 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '3' and
+              'REJECTED — ' + T + ' model run failed or timed out' in log(run) and 'PAUSED' not in log(run) and len(notified(run)) == 1 and 'parked' in notified(run)[0], log(run)[-2500:])
+
         run, state, script, repo = scenario('code_refused')
         origin_head = git_out(run / 'origin.git', 'rev-parse', 'main')
         result = execute(script)

@@ -105,6 +105,8 @@ export const context = (target = TICKET) => ({ version: 1, target_id: target, ru
 
 let sessionCount = 0;
 // A stub model: script = { extract, repro, worker(opts, call), review, confirm } each (opts, n) -> structured.
+// { fail: reason } is a failed session; with usage_limit: true, one the
+// subscription's limit stopped (as runSession reports it).
 // Each may write files into opts.cwd. Records every call. A result with a
 // $reads list reports those Read tool calls ({ file_path, ok }), as the CLI's
 // stream would; the key is removed from the structured result.
@@ -115,7 +117,7 @@ export function stubModel(script) {
     const handler = script[opts.role];
     if (!handler) return { ok: false, reason: `no stub for ${opts.role}` };
     const given = await handler(opts, calls.filter(c => c.role === opts.role).length);
-    if (given && given.fail) return { ok: false, reason: given.fail, timedOut: Boolean(given.timedOut) };
+    if (given && given.fail) return { ok: false, reason: given.fail, timedOut: Boolean(given.timedOut), ...(given.usage_limit ? { usage_limit: true } : {}) };
     const { $reads: reads = [], ...value } = given ?? {};
     const session = `00000000-0000-4000-8000-${String(++sessionCount).padStart(12, '0')}`;
     return { ok: true, output: { type: 'result', is_error: false, session_id: session, total_cost_usd: 0, structured_output: value }, session_id: session, reads };

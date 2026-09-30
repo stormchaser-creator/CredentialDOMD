@@ -78,7 +78,15 @@
 // two repairs; 3 the worker session failed or timed out; 4 the run changed
 // the runner's own code; 5 the run changed files outside its scope; 6 the
 // run changed git state outside its worktree; 7 the checklist could not be
-// extracted; 1 a host step failed. Log lines carry ids, rule and check names,
+// extracted; 8 the subscription's session or usage limit stopped a session
+// before the merge (worker.mjs usageLimitHit): the run is recorded "paused",
+// its worktree and branch go, and the shell counts nothing against the
+// ticket and starts no other target this hour; 1 a host step failed. Session
+// limits: each role has its own (workerSeconds, reproSeconds, reviewSeconds,
+// extractSeconds); a resume that changes code (the reproduction's test
+// repair, the gate repair, the review revision) has reviseSeconds, and a
+// resume that only corrects the structured result has repairSeconds. Log
+// lines carry ids, rule and check names,
 // attachment storage paths and a failed session's redacted last error line
 // from the CLI, never ticket text.
 import { createHash } from 'node:crypto';
@@ -113,7 +121,7 @@ export const CONFIRM_PROMPT = path.join(HERE, 'confirm-prompt.md');
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const SHA = /^[0-9a-f]{40}$/;
 const sha256 = text => createHash('sha256').update(text).digest('hex');
-export const EXIT = Object.freeze({ ok: 0, host: 1, refused: 2, model: 3, runnerCode: 4, scope: 5, hostState: 6, checklist: 7 });
+export const EXIT = Object.freeze({ ok: 0, host: 1, refused: 2, model: 3, runnerCode: 4, scope: 5, hostState: 6, checklist: 7, usageLimit: 8 });
 export const CASE_STATE = path.join(os.homedir(), 'Library', 'Application Support', 'CredentialDOMD', 'ticket-context');
 export const FIX_STATE = path.join(os.homedir(), 'Library', 'Application Support', 'CredentialDOMD', 'ticket-fix');
 
@@ -132,6 +140,16 @@ export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state
 }
 // Raised when the host sees git state outside the worktree change (exit 6).
 export class HostStateChanged extends Error {}
+// Raised when the subscription's limit stops a session before the merge
+// (exit 8): the failure says nothing about the ticket (2026-09-29, two
+// tickets parked by three limit exits each).
+export class UsageLimitReached extends Error {
+  constructor(role, r) {
+    super(`the ${role} session hit the subscription's usage limit`);
+    this.role = role;
+    this.detail = String(r?.reason ?? '').slice(0, 300);
+  }
+}
 
 const str = (max, min = 1) => ({ type: 'string', minLength: min, maxLength: max });
 // Each reproduction test names the checklist item it pins (stage 3).
@@ -283,7 +301,7 @@ export async function runTicket(o) {
 }
 async function workTicket(o, atEnd) {
   const { ticket, contextFile, outputFile, runFile, runId, runDir, repo, work, state, fixState = null, committer, notify = null,
-    workerSeconds = 1500, reproSeconds = 900, reviewSeconds = 1200, repairSeconds = 600, extractSeconds = 600, commands = DEFAULT_COMMANDS, binary = 'git',
+    workerSeconds = 1500, reproSeconds = 900, reviewSeconds = 1200, repairSeconds = 600, reviseSeconds = 1200, extractSeconds = 600, commands = DEFAULT_COMMANDS, binary = 'git',
     env = process.env, home = os.homedir(), fetch = true, installNodeModules, releaseOptions = {}, runStarted = new Date().toISOString().slice(0, 19) + 'Z',
     log = defaultLog, send = null, fetchBuild, autoMerge = false, attachmentsDir = null, attachmentsManifest = null } = o;
   if (!UUID.test(ticket || '') || !/^[0-9a-f]{16}$/.test(runId || '')) throw Error('work needs --ticket UUID and --run-id <16 hex>');
@@ -389,6 +407,9 @@ async function workTicket(o, atEnd) {
   // runs/<run>/sessions/ (redacted, owner-only), and what it cost, how many
   // turns it took and, when it failed, why go on the run record and the log.
   let sessionCount = 0;
+  // Set when the merge begins: from then on a session the subscription's
+  // limit stops is an ordinary failed session (see below).
+  let merging = false;
   const recordDir = runDirectory(work, name);
   // The session in flight, for the stop hook below.
   let current = null;
@@ -402,6 +423,10 @@ async function workTicket(o, atEnd) {
     sessionLog.push(entry);
     log(sessionLine(id8, name, entry));
     await hostCheck(`the ${opts.role} session`);
+    // The subscription's limit: every later session would fail the same way,
+    // so the run pauses (exit 8). Once the merge has begun, a limited
+    // re-review is a failed review, which holds the change for the owner.
+    if (!r?.ok && r?.usage_limit === true && !merging) throw new UsageLimitReached(opts.role, r);
     return r;
   };
   // The runner signalled (the shell's 3-hour alarm, launchd stopping the job):
@@ -518,7 +543,7 @@ async function workTicket(o, atEnd) {
         const verdicts = recorded.tests.filter(t => t.on_base !== 'red').map(t => `- ${t.file} :: ${t.name}: ${t.on_base.replace(/_/g, ' ')}`).join('\n');
         log(`REPRO — ${id8}: ${recorded.tests.filter(t => t.on_base !== 'red').length} test(s) did not fail on base with an assertion; resuming once`);
         r = await session({ role: 'repro', resume: r.session_id, cwd: wt.dir, input: `The host ran your tests on base. These did not fail with an assertion (ERR_ASSERTION), so they do not reproduce anything:\n${verdicts}\nFix the tests (not the product) so each fails on the current code with an assertion, then return the structured result again.`,
-          schema: REPRO_SCHEMA, settings, sessionDir: path.join(sessions, 'repro'), timeoutMs: repairSeconds * 1000, baseEnv: env });
+          schema: REPRO_SCHEMA, settings, sessionDir: path.join(sessions, 'repro'), timeoutMs: reviseSeconds * 1000, baseEnv: env });
       }
       run.repro = repro ? { kind: repro.kind, recorded: repro.recorded, tests: repro.tests, frozen: repro.frozen } : run.repro;
       log(`REPRO — ${id8}: ${repro ? (repro.kind === 'no_code' ? 'no code change to reproduce' : `${repro.tests.length} test(s), ${repro.recorded ? 'recorded failing on base' : 'NOT recorded failing on base'}`) : 'none'}`);
@@ -696,7 +721,7 @@ async function workTicket(o, atEnd) {
       if (!gates.pass) {
         if (gateRepairs >= 1 || !sessionId) break;
         gateRepairs++;
-        const next = await workerCall(`The host ran the gates on your change and it did not pass, so nothing was merged:\n${gateFailures(gates).map(l => `- ${l}`).join('\n')}\nFix the change (not the reproduction files), then return the structured result again for the same target_id.`, sessionId, repairSeconds);
+        const next = await workerCall(`The host ran the gates on your change and it did not pass, so nothing was merged:\n${gateFailures(gates).map(l => `- ${l}`).join('\n')}\nFix the change (not the reproduction files), then return the structured result again for the same target_id.`, sessionId, reviseSeconds);
         if (!next.ok) { log(`GATES — ${id8}: repair session ${next.reason}`); break; }
         output = next.output; sessionId = next.session_id ?? sessionId; await saveOutput();
         step = await afterWorker();
@@ -711,7 +736,7 @@ async function workTicket(o, atEnd) {
       log(`REVIEW — ${id8} round ${round}: ${review.pass ? 'approve' : `not approved (${review.reviews.map(r => r.verdict).join(', ')})`}${review.count > 1 ? ' [two reviews]' : ''}`);
       if (!review.pass && review.revise && revisions < 1 && sessionId) {
         revisions++;
-        const next = await workerCall(reviseInput(review.reviews.map(r => r.review).filter(Boolean)), sessionId, repairSeconds);
+        const next = await workerCall(reviseInput(review.reviews.map(r => r.review).filter(Boolean)), sessionId, reviseSeconds);
         if (!next.ok) { log(`REVIEW — ${id8}: revision session ${next.reason}`); break; }
         output = next.output; sessionId = next.session_id ?? sessionId; await saveOutput();
         step = await afterWorker();
@@ -753,6 +778,7 @@ async function workTicket(o, atEnd) {
       return EXIT.ok;
     }
     run.status = 'ready';
+    merging = true;
     await saveRun();
     const support = await mergeSupport({ run, work, launch: reviewLaunch, commands, env: gEnv, binary, sandbox: box, state: denyState, secrets });
     const merged = await mergeRun({ work, runId: name, repo, reviewAgain: support.reviewAgain, regate: support.regate, releaseOptions, binary, env, log,
@@ -772,6 +798,11 @@ async function workTicket(o, atEnd) {
     await writeFacts();
     return EXIT.ok;
   } catch (error) {
+    if (error instanceof UsageLimitReached) {
+      log(`PAUSED — ${id8} run ${name}: ${error.message} (${error.detail}); nothing counted`);
+      await cleanup();
+      return await finishWith(EXIT.usageLimit, 'paused', { reason: `usage limit: ${error.message}`, paused: { role: error.role, detail: error.detail } });
+    }
     if (!(error instanceof HostStateChanged)) throw error;
     log(`HOST STATE — ${ticket} run ${name}: ${error.message}; nothing recorded, every later run held`);
     await alert('host_state_changed', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: during run ${name} (ticket ${id8}) ${error.message}. Nothing was recorded or merged. Every run is held until ticket-context/HOLD-host-code-changed is removed after review.`);
@@ -930,11 +961,11 @@ async function main([command, ...rest]) {
     // (the shell's backstop alarm, launchd stopping the job).
     installSignalHandlers();
     const seconds = v => (v === undefined ? undefined : Number(v));
-    for (const v of ['workerSeconds', 'reproSeconds', 'reviewSeconds']) if (o[v] !== undefined && !(Number.isInteger(Number(o[v])) && Number(o[v]) > 0)) throw Error(`--${v} must be a positive integer`);
+    for (const v of ['workerSeconds', 'reproSeconds', 'reviewSeconds', 'reviseSeconds']) if (o[v] !== undefined && !(Number.isInteger(Number(o[v])) && Number(o[v]) > 0)) throw Error(`--${v} must be a positive integer`);
     if (!['on', 'off'].includes(o.autoMerge)) throw Error('work needs --auto-merge on|off, read before any model ran');
     return runTicket({ ticket: o.ticket, contextFile: o.context, outputFile: o.output, runFile: o.runFile, runId: o.runId, runDir: o.runDir, repo: o.repo,
       work: o.work, state: o.state, fixState: o.fixState, claude: o.claude, committer: o.committer, notify: o.notify ?? null, autoMerge: o.autoMerge === 'on',
-      workerSeconds: seconds(o.workerSeconds), reproSeconds: seconds(o.reproSeconds), reviewSeconds: seconds(o.reviewSeconds), runStarted: o.runStarted,
+      workerSeconds: seconds(o.workerSeconds), reproSeconds: seconds(o.reproSeconds), reviewSeconds: seconds(o.reviewSeconds), reviseSeconds: seconds(o.reviseSeconds), runStarted: o.runStarted,
       attachmentsDir: o.attachmentsDir ?? null, attachmentsManifest: o.attachmentsManifest ?? null });
   }
   throw Error('Usage: run.mjs work|held-for|get|finish|auto-merge ...');

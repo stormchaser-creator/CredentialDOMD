@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, existsSync, rmSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runSession, sessionFacts, failureReason } from '../../scripts/ticket-fix/worker.mjs';
+import { runSession, sessionFacts, failureReason, usageLimitHit } from '../../scripts/ticket-fix/worker.mjs';
 import { redactSecrets, redactedLine, REDACTED } from '../../scripts/ticket-fix/redact.mjs';
 import { EXIT, REPRO_SCHEMA } from '../../scripts/ticket-fix/run.mjs';
 import { readRun } from '../../scripts/ticket-fix/merge.mjs';
@@ -23,10 +23,14 @@ const BEARER = 'abcDEF123456'.repeat(4);
 const OAUTH_SHAPE = `sk-ant-oat01-${'Zx9'.repeat(30)}`;
 const NAME = `${TICKET.slice(0, 8)}-${RUN_ID}`;
 
+// The CLI's own words when the subscription's limit is reached (2026-09-29).
+const LIMIT_TEXT = "You've hit your session limit · resets 2pm (America/Los_Angeles)";
+
 // The stand-in CLI: the extractor succeeds; every other role reads its
 // credential from the pipe, prints it and two token shapes on stderr, and
-// stops at its budget.
-function fakeCli() {
+// stops at its budget. limit: every other role stops at once on the
+// subscription's limit, as the real CLI did (exit 1, one turn, no cost).
+function fakeCli({ limit = false } = {}) {
   const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'fake-claude-')));
   const file = path.join(dir, 'claude');
   writeFileSync(file, `#!/usr/bin/env node
@@ -43,6 +47,10 @@ out({ type: 'system', subtype: 'init', session_id: ${JSON.stringify(SESSION)} })
 if (extract) {
   out({ type: 'result', subtype: 'success', is_error: false, num_turns: 1, total_cost_usd: 0.1234, session_id: ${JSON.stringify(SESSION)}, structured_output: ${JSON.stringify(CHECKLIST_RESULT)} });
   process.exit(0);
+}
+if (${JSON.stringify(limit)}) {
+  out({ type: 'result', subtype: 'success', is_error: true, num_turns: 1, total_cost_usd: 0, session_id: ${JSON.stringify(SESSION)}, result: ${JSON.stringify(LIMIT_TEXT)} });
+  process.exit(1);
 }
 process.stderr.write('debug: role with schema keys ' + Object.keys(schema.properties || {}).join(',') + '\\n');
 process.stderr.write('debug: credential ' + credential + '\\n');
@@ -109,6 +117,7 @@ test('runSession reads the result event of a session that exits non-zero and kee
       sessionDir: path.join(cli.dir, 'session'), timeoutMs: 30000, baseEnv: env(), stderrFile });
     assert.equal(r.ok, false);
     assert.equal(r.reason, 'exited 1 (error_max_budget_usd, 57 turns, $3.0096): Reached maximum budget ($3)');
+    assert.equal(r.usage_limit, undefined, 'a budget stop is a real failure');
     assert.equal(r.session.subtype, 'error_max_budget_usd');
     assert.equal(r.session.cost_usd, 3.0096);
     assert.equal(r.session.turns, 57);
@@ -167,5 +176,48 @@ test('run.mjs: a reproduction that stops at its budget is recorded with its subt
     }
     assert.deepEqual(leaks(log), []);
     assert.deepEqual(leaks(readFileSync(path.join(p.work, 'runs', NAME, 'run.json'), 'utf8')), []);
+  } finally { r?.cleanup(); cli.cleanup(); p.cleanup(); }
+});
+
+// The subscription's limit (2026-09-29): three runs whose every session exited
+// 1 with it parked two tickets. It is read from a failed session's CLI text
+// only, and only in its "hit/reached" forms.
+test('usage limit: the CLI\'s limit text in a failed session\'s result, errors or stderr; never a budget stop, a near-limit warning or a model\'s answer', () => {
+  const failed = result => ({ type: 'result', subtype: 'success', is_error: true, num_turns: 1, total_cost_usd: 0, result });
+  assert.equal(usageLimitHit({ code: 1, output: failed(LIMIT_TEXT) }), true);
+  for (const text of ["You've hit your limit · resets 3pm", "You've reached your usage limit.", 'Claude AI usage limit reached|1790700000', '5-hour limit reached ∙ resets 2pm', 'Weekly limit reached · resets Mon 9am']) {
+    assert.equal(usageLimitHit({ code: 1, output: failed(text) }), true, text);
+  }
+  assert.equal(usageLimitHit({ code: 1, output: { is_error: true, errors: [LIMIT_TEXT] } }), true, 'in the errors list');
+  assert.equal(usageLimitHit({ code: 1, output: null, stderrText: `debug: start\n${LIMIT_TEXT}\n` }), true, 'the last stderr line, with no result event');
+  assert.equal(usageLimitHit({ code: 1, output: { subtype: 'success', is_error: false, result: LIMIT_TEXT } }), true, 'a non-zero exit\'s result is the CLI\'s');
+  // Real failures, and text that is not the CLI saying the limit was hit.
+  assert.equal(usageLimitHit({ code: 1, output: { subtype: 'error_max_budget_usd', is_error: true, errors: ['Reached maximum budget ($3)'] } }), false);
+  assert.equal(usageLimitHit({ code: 1, output: failed('API Error: 500 Internal server error') }), false);
+  assert.equal(usageLimitHit({ code: 1, output: failed('Context limit reached: the conversation is too long') }), false);
+  assert.equal(usageLimitHit({ code: 1, output: null, stderrText: "Warning: you are approaching your usage limit\nError: spawn EPERM\n" }), false);
+  assert.equal(usageLimitHit({ code: 0, output: { subtype: 'success', is_error: false, result: `The member wrote: ${LIMIT_TEXT}` } }), false, 'a model\'s answer is never read');
+  assert.equal(usageLimitHit(), false);
+});
+
+test('runSession marks a session the limit stopped; run.mjs pauses the run (exit 8) with no later session, and records why', async () => {
+  const p = project();
+  const cli = fakeCli({ limit: true });
+  let r;
+  try {
+    const one = await runSession({ claude: cli.file, role: 'repro', cwd: cli.dir, input: 'Synthetic input', schema: REPRO_SCHEMA, settings: { permissions: {} },
+      sessionDir: path.join(cli.dir, 'session'), timeoutMs: 30000, baseEnv: env() });
+    assert.equal(one.ok, false);
+    assert.equal(one.usage_limit, true);
+    assert.equal(one.reason, `exited 1 (success, 1 turn, $0.0000): ${LIMIT_TEXT}`);
+    r = await runStub(p, {}, { extra: { launchSession: undefined, claude: cli.file, env: env() } });
+    assert.equal(r.code, EXIT.usageLimit, r.logs.join('\n'));
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.status, 'paused');
+    assert.deepEqual(run.sessions.map(s => [s.n, s.role, s.ok, s.subtype, s.cost_usd, s.turns]), [[1, 'extract', true, 'success', 0.1234, 1], [2, 'repro', false, 'success', 0, 1]],
+      'the worker never started');
+    assert.equal(run.sessions[1].error, LIMIT_TEXT);
+    assert.ok(r.logs.includes(`PAUSED — 00000000 run ${NAME}: the repro session hit the subscription's usage limit (exited 1 (success, 1 turn, $0.0000): ${LIMIT_TEXT}); nothing counted`), r.logs.join('\n'));
+    assert.deepEqual(leaks(r.logs.join('\n')), []);
   } finally { r?.cleanup(); cli.cleanup(); p.cleanup(); }
 });
