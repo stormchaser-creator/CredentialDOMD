@@ -7,6 +7,8 @@ apply the separately owned real identity migration.
 """
 import hashlib, json, os, subprocess, tempfile
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 BIN=Path('/opt/homebrew/opt/postgresql@17/bin')
 ROOT=Path(__file__).resolve().parents[2]
 ENV={k:v for k,v in os.environ.items() if not k.startswith('PG')}
@@ -26,6 +28,7 @@ COLLECTIONS=['screenings','follow_ups','professional_photos','publications','tra
 with tempfile.TemporaryDirectory(prefix='write-enforcement-',dir='/private/tmp') as temp:
     root=Path(temp); socket=root/'socket'; socket.mkdir()
     def run(*args,**kw): return subprocess.run([str(x) for x in args],text=True,capture_output=True,env=ENV,**kw)
+    slot=pg_slot.acquire(root/'data')
     r=run(BIN/'initdb','-D',root/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8'); assert r.returncode==0,r.stderr
     r=run(BIN/'pg_ctl','-D',root/'data','-l',root/'log','-o',f"-k {socket} -p 56431 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off",'-w','start'); assert r.returncode==0,r.stderr
     def sql(q,ok=True):
@@ -160,3 +163,4 @@ with tempfile.TemporaryDirectory(prefix='write-enforcement-',dir='/private/tmp')
         print(json.dumps({'checks':checks,'count':len(checks),'migrationSHA256':hashlib.sha256(migration.encode()).hexdigest(),'continuity':'contract fixture; real identity migration tested separately'},indent=2))
     finally:
         r=run(BIN/'pg_ctl','-D',root/'data','-m','fast','-w','stop'); assert r.returncode==0,r.stderr
+        slot.release()

@@ -25,7 +25,7 @@ import path from 'node:path';
 import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
 import { raise, QUEUE_FILE, SENT_FILE } from '../../scripts/ticket-fix/alert.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -121,6 +121,7 @@ async function startPostgres() {
   const socket = fs.mkdtempSync(path.join(os.tmpdir(), 'pgs-')); // short: a socket path has a length limit
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const run = (name, args) => exec(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
+  const slot = await acquirePgSlot(path.join(base, 'data'));
   await run('initdb', ['-D', path.join(base, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   await run('pg_ctl', ['-D', path.join(base, 'data'), '-l', path.join(base, 'pg.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c fsync=off`, '-w', 'start']);
   const psqlArgs = db => ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', PORT, '-U', 'postgres', '-d', db];
@@ -128,6 +129,7 @@ async function startPostgres() {
   const rows = async (query, db = 'postgres') => JSON.parse(await sql(`select coalesce(json_agg(t), '[]'::json) from (${query}) t`, db));
   const close = async () => {
     await run('pg_ctl', ['-D', path.join(base, 'data'), '-m', 'fast', '-w', 'stop']);
+    slot.release();
     fs.rmSync(base, { recursive: true, force: true }); fs.rmSync(socket, { recursive: true, force: true });
   };
   return { base, bin, socket, psql: path.join(bin, 'psql'), psqlArgs, sql, rows, close };

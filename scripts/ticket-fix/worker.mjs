@@ -45,7 +45,7 @@
 import { spawn } from 'node:child_process';
 import { promises as fs, rmSync, readdirSync, existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import path from 'node:path';
-import { SANDBOX_EXEC, shortTmpRoot, sandboxProfile, sandboxEnv, real } from './sandbox.mjs';
+import { SANDBOX_EXEC, shortTmpRoot, sandboxProfile, sandboxEnv, real, pgSlotDir } from './sandbox.mjs';
 import { ATTACH_ROOT_PREFIX } from './attachments.mjs';
 import { redactSecrets, redactedLine } from './redact.mjs';
 
@@ -398,7 +398,7 @@ export async function sessionLaunch({ claude, args, cwd, sessionDir, baseEnv = p
   // otherwise; that directory holds other sessions' output and is denied.
   Object.assign(env, sandboxEnv(tmp), { CLAUDE_CODE_TMPDIR: tmp });
   const profileFile = path.join(sandbox.profileDir, `session-${process.pid}-${++profiles}.sb`);
-  const profile = sandboxProfile({ kind: 'session', home: sandbox.home, writable: [cwd, sessionDir, tmp], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [],
+  const profile = sandboxProfile({ kind: 'session', home: sandbox.home, writable: [cwd, sessionDir, tmp], shared: [pgSlotDir()], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [],
     readable: (sandbox.readable ?? []).filter(d => existsSync(d)) });
   await fs.writeFile(profileFile, profile, { mode: 0o600 });
   return { command: SANDBOX_EXEC, args: ['-f', profileFile, claude, ...args], env, secret: credential?.value ?? null };

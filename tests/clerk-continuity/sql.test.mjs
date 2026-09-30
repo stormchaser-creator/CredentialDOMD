@@ -12,6 +12,7 @@ const PG_ENV = { ...process.env, LC_ALL: 'C' };
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { canonicalMembers } from '../../scripts/clerk-continuity-plan.mjs';
+import { acquirePgSlot } from '../helpers/pg-slot.mjs';
 
 // Disposable PostgreSQL, synthetic identities, Unix socket only; no live DB URL.
 const bin = process.env.PG_BIN || '/opt/homebrew/opt/postgresql@17/bin';
@@ -22,6 +23,7 @@ const args = ['-h', temp, '-p', '55479', '-U', userInfo().username, '-d', 'postg
 const query = sql => execFileSync(`${bin}/psql`, [...args, '-c', sql], { encoding: 'utf8', env: PG_ENV }).trim();
 const run = promisify(execFile);
 let started = false;
+let slot = null;
 
 test('continuity SQL binding, recovery journal, privileges, RLS and concurrent claims', {
   // A machine without PostgreSQL cannot run this, and a hard failure there
@@ -30,6 +32,7 @@ test('continuity SQL binding, recovery journal, privileges, RLS and concurrent c
   skip: existsSync(join(bin, 'initdb')) ? false : `PostgreSQL not found at ${bin}; set PG_BIN`,
 }, async t => {
   try {
+    slot = await acquirePgSlot(data);
     execFileSync(`${bin}/initdb`, ['-D', data, '-A', 'trust', '--no-locale'], { stdio: 'pipe', env: PG_ENV });
     execFileSync(`${bin}/pg_ctl`, ['-D', data, '-l', join(temp, 'postgres.log'), '-o', `-k ${temp} -p 55479 -c listen_addresses=''`, '-w', 'start'], { stdio: 'pipe', env: PG_ENV });
     started = true;
@@ -178,5 +181,6 @@ test('continuity SQL binding, recovery journal, privileges, RLS and concurrent c
     await writeFile(join(temp,'result.txt'),'Synthetic continuity SQL suite passed; no live connection.\n');
   } finally {
     if(started) execFileSync(`${bin}/pg_ctl`,['-D',data,'-m','fast','-w','stop'],{stdio:'pipe',env:PG_ENV});
+    slot?.release();
   }
 });

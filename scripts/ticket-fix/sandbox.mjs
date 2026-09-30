@@ -12,10 +12,11 @@
 //                 runner's state (case records, run records, ledgers, the
 //                 AUTO_MERGE flag); no exec of security, osascript, gh or any
 //                 git-credential helper; no mach lookup of the security daemon
-//   writes        only the worktree (or gate worktree), the session directory
-//                 and a per-run temporary directory. The owner's checkout, its
-//                 .git (hooks, config, refs), its node_modules, ticket-work and
-//                 the global git config cannot be changed.
+//   writes        only the worktree (or gate worktree), the session directory,
+//                 a per-run temporary directory and the tests' PostgreSQL slot
+//                 directory (pgSlotDir). The owner's checkout, its .git (hooks,
+//                 config, refs), its node_modules, ticket-work and the global
+//                 git config cannot be changed.
 //   network       sessions: outbound allowed (the CLI needs the API), but not
 //                 the owner's local services (database and model-server ports,
 //                 sockets under /tmp, the launchd sockets that serve
@@ -76,14 +77,37 @@ export function shortTmpRoot() {
   return t.length <= 40 ? t : SHORT_TMP;
 }
 
+// The tests' PostgreSQL slot directory (tests/helpers/pg-slot.mjs and
+// pg_slot.py; they compute the same default). Every disposable cluster a test
+// starts, and initdb's bootstrap, takes a System V shared-memory segment, and
+// macOS allows 32 for the whole machine: the full suite in a gate, the suite
+// in a session and another worktree's suite together ran initdb out of them.
+// So every test process of this user, sandboxed or not, takes one of a fixed
+// number of slots here before initdb. It has to be one directory for all of
+// them (TMPDIR is per run here), so both profiles share it (sandboxProfile
+// shared: files only, no sockets). What a sandboxed process can do with it:
+// hold, fake or drop slots, which at worst delays or fails another run's
+// database tests. A record there gets no process signalled unless it is a
+// postgres started on the record's data directory with the record's token in
+// a marker file next to that directory: a disposable test cluster. The
+// owner's own databases cannot qualify; nothing sandboxed can write beside
+// their directories.
+export function pgSlotDir() {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : 'user';
+  return path.join(real('/tmp'), `credentialdomd-pg-slots-${uid}`);
+}
+
 // kind: 'session' (a model session: API network allowed) or 'gates' (host
 // steps running worktree code: loopback only). writable: directories the
 // process tree may write. denyRead: further directories it may not read
 // (the run records, the baseline cache, the AUTO_MERGE flag, other state).
 // readable: directories it may read (never write) even inside a denied one:
 // this ticket's downloaded attachments (stage 3, G6), whose parent holds no
-// other ticket's files but is denied as a whole anyway.
-export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead = [], denyFiles = [], readable = [] }) {
+// other ticket's files but is denied as a whole anyway. shared: directories
+// it may write files in that other runs and the owner's own processes use
+// too (pgSlotDir): writable like the others, but no unix socket there is its
+// own.
+export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead = [], denyFiles = [], readable = [], shared = [] }) {
   if (!['session', 'gates'].includes(kind)) throw Error('Unknown sandbox kind');
   if (!Array.isArray(writable) || !writable.length) throw Error('A sandbox needs its writable directories');
   const h = real(home);
@@ -92,11 +116,12 @@ export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead =
   const files = [...SECRET_FILES.map(f => path.join(h, f)), ...denyFiles.map(f => path.join(real(path.dirname(f)), path.basename(f)))];
   const open = writable.map(real);
   const view = readable.map(real);
-  for (const w of open) if (dirs.some(d => d === w || d.startsWith(`${w}/`))) throw Error('A writable sandbox directory may not contain a denied one');
+  const writes = [...open, ...shared.map(real)];
+  for (const w of writes) if (dirs.some(d => d === w || d.startsWith(`${w}/`))) throw Error('A writable sandbox directory may not contain a denied one');
   // A readable directory re-opens what a deny closed, so it may not hold a
   // denied directory or a credential, and it is never writable.
   for (const r of view) if (dirs.some(d => d.startsWith(`${r}/`)) || files.some(f => f.startsWith(`${r}/`)) || SECRET_DIRS.some(d => r === path.join(h, d) || r.startsWith(`${path.join(h, d)}/`))) throw Error('A readable sandbox directory may not contain or sit in a credential directory');
-  const ancestors = [...new Set([...open, ...view].flatMap(w => { const out = []; for (let d = path.dirname(w); d !== path.dirname(d); d = path.dirname(d)) out.push(d); return out; }))];
+  const ancestors = [...new Set([...writes, ...view].flatMap(w => { const out = []; for (let d = path.dirname(w); d !== path.dirname(d); d = path.dirname(d)) out.push(d); return out; }))];
   const lines = [
     '(version 1)',
     '(allow default)',
@@ -106,12 +131,12 @@ export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead =
     ';; the writable directories stay usable even inside a denied tree (a',
     ';; session directory lives inside the run directory), with their ancestors',
     ';; visible to stat only',
-    `(allow file-read* file-write* ${open.map(w => `(subpath ${literal(w)})`).join(' ')})`,
+    `(allow file-read* file-write* ${writes.map(w => `(subpath ${literal(w)})`).join(' ')})`,
     ...(view.length ? [';; this ticket\'s attachments: read only', `(allow file-read* ${view.map(r => `(subpath ${literal(r)})`).join(' ')})`] : []),
     `(allow file-read-metadata ${ancestors.map(a => `(literal ${literal(a)})`).join(' ')})`,
     `(deny process-exec ${DENIED_PROGRAMS.map(p => `(literal ${literal(p)})`).join(' ')} (regex #"/git-credential-[^/]*$"))`,
     ';; writes: only these',
-    `(deny file-write* (require-not (require-any ${open.map(w => `(subpath ${literal(w)})`).join(' ')} (subpath "/dev"))))`,
+    `(deny file-write* (require-not (require-any ${writes.map(w => `(subpath ${literal(w)})`).join(' ')} (subpath "/dev"))))`,
   ];
   // One filter per directory: several paths inside one (unix-socket ...)
   // filter must ALL match, which none does.

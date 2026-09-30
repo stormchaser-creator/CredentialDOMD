@@ -9,6 +9,8 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 import shutil
 import subprocess
 import tempfile
@@ -41,6 +43,7 @@ if not (BIN / 'initdb').is_file():
 with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
     base = Path(temp); sock = base / 's'; sock.mkdir()
     started = False
+    slot = pg_slot.acquire(base / 'data')
     initialized = run(BIN / 'initdb', '-D', base / 'data', '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8')
     assert initialized.returncode == 0, initialized.stderr
     try:
@@ -389,3 +392,4 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
     finally:
         if started:
             run(BIN / 'pg_ctl', '-D', base / 'data', '-m', 'immediate', '-w', 'stop')
+        slot.release()

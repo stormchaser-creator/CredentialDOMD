@@ -8,6 +8,8 @@ import concurrent.futures
 import json
 import os
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 import subprocess
 import tempfile
 
@@ -31,6 +33,7 @@ def text(value): return "'" + str(value).replace("'", "''") + "'"
 with tempfile.TemporaryDirectory(prefix='gift-', dir='/private/tmp') as tmp:
     base = Path(tmp); sock = base / 's'; sock.mkdir()
     run = lambda *a, **k: subprocess.run([str(x) for x in a], text=True, capture_output=True, env=ENV, **k)
+    slot = pg_slot.acquire(base / 'data')
     assert run(BIN / 'initdb', '-D', base / 'data', '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8').returncode == 0
     r = run(BIN / 'pg_ctl', '-D', base / 'data', '-l', base / 'log', '-o', f"-k {sock} -p 56451 -c listen_addresses='' -c fsync=off", '-w', 'start')
     assert r.returncode == 0, r.stderr
@@ -262,3 +265,4 @@ with tempfile.TemporaryDirectory(prefix='gift-', dir='/private/tmp') as tmp:
         print(json.dumps({'passed': len(checks), 'checks': checks, 'realPostgreSQL': True, 'providerRequests': 0, 'productionChanges': False}, indent=1))
     finally:
         run(BIN / 'pg_ctl', '-D', base / 'data', '-m', 'immediate', 'stop')
+        slot.release()

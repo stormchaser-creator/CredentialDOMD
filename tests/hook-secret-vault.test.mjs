@@ -6,7 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { pgBin, pgSkip } from "./credential-portal/postgresFixture.mjs";
+import { pgBin, pgSkip, acquirePgSlot } from "./credential-portal/postgresFixture.mjs";
 
 // No function body, cron command or SQL file in this repo may carry a literal
 // hook secret. Until 20260925140000_hook_secret_vault.sql the x-hook-secret
@@ -73,13 +73,14 @@ async function startPostgres() {
   const socket = path.join(root, "socket"); fs.mkdirSync(socket);
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("PG"))), LC_ALL: "C" };
   const exec = (name, args) => run(path.join(bin, name), args, { env, maxBuffer: 4 * 1024 * 1024 });
+  const slot = await acquirePgSlot(path.join(root, "data"));
   await exec("initdb", ["-D", path.join(root, "data"), "-U", "postgres", "--auth=trust", "--no-locale", "--encoding=UTF8"]);
   await exec("pg_ctl", ["-D", path.join(root, "data"), "-l", path.join(root, "pg.log"), "-o", `-k ${socket} -p ${PORT} -c listen_addresses='' -c fsync=off`, "-w", "start"]);
   const full = (query, { user = "postgres", db = "postgres" } = {}) =>
     exec("psql", ["-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-h", socket, "-p", PORT, "-U", user, "-d", db, "-c", query]);
   const sql = async (query, opts) => (await full(query, opts)).stdout.trim();
   const tryRun = async (query, opts) => { try { const r = await full(query, opts); return { ok: true, out: r.stdout.trim(), err: r.stderr }; } catch (e) { return { ok: false, err: String(e.stderr || e.message) }; } };
-  const close = async () => { await exec("pg_ctl", ["-D", path.join(root, "data"), "-m", "fast", "-w", "stop"]); fs.rmSync(root, { recursive: true, force: true }); };
+  const close = async () => { await exec("pg_ctl", ["-D", path.join(root, "data"), "-m", "fast", "-w", "stop"]); slot.release(); fs.rmSync(root, { recursive: true, force: true }); };
   return { sql, tryRun, close };
 }
 

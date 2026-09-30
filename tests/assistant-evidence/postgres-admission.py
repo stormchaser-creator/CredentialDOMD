@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 import subprocess
 import tempfile
 
@@ -21,6 +23,7 @@ def check(name, value):
 with tempfile.TemporaryDirectory(prefix='vera-pg-',dir='/private/tmp') as temporary:
     root=Path(temporary); sock=root/'s'; sock.mkdir()
     def run(*args,**kw): return subprocess.run([str(a) for a in args],text=True,capture_output=True,env=ENV,**kw)
+    slot=pg_slot.acquire(root/'db')
     result=run(BIN/'initdb','-D',root/'db','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8')
     if result.returncode: raise RuntimeError(result.stderr)
     result=run(BIN/'pg_ctl','-D',root/'db','-l',root/'server.log','-o',f"-k {sock} -p 56539 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off",'-w','start')
@@ -71,3 +74,4 @@ with tempfile.TemporaryDirectory(prefix='vera-pg-',dir='/private/tmp') as tempor
         print(json.dumps({'checks':checks,'passed':len(checks),'migrationSha256':hashlib.sha256(MIGRATION.read_bytes()).hexdigest()},indent=2))
     finally:
         run(BIN/'pg_ctl','-D',root/'db','-m','immediate','-w','stop')
+        slot.release()

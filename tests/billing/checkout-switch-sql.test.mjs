@@ -20,7 +20,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
 
 // Own port: node --test runs files in parallel and the other suites hold theirs.
 const PORT = '58917';
@@ -47,6 +47,7 @@ async function startPostgres() {
   const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const exec = (name, args) => run(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
+  const slot = await acquirePgSlot(path.join(root, 'data'));
   await exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   await exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off`, '-w', 'start']);
   // A script on stdin, as the Python suites send it: each call is one session.
@@ -79,7 +80,7 @@ async function startPostgres() {
     const closed = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => resolve({ code, stdout: stdout.trim(), stderr })); });
     return { send: statement => child.stdin.write(`${statement}\n`), end: () => { child.stdin.end(); return closed; } };
   };
-  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); };
+  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); slot.release(); fs.rmSync(root, { recursive: true, force: true }); };
   return { sql, as, value, session, close };
 }
 

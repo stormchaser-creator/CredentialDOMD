@@ -6,6 +6,8 @@ actual latest continuity eligibility/snapshot, billing, access and gift SQL run.
 """
 import concurrent.futures, hashlib, json, os, subprocess, tempfile
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 
 ROOT=Path(__file__).resolve().parents[2]
 BIN=Path('/opt/homebrew/opt/postgresql@17/bin')
@@ -20,6 +22,7 @@ def lit(value): return text(json.dumps(value,separators=(',',':')))+'::jsonb'
 with tempfile.TemporaryDirectory(prefix='beta-deferred-',dir='/private/tmp') as temp:
  base=Path(temp); sock=base/'socket'; sock.mkdir()
  def run(*args,**kw): return subprocess.run([str(a) for a in args],text=True,capture_output=True,env=ENV,**kw)
+ slot=pg_slot.acquire(base/'data')
  r=run(BIN/'initdb','-D',base/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8'); assert r.returncode==0,r.stderr
  r=run(BIN/'pg_ctl','-D',base/'data','-l',base/'log','-o',f"-k {sock} -p 56441 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off",'-w','start'); assert r.returncode==0,r.stderr
  def sql(statement,ok=True):
@@ -208,3 +211,4 @@ with tempfile.TemporaryDirectory(prefix='beta-deferred-',dir='/private/tmp') as 
   print(json.dumps({'result':'PASS','count':len(checks),'migrationSHA256':hashlib.sha256(migration.encode()).hexdigest(),'checks':checks,'limits':'Synthetic private PostgreSQL only. Identity-continuity helpers are stubs; actual account-closure/billing/access/eligibility/snapshot SQL. No Stripe or live-provider behavior asserted.'},indent=2))
  finally:
   r=run(BIN/'pg_ctl','-D',base/'data','-m','fast','-w','stop');assert r.returncode==0,r.stderr
+  slot.release()

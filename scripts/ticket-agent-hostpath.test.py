@@ -19,6 +19,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tests' / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +134,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         return subprocess.run([str(a) for a in args], text=True, capture_output=True,
                               env=env, timeout=30, **kwargs)
 
+    slot = pg_slot.acquire(folder / 'data')
     initialized = command(PG / 'initdb', '-D', folder / 'data', '-U', 'postgres',
                           '--auth=trust', '--no-locale', '--encoding=UTF8')
     if initialized.returncode:
@@ -528,5 +531,6 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
     finally:
         recorder.shutdown()
         stopped = command(PG / 'pg_ctl', '-D', folder / 'data', '-m', 'immediate', '-w', 'stop')
+        slot.release()
         if stopped.returncode:
             raise RuntimeError('Temporary PostgreSQL failed to stop')
