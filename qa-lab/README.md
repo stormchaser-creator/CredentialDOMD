@@ -26,6 +26,96 @@ Built so far:
 > (it contains function bodies) is written to `qa-lab/.generated/`, which is
 > gitignored. `tests/qa-lab/public-repo-safety.test.mjs` enforces this.
 
+## Running it on main (or any checkout)
+
+The lab is on `main`, so every checkout and worktree has it. To test a change
+end to end:
+
+1. **Once per machine.** Docker running; the Supabase CLI (tested with
+   2.109.1); Node 24; PostgreSQL 17 client tools (`psql`, found through `$PSQL`,
+   `$PG_BIN`, `pg_config --bindir` or Homebrew's `postgresql@17`); Playwright's
+   Chromium for the journeys: `npx playwright install chromium` (revision 1243
+   for `@playwright/test` 1.63; `QA_BROWSER_CHANNEL=chrome` uses an installed
+   Google Chrome instead). The first `qa:lab` or `qa:up` of a checkout reads
+   production's catalog, read-only, with a Supabase Management API token from
+   the macOS keychain item `Supabase CLI` (what `supabase login` stores) or
+   `SUPABASE_ACCESS_TOKEN` (section "Production access").
+2. **Once per checkout.** `npm ci`. The lab needs the dev dependencies
+   `@playwright/test`, `playwright-core`, `jose`, `stripe` and `svix`
+   (`package.json`); a `node_modules` installed before the lab reached `main`
+   lacks them, and a worktree that links another checkout's `node_modules` has
+   them only if that checkout installed them. `npm test` does not need them.
+3. **The checklist** (optional, for names and priorities in `results.json`):
+   `features.json` is not in this repository. The runner reads `QA_FEATURES`, or
+   `../qa-data/features.json` beside the checkout. Without it every journey
+   still runs and reports by checklist id.
+4. **Run.**
+
+   ```sh
+   npm run qa:lab          # terminal 1: stack, production's schema, seed, mocks, functions, the QA build; leave it running
+   npm run qa:smoke        # terminal 2: a new test physician reaches the membership gate (-- --checkout: pays, becomes active)
+   npm run qa:e2e          # every journey (about 26 minutes); starts a lab first when none is running
+   npm run qa:e2e -- practice              # journeys whose file name matches
+   npm run qa:e2e -- --grep @CRED-001      # journeys tagged with a checklist id
+   npm run qa:e2e -- --fresh               # rebuild the lab database first (empty, re-seeded)
+   ```
+
+   Results: `qa-lab/.generated/results.json` (checklist id to pass / fail /
+   blocked / by design, with evidence and screenshots), the HTML report with
+   `npx playwright show-report qa-lab/.generated/e2e/html`. Several authors on
+   one running lab: section "Several runs at once".
+
+**One lab per machine.** The Supabase CLI names the stack's containers and its
+database volume after the template's `project_id` (`credentialdomd-qa-lab`),
+whichever checkout started it, while what the lab serves is that checkout's
+own: its `supabase/functions`, its lab keys (`.generated/lab-secrets.json`, the
+keys its mocks accept) and the vault values its database was built with
+(`.generated/local-secrets.json`, the hook secret the database's triggers
+send). So:
+
+- `qa:up`, `qa:lab`, `qa:e2e` and `qa:down` refuse to start, restart or stop a
+  stack another checkout is running (they name it; `lib/checkout-guard.mjs`
+  reads the checkout from the edge runtime's functions mount). Use that lab
+  from its own checkout, or stop it there (Ctrl-C in its `qa:lab` terminal,
+  then `npm run qa:down`). `QA_LAB_TAKE_OVER=1` takes it over anyway, under
+  whatever that checkout is running; a stack whose checkout was deleted is
+  taken over without it.
+- `qa:up` and `qa:lab` refuse a kept database another checkout built (its vault
+  values are not this checkout's; compared by SHA-256, no value is read out).
+  Rebuild it for this checkout: `npm run qa:down -- --wipe && npm run qa:lab`,
+  or `npm run qa:e2e -- --fresh`.
+- The journeys' results, screenshots, the mocks' state and the QA build are
+  per checkout, under its own `qa-lab/.generated/`.
+
+**Which schema.** The lab runs production's schema as extracted (and, on a
+release branch, the release's migrations on top: section "A release branch").
+`main` carries no `DEPLOY-PLAN.md`, so a migration merged to `main` that
+production does not have yet is not in the lab: its journeys fail on the missing
+object, and `qa:parity` says nothing about it (it compares the lab with
+production). To test one before it is deployed, write a plan for it (a `##
+Order` table whose rows name ``Migration `<file name>` ``) and, with the lab
+running, `npm run qa:release -- --plan <plan file> --live-ref <the commit
+production runs>`; every migration the checkout adds over that commit must be
+in the plan. A plain `npm run qa:lab` after production changed:
+`npm run qa:down -- --wipe && npm run qa:lab -- --extract`.
+
+**Never from the main checkout's Supabase link.** The main checkout's
+`supabase/.temp/linked-project.json` links the CLI to production. The lab only
+ever runs `supabase start/stop/status --workdir qa-lab/.generated/stack`
+(local); never run `supabase db push`, `functions deploy`, `config push` or
+`secrets set` for the lab (section "Production access").
+
+**Status when the lab reached `main`** (2026-09-30): the lab code, the
+journeys and every offline test (`npm test`) came over as they were; no lab
+was started for the merge (another checkout's lab was running on this machine,
+and the guard above now refuses exactly that), so neither `qa:smoke` nor
+`qa:e2e` has run from `main` itself yet. The journeys were last run against
+`release/qa1` as of `7d61cc71`, after they were updated to what that release
+changed on purpose; `main`'s `1333e34e` is that release plus its last commit
+(every symbol and icon button 32 x 32 on a phone, 35 files under `src/` and
+`supabase/`). The first run from `main` is the one to compare with the results
+below.
+
 ## Quick start
 
 ```sh
@@ -51,7 +141,8 @@ Rebuild after production's schema changed:
 
 On a release branch (one that carries `DEPLOY-PLAN.md`), `qa:up` and `qa:lab`
 then apply the release's own migrations on top, in the plan's order (section
-"A release branch" below); `--no-release` skips them.
+"A release branch" below); `--no-release` skips them. On `main` (no plan) they
+apply nothing more; see "Which schema" above.
 
 Lower-level commands: `npm run qa:extract` (catalog to `.generated/`),
 `npm run qa:apply` (schema + seed onto a running stack; `--no-seed`, `--seed-only`),
@@ -610,7 +701,8 @@ happens). Now:
   67 files byte for byte (`dist/.vite/manifest.json` differed only in how the
   comparison's symlinked `node_modules` path was spelled).
 - Edge functions: see "Base-URL overrides" below. Production sets none of the
-  new variables, so it keeps calling the real providers
+  new variables, so it keeps calling the real providers; each is read only from
+  the function's environment, never from a request
   (`tests/qa-lab/provider-overrides.test.mjs`).
 
 ### Edge functions in the lab
@@ -689,13 +781,20 @@ provider when unset, which is production:
 | `CLERK_JWKS_URL` | the issuer's own `/.well-known/jwks.json` | `clerkJwksUrl()` in `_shared/clerkContinuity.ts` (used by `_shared/clerkAuth.ts`, `initialize-clerk-profile`, `_shared/credentialPortalDependencies.ts`, `_shared/supportDependencies.ts`, `vera-sources`) |
 | `CLERK_PRODUCTION_ISSUER` | `https://clerk.credentialdomd.com` | `_shared/clerkContinuity.ts` |
 | `STRIPE_API_BASE` | the Stripe SDK's own host | `stripeHostOptions()` in `_shared/billingDependencies.ts` |
-| `RESEND_API_BASE` | `https://api.resend.com` | `send-guide`, `send-invite`, `send-reminders`, `send-ticket-reply`, `send-welcome`, `_shared/credentialPortalDependencies.ts`, `_shared/supportDependencies.ts`, `_shared/limitedLaunchDependencies.ts` (the paid-member welcome) (already present in `email-inbound`, `send-packet-email`, `forwarding-address`, `build-backup`, `_shared/inviteToJoinDependencies.ts`) |
+| `RESEND_API_BASE` | `https://api.resend.com` | `send-guide`, `send-invite`, `send-reminders`, `send-ticket-reply`, `send-welcome`, `_shared/credentialPortalDependencies.ts`, `_shared/supportDependencies.ts`, `_shared/limitedLaunchDependencies.ts` (the paid-member welcome) (already present in `email-inbound`, `send-packet-email`, `forwarding-address`, `build-backup`, `_shared/inviteToJoinDependencies.ts`, `_shared/invoiceEmailDependencies.ts`) |
 | `ANTHROPIC_API_BASE` | `https://api.anthropic.com` | `ai-proxy` |
 | `GEMINI_API_BASE` | `https://generativelanguage.googleapis.com` | `ai-proxy`, `email-inbound`, `admin-shared-key` |
 
 `tests/qa-lab/provider-overrides.test.mjs` pins every default, and fails if a
 function calls one of these providers without an override (the lab could not
-reach that call). Public data sources (NPPES, CMS, PubMed, the state boards) are
+reach that call), if a function reads an override the test's list does not
+name (so every one has its real default checked), or if an override is read
+any other way than from the function's own environment (`Deno.env.get`, or a
+one-line helper that is only that): no header, body, query or other request
+input takes part in choosing a provider host, `stripeHostOptions()` takes no
+argument, and a Clerk JWKS location is built only for the issuer the
+environment names. No function names the lab, its `.test` domain or a `QA_*`
+switch. Public data sources (NPPES, CMS, PubMed, the state boards) are
 not mocked: they need no key, are read-only, and are only reached when a test
 exercises them.
 
@@ -1051,6 +1150,10 @@ whose id is also tombstoned in `deleted_items`), and edge-function error lines i
 the runtime's log.
 
 ### Result, 2026-09-30 (the full suite)
+
+(Run on `feat/qa-lab`, before `release/qa1`'s fixes. Many of the bugs below are
+fixed on `main`, and the journeys have since been updated to what that release
+changed on purpose, so a run from `main` is expected to differ.)
 
 Full run with `--fresh` (123 journeys in 57 files, three workers, 25.0 minutes,
 started 2026-09-30 08:17 UTC): **54 journeys passed, 69 failed, and every
@@ -1680,6 +1783,7 @@ checked (each id's evidence names what was checked instead):
 | `lib/lab-config.mjs` | fixed facts: test domain, issuers, ports, mock mount points |
 | `lib/lab-secrets.mjs` | the lab's token key and fake provider keys (generated per machine) |
 | `lib/stack.mjs` | the lab CLI workdir and stack start/stop; loopback-only network and the exposed-port check; Kong's functions CORS removed |
+| `lib/checkout-guard.mjs` | one lab per machine: the checkout a running stack serves (its edge runtime's functions mount), the refusal to start, restart or stop another checkout's stack, and the refusal to reuse a database another checkout's vault values built |
 | `lib/functions-env.mjs` | the edge functions' environment and its guard |
 | `lib/app-env.mjs` | the QA build's `VITE_*` environment |
 | `lib/procs.mjs` | ports, child processes, waits |
@@ -1773,7 +1877,9 @@ Step 3 (offline):
   looks of ten, never one, and is ended by pid without a restart, three rounds at
   most; the founding reset's SQL (public places only, older than the age, lab
   check then both product locks then the delete) and, on a throwaway PostgreSQL
-  built from production's table definitions, that it refuses a database without
+  built from production's table definitions (it takes one of the machine's
+  PostgreSQL test slots, `tests/helpers/pg-slot.mjs`, as every cluster a test
+  starts on `main` must), that it refuses a database without
   the lab seed, rolls back a dry run, waits for a checkout holding the founding
   lock, and frees only old public places (promised places and members untouched).
 - `tests/qa-lab/mocks.test.mjs`: also matched AI scripts and Stripe deliveries
@@ -1791,6 +1897,24 @@ Step 3 (offline):
   host: every Anthropic SDK client a function builds has no `baseURL`, the lab
   sets `ANTHROPIC_BASE_URL` to the mock, the installed SDK (the version the
   functions pin) reads that variable, and a real host there is refused.
+
+On `main`:
+
+- `tests/qa-lab/checkout-guard.test.mjs`: the checkout a running edge runtime
+  serves, read from `docker inspect` (a stopped container, no container, or no
+  functions mount say nothing); the same checkout through a trailing slash, a
+  symbolic link or Docker's `/host_mnt` prefix, and a sibling folder is another;
+  another checkout's stack is refused for start and stop, with what to do,
+  unless `QA_LAB_TAKE_OVER=1` (that exact value) or that checkout is gone;
+  `startStack` and `stopStack` call the guard first, and `apply-schema` checks a
+  database it did not build before reusing it; a vault value that differs from
+  this checkout's is refused by name, never printed, and the query returns only
+  SHA-256 hashes.
+- `tests/qa-lab/provider-overrides.test.mjs`: also every override a function
+  reads is on the test's list, each is read only from the function's
+  environment (no request input on that line, `stripeHostOptions()` without an
+  argument, JWKS only for `CLERK_ISSUER` or the production issuer), unrelated
+  variables change no host, and no function names the lab.
 
 The journeys themselves (`*.spec.mjs`) need the running lab and are not part of
 `npm test`.
