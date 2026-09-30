@@ -8,7 +8,7 @@
 import { test, expect } from './support/fixtures.mjs';
 import {
   LAB_EMAIL_DOMAIN, accessSnapshot, createPhysician, letters, emails, emailBody, labExec, landing, lab, makeAdmin, mockApi,
-  newMember, profileOf, replayStripeEvent, restAs, row, rows, signIn, sleep, stamp, stripeFor, waitFor, waitForMemberApp, waitForProfile,
+  newMember, profileOf, replayStripeEvent, restAs, row, rows, signIn, sleep, stamp, stripeFor, waitFor, waitForCheckoutEvents, waitForMemberApp, waitForProfile,
 } from './support/lab.mjs';
 
 // Tests in a file run in order in one worker (fullyParallel is off); a failure does not skip the next.
@@ -106,7 +106,7 @@ test('new signup: pending gate, $99 founding offer with Practice, checkout, acti
     await proceed.click();
     await page.getByTestId('qa-stripe-pay').waitFor({ timeout: 60000 });
     checkout = new URL(page.url()).pathname.split('/').pop();
-    qa.check('Continue opens Checkout (the lab stand-in, never checkout.stripe.com)', checkout.startsWith('cs_live_'), checkout.slice(0, 24));
+    qa.check('Continue opens Checkout (the lab stand-in on the app\'s origin, never checkout.stripe.com)', checkout.startsWith('cs_live_') && new URL(page.url()).origin === lab().urls.appOrigin, page.url().slice(0, 80));
     // Reviewing writes nothing; limited-checkout records the consented quote when Continue is pressed.
     const quotes = rows(`select offer_id, price_phase, annual_cents, consented_at from public.limited_billing_quotes where clerk_subject = '${subject}' order by created_at`);
     qa.check('limited-checkout recorded one consented quote: founding, core, 9900 cents', quotes.length === 1 && quotes[0].offer_id === 'core' && quotes[0].annual_cents === 9900 && quotes[0].price_phase === 'founding' && !!quotes[0].consented_at, quotes);
@@ -118,10 +118,14 @@ test('new signup: pending gate, $99 founding offer with Practice, checkout, acti
 
   await qa.feature('BILL-003', 'Completed payment activates the membership', async () => {
     await page.getByTestId('qa-stripe-pay').click();
+    // As with Stripe: back in the app at once, the three events a moment later, all at once, in no set order.
     await page.waitForURL((u) => u.origin === lab().urls.appOrigin && u.searchParams.get('billing') === 'complete', { timeout: 120000 });
-    const { deliveries } = await stripeFor(subject);
-    const types = deliveries.map((d) => d.type).reverse().join(',');
-    qa.check('checkout.session.completed, customer.subscription.created, invoice.paid all accepted (200)', types === 'checkout.session.completed,customer.subscription.created,invoice.paid' && deliveries.every((d) => d.status === 200), deliveries.map((d) => `${d.type} ${d.status}`).join(', '));
+    const attempts = await waitForCheckoutEvents(checkout).catch(async () => (await stripeFor(subject)).deliveries.slice().reverse());
+    const accepted = (t) => attempts.some((d) => d.type === t && d.status === 200);
+    qa.check('checkout.session.completed, customer.subscription.created, invoice.paid each accepted (200), a busy 503 retried as Stripe does',
+      accepted('checkout.session.completed') && accepted('customer.subscription.created') && accepted('invoice.paid')
+        && attempts.every((d) => d.status === 200 || (d.status === 503 && /billing_reconciliation_pending/.test(d.response) && d.willRetry)),
+      attempts.map((d) => `${d.type} ${d.status}${d.attempt > 1 ? ` #${d.attempt}` : ''}`).join(', '));
     const active = await waitForProfile(subject, (p) => p.access_status === 'active', 60000).catch(() => null);
     qa.check('profiles.access_status becomes active', !!active);
     await waitForMemberApp(page);

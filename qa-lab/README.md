@@ -32,6 +32,7 @@ Built so far:
 npm run qa:lab                 # everything: stack, schema, seed, mocks, functions, the app (QA sign-in)
 npm run qa:smoke               # (second terminal) new test physician -> app -> pending membership gate
 npm run qa:smoke -- --checkout #   ... and on through Checkout to an active membership
+npm run qa:cors                # every function the browser calls: its own CORS answers, cross-origin
 npm run qa:stripe -- complete --email someone@qa.credentialdomd.test   # pay an open checkout
 ```
 
@@ -74,14 +75,37 @@ instead of live production), `--verbose` (list every explained difference).
 | Studio | http://127.0.0.1:54323 |
 | Mailpit (Supabase Auth's own mail only; the app does not use Supabase Auth) | http://127.0.0.1:54324 |
 | Mock server and its inbox (every email the edge functions send), step 2 | http://127.0.0.1:54380, inbox at `/qa/inbox` |
+| API proxy: the app's Supabase URL, another origin than the app, step 2 | http://127.0.0.1:54385 |
 | The app, QA-lab build, step 2 | http://127.0.0.1:54390/app/ |
 | Shadow DB (for `supabase db diff`) | 54320 |
 
 Pooler (54329) and analytics (54327) are disabled. The edge-runtime inspector
 uses 8083. Keys for the local gateway: `supabase status -o json --workdir
 qa-lab/.generated/stack` (the lab signs them with its own key, see step 2). The
-mock and app ports are the first free ones from 54380 and 54390, remembered in
-`.generated/lab-ports.json`.
+mock, API proxy and app ports are the first free ones from 54380, 54385 and
+54390, remembered in `.generated/lab-ports.json`.
+
+### Loopback only
+
+Every port above is published on **127.0.0.1 only**. The database holds
+production's schema, policies, grants, cron commands and every function body
+(the reason `.generated/` is gitignored), and the local stack's password is the
+Supabase CLI's default (`postgres`), and Studio has no login: on `0.0.0.0` anyone
+on the same network could read all of it and drive `pg_net` from the lab
+database. The Supabase CLI publishes on every interface and has no setting for
+it, so `lib/stack.mjs` creates the stack's Docker network itself before `supabase
+start`, with `com.docker.network.bridge.host_binding_ipv4 = 127.0.0.1` (the CLI
+reuses an existing network and does not remove one it did not create), and after
+every start refuses to go on if any `*_credentialdomd-qa-lab` container publishes
+a port on `0.0.0.0` or `[::]` (`docker ps`). A stack started before this (published
+on every interface) is stopped and started again by `qa:up`/`qa:lab`, data kept.
+This is per network: no Docker daemon or Colima setting is changed, and other
+containers on the machine are unaffected. With Colima the host side follows the
+container binding (its forwarder listens on `127.0.0.1:<port>`); check with
+`lsof -nP -iTCP -sTCP:LISTEN | grep 5432`. The lab's own servers (mocks, API proxy,
+app) bind `127.0.0.1` too. Never publish these ports, and never treat
+`postgres:postgres` as safe to expose: it is only acceptable because nothing
+outside this machine can connect.
 
 ## Production access: read-only, catalog only
 
@@ -108,22 +132,41 @@ Resend or Cloudflare call. What is read:
 | `vault.secrets` **names and descriptions only** | the local vault gets the same names with local dummy values |
 | `supabase_migrations.schema_migrations` version and name (not statements) | migration history |
 | extensions, roles, schema list, event triggers, publications; effective privileges of `anon`/`authenticated`/`service_role`/`postgres` on platform objects | parity |
-| rows of `access_policy_settings` and `vera_source_settings` (singletons, configuration); **names** of `app_secrets` rows | seed parity |
+| rows of `access_policy_settings`, `vera_source_settings` and `welcome_email_settings` (singletons, configuration); **names** of `app_secrets` rows (the lab stores a placeholder under each); `limited_founding_programs` promise count and the number of promised places per mode (counts only, never the addresses) | seed parity |
 
-`supabase/config.toml`'s `[functions.*]` entries were written from a read-only
-`GET /v1/projects/<ref>/functions` (slug and `verify_jwt` only) on 2026-09-29.
+`qa-lab/supabase-config.template.toml`'s `[functions.*]` entries were written
+from a read-only `GET /v1/projects/<ref>/functions` (slug and `verify_jwt` only)
+on 2026-09-29.
+
+**No `supabase/config.toml`.** The lab's CLI settings live in
+`qa-lab/supabase-config.template.toml`, never in `supabase/config.toml`: the CLI
+reads that file for production's own procedures too (`supabase db push
+--project-ref ...` in docs/AI-PROXY.md, docs/BACKUPS.md, docs/EMAIL-INBOUND.md,
+cloudflare/credentialdomd-api/README.md; `functions deploy`; `config push` from the
+main checkout, which is linked to production). With the lab's `[db.migrations]
+enabled = false` there, a `db push` printed "Skipping migrations because it is
+disabled in config.toml" and then reported the remote as up to date: the next
+migration, a security fix included, would have been skipped silently, and a
+`config push` would have sent the template's auth settings (no Clerk third-party
+auth) to production. `main` has no root config, so production's procedures run
+with the CLI defaults, as before the lab. `lib/stack.mjs` copies the template into
+the lab's own workdir (`.generated/stack/supabase/config.toml`, gitignored, never
+linked to a project); `tests/qa-lab/public-repo-safety.test.mjs` fails if a root
+`supabase/config.toml` disables migrations, names `qa-lab/`, is the lab's
+config, or names a signing key, and if any file under `qa-lab/` is named
+`config.toml` (where the CLI would look).
 
 **Warning:** this worktree's `supabase/.temp/linked-project.json` links the CLI to
-the production project. The lab's scripts only use `supabase start/stop/status`,
-which are local. Never run `supabase db push`, `db pull`, `db dump`,
-`migration repair`, `config push`, `secrets set` or `functions deploy` from here:
-those act on the linked production project.
+the production project. The lab's scripts only use `supabase start/stop/status`
+with `--workdir qa-lab/.generated/stack`, which are local. Never run `supabase db
+push`, `db pull`, `db dump`, `migration repair`, `config push`, `secrets set` or
+`functions deploy` from here: those act on the linked production project.
 
 ## How the schema is rebuilt
 
 `supabase/migrations` cannot rebuild production from empty (objects were created
-outside the chain), so `config.toml` disables migrations and seeding, and the
-schema comes from production's catalog instead:
+outside the chain), so the lab's stack config (the template) disables migrations
+and seeding, and the schema comes from production's catalog instead:
 
 1. `extract-schema.mjs` reads the catalog (`lib/catalog-sql.mjs`, one query per
    section, with `search_path = pg_catalog` so every deparsed name is
@@ -170,13 +213,19 @@ Configuration only, applied after the schema:
   the OFF singleton production has (seed version 3); the owner turns the
   paid-member welcome on in Admin > Emails. Parity compares them with
   production on every live run, so drift is reported.
-- **Founding programs for both modes** (`livemode = false` and `true`, capacity
-  100 each), each with two synthetic promised places
-  (`qa-promised-1@qa.credentialdomd.test`, `qa-promised-2@...`), built by the
-  same functions production used (`seal_limited_free_beta_cohort`,
-  `prepare_founding_program`). Production's own cohort and program rows name real
-  mailboxes and are not copied. The lab runs live mode, as production does
-  (step 2), so the live-mode program is the one checkouts claim places from.
+- **Founding programs for both modes** (capacity 100 each), built by the same
+  functions production used (`seal_limited_free_beta_cohort`,
+  `prepare_founding_program`) from synthetic cohorts. Production's own cohort and
+  program rows name real mailboxes and are not copied. **Live mode** (the mode the
+  lab runs, as production does, so the one checkouts claim places from) promises
+  as many places as production's program: **4** (read-only aggregate on
+  2026-09-29: one program, `livemode = true`, `promise_count = 4`), to
+  `qa-promised-1@qa.credentialdomd.test` ... `qa-promised-4@...`. So public places
+  (96), founding numbers on the membership card and the point where the gate
+  switches from $99 to the next price match live. Parity compares the live
+  program's promise count and promised places with production's on every live
+  run. **Test mode**: two promised places, lab-only (production has no test-mode
+  program; parity lists it as an explained difference).
 - **A Clerk continuity run for the lab's issuers** (`stage_clerk_continuity`,
   `set_clerk_continuity_enabled`): production has an enabled run for its Clerk
   issuers, so every sign-in goes through `initialize-clerk-profile` and a direct
@@ -185,13 +234,24 @@ Configuration only, applied after the schema:
   `https://clerk-legacy.qa.credentialdomd.test` (source), with one synthetic
   legacy member, `user_qalegacy1` / `qa-legacy-1@qa.credentialdomd.test`, who
   also exists in the mock Clerk's legacy instance.
-- `qa_lab.seed_version` (currently 3). `qa:apply` refuses to go on over a
-  database seeded by an older `seed.sql` and says to rebuild
-  (`npm run qa:down -- --wipe && npm run qa:up`).
-- Deliberately empty: `app_secrets` (production AI keys; `npm run qa:lab` stores
-  two random `qa-lab-placeholder-...` values there so `ai-proxy` and
-  `email-inbound` have a key to send to the mock AI), `app_admins`, `profiles`
-  and every member table.
+- `qa_lab.seed_version` (currently 4: the live program's four promised places).
+  `qa:apply` refuses to go on over a database seeded by an older `seed.sql` and
+  says to rebuild (`npm run qa:down -- --wipe && npm run qa:up`).
+- Deliberately empty: `app_secrets` (production AI keys), `app_admins`,
+  `profiles` and every member table. `npm run qa:lab` then stores one random
+  `qa-lab-placeholder-...` value under **each name production's `app_secrets`
+  has, and no other** (names read with the catalog; values never): on 2026-09-29
+  `anthropic_intake_key`, `anthropic_shared_key_paused_launch_20260920`,
+  `gemini_shared_key`. There is no `anthropic_shared_key`, because production's
+  shared Anthropic key is paused: `ai-proxy` answers Anthropic calls 503
+  `shared_key_not_configured` and reports `anthropic_configured: false`, the
+  app's `anthropicAvailable()` is false, and the Opus paths (CPT coder, case
+  dictation, Vera with attachments) fall back or refuse, in the lab as live.
+  `email-inbound` uses `anthropic_intake_key` with its own allowance, as live.
+  Placeholder rows under names production no longer has are deleted; a
+  non-placeholder value is never touched. `QA_AI_ANTHROPIC_SHARED=1 npm run
+  qa:lab` adds `anthropic_shared_key` for that run, to exercise the Opus paths on
+  purpose (parity then reports the extra name).
 
 ## Parity
 
@@ -200,37 +260,46 @@ Configuration only, applied after the schema:
 options); sequences; functions (identity arguments, owner, security definer,
 definition hash); constraints; indexes; triggers; policies; privileges per
 object, per column and per role; default privileges; storage buckets; cron jobs;
-vault secret names; migration history; extensions; schemas; roles; event
-triggers; effective platform privileges of the app's roles; and the seeded
-configuration rows. Deparsed expressions are compared in canonical form: nested
+vault secret names; `app_secrets` names (exactly: only values stay local);
+migration history; extensions; schemas; roles; event triggers; effective
+platform privileges of the app's roles; the seeded configuration rows; and the
+founding programs per mode (promise count, promised places). Deparsed expressions are compared in canonical form: nested
 `AND`/`OR` groups are flattened, because PostgreSQL stores `a BETWEEN 1 AND 2 AND b`
 as a nested AND that re-parses flat (same meaning, different text).
 Differences listed in `parity-known.json` are reported as explained; anything
-else fails (exit 1). The full report is written to `.generated/parity-report.txt`.
+else fails (exit 1). Entries name the exact object (`key`); only Realtime's
+daily `realtime.messages_YYYY_MM_DD` partitions are matched by a date
+`keyPattern`, and platform privileges never take `"*"` (a wildcard would also
+explain whatever platform object production gains next). A platform object that
+exists on one side only is never explained once an application function body,
+view, policy, trigger or cron command in production's catalog names it (a call
+to it would work on one side only). The full report is written to
+`.generated/parity-report.txt`.
 
-### Result, 2026-09-29 (live production vs local, rebuilt from a fresh extraction)
+### Result, 2026-09-30 01:01 UTC (live production vs local, rebuilt from a fresh extraction)
 
 ```
 category                 prod  local  unexplained  explained
-tables                    113    113            0          0
-columns                  1258   1258            0          0
+tables                    114    114            0          0
+columns                  1262   1262            0          0
 views                       9      9            0          0
 sequences                   3      3            0          0
-functions                 190    190            0          0
-constraints               405    405            0          0
+functions                 192    192            0          0
+constraints               408    408            0          0
 indexes                    90     90            0          0
 triggers                   23     23            0          0
 policies                  180    180            0          0
-table grants              122    122            0          0
+table grants              123    123            0          0
 column grants              10     10            0          0
 sequence grants             3      3            0          0
-function grants           190    190            0          0
+function grants           192    192            0          0
 schema grants              12     15            0          3
 default privileges         27     30            0          3
 storage buckets             2      2            0          0
-cron jobs                  12     12            0          0
-cron job active            12     12            0         12
+cron jobs                  13     13            0          0
+cron job active            13     13            0         13
 vault secret names          2      2            0          0
+app secret names            3      3            0          0
 migration history           2      2            0          0
 publications                1      1            0          0
 extensions                  7      7            0          1
@@ -238,9 +307,15 @@ schemas                    12     15            0          3
 roles                      17     16            0          1
 event triggers              6      6            0          0
 platform privileges       164    165            0         27
-config rows                 3      3            0          1
+config rows                 4      5            0          1
 PARITY OK: every difference is explained.
 ```
+
+(Before 2026-09-30 the lab stored `anthropic_shared_key` and `gemini_shared_key`
+placeholders while production had `anthropic_intake_key`,
+`anthropic_shared_key_paused_launch_20260920` and `gemini_shared_key`, and
+`parity-known.json` excused the mismatch with a reason that was not true. Names
+now match exactly.)
 
 Grants per role on application objects match exactly (production / local):
 `anon` 320 table, 27 view, 9 sequence, 9 function; `authenticated` 366 table,
@@ -262,13 +337,13 @@ locally", which is the signal to rebuild (command above).
 
 | Category | Difference | Reason |
 |---|---|---|
-| cron job active | all 12 jobs inactive locally | on purpose; definitions match exactly |
+| cron job active | all 13 jobs inactive locally | on purpose; definitions match exactly |
 | extensions | `pg_net` 0.19.5 in prod, 0.20.3 locally | the local image ships only 0.20.3; objects live in schema `net` either way |
 | roles | `cli_login_postgres` missing locally | production-only Supabase CLI login role; no application privileges |
 | schemas (+ their grants, default privileges) | `_realtime`, `supabase_functions`, `qa_lab` only local | local Realtime bookkeeping; local database-webhook schema; the lab's marker |
-| config rows | `app_secrets` empty locally | production AI keys are never copied |
-| platform privileges | objects only in production | production's newer auth/storage-api: MFA recovery-code and SCIM tables, new `storage.search*`/`list*` signatures, and the bucket-control guards behind production's `protect_bucket_control_*` triggers on `storage.buckets` |
-| platform privileges | objects only locally | the local image's older storage signatures, `storage.iceberg_*`, Realtime's daily `realtime.messages_*` partitions |
+| config rows | `founding program (test)` only local | the lab also seeds a test-mode program (two synthetic places); production has only the live one, which is compared exactly |
+| platform privileges | 12 named objects only in production | production's newer auth/storage-api: `auth.mfa_recovery_codes`, `auth.mfa_recovery_code_sets`, `auth.scim_users`, `auth.scim_tokens`, six new `storage.search*`/`list*`/`get_size_by_bucket` signatures, and the bucket-control guards `storage.protect_bucket_control_columns()` and `storage.enforce_bucket_lifecycle_service_role()` behind production's `protect_bucket_control_*` triggers on `storage.buckets` (each listed by its exact key as seen on 2026-09-29) |
+| platform privileges | 8 named objects and the daily partitions only locally | the local image's six older storage signatures, `storage.iceberg_tables`, `storage.iceberg_namespaces`; Realtime's `realtime.messages_YYYY_MM_DD` partitions (date pattern) |
 | platform privileges | `cron.job_run_details` | local pg_cron setup leaves `postgres` TRIGGER on it |
 | platform privileges | `realtime.schema_migrations` | Realtime's internal table, granted differently by the local container |
 
@@ -292,25 +367,32 @@ npm run qa:lab                    # stack + schema + seed + mocks + every edge f
 npm run qa:lab -- --dev           # the app on the vite dev server (hot reload; import.meta.env.DEV is true)
 npm run qa:lab -- --no-build      # serve the last QA build without rebuilding
 npm run qa:lab -- --extract       # re-read production's catalog first (read-only)
-npm run qa:lab -- --app-port 54500 --mock-port 54501 --quiet
+npm run qa:lab -- --app-port 54500 --mock-port 54501 --api-port 54502 --quiet
+QA_AI_ANTHROPIC_SHARED=1 npm run qa:lab   # also store anthropic_shared_key (production has none: paused)
 ```
 
-`qa:lab` starts the stack from the lab's own workdir (below), applies schema and
-seed if needed, stores the AI placeholders, starts the mock server, waits until
-the edge functions answer with the lab's settings, builds the app in QA-lab mode
-(a production-mode bundle) and serves it. It then prints the URLs and writes them
-to `.generated/lab.json`. Ctrl-C stops the mocks and the app server; the stack
-and its functions keep running until `npm run qa:down`. Logs:
-`.generated/logs/mocks.log`, `.generated/logs/app.log`, and for the functions
+`qa:lab` starts the stack from the lab's own workdir (below; ports on loopback
+only, the gateway passing the functions' own CORS through), applies schema and
+seed if needed, stores the AI placeholders under production's `app_secrets`
+names (re-reading the catalog, read-only, if the saved one predates that),
+starts the mock server and the API proxy, waits until the edge functions answer
+with the lab's settings, builds the app in QA-lab mode (a production-mode bundle)
+and serves it, and checks that a function preflight through the API proxy comes
+back with the function's own `Access-Control-Allow-Origin`. It then prints the URLs and writes them
+to `.generated/lab.json`. Ctrl-C stops the mocks, the API proxy and the app
+server; the stack and its functions keep running until `npm run qa:down`. Logs:
+`.generated/logs/mocks.log`, `.generated/logs/api.log`, `.generated/logs/app.log`, and for the functions
 `docker logs -f supabase_edge_runtime_credentialdomd-qa-lab`.
 
 `npm run qa:smoke` (against a running lab, or `-- --with-lab` to start one and
 stop it after) creates a test physician through the QA sign-in API, opens the app
 in headless Chrome, signs in as that physician and checks that the pending
-membership gate appears and that the database agrees. `--checkout` continues as
-the physician would: review the founding offer, agree to its terms, continue to
-payment, pay on the lab's stand-in for Stripe Checkout, and back in the app the
-membership is active. The browser refuses every request to a host that is not
+membership gate appears, that the database agrees, and that every function the
+browser calls keeps its CORS contract (`qa:cors`, below). `--checkout` continues
+as the physician would: review the founding offer, agree to its terms, continue
+to payment, pay on the lab's stand-in for Stripe Checkout, and back in the app
+(at once, as with Stripe) the three webhook events land a moment later, all at
+the same time, busy answers retried, and the membership turns active. The browser refuses every request to a host that is not
 this machine and reports any it saw. `--headed` shows the browser. Screenshots go
 to `.generated/smoke/`.
 
@@ -319,10 +401,13 @@ to `.generated/smoke/`.
 ```
 browser ──> app server  http://127.0.0.1:<app port>   (vite preview of the QA build, or vite dev)
               /app/            the QA-lab bundle (Clerk replaced by the QA sign-in)
-              /__qa/sb/*   ──> local Supabase gateway :54321  (Origin presented as https://credentialdomd.com)
-              /__qa/mock/* ──> mock server
+              /__qa/mock/* ──> mock server (QA sign-in API; the Checkout and portal stand-ins)
               /api/waitlist, /api/waitlist-attempt, /api/pv, /api/confirm-forwarding
                            ──> relayed as production's Cloudflare worker relays them
+browser ──> API proxy   http://127.0.0.1:<api port>   (the app's VITE_SUPABASE_URL: CROSS-ORIGIN, as live)
+                           ──> local Supabase gateway :54321 (Origin presented as https://credentialdomd.com;
+                               the function's Access-Control-Allow-Origin renamed back to the lab app's)
+                               /functions/v1/* without Kong's cors plugin: the functions' own CORS answers
 edge functions (container) ──> host.docker.internal:<mock port>  Clerk, Stripe, Resend, Anthropic, Gemini, Telegram
 mock server  ──> local gateway: Svix-signed Clerk webhooks (clerk-webhook), Stripe-signed events
                  (limited-stripe-webhook), Svix-signed inbound mail (email-inbound)
@@ -330,10 +415,65 @@ database triggers and dispatch_* ──> pg_net ──> local gateway ──> fu
 ```
 
 The functions pin `https://credentialdomd.com` for CORS, Origin checks and the
-token's `azp`. The live app runs on that origin; the lab app server presents the
+token's `azp`. The live app runs on that origin; the API proxy presents the
 browser's requests to the functions as coming from it, so the functions run
 unchanged. Stripe's success and cancel URLs are rewritten back to the lab app by
 the mock.
+
+### CORS: the browser checks it, as live
+
+The live app (`https://credentialdomd.com/app/`) calls its Supabase project
+(`https://<ref>.supabase.co`) cross-origin: the browser sends a preflight before
+each function call and hides any answer whose CORS headers do not allow the app.
+Until 2026-09-30 the lab app reached the stack through its own origin
+(`/__qa/sb`), so the browser never checked any of it, and local Kong's cors
+plugin answered every function preflight itself and stamped
+`Access-Control-Allow-Origin: *` on every response (a POST to
+`initialize-clerk-profile` from `https://evil.example` came back with `*`,
+although the function pins the production origin). Two kinds of break passed
+every journey and would fail live: a function that answers an error without its
+CORS headers (the browser hides the structured error; the app shows a generic
+network failure), and a header the app sends that a function's
+`Access-Control-Allow-Headers` does not list (the preflight fails; the call never
+happens). Now:
+
+- **Another origin.** The app's `VITE_SUPABASE_URL` is the lab's API proxy
+  (`lib/api-proxy.mjs`, `http://127.0.0.1:<api port>`), not the app's origin. The
+  QA vite config refuses a Supabase URL on the app's origin.
+- **The functions' own headers.** The proxy forwards everything to the local
+  gateway and changes exactly two things: the lab app's `Origin` (and `Referer`)
+  is presented as production's, and an `Access-Control-Allow-Origin` naming
+  production's origin is renamed to the lab app's. `*` and any other value pass
+  unchanged (a function that refuses the origin is refused in the lab too);
+  `Allow-Headers`, `Allow-Methods` and `Expose-Headers` are never touched.
+- **No Kong CORS on functions.** After every stack start, `lib/stack.mjs` removes
+  the `cors` plugin from the `functions-v1` service in the running Kong's
+  declarative config (`/home/kong/kong.yml`) and reloads Kong, so preflights
+  reach the functions and their headers reach the browser, as on hosted Supabase.
+  REST, Auth and Storage keep Kong's permissive CORS, as hosted Supabase does.
+  The container writes its config at start, so a Kong restart brings the plugin
+  back: `qa:lab`, `qa:up` and `qa:e2e` put it right again, and `qa:lab` refuses to
+  report ready unless a function preflight through the proxy carries the
+  function's own header.
+- **`npm run qa:cors`** (also run by `qa:smoke`) checks every function the browser
+  calls (found in `src/`, `landing/`, `public/`, `index.html`: 32 on 2026-09-30):
+  the preflight is 2xx with `Access-Control-Allow-Origin` for the app (or `*`) and
+  `Access-Control-Allow-Headers` naming `authorization` and `content-type`, plus
+  `apikey` and `x-client-info` for functions the app calls through
+  `supabase.functions.invoke` (which adds them; a `*` does not cover
+  `authorization`); and an error answer (no member token, empty body) carries
+  `Access-Control-Allow-Origin` too. A GET-only public function (the membership
+  offer) is a simple request, so only its answer's header counts. For
+  `track-event` (`verify_jwt` on) the error call carries the local anon key so
+  the function answers, not the gateway's token check in front of it (locally
+  that check answers without CORS headers; the app always sends a token).
+  Result 2026-09-30: **32 of 32 keep the contract.** Success paths are the
+  journeys' job, now in a browser that enforces all of this.
+- **Not offline.** The functions are Deno modules (`serve(...)` at import, remote
+  and `npm:` specifiers) that Node's test runner cannot import, and CI has no
+  Deno, so the contract runs against the lab. Offline tests pin the proxy's
+  header translation, the Kong rewrite and the check's rules
+  (`tests/qa-lab/lab-fidelity.test.mjs`).
 
 ### The QA sign-in (replaces Clerk, in QA-lab builds only)
 
@@ -370,11 +510,24 @@ the mock.
   production). A new physician lands on the pending membership gate.
 - **Build switches.** The QA build gets the same `VITE_*` switches as the
   production deploy (read from the build step of
-  `.github/workflows/deploy-gh-pages.yml`), plus `VITE_QA_LAB=1`, the lab app
-  server as `VITE_SUPABASE_URL` and the local anon key. No `.env` file is read.
+  `.github/workflows/deploy-gh-pages.yml`), plus `VITE_QA_LAB=1`, the lab's API
+  proxy as `VITE_SUPABASE_URL` and the local anon key. No `.env` file is read.
   Output goes to `.generated/app-dist/`, never `dist/`.
-- **Guards.** The QA config refuses to run without `VITE_QA_LAB=1` or with a
-  Supabase URL that is not this machine. The shim throws unless
+- **Stripe's hosted pages.** Where the live app sends the browser to
+  `https://checkout.stripe.com/c/pay/<id>` or `https://billing.stripe.com/p/session/<id>`
+  (`LimitedLaunchMembership.jsx`, and `useSubscription.js` for the portal and the
+  older checkout), the QA build sends it to the mock's stand-in on the app's own
+  origin, `/__qa/mock/qa/stripe/hosted/checkout/<id>` or `.../portal/<id>`. Only
+  the navigation is rewritten (`LAB_REWRITES` in `app/vite.config.mjs`; the build
+  fails if the text moves): the URL checks stay production's, so the app still
+  accepts only a Stripe URL from the function, and `limited-checkout` itself
+  still refuses a Checkout session whose `url` is not `https://checkout.stripe.com/`
+  (which is why the mock keeps answering Stripe URLs rather than lab ones). So a
+  tester who opens the lab app in their own browser and presses Continue stays
+  on this machine, as the journeys do; the journeys' browsers now block Stripe's
+  hosts outright instead of redirecting them.
+- **Guards.** The QA config refuses to run without `VITE_QA_LAB=1`, with a
+  Supabase URL that is not this machine, or with one on the app's own origin. The shim throws unless
   `VITE_QA_LAB=1` was built in and the page is on `127.0.0.1` or `localhost`.
 - **Not reproduced.** Clerk's own account screens (`openUserProfile` shows a
   notice; change a physician through `PATCH /qa/users/:id` instead), passkeys,
@@ -402,14 +555,15 @@ the mock.
 
 **How they are served.** `supabase start` serves every function in
 `supabase/functions`, from the lab's own CLI workdir,
-`.generated/stack/supabase/`: a copy of `supabase/config.toml` with three
-changes (`auth.signing_keys_path` names the lab's token key, `sql_paths` is
-cleared, and an `[edge_runtime.secrets]` table holds the lab environment) and a
-`functions` link to the real `supabase/functions`. The copy has no `.temp/`
-folder, so nothing started from it is linked to a hosted project. `verify_jwt`
-per function is exactly production's (from `config.toml`). The workdir is
-rewritten on every `qa:up`/`qa:lab`; a stack running with other settings is
-restarted (data kept).
+`.generated/stack/supabase/`: `config.toml` written from
+`qa-lab/supabase-config.template.toml` (which already has `auth.signing_keys_path`
+naming the lab's token key and empty `sql_paths`) with an
+`[edge_runtime.secrets]` table added for the lab environment, and a `functions`
+link to the real `supabase/functions`. The copy has no `.temp/` folder, so
+nothing started from it is linked to a hosted project. `verify_jwt` per function
+is exactly production's (from the template). The workdir is rewritten on every
+`qa:up`/`qa:lab`; a stack running with other settings, or publishing a port
+beyond loopback, is restarted (data kept).
 
 `supabase functions serve --env-file ...` was the first plan, and the same
 environment is written to `.generated/functions.env` (mode 600) for it, but with
@@ -483,7 +637,7 @@ reach that call). Public data sources (NPPES, CMS, PubMed, the state boards) are
 not mocked: they need no key, are read-only, and are only reached when a test
 exercises them.
 
-**Scheduled work.** The 12 cron jobs stay inactive. Run the one a test needs by
+**Scheduled work.** The 13 cron jobs stay inactive. Run the one a test needs by
 hand, as the job would: for example `select public.dispatch_guide_emails();`
 (guide emails), `select public.dispatch_daily_reminders();`,
 `select public.dispatch_welcome_email_sweep();` (psql to 127.0.0.1:54322).
@@ -522,23 +676,58 @@ checks. API: customers (create, retrieve), products, prices (list by
 invoices, invoice items, billing portal configuration and sessions;
 `Idempotency-Key` is honoured.
 
+**Webhook timing, as Stripe does it.** When the buyer presses Pay on the
+Checkout stand-in, the browser goes back to `success_url` **at once**, and the
+three events follow a moment later (default: 1.5 s), **all at the same time, in a
+shuffled order**. Any answer other than 2xx is retried, as Stripe retries
+(Stripe for days; the lab after 1, 3, 8, 15 and 30 seconds); every attempt is
+recorded in `/qa/stripe/deliveries` with its `attempt` number and whether it will
+be retried. So the app meets its "confirming" return state (`useBillingReturn`:
+"Checkout complete. Confirming your membership...", nothing offered for sale,
+then "Your membership is confirmed." once the events land, without a reload), and
+`limited-stripe-webhook` meets its own concurrency: while one event holds the
+account's 60-second reconcile lease (`claim_billing_reconcile`), the others are
+refused `503 billing_reconciliation_pending` and land on retry. (Until
+2026-09-30 the stand-in delivered the three events one after another, waited for
+every one to answer 200, and only then sent the browser back, so the membership
+was always active before the app loaded and neither path ever ran.) A delivery
+plan changes this for one checkout session or as the default: `POST
+/qa/stripe/delivery-plan {session: "cs_..." | default: true, delayMs, order:
+"shuffled"|"checklist"|"invoice-first"|[types], mode: "concurrent"|"sequential",
+drop: [types], retry}` (`GET` shows them, `DELETE ?session=` clears one), or
+`npm run qa:stripe -- plan`. The `.../complete` API below still answers with the
+results, so by default it sends the events one after another in the checklist's
+order and waits (retries included); `plan` in its body changes that.
+
 | Lab endpoint | What |
 |---|---|
 | `GET /qa/stripe/sessions` (`customer`, `status`, `profile`, `subject`) | checkout sessions |
-| `POST /qa/stripe/checkout/:id/complete` `{send?, endpoint?}` | the buyer paid: a subscription and its paid first invoice, then signed `checkout.session.completed`, `customer.subscription.created`, `invoice.paid` to `limited-stripe-webhook` |
+| `POST /qa/stripe/checkout/:id/complete` `{send?, endpoint?, plan?, wait?}` | the buyer paid: a subscription and its paid first invoice, then signed `checkout.session.completed`, `customer.subscription.created`, `invoice.paid` to `limited-stripe-webhook` (retried until accepted); answers with each event's last attempt (`wait: false` returns at once) |
+| `GET/POST/DELETE /qa/stripe/delivery-plan` | how the hosted Pay button delivers one session's events, or the default (above) |
 | `POST /qa/stripe/checkout/:id/expire`, `POST /qa/stripe/subscriptions/:id/cancel` `{atPeriodEnd}` | with `checkout.session.expired`, `customer.subscription.updated`/`deleted` |
 | `POST /qa/stripe/events/:id/resend`, `GET /qa/stripe/deliveries` | resend an event; every delivery and its answer, with the `object` and `customer` it was about |
-| `/qa/stripe/hosted/checkout/:id`, `/qa/stripe/hosted/portal/:token` | stand-ins for Stripe's hosted pages (the smoke's browser is routed there from `checkout.stripe.com` and `billing.stripe.com`) |
+| `/qa/stripe/hosted/checkout/:id`, `/qa/stripe/hosted/portal/:token` | stand-ins for Stripe's hosted pages; the QA build sends the browser to them on the app's origin (`/__qa/mock/qa/stripe/hosted/...`), and their forms and redirects are relative, so they work there and straight on the mock |
 
-The same from a terminal: `npm run qa:stripe -- sessions | complete | expire |
-cancel | resend | deliveries` (`--email`, `--subject`, `--latest`, `--now`,
-`--no-events`, `--endpoint`; run it without arguments for the usage).
+The same from a terminal: `npm run qa:stripe -- sessions | complete | plan |
+expire | cancel | resend | deliveries` (`--email`, `--subject`, `--latest`,
+`--now`, `--no-events`, `--endpoint`; for `complete` and `plan`: `--concurrent` /
+`--sequential`, `--order`, `--delay MS`, `--drop TYPE`, `--default`, `--clear`;
+run it without arguments for the usage).
 
 **Resend** (`mocks/resend.mjs`). `POST /resend/emails`, `/resend/emails/batch`,
 `GET /resend/emails/:id`, and the Receiving API `email-inbound` reads
 (`/resend/emails/receiving/:id`, `.../attachments`, download URLs). Every email
 is kept: from, to, cc, bcc, reply-to, subject, HTML, text, headers, tags,
-attachments.
+attachments. `Idempotency-Key` works as Resend's does, on single sends and on
+batches (one key for the whole batch): within 24 hours, the same payload returns
+the first answer and sends nothing; a **different payload under the same key is
+refused `409 {"name": "invalid_idempotent_request"}`** and nothing is sent (the
+payload is compared by a hash with key order ignored). Before 2026-09-30 the
+mock returned the first id for any repeat, so a retry whose body had changed
+passed in the lab and would be refused live: `send-ticket-reply` uses
+`ticket-reply/<message id>` on every retry, and its body carries the ticket
+subject and the owner's current address (a product follow-up is filed for that
+case).
 
 | Lab endpoint | What |
 |---|---|
@@ -567,29 +756,33 @@ provider's format.
 (main removed `_shared/telegram.ts`), so the functions get no Telegram settings;
 the mock endpoint stays for scripts.
 
-### Smoke result, 2026-09-29
+### Smoke result, 2026-09-30
 
 ```
 $ npm run qa:smoke -- --checkout
-PASS  test physician created through the QA sign-in API  (user_qaXkowX8aXKJJDvAcFcWEdegq6 <smoke-20260929210923@qa.credentialdomd.test>)
+PASS  test physician created through the QA sign-in API  (user_qaGuboZG4gVsInGrtQUgPD3peR <smoke-20260930010049@qa.credentialdomd.test>)
 PASS  Svix-signed user.created webhook accepted by the local clerk-webhook  (delivered, HTTP 200 ok)
 PASS  the app shows the QA sign-in (Clerk replaced in this build)
 PASS  signed in, the pending membership gate appears  (Your membership Your account is signed in. Review an eligible membership below; ...)
 PASS  the gate offers the founding Credential membership
 PASS  the gate has "Check access again" and "Sign out"
-PASS  a profile exists for the signed-in subject, access pending  (profile f4dfa9ff-..., access pending, verified_email stamped)
+PASS  a profile exists for the signed-in subject, access pending  (profile ceb9524a-..., access pending, verified_email stamped)
+PASS  every browser-called function keeps its CORS contract through the cross-origin API (32 checked)
 PASS  the offer review shows the founding price and its terms  (Credential $99.00 per year)
 PASS  payment stays disabled until the terms are agreed
-PASS  continuing opens Checkout (the lab stand-in, never checkout.stripe.com)  (cs_live_aAxboywVHedtnCsE...)
-PASS  signed checkout.session.completed, customer.subscription.created, invoice.paid all accepted by limited-stripe-webhook  (... 200, ... 200, ... 200)
+PASS  continuing opens Checkout (the lab stand-in on the app origin, never checkout.stripe.com)  (cs_live_z6UU3VA7SnZQ3mPs...)
+PASS  signed checkout.session.completed, customer.subscription.created, invoice.paid each accepted by limited-stripe-webhook (a busy 503 is retried, as Stripe does)
+      (customer.subscription.created 503, checkout.session.completed 503, invoice.paid 200, checkout.session.completed 503 (attempt 2),
+       customer.subscription.created 200 (attempt 2), checkout.session.completed 200 (attempt 3))
 PASS  the profile is active after payment
 PASS  back in the app, the membership gate is gone
 PASS  the browser reached only this machine
-qa-smoke: 14/14 checks passed
+qa-smoke: 15/15 checks passed
 ```
 
-Without `--checkout` it is the first 7 checks plus the last (8/8), and it passes
-against both the preview build and `--dev`. Also checked by hand the same day: a
+The deliveries line is the concurrency the lab used to hide: invoice.paid won the
+reconcile lease, the other two were refused busy and landed on retry. Without
+`--checkout` it is the first 8 checks plus the last (9/9). Also checked by hand the same day: a
 guide email requested through `/api/waitlist` and sent by
 `dispatch_guide_emails()` (trigger, pg_net, local gateway, `send-guide`, mock
 Resend) lands in the inbox; `ai-proxy` answers for both providers from the mock
@@ -611,8 +804,11 @@ schema is production's):
 
 `npm run qa:e2e` runs Playwright journeys against the QA build. Each journey
 creates its own test physician on the QA sign-in, pays on the Checkout stand-in
-when it needs a member (the founding offer, as a new physician would), then uses
-the app through its screens. After the steps that matter it checks both sides:
+when it needs a member (the founding offer, as a new physician would: back in
+the app at once, the Stripe events a moment later, concurrently, busy answers
+retried; once the membership is active the app is opened again, as the member's
+next visit), then uses the app through its screens, in a browser that enforces
+the functions' CORS (the API is another origin). After the steps that matter it checks both sides:
 what the screen shows, and the local database (read-only `psql` against the lab
 stack) or the email the mock Resend captured.
 
@@ -633,11 +829,14 @@ default (`QA_E2E_WORKERS`); a full run takes about 6 minutes plus 3 for `--fresh
 Playwright's own Chromium (1.63, revision 1243) is used; `QA_BROWSER_CHANNEL=chrome`
 uses the installed Google Chrome instead.
 
-**Founding places.** Every journey that pays takes one of the lab's 100 founding
-places, and a full run takes about 27. Once they are gone the gate offers the
-early-bird price and the signup journey's "$99" checks fail for a lab reason. The
-runner prints how many are left and warns under 25; `--fresh` (or
-`npm run qa:down -- --wipe && npm run qa:up`) starts over.
+**Founding places.** Every journey that pays takes one of the lab's 96 public
+founding places (100 less the 4 promised ones, as live), and a full run takes
+about 30. Once they are gone the gate offers the early-bird price and the signup
+journey's "$99" checks fail for a lab reason. The runner prints how many public
+places are left (100 minus every live slot row, promised or taken) and warns
+under 25; `--fresh` (or `npm run qa:down -- --wipe && npm run qa:up`) starts
+over. A lab that is already running is re-checked first: no port beyond
+loopback, and the gateway's functions CORS plugin still removed.
 
 Output (all under the gitignored `qa-lab/.generated/`):
 
@@ -652,9 +851,10 @@ Output (all under the gitignored `qa-lab/.generated/`):
 
 - `e2e/support/fixtures.mjs` extends Playwright's `test`:
   - every browser context refuses requests to hosts that are not this machine
-    (and the journey fails if the app tried), sends Stripe's hosted pages to the
-    mock's stand-ins, and serves signed Storage links the functions make (they
-    name the stack's internal host `kong:8000`) from the local gateway;
+    (and the journey fails if the app tried; Stripe's hosts included, since the
+    QA build itself goes to the stand-ins), and serves signed Storage links the
+    functions make (they name the stack's internal host `kong:8000`) from the
+    local gateway;
   - console errors, page errors, failed requests and native dialogs are recorded
     per journey (`qa.report`); native `confirm()`s are accepted, as the physician
     who pressed the button would, unless the journey sets `qa.onDialog`;
@@ -672,7 +872,13 @@ Output (all under the gitignored `qa-lab/.generated/`):
   buttons (only the star has an accessible name), the pending-ops queue, Home's
   ring and tiles, synthetic PDF/PNG files, the captured email, SQL rows, the
   access snapshot the database computes for a member, PostgREST as a member, the
-  Stripe events of a member, and `scriptAi(provider, answer, match)`.
+  Stripe events of a member, and `scriptAi(provider, answer, match)`. For
+  billing timing: `payForMembership(page, { plan, beforePay })` (a delivery plan
+  for that checkout, and a step on the stand-in before Pay),
+  `waitForCheckoutEvents(sessionId)` (until each event is accepted, retries
+  included), `checkoutAttempts(sessionId)`, and `holdReconcileLease(profileId)` /
+  `releaseReconcileLease` (take the member's reconcile lease in the local
+  database, as a concurrent event would, so the next event is refused busy).
 - Specs are tagged with the checklist ids they cover (`@CRED-001`), so
   `--grep @CRED-001` runs them.
 
@@ -704,22 +910,26 @@ the journeys' own checks: client error reports the app sent, zombie rows (a row
 whose id is also tombstoned in `deleted_items`), and edge-function error lines in
 the runtime's log.
 
-### Result, 2026-09-29
+### Result, 2026-09-30
 
-Full run with `--fresh` (24 journeys, 3 workers, 5.9 minutes): **19 journeys
-passed, 5 failed, every failure a product bug below** (none from the lab).
-Checklist coverage: **83 of 261 ids exercised: 78 pass, 5 fail,
-0 blocked**; 178 not run yet. By priority: P0 36 pass /
-3 fail / 22 not run; P1 34 / 2 / 96;
-P2 8 / 0 / 60. Lab health: 0 runaway PostgREST
-retries left, 1 zombie row (the restore bug's), 4 client error reports (the
-Delete-All dead end twice, the paused member's refused membership check and
-enrollment).
+Full run with `--fresh` after the review fixes (26 journeys, 3 workers, 6.6
+minutes): **20 journeys passed, 6 failed, every failure a product bug below**
+(none from the lab). Checklist coverage: **83 of 261 ids exercised: 77 pass, 6
+fail, 0 blocked**; 178 not run yet. By priority: P0 35 pass / 4 fail / 22 not
+run; P1 34 / 2 / 96; P2 8 / 0 / 60. Lab health: 0 runaway PostgREST retries left,
+1 zombie row (the restore bug's), 3 client error reports (the Delete-All dead end
+twice, the paused member's refused enrollment). The edge-function log now also
+counts `billing_reconciliation_pending` 503s (about 80 a run): the busy answers of
+concurrent Stripe events, each retried and accepted. Compared with 2026-09-29:
+two new billing-return journeys (one passes; one fails on the new product bug
+below), and every other journey has the same result.
 
 | File | Journey | Checklist ids | Result |
 |---|---|---|---|
 | `admin-invite-gift.spec.mjs` | owner: invite to join sends one email and grants nothing | ADMIN-001 | pass |
 | `admin-invite-gift.spec.mjs` | owner: lifetime gift by email, claimed by signing up with that address | ADMIN-001, BILL-014 | pass |
+| `billing-return.spec.mjs` | back from Checkout before the events land: "confirming", nothing to buy, then active on its own | BILL-003 | fail (BILL-003: shared AI stale after the purchase lands) |
+| `billing-return.spec.mjs` | the first invoice.paid is refused as busy: nothing recorded, the app keeps confirming, the retry activates | BILL-003 | pass |
 | `billing.spec.mjs` | return from Checkout without paying: notice, nothing charged, dismiss sticks, checkout can be resumed | BILL-002, BILL-010 | pass |
 | `billing.spec.mjs` | paid member: membership card, customer portal, cancel at period end, export | BILL-007, BILL-005, SYNC-019 | pass |
 | `admin-controls.spec.mjs` | owner controls: pause and restore access, lifetime grant, view as member, owner message | ADMIN-001, AUTH-008, ADMIN-006, ADMIN-005, SUPPORT-003 | fail (ADMIN-001) |
@@ -743,6 +953,12 @@ enrollment).
 | `member-records.spec.mjs` | full member: licenses added, edited, starred, attached, deleted; Home and a second browser agree | CRED-001, HOME-003, CRED-002, CRED-025, CRED-016, CRED-003, SYNC-001, SYNC-003 | pass |
 | `two-devices.spec.mjs` | Delete All My Data wipes the account; the other device drops its stale cache | SETTINGS-005, SYNC-012 | fail (SETTINGS-005) |
 
+Two lab fixes the reruns needed: the AI script marker is now the file's whole
+base64 (a script left queued by a journey that stopped early matched the next
+run's synthetic PDF, which differs only in a few digits), and the custom-category
+form is opened with one click unless no dialog is open at all (under load a
+second click closed the opening form).
+
 Many P1 stretches check the core path (add, edit, reload, delete, or the
 screen and its rows) rather than every sub-expectation the checklist lists for
 the id; each id's evidence in `results.json` names exactly what was checked.
@@ -760,6 +976,7 @@ functions and app code are production's; each is in `results.json` under
 
 | Severity | Id | Bug |
 |---|---|---|
+| medium | BILL-003 | **Back from Checkout, the new member is told "AI is not on yet ... Shared AI: available once your membership is active" after the membership is confirmed**, until a reload. `fetchSharedAiStatus` (`src/utils/aiClient.js`) asks `ai-proxy` once per page load; the load that returns from Checkout asks while the membership is still pending (the Stripe events land after the return, as they do live), gets "pending", and nothing asks again when `useBillingReturn` sees the purchase land. In the documents journey (before `newMember()` reopened the app) Upload opened no file chooser. Found 2026-09-30 by `billing-return.spec.mjs`, once the Checkout stand-in stopped settling the events before the redirect. |
 | high | SETTINGS-005 | After **Delete All My Data** the account dead-ends: the app is not signed out, and every later load shows "Your account identity could not be verified. Your existing records have not changed. Reload to try again (ID-INIT-ACCOUNT_UNAVAILABLE-H409)". `profiles.deleted_at` makes `account_is_closed` true, so `initialize-clerk-profile` answers `account_unavailable`; "records have not changed" is false; Data Rights says only closing the sign-in account needs an email to support; the paid subscription stays active and is not cancelled. |
 | medium | ADMIN-001 | Admin > Accounts **Pause / Approve hangs on "Saving…"** (Cancel disabled) when the member's profile changed after the list loaded, which a member opening the app does. `admin_change_profile_access` raises "Account changed. Refresh and review it again" with SQLSTATE 40001, and PostgREST (14.14 locally) re-runs 40001 transactions, so the refusal re-runs indefinitely (still running 15 minutes later): each re-run locks the member's profile row, so a second attempt on that member hangs too, and the loop holds PostgREST pool connections until PostgREST restarts. A direct call with a stale timestamp did not answer in 40 s. Production impact depends on its PostgREST version; a deterministic refusal should not use a retryable SQLSTATE. |
 | medium | ADMIN-002 | Admin > Tickets: **a ticket's screenshot never displays**. `TicketAttachments` renders `<img src=signed Storage URL>`, and the app's CSP (`src/main.jsx`) allows images only from `'self' data: blob: https://img.clerk.com`, not the Supabase host. |
@@ -786,7 +1003,7 @@ exhaust it.
   invite to join, the paid-member welcome email and the support reply email.
   The base-URL overrides were re-applied where the merge replaced code
   (`limitedLaunchDependencies.ts`: `CLERK_API_BASE`, `RESEND_API_BASE` for the
-  welcome email; `send-ticket-reply`); `config.toml` gained `invite-to-join`
+  welcome email; `send-ticket-reply`); the stack config (now the template) gained `invite-to-join`
   (`verify_jwt = false`, as deployed). Production had moved too (the reply
   email retry table and job), so the lab database was rebuilt from a fresh
   extraction.
@@ -806,6 +1023,37 @@ exhaust it.
   behind; left alone they hold rows and pool connections across runs). The
   owner-controls journey does the same after recording the bug, so its later
   steps can run.
+
+### Review fixes, 2026-09-30
+
+Ten review findings about where the lab could differ from production or leak;
+each was confirmed on this machine before it was fixed.
+
+| Finding | Confirmed | Fix | Test |
+|---|---|---|---|
+| The branch's `supabase/config.toml` (the first one in the repo) disabled migrations and named the lab's seed; production's `supabase db push` would skip every migration and say "up to date"; `config push` would send the template's auth settings | yes (`main` has no root config; the CLI reads it for `db push`, `functions deploy`, `config push`) | moved to `qa-lab/supabase-config.template.toml`, copied only into `.generated/stack/`; no root config at all | `public-repo-safety`: no root config with lab settings; no `config.toml` under `qa-lab/` |
+| Lab ports published on `0.0.0.0` and `[::]` (database with the default password, Studio without login) | yes (`docker ps`, `lsof`: `*:54322`, `*:54323`) | the stack's Docker network is created with `host_binding_ipv4=127.0.0.1` before `supabase start` (per network, no daemon or Colima change); start refuses if any lab port is published beyond loopback; README no longer presents `postgres:postgres` as fine to expose | `lab-fidelity`: the exposed-port parser; checked live: every port `127.0.0.1:` |
+| The local database guard checked only the URL's hostname; libpq's `?host=`/`?hostaddr=`/`?service=`/`?port=` override it | yes, by reading (only `new URL(base).hostname` was checked, and the caller's URL went to psql unchanged; not tried against a remote host) | the URL is rebuilt from a checked loopback host, numeric port and plain database name; any query parameter but `sslmode` refused; psql runs without `PG*` variables (`PGHOSTADDR` would also redirect) | `read-only-guard`: 12 refused shapes, the rebuilt URL, the environment |
+| Checkout and the portal sent a tester's own browser to the real `checkout.stripe.com` / `billing.stripe.com` | yes (only Playwright contexts rerouted them) | the QA build rewrites the three navigation calls to the stand-ins on the app's origin; the URL checks stay production's. The suggested fix (mock answering a lab URL) was not used: `limited-checkout` itself refuses a session whose `url` is not `https://checkout.stripe.com/` | `lab-fidelity`: the rewrite and untouched checks; `production-bundle`: production keeps the Stripe hosts, no stand-in path; journeys now block Stripe hosts |
+| Lab `app_secrets` names differed from production (`anthropic_shared_key` locally, paused in production), and parity excused it with an untrue reason | yes (live read-only parity: production `anthropic_intake_key`, `anthropic_shared_key_paused_launch_20260920`, `gemini_shared_key`) | placeholders under exactly production's names (read with the catalog); stale lab names removed; the parity excuse deleted, so names are compared; `QA_AI_ANTHROPIC_SHARED=1` opts in | `lab-fidelity`: the rows and the absent excuse; live parity: `app secret names 3 / 3` |
+| The Checkout stand-in delivered all three events one by one and waited for 200s before redirecting | yes (the busy 503 also reproduced: two of three concurrent events refused `billing_reconciliation_pending`) | redirect at once; events after a delay, concurrent and shuffled by default, retried like Stripe; delivery plans (delay, order, sequential, drop); smoke and BILL-003 now wait for each event to be accepted | `mocks`: immediate redirect, concurrency, retry of the same event; journeys `billing-return.spec.mjs` (confirming then active without reload; first `invoice.paid` refused busy, retry activates) |
+| CORS never exercised: the app called the stack on its own origin, and Kong answered every function preflight with `*` | yes (Kong's `cors` plugin sits on the whole `functions-v1` route in the running gateway; an `initialize-clerk-profile` preflight from `https://evil.example` was answered by Kong itself with `*`, and its 401 carried `*` although the function pins the production origin) | the app calls a cross-origin API proxy; Kong's cors plugin removed from `/functions/v1/` only; `npm run qa:cors` (also in the smoke) checks the preflight and an error answer of every function the browser calls | `lab-fidelity`: proxy translation, Kong rewrite, contract rules; live: 32 of 32 |
+| `parity-known.json` explained any platform-privilege difference with `"*"` | yes (two `"*"` entries covered 25 objects) | 20 exact keys and one date pattern (Realtime partitions); a one-sided platform object named by application code is never explained | `schema-ddl`: no `"*"`, a new object fails, the reference rule |
+| Mock Resend returned the first id for a reused `Idempotency-Key` whatever the body; batches ignored the key | yes, by reading `accept()` and the batch route | payload hash per key; `409 invalid_idempotent_request` on a different payload within 24 h; batch keys honoured | `mocks`: the 409, key order ignored, batch retry and conflict |
+| Seeded founding program promised 2 places, production's 4; parity did not compare it | yes (read-only aggregate: one live program, `promise_count` 4) | live program seeded with 4 synthetic places (seed version 4); parity compares each mode's promise count and promised places; the lab-only test-mode program is an explained difference; the runner counts public places as 100 minus every slot row | `public-repo-safety`: the live program and its four-address cohort; `schema-ddl`: per-mode comparison |
+
+**What the fixes found.** With the Stripe events arriving after the return, as
+live, the `billing-return` journey found a product bug the old stand-in hid:
+the page load that returns from Checkout asks `ai-proxy` for the shared AI
+status while the membership is still pending, and nothing asks again when the
+purchase lands, so the new member's Documents page says "AI is not on yet ...
+available once your membership is active" until a reload (table below). The
+`documents` journey met it first, through `newMember()`; `newMember()` now opens
+the app again once the membership is active (the member's next visit), so the
+other journeys test their own features and the return path is the billing
+journeys' to check. The support reply email's fixed `Idempotency-Key` with a
+body that can change between retries (above, under Resend) is filed as a
+product follow-up.
 
 ### Checklist expectations that differ from the product's design
 
@@ -830,6 +1078,11 @@ expectation turned out to be written against an older or assumed design:
   Clerk's API (AUTH-006).
 - **Stripe's hosted pages are stand-ins**: Pay, Cancel, and a portal with
   "Cancel at period end". No cards, 3-D Secure, invoices by email or refunds.
+  Event timing is Stripe's shape (back at once, events concurrent, retried) but
+  compressed (Stripe's retries run for days), and the stand-in's objects are
+  complete (subscription active, invoice paid) by the time any event is sent;
+  payment methods that settle later (a session completed with
+  `payment_status: unpaid`) are not reproduced.
 - **AI is mocked**: answers are canned or scripted; `QA_AI=real` with a lab key
   calls the real providers, capped.
 - **Signed Storage links** from functions name the stack's internal gateway
@@ -865,19 +1118,22 @@ expectation turned out to be written against an older or assumed design:
 | `lib/catalog-sql.mjs` | the catalog queries (shared by extract and parity) |
 | `lib/ddl.mjs` | catalog to DDL, with the safety rules |
 | `lib/parity.mjs` | comparison and expression canonicalization |
-| `lib/local-db.mjs` | psql against the local stack only (refuses non-local hosts) |
-| `lib/config.mjs`, `lib/paths.mjs` | `config.toml` values; paths via `fileURLToPath` |
+| `lib/local-db.mjs` | psql against the local stack only: the URL is rebuilt from a checked loopback host, numeric port and plain database name, any query parameter but `sslmode` is refused (libpq would let `host=`, `hostaddr=`, `service=` or `port=` there override the host), and psql runs without the caller's `PG*` connection variables |
+| `lib/config.mjs`, `lib/paths.mjs` | values from the stack template; paths via `fileURLToPath` |
+| `supabase-config.template.toml` | the lab's Supabase CLI config (migrations/seed off, analytics off, the lab token key, per-function `verify_jwt` as deployed); copied into `.generated/stack/`, never to `supabase/config.toml` |
+| `lib/api-proxy.mjs` | the app's Supabase URL: a cross-origin proxy to the local gateway (Origin presented as production's, production's Allow-Origin renamed back) |
+| `cors-check.mjs` | `npm run qa:cors`: the CORS contract of every function the browser calls |
 | `lab.mjs` | `npm run qa:lab` |
 | `smoke.mjs` | `npm run qa:smoke` (also exports `launchBrowser` and `labPage` for later runners) |
 | `stripe-cli.mjs` | `npm run qa:stripe` |
 | `stack-cli.mjs` | start/stop the stack from the lab workdir (`up.sh`, `down.sh`) |
 | `lib/lab-config.mjs` | fixed facts: test domain, issuers, ports, mock mount points |
 | `lib/lab-secrets.mjs` | the lab's token key and fake provider keys (generated per machine) |
-| `lib/stack.mjs` | the lab CLI workdir and stack start/stop |
+| `lib/stack.mjs` | the lab CLI workdir and stack start/stop; loopback-only network and the exposed-port check; Kong's functions CORS removed |
 | `lib/functions-env.mjs` | the edge functions' environment and its guard |
 | `lib/app-env.mjs` | the QA build's `VITE_*` environment |
 | `lib/procs.mjs` | ports, child processes, waits |
-| `app/vite.config.mjs` | the QA-lab build: Clerk alias, issuer rewrite, gateway, output folder |
+| `app/vite.config.mjs` | the QA-lab build: Clerk alias, issuer and hosted-page rewrites (`LAB_REWRITES`), app server, output folder |
 | `app/clerk-shim.jsx`, `app/qa-clerk.js`, `app/QaSignIn.jsx` | the QA sign-in |
 | `mocks/server.mjs` | the mock server (`clerk.mjs`, `stripe.mjs`, `stripe-params.mjs`, `resend.mjs`, `ai.mjs`, `signing.mjs`, `store.mjs`, `http.mjs`) |
 | `e2e/run.mjs` | `npm run qa:e2e` (starts the lab if needed, `--fresh`, lab health) |
@@ -885,13 +1141,11 @@ expectation turned out to be written against an older or assumed design:
 | `e2e/*.spec.mjs` | the journeys (list below) |
 | `e2e/support/fixtures.mjs`, `e2e/support/lab.mjs` | the journeys' fixtures and shared steps |
 | `e2e/support/results-reporter.mjs` | writes `.generated/results.json` |
-| `.generated/` (gitignored) | `catalog.json`, `schema.sql`, `local-secrets.json`, `parity-report.txt`; step 2: `lab-secrets.json`, `stack/`, `functions.env`, `lab.json`, `lab-ports.json`, `mocks/`, `app-dist/`, `logs/`, `smoke/`; step 3: `results.json`, `e2e/` |
-| `../supabase/config.toml` | local stack config: migrations/seed off, analytics off, per-function `verify_jwt` as deployed |
+| `.generated/` (gitignored) | `catalog.json`, `schema.sql`, `local-secrets.json`, `parity-report.txt`; step 2: `lab-secrets.json`, `stack/` (the CLI workdir: `supabase/config.toml` from the template, `signing_keys.json`, a `functions` link), `functions.env`, `lab.json`, `lab-ports.json`, `mocks/`, `app-dist/`, `logs/`, `smoke/`; step 3: `results.json`, `e2e/` |
 
-`supabase/config.toml` also governs `supabase functions deploy` from this repo:
-its `[functions.*]` entries state `verify_jwt` exactly as production runs today
-(every function off except `track-event`), which matches the `--no-verify-jwt`
-flags the deploy uses.
+There is no `supabase/config.toml` (see "No `supabase/config.toml`" above):
+production deploys keep passing `--no-verify-jwt` as their docs say, and `db
+push` keeps applying migrations.
 
 ## Tests (run in `npm test`, offline)
 
@@ -902,7 +1156,13 @@ flags the deploy uses.
 - `tests/qa-lab/public-repo-safety.test.mjs`: seed addresses on
   `qa.credentialdomd.test` only, seed writes configuration tables only, no
   secrets or real mailboxes in committed lab files, `.generated/` gitignored,
-  `config.toml` settings, and no `src/` import of lab code.
+  the stack template's settings, **no root `supabase/config.toml` carrying lab
+  settings** (migrations off, `qa-lab/` paths, the lab project, a signing key)
+  and no `config.toml` under `qa-lab/`, and no `src/` import of lab code.
+- `tests/qa-lab/read-only-guard.test.mjs`: also the LOCAL database guard: `host=`,
+  `hostaddr=`, `service=`, `port=`, `options=` and repeated parameters in the URL
+  query, host lists, remote hosts, a missing port and odd database names are
+  refused; the URL handed to psql is rebuilt; psql gets no `PG*` variables.
 - `tests/path-with-space-guard.test.mjs` now also scans `qa-lab/`.
 
 Step 2 (also offline, no Docker needed):
@@ -927,6 +1187,21 @@ Step 2 (also offline, no Docker needed):
 
 Step 3 (offline):
 
+- `tests/qa-lab/lab-fidelity.test.mjs`: where the lab could quietly differ from
+  production: published ports beyond loopback are found; Kong loses its cors
+  plugin on functions only; the API proxy's header translation and a function's
+  own CORS answer through it (an error without headers stays without); the
+  `app_secrets` names follow production's catalog and parity no longer excuses a
+  mismatch; the QA build's hosted-page rewrite (checks untouched); the CORS
+  contract check's rules.
+- `tests/qa-lab/mocks.test.mjs`: also the hosted Pay button returning at once
+  with the events concurrent after the plan's delay and a 503 retried as the
+  same event; delivery-plan validation; Resend's 409 for a reused key with a
+  different payload, and batch idempotency.
+- `tests/qa-lab/schema-ddl.test.mjs`: also parity-known's exact keys (no `"*"`
+  on platform privileges; the date pattern), the rule that a one-sided platform
+  object named by application code is never explained, and founding programs
+  compared per mode.
 - `tests/qa-lab/e2e-results.test.mjs`: how the reporter turns journeys into
   pass / fail / blocked / not_run per checklist id, and that `--list` keeps the
   last results.

@@ -1,5 +1,5 @@
 {
-  "about": "Differences between the local QA lab and production that are expected. qa-lab/parity.mjs reports these as explained; any other difference fails the check. Each reason is repeated in qa-lab/README.md.",
+  "about": "Differences between the local QA lab and production that are expected. qa-lab/parity.mjs reports these as explained; any other difference fails the check. Keys are exact (keyPattern only where the object is named by date); platform privileges never take \"*\". A platform object on one side only is never explained once application code names it. Each reason is repeated in qa-lab/README.md.",
   "differences": [
     {
       "category": "cron job active",
@@ -74,22 +74,130 @@
       "reason": "Default privileges of the local-only supabase_functions schema."
     },
     {
-      "category": "config rows",
-      "key": "app_secrets names",
-      "kind": "differs",
-      "reason": "app_secrets holds production AI provider keys; the lab never copies them, and leaves the table empty."
-    },
-    {
       "category": "platform privileges",
-      "key": "*",
+      "key": "table auth.scim_users",
       "kind": "missing locally",
-      "reason": "Supabase platform object that production's (newer) auth or storage-api version has and the local image (CLI 2.109.1: storage-api v1.62.5, gotrue v2.192.0) does not: auth MFA recovery codes and SCIM tables, new storage.search*/list* signatures, and the storage bucket-control guards (storage.protect_bucket_control_columns, storage.enforce_bucket_lifecycle_service_role) behind production's protect_bucket_control_* triggers on storage.buckets."
+      "reason": "Supabase Auth (gotrue) in production is newer than the local image (CLI 2.109.1: gotrue v2.192.0): its MFA recovery-code and SCIM tables do not exist locally. No application object names them (qa:parity checks function bodies, views, policies, triggers and cron commands)."
     },
     {
       "category": "platform privileges",
-      "key": "*",
+      "key": "table auth.scim_tokens",
+      "kind": "missing locally",
+      "reason": "Supabase Auth (gotrue) in production is newer than the local image (CLI 2.109.1: gotrue v2.192.0): its MFA recovery-code and SCIM tables do not exist locally. No application object names them (qa:parity checks function bodies, views, policies, triggers and cron commands)."
+    },
+    {
+      "category": "platform privileges",
+      "key": "table auth.mfa_recovery_codes",
+      "kind": "missing locally",
+      "reason": "Supabase Auth (gotrue) in production is newer than the local image (CLI 2.109.1: gotrue v2.192.0): its MFA recovery-code and SCIM tables do not exist locally. No application object names them (qa:parity checks function bodies, views, policies, triggers and cron commands)."
+    },
+    {
+      "category": "platform privileges",
+      "key": "table auth.mfa_recovery_code_sets",
+      "kind": "missing locally",
+      "reason": "Supabase Auth (gotrue) in production is newer than the local image (CLI 2.109.1: gotrue v2.192.0): its MFA recovery-code and SCIM tables do not exist locally. No application object names them (qa:parity checks function bodies, views, policies, triggers and cron commands)."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.get_size_by_bucket(text, text)",
+      "kind": "missing locally",
+      "reason": "Supabase Storage in production is newer than the local image (CLI 2.109.1: storage-api v1.62.5): this signature does not exist locally (the local image has an older one, listed as only local). No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.search(text, text, integer, integer, integer, text, text, text, text, text)",
+      "kind": "missing locally",
+      "reason": "Supabase Storage in production is newer than the local image (CLI 2.109.1: storage-api v1.62.5): this signature does not exist locally (the local image has an older one, listed as only local). No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.list_multipart_uploads_with_delimiter(text, text, text, integer, text, text, text)",
+      "kind": "missing locally",
+      "reason": "Supabase Storage in production is newer than the local image (CLI 2.109.1: storage-api v1.62.5): this signature does not exist locally (the local image has an older one, listed as only local). No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.search_by_timestamp(text, text, integer, integer, text, text, text, text, text, text, text)",
+      "kind": "missing locally",
+      "reason": "Supabase Storage in production is newer than the local image (CLI 2.109.1: storage-api v1.62.5): this signature does not exist locally (the local image has an older one, listed as only local). No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.list_objects_with_delimiter(text, text, text, integer, text, text, text, text, text, timestamp with time zone, text)",
+      "kind": "missing locally",
+      "reason": "Supabase Storage in production is newer than the local image (CLI 2.109.1: storage-api v1.62.5): this signature does not exist locally (the local image has an older one, listed as only local). No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.search_v2(text, text, integer, integer, text, text, text, text, text, text, timestamp with time zone, text, boolean)",
+      "kind": "missing locally",
+      "reason": "Supabase Storage in production is newer than the local image (CLI 2.109.1: storage-api v1.62.5): this signature does not exist locally (the local image has an older one, listed as only local). No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.protect_bucket_control_columns()",
+      "kind": "missing locally",
+      "reason": "Production's storage bucket-control guard, behind its protect_bucket_control_* triggers on storage.buckets; the local storage-api image predates it. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.enforce_bucket_lifecycle_service_role()",
+      "kind": "missing locally",
+      "reason": "Production's storage bucket-control guard, behind its protect_bucket_control_* triggers on storage.buckets; the local storage-api image predates it. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "table storage.iceberg_tables",
       "kind": "only local",
-      "reason": "Supabase platform object that only the local image has: older storage.search*/list* signatures, storage.iceberg_* tables, and Realtime's daily realtime.messages_* partitions."
+      "reason": "Older storage-api signature or table that only the local image (CLI 2.109.1: storage-api v1.62.5) has; production's newer signature is listed as missing locally. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "table storage.iceberg_namespaces",
+      "kind": "only local",
+      "reason": "Older storage-api signature or table that only the local image (CLI 2.109.1: storage-api v1.62.5) has; production's newer signature is listed as missing locally. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.get_size_by_bucket()",
+      "kind": "only local",
+      "reason": "Older storage-api signature or table that only the local image (CLI 2.109.1: storage-api v1.62.5) has; production's newer signature is listed as missing locally. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.search(text, text, integer, integer, integer, text, text, text)",
+      "kind": "only local",
+      "reason": "Older storage-api signature or table that only the local image (CLI 2.109.1: storage-api v1.62.5) has; production's newer signature is listed as missing locally. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.search_v2(text, text, integer, integer, text, text, text, text)",
+      "kind": "only local",
+      "reason": "Older storage-api signature or table that only the local image (CLI 2.109.1: storage-api v1.62.5) has; production's newer signature is listed as missing locally. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.list_objects_with_delimiter(text, text, text, integer, text, text, text)",
+      "kind": "only local",
+      "reason": "Older storage-api signature or table that only the local image (CLI 2.109.1: storage-api v1.62.5) has; production's newer signature is listed as missing locally. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.search_by_timestamp(text, text, integer, integer, text, text, text, text)",
+      "kind": "only local",
+      "reason": "Older storage-api signature or table that only the local image (CLI 2.109.1: storage-api v1.62.5) has; production's newer signature is listed as missing locally. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "key": "function storage.list_multipart_uploads_with_delimiter(text, text, text, integer, text, text)",
+      "kind": "only local",
+      "reason": "Older storage-api signature or table that only the local image (CLI 2.109.1: storage-api v1.62.5) has; production's newer signature is listed as missing locally. No application object names it."
+    },
+    {
+      "category": "platform privileges",
+      "keyPattern": "^table realtime\\.messages_\\d{4}_\\d{2}_\\d{2}$",
+      "kind": "only local",
+      "reason": "Realtime's daily realtime.messages_YYYY_MM_DD partitions, which only the local Realtime container creates (named by date, so matched by pattern; any other realtime object still fails)."
     },
     {
       "category": "platform privileges",
@@ -102,6 +210,12 @@
       "key": "table realtime.schema_migrations",
       "kind": "differs",
       "reason": "Realtime's own migration bookkeeping table: the local Realtime container grants it differently. The application never reads it."
+    },
+    {
+      "category": "config rows",
+      "key": "founding program (test)",
+      "kind": "only local",
+      "reason": "The lab also seeds a test-mode founding program (two synthetic promised places) so test-mode billing can be exercised; production has a live-mode program only. The live-mode program is compared exactly (promise count and promised places)."
     }
   ]
 }

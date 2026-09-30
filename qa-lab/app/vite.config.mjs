@@ -10,13 +10,22 @@
 // tests/qa-lab/production-bundle.test.mjs). What a QA-lab build does differently:
 //   1. "@clerk/clerk-react" resolves to ./clerk-shim.jsx (the QA sign-in).
 //   2. Two production-pinned Clerk issuer literals, in exactly two modules, are
-//      rewritten to the lab's issuers (the build fails if either is missing).
-//   3. The app server is the lab gateway: /__qa/sb proxies the local Supabase
-//      stack (presenting requests as coming from the production origin the
-//      functions pin), /__qa/mock proxies the mock server, and /api/* is
-//      relayed the way production's Cloudflare worker relays it.
+//      rewritten to the lab's issuers, and the three places that send the
+//      browser to Stripe's hosted pages (checkout.stripe.com,
+//      billing.stripe.com) send it to the mock's stand-ins on the app's own
+//      origin instead (/__qa/mock/qa/stripe/hosted/...). The URL checks
+//      themselves are untouched: the app still accepts only a Stripe-shaped
+//      URL, and limited-checkout still refuses a session whose url is not
+//      https://checkout.stripe.com/, so the mock keeps answering Stripe URLs.
+//      The build fails if any rewritten text is missing (LAB_REWRITES).
+//   3. The app server serves the build, proxies /__qa/mock to the mock server,
+//      and relays /api/* the way production's Cloudflare worker does. The
+//      Supabase API is NOT on this origin: the app calls the lab's API proxy
+//      on its own port (qa-lab/lib/api-proxy.mjs), cross-origin as live, so
+//      the browser enforces the functions' CORS headers.
 //   4. Output goes to qa-lab/.generated/app-dist, never dist/.
-// It refuses to run unless VITE_QA_LAB=1 and the Supabase URL is this machine.
+// It refuses to run unless VITE_QA_LAB=1 and the Supabase URL is this machine
+// on another origin than the app.
 import { defineConfig } from 'vite';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -24,17 +33,44 @@ import { fileURLToPath } from 'node:url';
 import baseConfig from '../../vite.config.js';
 import { computePrecacheUrls, stampPrecache, verifyPrecache } from '../../scripts/sw-precache.mjs';
 import { QA_APP_DIST, REPO_ROOT } from '../lib/paths.mjs';
-import { APP_PROXY, APP_PUBLIC_ORIGIN, LAB_ISSUER, LAB_LEGACY_ISSUER, PRODUCTION_ISSUER, PRODUCTION_LEGACY_ISSUER, SUPABASE_API_URL } from '../lib/lab-config.mjs';
+import { APP_PROXY, HOSTED_STAND_IN_PATH, LAB_ISSUER, LAB_LEGACY_ISSUER, PRODUCTION_ISSUER, PRODUCTION_LEGACY_ISSUER, SUPABASE_API_URL } from '../lib/lab-config.mjs';
 
 const SHIM = fileURLToPath(new URL('./clerk-shim.jsx', import.meta.url));
 const APP_DIR = fileURLToPath(new URL('.', import.meta.url));
 const LOCAL = new Set(['127.0.0.1', 'localhost']);
 
-/** Module -> the production literals it must contain, and what the lab build puts there instead. */
-export const ISSUER_REWRITES = Object.freeze({
+/**
+ * Where a Stripe hosted-page URL sends the browser in the QA build: the mock's
+ * stand-in on the app's own origin (a path, so the build does not name a port).
+ * Any other URL is left alone. Inlined as an expression at the call site.
+ */
+export const HOSTED_STAND_IN = `((u) => { const m = /^https:\\/\\/(checkout|billing)\\.stripe\\.com\\/(?:c\\/pay|p\\/session)\\/([A-Za-z0-9_]+)/.exec(String(u)); return m ? ${JSON.stringify(HOSTED_STAND_IN_PATH + '/')} + (m[1] === "checkout" ? "checkout/" : "portal/") + m[2] : u; })`;
+
+/** Module -> the production text it must contain, and what the lab build puts there instead (every occurrence). */
+export const LAB_REWRITES = Object.freeze({
   'src/utils/limitedLaunchClient.js': [[PRODUCTION_ISSUER, LAB_ISSUER], [PRODUCTION_LEGACY_ISSUER, LAB_LEGACY_ISSUER]],
   'src/utils/continuityRecovery.js': [[PRODUCTION_ISSUER, LAB_ISSUER], [PRODUCTION_LEGACY_ISSUER, LAB_LEGACY_ISSUER]],
+  // Checkout (limited launch) and the billing portal.
+  'src/components/pages/LimitedLaunchMembership.jsx': [['window.location.assign(result.url)', `window.location.assign(${HOSTED_STAND_IN}(result.url))`]],
+  'src/hooks/useSubscription.js': [
+    ['window.location.assign(result.url)', `window.location.assign(${HOSTED_STAND_IN}(result.url))`],
+    ['window.location.href = res.data.url', `window.location.href = ${HOSTED_STAND_IN}(res.data.url)`],
+  ],
 });
+/** Kept for callers of the step-2 name. */
+export const ISSUER_REWRITES = LAB_REWRITES;
+
+/** Applies LAB_REWRITES[rel] to `code`; throws naming the text that is missing. */
+export function applyLabRewrites(rel, code) {
+  const swaps = LAB_REWRITES[rel];
+  if (!swaps) return null;
+  let out = code;
+  for (const [from, to] of swaps) {
+    if (!out.includes(from)) throw new Error(`qa-lab: ${rel} no longer contains ${from}; update qa-lab/app/vite.config.mjs`);
+    out = out.split(from).join(to);
+  }
+  return out;
+}
 
 function rewriteIssuers(command) {
   const done = new Set();
@@ -43,19 +79,15 @@ function rewriteIssuers(command) {
     enforce: 'pre',
     transform(code, id) {
       const rel = path.relative(REPO_ROOT, id.split('?')[0]).split(path.sep).join('/');
-      const swaps = ISSUER_REWRITES[rel];
-      if (!swaps) return null;
-      let out = code;
-      for (const [from, to] of swaps) {
-        if (!out.includes(from)) this.error(`qa-lab: ${rel} no longer contains ${from}; update qa-lab/app/vite.config.mjs`);
-        out = out.split(from).join(to);
-      }
+      if (!LAB_REWRITES[rel]) return null;
+      let out;
+      try { out = applyLabRewrites(rel, code); } catch (e) { this.error(e.message); }
       done.add(rel);
       return { code: out, map: null };
     },
     buildEnd(error) {
       if (command !== 'build' || error) return;
-      for (const rel of Object.keys(ISSUER_REWRITES)) if (!done.has(rel)) this.error(`qa-lab: ${rel} was not part of the build; update qa-lab/app/vite.config.mjs`);
+      for (const rel of Object.keys(LAB_REWRITES)) if (!done.has(rel)) this.error(`qa-lab: ${rel} was not part of the build; update qa-lab/app/vite.config.mjs`);
     },
   };
 }
@@ -112,14 +144,8 @@ function gateway(anonKey) {
 
 function proxies(mockUrl) {
   const strip = (prefix) => (p) => p.slice(prefix.length) || '/';
-  // The functions pin production's origin (CORS, Origin checks); the live app
-  // runs on it. The lab app presents its requests the same way.
-  const presentAsProduction = (proxy) => {
-    proxy.on('proxyReq', (proxyReq, req) => { if (req.headers.origin) proxyReq.setHeader('origin', APP_PUBLIC_ORIGIN); });
-    proxy.on('proxyReqWs', (proxyReq, req) => { if (req.headers.origin) proxyReq.setHeader('origin', APP_PUBLIC_ORIGIN); });
-  };
+  // Only the mock server. The Supabase API is on the lab's API proxy (another origin).
   return {
-    [APP_PROXY.supabase]: { target: SUPABASE_API_URL, changeOrigin: true, ws: true, rewrite: strip(APP_PROXY.supabase), configure: presentAsProduction },
     [APP_PROXY.mock]: { target: mockUrl, changeOrigin: true, rewrite: strip(APP_PROXY.mock) },
   };
 }
@@ -148,7 +174,10 @@ export default defineConfig(({ command }) => {
   if (!LOCAL.has(supabaseUrl.hostname)) throw new Error(`qa-lab: refusing a Supabase URL that is not this machine (${supabaseUrl.hostname})`);
   const mockUrl = process.env.QA_LAB_MOCK_URL || '';
   if (command === 'serve' && !/^http:\/\/127\.0\.0\.1:\d+$/.test(mockUrl)) throw new Error('qa-lab: QA_LAB_MOCK_URL must be the local mock server (http://127.0.0.1:<port>)');
-  const port = Number(process.env.QA_LAB_APP_PORT || supabaseUrl.port);
+  const port = Number(process.env.QA_LAB_APP_PORT);
+  if (!Number.isInteger(port) || port <= 0) throw new Error('qa-lab: QA_LAB_APP_PORT must be the lab app port');
+  // Cross-origin, as live: the browser must check the functions' CORS headers.
+  if (supabaseUrl.origin === `http://127.0.0.1:${port}` || supabaseUrl.origin === `http://localhost:${port}`) throw new Error('qa-lab: the Supabase URL must be the lab API proxy, another origin than the app (qa-lab/lib/api-proxy.mjs)');
   const buildId = `${JSON.parse(baseConfig.define.__APP_BUILD_ID__)}-qalab`;
   const plugins = baseConfig.plugins.filter((p) => !(p && !Array.isArray(p) && ['stamp-build-id', 'assert-precache'].includes(p.name)));
   return {

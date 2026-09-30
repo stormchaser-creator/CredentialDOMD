@@ -1,10 +1,19 @@
-# CredentialDOMD QA lab: LOCAL Supabase stack only (see qa-lab/README.md).
-# Start it with `npm run qa:up`, stop it with `npm run qa:down`.
+# CredentialDOMD QA lab: TEMPLATE for the LOCAL Supabase stack only (see qa-lab/README.md).
 #
-# This file configures the local containers. The database schema is NOT built from
-# supabase/migrations (that chain does not rebuild production from empty); it is
-# reconstructed from production's catalog by qa-lab/extract-schema.mjs and applied by
-# qa-lab/apply-schema.mjs. Migrations and seeding are therefore disabled below.
+# Not a Supabase CLI config by itself, on purpose. The CLI reads supabase/config.toml,
+# and the repository has none (production's procedures such as `supabase db push`
+# and `supabase functions deploy` run with the CLI defaults, as they always have).
+# qa-lab/lib/stack.mjs copies this template into the lab's own CLI workdir,
+# qa-lab/.generated/stack/supabase/config.toml, adds the lab's edge-function
+# environment, and starts the stack from there (npm run qa:up / qa:lab). A root
+# supabase/config.toml with these settings would make `supabase db push` skip every
+# migration ("migrations disabled") while reporting the remote as up to date
+# (tests/qa-lab/public-repo-safety.test.mjs refuses one).
+#
+# The database schema is NOT built from supabase/migrations (that chain does not
+# rebuild production from empty); it is reconstructed from production's catalog by
+# qa-lab/extract-schema.mjs and applied by qa-lab/apply-schema.mjs. Migrations and
+# seeding are therefore disabled below.
 #
 # The [functions.*] entries mirror each deployed function's verify_jwt setting in
 # production, so the local gateway authenticates exactly as production does.
@@ -75,11 +84,11 @@ schema_paths = []
 
 [db.seed]
 # If enabled, seeds the database after migrations during a db reset.
-# QA lab: qa-lab/up.sh applies qa-lab/seed.sql after the reconstructed schema.
+# QA lab: qa-lab/apply-schema.mjs applies qa-lab/seed.sql after the reconstructed schema.
 enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["../qa-lab/seed.sql"]
+sql_paths = []
 
 [db.network_restrictions]
 # Enable management of network restrictions.
@@ -120,7 +129,7 @@ port = 54324
 # Uncomment to expose additional ports for testing user applications that send emails.
 # smtp_port = 54325
 # pop3_port = 54326
-# admin_email = "admin@email.com"
+# admin_email = "admin@example.com"
 # sender_name = "Admin"
 
 [storage]
@@ -177,7 +186,10 @@ jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
 # jwt_issuer = ""
 # Path to JWT signing key. DO NOT commit your signing keys file to git.
-# signing_keys_path = "./signing_keys.json"
+# QA lab: the mock Clerk's token key, written next to the generated copy of this file
+# (qa-lab/.generated/stack/supabase/signing_keys.json, gitignored), so the local stack
+# trusts the tokens the lab's QA sign-in mints.
+signing_keys_path = "./signing_keys.json"
 # If disabled, the refresh token will never expire.
 enable_refresh_token_rotation = true
 # Allows refresh tokens to be reused after expiry, up to the specified interval in seconds.
@@ -251,7 +263,7 @@ otp_expiry = 3600
 # port = 587
 # user = "apikey"
 # pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
+# admin_email = "admin@example.com"
 # sender_name = "Admin"
 
 # Uncomment to customize email template

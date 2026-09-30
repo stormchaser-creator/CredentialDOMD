@@ -9,12 +9,24 @@
 //   POST /qa/inbound                              simulate mail arriving at an @credentialdomd.com
 //                                                 address: stored for the Receiving API, then a
 //                                                 Svix-signed email.received webhook to email-inbound
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { randomAlnum } from '../lib/lab-secrets.mjs';
 import { svixHeaders } from './signing.mjs';
 import { HttpError, esc, html, json, readJson, send } from './http.mjs';
 
 const list = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]).map(String);
+
+/** How long Resend remembers an Idempotency-Key. */
+export const IDEMPOTENCY_TTL_MS = 24 * 3600 * 1000;
+/** A stable hash of a request payload (key order ignored), to tell a retry from a different request under the same key. */
+export function payloadHash(body) {
+  const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v);
+  return createHash('sha256').update(JSON.stringify(canon(body))).digest('hex');
+}
+/** Resend's answer to a key reused with a different payload within 24 hours. */
+const idempotencyMismatch = () => new HttpError(409, 'Same idempotency key used with a different request payload.', {
+  statusCode: 409, name: 'invalid_idempotent_request', message: 'Same idempotency key used with a different request payload. Change your idempotency key or payload.',
+});
 const addressOf = (v) => (/<([^>]+)>/.exec(v)?.[1] || v || '').trim().toLowerCase();
 
 export function createResendMock({ store, secrets, supabaseUrl, dockerBaseUrl, log = console.log }) {
@@ -24,15 +36,32 @@ export function createResendMock({ store, secrets, supabaseUrl, dockerBaseUrl, l
     }
   };
 
-  function accept(body, idempotencyKey) {
+  function validate(body) {
     if (!body || typeof body !== 'object') throw new HttpError(422, 'invalid body', { statusCode: 422, name: 'validation_error', message: 'Invalid body' });
     const to = list(body.to);
     if (!body.from || !to.length || typeof body.subject !== 'string') {
       throw new HttpError(422, 'from, to and subject are required', { statusCode: 422, name: 'validation_error', message: 'Missing `from`, `to` or `subject` field.' });
     }
+  }
+  // Resend: a repeat of an Idempotency-Key within 24 hours with the SAME payload
+  // returns the first answer and sends nothing; with a DIFFERENT payload it is
+  // refused 409 invalid_idempotent_request (and nothing is sent).
+  const fresh = (at) => Date.now() - Date.parse(at) < IDEMPOTENCY_TTL_MS;
+  function priorSend(idempotencyKey, hash) {
+    const prior = store.state.emails.find((e) => e.idempotencyKey === idempotencyKey && fresh(e.created_at));
+    if (!prior) return null;
+    // Emails captured before payload hashes were kept count as the same payload.
+    if (prior.idempotencyHash && prior.idempotencyHash !== hash) throw idempotencyMismatch();
+    return { id: prior.id, duplicate: true };
+  }
+
+  function accept(body, idempotencyKey) {
+    validate(body);
+    const to = list(body.to);
+    const hash = idempotencyKey ? payloadHash(body) : null;
     if (idempotencyKey) {
-      const prior = store.state.emails.find((e) => e.idempotencyKey === idempotencyKey);
-      if (prior) return { id: prior.id, duplicate: true };
+      const prior = priorSend(idempotencyKey, hash);
+      if (prior) return prior;
     }
     const id = randomUUID();
     const email = {
@@ -48,7 +77,7 @@ export function createResendMock({ store, secrets, supabaseUrl, dockerBaseUrl, l
     };
     store.putEmail(email);
     // The index keeps the idempotency key, so a retried send returns the first id (as Resend does).
-    store.update((s) => { s.emails.unshift({ id, created_at: email.created_at, from: email.from, to: email.to, subject: email.subject, tags: email.tags, attachments: email.attachments.length, idempotencyKey: email.idempotencyKey }); });
+    store.update((s) => { s.emails.unshift({ id, created_at: email.created_at, from: email.from, to: email.to, subject: email.subject, tags: email.tags, attachments: email.attachments.length, idempotencyKey: email.idempotencyKey, idempotencyHash: hash }); });
     log(`resend: captured "${email.subject}" to ${email.to.join(', ')}`);
     return { id };
   }
@@ -140,7 +169,20 @@ iframe{width:100%;height:60vh;border:1px solid var(--line);border-radius:8px;bac
       auth(req);
       const body = await readJson(req);
       if (!Array.isArray(body)) throw new HttpError(422, 'batch body must be an array');
-      json(res, 200, { data: body.map((b) => ({ id: accept(b).id })) });
+      // The key covers the whole batch: a retry with the same emails returns the first ids.
+      const key = req.headers['idempotency-key'];
+      const hash = key ? payloadHash(body) : null;
+      if (key) {
+        const prior = (store.state.batchIdempotency || []).find((b) => b.key === key && fresh(b.at));
+        if (prior) {
+          if (prior.hash !== hash) throw idempotencyMismatch();
+          return json(res, 200, { data: prior.ids.map((id) => ({ id })) });
+        }
+      }
+      for (const b of body) validate(b);
+      const ids = body.map((b) => accept(b).id);
+      if (key) store.update((s) => { s.batchIdempotency = [{ key, hash, ids, at: new Date().toISOString() }, ...(s.batchIdempotency || [])].slice(0, 500); });
+      json(res, 200, { data: ids.map((id) => ({ id })) });
     });
     router.add('GET', '/resend/emails/receiving/:id', (req, res, { params }) => {
       auth(req);

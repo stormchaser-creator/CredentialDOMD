@@ -87,9 +87,11 @@ test('protected identity stays on the device and encrypted; a custom category ho
     await openCredentials(page, 'QA Hospital Badges');
     await page.getByRole('heading', { name: /QA Hospital Badges/ }).waitFor();
     const d = page.getByRole('dialog').filter({ hasText: 'Badge number' });
+    // Click Add again only while no dialog is open at all: under load the form can take a
+    // few seconds to appear, and a second click then lands on the opening form and closes it.
     for (let attempt = 0; attempt < 3 && !(await d.isVisible().catch(() => false)); attempt++) {
-      await page.getByRole('button', { name: 'Add', exact: true }).first().click();
-      await d.waitFor({ timeout: 5000 }).catch(() => {});
+      if (!(await page.getByRole('dialog').count())) await page.getByRole('button', { name: 'Add', exact: true }).first().click();
+      await d.waitFor({ timeout: 10000 }).catch(() => {});
     }
     await d.waitFor({ timeout: 5000 });
     const labels = await d.locator('label').allTextContents();

@@ -5,10 +5,17 @@
 //   sessions [--email a@qa.credentialdomd.test | --subject user_qa... | --status open]
 //       lists checkout sessions, newest first
 //   complete [cs_live_... | --latest | --email a@qa.credentialdomd.test] [--no-events] [--endpoint name]
+//            [--concurrent] [--order shuffled|checklist|invoice-first] [--delay MS] [--drop TYPE]
 //       completes the checkout as if the buyer paid (a subscription and its paid
 //       first invoice), then posts correctly signed checkout.session.completed,
 //       customer.subscription.created and invoice.paid events to the local
-//       limited-stripe-webhook (or --endpoint), and prints each answer
+//       limited-stripe-webhook (or --endpoint), retries any answer that is not
+//       2xx the way Stripe does (lab backoff), and prints every attempt. By
+//       default one after another in the checklist's order; --concurrent sends
+//       them at once, as Stripe does after a real Checkout
+//   plan [cs_live_... | --default] [--delay MS] [--order ...] [--sequential] [--drop TYPE] [--clear]
+//       how the hosted Pay button delivers the events for one session, or by
+//       default (default: 1500 ms after the browser is sent back, all at once, shuffled)
 //   expire cs_live_...                       expires an open session (+ checkout.session.expired)
 //   cancel sub_... [--now]                   cancel at period end (customer.subscription.updated),
 //                                            or at once (customer.subscription.deleted)
@@ -21,7 +28,8 @@ import { isMain } from './lib/paths.mjs';
 import { readRuntime } from './lab.mjs';
 
 const USAGE = `usage: npm run qa:stripe -- sessions [--email E | --subject S | --status open]
-       npm run qa:stripe -- complete [cs_... | --latest | --email E] [--no-events] [--endpoint NAME]
+       npm run qa:stripe -- complete [cs_... | --latest | --email E] [--no-events] [--endpoint NAME] [--concurrent] [--order O] [--delay MS] [--drop TYPE]
+       npm run qa:stripe -- plan [cs_... | --default] [--delay MS] [--order O] [--sequential] [--drop TYPE] [--clear]
        npm run qa:stripe -- expire cs_...
        npm run qa:stripe -- cancel sub_... [--now]
        npm run qa:stripe -- resend evt_... [--endpoint NAME]
@@ -51,7 +59,7 @@ async function subjectForEmail(call, email) {
 const money = (cents) => `${((cents || 0) / 100).toFixed(2)} USD`;
 const when = (t) => new Date(t * 1000).toISOString().replace('T', ' ').slice(0, 19);
 const sessionLine = (s) => `${s.id}  ${s.status.padEnd(8)} ${money(s.amount_total).padStart(10)}  ${when(s.created)}  ${s.metadata?.offer_id || '?'}  ${s.metadata?.clerk_user_id || s.customer}`;
-const deliveryLine = (d) => `${d.status >= 200 && d.status < 300 ? 'ok  ' : 'FAIL'} ${String(d.status || 'none').padEnd(4)} ${d.type.padEnd(32)} -> ${d.endpoint}  ${String(d.response).replace(/\s+/g, ' ').slice(0, 160)}`;
+const deliveryLine = (d) => `${d.dropped ? 'drop' : d.status >= 200 && d.status < 300 ? 'ok  ' : d.willRetry ? 'retry' : 'FAIL'} ${String(d.status || 'none').padEnd(4)} ${d.type.padEnd(32)} -> ${d.endpoint}${d.attempt > 1 ? ` (attempt ${d.attempt})` : ''}  ${String(d.response).replace(/\s+/g, ' ').slice(0, 160)}`;
 
 async function listSessions(call, { email, subject, status }) {
   const q = new URLSearchParams();
@@ -65,9 +73,17 @@ export async function runStripeCli(argv = process.argv.slice(2), { call = mockCl
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     email: { type: 'string' }, subject: { type: 'string' }, status: { type: 'string' }, latest: { type: 'boolean', default: false },
     'no-events': { type: 'boolean', default: false }, endpoint: { type: 'string' }, now: { type: 'boolean', default: false },
+    concurrent: { type: 'boolean', default: false }, sequential: { type: 'boolean', default: false }, order: { type: 'string' }, delay: { type: 'string' },
+    drop: { type: 'string', multiple: true }, default: { type: 'boolean', default: false }, clear: { type: 'boolean', default: false },
   } });
+  const planFields = (base) => ({
+    ...base,
+    ...(values.concurrent ? { mode: 'concurrent' } : values.sequential ? { mode: 'sequential' } : {}),
+    ...(values.order ? { order: values.order } : {}), ...(values.delay !== undefined ? { delayMs: Number(values.delay) } : {}),
+    ...(values.drop ? { drop: values.drop } : {}),
+  });
   const [command, target] = positionals;
-  const deliveredOk = (list) => list.every((d) => d.status >= 200 && d.status < 300);
+  const deliveredOk = (list) => list.every((d) => d.dropped || (d.status >= 200 && d.status < 300));
 
   switch (command) {
     case 'sessions': {
@@ -84,10 +100,29 @@ export async function runStripeCli(argv = process.argv.slice(2), { call = mockCl
         id = open[0].id;
       }
       if (!/^cs_(live|test)_[A-Za-z0-9]+$/.test(id)) throw new Error(`not a checkout session id: ${id}`);
-      const done = await call(`/qa/stripe/checkout/${encodeURIComponent(id)}/complete`, { method: 'POST', body: { send: !values['no-events'], ...(values.endpoint ? { endpoint: values.endpoint } : {}) } });
+      const done = await call(`/qa/stripe/checkout/${encodeURIComponent(id)}/complete`, { method: 'POST', body: { send: !values['no-events'], plan: planFields({ delayMs: 0, order: 'checklist', mode: 'sequential' }), ...(values.endpoint ? { endpoint: values.endpoint } : {}) } });
       out(`completed ${done.session.id}\n  subscription ${done.subscription.id} (${done.subscription.status}), invoice ${done.invoice.id} paid ${money(done.invoice.amount_paid)}`);
-      for (const d of done.deliveries) out(`  ${deliveryLine(d)}`);
+      // Every attempt, oldest first (a 503 billing_reconciliation_pending followed by its retry is normal under --concurrent).
+      const events = new Set(done.deliveries.map((d) => d.event));
+      const attempts = (await call('/qa/stripe/deliveries')).deliveries.filter((d) => events.has(d.event)).reverse();
+      for (const d of attempts) out(`  ${deliveryLine(d)}`);
       return { ok: deliveredOk(done.deliveries), ...done };
+    }
+    case 'plan': {
+      if (values.clear) {
+        const q = values.default ? 'default=1' : `session=${encodeURIComponent(target || '')}`;
+        const r = await call(`/qa/stripe/delivery-plan?${q}`, { method: 'DELETE' });
+        out(`cleared the delivery plan for ${r.cleared}`);
+        return { ok: true, ...r };
+      }
+      if (!values.default && !target) {
+        const r = await call('/qa/stripe/delivery-plan');
+        out(JSON.stringify(r, null, 2));
+        return { ok: true, ...r };
+      }
+      const r = await call('/qa/stripe/delivery-plan', { method: 'POST', body: planFields(values.default ? { default: true } : { session: target }) });
+      out(JSON.stringify(r, null, 2));
+      return { ok: true, ...r };
     }
     case 'expire': {
       if (!target) throw new Error('expire needs a session id');

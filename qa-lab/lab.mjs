@@ -7,14 +7,17 @@
 //      explains why that is [edge_runtime.secrets] and not `functions serve`);
 //      production's schema and the seed;
 //   2. the mock server (Clerk, Stripe, Resend, AI, Telegram) on a free port;
-//   3. the app in QA-lab mode on a free port: a production-mode build served by
+//   3. the lab's API proxy on its own port: the app's Supabase URL, on another
+//      origin than the app as live, so the browser enforces the functions' CORS
+//      (qa-lab/lib/api-proxy.mjs);
+//   4. the app in QA-lab mode on a free port: a production-mode build served by
 //      vite preview (default), or the vite dev server with --dev.
 //
 // Options:
 //   --dev              vite dev server (hot reload; import.meta.env.DEV is true, unlike production)
 //   --no-build         serve the existing QA build (preview mode) without rebuilding
 //   --extract          re-read production's catalog before applying (read-only)
-//   --app-port N / --mock-port N   preferred ports (the next free one is used)
+//   --app-port N / --mock-port N / --api-port N   preferred ports (the next free one is used)
 //   --quiet            do not echo child output (logs are in qa-lab/.generated/logs/)
 //
 // Ctrl-C stops the mocks and the app server. The stack (database and edge
@@ -24,9 +27,9 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { DEFAULT_APP_PORT, DEFAULT_MOCK_PORT, LAB_ISSUER, SUPABASE_API_URL } from './lib/lab-config.mjs';
-import { LAB_PORTS_JSON, LAB_RUNTIME_JSON, QA_APP_DIST, QA_LAB_DIR, QA_VITE_CONFIG, REPO_ROOT, SCHEMA_SQL, isMain } from './lib/paths.mjs';
-import { labSecrets } from './lib/lab-secrets.mjs';
+import { APP_PUBLIC_ORIGIN, DEFAULT_API_PORT, DEFAULT_APP_PORT, DEFAULT_MOCK_PORT, LAB_ISSUER, SUPABASE_API_URL } from './lib/lab-config.mjs';
+import { CATALOG_JSON, LAB_PORTS_JSON, LAB_RUNTIME_JSON, QA_APP_DIST, QA_LAB_DIR, QA_VITE_CONFIG, REPO_ROOT, SCHEMA_SQL, isMain } from './lib/paths.mjs';
+import { labSecrets, randomAlnum } from './lib/lab-secrets.mjs';
 import { startStack } from './lib/stack.mjs';
 import { writeFunctionsEnv } from './lib/functions-env.mjs';
 import { qaAppEnv } from './lib/app-env.mjs';
@@ -48,15 +51,59 @@ function runNode(script, args = []) {
   if (r.status !== 0) throw new Error(`${script} failed`);
 }
 
+/**
+ * The app_secrets names production has (names only, read by extract-schema into
+ * the saved catalog), or null when the saved catalog predates that read.
+ */
+export function productionSecretNames(catalogFile = CATALOG_JSON) {
+  if (!existsSync(catalogFile)) return null;
+  try {
+    const names = JSON.parse(readFileSync(catalogFile, 'utf8')).platform?.app_secret_names;
+    return Array.isArray(names) ? names : null;
+  } catch { return null; }
+}
+
+/**
+ * Which app_secrets rows the lab holds: one placeholder for each name
+ * production has, and nothing else, so every function takes the branch it
+ * takes live. (Production has no anthropic_shared_key while the shared
+ * Anthropic key is paused: ai-proxy answers 503 shared_key_not_configured for
+ * Anthropic and the app's Opus paths fall back or refuse. The lab does the same.)
+ * QA_AI_ANTHROPIC_SHARED=1 adds anthropic_shared_key for one run, to exercise
+ * the Opus paths on purpose; qa:parity then reports that name as a difference.
+ */
+export function labSecretRows(prodNames, { env = process.env, secrets = labSecrets() } = {}) {
+  if (!Array.isArray(prodNames)) throw new Error('production\'s app_secrets names are unknown: re-read the catalog (npm run qa:extract)');
+  const names = new Set(prodNames);
+  if (env.QA_AI_ANTHROPIC_SHARED === '1') names.add('anthropic_shared_key');
+  const rows = [];
+  for (const name of [...names].sort()) {
+    if (!/^[a-z][a-z0-9_]{0,62}$/.test(name)) throw new Error(`refusing an app_secrets name: ${name}`);
+    const value = name === 'gemini_shared_key' ? secrets.ai.geminiPlaceholder
+      : name === 'anthropic_shared_key' ? secrets.ai.anthropicPlaceholder
+        : `qa-lab-placeholder-${randomAlnum(32)}`;
+    if (!value.startsWith('qa-lab-placeholder-')) throw new Error('an app_secrets placeholder must start with qa-lab-placeholder-');
+    rows.push([name, value]);
+  }
+  return rows;
+}
+
 /** Local-only setup the lab needs on top of the seed (idempotent). */
 function labDatabaseSetup() {
-  const s = labSecrets();
-  // ai-proxy and email-inbound read their provider key from app_secrets and stop
-  // before calling out when there is none. The lab stores random placeholders;
-  // the mock AI ignores them. A value that is not a lab placeholder is never overwritten.
+  // ai-proxy and email-inbound read their provider keys from app_secrets and stop
+  // before calling out when a name is absent. The lab stores random placeholders
+  // under exactly production's names (the mock AI ignores the values), removes
+  // placeholder rows under any other name, and never overwrites a value that is
+  // not a lab placeholder.
+  const rows = labSecretRows(productionSecretNames());
+  const names = rows.map(([n]) => `'${n}'`).join(', ');
   localExec(`insert into public.app_secrets (name, value, updated_at) values
-    ('gemini_shared_key', '${s.ai.geminiPlaceholder}', now()), ('anthropic_shared_key', '${s.ai.anthropicPlaceholder}', now())
+    ${rows.map(([n, v]) => `('${n}', '${v}', now())`).join(', ')}
     on conflict (name) do update set value = excluded.value, updated_at = now() where public.app_secrets.value like 'qa-lab-placeholder-%'`);
+  localExec(`delete from public.app_secrets where name not in (${names}) and value like 'qa-lab-placeholder-%'`);
+  const other = localExec(`select string_agg(name, ', ' order by name) from public.app_secrets where name not in (${names})`);
+  if (other) console.log(`qa-lab: WARNING: app_secrets holds names production does not (${other}) with values that are not lab placeholders; they were left alone, and qa:parity reports them.`);
+  if (process.env.QA_AI_ANTHROPIC_SHARED === '1') console.log('qa-lab: QA_AI_ANTHROPIC_SHARED=1: anthropic_shared_key is set for this run (production has none while the shared Anthropic key is paused).');
 }
 
 async function httpStatus(url, init) {
@@ -67,15 +114,16 @@ async function httpStatus(url, init) {
 export async function runLab(argv = process.argv.slice(2)) {
   const { values } = parseArgs({ args: argv, options: {
     dev: { type: 'boolean', default: false }, 'no-build': { type: 'boolean', default: false }, extract: { type: 'boolean', default: false },
-    'app-port': { type: 'string' }, 'mock-port': { type: 'string' }, quiet: { type: 'boolean', default: false },
+    'app-port': { type: 'string' }, 'mock-port': { type: 'string' }, 'api-port': { type: 'string' }, quiet: { type: 'boolean', default: false },
   } });
   const existing = readRuntime();
   if (existing?.pid && existing.pid !== process.pid && alive(existing.pid)) {
     throw new Error(`a QA lab is already running (pid ${existing.pid}, app ${existing.urls?.app}). Stop it with Ctrl-C in its terminal, or kill ${existing.pid}.`);
   }
 
-  if (values.extract || !existsSync(SCHEMA_SQL)) runNode('extract-schema.mjs');
-  const { mockPort, appPort } = await resolveLabPorts({ mockPort: values['mock-port'], appPort: values['app-port'], defaults: { mock: DEFAULT_MOCK_PORT, app: DEFAULT_APP_PORT }, file: LAB_PORTS_JSON });
+  // The saved catalog also names production's app_secrets (read-only); an older one is re-read.
+  if (values.extract || !existsSync(SCHEMA_SQL) || !productionSecretNames()) runNode('extract-schema.mjs');
+  const { mockPort, appPort, apiPort } = await resolveLabPorts({ mockPort: values['mock-port'], appPort: values['app-port'], apiPort: values['api-port'], defaults: { mock: DEFAULT_MOCK_PORT, app: DEFAULT_APP_PORT, api: DEFAULT_API_PORT }, file: LAB_PORTS_JSON });
   const { env: fnEnv } = writeFunctionsEnv({ mockPort, appPort });
   step('starting the local Supabase stack (lab workdir: lab token key, functions pointed at the mocks)');
   const status = startStack({ functionsEnv: fnEnv });
@@ -83,6 +131,7 @@ export async function runLab(argv = process.argv.slice(2)) {
   labDatabaseSetup();
   const appOrigin = `http://127.0.0.1:${appPort}`;
   const mockUrl = `http://127.0.0.1:${mockPort}`;
+  const apiOrigin = `http://127.0.0.1:${apiPort}`;
   const children = [];
   let stopping = false;
   const shutdown = async (code = 0) => {
@@ -113,7 +162,12 @@ export async function runLab(argv = process.argv.slice(2)) {
       return r.status === 401 && r.text.includes('unauthorized');
     }, { timeoutMs: 300000, intervalMs: 2000 });
 
-    const appEnv = { ...qaAppEnv({ appPort, anonKey: status.ANON_KEY }), QA_LAB_MOCK_URL: mockUrl };
+    step(`starting the API proxy on ${apiOrigin} (the app's Supabase URL: another origin, as live)`);
+    const api = startChild('api', process.execPath, [path.join(QA_LAB_DIR, 'lib', 'api-proxy.mjs'), '--port', String(apiPort), '--app-origin', appOrigin], { quiet: values.quiet });
+    children.push(api); watch(api, 'the API proxy');
+    await waitFor('the API proxy', async () => (await httpStatus(`${apiOrigin}/rest/v1/`, { headers: { apikey: status.ANON_KEY } })).status < 500, { timeoutMs: 20000 });
+
+    const appEnv = { ...qaAppEnv({ appPort, apiPort, anonKey: status.ANON_KEY }), QA_LAB_MOCK_URL: mockUrl };
     let app;
     if (values.dev) {
       step(`starting the app (vite dev server, QA-lab mode) on ${appOrigin}/app/`);
@@ -129,12 +183,16 @@ export async function runLab(argv = process.argv.slice(2)) {
     }
     children.push(app); watch(app, 'the app server');
     await waitFor('the app server', async () => (await httpStatus(`${appOrigin}/app/`)).status === 200, { timeoutMs: 120000 });
-    // The app reaches the stack and the mocks through its own origin.
+    // The app reaches the mocks through its own origin, and the stack through the API proxy (cross-origin).
     await waitFor('the app gateway', async () => (await httpStatus(`${appOrigin}/__qa/mock/qa/health`)).status === 200, { timeoutMs: 20000 });
+    const preflight = await fetch(`${apiOrigin}/functions/v1/initialize-clerk-profile`, { method: 'OPTIONS', headers: { Origin: appOrigin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization, content-type' }, signal: AbortSignal.timeout(20000) });
+    await preflight.arrayBuffer();
+    if (preflight.headers.get('access-control-allow-origin') !== appOrigin) throw new Error(`a function preflight through the API proxy did not come back with the function's own CORS headers (Access-Control-Allow-Origin: ${preflight.headers.get('access-control-allow-origin')}); see qa-lab/README.md "CORS"`);
 
     const runtime = {
-      pid: process.pid, startedAt: new Date().toISOString(), mode: values.dev ? 'dev' : 'preview', appPort, mockPort, issuer: LAB_ISSUER,
-      urls: { app: `${appOrigin}/app/`, appOrigin, mock: mockUrl, inbox: `${mockUrl}/qa/inbox`, api: SUPABASE_API_URL, studio: 'http://127.0.0.1:54323', mailpit: 'http://127.0.0.1:54324' },
+      pid: process.pid, startedAt: new Date().toISOString(), mode: values.dev ? 'dev' : 'preview', appPort, mockPort, apiPort, issuer: LAB_ISSUER,
+      urls: { app: `${appOrigin}/app/`, appOrigin, mock: mockUrl, inbox: `${mockUrl}/qa/inbox`, apiOrigin, api: SUPABASE_API_URL, studio: 'http://127.0.0.1:54323', mailpit: 'http://127.0.0.1:54324' },
+      productionOrigin: APP_PUBLIC_ORIGIN,
       functionsEnv: Object.keys(fnEnv),
     };
     mkdirSync(path.dirname(LAB_RUNTIME_JSON), { recursive: true });
@@ -144,7 +202,8 @@ QA lab is up.
   App (QA sign-in):   ${runtime.urls.app}
   Inbox (all email):  ${runtime.urls.inbox}
   Mock server:        ${mockUrl}   (JSON API under /qa, see qa-lab/README.md)
-  Supabase API:       ${SUPABASE_API_URL}   Studio: ${runtime.urls.studio}
+  API (the app's):    ${apiOrigin}   (cross-origin proxy to the gateway ${SUPABASE_API_URL})
+  Studio:             ${runtime.urls.studio}   (loopback only; the local database password is the CLI default)
   Smoke test:         npm run qa:smoke
   Logs:               qa-lab/.generated/logs/
 Ctrl-C stops the app and the mocks; npm run qa:down stops the stack and its functions.`);

@@ -16,18 +16,29 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { CATALOG_JSON, GENERATED_DIR, PARITY_KNOWN, PARITY_REPORT, isMain } from './lib/paths.mjs';
 import { fetchLocalCatalog, fetchLocalConfigRows, fetchProdCatalog, fetchProdConfigRows } from './lib/fetch-catalog.mjs';
-import { compare, explain, grantsPerRole, index } from './lib/parity.mjs';
+import { compare, explain, grantsPerRole, index, referencedOneSidedPlatformObjects } from './lib/parity.mjs';
 import { localGatewayOrigin } from './lib/config.mjs';
 
-function configDiffs(prod, local) {
+/**
+ * The configuration rows the seed copies, and the founding programs per mode
+ * (promise count and promised places, never the addresses). Exported for
+ * tests/qa-lab/schema-ddl.test.mjs.
+ */
+export function configDiffs(prod, local) {
   const diffs = [];
   for (const table of ['access_policy_settings', 'vera_source_settings', 'welcome_email_settings']) {
     const a = JSON.stringify(prod[table]); const b = JSON.stringify(local[table]);
     if (a !== b) diffs.push({ category: 'config rows', key: table, kind: 'differs', prod: a, local: b });
   }
-  const a = JSON.stringify(prod.app_secret_names); const b = JSON.stringify(local.app_secret_names);
-  if (a !== b) diffs.push({ category: 'config rows', key: 'app_secrets names', kind: 'differs', prod: a, local: b });
-  return { category: 'config rows', prod: 4, local: 4, diffs };
+  // Keyed per mode, so the lab's extra test-mode program can be explained without hiding the live one.
+  const mode = (list) => new Map((list || []).map((p) => [`founding program (${p.livemode ? 'live' : 'test'})`, JSON.stringify({ promise_count: p.promise_count, promised_total: p.promised_total })]));
+  const pm = mode(prod.founding_programs); const lm = mode(local.founding_programs);
+  for (const [k, v] of pm) {
+    if (!lm.has(k)) diffs.push({ category: 'config rows', key: k, kind: 'missing locally', prod: v });
+    else if (lm.get(k) !== v) diffs.push({ category: 'config rows', key: k, kind: 'differs', prod: v, local: lm.get(k) });
+  }
+  for (const [k, v] of lm) if (!pm.has(k)) diffs.push({ category: 'config rows', key: k, kind: 'only local', local: v });
+  return { category: 'config rows', prod: 3 + pm.size, local: 3 + lm.size, diffs };
 }
 
 async function main() {
@@ -55,9 +66,14 @@ async function main() {
   say(`${'category'.padEnd(22)} ${'prod'.padStart(6)} ${'local'.padStart(6)}  unexplained  explained`);
   let unexplained = 0;
   const detail = []; const explainedDetail = [];
+  // A platform object on one side only is never explained once application code names it.
+  const referenced = new Set(referencedOneSidedPlatformObjects(results.flatMap((r) => r.diffs), prodCatalog).map((d) => `${d.category}|${d.key}`));
   for (const r of results) {
     const un = []; const ex = [];
-    for (const d of r.diffs) { const k = explain(d, known); if (k) ex.push({ ...d, reason: k.reason }); else un.push(d); }
+    for (const d of r.diffs) {
+      const k = referenced.has(`${d.category}|${d.key}`) ? null : explain(d, known);
+      if (k) ex.push({ ...d, reason: k.reason }); else un.push(referenced.has(`${d.category}|${d.key}`) ? { ...d, kind: `${d.kind}, and application code names it` } : d);
+    }
     unexplained += un.length;
     say(`${r.category.padEnd(22)} ${String(r.prod).padStart(6)} ${String(r.local).padStart(6)}  ${String(un.length).padStart(11)}  ${String(ex.length).padStart(9)}`);
     detail.push(...un); explainedDetail.push(...ex);

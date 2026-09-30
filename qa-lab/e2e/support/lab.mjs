@@ -143,9 +143,12 @@ export async function landing(page, { timeoutMs = 120000 } = {}) {
 /**
  * From the pending membership gate: review the offer shown, agree to its
  * terms, continue to payment and pay on the lab's Checkout stand-in. Returns
- * the review text, the checkout session id and the Stripe deliveries.
+ * the review text and the checkout session id. As with Stripe, the browser is
+ * back at ?billing=complete at once and the webhook events follow (by default
+ * 1.5 s later, all at once, shuffled); `plan` changes that for this checkout
+ * (see setDeliveryPlan), `beforePay(sessionId)` runs on the stand-in first.
  */
-export async function payForMembership(page, { offerButton = /Review .* offer/ } = {}) {
+export async function payForMembership(page, { offerButton = /Review .* offer/, plan, beforePay } = {}) {
   const rt = lab();
   await page.getByRole('button', { name: offerButton }).first().click();
   const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
@@ -156,10 +159,58 @@ export async function payForMembership(page, { offerButton = /Review .* offer/ }
   await proceed.click();
   const pay = page.getByTestId('qa-stripe-pay');
   await pay.waitFor({ timeout: 60000 });
-  const sessionId = new URL(page.url()).pathname.split('/').pop();
+  const standIn = new URL(page.url());
+  const sessionId = standIn.pathname.split('/').pop();
+  // The QA build sends the browser to the stand-in on the app's own origin, never to Stripe.
+  if (standIn.origin !== rt.urls.appOrigin) throw new Error(`Checkout opened on ${standIn.origin}, not the lab app's origin`);
+  if (plan) await setDeliveryPlan(sessionId, plan);
+  if (beforePay) await beforePay(sessionId);
   await pay.click();
   await page.waitForURL((u) => u.origin === rt.urls.appOrigin && u.searchParams.get('billing') === 'complete', { timeout: 120000 });
   return { reviewText, sessionId, disabledBeforeConsent };
+}
+
+/**
+ * How the mock Stripe delivers one checkout's events: { delayMs, order
+ * ('shuffled' | 'checklist' | 'invoice-first' | [types]), mode ('concurrent' |
+ * 'sequential'), drop: [types], retry }. Set it on the stand-in, before Pay.
+ */
+export async function setDeliveryPlan(sessionId, plan) {
+  return mockApi('/qa/stripe/delivery-plan', { method: 'POST', body: { session: sessionId, ...plan } });
+}
+
+/** Every webhook attempt about one checkout session (its session, subscription and invoice), oldest first. */
+export async function checkoutAttempts(sessionId) {
+  const session = (await mockApi('/qa/stripe/sessions')).sessions.find((x) => x.id === sessionId);
+  const ids = new Set([session?.id, session?.subscription, session?.invoice].filter(Boolean));
+  return (await mockApi('/qa/stripe/deliveries')).deliveries.filter((d) => ids.has(d.object)).reverse();
+}
+
+/** Waits until each of the checkout's three events has been accepted (2xx) by the webhook; returns every attempt. */
+export async function waitForCheckoutEvents(sessionId, timeoutMs = 90000) {
+  const types = ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid'];
+  return waitFor('every checkout event to be accepted', async () => {
+    const all = await checkoutAttempts(sessionId);
+    return types.every((t) => all.some((d) => d.type === t && d.status >= 200 && d.status < 300)) ? all : null;
+  }, { timeoutMs, intervalMs: 1000 });
+}
+
+/**
+ * Holds the member's billing reconcile lease (LOCAL database, as the webhook
+ * itself takes it: claim_billing_reconcile), so the next Stripe event for this
+ * account is refused 503 billing_reconciliation_pending, as when another event
+ * for the same account is being settled. Returns the lease token.
+ */
+export function holdReconcileLease(profileId) {
+  const account = row(`select stripe_customer_id from public.billing_accounts where profile_id = ${quote(profileId)} and livemode`);
+  if (!account) throw new Error(`no live billing account for profile ${profileId}`);
+  const out = localExec(`select public.claim_billing_reconcile(${quote(profileId)}::uuid, true, ${quote(account.stripe_customer_id)}, 'evt_qalabjourneyhold${Date.now()}')::text`);
+  const claim = JSON.parse(out.split('\n').filter((l) => l.startsWith('{')).at(-1));
+  if (claim.state !== 'claimed') throw new Error(`could not hold the reconcile lease: ${claim.state}`);
+  return claim.token;
+}
+export function releaseReconcileLease(profileId, token) {
+  return localExec(`select public.release_billing_reconcile(${quote(profileId)}::uuid, true, ${quote(token)}::uuid)`) === 't';
 }
 
 /** Waits for the member app (the gate gone and the main navigation shown). */
@@ -170,8 +221,13 @@ export async function waitForMemberApp(page, timeoutMs = 120000) {
 
 /**
  * A fresh ACTIVE member, the way a physician becomes one: created on the QA
- * sign-in, signed in, founding offer paid on the Checkout stand-in. The page
- * ends on the member app.
+ * sign-in, signed in, founding offer paid on the Checkout stand-in (back at
+ * once, the events a moment later, as with Stripe), and once the membership
+ * is active the app opened again, as the member's next visit. The page ends on
+ * the member app. (That reopening keeps these journeys about their own
+ * features: the return from Checkout itself, including what one page load
+ * that started pending gets wrong, is billing-return.spec.mjs's and
+ * signup-checkout.spec.mjs's to check.)
  */
 export async function newMember(page, opts = {}) {
   const user = await createPhysician(opts);
@@ -180,6 +236,8 @@ export async function newMember(page, opts = {}) {
   if (where !== 'gate') throw new Error(`a new physician should land on the membership gate, landed on: ${where}`);
   const payment = await payForMembership(page);
   await waitForProfile(user.id, (p) => p.access_status === 'active', 90000);
+  await waitForMemberApp(page);
+  await page.goto(lab().urls.app, { waitUntil: 'domcontentloaded' });
   await waitForMemberApp(page);
   await dismissInterruptions(page);
   return { user, payment, profile: profileOf(user.id) };
@@ -365,8 +423,12 @@ export function recordButtons(page, text) {
 export async function scriptAi(provider, response, match) {
   return mockApi('/qa/ai/next', { method: 'POST', body: { provider, response, ...(match ? { match } : {}) } });
 }
-/** A slice of a file's base64 that identifies it inside an AI request. */
+/**
+ * The file's whole base64, which identifies it inside an AI request. (A middle
+ * slice used to be enough, until a script left queued by a journey that
+ * stopped early matched the next run's synthetic PDF, which differs from it
+ * only in a few digits, and answered it with the old license number.)
+ */
 export function base64Marker(buffer) {
-  const b64 = Buffer.from(buffer).toString('base64');
-  return b64.slice(Math.max(0, Math.floor(b64.length / 2 / 4) * 4 - 40), Math.floor(b64.length / 2 / 4) * 4 + 40);
+  return Buffer.from(buffer).toString('base64');
 }

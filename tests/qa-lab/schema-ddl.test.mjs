@@ -141,3 +141,50 @@ test('parity: identical catalogs compare clean; a missing policy and a changed g
   assert.equal(explain(diffs.find((d) => d.category === 'policies'), known).reason, 'test');
   assert.equal(explain(diffs.find((d) => d.category === 'table grants'), known), undefined);
 });
+
+// ── Parity rules that must not hide real differences ─────────────────────────
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { referencedOneSidedPlatformObjects } from '../../qa-lab/lib/parity.mjs';
+import { configDiffs } from '../../qa-lab/parity.mjs';
+
+const KNOWN = JSON.parse(readFileSync(fileURLToPath(new URL('../../qa-lab/parity-known.json', import.meta.url)), 'utf8')).differences;
+
+test('parity-known: platform privileges are explained by exact key (or a date pattern), never "*"', () => {
+  const platform = KNOWN.filter((k) => k.category === 'platform privileges');
+  assert.ok(platform.length >= 20);
+  for (const k of platform) assert.ok((k.key && k.key !== '*') || k.keyPattern, JSON.stringify(k));
+  // A platform object production gains tomorrow is not explained by today's list.
+  assert.equal(explain({ category: 'platform privileges', key: 'function auth.new_thing()', kind: 'missing locally' }, KNOWN), undefined);
+  assert.equal(explain({ category: 'platform privileges', key: 'table storage.buckets_guard', kind: 'only local' }, KNOWN), undefined);
+  // Today's are, and Realtime's daily partitions match by date only.
+  assert.ok(explain({ category: 'platform privileges', key: 'table auth.scim_users', kind: 'missing locally' }, KNOWN));
+  assert.ok(explain({ category: 'platform privileges', key: 'table realtime.messages_2026_12_31', kind: 'only local' }, KNOWN));
+  assert.equal(explain({ category: 'platform privileges', key: 'table realtime.messages', kind: 'only local' }, KNOWN), undefined);
+  assert.equal(explain({ category: 'platform privileges', key: 'table auth.scim_users', kind: 'only local' }, KNOWN), undefined, 'the kind must match too');
+});
+
+test('parity: a one-sided platform object that application code names is never explained', () => {
+  const diffs = [
+    { category: 'platform privileges', key: 'function storage.search(text, text, integer, integer, integer, text, text, text, text, text)', kind: 'missing locally' },
+    { category: 'platform privileges', key: 'table auth.scim_users', kind: 'missing locally' },
+    { category: 'platform privileges', key: 'table cron.job_run_details', kind: 'differs' },
+  ];
+  const cat = catalog();
+  assert.deepEqual(referencedOneSidedPlatformObjects(diffs, cat), []);
+  cat.functions[0].def = cat.functions[0].def.replace('perform net.http_post', 'perform storage.search($1, $2); perform net.http_post');
+  assert.deepEqual(referencedOneSidedPlatformObjects(diffs, cat).map((d) => d.key), [diffs[0].key]);
+  cat.policies[0].qual = 'exists (select 1 from auth.scim_users)';
+  assert.equal(referencedOneSidedPlatformObjects(diffs, cat).length, 2);
+});
+
+test('parity: founding programs are compared per mode; only the lab\'s test-mode program is explained', () => {
+  const base = { access_policy_settings: [], vera_source_settings: [], welcome_email_settings: [] };
+  const prod = { ...base, founding_programs: [{ livemode: true, promise_count: 4, promised_total: 4 }] };
+  const same = configDiffs(prod, { ...base, founding_programs: [{ livemode: false, promise_count: 2, promised_total: 2 }, { livemode: true, promise_count: 4, promised_total: 4 }] });
+  assert.deepEqual(same.diffs.map((d) => `${d.key}|${d.kind}`), ['founding program (test)|only local']);
+  assert.ok(explain(same.diffs[0], KNOWN), 'the extra test-mode program is an explained lab-only difference');
+  const off = configDiffs(prod, { ...base, founding_programs: [{ livemode: true, promise_count: 2, promised_total: 2 }] });
+  assert.deepEqual(off.diffs.map((d) => `${d.key}|${d.kind}`), ['founding program (live)|differs']);
+  assert.equal(explain(off.diffs[0], KNOWN), undefined, 'a live program that differs from production fails parity');
+});

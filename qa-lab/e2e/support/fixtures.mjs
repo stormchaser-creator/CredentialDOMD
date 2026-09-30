@@ -1,9 +1,10 @@
 // The Playwright fixtures every journey uses.
 //
 //   * Every browser context refuses requests to hosts that are not this machine
-//     (and records them), and sends Stripe's hosted pages to the mock's
-//     stand-ins, exactly as qa:smoke does. A journey fails if the app tried to
-//     reach anything else.
+//     (and records them), exactly as qa:smoke does. A journey fails if the app
+//     tried to reach anything else, Stripe's hosted pages included: the QA
+//     build itself sends the browser to the mock's stand-ins on the app's
+//     origin (qa-lab/app/vite.config.mjs), as a tester's own browser would be.
 //   * Console errors, page errors and failed local requests are recorded per
 //     journey and attached to its report.
 //   * `qa` records what the checklist needs: which feature a stretch of the
@@ -28,8 +29,6 @@ export function guardContext(context, report) {
     if (url.hostname === 'kong') {
       return route.fetch({ url: `${rt.urls.api}${url.pathname}${url.search}` }).then((response) => route.fulfill({ response }), () => route.abort('failed'));
     }
-    if (url.hostname === 'checkout.stripe.com') return route.fulfill({ status: 302, headers: { Location: `${rt.urls.mock}/qa/stripe/hosted/checkout/${url.pathname.split('/').pop()}` } });
-    if (url.hostname === 'billing.stripe.com') return route.fulfill({ status: 302, headers: { Location: `${rt.urls.mock}/qa/stripe/hosted/portal/${url.pathname.split('/').pop()}` } });
     report.external.push(`${route.request().method()} ${url.origin}${url.pathname}`);
     return route.abort('blockedbyclient');
   });

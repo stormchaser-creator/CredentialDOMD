@@ -13,6 +13,19 @@
 // The catalogue is built from the repository's own catalogue modules
 // (limitedLaunchCatalog.mjs, billingCatalog.mjs), so prices, lookup keys and
 // product metadata always match what the functions verify.
+//
+// Webhook timing, as Stripe does it: when the buyer pays on the Checkout
+// stand-in, the browser goes back to success_url AT ONCE, and the three events
+// (checkout.session.completed, customer.subscription.created, invoice.paid)
+// follow a moment later, all at the same time and in no set order. Any answer
+// other than 2xx is retried on a short backoff (Stripe retries for days; the
+// lab for about a minute). So the app meets the "confirming" return state, and
+// limited-stripe-webhook meets its own concurrency: two of three simultaneous
+// events for one account are refused 503 billing_reconciliation_pending while
+// the first holds the reconcile lease, and land on retry. A delivery plan
+// (POST /qa/stripe/delivery-plan) changes the delay, the order (shuffled,
+// checklist, invoice-first or a list), concurrent or one after another, and
+// can drop events, for one checkout session or as the default.
 import { randomAlnum } from '../lib/lab-secrets.mjs';
 import { APP_PUBLIC_ORIGIN } from '../lib/lab-config.mjs';
 import { limitedOffers, LIMITED_LAUNCH } from '../../supabase/functions/_shared/limitedLaunchCatalog.mjs';
@@ -28,6 +41,43 @@ const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 const stripeError = (status, message, extra = {}) => new HttpError(status, message, { error: { type: 'invalid_request_error', message, ...extra } });
 const missing = (kind, id) => stripeError(404, `No such ${kind}: '${id}'`, { code: 'resource_missing', param: 'id' });
 const list = (data, url) => ({ object: 'list', data, has_more: false, url });
+const sleep = (ms) => new Promise((r) => { const t = setTimeout(r, ms); t.unref?.(); });
+
+/** The events a paid subscription Checkout sends, in the order the owner's checklist names them. */
+export const CHECKOUT_EVENT_TYPES = Object.freeze(['checkout.session.completed', 'customer.subscription.created', 'invoice.paid']);
+/** Lab retry backoff after a non-2xx answer (Stripe's own schedule runs for three days). */
+export const WEBHOOK_RETRY_MS = Object.freeze([1000, 3000, 8000, 15000, 30000]);
+/** How the hosted Pay button delivers events unless a plan says otherwise: after a moment, all at once, shuffled. */
+export const DEFAULT_DELIVERY_PLAN = Object.freeze({ delayMs: 1500, order: 'shuffled', mode: 'concurrent', drop: [], retry: true });
+/** What the /qa/stripe/checkout/:id/complete API does unless told otherwise (it answers with the results). */
+export const API_DELIVERY_PLAN = Object.freeze({ delayMs: 0, order: 'checklist', mode: 'sequential', drop: [], retry: true });
+
+/** A checked delivery plan: { delayMs, order, mode, drop, retry }. Throws on anything else. */
+export function deliveryPlan(input = {}, base = DEFAULT_DELIVERY_PLAN) {
+  const p = { ...base, ...(input || {}) };
+  const known = new Set(['delayMs', 'order', 'mode', 'drop', 'retry']);
+  for (const k of Object.keys(input || {})) if (!known.has(k)) throw new HttpError(400, `unknown delivery plan field ${k}`);
+  const delayMs = Number(p.delayMs);
+  if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > 120000) throw new HttpError(400, 'delayMs must be 0-120000');
+  if (!['concurrent', 'sequential'].includes(p.mode)) throw new HttpError(400, 'mode must be concurrent or sequential');
+  const order = Array.isArray(p.order) ? p.order : p.order;
+  if (Array.isArray(order)) {
+    if (order.length !== CHECKOUT_EVENT_TYPES.length || !CHECKOUT_EVENT_TYPES.every((t) => order.includes(t))) throw new HttpError(400, `order must list ${CHECKOUT_EVENT_TYPES.join(', ')} once each`);
+  } else if (!['shuffled', 'checklist', 'invoice-first'].includes(order)) throw new HttpError(400, 'order must be shuffled, checklist, invoice-first or a list of the three event types');
+  const drop = Array.isArray(p.drop) ? p.drop : [];
+  for (const t of drop) if (!CHECKOUT_EVENT_TYPES.includes(t)) throw new HttpError(400, `cannot drop ${t}`);
+  return { delayMs, order: Array.isArray(order) ? [...order] : order, mode: p.mode, drop: [...drop], retry: p.retry !== false };
+}
+
+/** The event types in the order a plan sends them. */
+export function planOrder(plan, random = Math.random) {
+  if (Array.isArray(plan.order)) return [...plan.order];
+  if (plan.order === 'checklist') return [...CHECKOUT_EVENT_TYPES];
+  if (plan.order === 'invoice-first') return ['invoice.paid', 'checkout.session.completed', 'customer.subscription.created'];
+  const out = [...CHECKOUT_EVENT_TYPES];
+  for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+  return out;
+}
 
 export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log = console.log }) {
   const S = () => store.state.stripe;
@@ -210,7 +260,7 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
     store.update((s) => { s.stripe.events.unshift(e); s.stripe.events.length = Math.min(s.stripe.events.length, 500); });
     return e;
   }
-  async function deliver(e, endpoint = 'limited-stripe-webhook') {
+  async function deliver(e, endpoint = 'limited-stripe-webhook', { attempt = 1, retryAfterMs = null } = {}) {
     if (!/^[a-z0-9-]+$/.test(endpoint)) throw new HttpError(400, 'bad endpoint');
     const payload = JSON.stringify(e, null, 2);
     let status = 0, text = '';
@@ -218,23 +268,59 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
       const r = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8', 'Stripe-Signature': stripeSignature(secrets.stripe.webhookSecret, payload), 'User-Agent': 'Stripe/1.0 (+https://stripe.com/docs/webhooks)' }, body: payload, signal: AbortSignal.timeout(120000) });
       status = r.status; text = (await r.text()).slice(0, 1000);
     } catch (err) { text = `network: ${err.message}`; }
+    const accepted = status >= 200 && status < 300;
     // Which object and customer the event was about, so a journey can find its own events.
     const obj = e.data?.object || {};
-    const record = { event: e.id, type: e.type, endpoint, status, response: text, at: new Date().toISOString(), object: obj.id || null, customer: typeof obj.customer === 'string' ? obj.customer : null };
+    const record = { event: e.id, type: e.type, endpoint, status, response: text, at: new Date().toISOString(), object: obj.id || null, customer: typeof obj.customer === 'string' ? obj.customer : null,
+      attempt, willRetry: !accepted && retryAfterMs !== null, final: accepted || retryAfterMs === null };
     store.update((s) => { s.stripe.deliveries.unshift(record); s.stripe.deliveries.length = Math.min(s.stripe.deliveries.length, 500); });
-    log(`stripe: ${e.type} -> ${endpoint} ${status || 'no response'} ${text.slice(0, 120)}`);
+    log(`stripe: ${e.type} -> ${endpoint} ${status || 'no response'}${attempt > 1 ? ` (attempt ${attempt})` : ''}${record.willRetry ? ` (retry in ${retryAfterMs} ms)` : ''} ${text.slice(0, 120)}`);
     return record;
   }
-  async function completeAndNotify(id, { send: sendEvents = true, endpoint } = {}) {
-    const done = completeSession(id);
-    const deliveries = [];
-    if (sendEvents) {
-      // In the order the owner's checklist names them; each is handled on its own.
-      for (const [type, obj] of [['checkout.session.completed', done.session], ['customer.subscription.created', done.subscription], ['invoice.paid', done.invoice]]) {
-        deliveries.push(await deliver(event(type, obj, done.session.livemode), endpoint));
-      }
+  /** Delivers `e` and, as Stripe does, retries every answer that is not 2xx (lab backoff). Resolves with the last attempt. */
+  async function deliverUntilSettled(e, endpoint, { retry = true } = {}) {
+    for (let n = 0; ; n++) {
+      const retryAfterMs = retry && n < WEBHOOK_RETRY_MS.length ? WEBHOOK_RETRY_MS[n] : null;
+      const rec = await deliver(e, endpoint, { attempt: n + 1, retryAfterMs });
+      if (!rec.willRetry) return rec;
+      await sleep(retryAfterMs);
     }
-    return { ...done, deliveries };
+  }
+  function dropped(e, endpoint) {
+    const obj = e.data?.object || {};
+    const record = { event: e.id, type: e.type, endpoint: endpoint || 'limited-stripe-webhook', status: null, response: 'dropped by the lab delivery plan (never sent)', at: new Date().toISOString(), object: obj.id || null, customer: typeof obj.customer === 'string' ? obj.customer : null, attempt: 0, willRetry: false, final: true, dropped: true };
+    store.update((s) => { s.stripe.deliveries.unshift(record); s.stripe.deliveries.length = Math.min(s.stripe.deliveries.length, 500); });
+    log(`stripe: ${e.type} dropped by the delivery plan`);
+    return record;
+  }
+  /** Sends a completed checkout's three events under `plan`; resolves with each event's last attempt, in send order. */
+  async function sendCheckoutEvents(done, plan, endpoint) {
+    const objects = { 'checkout.session.completed': done.session, 'customer.subscription.created': done.subscription, 'invoice.paid': done.invoice };
+    const events = planOrder(plan).map((type) => event(type, objects[type], done.session.livemode));
+    if (plan.delayMs) await sleep(plan.delayMs);
+    const one = (e) => (plan.drop.includes(e.type) ? dropped(e, endpoint) : deliverUntilSettled(e, endpoint, { retry: plan.retry }));
+    if (plan.mode === 'concurrent') return Promise.all(events.map(one));
+    const out = [];
+    for (const e of events) out.push(await one(e));
+    return out;
+  }
+  /** The plan for a session: its own, else the lab default, else DEFAULT_DELIVERY_PLAN. */
+  function planFor(sessionId) {
+    const plans = S().plans || {};
+    return deliveryPlan(plans[sessionId] || plans.default || {}, DEFAULT_DELIVERY_PLAN);
+  }
+  /**
+   * Completes the session and sends its events. wait: true resolves once every
+   * event has settled (the API helper); wait: false returns at once and the
+   * events follow on their own (the hosted Pay button).
+   */
+  async function completeAndNotify(id, { send: sendEvents = true, endpoint, plan = null, wait = true } = {}) {
+    const chosen = plan ? deliveryPlan(plan, API_DELIVERY_PLAN) : planFor(id);
+    const done = completeSession(id);
+    if (!sendEvents) return { ...done, deliveries: [], plan: null };
+    const pending = sendCheckoutEvents(done, chosen, endpoint).catch((e) => { log(`stripe: delivering the events of ${id.slice(0, 20)}... failed: ${e.message}`); return []; });
+    if (!wait) return { ...done, deliveries: [], plan: chosen, pending };
+    return { ...done, deliveries: await pending, plan: chosen };
   }
   const rewrite = (url) => (typeof url === 'string' && url.startsWith(APP_PUBLIC_ORIGIN) ? appOrigin + url.slice(APP_PUBLIC_ORIGIN.length) : url);
   // The hosted pages' forms answer with a redirect back to the lab app, and a
@@ -331,7 +417,24 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
     });
     router.add('POST', '/qa/stripe/checkout/:id/complete', async (req, res, { params }) => {
       const body = await readJson(req);
-      json(res, 200, await completeAndNotify(params.id, { send: body.send !== false, endpoint: body.endpoint }));
+      const wait = body.wait !== false;
+      const { pending, ...out } = await completeAndNotify(params.id, { send: body.send !== false, endpoint: body.endpoint, plan: body.plan || API_DELIVERY_PLAN, wait });
+      json(res, 200, out);
+    });
+    // Delivery plans: { session: 'cs_...' | default: true, delayMs, order, mode, drop, retry }; DELETE clears one.
+    router.add('GET', '/qa/stripe/delivery-plan', (req, res) => json(res, 200, { default: deliveryPlan(S().plans?.default || {}), plans: S().plans || {} }));
+    router.add('POST', '/qa/stripe/delivery-plan', async (req, res) => {
+      const { session, default: isDefault, ...fields } = await readJson(req);
+      if (!isDefault && !/^cs_(live|test)_[A-Za-z0-9]+$/.test(session || '')) throw new HttpError(400, 'name a checkout session (session) or set default: true');
+      const plan = deliveryPlan(fields, DEFAULT_DELIVERY_PLAN);
+      store.update((s) => { s.stripe.plans ||= {}; s.stripe.plans[isDefault ? 'default' : session] = plan; });
+      json(res, 200, { [isDefault ? 'default' : session]: plan });
+    });
+    router.add('DELETE', '/qa/stripe/delivery-plan', async (req, res, { url }) => {
+      const key = url.searchParams.get('session') || (url.searchParams.get('default') ? 'default' : null);
+      if (!key) throw new HttpError(400, 'name ?session=cs_... or ?default=1');
+      store.update((s) => { if (s.stripe.plans) delete s.stripe.plans[key]; });
+      json(res, 200, { cleared: key });
     });
     router.add('POST', '/qa/stripe/checkout/:id/expire', async (req, res, { params }) => {
       const body = await readJson(req);
@@ -360,9 +463,12 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
     });
     router.add('GET', '/qa/stripe/deliveries', (req, res) => json(res, 200, { deliveries: S().deliveries }));
 
-    // Stand-ins for Stripe's hosted pages. The app sends the browser to
-    // https://checkout.stripe.com/c/pay/<id>; the lab's runner routes that
-    // address here. Success and cancel return to the lab app, not production.
+    // Stand-ins for Stripe's hosted pages. The QA build sends the browser here
+    // (on the app's own origin, /__qa/mock/qa/stripe/hosted/..., see
+    // qa-lab/app/vite.config.mjs) where the live app goes to checkout.stripe.com
+    // or billing.stripe.com; the pages also work straight from the mock server.
+    // Their forms and redirects are relative, so they work under both. Success
+    // and cancel return to the lab app, not production.
     router.add('GET', '/qa/stripe/hosted/checkout/:id', (req, res, { params }) => {
       const s = S().sessions[params.id];
       if (!s) throw new HttpError(404, 'no such checkout session');
@@ -371,15 +477,19 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
         <dl><dt>Session</dt><dd><code>${esc(s.id)}</code></dd><dt>Status</dt><dd>${esc(s.status)}</dd><dt>Item</dt><dd>${esc(price?.lookup_key)} &times; ${s._qa.items[0].quantity}</dd>
         <dt>Price</dt><dd>${((price?.unit_amount || 0) / 100).toFixed(2)} USD per year</dd><dt>Due now</dt><dd>${(s.amount_total / 100).toFixed(2)} USD</dd>
         ${s.custom_text?.submit?.message ? `<dt>Note</dt><dd>${esc(s.custom_text.submit.message)}</dd>` : ''}</dl>
-        ${s.status === 'open' ? `<form method="post" action="/qa/stripe/hosted/checkout/${esc(s.id)}/pay"><button class="primary" data-testid="qa-stripe-pay">Pay (lab)</button></form>
-        <form method="post" action="/qa/stripe/hosted/checkout/${esc(s.id)}/cancel"><button data-testid="qa-stripe-cancel">Cancel and go back</button></form>` : `<p><a href="${esc(rewrite(s.success_url))}">Back to the app</a></p>`}`), hostedHeaders);
+        ${s.status === 'open' ? `<form method="post" action="${esc(s.id)}/pay"><button class="primary" data-testid="qa-stripe-pay">Pay (lab)</button></form>
+        <form method="post" action="${esc(s.id)}/cancel"><button data-testid="qa-stripe-cancel">Cancel and go back</button></form>` : `<p><a href="${esc(rewrite(s.success_url))}">Back to the app</a></p>`}`), hostedHeaders);
     });
     router.add('POST', '/qa/stripe/hosted/checkout/:id/pay', async (req, res, { params }) => {
       const s = S().sessions[params.id];
       if (!s) throw new HttpError(404, 'no such checkout session');
-      const done = await completeAndNotify(params.id);
-      const failed = done.deliveries.filter((d) => d.status < 200 || d.status >= 300);
-      if (failed.length) log(`stripe: ${failed.length} webhook deliveries were not accepted; see /qa/stripe/deliveries`);
+      // Back to the app at once; the events follow under the session's delivery plan.
+      const { pending, plan } = await completeAndNotify(params.id, { wait: false });
+      pending.then((last) => {
+        const failed = last.filter((d) => !d.dropped && (d.status < 200 || d.status >= 300));
+        if (failed.length) log(`stripe: ${failed.length} webhook event(s) of ${params.id.slice(0, 20)}... still not accepted after retries; see /qa/stripe/deliveries`);
+      });
+      log(`stripe: checkout ${params.id.slice(0, 20)}... paid; events in ${plan.delayMs} ms, ${plan.mode}, ${Array.isArray(plan.order) ? plan.order.join('>') : plan.order}${plan.drop.length ? `, dropping ${plan.drop.join(', ')}` : ''}`);
       send(res, 303, '', { Location: rewrite(s.success_url) });
     });
     router.add('POST', '/qa/stripe/hosted/checkout/:id/cancel', (req, res, { params }) => {
@@ -393,7 +503,7 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
       const subs = Object.values(S().subscriptions).filter((x) => x.customer === session.customer);
       html(res, 200, page('QA lab billing portal', `<p class="warn">Stand-in for the Stripe customer portal.</p>
         ${subs.map((sub) => `<div class="card"><code>${esc(sub.id)}</code> &middot; ${esc(sub.status)}${sub.cancel_at_period_end ? ' &middot; cancels at period end' : ''}
-        ${sub.status !== 'canceled' && !sub.cancel_at_period_end ? `<form method="post" action="/qa/stripe/hosted/portal/${esc(params.token)}/cancel/${esc(sub.id)}"><button data-testid="qa-stripe-portal-cancel">Cancel at period end</button></form>` : ''}</div>`).join('') || '<p>No subscriptions.</p>'}
+        ${sub.status !== 'canceled' && !sub.cancel_at_period_end ? `<form method="post" action="${esc(params.token)}/cancel/${esc(sub.id)}"><button data-testid="qa-stripe-portal-cancel">Cancel at period end</button></form>` : ''}</div>`).join('') || '<p>No subscriptions.</p>'}
         <p><a href="${esc(rewrite(session.return_url))}">Return to the app</a></p>`), hostedHeaders);
     });
     router.add('POST', '/qa/stripe/hosted/portal/:token/cancel/:sub', async (req, res, { params }) => {
@@ -401,7 +511,8 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
       if (!sub) throw new HttpError(404, 'no such subscription');
       store.update(() => { sub.cancel_at_period_end = true; sub.cancel_at = sub.current_period_end; });
       await deliver(event('customer.subscription.updated', publicView(sub), sub.livemode));
-      send(res, 303, '', { Location: `/qa/stripe/hosted/portal/${encodeURIComponent(params.token)}` });
+      // Relative: back to .../portal/<token> whether the page was opened on the app's origin or the mock's.
+      send(res, 303, '', { Location: `../../${encodeURIComponent(params.token)}` });
     });
   }
 
@@ -413,5 +524,5 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}dt{color:#777}dd{mar
   }
 
   seedCatalog();
-  return { routes, completeAndNotify, completeSession, deliver, event, seed: seedCatalog };
+  return { routes, completeAndNotify, completeSession, deliver, deliverUntilSettled, event, planFor, seed: seedCatalog };
 }

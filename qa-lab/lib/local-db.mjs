@@ -1,21 +1,46 @@
 // The LOCAL QA-lab database (supabase start). Nothing here can reach production:
 // the connection string is built from `supabase status`, and connectionUrl()
-// refuses any host that is not this machine.
+// rebuilds it from a checked host, port and database name, so no part of the
+// caller's URL can point libpq anywhere else (see localConnection()).
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { stackWorkdir } from './stack.mjs';
+import { stackStatus } from './stack.mjs';
 
-const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+/** The only query parameter a lab database URL may carry (libpq also reads host, hostaddr, port, service... from the query). */
+const ALLOWED_PARAMS = new Set(['sslmode']);
+const SSLMODES = new Set(['disable', 'allow', 'prefer', 'require']);
 
 /** Status of the local stack as reported by the Supabase CLI (JSON), or null when it is not running. */
 export function supabaseStatus() {
-  // The lab's own workdir once qa:up has written it (its keys are the running stack's).
-  const r = spawnSync('supabase', ['status', '-o', 'json', '--workdir', stackWorkdir()], { encoding: 'utf8' });
-  if (r.status !== 0) return null;
-  const start = r.stdout.indexOf('{');
-  if (start < 0) return null;
-  try { return JSON.parse(r.stdout.slice(start)); } catch { return null; }
+  return stackStatus();
+}
+
+/**
+ * The parts of a local database URL, checked. libpq lets the query string
+ * override the authority (…@127.0.0.1:54322/postgres?host=db.example.com or
+ * ?hostaddr=…, ?service=…, ?port=…), and treats a comma in the host as a list
+ * of hosts, so checking `new URL(base).hostname` alone proves nothing. This
+ * accepts a URL only when every part is plain: scheme postgres(ql), a loopback
+ * host, a numeric port, a simple database name, and no query parameter but sslmode.
+ */
+export function localConnection(base) {
+  let u;
+  try { u = new URL(base); } catch { throw new Error('refusing a database URL that does not parse'); }
+  if (u.protocol !== 'postgresql:' && u.protocol !== 'postgres:') throw new Error(`refusing a database URL with scheme ${u.protocol}`);
+  if (!LOCAL_HOSTS.has(u.hostname)) throw new Error(`refusing a non-local database host: ${u.hostname}`);
+  if (!/^\d{1,5}$/.test(u.port)) throw new Error('refusing a database URL without a numeric port');
+  const database = decodeURIComponent(u.pathname.replace(/^\//, ''));
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(database)) throw new Error('refusing a database URL whose database name is not a plain identifier');
+  const params = [...u.searchParams.keys()];
+  const bad = params.filter((k) => !ALLOWED_PARAMS.has(k));
+  if (bad.length) throw new Error(`refusing a database URL with query parameter(s) ${[...new Set(bad)].join(', ')}: libpq would let them override the host`);
+  if (params.length !== new Set(params).size) throw new Error('refusing a database URL with a repeated query parameter');
+  const sslmode = u.searchParams.get('sslmode');
+  if (sslmode !== null && !SSLMODES.has(sslmode)) throw new Error(`refusing sslmode=${sslmode}`);
+  if (u.hash) throw new Error('refusing a database URL with a fragment');
+  return { host: u.hostname, port: u.port, database, password: decodeURIComponent(u.password), sslmode };
 }
 
 /** Connection URL for the local database as `user` (default supabase_admin, the local superuser). */
@@ -23,11 +48,22 @@ let cachedBase = null;
 export function connectionUrl(user = 'supabase_admin') {
   const base = cachedBase || (cachedBase = process.env.QA_LAB_DB_URL || supabaseStatus()?.DB_URL || null);
   if (!base) throw new Error('The local QA-lab stack is not running. Start it with `npm run qa:up`.');
-  const u = new URL(base);
-  if (!LOCAL_HOSTS.has(u.hostname)) throw new Error(`refusing a non-local database host: ${u.hostname}`);
-  u.username = user;
+  const c = localConnection(base);
+  if (!/^[a-z_][a-z0-9_]*$/.test(user)) throw new Error(`refusing database user ${user}`);
+  // Rebuilt from the checked parts: nothing of the caller's text is passed on as is.
   // The local image gives every login role the stack's database password.
-  return u.toString();
+  return `postgresql://${user}:${encodeURIComponent(c.password)}@${c.host}:${c.port}/${c.database}${c.sslmode ? `?sslmode=${c.sslmode}` : ''}`;
+}
+
+/**
+ * The environment psql runs with: the caller's, minus every libpq connection
+ * variable (PGHOST, PGHOSTADDR, PGPORT, PGSERVICE, PGSERVICEFILE, PGOPTIONS...),
+ * which would otherwise fill in or redirect what the URL leaves unset.
+ */
+export function psqlEnv(base = process.env) {
+  const out = {};
+  for (const [k, v] of Object.entries(base)) if (!/^PG[A-Z_]+$/.test(k)) out[k] = v;
+  return { ...out, LC_ALL: 'C', PGCONNECT_TIMEOUT: '10' };
 }
 
 /** Absolute path of psql: $PSQL, $PG_BIN/psql, `pg_config --bindir`/psql, or Homebrew's postgresql@17. */
@@ -42,7 +78,7 @@ export function psqlPath() {
   return found;
 }
 
-const env = () => ({ ...process.env, LC_ALL: 'C', PGCONNECT_TIMEOUT: '10' });
+const env = () => psqlEnv();
 
 /** Runs a SQL file in ONE transaction, stopping at the first error. */
 export function runSqlFile(file, { user = 'supabase_admin', quiet = true } = {}) {

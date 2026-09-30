@@ -76,15 +76,17 @@ export function stopChild(child, graceMs = 8000) {
 }
 
 /**
- * The mock and app ports: the ones saved last time when they are free (the
- * functions' environment names the mock's port, and changing it restarts the
- * stack), otherwise the next free ports from the defaults. Saved again.
+ * The mock, app and API proxy ports: the ones saved last time when they are
+ * free (the functions' environment names the mock's and the app's port, and
+ * changing it restarts the stack), otherwise the next free ports from the
+ * defaults. Saved again.
  */
-export async function resolveLabPorts({ mockPort: wantMock, appPort: wantApp, defaults, file } = {}) {
+export async function resolveLabPorts({ mockPort: wantMock, appPort: wantApp, apiPort: wantApi, defaults, file } = {}) {
   let saved = {};
   try { if (existsSync(file)) saved = JSON.parse(readFileSync(file, 'utf8')); } catch { saved = {}; }
   const mockPort = await freePort(Number(wantMock || saved.mockPort || defaults.mock));
   const appPort = await freePort(Number(wantApp || saved.appPort || defaults.app), { avoid: [mockPort] });
-  if (saved.mockPort !== mockPort || saved.appPort !== appPort) writeFileSync(file, JSON.stringify({ mockPort, appPort }, null, 2) + '\n');
-  return { mockPort, appPort };
+  const apiPort = await freePort(Number(wantApi || saved.apiPort || defaults.api || 54385), { avoid: [mockPort, appPort] });
+  if (saved.mockPort !== mockPort || saved.appPort !== appPort || saved.apiPort !== apiPort) writeFileSync(file, JSON.stringify({ mockPort, appPort, apiPort }, null, 2) + '\n');
+  return { mockPort, appPort, apiPort };
 }

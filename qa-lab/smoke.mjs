@@ -6,7 +6,9 @@
 //   2. opens the app in headless Chrome, picks that physician on the QA sign-in;
 //   3. waits for the pending membership gate (a new account has no membership);
 //   4. checks the database agrees (a profile for the subject, access pending),
-//      and that the browser never talked to anything but this machine.
+//      that every function the browser calls answers its own CORS headers for
+//      the lab app through the cross-origin API (qa:cors), and that the
+//      browser never talked to anything but this machine.
 //
 // --checkout goes on, as the physician would: reviews the founding offer,
 // agrees to its terms, continues to payment, pays on the lab's stand-in for
@@ -27,6 +29,7 @@ import { LAB_EMAIL_DOMAIN } from './lib/lab-config.mjs';
 import { GENERATED_DIR, QA_LAB_DIR, isMain } from './lib/paths.mjs';
 import { readRuntime } from './lab.mjs';
 import { sleep, waitFor } from './lib/procs.mjs';
+import { corsContract } from './cors-check.mjs';
 
 const LOCAL = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
@@ -41,9 +44,9 @@ export async function launchBrowser({ headed = false } = {}) {
 }
 
 /**
- * A browser page for the lab: records console errors, refuses (and records)
- * every request to a host that is not this machine, and routes Stripe's hosted
- * pages to the mock's stand-ins so a checkout never opens the real Stripe.
+ * A browser page for the lab: records console errors, and refuses (and
+ * records) every request to a host that is not this machine, Stripe's hosted
+ * pages included (the QA build sends the browser to the mock's stand-ins itself).
  */
 export async function labPage(browser, runtime) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -51,8 +54,6 @@ export async function labPage(browser, runtime) {
   await context.route('**/*', (route) => {
     const url = new URL(route.request().url());
     if (url.protocol === 'data:' || url.protocol === 'blob:' || LOCAL.has(url.hostname)) return route.continue();
-    if (url.hostname === 'checkout.stripe.com') return route.fulfill({ status: 302, headers: { Location: `${runtime.urls.mock}/qa/stripe/hosted/checkout/${url.pathname.split('/').pop()}` } });
-    if (url.hostname === 'billing.stripe.com') return route.fulfill({ status: 302, headers: { Location: `${runtime.urls.mock}/qa/stripe/hosted/portal/${url.pathname.split('/').pop()}` } });
     report.external.push(`${route.request().method()} ${url.origin}${url.pathname}`);
     return route.abort('blockedbyclient');
   });
@@ -99,13 +100,20 @@ async function checkoutFlow({ page, runtime, user, check, shotDir, stamp }) {
   const pay = page.getByTestId('qa-stripe-pay');
   await pay.waitFor({ timeout: 60000 });
   const sessionId = new URL(page.url()).pathname.split('/').pop();
-  check('continuing opens Checkout (the lab stand-in, never checkout.stripe.com)', page.url().startsWith(`${runtime.urls.mock}/qa/stripe/hosted/checkout/cs_live_`), sessionId.slice(0, 24) + '...');
+  check('continuing opens Checkout (the lab stand-in on the app origin, never checkout.stripe.com)', page.url().startsWith(`${runtime.urls.appOrigin}/__qa/mock/qa/stripe/hosted/checkout/cs_live_`), sessionId.slice(0, 24) + '...');
   await pay.click();
+  // Stripe sends the browser back at once; the events follow (concurrently, in no set order).
   await page.waitForURL((u) => u.origin === runtime.urls.appOrigin && u.searchParams.get('billing') === 'complete', { timeout: 120000 });
-  const deliveries = (await api(runtime, '/qa/stripe/deliveries')).deliveries.slice(0, 3).reverse();
-  check('signed checkout.session.completed, customer.subscription.created, invoice.paid all accepted by limited-stripe-webhook',
-    deliveries.map((d) => d.type).join(',') === 'checkout.session.completed,customer.subscription.created,invoice.paid' && deliveries.every((d) => d.status === 200 && d.endpoint === 'limited-stripe-webhook'),
-    deliveries.map((d) => `${d.type} ${d.status}`).join(', '));
+  const session = (await api(runtime, `/qa/stripe/sessions?subject=${encodeURIComponent(user.id)}`)).sessions.find((x) => x.id === sessionId);
+  const ids = new Set([session?.id, session?.subscription, session?.invoice].filter(Boolean));
+  const settled = await waitFor('every checkout event to be accepted', async () => {
+    const mine = (await api(runtime, '/qa/stripe/deliveries')).deliveries.filter((d) => ids.has(d.object));
+    const ok = ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid'].every((t) => mine.some((d) => d.type === t && d.status >= 200 && d.status < 300 && d.endpoint === 'limited-stripe-webhook'));
+    return ok ? mine : null;
+  }, { timeoutMs: 90000, intervalMs: 1000 }).catch(() => null);
+  const attempts = settled || (await api(runtime, '/qa/stripe/deliveries')).deliveries.filter((d) => ids.has(d.object));
+  check('signed checkout.session.completed, customer.subscription.created, invoice.paid each accepted by limited-stripe-webhook (a busy 503 is retried, as Stripe does)',
+    !!settled, attempts.slice().reverse().map((d) => `${d.type} ${d.status}${d.attempt > 1 ? ` (attempt ${d.attempt})` : ''}`).join(', '));
   const active = await waitFor('the membership to turn active', async () => {
     const { profile } = await api(runtime, `/qa/users/${user.id}/profile`).catch(() => ({ profile: null }));
     return profile?.access_status === 'active' ? profile : null;
@@ -177,6 +185,12 @@ export async function smoke(argv = process.argv.slice(2)) {
     // 4. The database agrees.
     const { profile } = await api(runtime, `/qa/users/${user.id}/profile?wait=20000`).catch(() => ({ profile: null }));
     check('a profile exists for the signed-in subject, access pending', profile && profile.auth_user_id === user.id && profile.access_status === 'pending', profile ? `profile ${profile.id}, access ${profile.access_status}, verified_email ${profile.verified_email ? 'stamped' : 'empty'}` : 'no profile');
+
+    // 4b. The functions' own CORS, as a browser on another origin meets it (npm run qa:cors).
+    const cors = await corsContract(runtime).catch((e) => [{ ok: false, name: 'qa:cors', problems: [e.message] }]);
+    const broken = cors.filter((r) => !r.ok);
+    check(`every browser-called function keeps its CORS contract through the cross-origin API (${cors.length} checked)`, cors.length > 0 && broken.length === 0,
+      broken.map((r) => `${r.name}: ${r.problems.join('; ')}`).join(' | ').slice(0, 400));
 
     // 5. (--checkout) Pay for the founding membership through the mock Stripe.
     if (values.checkout && outcome === 'gate') await checkoutFlow({ page, runtime, user, check, shotDir, stamp });

@@ -16,9 +16,13 @@
 --                                   and without it that screen says "settings missing")
 -- Synthetic, because production's rows hold member mailboxes:
 --   public.limited_beta_cohorts, public.limited_founding_programs,
---   public.limited_founding_slots  (founding programs for BOTH modes, each with two
---   synthetic promised places, built by the same functions production uses; the lab
---   runs live mode like production, see qa-lab/lib/functions-env.mjs)
+--   public.limited_founding_slots  (founding programs built by the same functions
+--   production uses. LIVE mode, the mode the lab runs like production (see
+--   qa-lab/lib/functions-env.mjs): as many promised places as production's program
+--   has (4, read-only aggregate on 2026-09-29), so public places, founding numbers
+--   and the point where $99 closes match live (96 public places). qa:parity compares
+--   the live program's promise count and promised places with production's. TEST
+--   mode: two promised places, lab-only (parity explains it).)
 --   public.clerk_continuity_runs / _accounts / _events  (an enabled continuity run
 --   for the lab's own Clerk issuers, as production has one for its issuers, with one
 --   synthetic legacy member; built by stage_clerk_continuity)
@@ -44,7 +48,8 @@ insert into public.vera_source_settings (singleton, enabled) values (true, false
 
 insert into public.welcome_email_settings (singleton, enabled) values (true, false);
 
--- 2. A sealed synthetic cohort and the test-mode founding program (capacity 100).
+-- 2. Sealed synthetic cohorts and the founding programs (capacity 100 each).
+--    Test mode: two promised places (lab-only; production has no test-mode program).
 select public.seal_limited_free_beta_cohort(
   'qa_lab_founding_promises',
   encode(sha256(convert_to('["qa-promised-1@qa.credentialdomd.test","qa-promised-2@qa.credentialdomd.test"]', 'UTF8')), 'hex'),
@@ -57,13 +62,19 @@ select public.prepare_founding_program(
   encode(sha256(convert_to('["qa-promised-1@qa.credentialdomd.test","qa-promised-2@qa.credentialdomd.test"]', 'UTF8')), 'hex'),
   2);
 
--- The live-mode program (production's only program is livemode = true, and the lab
--- runs CREDENTIALDOMD_BILLING_MODE=live against its mock Stripe).
+-- Live mode (production's only program is livemode = true, with 4 promised places,
+-- and the lab runs CREDENTIALDOMD_BILLING_MODE=live against its mock Stripe).
+select public.seal_limited_free_beta_cohort(
+  'qa_lab_founding_promises_live',
+  encode(sha256(convert_to('["qa-promised-1@qa.credentialdomd.test","qa-promised-2@qa.credentialdomd.test","qa-promised-3@qa.credentialdomd.test","qa-promised-4@qa.credentialdomd.test"]', 'UTF8')), 'hex'),
+  '["qa-promised-1@qa.credentialdomd.test","qa-promised-2@qa.credentialdomd.test","qa-promised-3@qa.credentialdomd.test","qa-promised-4@qa.credentialdomd.test"]'::jsonb,
+  'QA lab synthetic cohort: four test addresses (production promised four founding places), not production data');
+
 select public.prepare_founding_program(
   true,
-  'qa_lab_founding_promises',
-  encode(sha256(convert_to('["qa-promised-1@qa.credentialdomd.test","qa-promised-2@qa.credentialdomd.test"]', 'UTF8')), 'hex'),
-  2);
+  'qa_lab_founding_promises_live',
+  encode(sha256(convert_to('["qa-promised-1@qa.credentialdomd.test","qa-promised-2@qa.credentialdomd.test","qa-promised-3@qa.credentialdomd.test","qa-promised-4@qa.credentialdomd.test"]', 'UTF8')), 'hex'),
+  4);
 
 -- 2b. Clerk continuity for the lab's issuers. Production has an enabled run whose
 --     target is its Clerk issuer, so every sign-in goes through
@@ -98,4 +109,4 @@ reset role;
 -- 4. Which seed this database holds. qa-lab/apply-schema.mjs compares it with
 --    this file and refuses to run the lab on an older seed (rebuild instead).
 create table if not exists qa_lab.seed_version (version integer not null, applied_at timestamptz not null default now());
-insert into qa_lab.seed_version (version) values (3);
+insert into qa_lab.seed_version (version) values (4);

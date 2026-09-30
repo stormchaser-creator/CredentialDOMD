@@ -148,6 +148,8 @@ export function index(catalog, { localOrigin, rewrite }) {
     put('cron job active', j.jobname, String(j.active));
   }
   for (const v of pl.vault_secret_names) put('vault secret names', v.name, 'exists');
+  // Names only (the values never leave production): the lab keeps a placeholder under each.
+  for (const n of pl.app_secret_names || []) put('app secret names', n, 'exists');
   for (const mg of pl.migrations) put('migration history', mg.version, mg.name);
   for (const p of pl.publications) put('publications', p.name, `all ${p.all_tables}: ${p.tables.join(',')}`);
   return m;
@@ -157,7 +159,7 @@ export function index(catalog, { localOrigin, rewrite }) {
 export const APP_CATEGORIES = [
   'tables', 'columns', 'views', 'sequences', 'functions', 'constraints', 'indexes', 'triggers', 'policies',
   'table grants', 'column grants', 'sequence grants', 'function grants', 'schema grants', 'default privileges',
-  'storage buckets', 'cron jobs', 'cron job active', 'vault secret names', 'migration history', 'publications',
+  'storage buckets', 'cron jobs', 'cron job active', 'vault secret names', 'app secret names', 'migration history', 'publications',
   'extensions', 'schemas', 'roles', 'event triggers', 'platform privileges',
 ];
 
@@ -190,7 +192,33 @@ export function grantsPerRole(catalog) {
   return count;
 }
 
-/** A difference is explained when parity-known.json lists its category and key (key may be "*"). */
+/**
+ * A difference is explained when parity-known.json lists its category, its
+ * kind, and either its exact key or a keyPattern the key matches. "*" still
+ * works for the category-wide entries that need it (cron job active: every job
+ * is created inactive on purpose), but never for platform privileges, where a
+ * wildcard would explain every future platform difference too
+ * (tests/qa-lab/schema-ddl.test.mjs).
+ */
 export function explain(diff, known) {
-  return known.find((k) => k.category === diff.category && (k.key === '*' || k.key === diff.key) && (!k.kind || k.kind === diff.kind));
+  return known.find((k) => k.category === diff.category && (!k.kind || k.kind === diff.kind)
+    && (k.key === '*' || k.key === diff.key || (k.keyPattern && new RegExp(k.keyPattern).test(diff.key))));
+}
+
+/** "function storage.search(text, ...)" / "table auth.scim_users" -> "storage.search" / "auth.scim_users". */
+const objectName = (key) => (/^(?:table|function|view|sequence)\s+([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_$]*)/i.exec(key) || [])[1] || null;
+
+/**
+ * Platform objects that exist on only one side AND that application code names
+ * (a function body, view, policy or trigger in the production catalog). Such a
+ * difference is never explained: a call to it would work on one side only.
+ */
+export function referencedOneSidedPlatformObjects(diffs, catalog) {
+  const text = [
+    ...(catalog.functions || []).map((f) => f.def || ''), ...(catalog.views || []).map((v) => v.def || ''),
+    ...(catalog.policies || []).map((p) => `${p.qual || ''} ${p.with_check || ''}`), ...(catalog.triggers || []).map((t) => t.def || ''),
+    ...((catalog.platform?.cron_jobs) || []).map((j) => j.command || ''),
+  ].join('\n').toLowerCase();
+  return diffs.filter((d) => d.category === 'platform privileges' && (d.kind === 'missing locally' || d.kind === 'only local'))
+    .filter((d) => { const name = objectName(d.key); return name && new RegExp(`\\b${name.replace(/[.$]/g, (c) => `\\${c}`)}\\b`).test(text); });
 }

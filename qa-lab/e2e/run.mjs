@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { MOCK_STATE_DIR, QA_LAB_DIR, REPO_ROOT, isMain } from '../lib/paths.mjs';
 import { readRuntime } from '../lab.mjs';
 import { localJson } from '../lib/local-db.mjs';
+import { labExposedPorts, passFunctionsCorsThrough } from '../lib/stack.mjs';
 import { RESULTS_JSON } from './support/results-reporter.mjs';
 import { waitFor } from '../lib/procs.mjs';
 
@@ -34,7 +35,14 @@ async function ensureLab() {
   const rt = readRuntime();
   if (rt?.pid && alive(rt.pid)) {
     const ok = await fetch(`${rt.urls.mock}/qa/health`, { signal: AbortSignal.timeout(5000) }).then((r) => r.ok, () => false);
-    if (ok) { console.log(`qa-e2e: using the running lab (${rt.urls.app})`); return { runtime: rt, child: null }; }
+    if (ok && rt.urls?.apiOrigin) {
+      // The same guarantees qa:lab makes at start, re-checked: a Kong restart brings its functions CORS back.
+      const exposed = labExposedPorts();
+      if (exposed.length) throw new Error(`the running lab publishes ports beyond loopback (${exposed.join(', ')}); restart it (npm run qa:down, then npm run qa:e2e)`);
+      if (passFunctionsCorsThrough()) console.log('qa-e2e: the local gateway had its functions CORS plugin back (a Kong restart); removed it again');
+      console.log(`qa-e2e: using the running lab (${rt.urls.app})`); return { runtime: rt, child: null };
+    }
+    if (ok) throw new Error(`the running lab (pid ${rt.pid}) predates the API proxy; stop it (Ctrl-C in its terminal) and run qa:e2e again`);
   }
   console.log('qa-e2e: no lab running; starting one (npm run qa:lab) ...');
   const child = spawn(process.execPath, [path.join(QA_LAB_DIR, 'lab.mjs'), '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
@@ -46,10 +54,14 @@ async function ensureLab() {
   return { runtime, child };
 }
 
-/** Founding places left in the lab's live-mode program (each journey that pays takes one). */
+/**
+ * Public founding places left in the lab's live-mode program (each journey that
+ * pays takes one). Promised places are held for their addresses, so they are
+ * not public: 100 minus every slot row, promised or taken.
+ */
 function foundingPlacesLeft() {
   try {
-    return localJson("select json_build_object('left', 100 - (select count(*) from public.limited_founding_slots where livemode and state <> 'promised')) ->> 'left'");
+    return localJson("select json_build_object('left', 100 - (select count(*) from public.limited_founding_slots where livemode)) ->> 'left'");
   } catch { return null; }
 }
 

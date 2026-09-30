@@ -10,12 +10,13 @@ export function emptyState() {
   return {
     version: 1,
     clerk: { users: {}, sessions: {}, webhooks: [] },
-    stripe: { customers: {}, products: {}, prices: {}, sessions: {}, subscriptions: {}, invoices: {}, invoiceItems: {}, portalSessions: {}, events: [], idempotency: {}, deliveries: [] },
+    stripe: { customers: {}, products: {}, prices: {}, sessions: {}, subscriptions: {}, invoices: {}, invoiceItems: {}, portalSessions: {}, events: [], idempotency: {}, deliveries: [], plans: {} },
     emails: [],
     inbound: {},
     telegram: [],
     ai: { usage: {}, calls: [], script: [] },
     beacons: [],
+    batchIdempotency: [],
   };
 }
 

@@ -23,8 +23,9 @@ export const PRODUCTION_LEGACY_ISSUER = 'https://dynamic-goshawk-87.clerk.accoun
 
 /**
  * The origin every edge function pins (CORS, Origin checks, the azp claim).
- * The lab's app server presents requests to the functions as coming from it,
- * exactly as the live app at /app/ does. Browsers never see this origin.
+ * The lab's API proxy (lib/api-proxy.mjs) presents the lab app's requests as
+ * coming from it, exactly as the live app at /app/ sends them, and renames it
+ * back to the lab app's origin in Access-Control-Allow-Origin.
  */
 export const APP_PUBLIC_ORIGIN = 'https://credentialdomd.com';
 
@@ -35,6 +36,8 @@ export const DOCKER_HOST_ALIAS = 'host.docker.internal';
 
 /** First ports tried for the lab's own servers; the next free one is used. */
 export const DEFAULT_MOCK_PORT = 54380;
+/** The API origin the app calls as its Supabase URL (a different origin from the app, as live). */
+export const DEFAULT_API_PORT = 54385;
 export const DEFAULT_APP_PORT = 54390;
 
 /** Only these hosts may appear in anything the lab points a function or the app at. */
@@ -50,11 +53,17 @@ export const MOCK_PATHS = Object.freeze({
   qa: '/qa',                // the lab's own API: test physicians, sessions, tokens, inbox, Stripe helpers
 });
 
-/** Paths the QA app server proxies (same origin as the app, so the browser needs no CORS). */
+/**
+ * Paths the QA app server proxies. Only the lab's own mock server: the Supabase
+ * API is on its own origin (lib/api-proxy.mjs), so the browser enforces CORS on
+ * every call to it, as it does live.
+ */
 export const APP_PROXY = Object.freeze({
-  supabase: '/__qa/sb',     // -> the local Supabase gateway, Origin presented as APP_PUBLIC_ORIGIN
-  mock: '/__qa/mock',       // -> the mock server
+  mock: '/__qa/mock',       // -> the mock server (QA sign-in, hosted-page stand-ins)
 });
+
+/** Where the QA build sends the browser instead of Stripe's hosted pages (same origin as the app). */
+export const HOSTED_STAND_IN_PATH = '/__qa/mock/qa/stripe/hosted';
 
 /** The token template the app asks Clerk for (src/lib/supabase.js). */
 export const SUPABASE_TEMPLATE = 'supabase';

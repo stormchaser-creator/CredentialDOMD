@@ -1,10 +1,10 @@
-// Values read from supabase/config.toml (the local stack's configuration).
+// Values read from the lab's stack config template (qa-lab/supabase-config.template.toml).
 import { readFileSync } from 'node:fs';
-import { SUPABASE_CONFIG } from './paths.mjs';
+import { STACK_CONFIG_TEMPLATE } from './paths.mjs';
 
 export function projectId() {
-  const m = /^project_id\s*=\s*"([^"]+)"/m.exec(readFileSync(SUPABASE_CONFIG, 'utf8'));
-  if (!m) throw new Error('project_id missing from supabase/config.toml');
+  const m = /^project_id\s*=\s*"([^"]+)"/m.exec(readFileSync(STACK_CONFIG_TEMPLATE, 'utf8'));
+  if (!m) throw new Error('project_id missing from qa-lab/supabase-config.template.toml');
   return m[1];
 }
 

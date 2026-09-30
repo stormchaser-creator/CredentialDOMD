@@ -30,7 +30,7 @@ function* files(dir) {
 // Strings only the lab's sign-in carries (qa-lab/app/*). Any of them in a
 // production bundle means the QA sign-in shipped.
 const QA_SIGNIN_MARKERS = [
-  'qa-signin', 'qa_lab_session', '/__qa/mock', '/__qa/sb', 'QA-lab sign-in', 'Sign in as a test physician',
+  'qa-signin', 'qa_lab_session', '/__qa/mock', '/__qa/sb', '/qa/stripe/hosted', 'QA-lab sign-in', 'Sign in as a test physician',
   'clerk.qa.credentialdomd.test', 'clerk-legacy.qa.credentialdomd.test', 'qa.credentialdomd.test', 'isQaLab', 'signInAs',
 ];
 
@@ -52,8 +52,8 @@ test('no workflow sets the QA-lab flag or builds with the QA-lab config', () => 
   }
 });
 
-test('the QA-lab vite config refuses to build without VITE_QA_LAB=1 or with a remote Supabase URL', async () => {
-  const saved = { lab: process.env.VITE_QA_LAB, url: process.env.VITE_SUPABASE_URL };
+test('the QA-lab vite config refuses to build without VITE_QA_LAB=1, with a remote Supabase URL, or with the API on the app\'s origin', async () => {
+  const saved = { lab: process.env.VITE_QA_LAB, url: process.env.VITE_SUPABASE_URL, port: process.env.QA_LAB_APP_PORT };
   try {
     const { default: config } = await import('../../qa-lab/app/vite.config.mjs');
     delete process.env.VITE_QA_LAB;
@@ -61,8 +61,14 @@ test('the QA-lab vite config refuses to build without VITE_QA_LAB=1 or with a re
     process.env.VITE_QA_LAB = '1';
     process.env.VITE_SUPABASE_URL = 'https://project.example.com';
     assert.throws(() => config({ command: 'build', mode: 'production' }), /not this machine/);
+    // Same origin as the app: the browser would never check the functions' CORS headers.
+    process.env.VITE_SUPABASE_URL = 'http://127.0.0.1:54390/__qa/sb';
+    process.env.QA_LAB_APP_PORT = '54390';
+    assert.throws(() => config({ command: 'build', mode: 'production' }), /another origin/);
+    process.env.VITE_SUPABASE_URL = 'http://127.0.0.1:54385';
+    assert.doesNotThrow(() => config({ command: 'build', mode: 'production' }));
   } finally {
-    for (const [k, v] of [['VITE_QA_LAB', saved.lab], ['VITE_SUPABASE_URL', saved.url]]) {
+    for (const [k, v] of [['VITE_QA_LAB', saved.lab], ['VITE_SUPABASE_URL', saved.url], ['QA_LAB_APP_PORT', saved.port]]) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }
   }
@@ -85,7 +91,7 @@ async function buildApp({ qa = false } = {}) {
     Object.assign(process.env, productionAppFlags(), {
       VITE_SUPABASE_URL: 'https://project.example.com', VITE_SUPABASE_ANON_KEY: 'placeholder-anon-key',
       VITE_CLERK_PUBLISHABLE_KEY: `pk_live_${Buffer.from('clerk.example.com$').toString('base64')}`,
-    }, qa ? { VITE_QA_LAB: '1', VITE_SUPABASE_URL: 'http://127.0.0.1:54390/__qa/sb' } : {});
+    }, qa ? { VITE_QA_LAB: '1', VITE_SUPABASE_URL: 'http://127.0.0.1:54385' } : {});
     // stamp-build-id and assert-precache write and check the repository's dist/
     // (the service worker stamp and version.json); they do not change the bundle.
     const plugins = baseConfig.plugins.filter((p) => !(p && !Array.isArray(p) && ['stamp-build-id', 'assert-precache'].includes(p.name)));
@@ -110,6 +116,9 @@ test('a production build contains no QA sign-in code, and does contain Clerk', {
   // The real Clerk SDK is what production signs in with (the shim replaces exactly this package).
   assert.match(js, /clerk-react|ClerkProvider|clerk\.browser/i, 'the production bundle contains the Clerk SDK');
   assert.match(js, /clerk\.credentialdomd\.com/, 'the production bundle keeps the production Clerk issuer');
+  // Checkout and the billing portal still go to Stripe's own pages (the lab's stand-in rewrite is QA-build only).
+  assert.match(js, /checkout\.stripe\.com/);
+  assert.match(js, /billing\.stripe\.com/);
 });
 
 test('negative control: the same build with the QA-lab alias does contain the markers', { timeout: 240000 }, async () => {

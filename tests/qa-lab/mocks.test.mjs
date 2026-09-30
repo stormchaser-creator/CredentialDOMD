@@ -21,6 +21,7 @@ import { LIMITED_LAUNCH, limitedOffer, assertLimitedPrice } from '../../supabase
 
 const secrets = generateLabSecrets();
 const received = [];   // what the stand-in "functions" got, after verifying each signature
+const refuseNext = {}; // event type -> how many more times limited-stripe-webhook answers 503 busy
 let receiver, mock, base, stateDir;
 
 /** Plays the local edge functions: verifies each webhook the way the real function does, answers 200. */
@@ -32,7 +33,15 @@ function startReceiver() {
     const name = new URL(req.url, 'http://x').pathname.replace('/functions/v1/', '');
     try {
       if (name === 'clerk-webhook') received.push({ name, event: new Webhook(secrets.clerk.webhookSecret).verify(body, req.headers) });
-      else if (name === 'limited-stripe-webhook') received.push({ name, event: Stripe.webhooks.constructEvent(body, req.headers['stripe-signature'], secrets.stripe.webhookSecret) });
+      else if (name === 'limited-stripe-webhook') {
+        const event = Stripe.webhooks.constructEvent(body, req.headers['stripe-signature'], secrets.stripe.webhookSecret);
+        received.push({ name, event, at: Date.now() });
+        if (refuseNext[event.type] > 0) {
+          refuseNext[event.type] -= 1;
+          res.writeHead(503, { 'Content-Type': 'application/json' }); res.end('{"error":"billing_reconciliation_pending"}');
+          return;
+        }
+      }
       else if (name === 'email-inbound') received.push({ name, event: new Webhook(secrets.resend.webhookSecret).verify(body, req.headers) });
       else throw new Error(`unexpected function ${name}`);
       res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"received":true}');
@@ -199,6 +208,53 @@ test('Stripe form parameters decode the way Stripe decodes them', () => {
     { metadata: { a: '1' }, line_items: [{ price: 'p', quantity: '1' }], expand: ['x', 'y'], lookup_keys: ['k'] });
 });
 
+test('mock Stripe: the hosted Pay button sends the browser back at once; the events follow concurrently and a 503 is retried', async () => {
+  const port = Number(new URL(base).port);
+  const stripe = new Stripe(secrets.stripe.secretKey, { apiVersion: '2024-04-10', host: '127.0.0.1', port: String(port), protocol: 'http', maxNetworkRetries: 0 });
+  const offer = limitedOffer('core', 'founding', { core: secrets.stripe.coreProductId, core_locum: secrets.stripe.coreLocumProductId });
+  const price = (await stripe.prices.list({ lookup_keys: [offer.lookupKey], active: true, limit: 1 })).data[0];
+  const customer = await stripe.customers.create({ metadata: { app: LIMITED_LAUNCH.app } });
+  const session = await stripe.checkout.sessions.create({ customer: customer.id, mode: 'subscription', line_items: [{ price: price.id, quantity: 1 }],
+    success_url: `${APP_PUBLIC_ORIGIN}/app/?billing=complete`, cancel_url: `${APP_PUBLIC_ORIGIN}/app/?billing=canceled`, expires_at: Math.floor(Date.now() / 1000) + 3600 });
+
+  // The stand-in's forms are relative, so the page works on the app's origin (/__qa/mock/...) and on the mock's.
+  const page = await (await fetch(`${base}/qa/stripe/hosted/checkout/${session.id}`)).text();
+  assert.match(page, new RegExp(`action="${session.id}/pay"`));
+  assert.doesNotMatch(page, /action="\//);
+
+  assert.equal((await call('/qa/stripe/delivery-plan', { method: 'POST', body: { session: session.id, delayMs: 400, order: 'invoice-first', mode: 'concurrent' } })).status, 200);
+  refuseNext['invoice.paid'] = 1;
+  const before = received.length;
+  const started = Date.now();
+  const pay = await fetch(`${base}/qa/stripe/hosted/checkout/${session.id}/pay`, { method: 'POST', redirect: 'manual' });
+  assert.equal(pay.status, 303);
+  assert.equal(pay.headers.get('location'), 'http://127.0.0.1:1/app/?billing=complete', 'back to the lab app, not production');
+  assert.equal(received.length, before, 'the browser is sent back before any event is delivered');
+  const mine = () => received.slice(before).filter((r) => r.name === 'limited-stripe-webhook');
+  await until(() => mine().length >= 4, 15000);
+  const first = mine().slice(0, 3);
+  assert.deepEqual(first.map((r) => r.event.type).sort(), ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid']);
+  assert.ok(first.every((r) => r.at - started >= 400), 'the events wait for the plan delay');
+  assert.ok(Math.max(...first.map((r) => r.at)) - Math.min(...first.map((r) => r.at)) < 300, 'concurrent: the three arrive together');
+  assert.equal(mine()[3].event.type, 'invoice.paid', 'the refused invoice.paid is sent again');
+  assert.equal(mine()[3].event.id, first.find((r) => r.event.type === 'invoice.paid').event.id, 'a retry is the same event');
+  const { data } = await call('/qa/stripe/deliveries');
+  const paid = data.deliveries.filter((d) => d.type === 'invoice.paid' && d.customer === customer.id).reverse();
+  assert.deepEqual(paid.map((d) => [d.attempt, d.status, d.willRetry]), [[1, 503, true], [2, 200, false]]);
+});
+
+test('mock Stripe: delivery plans are checked, and orders are what they say', async () => {
+  const { deliveryPlan, planOrder, DEFAULT_DELIVERY_PLAN } = await import('../../qa-lab/mocks/stripe.mjs');
+  assert.deepEqual(deliveryPlan({}), { ...DEFAULT_DELIVERY_PLAN, drop: [] });
+  assert.deepEqual(planOrder(deliveryPlan({ order: 'invoice-first' })), ['invoice.paid', 'checkout.session.completed', 'customer.subscription.created']);
+  assert.deepEqual(planOrder(deliveryPlan({ order: 'checklist' })), ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid']);
+  assert.deepEqual(planOrder(deliveryPlan({ order: 'shuffled' }), () => 0).sort(), ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid']);
+  for (const bad of [{ delayMs: -1 }, { mode: 'parallel' }, { order: 'random' }, { order: ['invoice.paid'] }, { drop: ['charge.refunded'] }, { surprise: 1 }]) {
+    assert.throws(() => deliveryPlan(bad), /./, JSON.stringify(bad));
+  }
+  assert.equal((await call('/qa/stripe/delivery-plan', { method: 'POST', body: { delayMs: 1 } })).status, 400, 'a plan names a session or the default');
+});
+
 // ── Resend ───────────────────────────────────────────────────────────────────
 test('mock Resend: captures what a function sends, needs the lab key, honours idempotency keys', async () => {
   const email = { from: 'CredentialDOMD <docs@credentialdomd.com>', to: ['reader@qa.credentialdomd.test'], subject: 'Lab probe', html: '<p>hi</p>', text: 'hi', tags: [{ name: 'kind', value: 'probe' }] };
@@ -217,6 +273,32 @@ test('mock Resend: captures what a function sends, needs the lab key, honours id
   const inbox = await fetch(`${base}/qa/inbox`);
   assert.match(inbox.headers.get('content-security-policy'), /default-src 'none'/);
   assert.match(await inbox.text(), /Lab probe/);
+});
+
+test('mock Resend: an Idempotency-Key reused with a different payload is refused 409, as Resend does; batches honour the key', async () => {
+  const auth = { Authorization: `Bearer ${secrets.resend.apiKey}` };
+  const email = { from: 'CredentialDOMD <support@credentialdomd.com>', to: ['owner-a@qa.credentialdomd.test'], subject: 'Re: Ticket (CredentialDOMD)', text: 'reply' };
+  const first = await call('/resend/emails', { method: 'POST', body: email, headers: { ...auth, 'Idempotency-Key': 'ticket-reply/probe-1' } });
+  assert.equal(first.status, 200);
+  // The same payload (keys in another order) is a retry: the first id, nothing sent again.
+  const reordered = { text: email.text, subject: email.subject, to: email.to, from: email.from };
+  assert.equal((await call('/resend/emails', { method: 'POST', body: reordered, headers: { ...auth, 'Idempotency-Key': 'ticket-reply/probe-1' } })).data.id, first.data.id);
+  // The owner's address changed between a lost first attempt and the retry: Resend refuses it.
+  const changed = await call('/resend/emails', { method: 'POST', body: { ...email, to: ['owner-b@qa.credentialdomd.test'] }, headers: { ...auth, 'Idempotency-Key': 'ticket-reply/probe-1' } });
+  assert.equal(changed.status, 409);
+  assert.equal(changed.data.name, 'invalid_idempotent_request');
+  assert.equal(changed.data.statusCode, 409);
+  assert.equal((await call('/qa/emails?to=owner-b@qa.credentialdomd.test')).data.emails.length, 0, 'nothing captured for the refused send');
+
+  const batch = [{ ...email, to: ['batch-1@qa.credentialdomd.test'] }, { ...email, to: ['batch-2@qa.credentialdomd.test'] }];
+  const b1 = await call('/resend/emails/batch', { method: 'POST', body: batch, headers: { ...auth, 'Idempotency-Key': 'batch/probe-1' } });
+  assert.equal(b1.status, 200);
+  const b2 = await call('/resend/emails/batch', { method: 'POST', body: batch, headers: { ...auth, 'Idempotency-Key': 'batch/probe-1' } });
+  assert.deepEqual(b2.data.data, b1.data.data, 'a retried batch returns the first ids');
+  assert.equal((await call('/qa/emails?to=batch-1@qa.credentialdomd.test')).data.emails.length, 1, 'and sends nothing twice');
+  const b3 = await call('/resend/emails/batch', { method: 'POST', body: batch.slice(0, 1), headers: { ...auth, 'Idempotency-Key': 'batch/probe-1' } });
+  assert.equal(b3.status, 409);
+  assert.equal(b3.data.name, 'invalid_idempotent_request');
 });
 
 test('mock Resend: simulated inbound mail reaches email-inbound as a Svix-signed email.received, readable through the Receiving API', async () => {

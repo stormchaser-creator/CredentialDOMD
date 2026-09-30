@@ -87,29 +87,32 @@ test('the env file is plain name=value lines', () => {
   for (const line of text.split('\n').filter((l) => l && !l.startsWith('#'))) assert.match(line, /^[A-Z][A-Z0-9_]*=[^\n]*$/);
 });
 
-test('the lab stack config: trusts the lab token key, clears seeding, adds the function environment, and nothing else', () => {
-  const source = readFileSync(path.join(ROOT, 'supabase', 'config.toml'), 'utf8');
+test('the lab stack config: the template plus the function environment, nothing else', () => {
+  const source = readFileSync(path.join(ROOT, 'qa-lab', 'supabase-config.template.toml'), 'utf8');
   const env = make();
   const text = stackConfigText(env, source);
   assert.match(text, /^signing_keys_path = "\.\/signing_keys\.json"$/m);
   assert.match(text, /^sql_paths = \[\]$/m);
   assert.match(text, /^\[edge_runtime\.secrets\]$/m);
   assert.ok(text.includes(`STRIPE_API_BASE = "${env.STRIPE_API_BASE}"`));
-  // Everything else is supabase/config.toml line for line.
+  // Everything else is the template line for line.
   const added = text.split('\n').filter((l) => !source.split('\n').includes(l));
-  for (const line of added) assert.ok(/^#|^signing_keys_path|^sql_paths|^\[edge_runtime\.secrets\]$|^[A-Z][A-Z0-9_]* = "|^$/.test(line), `unexpected line: ${line}`);
+  for (const line of added) assert.ok(/^#|^\[edge_runtime\.secrets\]$|^[A-Z][A-Z0-9_]* = "|^$/.test(line), `unexpected line: ${line}`);
   assert.throws(() => stackConfigText({ BAD: 'has "quote"' }, source), /plain one-line/);
-  assert.throws(() => stackConfigText(null, source.replace('# signing_keys_path = "./signing_keys.json"', '')), /changed shape/);
-  assert.ok(!/^signing_keys_path/m.test(source), 'supabase/config.toml itself never names a signing key (deploys read it)');
+  assert.throws(() => stackConfigText(null, source.replace('signing_keys_path = "./signing_keys.json"', '# signing_keys_path = "./signing_keys.json"')), /changed shape/);
+  assert.throws(() => stackConfigText(null, source.replace('sql_paths = []', 'sql_paths = ["../qa-lab/seed.sql"]')), /changed shape/);
 });
 
 test('the QA app build gets the deploy\'s switches, the local stack and the QA flag, and drops the caller\'s VITE_* values', () => {
   const flags = productionAppFlags();
   assert.equal(flags.VITE_CLERK_CONTINUITY_ENABLED, 'true');
   assert.ok(!('VITE_QA_LAB' in flags));
-  const env = qaAppEnv({ appPort: 54390, anonKey: 'local-anon', base: { PATH: '/bin', VITE_SUPABASE_URL: 'https://project.example.com', VITE_ANYTHING: 'x' } });
+  const env = qaAppEnv({ appPort: 54390, apiPort: 54385, anonKey: 'local-anon', base: { PATH: '/bin', VITE_SUPABASE_URL: 'https://project.example.com', VITE_ANYTHING: 'x' } });
   assert.equal(env.VITE_QA_LAB, '1');
-  assert.equal(env.VITE_SUPABASE_URL, 'http://127.0.0.1:54390/__qa/sb');
+  // The lab's API proxy: this machine, another origin than the app, so the browser checks CORS as it does live.
+  assert.equal(env.VITE_SUPABASE_URL, 'http://127.0.0.1:54385');
+  assert.equal(env.QA_LAB_APP_PORT, '54390');
+  assert.throws(() => qaAppEnv({ appPort: 54390, apiPort: 54390, anonKey: 'k', base: {} }), /another port/);
   assert.equal(env.VITE_ANYTHING, undefined);
   assert.equal(env.PATH, '/bin');
   for (const [k, v] of Object.entries(flags)) assert.equal(env[k], v, k);

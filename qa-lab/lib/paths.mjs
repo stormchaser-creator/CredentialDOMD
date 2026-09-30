@@ -13,13 +13,20 @@ export const LOCAL_SECRETS_JSON = path.join(GENERATED_DIR, 'local-secrets.json')
 export const PARITY_REPORT = path.join(GENERATED_DIR, 'parity-report.txt');
 export const SEED_SQL = path.join(QA_LAB_DIR, 'seed.sql');
 export const PARITY_KNOWN = path.join(QA_LAB_DIR, 'parity-known.json');
-export const SUPABASE_CONFIG = path.join(REPO_ROOT, 'supabase', 'config.toml');
+/**
+ * The lab's Supabase CLI config TEMPLATE. Deliberately not supabase/config.toml: the
+ * CLI reads that file for production's `db push` / `functions deploy` too, and the lab's
+ * settings (migrations off, seeding off) must never reach those commands.
+ */
+export const STACK_CONFIG_TEMPLATE = path.join(QA_LAB_DIR, 'supabase-config.template.toml');
+/** Where a root CLI config would be. The repository has none (tests/qa-lab/public-repo-safety.test.mjs). */
+export const ROOT_SUPABASE_CONFIG = path.join(REPO_ROOT, 'supabase', 'config.toml');
 export const FUNCTIONS_DIR = path.join(REPO_ROOT, 'supabase', 'functions');
 
 // Step 2 (sign-in, mocks, functions). All generated, all gitignored.
 /** Lab-only keys and fake provider secrets (mode 600). Never production values. */
 export const LAB_SECRETS_JSON = path.join(GENERATED_DIR, 'lab-secrets.json');
-/** The Supabase CLI workdir the lab starts the stack from: config.toml + signing key + functions link. */
+/** The Supabase CLI workdir the lab starts the stack from: config.toml (from the template) + signing key + functions link. */
 export const STACK_WORKDIR = path.join(GENERATED_DIR, 'stack');
 export const STACK_CONFIG = path.join(STACK_WORKDIR, 'supabase', 'config.toml');
 export const STACK_SIGNING_KEYS = path.join(STACK_WORKDIR, 'supabase', 'signing_keys.json');

@@ -171,6 +171,8 @@ from pg_policies where schemaname = any(${list(POLICY_SCHEMAS)})`,
   'cron_jobs', (select coalesce(jsonb_agg(jsonb_build_object('jobname', j.jobname, 'schedule', j.schedule, 'command', j.command,
        'database', j.database, 'username', j.username, 'active', j.active) order by j.jobname), '[]'::jsonb) from cron.job j),
   'vault_secret_names', (select coalesce(jsonb_agg(jsonb_build_object('name', s.name, 'description', s.description) order by s.name), '[]'::jsonb) from vault.secrets s),
+  -- NAMES only: the lab stores a placeholder under each (qa-lab/lab.mjs), so every function takes the branch it takes live.
+  'app_secret_names', (select coalesce(jsonb_agg(s.name order by s.name), '[]'::jsonb) from public.app_secrets s),
   'migrations', (select coalesce(jsonb_agg(jsonb_build_object('version', m.version, 'name', m.name) order by m.version), '[]'::jsonb) from supabase_migrations.schema_migrations m),
   'publications', (select coalesce(jsonb_agg(jsonb_build_object('name', p.pubname, 'all_tables', p.puballtables,
        'tables', (select coalesce(jsonb_agg(pt.schemaname || '.' || pt.tablename order by pt.schemaname, pt.tablename), '[]'::jsonb) from pg_publication_tables pt where pt.pubname = p.pubname))
@@ -183,5 +185,8 @@ export const CONFIG_ROWS_QUERY = `select jsonb_build_object(
   'access_policy_settings', (select coalesce(jsonb_agg(to_jsonb(a) order by a.singleton), '[]'::jsonb) from public.access_policy_settings a),
   'vera_source_settings', (select coalesce(jsonb_agg(to_jsonb(v) order by v.singleton), '[]'::jsonb) from public.vera_source_settings v),
   'welcome_email_settings', (select coalesce(jsonb_agg(jsonb_build_object('singleton', w.singleton, 'enabled', w.enabled) order by w.singleton), '[]'::jsonb) from public.welcome_email_settings w),
-  'app_secret_names', (select coalesce(jsonb_agg(s.name order by s.name), '[]'::jsonb) from public.app_secrets s)
+  -- Counts only (the programs' promised places are member mailboxes): how many founding places each mode's program promised.
+  'founding_programs', (select coalesce(jsonb_agg(jsonb_build_object('livemode', f.livemode, 'promise_count', f.promise_count,
+       'promised_total', (select count(*) from public.limited_founding_slots s where s.livemode = f.livemode and s.promise_email is not null)) order by f.livemode), '[]'::jsonb)
+     from public.limited_founding_programs f)
 ) as r`;
