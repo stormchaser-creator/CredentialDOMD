@@ -478,6 +478,10 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('due work continues without new customer input', execute(script).returncode == 0 and invocations(run)[-1]['run_mode'] == 'continuation')
         record = json.loads((state / f'{T}.json').read_text())
         check('quiet continuation saves progress without publication', count() == 1 and record['run_mode'] == 'continuation' and record['continuation']['attempts'] == 1)
+        # The personal-data gate leaves only the runner's own replies out of
+        # its ticket_text rule: the one its ledger recorded, marked on load.
+        replies = [m for f in (run / 'work' / 'runs').glob('*/context.json') for t in json.loads(f.read_text())['tickets'] for m in t['messages'] if m.get('is_admin_reply')]
+        check("the runner's stored reply is marked as its own from its ledger on the next load", len(replies) == 1 and replies[0].get('verification_id') and replies[0].get('runner_reply') is True, replies)
 
         # A continuation the limit pauses gets back the attempt its load
         # reserved (review of 2026-09-29): three limited hours used to use up

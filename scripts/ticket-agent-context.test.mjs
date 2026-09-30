@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, stat, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { loadContext, historySQL, messagesSQL, targetSQL, actorLabel, validateAssessment,
@@ -304,6 +304,39 @@ test('a paused run gives back the continuation attempt it reserved; three limite
     await assert.rejects(releaseAttempt(directory, targetId, 'not-a-run'), /the run that reserved it/);
     assert.equal(await releaseAttempt(directory, uuid(77), RUN), false, 'no case record');
   });
+});
+// Review of 2026-09-29: the personal-data gate leaves the runner's own
+// replies out of its ticket_text rule. An operator's post-reply.mjs reply is
+// verified too, so a verification alone is not the runner's: only a reply the
+// runner's own ledger recorded (path agent, the same ticket, verification and
+// message) is marked.
+test('the runner\'s own replies are marked from its ledger; an operator\'s verified reply and a mismatched entry are not', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'support-ledger-test-'));
+  try {
+    await ensureState(directory);
+    const vid = n => uuid(5000 + n);
+    const msgs = [message(1), message(2, targetId, { is_admin_reply: true, verification_id: vid(2) }), message(3, targetId, { is_admin_reply: true, verification_id: vid(3) }),
+      message(4, targetId, { is_admin_reply: true, verification_id: vid(4) }), message(5, uuid(2), { is_admin_reply: true, verification_id: vid(5) }),
+      message(6, targetId, { is_admin_reply: true, verification_id: vid(6) })];
+    const ledger = async (ticketId, entry) => {
+      await mkdir(path.join(directory, 'replies', ticketId), { recursive: true, mode: 0o700 });
+      await writeFile(path.join(directory, 'replies', ticketId, `${entry.verification_id}.json`), JSON.stringify(entry), { mode: 0o600 });
+    };
+    const agent = (m, changes = {}) => ({ kind: 'reply_stored', path: 'agent', ticket_id: m.ticket_id, message_id: m.id, verification_id: m.verification_id, ...changes });
+    await ledger(targetId, agent(msgs[1]));
+    // An operator's reply: its ledger is post-reply's; a copy here says so.
+    await ledger(targetId, agent(msgs[2], { path: 'post-reply' }));
+    // An entry for another message with this verification id.
+    await ledger(targetId, agent(msgs[3], { message_id: msgs[0].id }));
+    // The runner's reply on a related ticket, in that ticket's ledger folder.
+    await ledger(uuid(2), agent(msgs[4]));
+    // msgs[5]: no ledger entry at all (a reply stored around the checks).
+    const { query } = fixtureQuery([ticket(1), ticket(2, { status: 'resolved' })], msgs);
+    const context = await loadQueuedContext(query, { id: targetId, mode: 'reply' }, directory);
+    const marked = context.tickets.flatMap(t => t.messages).filter(m => m.runner_reply === true).map(m => m.id);
+    assert.deepEqual(marked.sort(), [msgs[1].id, msgs[4].id].sort());
+    assert.equal(context.tickets[0].messages.find(m => m.id === msgs[2].id).runner_reply, undefined, 'the operator\'s verified reply still counts as ticket text');
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 test('due work shares the two-target bound and new customer input wins for the same target', async () => {
   await pendingFixture(async ({ directory, context, makeQuery }) => {

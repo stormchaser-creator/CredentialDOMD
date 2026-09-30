@@ -13,7 +13,8 @@
 //   base64_blob    a long base64 run (an embedded image or document)
 //   media_in_tests an image, PDF or font added or changed under tests/
 //   ticket_text    8 or more words in a row copied from the ticket thread
-//                  (not from the runner's own verified replies)
+//                  (not from the runner's own replies: runner_reply, set
+//                  from its reply ledger; an operator's verified reply counts)
 //   credential     the runner's own model credential, or a token shape
 //                  (sk-ant-, sbp_, ghp_/gho_/ghu_/ghs_/ghr_, github_pat_, a
 //                  JWT, a private key block)
@@ -53,18 +54,23 @@ export function deaValid(letters, digits) {
   return (d[0] + d[2] + d[4] + 2 * (d[1] + d[3] + d[5])) % 10 === d[6] && /^[ABCDEFGHJKLMPRSTUX]/.test(letters);
 }
 const words = text => String(text ?? '').toLowerCase().match(/[a-z0-9']+/g) ?? [];
-// Every 8-word run in the ticket thread, less the runner's own verified
-// replies (a message with a verification_id). Those are written from the
-// acceptance criteria and the test names, so a reproduction test named after
-// an acceptance criterion, as the runner requires, matched the runner's own
-// words, and a frozen reproduction file can never be repaired (2026-09-29).
-// Member words such a reply quotes are in the member's own messages, which
-// still count. Admin replies without a verification still count.
+// Every 8-word run in the ticket thread, less the runner's own replies: a
+// message with a verification_id that the runner's reply ledger recorded as
+// its own (runner_reply, set on the host by ticket-agent-context.mjs
+// markRunnerReplies). Those are rendered from the acceptance criteria and the
+// test names, so a reproduction test named after an acceptance criterion, as
+// the runner requires, matched the runner's own words, and a frozen
+// reproduction file can never be repaired (2026-09-29). Member words such a
+// reply quotes are in the member's own messages, which still count. Every
+// other reply still counts: an admin reply without a verification, and an
+// operator's post-reply.mjs reply, which is verified too but whose free text
+// can relay words from outside the thread (review of 2026-09-29).
+const runnerReply = m => Boolean(m?.verification_id) && m?.runner_reply === true;
 export function evidenceShingles(context, size = 8) {
   const texts = [];
   for (const t of context?.tickets ?? []) {
     texts.push(t.subject, t.body);
-    for (const m of t.messages ?? []) if (!m?.verification_id) texts.push(m?.body);
+    for (const m of t.messages ?? []) if (!runnerReply(m)) texts.push(m?.body);
   }
   const shingles = new Set();
   for (const text of texts) {

@@ -489,7 +489,29 @@ export async function loadQueuedContext(query, item, directory, options = {}) {
     pending.continuation.reservation = { run_id: RUN_ID.test(options.runId ?? '') ? options.runId : null, at, before };
     await writePrivate(path.join(directory, `${item.id}.json`), JSON.stringify(pending, null, 2));
   }
+  await markRunnerReplies(context, directory);
   return attachPriorReviews(context, directory);
+}
+// The runner's own stored replies: a message whose verification this runner's
+// ledger recorded (finishRun: <state>/replies/<ticket>/<verification>.json,
+// path "agent", the same ticket, verification and message) gets
+// runner_reply: true. The personal-data gate leaves only these out of its
+// ticket_text rule (gates/personal-data.mjs): they are rendered from the
+// checklist and the test names. An operator's post-reply.mjs reply carries a
+// verification too, but its free text can relay words from outside the
+// thread (a phone call, a forwarded email), so it still counts (review of
+// 2026-09-29).
+export async function markRunnerReplies(context, directory) {
+  for (const ticket of context.tickets ?? []) {
+    if (!UUID.test(ticket?.id || '')) continue;
+    for (const m of ticket.messages ?? []) {
+      if (!UUID.test(m?.verification_id || '')) continue;
+      let entry = null;
+      try { entry = JSON.parse(await fs.readFile(path.join(directory, 'replies', ticket.id, `${m.verification_id}.json`), 'utf8')); } catch { entry = null; }
+      if (entry?.kind === 'reply_stored' && entry.path === 'agent' && entry.ticket_id === ticket.id && entry.verification_id === m.verification_id && entry.message_id === m.id) m.runner_reply = true;
+    }
+  }
+  return context;
 }
 // A run the subscription's usage limit paused (run.mjs exit 8) says nothing
 // about the ticket, and three limited hours in a row would otherwise use up a

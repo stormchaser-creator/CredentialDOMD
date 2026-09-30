@@ -43,27 +43,36 @@ test('eight words in a row from the ticket thread count as copied text', () => {
   assert.equal(evidenceShingles(null).size, 0);
 });
 
-// The runner's own verified reply (a message with a verification_id) is
-// written from the acceptance criteria and the test names; a reproduction test
-// named after its criterion, as the runner requires, matched it, and a frozen
+// The runner's own reply (a verified message its reply ledger recorded:
+// runner_reply, set by ticket-agent-context.mjs markRunnerReplies) is written
+// from the acceptance criteria and the test names; a reproduction test named
+// after its criterion, as the runner requires, matched it, and a frozen
 // reproduction file can never be repaired (2026-09-29). Synthetic text.
 const CRITERION = 'Renewal list: the expired badge shows on the card once the renewal date has passed';
 const verifiedReply = { id: '00000000-0000-4000-8000-000000000301', body: `CredentialDOMD Support · Automated\n\nFixed and verified: ${CRITERION}. The test that checks it passed on the released build.`,
-  is_admin_reply: true, verification_id: '00000000-0000-4000-8000-000000000302', actor_label: 'owner_support_reply' };
+  is_admin_reply: true, verification_id: '00000000-0000-4000-8000-000000000302', actor_label: 'owner_support_reply', runner_reply: true };
+// An operator's reply through post-reply.mjs is verified too (every operator
+// reply must be, migration 20260928150000), but its claims and not-done lines
+// are free text: here, words relayed from a phone call (review of 2026-09-29).
+const operatorReply = { id: '00000000-0000-4000-8000-000000000305', body: 'CredentialDOMD Support · Automated\n\nFrom your call today: the board portal rejects the upload when the scanned licence is rotated sideways',
+  is_admin_reply: true, verification_id: '00000000-0000-4000-8000-000000000306', actor_label: 'owner_support_reply' };
 const ownerNote = { id: '00000000-0000-4000-8000-000000000303', body: 'Admin note, no verification: the orange banner on the credentials page overlaps the search field on narrow phones',
   is_admin_reply: true, verification_id: null, actor_label: 'recorded_admin_author' };
 const memberAsk = { id: '00000000-0000-4000-8000-000000000304', body: 'Please make the reminder email name the licence that expires first, not the newest one',
   is_admin_reply: false, verification_id: null, actor_label: 'recorded_customer_author' };
 
-test('the runner\'s own verified reply is not ticket text; an admin reply without a verification and the member\'s words still are', () => {
-  const shingles = evidenceShingles({ tickets: [{ subject: 'Synthetic', body: 'Synthetic opening', messages: [verifiedReply, ownerNote, memberAsk] }] });
-  assert.ok(!shingles.has('the expired badge shows on the card once the'), 'the verified reply is the runner\'s own words');
+test('the runner\'s own reply is not ticket text; an operator\'s verified reply, an admin reply without a verification and the member\'s words still are', () => {
+  const shingles = evidenceShingles({ tickets: [{ subject: 'Synthetic', body: 'Synthetic opening', messages: [verifiedReply, ownerNote, memberAsk, operatorReply] }] });
+  assert.ok(!shingles.has('the expired badge shows on the card once the'), 'the runner\'s reply is its own words');
   assert.ok(!shingles.has('credentialdomd support automated fixed and verified renewal list'));
+  assert.ok(shingles.has('board portal rejects the upload when the scanned'), 'an operator\'s verified reply still counts');
   assert.ok(shingles.has('banner on the credentials page overlaps the search'), 'an admin reply with no verification still counts');
   assert.ok(shingles.has('reminder email name the licence that expires first'), 'the member\'s own words still count');
+  // The mark alone, with no verification, exempts nothing.
+  assert.ok(evidenceShingles({ tickets: [{ messages: [{ ...ownerNote, runner_reply: true }] }] }).has('banner on the credentials page overlaps the search'));
 });
 
-test('the report: a reproduction test named after an acceptance criterion passes when only the runner\'s verified reply repeats it', () => {
+test('the report: a reproduction test named after an acceptance criterion passes when only the runner\'s own reply repeats it', () => {
   const p = project({ 'tests/existing.test.mjs': '// Existing fixture\n' });
   try {
     const base = sh(p.repo, ['rev-parse', 'HEAD']);
@@ -78,6 +87,9 @@ test('the report: a reproduction test named after an acceptance criterion passes
     assert.deepEqual(fromMember.hits, [{ rule: 'ticket_text', file: 'tests/renewal-badge.test.mjs' }]);
     const fromAdmin = personalDataReport({ dir: p.repo, base, head, context: thread([{ ...verifiedReply, verification_id: null }]) });
     assert.deepEqual(fromAdmin.hits, [{ rule: 'ticket_text', file: 'tests/renewal-badge.test.mjs' }]);
+    // An operator's verified reply (no runner_reply) is not the runner's own.
+    const fromOperator = personalDataReport({ dir: p.repo, base, head, context: thread([{ ...verifiedReply, runner_reply: undefined }]) });
+    assert.deepEqual(fromOperator.hits, [{ rule: 'ticket_text', file: 'tests/renewal-badge.test.mjs' }]);
   } finally { p.cleanup(); }
 });
 

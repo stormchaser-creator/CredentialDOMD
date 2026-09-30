@@ -57,6 +57,8 @@ test('the real runner shell end to end: repair loop, parked skip, alerts, stale 
     'the status file shows the pause and its limit sentence, not a clean run', 'a pause that has lasted 6 h alerts the owner once, with the limit sentence and ids only',
     'the same pause alerts only once', 'three limited continuation runs give back every attempt: still pending, due and unspent',
     'the next run past the limit does the continuation, spends one attempt and ends the pause',
+    // Only the runner's own replies leave the personal-data gate's ticket_text rule (review of 2026-09-29).
+    "the runner's stored reply is marked as its own from its ledger on the next load",
     'reconcile finds every stored reply in a ledger and alerts nobody', 'the log names the broken rules, never the refused reply text',
     'the verification records the run and that its claims are bound',
     // Stage 2: branch-only work, runner-owned gates, held merges.
