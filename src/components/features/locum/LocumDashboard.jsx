@@ -37,9 +37,14 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
   // navigation named; anything that is not one of these tabs opens Work.
   const start = SUBTABS.some(t => t.id === initialSub) ? initialSub : undefined;
   const [sub, setSub] = useState(start || "work");
+  // Invoices' "Needs invoicing" opens Work on that one contract, even on a
+  // day the schedule shows another (WorkLog's openContractId). Any other way
+  // into a sub-view carries no contract, so Work opens on its own default.
+  const [openContractId, setOpenContractId] = useState(null);
+  const showSub = (id) => { setOpenContractId(null); setSub(id); };
   // A later navigation to another sub-view, while Practice stays on screen.
   const [landedOn, setLandedOn] = useState(start);
-  if (start !== landedOn) { setLandedOn(start); if (start) setSub(start); }
+  if (start !== landedOn) { setLandedOn(start); if (start) showSub(start); }
   useEffect(() => { if (focusId) onFocusConsumed?.(); }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [billDraft, setBillDraft] = useState(null);
 
@@ -71,7 +76,7 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
           <button
             key={t.id}
             aria-pressed={sub === t.id}
-            onClick={() => setSub(t.id)}
+            onClick={() => showSub(t.id)}
             style={{
               flex: 1, minHeight: 32, padding: "8px 2px", borderRadius: 8, border: "none",
               backgroundColor: sub === t.id ? T.card : "transparent",
@@ -90,15 +95,15 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
       {/* WorkLog owns the contract picker and swaps its engine per contract:
           time-priced agreements get the timer/time log, the day-rate
           agreement gets days-and-call logging (DutyLog). */}
-      {sub === "work" && <WorkLog billDraft={billDraft} onBillDraftDone={() => setBillDraft(null)} />}
+      {sub === "work" && <WorkLog billDraft={billDraft} onBillDraftDone={() => setBillDraft(null)} openContractId={openContractId} />}
       {sub === "rvus" && <RVULog />}
       {sub === "schedule" && <Schedule />}
       {sub === "invoices" && (
-        <Invoices onOpenContract={(contractId) => { lsSet(BASE_KEYS.lastContract, contractId); setSub("work"); }} />
+        <Invoices onOpenContract={(contractId) => { lsSet(BASE_KEYS.lastContract, contractId); setOpenContractId(contractId); setSub("work"); }} />
       )}
       {sub === "contracts" && <Contracts />}
       {sub === "expenses" && <Expenses />}
-      {sub === "todo" && <TaskNotes onBill={(d) => { setBillDraft(d); setSub("work"); }} />}
+      {sub === "todo" && <TaskNotes onBill={(d) => { setBillDraft(d); showSub("work"); }} />}
     </div>
   );
 }

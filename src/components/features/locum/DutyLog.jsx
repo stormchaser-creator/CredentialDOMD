@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, memo } from "react";
+import { useState, useEffect, useMemo, useRef, memo } from "react";
 import { cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
@@ -30,7 +30,7 @@ import {
  * clinical day, was call taken and where, was teaching logged. The invoice
  * unit is the month, so that is what the header totals.
  */
-function DutyLog({ contract }) {
+function DutyLog({ contract, onBusyChange }) {
   const { data, addItem, editItem, deleteItem, theme: T, user, userIdRef } = useApp();
   const iS = useInputStyle();
   const [editing, setEditing] = useState(null);
@@ -59,6 +59,12 @@ function DutyLog({ contract }) {
   // screen asks first.
   const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id });
   useUnloadWarning(!!unrecorded);
+  // Work is told while a day, an invoice or Mark as sent is open here, so the
+  // agreement on screen is never swapped out from under it (a schedule that
+  // loads late, a call day turning over): the invoice records against it.
+  const busy = !!(editing || placement || invoicePick || invoicePreview || markSent || unrecorded);
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
   // After a send: where the full cover letter is (the WorkLog notice, here too).
   const [notice, setNotice] = useState(null);
 
