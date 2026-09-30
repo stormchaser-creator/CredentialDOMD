@@ -23,7 +23,7 @@ import ResultsReporter from '../../qa-lab/e2e/support/results-reporter.mjs';
 import {
   DEFAULT_MIN_AGE_MINUTES, FOUNDING_LOCK_KEY, describeReset, foundingResetSql, minAgeMinutes,
 } from '../../qa-lab/founding-reset.mjs';
-import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { acquirePgSlot, pgBin, pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 
 const TMP = os.tmpdir();
 const withEnv = async (vars, fn) => {
@@ -271,8 +271,13 @@ async function startPostgres() {
   const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const exec = (name, args) => run(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
-  await exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
-  await exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off`, '-w', 'start']);
+  // One of the machine's PostgreSQL test slots (tests/helpers/pg-slot.mjs), taken before initdb
+  // and given back once the cluster is stopped (release also stops a cluster left running).
+  const slot = await acquirePgSlot(path.join(root, 'data'));
+  try {
+    await exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
+    await exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off`, '-w', 'start']);
+  } catch (e) { slot.release(); fs.rmSync(root, { recursive: true, force: true }); throw e; }
   const psqlArgs = ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', PORT, '-U', 'postgres', '-d', 'postgres'];
   const psql = (input) => new Promise((resolve, reject) => {
     const child = spawn(path.join(bin, 'psql'), psqlArgs, { env });
@@ -290,13 +295,15 @@ async function startPostgres() {
     child.stdout.resume(); child.stderr.resume();
     return { send: (s) => child.stdin.write(`${s}\n`), end: () => { child.stdin.end(); return closed; } };
   };
-  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); };
+  const close = async () => {
+    try { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); } finally { slot.release(); fs.rmSync(root, { recursive: true, force: true }); }
+  };
   return { psql, sql, session, close };
 }
 
 const resetJson = (out) => JSON.parse(out.split('\n').find((l) => l.startsWith('{')));
 
-test('founding reset on PostgreSQL: frees old public places only, waits for a checkout holding the lock, refuses a non-lab database', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('founding reset on PostgreSQL: frees old public places only, waits for a checkout holding the lock, refuses a non-lab database', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const db = await startPostgres();
   const { psql, sql, session } = db;
   try {
