@@ -10,6 +10,7 @@ import { checkPlacement } from "../../../utils/scheduleGuard";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import EmptyState from "../../shared/EmptyState";
+import { TAP_MIN } from "../../shared/actionButton";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard, localDay, sentDay } from "../../../utils/helpers";
 import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
@@ -1453,7 +1454,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
                   <span style={{ fontSize: 11, fontWeight: 800, color: T.textDim, flexShrink: 0 }}>billed</span>
                 ) : (
                   <button onClick={() => { if (window.confirm("Delete this time entry? Log the day or call period above first if it hasn't been.")) { removePrivate("workLog", e.id); deleteItem("workLog", e.id); } }} style={{
-                    padding: "6px 10px", borderRadius: 8, border: "none", flexShrink: 0,
+                    padding: "6px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none", flexShrink: 0,
                     backgroundColor: T.dangerDim || "rgba(239,68,68,0.12)", color: T.danger || "#ef4444",
                     fontSize: 11.5, fontWeight: 700, cursor: "pointer",
                   }}>Delete</button>
@@ -1613,7 +1614,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
 
       {/* An invoice from this agreement that went out without a record and
           was left behind: said here until it is recorded or forgotten. */}
-      {!invoicePreview && UnrecordedNotes({ T, list: leftUnrecorded, what: "its entries", onForget: forgetUnrecorded })}
+      {!invoicePreview && UnrecordedNotes({ T, isDesktop, list: leftUnrecorded, what: "its entries", onForget: forgetUnrecorded })}
 
       {/* Unbilled summary + invoice CTA — never for a day-rate contract,
           whose invoicing lives in duty days, not the time engine. Gated on

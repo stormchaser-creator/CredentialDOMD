@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { probeNetwork } from "../../utils/offlineSession";
 import { LIMITED_LAUNCH_ACCESS_ENABLED } from "../../utils/limitedLaunchAccess.js";
+import { useApp } from "../../context/AppContext";
+import { TAP_MIN } from "./actionButton";
 
 // Persistent while the offline session is active. When connectivity comes
 // back (online event, periodic probe, or the Retry button) it flips to
@@ -11,6 +13,7 @@ import { LIMITED_LAUNCH_ACCESS_ENABLED } from "../../utils/limitedLaunchAccess.j
 // a fresh membership answer, which needs the connection. The copy says so
 // instead of promising that changes will sync.
 export default function OfflineBanner({ limitedLaunch = LIMITED_LAUNCH_ACCESS_ENABLED } = {}) {
+  const { isDesktop } = useApp();
   const [phase, setPhase] = useState("offline"); // offline | checking | back
   const check = useCallback(async () => {
     setPhase((p) => (p === "back" ? p : "checking"));
@@ -57,7 +60,7 @@ export default function OfflineBanner({ limitedLaunch = LIMITED_LAUNCH_ACCESS_EN
       {back && (
         <button
           onClick={() => window.location.reload()}
-          style={{ border: "none", borderRadius: 8, padding: "6px 12px", backgroundColor: "#10b981", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+          style={{ border: "none", borderRadius: 8, padding: "6px 12px", minHeight: isDesktop ? undefined : TAP_MIN, backgroundColor: "#10b981", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
         >Reload now</button>
       )}
       {!back && (

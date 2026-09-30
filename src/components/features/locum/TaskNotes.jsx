@@ -4,6 +4,7 @@ import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
 import SmartTimeField from "../../shared/SmartTimeField";
+import { TAP_MIN } from "../../shared/actionButton";
 import { generateId } from "../../../utils/helpers";
 import { pickableContracts, hiddenEndedCount, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
 
@@ -28,7 +29,7 @@ const fmtDay = (iso) => {
 const minutesBetween = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
 
 function TaskNotes({ onBill }) {
-  const { data, addItem, editItem, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
   const [text, setText] = useState("");
   const [showDone, setShowDone] = useState(false);
@@ -151,7 +152,7 @@ function TaskNotes({ onBill }) {
                 none on file the only honest close is "done, no charge" */}
             {contracts.length > 0 && (
               <button onClick={() => openFinish(t)} style={{
-                padding: "8px 12px", borderRadius: 9, border: "none",
+                padding: "8px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: "none",
                 background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer",
               }}>Finish &amp; log time</button>
             )}
@@ -163,7 +164,7 @@ function TaskNotes({ onBill }) {
         )}
         {isDone && (
           <button onClick={() => { if (window.confirm("Delete this note?")) deleteItem("taskNotes", t.id); }} style={{
-            marginTop: 6, padding: "5px 9px", borderRadius: 8, border: "none",
+            marginTop: 6, padding: "5px 9px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none",
             backgroundColor: T.dangerDim, color: T.danger, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
           }}>Delete</button>
         )}

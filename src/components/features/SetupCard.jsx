@@ -158,7 +158,7 @@ export default function SetupCard({ onOpenSetup }) {
         <button onClick={() => snooze(14)} style={{
           border: "none", background: "transparent", color: T.textDim,
           fontSize: 12, fontWeight: 600, cursor: "pointer",
-          minHeight: 32, padding: "0 0 0 12px", margin: "-6px 0",
+          position: "relative", minHeight: 32, padding: "0 0 0 12px", margin: "-6px 0",
         }}>Not now</button>
       </div>
 

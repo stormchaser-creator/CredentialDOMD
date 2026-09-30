@@ -389,8 +389,11 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
     background: primary ? "linear-gradient(135deg, #10b981, #059669)" : "transparent",
     color: primary ? "#fff" : T.text,
   });
+  // An underlined text button: 9 px of padding above and below its 13 px
+  // text makes it TAP_MIN tall to a finger; the 3 px each way it gained are
+  // pulled back by the margin, so the row or line it sits in keeps its height.
   const linkBtn = {
-    padding: "6px 0", border: "none", background: "none", color: T.accent,
+    position: "relative", padding: "9px 0", margin: "-3px 0", border: "none", background: "none", color: T.accent,
     font: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "underline",
   };
   const sectionLabel = { fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 };
@@ -469,7 +472,7 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
     };
     return (
       <div>
-        <button onClick={() => setOpenId(null)} style={{ ...btn(false), padding: "7px 12px", fontSize: 12.5, marginBottom: 12 }}>‹ All requests</button>
+        <button onClick={() => setOpenId(null)} style={{ ...btn(false), padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 12.5, marginBottom: 12 }}>‹ All requests</button>
         <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
             <div style={{ minWidth: 0 }}>
@@ -636,7 +639,7 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>Requests</h2>
         <button onClick={() => load()} disabled={loading} style={{
-          padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+          padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 10, border: `1px solid ${T.border}`,
           backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700,
           cursor: loading ? "default" : "pointer", opacity: loading ? 0.5 : 1,
         }}>{loading ? "Refreshing…" : "Refresh"}</button>
@@ -668,11 +671,12 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
           </>
         )}
         {/* A link inside the sentence: 32 px tall, its extra height taken
-            back by negative margins so the line it sits on does not grow. */}
+            back by negative margins so the line it sits on does not grow, and
+            positioned so the sentence's next line does not take its lower 8 px. */}
         <button onClick={() => navigate("more", "settings")} style={{
           padding: 0, border: "none", background: "none", color: T.accent,
           font: "inherit", fontWeight: 700, cursor: "pointer", textDecoration: "underline",
-          display: "inline-flex", alignItems: "center", minHeight: TAP_MIN, margin: "-8px 0",
+          display: "inline-flex", alignItems: "center", position: "relative", minHeight: TAP_MIN, margin: "-8px 0",
         }}>{routable.length > 0 ? "add another address in Settings" : "Open Settings, Email"}</button>.
       </div>
 

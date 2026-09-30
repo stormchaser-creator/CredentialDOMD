@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect, memo } from "react";
-import { cardActionSize } from "../../shared/actionButton";
+import { cardActionSize, TAP_MIN } from "../../shared/actionButton";
 import { dictationErrorText } from "../../../utils/dictationErrors";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
@@ -546,7 +546,7 @@ function RVULog() {
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
             {[{ id: "all", label: "All" }, ...contracts.filter(c => encounters.some(e => e.contractId === c.id)).map(c => ({ id: c.id, label: c.shortName || (c.facility || "Contract").split(" ").slice(0, 2).join(" ") }))].map(ch => (
               <button key={ch.id} aria-pressed={fltContract === ch.id} onClick={() => setFltContract(ch.id)} style={{
-                padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                padding: "6px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
                 border: `1px solid ${fltContract === ch.id ? T.accent : T.border}`,
                 backgroundColor: fltContract === ch.id ? T.accentDim || "rgba(16,185,129,0.14)" : "transparent",
                 color: fltContract === ch.id ? T.accent : T.textMuted,

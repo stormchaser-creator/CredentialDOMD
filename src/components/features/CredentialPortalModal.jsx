@@ -102,7 +102,7 @@ function CredentialPortalModal({ onClose, initialDocIds = [], initialTo = "" }) 
       <p style={{ fontSize: 12 }}>{invite.documentCount} documents · {invite.status} · {portalDeliveryLabel(invite.deliveryState)}</p>
       <p style={{ fontSize: 12 }}>Expires {new Date(invite.expiresAt).toLocaleString()}</p>
       {!["revoked", "expired"].includes(invite.status) && <button disabled={busy} style={button} onClick={() => revoke(invite.id)}>Revoke access</button>}
-      {!!invite.audit?.length && <details style={{ fontSize: 12, marginTop: 8 }}><summary>Access activity</summary>
+      {!!invite.audit?.length && <details style={{ fontSize: 12, marginTop: 8 }}><summary style={{ position: "relative", padding: "9px 0", margin: "-9px 0" }}>Access activity</summary>
         <p>File responses record access requests; they do not prove someone read or saved a document.</p>
         <ul>{invite.audit.map((event, i) => <li key={i}>{({ invitation_created: "Invitation created", session_verified: "Recipient verified their email", invitation_revoked: "Access revoked", documents_listed: "Document list requested", document_response_prepared: "File response prepared" })[event.event] || "Access event"}{event.intent ? ` (${event.intent})` : ""} · {new Date(event.created_at).toLocaleString()}</li>)}</ul>
       </details>}

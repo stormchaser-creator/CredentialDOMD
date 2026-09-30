@@ -5,6 +5,7 @@ import Modal from "./Modal";
 import Field from "./Field";
 import { supabase } from "../../lib/supabase";
 import { safeHttpUrl } from "../../utils/safeUrl";
+import { TAP_MIN, inlineLinkTap } from "./actionButton";
 
 /**
  * Provenance line for a rule set (state CME or board MOC) plus a one-tap
@@ -72,7 +73,7 @@ async function submitRuleChange({ reportKey, subject, citation, meta, verified, 
 }
 
 function RuleProvenance({ reportKey, subject, citation, meta, verified, sourceUrl, upcoming, compact = false, style }) {
-  const { theme: T, userIdRef } = useApp();
+  const { theme: T, userIdRef, isDesktop } = useApp();
   const iS = useInputStyle();
   const [open, setOpen] = useState(false);
   const [what, setWhat] = useState("");
@@ -119,7 +120,7 @@ function RuleProvenance({ reportKey, subject, citation, meta, verified, sourceUr
         <div>
           {"Source: "}
           {href ? (
-            <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, textDecoration: "underline", wordBreak: "break-word" }}>{citationText}</a>
+            <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, textDecoration: "underline", wordBreak: "break-word", ...inlineLinkTap }}>{citationText}</a>
           ) : citationText}
           {trailing.length > 0 ? ` · ${trailing.join(" · ")}` : ""}
         </div>
@@ -131,7 +132,7 @@ function RuleProvenance({ reportKey, subject, citation, meta, verified, sourceUr
         )}
       </div>
       <button type="button" onClick={openForm} style={{
-        padding: "3px 9px", fontSize: 11, fontWeight: 700, borderRadius: 8, flexShrink: 0,
+        padding: "3px 9px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, flexShrink: 0,
         border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer",
       }}>Rules changed?</button>
 

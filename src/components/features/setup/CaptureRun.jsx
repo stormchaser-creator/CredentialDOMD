@@ -219,7 +219,7 @@ export default function CaptureRun({
 
   /* ─── Chrome ─────────────────────────────────────────────────── */
 
-  const btn = (label, onClick, kind = "ghost", extra = {}) => {
+  const btn = (label, onClick, kind = "ghost", { width } = {}) => {
     const primary = kind === "primary";
     return (
       <button onClick={onClick} style={{
@@ -229,7 +229,7 @@ export default function CaptureRun({
         backgroundColor: primary ? T.accent : "transparent",
         color: primary ? "#fff" : T.textMuted,
         fontSize: primary ? 15 : 13.5, fontWeight: primary ? 800 : 700,
-        cursor: "pointer", fontFamily: "inherit", ...extra,
+        cursor: "pointer", fontFamily: "inherit", width,
       }}>{label}</button>
     );
   };

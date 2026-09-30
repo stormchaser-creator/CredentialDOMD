@@ -154,7 +154,7 @@ function NotificationBanner({ onOpenCenter }) {
           <AlertIcon />
           <span style={{ fontSize: 14, fontWeight: 700, color: fgColor }}>{alertSummary}</span>
         </div>
-        <button onClick={snooze} style={{ padding: "0 10px", minHeight: 32, margin: "-6px 0", borderRadius: 6, border: "none", backgroundColor: "rgba(0,0,0,0.08)", color: T.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Snooze</button>
+        <button onClick={snooze} style={{ position: "relative", padding: "0 10px", minHeight: 32, margin: "-6px 0", borderRadius: 6, border: "none", backgroundColor: "rgba(0,0,0,0.08)", color: T.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Snooze</button>
       </div>
       <div style={{ fontSize: 12, color: T.text, marginBottom: 4, lineHeight: 1.3 }}>
         {sendIsDue || fingerprintChanged ? "Notification due. Send yourself an alert:" : "Alerts active. Renew credentials to clear."}

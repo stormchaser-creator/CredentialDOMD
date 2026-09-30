@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
+import { inlineLinkTap } from "../shared/actionButton";
 import { createLimitedLaunchClient } from "../../utils/limitedLaunchClient.js";
 import { readLaunchInvitation, clearLaunchInvitation } from "../../utils/launchInvitation.js";
 import { accessAuthority, canReviewBillingOffer, renewalPaymentFailed } from "../../utils/limitedLaunchAccess.js";
@@ -217,7 +218,7 @@ function MembershipForAccount({ accountId, onActivated }) {
           {renewalLine && <p>{renewalLine}</p>}
           {foundingPractice && <p>{MEMBERSHIP_COPY.foundingPracticeIncluded}</p>}
           {access.purchasedOfferId === "core" && !foundingPractice && access.practiceTrial.state === "active" && <p>Your Practice trial runs until {membershipDate(access.practiceTrial.endsAt)}. It does not charge automatically. Your Credential membership continues separately.</p>}
-          {access.purchasedOfferId === "core" && !foundingPractice && !access.capabilities.practice.write && <p>{access.practiceTrial.state === "expired" ? "Your Practice trial has ended. " : ""}Saved Practice records remain available to read and export. <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}</p>}
+          {access.purchasedOfferId === "core" && !foundingPractice && !access.capabilities.practice.write && <p>{access.practiceTrial.state === "expired" ? "Your Practice trial has ended. " : ""}Saved Practice records remain available to read and export. <a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}</p>}
           <button style={button} onClick={manage}>Manage paid subscription</button>
         </div>
           : renewalPaymentFailed(access) ? <div>
@@ -252,7 +253,7 @@ function MembershipForAccount({ accountId, onActivated }) {
     {panelShown && <section style={{ marginTop: 20, padding: 16, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12 }}>
       <h3 ref={offerHeading} tabIndex={-1} style={{ margin: "0 0 8px" }}>{quote.name}</h3>
       <p><strong>{membershipPrice(quote.annualCents)} per year</strong></p>
-      <p>100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals. Request a refund through Get help in the app or <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>support@credentialdomd.com</a>.</p>
+      <p>100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals. Request a refund through Get help in the app or <a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>support@credentialdomd.com</a>.</p>
       {quote.paymentTiming === "after_beta" && <div>
         {deferredResumeAfterBeta
           ? <p><strong>Your original beta has ended.</strong> Completing this saved Checkout collects {membershipPrice(quote.annualCents)} for the paid year starting on <time dateTime={quote.firstChargeAt}>{membershipDate(quote.firstChargeAt)}</time>. This resumes your existing checkout; it does not start a second purchase. If you already completed it, check your membership again instead.</p>

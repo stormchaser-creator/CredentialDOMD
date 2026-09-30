@@ -46,7 +46,7 @@ const slimForArchive = (msgs) =>
  * credentialer. onClearRequest lets the app drop it on New chat.
  */
 function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest }) {
-  const { data, addItem, editItem, allTrackedStates, userIdRef, navigate, theme: T } = useApp();
+  const { data, addItem, editItem, allTrackedStates, userIdRef, navigate, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
   // The Opus badge says what answers: Claude only when "Vera answers with"
   // is Claude Opus AND Opus is reachable (own key, or the shared one), as
@@ -669,20 +669,20 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           <div style={{ display: "flex", gap: 6 }}>
             {msgs.length > 0 && (
               <button onClick={() => { archiveCurrent(); }} disabled={busy} style={{
-                padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+                padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 10, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700,
                 cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
               }}>New chat</button>
             )}
             {archives.length > 0 && (
               <button onClick={() => setShowArchives(true)} style={{
-                padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+                padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 10, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
               }}>{"🗂"} {archives.length}</button>
             )}
             {onFileTicket && (
               <button onClick={onFileTicket} style={{
-                padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+                padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 10, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
               }}>File a ticket</button>
             )}
@@ -719,13 +719,13 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
             }}>
               {m.attachName && <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 4 }}>📎 {m.attachName}</div>}
               {m.text}
-              {m.role === "model" && <VeraSourceReceipt evidence={m.sourceEvidence} />}
+              {m.role === "model" && <VeraSourceReceipt evidence={m.sourceEvidence} isDesktop={isDesktop} />}
             </div>
             {m.failed && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
                 <span style={{ fontSize: 12, color: T.danger, fontWeight: 600 }}>Not sent</span>
                 <button onClick={() => retryFailed(m)} disabled={busy} style={{
-                  padding: "6px 14px", borderRadius: 8, border: "none",
+                  padding: "6px 14px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none",
                   backgroundColor: T.accent, color: "#fff", fontSize: 12.5, fontWeight: 800,
                   cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
                 }}>Try again</button>
@@ -879,11 +879,11 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               <button onClick={() => restoreArchive(arc)} style={{
-                padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.accent}`,
+                padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: `1px solid ${T.accent}`,
                 backgroundColor: "transparent", color: T.accent, fontSize: 12, fontWeight: 800, cursor: "pointer",
               }}>Continue this chat</button>
               <button onClick={() => { if (window.confirm("Delete this archived chat for good?")) setArchives(a => a.filter(x => x.id !== arc.id)); }} style={{
-                padding: "7px 12px", borderRadius: 9, border: "none",
+                padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: "none",
                 backgroundColor: T.dangerDim, color: T.danger, fontSize: 12, fontWeight: 700, cursor: "pointer",
               }}>Delete</button>
             </div>
@@ -906,7 +906,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                   }}>
                     {m.attachName && <div style={{ fontSize: 11.5, opacity: 0.85, marginBottom: 3 }}>{"📎"} {m.attachName}</div>}
                     {m.text}
-              {m.role === "model" && <VeraSourceReceipt evidence={m.sourceEvidence} />}
+              {m.role === "model" && <VeraSourceReceipt evidence={m.sourceEvidence} isDesktop={isDesktop} />}
                   </div>
                 </div>
               ))}

@@ -7,6 +7,7 @@ import { providerAoaLine } from "../../constants/creditEquivalence";
 import { complianceFor } from "../../utils/compliance";
 import { topicSources } from "../../utils/cmeTopicSources";
 import { compareProviders } from "../../utils/cmeProviderSort.js";
+import { TAP_MIN } from "../shared/actionButton";
 
 const PRICING_COLORS = {
   free: { bg: "#dcfce7", color: "#15803d", label: "Free" },
@@ -17,7 +18,7 @@ const PRICING_COLORS = {
 };
 
 function CMEResourcesSection({ initialTopicFilter }) {
-  const { data, theme: T, allTrackedStates } = useApp();
+  const { data, theme: T, allTrackedStates, isDesktop } = useApp();
   const deg = data.settings.degreeType;
 
   const [searchQ, setSearchQ] = useState("");
@@ -194,7 +195,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
           { id: "subscription", label: "Subscription" },
         ].map(p => (
           <button key={p.id} aria-pressed={pricingFilter === p.id} onClick={() => setPricingFilter(p.id)} style={{
-            padding: "6px 12px", fontSize: 12, fontWeight: 600, borderRadius: 16,
+            padding: "6px 12px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 12, fontWeight: 600, borderRadius: 16,
             border: `1px solid ${pricingFilter === p.id ? T.accent : T.border}`,
             backgroundColor: pricingFilter === p.id ? T.accentGlow : "transparent",
             color: pricingFilter === p.id ? T.accent : T.textDim, cursor: "pointer",
@@ -204,9 +205,9 @@ function CMEResourcesSection({ initialTopicFilter }) {
 
       {/* Special filter chips */}
       <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
-        <FilterChip label="MATE Act" active={showMateAct} onClick={() => setShowMateAct(!showMateAct)} T={T} />
-        <FilterChip label="State-Specific" active={showStateSpecific} onClick={() => setShowStateSpecific(!showStateSpecific)} T={T} />
-        {deg === "DO" && <FilterChip label="DO Dual Credit" active={showDualAccredited} onClick={() => setShowDualAccredited(!showDualAccredited)} T={T} />}
+        <FilterChip label="MATE Act" active={showMateAct} onClick={() => setShowMateAct(!showMateAct)} T={T} isDesktop={isDesktop} />
+        <FilterChip label="State-Specific" active={showStateSpecific} onClick={() => setShowStateSpecific(!showStateSpecific)} T={T} isDesktop={isDesktop} />
+        {deg === "DO" && <FilterChip label="DO Dual Credit" active={showDualAccredited} onClick={() => setShowDualAccredited(!showDualAccredited)} T={T} isDesktop={isDesktop} />}
       </div>
 
       {/* Topic filter chips */}
@@ -218,7 +219,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
             {(unmetTopics.length > 0 ? unmetTopics : allRequiredTopics).map(topic => (
               <button key={topic} aria-pressed={topicFilter === topic} onClick={() => setTopicFilter(topicFilter === topic ? null : topic)} style={{
-                padding: "6px 12px", fontSize: 12, fontWeight: 600, borderRadius: 14,
+                padding: "6px 12px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 12, fontWeight: 600, borderRadius: 14,
                 border: topicFilter === topic ? "none" : `1px solid ${unmetTopics.includes(topic) ? T.warning : T.border}`,
                 backgroundColor: topicFilter === topic ? T.accent : (unmetTopics.includes(topic) ? T.warningDim : "transparent"),
                 color: topicFilter === topic ? "#fff" : (unmetTopics.includes(topic) ? T.warning : T.textMuted),
@@ -273,7 +274,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
         <div style={{ padding: "24px 18px", color: T.textDim, fontSize: 15, lineHeight: 1.55 }}>
           <p style={{ margin: "0 0 10px" }}>No provider in this list carries {topicFilter} yet. Your state board&rsquo;s page says how to meet this requirement.</p>
           {topicSources(topicFilter, allTrackedStates, deg).map(({ state, url }) => (
-            <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={{ display: "block", color: T.accent, fontWeight: 700, marginBottom: 8, overflowWrap: "anywhere" }}>
+            <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={{ display: "block", position: "relative", padding: "5px 0", margin: "-5px 0 3px", color: T.accent, fontWeight: 700, overflowWrap: "anywhere" }}>
               {state} board: {topicFilter}
             </a>
           ))}
@@ -321,10 +322,10 @@ function CMEResourcesSection({ initialTopicFilter }) {
   );
 }
 
-function FilterChip({ label, active, onClick, T }) {
+function FilterChip({ label, active, onClick, T, isDesktop }) {
   return (
     <button aria-pressed={!!active} onClick={onClick} style={{
-      padding: "6px 12px", fontSize: 12, fontWeight: 600, borderRadius: 16,
+      padding: "6px 12px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 12, fontWeight: 600, borderRadius: 16,
       border: `1px solid ${active ? T.accent : T.border}`,
       backgroundColor: active ? T.accentGlow : "transparent",
       color: active ? T.accent : T.textDim, cursor: "pointer",

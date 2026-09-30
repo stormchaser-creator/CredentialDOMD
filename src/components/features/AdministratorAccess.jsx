@@ -328,7 +328,7 @@ export default function AdministratorAccessPage() {
         </div>}
 
         {(files.length > 0 || visits > 0) && <details style={{ fontSize: 12, marginTop: 8 }}>
-          <summary>Activity: {visits} visit{visits === 1 ? "" : "s"}, {files.length} file{files.length === 1 ? "" : "s"} opened</summary>
+          <summary style={{ position: "relative", padding: "9px 0", margin: "-9px 0" }}>Activity: {visits} visit{visits === 1 ? "" : "s"}, {files.length} file{files.length === 1 ? "" : "s"} opened</summary>
           <p style={hint}>File activity means a file was sent to their browser. It does not prove someone read it.</p>
           <ul style={{ paddingLeft: 18 }}>{files.map(f => <li key={f.name + f.last}>{f.name}: {[f.views ? `previewed ${f.views}` : "", f.downloads ? `downloaded ${f.downloads}` : "", f.refused ? `download refused ${f.refused}` : ""].filter(Boolean).join(", ")} {"\u{b7}"} last {formatMoment(f.last)}</li>)}</ul>
           <ul style={{ paddingLeft: 18 }}>{(grant.audit || []).filter(e => EVENT_LABEL[e.event]).slice(0, 20).map((e, i) => <li key={i}>{EVENT_LABEL[e.event]} {"\u{b7}"} {formatMoment(e.createdAt)}</li>)}</ul>

@@ -1,5 +1,6 @@
 import { useApp } from "../../context/AppContext";
 import { findStateLicense } from "../../utils/compliance";
+import { inlineLinkTap } from "./actionButton";
 
 export default function ConditionalCmeTopics({ comp }) {
   const { data, editItem, theme: T } = useApp();
@@ -23,13 +24,13 @@ export default function ConditionalCmeTopics({ comp }) {
           </select>
         </label> : <p>Add your {comp.state} medical license with its expiration date to record your answer.</p>}
         {topic.applicability === "unknown" && <p style={{ margin: "8px 0 0" }}>The conditional {topic.required}-hour rule is awaiting confirmation. It is not counted as missing hours or assumed exempt.</p>}
-        <p style={{ margin: "8px 0 0" }}><a href={topic.url} target="_blank" rel="noopener noreferrer" style={{ color: T.accent }}>{topic.cite}</a> · Checked {topic.checkedOn}</p>
+        <p style={{ margin: "8px 0 0" }}><a href={topic.url} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, ...inlineLinkTap }}>{topic.cite}</a> · Checked {topic.checkedOn}</p>
       </div>;
     })}
     {(comp.informationalTopics || []).map(topic => <details key={topic.topic} style={{ marginTop: 8, padding: "8px 10px", backgroundColor: T.input, borderRadius: 8, fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>
-      <summary style={{ cursor: "pointer" }}>{topic.topic}: provider / course guidance</summary>
+      <summary style={{ cursor: "pointer", position: "relative", padding: "8px 0", margin: "-8px 0" }}>{topic.topic}: provider / course guidance</summary>
       <p>{topic.note}</p>
-      <a href={topic.url} target="_blank" rel="noopener noreferrer" style={{ color: T.accent }}>{topic.cite}</a>
+      <a href={topic.url} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, ...inlineLinkTap }}>{topic.cite}</a>
     </details>)}
   </div>;
 }
