@@ -357,6 +357,10 @@ test('a usage limit before the merge pauses the run (exit 8): no later session, 
     assert.equal(existsSync(run.worktree), false);
     assert.equal(sh(p.repo, ['branch', '--list', 'agent/*']), '');
     assert.deepEqual(r.sent, [], 'no alert');
+    // The CLI's limit sentence, and nothing else of the error, goes on the
+    // run file for the shell's pause alert.
+    assert.equal(r.facts.usage_limit, "You've hit your session limit · resets 2pm (America/Los_Angeles)");
+    assert.equal(readField(path.join(r.runDir, `${TICKET}-run.json`), 'usage_limit'), r.facts.usage_limit);
     // After the host committed a change, at its review: paused too, not refused.
     s = await runStub(q, standardScript({ review: () => ({ ...LIMITED }) }));
     assert.equal(s.code, EXIT.usageLimit, s.logs.join('\n'));

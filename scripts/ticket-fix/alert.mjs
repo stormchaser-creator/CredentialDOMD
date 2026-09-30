@@ -34,6 +34,18 @@
 //   alert.mjs lock   --state DIR --lock DIR [--notify PATH] [--max-hours 4]
 //   alert.mjs status --state DIR --rc N [--lock DIR]
 //   alert.mjs auto-merge --state DIR --value on|off [--notify PATH]
+//   alert.mjs paused --state DIR --ticket UUID [--detail TEXT] [--notify PATH]
+//   alert.mjs resumed --state DIR
+//
+// "paused": the subscription's usage limit stopped a run (run.mjs exit 8),
+// which counts nothing against the ticket. Each paused run is added to
+// PAUSE_FILE (first and last time, runs, the CLI's limit sentence); status.json
+// shows it, and once the pause has lasted PAUSE_ALERT_HOURS the owner is
+// alerted, once per pause. A 5-hour session limit clears before that; a weekly
+// limit, or a CLI message that matches the limit by mistake, would otherwise
+// stop every ticket for days while every run exits cleanly (review of
+// 2026-09-29). "resumed": a run got past the limit (any other exit), so the
+// pause is over and PAUSE_FILE goes.
 //
 // "hold": a model run changed the runner's own code (the reply checks, the
 // runner, the notifier, the support reply migrations or send-ticket-reply),
@@ -60,6 +72,8 @@ export const HOLD_FILE = 'HOLD-host-code-changed';
 export const QUEUE_FILE = 'owner-alerts.jsonl';
 export const SENT_FILE = 'owner-alerts.sent';
 export const DIRECT_SEND_SECONDS = 15;
+export const PAUSE_FILE = 'usage-limit.json';
+export const PAUSE_ALERT_HOURS = 6;
 // The queue holds ids and counts only. The messages are built from fixed
 // templates, but a detail can carry a tool's own error text: an email address
 // or the owner's home path in it never reaches the queue.
@@ -112,6 +126,13 @@ export async function lockState(lock, now = Date.now()) {
     stale: ageHours > STALE_LOCK_HOURS, started_ms: Math.floor(started) };
 }
 
+// The current usage-limit pause (PAUSE_FILE), or null.
+export async function pauseState(state) {
+  try {
+    const pause = JSON.parse(await fs.readFile(path.join(state, PAUSE_FILE), 'utf8'));
+    return pause && typeof pause === 'object' && Number.isFinite(Date.parse(pause.since)) && Number.isInteger(pause.runs) ? pause : null;
+  } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
+}
 async function recentAlerts(state, limit = 20) {
   try {
     const lines = (await fs.readFile(path.join(state, 'alerts.log'), 'utf8')).split('\n').filter(Boolean).slice(-limit);
@@ -127,6 +148,7 @@ export async function writeStatus(state, { lock = null, rc = undefined, now = Da
   const status = { version: 1, updated_at: new Date(now).toISOString(), hold,
     last_run: rc === undefined ? previous.last_run ?? null : { rc, finished_at: new Date(now).toISOString() },
     parked: await parkedList(state),
+    usage_limit: await pauseState(state),
     lock: lockInfo && { ...lockInfo, started_ms: undefined },
     alerts: await recentAlerts(state) };
   await writePrivate(path.join(state, 'status.json'), `${JSON.stringify(status, null, 2)}\n`);
@@ -174,10 +196,11 @@ export function directSend(notify, message, { timeoutMs = DIRECT_SEND_SECONDS * 
   return !r.error && r.status === 0;
 }
 
+const at19 = now => new Date(now).toISOString().slice(0, 19).replace('T', ' ');
 export async function raise(state, kind, detail, message, { notify = null, now = Date.now(), send = null, directTimeoutMs = undefined } = {}) {
   const line = `${new Date(now).toISOString()} ALERT ${kind} ${detail}\n`;
   await fs.appendFile(path.join(state, 'alerts.log'), line, { mode: 0o600 });
-  console.log(`${new Date(now).toISOString().slice(0, 19).replace('T', ' ')} ALERT ${kind} ${detail}`);
+  console.log(`${at19(now)} ALERT ${kind} ${detail}`);
   // Queued first: whatever happens to the direct send, the drain has it.
   let queued = null;
   try { queued = await enqueue(state, { kind, detail, message, now }); } catch (error) { console.log(`ALERT ${kind} could not be queued for the owner: ${error.message}`); }
@@ -199,7 +222,7 @@ function parse(argv) {
   const options = {};
   for (let i = 0; i < rest.length; i += 2) {
     const key = rest[i];
-    if (!/^--(state|ticket|count|notify|lock|rc|max-hours|why|value)$/.test(key) || rest[i + 1] === undefined || key.slice(2) in options) throw Error(`Unexpected argument ${key}`);
+    if (!/^--(state|ticket|count|notify|lock|rc|max-hours|why|value|detail)$/.test(key) || rest[i + 1] === undefined || key.slice(2) in options) throw Error(`Unexpected argument ${key}`);
     options[key.slice(2)] = rest[i + 1];
   }
   if (!options.state || !path.isAbsolute(options.state)) throw Error('--state must be an absolute path');
@@ -274,12 +297,40 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
     await writeStatus(options.state, { lock: options.lock, now });
     return;
   }
+  if (command === 'paused') {
+    if (!UUID.test(options.ticket || '')) throw Error('paused needs --ticket UUID');
+    const previous = await pauseState(options.state);
+    const at = new Date(now).toISOString();
+    const notice = queueSafe(options.detail ?? '').slice(0, 160) || previous?.notice || null;
+    const pause = { since: previous?.since ?? at, last_at: at, runs: (previous?.runs ?? 0) + 1, ticket: options.ticket.slice(0, 8), notice, alerted_at: previous?.alerted_at ?? null };
+    const hours = Math.round(((now - Date.parse(pause.since)) / 3600000) * 10) / 10;
+    // Alerted before the file records it: a failed write repeats the alert
+    // next hour, never loses it.
+    if (!pause.alerted_at && hours >= PAUSE_ALERT_HOURS) {
+      await raise(options.state, 'usage_limit_paused', `hours=${hours} runs=${pause.runs} since=${pause.since}`,
+        `CredentialDOMD ticket agent: every run for ${hours} h (${pause.runs} runs since ${pause.since}) has stopped at the subscription's usage limit, so no ticket is being worked. Nothing is counted against the tickets; the runs resume by themselves when the limit resets.${notice ? ` The CLI said: ${notice}` : ''}`,
+        { notify, now, send });
+      pause.alerted_at = at;
+    }
+    await writePrivate(path.join(options.state, PAUSE_FILE), `${JSON.stringify(pause, null, 2)}\n`);
+    await writeStatus(options.state, { now });
+    return;
+  }
+  if (command === 'resumed') {
+    const previous = await pauseState(options.state);
+    try { await fs.unlink(path.join(options.state, PAUSE_FILE)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (previous) {
+      console.log(`${at19(now)} RESUMED — the usage-limit pause since ${previous.since} is over after ${previous.runs} paused run(s)`);
+      await writeStatus(options.state, { now });
+    }
+    return;
+  }
   if (command === 'status') {
     if (!/^-?\d+$/.test(options.rc ?? '')) throw Error('status needs --rc N');
     await writeStatus(options.state, { lock: options.lock ?? null, rc: Number(options.rc), now });
     return;
   }
-  throw Error('Usage: alert.mjs park|hold|lock|status|auto-merge --state DIR ...');
+  throw Error('Usage: alert.mjs park|hold|lock|status|auto-merge|paused|resumed --state DIR ...');
 }
 
 if (isMain(import.meta.url)) {

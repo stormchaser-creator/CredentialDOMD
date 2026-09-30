@@ -453,6 +453,24 @@ export function usageLimitHit({ code = null, output = null, stderrText = '' } = 
   if (code !== 0 || output?.is_error === true) texts.push(output?.result);
   return texts.some(t => typeof t === 'string' && USAGE_LIMIT.test(t));
 }
+// The CLI's limit sentence out of a failed session's reason ("exited 1
+// (success, 1 turn, $0.0000): You've hit your session limit · resets 2pm
+// (America/Los_Angeles)"): from the clause that says it, at most 160
+// characters, so the owner's alert says which limit and when it resets and
+// carries nothing else of the error text. null when no text says it.
+export function limitNotice(...texts) {
+  for (const text of texts) {
+    for (const line of String(text ?? '').split(/[\r\n]+/)) {
+      const s = [...line].map(c => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? ' ' : c)).join('').replace(/\s+/g, ' ').trim();
+      const m = USAGE_LIMIT.exec(s);
+      if (!m) continue;
+      const colon = s.lastIndexOf(': ', m.index);
+      const from = colon < 0 ? 0 : colon + 2;
+      return s.slice(from, from + 160).trim();
+    }
+  }
+  return null;
+}
 // "exited 1 (error_max_budget_usd, 57 turns, $3.0096): Reached maximum budget ($3)"
 export function failureReason(head, facts) {
   const parts = [facts?.subtype, Number.isInteger(facts?.turns) ? `${facts.turns} turn${facts.turns === 1 ? '' : 's'}` : null,

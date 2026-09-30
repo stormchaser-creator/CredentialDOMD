@@ -51,8 +51,12 @@ test('the real runner shell end to end: repair loop, parked skip, alerts, stale 
     'edits already present before the run do not hold it', 'a model killed by the alarm counts toward the breaker',
     'the third timeout parks the ticket and alerts the owner', 'reconcile reports it to the owner by id prefix',
     // The subscription's limit pauses a run and counts nothing, 2026-09-29.
-    'a usage limit pauses the run and counts nothing: no rejection, no park, no alert', 'the pause ends the run: the other ticket starts no session',
+    'a usage limit pauses the run (exit 8) and counts nothing: no rejection, no park, no alert yet', 'the pause ends the run: the other ticket starts no session',
     'a paused run leaves no worktree and no branch', 'another limited run still counts nothing', 'a real session failure of the same shape still counts and parks',
+    // A pause is not silent, and gives a continuation its attempt back (review of 2026-09-29).
+    'the status file shows the pause and its limit sentence, not a clean run', 'a pause that has lasted 6 h alerts the owner once, with the limit sentence and ids only',
+    'the same pause alerts only once', 'three limited continuation runs give back every attempt: still pending, due and unspent',
+    'the next run past the limit does the continuation, spends one attempt and ends the pause',
     'reconcile finds every stored reply in a ledger and alerts nobody', 'the log names the broken rules, never the refused reply text',
     'the verification records the run and that its claims are bound',
     // Stage 2: branch-only work, runner-owned gates, held merges.

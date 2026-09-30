@@ -72,10 +72,14 @@ const reply = value => console.log(JSON.stringify({ type: 'result', subtype: 'su
 const scenario = process.env.SUPPORT_FIXTURE_SCENARIO;
 // The subscription's limit, as the CLI reported it on 2026-09-29: every
 // session exits 1 at once with this result. session_error: the same shape
-// with an ordinary error, which is a real failure.
-if (scenario === 'usage_limit' || scenario === 'session_error') {
+// with an ordinary error, which is a real failure. continuation_limit: the
+// limit only while the test has written <run>/limit-enabled (read through the
+// recorder: the session sandbox denies the test folder).
+const limited = scenario === 'usage_limit' ||
+  (scenario === 'continuation_limit' && await recorder('GET', 'read', { file: path.join(run, 'limit-enabled') }).then(() => true, () => false));
+if (limited || scenario === 'session_error') {
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: true, num_turns: 1, total_cost_usd: 0, session_id: SESSION,
-    result: scenario === 'usage_limit' ? "You've hit your session limit · resets 2pm (America/Los_Angeles)" : 'API Error: 500 Internal server error' }));
+    result: limited ? "You've hit your session limit · resets 2pm (America/Los_Angeles)" : 'API Error: 500 Internal server error' }));
   process.exit(1);
 }
 const marker = '\n\n## Untrusted support evidence supplied by the runner\n';

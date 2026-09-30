@@ -69,7 +69,8 @@ host_fingerprint() {
 }
 # Owner alerts (parked ticket, held run, lock held over 4 h, a stored reply no
 # checked path recorded, a reply still not emailed an hour after it was
-# stored): scripts/ticket-fix/alert.mjs writes $CASE_STATE/alerts.log and
+# stored, every run stopped by the usage limit for 6 h):
+# scripts/ticket-fix/alert.mjs writes $CASE_STATE/alerts.log and
 # $CASE_STATE/status.json and queues each one in
 # $CASE_STATE/owner-alerts.jsonl, which signup-notify.sh (a launchd job macOS
 # lets drive Messages; this one's node is refused) sends within 10 minutes.
@@ -177,7 +178,11 @@ cd "$REPO" || exit 1
 # ticket that always timed out would never have parked. The one exception is
 # the subscription's session or usage limit (run.mjs exit 8): it says nothing
 # about the ticket, so it pauses the run and counts nothing (on 2026-09-29
-# three limit exits each parked two tickets that had nothing wrong).
+# three limit exits each parked two tickets that had nothing wrong). A pause
+# is not silent: the run exits 8 (status.json shows the pause), a
+# continuation gets back the attempt its load reserved, and once the pause has
+# lasted 6 h the owner is alerted once (alert.mjs paused). The first run that
+# gets past the limit ends the pause (alert.mjs resumed).
 reject() {
   KEPT="$FAIL_DIR/$TICKET_ID-$(date '+%Y%m%dT%H%M%S').json"
   if [ -s "$OUTPUT" ] && /bin/cp "$OUTPUT" "$KEPT" 2>/dev/null; then
@@ -229,7 +234,9 @@ for TARGET in ${(f)TARGETS}; do
     echo "$(date '+%F %T') WAITING — $TICKET_ID has a change held for the owner (run $HELD_RUN)" >> "$LOG"
     continue
   fi
-  TICKET_RUN_KEY="$RUN_KEY" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
+  # A continuation's --load reserves one of its bounded attempts, tagged with
+  # this run's id so a paused run can give it back (--release-attempt).
+  TICKET_RUN_KEY="$RUN_KEY" TICKET_RUN_ID="$RUN_ID" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --load "$TICKET_ID" "$CONTEXT" "$CASE_STATE" "$RUN_MODE" >> "$LOG" 2>&1 || { RC=1; break; }
   # G6: every attachment on the ticket, downloaded before any session starts
   # (the storage key never leaves that process). The log gets the ticket id
@@ -249,7 +256,7 @@ for TARGET in ${(f)TARGETS}; do
   # extracted (the ticket is parked at once and the owner alerted: design G1),
   # 8 the subscription's session or usage limit stopped a session: paused,
   # nothing counted, and no later target runs until the next scheduled run
-  # (every one of its sessions would fail the same way).
+  # (every one of its sessions would fail the same way); this run exits 8.
   # The 3-hour alarm is a backstop; every session and gate has its own limit
   # and run.mjs kills whole process groups when it is signalled.
   RUN_STARTED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -258,6 +265,9 @@ for TARGET in ${(f)TARGETS}; do
     --claude "$CLAUDE" --committer "$RUN_COMMITTER" --notify "$NOTIFY" --worker-seconds "$WORKER_SECONDS" --run-started "$RUN_STARTED" \
     --attachments-dir "$ATTACHMENTS" --attachments-manifest "$MANIFEST" --auto-merge "$AUTO_MERGE" >> "$LOG" 2>&1
   WORK_RC=$?
+  # Any exit but the limit's: a session got past it (or the run failed for
+  # its own reason), so a usage-limit pause is over.
+  [ "$WORK_RC" -eq 8 ] || node "$ALERT" resumed --state "$CASE_STATE" >> "$LOG" 2>&1
   if host_code_changed || [ "$WORK_RC" -eq 4 ]; then hold_run runner_code; RC=1; break; fi
   if [ "$WORK_RC" -eq 6 ]; then hold_run host_state; RC=1; break; fi
   case "$WORK_RC" in
@@ -269,9 +279,18 @@ for TARGET in ${(f)TARGETS}; do
        echo "$(date '+%F %T') REJECTED — $TICKET_ID checklist not extracted; parked" >> "$LOG"
        node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why checklist --notify "$NOTIFY" >> "$LOG" 2>&1
        RC=1; break ;;
-    # The limit, not the ticket: no reject, the fail count untouched, and no
-    # later target this run (its sessions would hit the same limit).
+    # The limit, not the ticket: no reject, the fail count untouched, a
+    # continuation's reserved attempt given back, and no later target this
+    # run (its sessions would hit the same limit). The pause is recorded, the
+    # run exits 8, and the owner hears once it has lasted 6 h.
     8) echo "$(date '+%F %T') PAUSED — $TICKET_ID usage limit reached; nothing counted, the rest wait for the next run" >> "$LOG"
+       if [ "$RUN_MODE" = continuation ]; then
+         TICKET_RUN_ID="$RUN_ID" node "$HOST/ticket-agent-context.mjs" --release-attempt "$TICKET_ID" "$CASE_STATE" >> "$LOG" 2>&1 ||
+           echo "$(date '+%F %T') WARN — the continuation attempt for $TICKET_ID was not given back" >> "$LOG"
+       fi
+       LIMIT_NOTICE=$(run_field usage_limit) || LIMIT_NOTICE=''
+       node "$ALERT" paused --state "$CASE_STATE" --ticket "$TICKET_ID" --detail "$LIMIT_NOTICE" --notify "$NOTIFY" >> "$LOG" 2>&1
+       [ "$RC" -eq 0 ] && RC=8
        break ;;
     *) reject "host step failed (exit $WORK_RC)"; RC=1; break ;;
   esac

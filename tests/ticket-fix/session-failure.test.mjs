@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, existsSync, rmSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runSession, sessionFacts, failureReason, usageLimitHit } from '../../scripts/ticket-fix/worker.mjs';
+import { runSession, sessionFacts, failureReason, usageLimitHit, limitNotice } from '../../scripts/ticket-fix/worker.mjs';
 import { redactSecrets, redactedLine, REDACTED } from '../../scripts/ticket-fix/redact.mjs';
 import { EXIT, REPRO_SCHEMA } from '../../scripts/ticket-fix/run.mjs';
 import { readRun } from '../../scripts/ticket-fix/merge.mjs';
@@ -198,6 +198,18 @@ test('usage limit: the CLI\'s limit text in a failed session\'s result, errors o
   assert.equal(usageLimitHit({ code: 1, output: null, stderrText: "Warning: you are approaching your usage limit\nError: spawn EPERM\n" }), false);
   assert.equal(usageLimitHit({ code: 0, output: { subtype: 'success', is_error: false, result: `The member wrote: ${LIMIT_TEXT}` } }), false, 'a model\'s answer is never read');
   assert.equal(usageLimitHit(), false);
+});
+
+// The owner's pause alert quotes which limit and when it resets, and nothing
+// else of a failed session's error text.
+test('limitNotice: the CLI\'s limit sentence out of a failed session\'s reason, bounded; null when no text says it', () => {
+  assert.equal(limitNotice(`exited 1 (success, 1 turn, $0.0000): ${LIMIT_TEXT}`), LIMIT_TEXT);
+  assert.equal(limitNotice('exited 1: Claude AI usage limit reached|1790700000'), 'Claude AI usage limit reached|1790700000');
+  assert.equal(limitNotice('exited 1 (error_max_budget_usd, 57 turns, $3.0096): Reached maximum budget ($3)', `debug: x\n${LIMIT_TEXT}`), LIMIT_TEXT, 'the first text that says it');
+  assert.equal(limitNotice(`exited 1: ${LIMIT_TEXT} ${'x'.repeat(400)}`).length, 160);
+  assert.equal(limitNotice(`exited 1: \u001b[31m${LIMIT_TEXT}\u001b[0m`), `[31m${LIMIT_TEXT} [0m`, 'no control character reaches the run file');
+  assert.equal(limitNotice('exited 1: API Error: 500 Internal server error'), null);
+  assert.equal(limitNotice(), null);
 });
 
 test('runSession marks a session the limit stopped; run.mjs pauses the run (exit 8) with no later session, and records why', async () => {

@@ -80,11 +80,13 @@
 // run changed git state outside its worktree; 7 the checklist could not be
 // extracted; 8 the subscription's session or usage limit stopped a session
 // before the code outcome was decided (worker.mjs usageLimitHit): the run is
-// recorded "paused", its worktree and branch go, and the shell counts nothing
-// against the ticket and starts no other target this hour. Once the outcome
-// is decided (a change refused or held, or the merge begun) a limited session
-// is an ordinary failed session: the owner may already have been told the
-// branch is kept. 1 a host step failed. Session
+// recorded "paused", its worktree and branch go, the CLI's limit sentence goes
+// on the run file (usage_limit), and the shell counts nothing against the
+// ticket, starts no other target this hour and alerts the owner once the
+// pause has lasted 6 h (alert.mjs paused). Once the outcome is decided (a
+// change refused or held, or the merge begun) a limited session is an
+// ordinary failed session: the owner may already have been told the branch
+// is kept. 1 a host step failed. Session
 // limits: each role has its own (workerSeconds, reproSeconds, reviewSeconds,
 // extractSeconds); a resume that changes code (the reproduction's test
 // repair, the gate repair, the review revision) has reviseSeconds, and a
@@ -105,7 +107,7 @@ import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtrac
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
 import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
   checkWorktreeLink, remoteMain, agentCommitsOnMain } from './worktree.mjs';
-import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps, onStop } from './worker.mjs';
+import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps, onStop, limitNotice } from './worker.mjs';
 import { recordReproduction, runTestGates, suiteBaseline, gateFailures, validTestRef, readBaseline, DEFAULT_COMMANDS } from './gates/tests.mjs';
 import { protectedReport, blastRadius } from './gates/owner-rules.mjs';
 import { reviewDiff, reviseInput, confirmChecklist, REVIEW_SCHEMA, CONFIRM_SCHEMA, EVIDENCE_MARKER } from './review.mjs';
@@ -145,12 +147,14 @@ export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state
 export class HostStateChanged extends Error {}
 // Raised when the subscription's limit stops a session before the code
 // outcome is decided (exit 8): the failure says nothing about the ticket
-// (2026-09-29, two tickets parked by three limit exits each).
+// (2026-09-29, two tickets parked by three limit exits each). notice: the
+// CLI's limit sentence only, for the owner's alert.
 export class UsageLimitReached extends Error {
   constructor(role, r) {
     super(`the ${role} session hit the subscription's usage limit`);
     this.role = role;
     this.detail = String(r?.reason ?? '').slice(0, 300);
+    this.notice = limitNotice(r?.reason, r?.session?.error, r?.session?.stderr_last_line);
   }
 }
 
@@ -810,6 +814,7 @@ async function workTicket(o, atEnd) {
   } catch (error) {
     if (error instanceof UsageLimitReached) {
       log(`PAUSED — ${id8} run ${name}: ${error.message} (${error.detail}); nothing counted`);
+      facts.usage_limit = error.notice;
       await cleanup();
       return await finishWith(EXIT.usageLimit, 'paused', { reason: `usage limit: ${error.message}`, paused: { role: error.role, detail: error.detail } });
     }
@@ -919,7 +924,9 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
 // The shell's view of a run: validated single values only.
 const FIELDS = { record_repo: v => path.isAbsolute(v) && !/[\n\0]/.test(v), base: v => SHA.test(v), release_file: v => path.isAbsolute(v) && !/[\n\0]/.test(v),
   stage3_file: v => path.isAbsolute(v) && !/[\n\0]/.test(v) && v.endsWith('-stage3.json'),
-  code_outcome: v => /^(?:none|held|refused|merged|released|release_failed)$/.test(v), run: v => RUN_NAME.test(v) };
+  code_outcome: v => /^(?:none|held|refused|merged|released|release_failed)$/.test(v), run: v => RUN_NAME.test(v),
+  // A paused run's limit sentence (limitNotice): one line, bounded.
+  usage_limit: v => v.length <= 160 && ![...v].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127) };
 export function readField(runFile, field) {
   if (!(field in FIELDS)) throw Error('Unknown field');
   const facts = JSON.parse(readFileSync(runFile, 'utf8'));

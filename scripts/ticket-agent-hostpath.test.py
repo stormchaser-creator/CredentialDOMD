@@ -383,15 +383,28 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
 
         # The subscription's limit (2026-09-29): every session exits 1 with the
         # CLI's limit text, and three such runs parked two tickets. Now the run
-        # pauses: nothing counted, no alert, and no later target this run.
+        # pauses: nothing counted and no later target this run. The run exits
+        # 8, status.json shows the pause, and once it has lasted 6 h the owner
+        # is told once (review of the pause: it was silent and looked clean).
         run, state, script, repo = scenario('usage_limit', two_owners=True, parked=2)
-        check('a usage limit pauses the run and counts nothing: no rejection, no park, no alert', execute(script).returncode == 0 and count() == 0 and count(X) == 0 and
+        check('a usage limit pauses the run (exit 8) and counts nothing: no rejection, no park, no alert yet', execute(script).returncode == 8 and count() == 0 and count(X) == 0 and
               (state / 'failed' / f'{T}.count').read_text().strip() == '2' and 'PAUSED — ' + T + ' usage limit reached' in log(run) and 'REJECTED' not in log(run) and notified(run) == [], log(run)[-2500:])
         check('the pause ends the run: the other ticket starts no session', [v['role'] for v in sessions(run)] == ['extract'] and not (state / 'failed' / f'{X}.count').exists(), sessions(run))
         check('a paused run leaves no worktree and no branch', not any((run / 'work' / 'worktrees').iterdir()) and git_out(repo, 'branch', '--list', 'agent/*') == '')
         again = execute(script)
-        check('another limited run still counts nothing', again.returncode == 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '2' and log(run).count('PAUSED — ' + T + ' usage limit reached') == 2 and notified(run) == [],
+        check('another limited run still counts nothing', again.returncode == 8 and (state / 'failed' / f'{T}.count').read_text().strip() == '2' and log(run).count('PAUSED — ' + T + ' usage limit reached') == 2 and notified(run) == [],
               (again.returncode, (state / 'failed' / f'{T}.count').read_text(), notified(run), log(run)[-2500:]))
+        paused = status(state)
+        check('the status file shows the pause and its limit sentence, not a clean run', paused['last_run']['rc'] == 8 and paused['usage_limit']['runs'] == 2 and paused['usage_limit']['ticket'] == T[:8] and
+              paused['usage_limit']['notice'] == "You've hit your session limit · resets 2pm (America/Los_Angeles)" and paused['usage_limit']['alerted_at'] is None, paused)
+        pause_file = state / 'usage-limit.json'
+        record = json.loads(pause_file.read_text())
+        record['since'] = time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime(time.time() - 7 * 3600))
+        write(pause_file, json.dumps(record))
+        check('a pause that has lasted 6 h alerts the owner once, with the limit sentence and ids only', execute(script).returncode == 8 and len(notified(run)) == 1 and
+              "has stopped at the subscription's usage limit, so no ticket is being worked" in notified(run)[0] and notified(run)[0].endswith("The CLI said: You've hit your session limit · resets 2pm (America/Los_Angeles)") and
+              T not in notified(run)[0] and 'Synthetic' not in notified(run)[0] and 'usage_limit_paused' in (state / 'alerts.log').read_text(), (notified(run), log(run)[-2500:]))
+        check('the same pause alerts only once', execute(script).returncode == 8 and len(notified(run)) == 1 and status(state)['usage_limit']['runs'] == 4, notified(run))
         run, state, script, repo = scenario('session_error', parked=2)
         check('a real session failure of the same shape still counts and parks', execute(script).returncode != 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '3' and
               'REJECTED — ' + T + ' model run failed or timed out' in log(run) and 'PAUSED' not in log(run) and len(notified(run)) == 1 and 'parked' in notified(run)[0], log(run)[-2500:])
@@ -465,6 +478,23 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('due work continues without new customer input', execute(script).returncode == 0 and invocations(run)[-1]['run_mode'] == 'continuation')
         record = json.loads((state / f'{T}.json').read_text())
         check('quiet continuation saves progress without publication', count() == 1 and record['run_mode'] == 'continuation' and record['continuation']['attempts'] == 1)
+
+        # A continuation the limit pauses gets back the attempt its load
+        # reserved (review of 2026-09-29): three limited hours used to use up
+        # all three and stall it for good.
+        run, state, script, repo = scenario('continuation_limit')
+        check('continuation_limit: the first run stores the promise', execute(script).returncode == 0 and count() == 1, log(run)[-2500:])
+        due(state)
+        before = json.loads((state / f'{T}.json').read_text())['continuation']
+        write(run / 'limit-enabled', 'synthetic')
+        results = [execute(script).returncode for _ in range(3)]
+        after = json.loads((state / f'{T}.json').read_text())['continuation']
+        check('three limited continuation runs give back every attempt: still pending, due and unspent', results == [8, 8, 8] and after == before and before['state'] == 'pending' and before['attempts'] == 0 and
+              log(run).count('RELEASED — the continuation attempt this run reserved for ' + T + ' is given back') == 3 and 'WARN' not in log(run), (results, before, after, log(run)[-3000:]))
+        (run / 'limit-enabled').unlink()
+        check('the next run past the limit does the continuation, spends one attempt and ends the pause', execute(script).returncode == 0 and invocations(run)[-1]['run_mode'] == 'continuation' and
+              json.loads((state / f'{T}.json').read_text())['continuation']['attempts'] == 1 and not (state / 'usage-limit.json').exists() and status(state)['usage_limit'] is None and
+              'RESUMED — the usage-limit pause since ' in log(run), log(run)[-3000:])
 
         run, state, script, repo = scenario('arrival_on_load')
         check('arrival fixture starts with one reply', execute(script).returncode == 0 and count() == 1)

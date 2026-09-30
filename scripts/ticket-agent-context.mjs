@@ -415,6 +415,8 @@ export async function attachPriorReviews(context, directory) {
 }
 const COOLDOWN_MS = 60 * 60 * 1000;
 const MAX_CONTINUATIONS = 3;
+// A runner run's id (ticket-agent.sh RUN_ID).
+const RUN_ID = /^[0-9a-f]{16}$/;
 async function readCase(directory, ticketId) {
   const filename = path.join(directory, `${id(ticketId)}.json`);
   const stat = await fs.lstat(filename);
@@ -477,12 +479,37 @@ export async function loadQueuedContext(query, item, directory, options = {}) {
   const context = await loadContext(query, item.id, { ...options, continuation: pending });
   if (pending && context.run_mode === 'continuation') {
     // Reserve before model launch; crashes and invalid output still consume a bounded attempt.
+    // The reservation keeps what it replaced, tagged with the run (runId), so a
+    // run the subscription's usage limit paused can give it back (releaseAttempt).
+    const before = { attempts: pending.continuation.attempts, due_at: pending.continuation.due_at, last_attempt_at: pending.continuation.last_attempt_at ?? null };
+    const at = new Date(now).toISOString();
     pending.continuation.attempts++;
     pending.continuation.due_at = new Date(now + COOLDOWN_MS).toISOString();
-    pending.continuation.last_attempt_at = new Date(now).toISOString();
+    pending.continuation.last_attempt_at = at;
+    pending.continuation.reservation = { run_id: RUN_ID.test(options.runId ?? '') ? options.runId : null, at, before };
     await writePrivate(path.join(directory, `${item.id}.json`), JSON.stringify(pending, null, 2));
   }
   return attachPriorReviews(context, directory);
+}
+// A run the subscription's usage limit paused (run.mjs exit 8) says nothing
+// about the ticket, and three limited hours in a row would otherwise use up a
+// continuation's three attempts and stall it for good (review of 2026-09-29).
+// Gives back the attempt this run's --load reserved: only while the record is
+// still that reservation (pending, the same run id and time, one attempt more
+// than it replaced). Returns whether it did.
+export async function releaseAttempt(directory, ticketId, runId) {
+  if (!RUN_ID.test(runId || '')) throw Error('An attempt is given back only by the run that reserved it (TICKET_RUN_ID)');
+  let record;
+  try { record = await readCase(directory, ticketId); } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  const queue = record.continuation, held = queue?.reservation;
+  if (queue?.state !== 'pending' || !held || held.run_id !== runId || queue.last_attempt_at !== held.at ||
+      !Number.isInteger(held.before?.attempts) || queue.attempts !== held.before.attempts + 1) return false;
+  const restored = { ...queue, attempts: held.before.attempts, due_at: held.before.due_at, last_attempt_at: held.before.last_attempt_at };
+  delete restored.reservation;
+  if (restored.last_attempt_at === null) delete restored.last_attempt_at;
+  record.continuation = restored;
+  await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
+  return true;
 }
 export function assertReplyMode(context) {
   if (context.run_mode !== 'reply') throw Error('Action-only continuation cannot publish a customer reply');
@@ -719,10 +746,16 @@ async function main(args) {
   if (mode === '--load' && args.length === 5) {
     const key = runKey();
     await ensureState(stateDirectory);
-    const context = await loadQueuedContext(databaseQuery, { id: ticketId, mode: runMode }, stateDirectory, { includeArchived: true });
+    const context = await loadQueuedContext(databaseQuery, { id: ticketId, mode: runMode }, stateDirectory, { includeArchived: true, runId: process.env.TICKET_RUN_ID });
     const serialized = JSON.stringify(context);
     await writePrivate(filename, serialized);
     await writePrivate(`${filename}.mac`, contextMac(key, serialized)); return;
+  }
+  if (mode === '--release-attempt' && args.length === 3) {
+    await ensureState(filename);
+    const released = await releaseAttempt(filename, id(ticketId), process.env.TICKET_RUN_ID);
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} ${released ? `RELEASED — the continuation attempt this run reserved for ${ticketId} is given back` : `no continuation attempt of this run to give back for ${ticketId}`}`);
+    return;
   }
   if (mode === '--validate' && args.length === 3) {
     // Exit 2 = the model's result broke a rule it can repair; the reason goes
@@ -759,6 +792,6 @@ async function main(args) {
     const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true, repo: repository(), ...facts, requireStructured: true });
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });

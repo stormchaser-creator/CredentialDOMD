@@ -4,7 +4,7 @@ import { mkdtemp, readFile, stat, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { loadContext, historySQL, messagesSQL, targetSQL, actorLabel, validateAssessment,
-  saveReview, attachPriorReviews, ensureState, collectQueue, loadQueuedContext, continuationSQL, finishRun, assertReplyMode } from './ticket-agent-context.mjs';
+  saveReview, attachPriorReviews, ensureState, collectQueue, loadQueuedContext, releaseAttempt, continuationSQL, finishRun, assertReplyMode } from './ticket-agent-context.mjs';
 
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const owner = uuid(9000), targetId = uuid(1);
@@ -272,6 +272,37 @@ test('crashes consume bounded continuation attempts and stalled work is surfaced
     assert.equal((await current()).continuation.state, 'stalled');
     const newMessage = await collectQueue(makeQuery([{ id: targetId, from_admin: false }]), directory, { now: START + 5 * HOUR });
     assert.deepEqual(newMessage.items, [{ id: targetId, mode: 'reply' }]);
+  });
+});
+// A run the subscription's usage limit paused (run.mjs exit 8) gives back the
+// attempt its load reserved: three limited hours in a row used to stall the
+// continuation for good (review of 2026-09-29). Only that run's reservation.
+test('a paused run gives back the continuation attempt it reserved; three limited hours leave it pending and due, and only its own run can release it', async () => {
+  const RUN = '0123456789abcdef', OTHER = 'fedcba9876543210';
+  await pendingFixture(async ({ directory, context, current, makeQuery }) => {
+    await saveReview(directory, context, workerAssessment(context), null, { now: START });
+    const original = (await current()).continuation;
+    for (let hour = 1; hour <= 3; hour++) {
+      const now = START + hour * HOUR;
+      const queue = await collectQueue(makeQuery(), directory, { now });
+      assert.deepEqual(queue.items, [{ id: targetId, mode: 'continuation' }], `hour ${hour}: still due`);
+      await loadQueuedContext(makeQuery(), queue.items[0], directory, { now, runId: RUN });
+      assert.equal((await current()).continuation.attempts, 1, 'reserved before any model runs');
+      assert.equal(await releaseAttempt(directory, targetId, OTHER), false, 'another run\'s id releases nothing');
+      assert.equal(await releaseAttempt(directory, targetId, RUN), true);
+      assert.deepEqual((await current()).continuation, original, 'attempts, due time and last attempt as they were');
+      assert.equal(await releaseAttempt(directory, targetId, RUN), false, 'given back once');
+    }
+    const after = await collectQueue(makeQuery(), directory, { now: START + 4 * HOUR });
+    assert.deepEqual(after, { items: [{ id: targetId, mode: 'continuation' }], attention: [], parked: [] }, 'not stalled');
+    assert.equal((await current()).continuation.state, 'pending');
+    // A reservation with no run id (the isolated runner), or one a finished run
+    // replaced, is never released.
+    await loadQueuedContext(makeQuery(), { id: targetId, mode: 'continuation' }, directory, { now: START + 4 * HOUR });
+    assert.equal(await releaseAttempt(directory, targetId, RUN), false);
+    assert.equal((await current()).continuation.attempts, 1);
+    await assert.rejects(releaseAttempt(directory, targetId, 'not-a-run'), /the run that reserved it/);
+    assert.equal(await releaseAttempt(directory, uuid(77), RUN), false, 'no case record');
   });
 });
 test('due work shares the two-target bound and new customer input wins for the same target', async () => {

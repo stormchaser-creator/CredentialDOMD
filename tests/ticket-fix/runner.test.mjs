@@ -79,6 +79,52 @@ test('parking writes a private alert line and status, and sends ids only', async
   } finally { state.cleanup(); }
 });
 
+// Review of the pause (2026-09-29): a run the usage limit stopped exits
+// cleanly and counts nothing, so a weekly limit (or a CLI message matching the
+// limit by mistake) stopped every ticket for days while status.json said the
+// last run was fine and nobody was told.
+test('usage-limit pauses: recorded in status.json, the owner alerted once after 6 h with the CLI\'s limit sentence, and cleared by a run that gets past it', async () => {
+  const state = privateDir('ticket-pause-');
+  const sent = [];
+  const send = async m => { sent.push(m); return true; };
+  const t0 = Date.parse('2026-09-29T14:17:00Z'), hour = 3600000;
+  const notice = "You've hit your weekly limit · resets Oct 3, 9am (America/Los_Angeles)";
+  const pause = at => alert(['paused', '--state', state.dir, '--ticket', T, '--detail', notice], { send, now: at });
+  try {
+    for (let h = 0; h <= 5; h++) await pause(t0 + h * hour);
+    assert.deepEqual(sent, [], 'a 5-hour session limit clears before anyone is told');
+    await alert(['status', '--state', state.dir, '--rc', '8'], { now: t0 + 5 * hour + 60000 });
+    let status = JSON.parse(readFileSync(path.join(state.dir, 'status.json'), 'utf8'));
+    assert.deepEqual(status.last_run, { rc: 8, finished_at: new Date(t0 + 5 * hour + 60000).toISOString() }, 'a paused run is not a clean run');
+    assert.deepEqual(status.usage_limit, { since: new Date(t0).toISOString(), last_at: new Date(t0 + 5 * hour).toISOString(), runs: 6, ticket: T.slice(0, 8), notice, alerted_at: null });
+    await pause(t0 + 6 * hour);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], /every run for 6 h \(7 runs since 2026-09-29T14:17:00\.000Z\) has stopped at the subscription's usage limit, so no ticket is being worked/);
+    assert.ok(sent[0].endsWith(`The CLI said: ${notice}`), sent[0]);
+    assert.ok(!sent[0].includes(T) && !sent[0].includes('\u2014'), 'no full id, no em dash');
+    assert.match(readFileSync(path.join(state.dir, 'alerts.log'), 'utf8'), /ALERT usage_limit_paused hours=6 runs=7 since=2026-09-29T14:17:00\.000Z\n$/);
+    for (let h = 7; h <= 30; h++) await pause(t0 + h * hour);
+    assert.equal(sent.length, 1, 'once per pause');
+    // A run that gets past the limit ends the pause; the next pause starts over.
+    await alert(['resumed', '--state', state.dir], { now: t0 + 31 * hour });
+    status = JSON.parse(readFileSync(path.join(state.dir, 'status.json'), 'utf8'));
+    assert.equal(status.usage_limit, null);
+    assert.equal(existsSync(path.join(state.dir, 'usage-limit.json')), false);
+    await alert(['resumed', '--state', state.dir], { now: t0 + 32 * hour });
+    await pause(t0 + 40 * hour);
+    await pause(t0 + 45 * hour);
+    assert.equal(sent.length, 1);
+    await pause(t0 + 46 * hour);
+    assert.equal(sent.length, 2, 'a new pause alerts again after its own 6 h');
+    assert.equal(statSync(path.join(state.dir, 'usage-limit.json')).mode & 0o777, 0o600);
+    // An email address or the home path in the CLI text never reaches the queue.
+    await alert(['resumed', '--state', state.dir], { now: t0 + 50 * hour });
+    await alert(['paused', '--state', state.dir, '--ticket', T, '--detail', 'limit reached for someone@elsewhere.org'], { send, now: t0 + 51 * hour });
+    assert.equal(JSON.parse(readFileSync(path.join(state.dir, 'usage-limit.json'), 'utf8')).notice, 'limit reached for [email removed]');
+    await assert.rejects(alert(['paused', '--state', state.dir, '--ticket', 'nope']), /paused needs --ticket UUID/);
+  } finally { state.cleanup(); }
+});
+
 test('a lock older than 4 h alerts once per lock, whether it has an owner record or was taken by hand', async () => {
   const state = privateDir('ticket-lock-');
   const sent = [];
@@ -225,7 +271,8 @@ test('the runner: per-run key and committer, timeouts count, rule names only in 
   assert.match(sh, /RUN_KEY=\$\(\/usr\/bin\/openssl rand -hex 32\)/);
   assert.doesNotMatch(sh, /export[^\n]*RUN_KEY/, 'never exported');
   assert.equal((sh.match(/TICKET_RUN_KEY="\$RUN_KEY"/g) || []).length, 2, 'only --load and --record-and-reply get it');
-  assert.match(sh, /TICKET_RUN_KEY="\$RUN_KEY" TICKET_DATABASE_TOKEN="\$TOKEN" node "\$HOST\/ticket-agent-context.mjs" \\\n\s+--load/);
+  // The run id tags the continuation attempt --load reserves (a paused run gives it back).
+  assert.match(sh, /TICKET_RUN_KEY="\$RUN_KEY" TICKET_RUN_ID="\$RUN_ID" TICKET_DATABASE_TOKEN="\$TOKEN" node "\$HOST\/ticket-agent-context.mjs" \\\n\s+--load/);
   assert.match(sh, /RUN_COMMITTER="ticket-agent\+\$RUN_ID@credentialdomd.invalid"/);
   assert.match(sh, /reject\(\) \{[\s\S]*?echo \$\(\(FAILS \+ 1\)\) > "\$FAIL_COUNT"[\s\S]*?node "\$ALERT" park/);
   assert.match(read('scripts/ticket-fix/run.mjs'), /log\(`REPAIR \u2014 \$\{ticket\} attempt \$\{repairs \+ 1\}: \$\{rules\}`\)/);
