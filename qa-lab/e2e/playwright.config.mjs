@@ -4,18 +4,21 @@
 // says where it is) as physicians would: Chromium, desk viewport, one fresh
 // test physician per journey. Reports and screenshots go under
 // qa-lab/.generated/ (gitignored); the checklist results go to
-// qa-lab/.generated/results.json.
+// qa-lab/.generated/results.json. With QA_E2E_RESULTS (parallel-safe mode,
+// support/run-options.mjs) the results, traces and HTML report are this run's
+// own, beside that file.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+import { runOutputs } from './support/run-options.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const GENERATED = path.resolve(HERE, '..', '.generated');
+const OUT = runOutputs();
 
 export default defineConfig({
   testDir: HERE,
   testMatch: /.*\.spec\.mjs$/,
-  outputDir: path.join(GENERATED, 'e2e', 'artifacts'),
+  outputDir: OUT.artifacts,
   timeout: 6 * 60 * 1000,
   expect: { timeout: 30000 },
   fullyParallel: false,
@@ -23,8 +26,8 @@ export default defineConfig({
   retries: 0,
   reporter: [
     ['list'],
-    ['html', { outputFolder: path.join(GENERATED, 'e2e', 'html'), open: 'never' }],
-    [path.join(HERE, 'support', 'results-reporter.mjs')],
+    ['html', { outputFolder: OUT.html, open: 'never' }],
+    [path.join(HERE, 'support', 'results-reporter.mjs'), { outputFile: OUT.results }],
   ],
   use: {
     ...devices['Desktop Chrome'],

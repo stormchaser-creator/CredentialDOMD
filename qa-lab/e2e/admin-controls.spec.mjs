@@ -5,6 +5,7 @@
 // message from the owner that the member reads and answers on Home.
 import { test } from './support/fixtures.mjs';
 import { clearRunawayRetries } from './run.mjs';
+import { noRestart } from './support/run-options.mjs';
 import {
   createPhysician, goTab, landing, letters, makeAdmin, newMember, openMore, profileOf, row, rows, signIn, sleep, waitFor, waitForMemberApp, accessSnapshot,
 } from './support/lab.mjs';
@@ -56,8 +57,9 @@ test('owner controls: pause and restore access, lifetime grant, view as member, 
         });
       }
       // An admin has no way out (the loop keeps the member's row locked). The lab restarts
-      // PostgREST to end the loop, then the journey reloads the list and tries again.
-      await clearRunawayRetries();
+      // PostgREST to end the loop (in parallel-safe mode it ends only the looping sessions,
+      // since other runs share the API), then the journey reloads the list and tries again.
+      await clearRunawayRetries({ action: noRestart() ? 'terminate' : 'restart' });
       await page.reload();
       await waitForMemberApp(page);
       await findAccount(page, memberName);

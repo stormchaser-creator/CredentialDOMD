@@ -1,5 +1,6 @@
 // Playwright reporter: turns the journeys' qa.feature / qa.bug records into
-// qa-lab/.generated/results.json, keyed by checklist id.
+// qa-lab/.generated/results.json, keyed by checklist id (or into this run's own
+// file with QA_E2E_RESULTS, parallel-safe mode: support/run-options.mjs).
 //
 // The checklist (features.json, 261 features with steps and expected results)
 // lives outside this public repository; its path comes from QA_FEATURES or
@@ -14,9 +15,11 @@
 //   not_run  no journey covers it yet
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { GENERATED_DIR, REPO_ROOT } from '../../lib/paths.mjs';
+import { REPO_ROOT } from '../../lib/paths.mjs';
+import { DEFAULT_RESULTS_JSON, resultsFile } from './run-options.mjs';
 
-export const RESULTS_JSON = path.join(GENERATED_DIR, 'results.json');
+/** The shared default results file; a run with QA_E2E_RESULTS writes its own (resultsFile()). */
+export const RESULTS_JSON = DEFAULT_RESULTS_JSON;
 export function featuresPath() {
   return process.env.QA_FEATURES || path.resolve(REPO_ROOT, '..', 'qa-data', 'features.json');
 }
@@ -88,8 +91,8 @@ export default class ResultsReporter {
       bugs: journeys.flatMap((j) => j.bugs),
       features: Object.fromEntries(Object.entries(out).sort(([a], [b]) => a.localeCompare(b))),
     };
-    mkdirSync(path.dirname(RESULTS_JSON), { recursive: true });
-    const file = this.options.outputFile || RESULTS_JSON;
+    const file = this.options.outputFile || resultsFile();
+    mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(results, null, 2) + '\n');
     console.log(`\nqa-e2e: results ${file}\n  features: ${summary.pass} pass, ${summary.fail} fail, ${summary.blocked} blocked, ${summary.not_run} not run; bugs recorded: ${results.bugs.length}`);
   }

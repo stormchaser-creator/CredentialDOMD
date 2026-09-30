@@ -833,10 +833,60 @@ uses the installed Google Chrome instead.
 founding places (100 less the 4 promised ones, as live), and a full run takes
 about 30. Once they are gone the gate offers the early-bird price and the signup
 journey's "$99" checks fail for a lab reason. The runner prints how many public
-places are left (100 minus every live slot row, promised or taken) and warns
-under 25; `--fresh` (or `npm run qa:down -- --wipe && npm run qa:up`) starts
-over. A lab that is already running is re-checked first: no port beyond
-loopback, and the gateway's functions CORS plugin still removed.
+places are left (100 minus every live slot row, promised or taken); under 40 it
+tops them up itself (below; `QA_E2E_NO_TOPUP=1` skips that), and warns under 25.
+A lab that is already running is re-checked first: no port beyond loopback, and
+the gateway's functions CORS plugin still removed.
+
+```sh
+npm run qa:founding-reset                  # free the public places journeys took more than 15 minutes ago
+npm run qa:founding-reset -- --dry-run     # say what it would free
+npm run qa:founding-reset -- --min-age 0   # whatever their age (only when no journey is running)
+```
+
+`qa:founding-reset` (`founding-reset.mjs`) deletes only the rows of
+`limited_founding_slots` a journey created (no `promise_email`), in both billing
+modes, and nothing else: the promised places, the members, their subscriptions,
+receipts and quotes stay (`--fresh` rebuilds everything instead). It is safe
+while journeys run: it takes the advisory locks the product's founding claim,
+settle and release functions take (`pg_advisory_xact_lock(8222, 1 live / 0
+test)`), and keeps a place younger than `--min-age` (15 minutes, longer than any
+journey's timeout), because every later Stripe event for that member (the
+invoice, a portal cancel) settles through `settle_limited_billing_subscription`,
+which raises "founding allocation missing" once the member's place is gone. It
+refuses a database without the lab's seed (`qa_lab.seed_version`).
+
+### Several runs at once (parallel-safe mode)
+
+Several authors (people or agents) can run different spec files against one
+running lab at the same time. Start the lab once and leave it running
+(`npm run qa:lab` in its own terminal), then each author runs:
+
+```sh
+QA_E2E_RESULTS=qa-lab/.generated/runs/<name>.json QA_E2E_NO_RESTART=1 npm run qa:e2e -- <file>.spec.mjs
+```
+
+| | one run at a time (default) | parallel-safe mode |
+|---|---|---|
+| results | `.generated/results.json` | the `QA_E2E_RESULTS` file (under `.generated/` or outside the repository; a relative path is taken from where npm was run) |
+| traces, HTML report | `.generated/e2e/artifacts`, `.generated/e2e/html` | `<name>-e2e/artifacts`, `<name>-e2e/html` beside the results file (Playwright empties its output folder when a run starts and its report folder when it ends, so shared folders would delete another run's traces mid-run) |
+| a looping refused Pause/Approve (the ADMIN-001 bug) | the runner and the owner-controls journey restart the lab's PostgREST | never a restart: the runner only counts such sessions; the owner-controls journey ends its own with `pg_terminate_backend` (PostgREST answers that one request 503 and reconnects within the second; checked with `billing.spec.mjs` running at the same time: no other 5xx, PostgREST not restarted) |
+| `--fresh` | wipes and rebuilds the database | refused |
+| no lab running | starts one, stops it at the end | refused (a lab one run started would stop under the others) |
+| `labHealth` | this run's window | the same, lab-wide: other runs' client errors and function errors are included (`labHealth.scope` says so) |
+
+Either variable turns the mode on (`QA_E2E_RESULTS` alone also implies no
+restart; `QA_E2E_NO_RESTART=1` alone keeps the default results file). Screenshots
+stay in `.generated/e2e/shots/`, named by journey, so different spec files never
+collide. The founding top-up is safe to run from several runners at once (the
+locks serialize it). Every run on a shared lab must use this mode: a default run
+may still restart PostgREST under the others.
+
+Finding a looping session takes ten looks at `pg_stat_activity` over about a
+second and a half: it flickers between active and idle-in-transaction and is
+idle for an instant between tries, so one look misses it about half the time
+(and between tries the session's `query` names its other statements, so the
+session is ended by pid, only if it is PostgREST's `authenticator`).
 
 Output (all under the gitignored `qa-lab/.generated/`):
 
@@ -1136,11 +1186,13 @@ expectation turned out to be written against an older or assumed design:
 | `app/vite.config.mjs` | the QA-lab build: Clerk alias, issuer and hosted-page rewrites (`LAB_REWRITES`), app server, output folder |
 | `app/clerk-shim.jsx`, `app/qa-clerk.js`, `app/QaSignIn.jsx` | the QA sign-in |
 | `mocks/server.mjs` | the mock server (`clerk.mjs`, `stripe.mjs`, `stripe-params.mjs`, `resend.mjs`, `ai.mjs`, `signing.mjs`, `store.mjs`, `http.mjs`) |
-| `e2e/run.mjs` | `npm run qa:e2e` (starts the lab if needed, `--fresh`, lab health) |
+| `e2e/run.mjs` | `npm run qa:e2e` (starts the lab if needed, `--fresh`, lab health, founding top-up, parallel-safe mode) |
+| `e2e/support/run-options.mjs` | parallel-safe mode: `QA_E2E_RESULTS`, `QA_E2E_NO_RESTART`, each run's output folders |
+| `founding-reset.mjs` | `npm run qa:founding-reset`: frees the founding places journeys took, nothing else |
 | `e2e/playwright.config.mjs` | Playwright settings: Chromium, desk viewport, three workers, reporters |
 | `e2e/*.spec.mjs` | the journeys (list below) |
 | `e2e/support/fixtures.mjs`, `e2e/support/lab.mjs` | the journeys' fixtures and shared steps |
-| `e2e/support/results-reporter.mjs` | writes `.generated/results.json` |
+| `e2e/support/results-reporter.mjs` | writes `.generated/results.json` (or the run's `QA_E2E_RESULTS` file) |
 | `.generated/` (gitignored) | `catalog.json`, `schema.sql`, `local-secrets.json`, `parity-report.txt`; step 2: `lab-secrets.json`, `stack/` (the CLI workdir: `supabase/config.toml` from the template, `signing_keys.json`, a `functions` link), `functions.env`, `lab.json`, `lab-ports.json`, `mocks/`, `app-dist/`, `logs/`, `smoke/`; step 3: `results.json`, `e2e/` |
 
 There is no `supabase/config.toml` (see "No `supabase/config.toml`" above):
@@ -1205,6 +1257,17 @@ Step 3 (offline):
 - `tests/qa-lab/e2e-results.test.mjs`: how the reporter turns journeys into
   pass / fail / blocked / not_run per checklist id, and that `--list` keeps the
   last results.
+- `tests/qa-lab/e2e-parallel.test.mjs`: parallel-safe mode: each run's results,
+  traces and report in folders of its own (the Playwright configuration and the
+  reporter, with the shared results file left alone); a results file the public
+  repository would commit is refused; either switch means no restart, no
+  `--fresh` and no lab started or stopped; a looping session is found in two
+  looks of ten, never one, and is ended by pid without a restart, three rounds at
+  most; the founding reset's SQL (public places only, older than the age, lab
+  check then both product locks then the delete) and, on a throwaway PostgreSQL
+  built from production's table definitions, that it refuses a database without
+  the lab seed, rolls back a dry run, waits for a checkout holding the founding
+  lock, and frees only old public places (promised places and members untouched).
 - `tests/qa-lab/mocks.test.mjs`: also matched AI scripts and Stripe deliveries
   naming their object and customer.
 - `tests/qa-lab/public-repo-safety.test.mjs`: the journeys may name the
