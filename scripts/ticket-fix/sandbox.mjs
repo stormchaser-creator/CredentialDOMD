@@ -18,7 +18,9 @@
 //                 (runSlotDir). The owner's checkout, its .git (hooks, config,
 //                 refs), its node_modules, ticket-work, the global git config
 //                 and the slots the owner's own test runs use cannot be
-//                 changed.
+//                 changed. Each writable directory is granted as the host made
+//                 it (pinDir, grantDir): never resolved again, and refused once
+//                 it is no longer that directory.
 //   network       sessions: outbound allowed (the CLI needs the API), but not
 //                 the owner's local services (database and model-server ports,
 //                 sockets under /tmp, the launchd sockets that serve
@@ -33,6 +35,7 @@ import { writeFileSync, existsSync, realpathSync, mkdirSync, mkdtempSync, lstatS
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
+import { stopRecordedClusters, running } from './pg-clusters.mjs';
 
 export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
 // Whether a sandbox can be applied here: macOS, sandbox-exec present, and
@@ -79,9 +82,116 @@ export function shortTmpRoot() {
   return t.length <= 40 ? t : SHORT_TMP;
 }
 
+// The directories a profile lets sandboxed processes write, as the host made
+// them (review of 2026-09-30). A profile grants (subpath W), which covers W
+// itself: a sandboxed process can rename W away or remove it and put a
+// symlink in its place, and the next launch that resolved W (realpath) at
+// launch time granted the link's target instead (~/Library/LaunchAgents,
+// the owner's checkout). So the host resolves a directory once, when it makes
+// it (pinDir; a directory the host never pinned is pinned the first time a
+// profile grants it, before any sandbox has had it), and records its device,
+// inode and owner. Every later grant (grantDir) takes the recorded path,
+// never resolved again, and refuses unless it is still a real directory,
+// not a link, with the same device, inode and owner, and resolves to itself
+// (no link anywhere in it). The profile names that string: if it is swapped
+// after the check, the grant is still the path, and a path reached through a
+// link is matched as its target, which is not granted.
+export class SandboxDirChanged extends Error {}
+const PINS = new Map();
+const ownUid = () => (typeof process.getuid === 'function' ? process.getuid() : null);
+const changed = dir => new SandboxDirChanged(`The sandbox directory ${dir} is not the directory the host made for it (removed, moved, replaced or reached through a link); nothing more runs in it`);
+function pinOf(key) {
+  let st;
+  try { st = lstatSync(key); } catch { throw changed(key); }
+  if (st.isSymbolicLink() || !st.isDirectory()) throw changed(key);
+  const resolved = realpathSync(key);
+  literal(resolved);
+  const at = lstatSync(resolved);
+  const uid = ownUid();
+  if (uid !== null && at.uid !== uid) throw Error(`The sandbox directory ${resolved} is not this user's`);
+  return { path: resolved, dev: at.dev, ino: at.ino, uid: at.uid };
+}
+// Records a directory the host just made; returns its resolved path.
+export function pinDir(p) {
+  const key = path.resolve(String(p));
+  const pin = pinOf(key);
+  PINS.set(key, pin);
+  PINS.set(pin.path, pin);
+  return pin.path;
+}
+// The path a profile grants for a directory the host made, or
+// SandboxDirChanged when it is no longer that directory.
+export function grantDir(p) {
+  const text = String(p);
+  literal(text);
+  const key = path.resolve(text);
+  if (!PINS.has(key)) pinDir(key);
+  const pin = PINS.get(key);
+  let same = false;
+  try {
+    const st = lstatSync(pin.path);
+    same = !st.isSymbolicLink() && st.isDirectory() && st.dev === pin.dev && st.ino === pin.ino && st.uid === pin.uid && realpathSync(pin.path) === pin.path;
+  } catch { same = false; }
+  if (!same) throw changed(pin.path);
+  return pin.path;
+}
+export const verifyDir = grantDir;
+export function dirIntact(p) {
+  try { grantDir(p); return true; } catch { return false; }
+}
+export function forgetDir(p) {
+  const key = path.resolve(String(p));
+  const pin = PINS.get(key);
+  PINS.delete(key);
+  if (pin) PINS.delete(pin.path);
+}
+
+// The host's temporary directories for sandboxed processes: the gates'
+// (ctg-) and each session's (cts-), under the short root, the runner's pid in
+// the name, pinned, and tracked so the stop handler removes them (review of
+// 2026-09-30: a signalled runner exits without its gates' `finally`, and a
+// gate's clusters kept their data directories, and so their segments). One
+// whose runner is gone goes when the next run starts (runSlotDir).
+const HOST_TEMPS = new Set();
+export function hostTemp(prefix) {
+  if (!/^[a-z]{2,8}-$/.test(prefix)) throw Error('A host temporary directory prefix is a short name and a dash');
+  const dir = pinDir(mkdtempSync(path.join(shortTmpRoot(), `${prefix}${process.pid}-`)));
+  HOST_TEMPS.add(dir);
+  return dir;
+}
+// Removes one (a link put in its place is removed, never followed).
+export function dropHostTemp(dir) {
+  HOST_TEMPS.delete(dir);
+  forgetDir(dir);
+  rmSync(dir, { recursive: true, force: true });
+}
+export function removeHostTemps() {
+  for (const dir of [...HOST_TEMPS]) { try { dropHostTemp(dir); } catch { /* gone */ } }
+}
+const TEMP_NAME = /^(?:ctg|cts)-(?:(\d+)-)?[A-Za-z0-9]{6}$/;
+// Names without a pid (made before 2026-09-30) go once a day old.
+const UNNAMED_TEMP_AGE_MS = 24 * 3600 * 1000;
+export function sweepHostTemps(root = shortTmpRoot()) {
+  let names = [];
+  try { names = readdirSync(root); } catch { return []; }
+  const uid = ownUid();
+  const removed = [];
+  for (const name of names) {
+    const m = TEMP_NAME.exec(name);
+    if (!m) continue;
+    const full = path.join(root, name);
+    let st;
+    try { st = lstatSync(full); } catch { continue; }
+    if (!st.isDirectory() || (uid !== null && st.uid !== uid)) continue;
+    if (m[1] ? Number(m[1]) === process.pid || running(Number(m[1])) : Date.now() - st.mtimeMs < UNNAMED_TEMP_AGE_MS) continue;
+    try { rmSync(full, { recursive: true, force: true }); removed.push(full); } catch { /* gone meanwhile */ }
+  }
+  return removed;
+}
+
 // The PostgreSQL test slots of one run's sandboxed processes
 // (tests/helpers/pg-slot.mjs and pg_slot.py). Every disposable cluster a test
-// starts, and initdb's bootstrap, takes a System V shared-memory segment and
+// starts, and each initdb backend, takes a System V shared-memory segment and
 // macOS allows 32 for the whole machine, so every test process takes one of a
 // fixed number of slots before initdb. The owner's own runs share
 // <realpath /tmp>/credentialdomd-pg-slots-<uid> (12 slots). No sandboxed
@@ -92,14 +202,21 @@ export function shortTmpRoot() {
 // directory of their own that the host makes when the run starts and removes
 // when it ends, with RUN_PG_SLOTS slots: whatever a sandboxed process does
 // there (hold, fake or drop slots) delays or fails only this run's database
-// tests. 12 + 6 for a run + 6 for a merge the owner runs meanwhile, with the
-// 4 segments the owner's own databases held (2026-09-29): 28 of 32. A cluster
-// a killed gate left running stops by itself once its data directory (in the
-// run's temporary directories, removed at the end) is gone: the postmaster
-// checks its data directory every minute and shuts down without it (16 s in
-// a measurement), freeing its segment. The runner removes the directory when
-// the run ends and when it is signalled; one a SIGKILLed runner left (its
-// pid is in the name) goes when the next run's is made.
+// tests. The budget: 12 + 6 for a run + 6 for a merge the owner runs
+// meanwhile = 24, with the owner's own databases (2 segments on 2026-09-30;
+// the 4 counted on 2026-09-29 were those 2 and 2 initdb backends a SIGKILL
+// had orphaned): 26 of 32. A segment is lost for good when a PostgreSQL
+// process dies attached to it without cleaning up (SIGKILL), so the runner
+// ends a process group with SIGTERM first (worker.mjs endGroup) and the slot
+// helpers remove a dead owner's orphaned segments before they give its slot
+// back (pg-clusters.mjs).
+// Before the host removes a run's slot directory (the run ended, the runner
+// was signalled, or a runner that died left it: its pid is in the name) it
+// stops every cluster the records there name (stopRecordedClusters): a
+// test process killed with its gate cannot stop its own, pg_ctl puts the
+// postmaster in a session of its own that no group kill reaches, and once
+// the records are gone no reclaimer can find it. The runner's temporary
+// directories, which hold the data directories, go too.
 export const RUN_PG_SLOTS = 6;
 export function runSlotDir() {
   const uid = typeof process.getuid === 'function' ? process.getuid() : 'user';
@@ -109,14 +226,20 @@ export function runSlotDir() {
   try { names = readdirSync(parent); } catch { names = []; }
   for (const name of names) {
     const pid = name.startsWith(prefix) ? /^(\d+)-[A-Za-z0-9]{6}$/.exec(name.slice(prefix.length))?.[1] : null;
-    if (!pid || Number(pid) === process.pid) continue;
-    try { process.kill(Number(pid), 0); continue; } catch { /* that runner is gone */ }
+    if (!pid || Number(pid) === process.pid || running(Number(pid))) continue;
     try {
       const st = lstatSync(path.join(parent, name));
-      if (st.isDirectory() && (typeof process.getuid !== 'function' || st.uid === process.getuid())) rmSync(path.join(parent, name), { recursive: true, force: true });
+      if (st.isDirectory() && (typeof process.getuid !== 'function' || st.uid === process.getuid())) retireSlotDir(path.join(parent, name));
     } catch { /* gone meanwhile */ }
   }
+  sweepHostTemps();
   return mkdtempSync(path.join(parent, `${prefix}${process.pid}-`));
+}
+// Removes a run's slot directory once every cluster its records name is
+// stopped and their orphaned segments are removed.
+export function retireSlotDir(dir) {
+  try { stopRecordedClusters(dir); } catch { /* remove it anyway */ }
+  rmSync(dir, { recursive: true, force: true });
 }
 // What a sandboxed test process needs to find this run's slots.
 export const slotEnv = dir => ({ PG_TEST_SLOT_DIR: dir, PG_TEST_SLOTS: String(RUN_PG_SLOTS) });
@@ -149,8 +272,10 @@ const entriesOf = dir => `(regex #"^${regexText(literal(dir).slice(1, -1))}/")`;
 
 // kind: 'session' (a model session: API network allowed) or 'gates' (host
 // steps running worktree code: loopback only). writable: directories the
-// process tree may write. denyRead: further directories it may not read
-// (the run records, the baseline cache, the AUTO_MERGE flag, other state).
+// process tree may write, each granted as the host made it (grantDir: a
+// directory swapped for a link or replaced since is refused). denyRead:
+// further directories it may not read (the run records, the baseline cache,
+// the AUTO_MERGE flag, other state).
 // readable: directories it may read (never write) even inside a denied one:
 // this ticket's downloaded attachments (stage 3, G6), whose parent holds no
 // other ticket's files but is denied as a whole anyway. shared: directories
@@ -165,7 +290,8 @@ export function sandboxProfile({ kind, home = os.homedir(), writable, denyRead =
   const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
   const dirs = [...SECRET_DIRS.map(d => path.join(h, d)), '/Library/Keychains', `/private/tmp/claude-${uid}`, ...denyRead.map(real)];
   const files = [...SECRET_FILES.map(f => path.join(h, f)), ...denyFiles.map(f => path.join(real(path.dirname(f)), path.basename(f)))];
-  const open = writable.map(real);
+  // As the host made them, never resolved here (grantDir).
+  const open = writable.map(grantDir);
   const view = readable.map(real);
   const shares = shared.map(sharedDir);
   for (const s of shares) if (open.some(w => s === w || s.startsWith(`${w}/`))) throw Error('A shared sandbox directory may not sit in a writable one');
@@ -228,7 +354,9 @@ export function sandboxed({ profileFile, profile, command, args = [] }) {
 // The environment every sandboxed process gets on top of its allowlist: its
 // own TMPDIR and npm cache, and git that reads no global or system config
 // (the sandbox denies ~/.gitconfig; git would otherwise stop on it).
+// tmp is granted like a writable directory (grantDir), never resolved.
 export function sandboxEnv(tmp) {
-  return { TMPDIR: `${real(tmp)}/`, npm_config_cache: path.join(real(tmp), 'npm-cache'), npm_config_update_notifier: 'false',
+  const t = grantDir(tmp);
+  return { TMPDIR: `${t}/`, npm_config_cache: path.join(t, 'npm-cache'), npm_config_update_notifier: 'false',
     npm_config_fund: 'false', npm_config_audit: 'false', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
 }

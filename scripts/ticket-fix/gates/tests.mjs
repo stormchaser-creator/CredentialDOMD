@@ -41,7 +41,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { git, isProduct, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES, MEDIA_FILE, gateWorktree, snapshotCommit, ignoredPaths } from '../worktree.mjs';
 import { launch } from '../worker.mjs';
-import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, slotEnv } from '../sandbox.mjs';
+import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, slotEnv, verifyDir, dirIntact } from '../sandbox.mjs';
 import { personalDataReport, personalDataSummary } from './personal-data.mjs';
 import { releaseCandidates } from '../release.mjs';
 
@@ -89,6 +89,10 @@ const childEnv = env => Object.fromEntries(Object.entries(env).filter(([key]) =>
 // (sandbox.mjs runSlotDir: the suite shares its clusters with the run's other
 // gates and sessions, never with the owner's own test runs). Without sandbox
 // (a machine with no sandbox-exec: tests only) the same command runs plainly.
+// dir and tmp are granted as the host made them (sandbox.mjs grantDir): a
+// gate step's code that swapped either for a link (both are its to write,
+// the directory entry included) stops the next step, which would otherwise
+// have been granted the link's target (review of 2026-09-30).
 let profileCount = 0;
 export async function gateLaunch({ sandbox, dir, tmp, command, args = [], env, ...rest }) {
   if (!sandbox) return launch({ command, args, cwd: dir, env, ...rest });
@@ -158,6 +162,8 @@ export async function recordReproduction({ dir, repo = null, work, base, tests, 
       const verdict = validTestRef(test) && runs.has(test.file) ? redVerdict(runs.get(test.file), test) : 'invalid_reference';
       results.push({ file: test.file, name: test.name, on_base: verdict, message: verdict === 'red' ? firstFailure(runs.get(test.file), test) : null });
     }
+    // The tests ran there: the host reads it only while it is still the gate.
+    verifyDir(gate.dir);
     const frozen = {};
     for (const file of changed) frozen[file] = existsSync(path.join(gate.dir, file)) ? sha256(readFileSync(path.join(gate.dir, file))) : null;
     return { base, snapshot, tests: results, frozen, recorded: tests.length > 0 && results.every(r => r.on_base === 'red') };
@@ -302,14 +308,19 @@ export async function mutationCheck({ dir, tmp = null, base, head, tests, env, s
     const patchFile = path.join(patchDir, 'hunk.patch');
     writeFileSync(patchFile, hunk.patch);
     try {
+      // The host's git writes here, after test code ran here: only while it
+      // is still the gate worktree (not a link to a checkout of the owner's).
+      verifyDir(dir);
       if (git(dir, ['apply', '-R', '--unidiff-zero', '--whitespace=nowarn', patchFile], { binary, allowFail: true }) === null) { skipped.push(index); continue; }
       for (const file of files) {
         const run = await runTestFile({ dir, tmp, file, env, sandbox, node });
         for (const test of tests.filter(t => t.file === file)) if (greenVerdict(run, test) !== 'green') killed.add(`${test.file}::${test.name}`);
       }
     } finally {
-      git(dir, ['checkout', '--quiet', 'HEAD', '--', '.'], { binary, allowFail: true });
-      git(dir, ['clean', '-fdq', '--', 'src', 'public', 'landing'], { binary, allowFail: true });
+      if (dirIntact(dir)) {
+        git(dir, ['checkout', '--quiet', 'HEAD', '--', '.'], { binary, allowFail: true });
+        git(dir, ['clean', '-fdq', '--', 'src', 'public', 'landing'], { binary, allowFail: true });
+      }
       rmSync(patchDir, { recursive: true, force: true });
     }
   }

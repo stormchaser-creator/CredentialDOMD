@@ -113,7 +113,7 @@ import { protectedReport, blastRadius } from './gates/owner-rules.mjs';
 import { reviewDiff, reviseInput, confirmChecklist, REVIEW_SCHEMA, CONFIRM_SCHEMA, EVIDENCE_MARKER } from './review.mjs';
 import { mergeRun, autoMergeEnabled, writeRun, writeRunFile, readRun, runDirectory, checkRunPaths, credentialValues, RUN_NAME, AUTO_MERGE_FLAG } from './merge.mjs';
 import { raise } from './alert.mjs';
-import { sandboxAvailable, runSlotDir } from './sandbox.mjs';
+import { sandboxAvailable, runSlotDir, retireSlotDir, verifyDir, SandboxDirChanged } from './sandbox.mjs';
 import { isMain } from './is-main.mjs';
 import { sessionEvidence, caseHistory, HISTORY_FILE, PROMPT_LIMIT, kb } from './session-context.mjs';
 
@@ -149,10 +149,14 @@ export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state
 // The run's PostgreSQL test slot directory, removed when the run ends
 // (undo) and when the runner is signalled (the stop hooks run instead of
 // undo then): sandboxed tests never share slots with the owner's own runs.
-function runSlots(enabled, undo) {
+// Every cluster its records name is stopped first (sandbox.mjs
+// retireSlotDir): a gate killed with the runner leaves its clusters running,
+// in sessions of their own, and without the records nothing else finds them
+// (review of 2026-09-30).
+export function runSlots(enabled, undo) {
   if (!enabled || !sandboxAvailable()) return null;
   const dir = runSlotDir();
-  const remove = () => rmSync(dir, { recursive: true, force: true });
+  const remove = () => retireSlotDir(dir);
   const unhook = onStop(remove);
   undo(() => { unhook(); remove(); });
   return dir;
@@ -414,6 +418,9 @@ async function workTicket(o, atEnd) {
   const hostCheck = async where => {
     if (hooksDigest(repo, { binary }) !== wt.hooks_sha256) throw new HostStateChanged(`the shared git hooks or config changed (after ${where})`);
     try { checkWorktreeLink(wt.dir, wt.gitdir); } catch (error) { throw new HostStateChanged(`${error.message} (after ${where})`); }
+    // The sessions can write the worktree's own directory entry: the host's
+    // git works there only while it is the directory the host made.
+    try { verifyDir(wt.dir); } catch (error) { throw new HostStateChanged(`${error.message} (after ${where})`); }
     const now = originAtStart ? remoteMain(repo, { binary, env }) : null;
     if (now && now !== originAtStart) {
       const agent = agentCommitsOnMain(repo, originAtStart, { binary, env });
@@ -833,7 +840,9 @@ async function workTicket(o, atEnd) {
       await cleanup();
       return await finishWith(EXIT.usageLimit, 'paused', { reason: `usage limit: ${error.message}`, paused: { role: error.role, detail: error.detail } });
     }
-    if (!(error instanceof HostStateChanged)) throw error;
+    // A directory a sandbox writes was swapped (a link, or replaced): an
+    // attempt to widen the next sandbox, held like any host state change.
+    if (!(error instanceof HostStateChanged) && !(error instanceof SandboxDirChanged)) throw error;
     log(`HOST STATE — ${ticket} run ${name}: ${error.message}; nothing recorded, every later run held`);
     await alert('host_state_changed', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: during run ${name} (ticket ${id8}) ${error.message}. Nothing was recorded or merged. Every run is held until ticket-context/HOLD-host-code-changed is removed after review.`);
     return finishWith(EXIT.hostState, 'host_state_changed', { reason: error.message });

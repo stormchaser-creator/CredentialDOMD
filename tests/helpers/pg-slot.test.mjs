@@ -585,7 +585,9 @@ const sandboxSkip = process.platform !== 'darwin' ? 'macOS sandbox only' : !sand
 test('inside the gates sandbox a test takes a slot in its run\'s own directory, cannot swap that directory, and cannot touch the owner\'s slots', { skip: sandboxSkip || pySkip, timeout: 60000 }, async t => {
   const dir = fs.realpathSync(scratch(t));
   const tmp = path.join(dir, 'tmp'); fs.mkdirSync(tmp);
-  const profileDir = path.join(dir, 'profiles'); fs.mkdirSync(profileDir);
+  // Profiles, and a session's settings and shim, live where no sandboxed
+  // process can write.
+  const profileDir = fs.realpathSync(scratch(t, 'pg-slot-profiles-'));
   const victim = fs.realpathSync(scratch(t, 'pg-slot-victim-'));
   const run = runSlotDir();
   t.after(() => fs.rmSync(run, { recursive: true, force: true }));

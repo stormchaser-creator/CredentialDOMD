@@ -24,8 +24,13 @@
 //              complete record onto the name (link fails if the name exists),
 //              so no reader ever sees a half-written record.
 //   record     JSON {pid, start (process start, epoch ms), token, label,
-//              dataDir, since}. <dataDir>.pg-slot holds the token: the proof
-//              that a cluster in that directory belongs to this slot.
+//              dataDir, dataIno, since}. <dataDir>.pg-slot holds the token:
+//              the proof that a cluster in that directory belongs to this
+//              slot. The helper makes the (empty) data directory when it
+//              takes the slot and records its inode (dataIno): PostgreSQL
+//              keys its System V segment on that inode, and initdb, when it
+//              is signalled, removes only what it put in a directory it did
+//              not make, so the directory, and its inode, outlive it.
 //   stale      the owner is gone. A record is not trusted to name a live test
 //              process: it holds its slot only while its pid runs as this
 //              user (a process of another user, such as pid 1, never owns
@@ -38,7 +43,11 @@
 //              immediate shutdown, which frees the segment), and only when
 //              its postmaster.pid names a postgres process whose command line
 //              is `-D <dataDir>` and the marker matches: a record anyone can
-//              write never gets another process signalled.
+//              write never gets another process signalled. Then the segments
+//              the dead owner's backends orphaned (a backend SIGKILLed while
+//              attached, as during initdb, leaves its segment on the machine
+//              for good) are removed: scripts/ticket-fix/pg-clusters.mjs
+//              removeOrphanSegments, keyed on the recorded inode.
 //   removal    a slot name is removed only under the directory's lock
 //              (reclaim.lock, itself a record, taken by hard link; broken
 //              when its pid no longer runs or it is 10 s old), and only while it is
@@ -50,12 +59,15 @@
 //              (withSlotWait).
 //   release    slot.release() once the cluster is stopped; also on process
 //              exit, SIGINT, SIGTERM and SIGHUP, which first stop a cluster
-//              of this process that is still running.
+//              of this process that is still running. It removes the
+//              segments this slot's cluster orphaned (an initdb killed by a
+//              timeout) before the slot is free.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { removeOrphanSegments, clusterInodes, directoryInode } from '../../scripts/ticket-fix/pg-clusters.mjs';
 
 export const DEFAULT_SLOTS = 12;
 export const DEFAULT_TIMEOUT_SECONDS = 600;
@@ -224,7 +236,10 @@ function reclaimable(seen) {
   if (!ownerGone(seen.record)) return false;
   const cluster = clusterOf(seen.record, false);
   if (cluster.state === 'unknown') return false;
-  return cluster.state === 'none' || stopCluster(cluster.pid);
+  if (cluster.state === 'running' && !stopCluster(cluster.pid)) return false;
+  // The segments its backends orphaned, before the slot is anyone else's.
+  try { removeOrphanSegments(clusterInodes(seen.record)); } catch { /* best effort */ }
+  return true;
 }
 // Removes a name only if it is still exactly what was seen there (inode,
 // kind and content): a record linked there since is never touched.
@@ -339,6 +354,7 @@ export class PgSlot {
     if (this.dataDir) {
       const cluster = clusterOf(this.record, true);
       if (cluster.state === 'running') stopCluster(cluster.pid);
+      try { removeOrphanSegments(clusterInodes(this.record)); } catch { /* best effort */ }
     }
     const mine = () => { const seen = inspect(this.file); if (seen?.record?.token === this.token) removeIfSame(this.file, seen); };
     try { if (!underLock(this.dir, mine).held) mine(); } catch { try { mine(); } catch { /* the directory is gone */ } }
@@ -355,7 +371,11 @@ function prepare(dataDir, options) {
   sweep(dir);
   const token = randomBytes(16).toString('hex');
   const label = options.label ?? (path.relative(process.cwd(), process.argv[1] ?? '') || 'node');
-  const record = { pid: process.pid, start: ownStart(), token, label, dataDir: dataDir ? String(dataDir) : null, since: new Date().toISOString() };
+  // The data directory, made now (empty, owner-only) when its parent exists:
+  // its inode keys the cluster's segments (see "record" above).
+  if (dataDir) { try { fs.mkdirSync(String(dataDir), { mode: 0o700 }); } catch { /* there already, or no parent yet */ } }
+  const dataIno = dataDir ? directoryInode(String(dataDir)) : null;
+  const record = { pid: process.pid, start: ownStart(), token, label, dataDir: dataDir ? String(dataDir) : null, ...(dataIno ? { dataIno } : {}), since: new Date().toISOString() };
   const draft = path.join(dir, `.tmp-${process.pid}-${token}`);
   fs.writeFileSync(draft, `${JSON.stringify(record)}\n`, { flag: 'wx', mode: 0o600 });
   return { dir, slots, record, draft, began: Date.now(), deadline: Date.now() + timeoutMs, timeoutMs, noticed: false };

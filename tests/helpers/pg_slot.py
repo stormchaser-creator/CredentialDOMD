@@ -18,7 +18,10 @@ A slot still held at exit (normal, an exception, SIGTERM or SIGHUP) is
 released then, after its cluster, if still running, is stopped. A record is
 never trusted to name a live test process (see "stale" in pg-slot.mjs), and a
 slot name is removed only under the directory's reclaim.lock, only while it
-is still the file its remover judged.
+is still the file its remover judged. acquire() makes the empty data
+directory and records its inode (dataIno); a reclaimer and release() remove
+the System V segments that cluster's backends orphaned before the slot is
+free (scripts/ticket-fix/pg-clusters.mjs has the node side and the why).
 Import it with sys.dont_write_bytecode set, so no __pycache__ lands in tests/.
 """
 import atexit
@@ -54,6 +57,8 @@ SLOT_NAME = re.compile(r'^slot-(\d+)$')
 LEFTOVER = re.compile(r'^\.(?:tmp|stale)-(\d+)-[0-9a-f]+$')
 OWNER_PROGRAM = re.compile(r'(?:^|/)(?:node|nodejs|python[0-9.]*|Python)(?:\s|$)')
 PS_ENV = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C', 'TZ': 'UTC'}
+KEY_SPAN = 10
+INODE = re.compile(r'^\d{1,20}$')
 
 
 def default_slot_dir():
@@ -283,6 +288,119 @@ def _cluster_of(record, own):
     return ('running', pid) if names else ('none', None)
 
 
+def _directory_inode(path):
+    """A directory's inode as a decimal string, or None (not a real directory)."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    return str(st.st_ino) if st.st_mode & 0o170000 == 0o040000 else None
+
+
+def _cluster_inodes(record):
+    """The inodes a record's cluster keyed its segments on: clusterInodes in
+    pg-clusters.mjs."""
+    out = []
+    ino = record.get('dataIno')
+    if isinstance(ino, str) and INODE.match(ino):
+        out.append(ino)
+    data_dir = record.get('dataDir')
+    token = record.get('token')
+    if isinstance(data_dir, str) and os.path.isabs(data_dir) and isinstance(token, str):
+        marker = _read_small(_marker(data_dir))
+        if marker and marker[0].strip() == token:
+            now = _directory_inode(data_dir)
+            if now and now not in out:
+                out.append(now)
+    return out
+
+
+def _sysv_segments():
+    """[{id, key, nattch, mine, cpid, lpid}], or None: sysvSegments in pg-clusters.mjs."""
+    uid = os.getuid()
+    if sys.platform.startswith('linux'):
+        try:
+            with open('/proc/sysvipc/shm') as handle:
+                rows = handle.read().strip().split('\n')
+        except OSError:
+            return None
+        cols = rows[0].split()
+        need = ['key', 'shmid', 'nattch', 'uid', 'cpid', 'lpid']
+        if any(c not in cols for c in need):
+            return None
+        at = {c: cols.index(c) for c in need}
+        out = []
+        for row in rows[1:]:
+            f = row.split()
+            try:
+                out.append({'id': int(f[at['shmid']]), 'key': int(f[at['key']]) & 0xffffffff, 'nattch': int(f[at['nattch']]),
+                            'mine': int(f[at['uid']]) == uid, 'cpid': int(f[at['cpid']]), 'lpid': int(f[at['lpid']])})
+            except (ValueError, IndexError):
+                pass
+        return out
+    try:
+        out = subprocess.run(['/usr/bin/ipcs', '-m', '-a'], capture_output=True, text=True, env=PS_ENV, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode:
+        return None
+    lines = out.stdout.split('\n')
+    head = next((l for l in lines if re.match(r'^T\s+ID\s+KEY\s', l)), None)
+    if head is None:
+        return None
+    cols = head.split()
+    need = ['ID', 'KEY', 'OWNER', 'NATTCH', 'CPID', 'LPID']
+    if any(c not in cols for c in need):
+        return None
+    at = {c: cols.index(c) for c in need}
+    try:
+        import pwd
+        user = pwd.getpwuid(uid).pw_name
+    except (ImportError, KeyError):
+        user = None
+    segments = []
+    for line in lines:
+        if not re.match(r'^m\s', line):
+            continue
+        f = line.split()
+        if len(f) < len(cols):
+            continue
+        try:
+            segments.append({'id': int(f[at['ID']]), 'key': int(f[at['KEY']], 16) & 0xffffffff, 'nattch': int(f[at['NATTCH']]),
+                             'mine': f[at['OWNER']] in (user, str(uid)), 'cpid': int(f[at['CPID']]), 'lpid': int(f[at['LPID']])})
+        except ValueError:
+            pass
+    return segments
+
+
+def _alive(pid):
+    return isinstance(pid, int) and pid > 0 and running(pid)
+
+
+def _remove_orphan_segments(inodes):
+    """Removes the segments orphaned by clusters keyed on these inodes:
+    removeOrphanSegments in pg-clusters.mjs. Returns the ids removed."""
+    keys = set()
+    for ino in inodes:
+        if isinstance(ino, str) and INODE.match(ino):
+            keys.update(((int(ino) + i) & 0xffffffff) for i in range(KEY_SPAN))
+    if not keys:
+        return []
+    segments = _sysv_segments()
+    if not segments:
+        return []
+    removed = []
+    for s in segments:
+        if s['key'] not in keys or s['nattch'] != 0 or not s['mine'] or _alive(s['cpid']) or _alive(s['lpid']):
+            continue
+        try:
+            if subprocess.run(['ipcrm', '-m', str(s['id'])], capture_output=True, env=PS_ENV, timeout=10).returncode == 0:
+                removed.append(s['id'])
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return removed
+
+
 def _stop_cluster(pid):
     try:
         os.kill(pid, signal.SIGQUIT)
@@ -312,7 +430,14 @@ def _reclaimable(seen):
     state, pid = _cluster_of(record, False)
     if state == 'unknown':
         return False
-    return state == 'none' or _stop_cluster(pid)
+    if state == 'running' and not _stop_cluster(pid):
+        return False
+    # The segments its backends orphaned, before the slot is anyone else's.
+    try:
+        _remove_orphan_segments(_cluster_inodes(record))
+    except Exception:  # best effort
+        pass
+    return True
 
 
 def _remove(path):
@@ -485,6 +610,10 @@ class Slot:
             state, pid = _cluster_of(self.record, True)
             if state == 'running':
                 _stop_cluster(pid)
+            try:
+                _remove_orphan_segments(_cluster_inodes(self.record))
+            except Exception:  # best effort
+                pass
         def mine():
             seen = _inspect(self.file)
             if seen and seen['record'] and seen['record'].get('token') == self.token:
@@ -540,9 +669,20 @@ def acquire(data_dir=None, *, label=None, slots=None, directory=None, timeout=No
     _ensure_dir(directory)
     _sweep(directory)
     token = secrets.token_hex(16)
+    # The data directory, made now (empty, owner-only) when its parent
+    # exists: its inode keys the cluster's segments.
+    data_ino = None
+    if data_dir is not None:
+        try:
+            os.mkdir(data_dir, 0o700)
+        except OSError:
+            pass
+        data_ino = _directory_inode(data_dir)
     record = {'pid': os.getpid(), 'start': _own_start(), 'token': token,
               'label': label or (os.path.relpath(sys.argv[0]) if sys.argv and sys.argv[0] else 'python'),
               'dataDir': data_dir, 'since': datetime.now(timezone.utc).isoformat()}
+    if data_ino:
+        record['dataIno'] = data_ino
     draft = os.path.join(directory, f'.tmp-{os.getpid()}-{token}')
     fd = os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as handle:

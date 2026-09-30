@@ -24,10 +24,10 @@
 // owner's (finding 1).
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { promises as fs, existsSync, readFileSync, lstatSync, readdirSync, readlinkSync, realpathSync, openSync, readSync, closeSync } from 'node:fs';
+import { promises as fs, existsSync, readFileSync, lstatSync, readdirSync, readlinkSync, realpathSync, openSync, readSync, closeSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { shortTmpRoot } from './sandbox.mjs';
+import { hostTemp, dropHostTemp, pinDir, forgetDir } from './sandbox.mjs';
 
 export const AGENT_NAME = 'CredentialDOMD Ticket Agent';
 export const AGENT_EMAIL = 'ticket-agent@credentialdomd.invalid';
@@ -176,6 +176,9 @@ export async function createWorktree({ repo, work, ticketId, runId, binary = 'gi
   const base = git(repo, ['rev-parse', '--verify', 'refs/remotes/origin/main^{commit}'], { binary }).trim();
   if (!SHA.test(base)) throw Error('origin/main is not a commit');
   git(repo, ['worktree', 'add', '--quiet', '-b', branch, dir, base], { binary, env });
+  // Sessions write it, the directory entry included: pinned, so a session
+  // that swaps it for a link is refused, not followed (sandbox.mjs grantDir).
+  pinDir(dir);
   const hooks = hooksDigest(repo, { binary });
   const modules = await moduleSource({ repo, work, base, binary, installNodeModules, env });
   const copied = await cloneModules(modules, dir);
@@ -223,7 +226,12 @@ export async function cloneModules(source, dir) {
 // A fresh detached worktree of one commit for the gates (and the
 // reproduction record, the base count and the merge re-gate). Nothing the
 // model left in its own worktree (git-ignored files, a changed node_modules)
-// is in it. remove() deletes it.
+// is in it. remove() deletes it. Both it and its temporary directory are
+// pinned when made (sandbox.mjs pinDir): every gate step runs test code that
+// can write them, entries included, and each later step is granted them only
+// while they are still what the host made (review of 2026-09-30). The
+// temporary directory is tracked by the host (hostTemp), so a signalled
+// runner removes it too; it holds the tests' PostgreSQL data directories.
 export async function gateWorktree({ repo, work, commit, modules = null, binary = 'git', label = 'gate' }) {
   if (!SHA.test(commit || '')) throw Error('A gate worktree needs a full commit id');
   const root = path.join(work, 'gates');
@@ -231,10 +239,13 @@ export async function gateWorktree({ repo, work, commit, modules = null, binary 
   const name = `${label}-${commit.slice(0, 12)}-${randomBytes(4).toString('hex')}`;
   const dir = path.join(root, name);
   // Short, for unix socket paths (sandbox.mjs SHORT_TMP).
-  const tmp = realpathSync(await fs.mkdtemp(path.join(shortTmpRoot(), 'ctg-')));
-  git(repo, ['worktree', 'add', '--quiet', '--detach', dir, commit], { binary });
-  try { await cloneModules(modules, dir); } catch (error) { removeWorktree({ repo, dir, binary }); await fs.rm(tmp, { recursive: true, force: true }); throw error; }
-  return { dir, tmp, remove: async () => { removeWorktree({ repo, dir, binary }); await fs.rm(tmp, { recursive: true, force: true }); } };
+  const tmp = hostTemp('ctg-');
+  try {
+    git(repo, ['worktree', 'add', '--quiet', '--detach', dir, commit], { binary });
+    pinDir(dir);
+    await cloneModules(modules, dir);
+  } catch (error) { removeWorktree({ repo, dir, binary }); dropHostTemp(tmp); throw error; }
+  return { dir, tmp, remove: async () => { removeWorktree({ repo, dir, binary }); dropHostTemp(tmp); } };
 }
 
 // A commit object (on no branch) of base plus the given paths as they are in
@@ -252,8 +263,15 @@ export function snapshotCommit({ dir, base, files, binary = 'git', message = 'Re
   } finally { try { spawnSync('/bin/rm', ['-f', index]); } catch { /* gone */ } }
 }
 
+// A link found where the worktree was (sandboxed code can replace the
+// directory entry) is removed itself and never handed to git: what it points
+// at is not this worktree.
 export function removeWorktree({ repo, dir, branch = null, deleteBranch = false, binary = 'git' }) {
-  git(repo, ['worktree', 'remove', '--force', dir], { binary, allowFail: true });
+  let link = false;
+  try { link = lstatSync(dir).isSymbolicLink(); } catch { link = false; }
+  if (link) rmSync(dir, { force: true });
+  else git(repo, ['worktree', 'remove', '--force', dir], { binary, allowFail: true });
+  forgetDir(dir);
   if (existsSync(dir)) spawnSync('/bin/rm', ['-rf', dir]);
   git(repo, ['worktree', 'prune'], { binary, allowFail: true });
   if (deleteBranch && branch) git(repo, ['branch', '-D', branch], { binary, allowFail: true });

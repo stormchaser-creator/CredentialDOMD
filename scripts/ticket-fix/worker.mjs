@@ -43,9 +43,10 @@
 // there), which is the only proof that an attachment was looked at (G6). A
 // session may Read this ticket's attachment directory and nothing next to it.
 import { spawn } from 'node:child_process';
-import { promises as fs, rmSync, readdirSync, existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { promises as fs, rmSync, readdirSync, existsSync, mkdirSync, writeFileSync, chmodSync, lstatSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { SANDBOX_EXEC, shortTmpRoot, sandboxProfile, sandboxEnv, real, slotEnv } from './sandbox.mjs';
+import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, slotEnv, pinDir, grantDir, hostTemp, dropHostTemp, removeHostTemps } from './sandbox.mjs';
 import { ATTACH_ROOT_PREFIX } from './attachments.mjs';
 import { redactSecrets, redactedLine } from './redact.mjs';
 
@@ -251,22 +252,66 @@ export const gatesEnv = (base = process.env) => {
   return { ...env, ...GATES_GIT, ...BUILD_ENV, LC_ALL: 'C' };
 };
 
-// Writes the settings file and a fresh config directory for one session.
-export async function prepareSession({ sessionDir, settings }) {
-  await fs.mkdir(sessionDir, { recursive: true, mode: 0o700 });
+// The session directory (its CLAUDE_CONFIG_DIR, transcripts) is the
+// session's to write, so the host writes no file there (review of
+// 2026-09-30): the unsandboxed host followed a symlink a session left at
+// settings.json or shims/ and overwrote a file of the owner's with its own
+// content. It makes the directory when the session first starts and pins it
+// (sandbox.mjs pinDir), and makes claude-config, an empty directory, only
+// when it is missing and only after checking the session directory is still
+// that one (grantDir). The settings file and the security shim of each
+// launch go in a fresh directory of the host's (sessionFiles), which the
+// session may read and never write.
+const FILES = new Set();
+// A fresh directory for one launch's settings and shim: in the sandbox's
+// profile directory, which no sandboxed process can write (the session
+// profile re-opens this one directory to read), or without a sandbox (tests
+// only) in the host's temporary directory.
+export async function sessionFiles(sandbox = null) {
+  const dir = real(await fs.mkdtemp(path.join(sandbox ? sandbox.profileDir : os.tmpdir(), 'session-files-')));
+  FILES.add(dir);
+  return dir;
+}
+export async function prepareSession({ sessionDir, settings, files = null }) {
+  const made = await fs.mkdir(sessionDir, { recursive: true, mode: 0o700 });
+  if (made !== undefined) pinDir(sessionDir);
+  else grantDir(sessionDir);
   const configDir = path.join(sessionDir, 'claude-config');
-  await fs.mkdir(configDir, { recursive: false, mode: 0o700 }).catch(error => { if (error.code !== 'EEXIST') throw error; });
-  const settingsFile = path.join(sessionDir, 'settings.json');
-  await fs.writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
-  return { configDir, settingsFile };
+  let missing = false;
+  try { lstatSync(configDir); } catch (error) { if (error.code !== 'ENOENT') throw error; missing = true; }
+  if (missing) await fs.mkdir(configDir, { mode: 0o700 });
+  const own = files ?? await sessionFiles(null);
+  const settingsFile = path.join(own, 'settings.json');
+  await fs.writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  return { configDir, settingsFile, files: own };
 }
 
-// Process groups the runner started, killed on timeout, on exit and when the
+// Process groups the runner started, ended on timeout, on exit and when the
 // runner itself is signalled (the old alarm killed only the model; its npm and
-// git children kept running).
+// git children kept running). SIGTERM first, then SIGKILL after a grace
+// (review of 2026-09-30): a SIGKILL that lands during a test's initdb kills
+// the backend while it is attached to its System V segment, which then stays
+// on the machine for good (macOS has 32), and a test process killed outright
+// never stops its cluster or gives its PostgreSQL slot back. On SIGTERM the
+// backend and initdb clean up and the slot helpers stop their clusters.
+export const KILL_GRACE_MS = 3000;
 const GROUPS = new Set();
-export function killGroup(pid) {
-  try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ }
+const groupAlive = pid => { try { process.kill(-pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
+const signalGroup = (pid, signal) => { try { process.kill(-pid, signal); } catch { /* already gone */ } };
+export async function endGroup(pid, graceMs = KILL_GRACE_MS) {
+  if (!groupAlive(pid)) return;
+  signalGroup(pid, 'SIGTERM');
+  for (const until = Date.now() + graceMs; groupAlive(pid) && Date.now() < until;) await new Promise(resolve => setTimeout(resolve, 50));
+  if (groupAlive(pid)) signalGroup(pid, 'SIGKILL');
+}
+// The same for several groups at once, synchronously (the stop and exit
+// handlers cannot wait on the event loop).
+const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+export function endGroupsSync(pids, graceMs = KILL_GRACE_MS) {
+  const alive = () => pids.filter(groupAlive);
+  for (const pid of alive()) signalGroup(pid, 'SIGTERM');
+  for (const until = Date.now() + graceMs; alive().length && Date.now() < until;) sleepSync(50);
+  for (const pid of alive()) signalGroup(pid, 'SIGKILL');
 }
 // When the runner is signalled, a session's stderr is still in memory (it is
 // written when the session ends) and the run record has no entry for it
@@ -294,22 +339,24 @@ export function installSignalHandlers() {
   if (handlersInstalled) return;
   handlersInstalled = true;
   const stop = (signal, code) => () => {
-    for (const pid of GROUPS) killGroup(pid);
+    endGroupsSync([...GROUPS]);
     flushActiveSessions(signal);
     for (const hook of STOP_HOOKS) { try { hook(signal); } catch { /* never keep the runner from stopping */ } }
     removeSessionTemps();
+    removeHostTemps();
     process.exit(code);
   };
   process.on('SIGTERM', stop('SIGTERM', 143));
   process.on('SIGINT', stop('SIGINT', 130));
   process.on('SIGHUP', stop('SIGHUP', 129));
   process.on('SIGALRM', stop('SIGALRM', 142));
-  process.on('exit', () => { for (const pid of GROUPS) killGroup(pid); removeSessionTemps(); });
+  process.on('exit', () => { endGroupsSync([...GROUPS]); removeSessionTemps(); removeHostTemps(); });
 }
 
 // Runs one command in its own process group. stdout is captured (bounded)
 // and returned; stderr goes to a file or is dropped. On timeout the whole
-// group is killed; after a normal exit, any child it left behind is too.
+// group is ended (endGroup: SIGTERM, then SIGKILL); after a normal exit, any
+// child it left behind is too.
 // secret: a string written to file descriptor 3 (a pipe) and nowhere else;
 // the child reads it once, and nothing it starts can read it from the
 // environment.
@@ -340,11 +387,11 @@ export function launch({ command, args = [], cwd, env, input = '', timeoutMs, st
     });
     child.stdin.on('error', () => {});
     if (secret !== null) { child.stdio[3].on('error', () => {}); child.stdio[3].end(secret); }
-    const timer = setTimeout(() => { timedOut = true; killGroup(child.pid); }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; endGroup(child.pid); }, timeoutMs);
     child.on('error', error => { clearTimeout(timer); GROUPS.delete(child.pid); resolve({ code: null, signal: null, timedOut, stdout: '', error: String(error.message) }); });
     child.on('close', async (code, signal) => {
       clearTimeout(timer);
-      killGroup(child.pid);
+      await endGroup(child.pid);
       GROUPS.delete(child.pid);
       const handle = await errOut; if (handle) await handle.close().catch(() => {});
       resolve({ code, signal, timedOut, stdout: Buffer.concat(chunks).toString('utf8') });
@@ -361,24 +408,25 @@ export function launch({ command, args = [], cwd, env, input = '', timeoutMs, st
 // slots, the run's PostgreSQL test slot directory (sandbox.mjs runSlotDir).
 let profiles = 0;
 // Each sandboxed session's temporary directory: short (a unix socket path is
-// limited to 104 bytes) and kept for the session's resumes. Removed by
-// removeSessionTemps() when the run ends.
-const TEMPS = new Set();
-async function sessionTemp(sessionDir) {
-  const record = path.join(sessionDir, '.tmpdir');
-  try {
-    const known = (await fs.readFile(record, 'utf8')).trim();
-    if (TEMPS.has(known)) return known;
-  } catch { /* first launch of this session */ }
-  const tmp = await fs.mkdtemp(path.join(shortTmpRoot(), 'cts-'));
-  TEMPS.add(tmp);
-  await fs.writeFile(record, tmp, { mode: 0o600 });
-  return tmp;
+// limited to 104 bytes) and kept for the session's resumes, by session
+// directory, in the host's memory: never in a file the session can write
+// (the .tmpdir record it had followed a planted link), and granted as the
+// host made it (sandbox.mjs hostTemp, grantDir: one a session swapped for a
+// link stops the next launch instead of opening the link's target). Removed
+// by removeSessionTemps() when the run ends.
+const TEMPS = new Map();
+function sessionTemp(sessionDir) {
+  const key = path.resolve(sessionDir);
+  if (!TEMPS.has(key)) TEMPS.set(key, hostTemp('cts-'));
+  return TEMPS.get(key);
 }
 export function removeSessionTemps() {
-  for (const tmp of TEMPS) { try { rmSync(tmp, { recursive: true, force: true }); } catch { /* gone */ } TEMPS.delete(tmp); }
+  for (const [key, tmp] of TEMPS) { try { dropHostTemp(tmp); } catch { /* gone */ } TEMPS.delete(key); }
+  for (const dir of FILES) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* gone */ } FILES.delete(dir); }
 }
-export async function sessionLaunch({ claude, args, cwd, sessionDir, baseEnv = process.env, sandbox = null, apiBaseUrl = null }) {
+// files: the launch's own directory from sessionFiles() (runSession passes
+// the one prepareSession wrote the settings to); made here when absent.
+export async function sessionLaunch({ claude, args, cwd, sessionDir, baseEnv = process.env, sandbox = null, apiBaseUrl = null, files = null }) {
   const configDir = path.join(sessionDir, 'claude-config');
   const credential = modelCredential(baseEnv);
   const env = { ...sessionEnv({ base: baseEnv, configDir, credentials: false }), ...(credential ? { [credential.variable]: String(CREDENTIAL_FD) } : {}),
@@ -389,18 +437,23 @@ export async function sessionLaunch({ claude, args, cwd, sessionDir, baseEnv = p
   // pipe: every run from 2026-09-29 16:17Z ended "extraction session exited 1".
   // A shim first on PATH answers "not found" (errSecItemNotFound, 44), so no
   // keychain item is read and the CLI falls through to the piped credential.
-  const shims = path.join(sessionDir, 'shims');
+  // It lives in the launch's own directory, outside the session directory.
+  const own = files ?? await sessionFiles(sandbox);
+  const shims = path.join(own, 'shims');
   await fs.mkdir(shims, { recursive: true, mode: 0o700 });
   await fs.writeFile(path.join(shims, 'security'), '#!/bin/sh\nexit 44\n', { mode: 0o700 });
   env.PATH = `${shims}:${env.PATH ?? '/usr/bin:/bin'}`;
   if (!sandbox) return { command: claude, args, env, secret: credential?.value ?? null };
-  const tmp = real(await sessionTemp(sessionDir));
+  // Granted as the host made them (sandbox.mjs grantDir), never resolved here.
+  const writable = [cwd, sessionDir, sessionTemp(sessionDir)].map(grantDir);
+  const tmp = writable[2];
+  if (writable.some(w => own === w || own.startsWith(`${w}/`))) throw Error('The session\'s settings and shim must be outside every directory it can write (sandbox.profileDir)');
   // The CLI keeps its own temporary files under /tmp/claude-<uid> unless told
   // otherwise; that directory holds other sessions' output and is denied.
   Object.assign(env, sandboxEnv(tmp), { CLAUDE_CODE_TMPDIR: tmp }, sandbox.slots ? slotEnv(sandbox.slots) : {});
   const profileFile = path.join(sandbox.profileDir, `session-${process.pid}-${++profiles}.sb`);
-  const profile = sandboxProfile({ kind: 'session', home: sandbox.home, writable: [cwd, sessionDir, tmp], shared: sandbox.slots ? [sandbox.slots] : [], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [],
-    readable: (sandbox.readable ?? []).filter(d => existsSync(d)) });
+  const profile = sandboxProfile({ kind: 'session', home: sandbox.home, writable, shared: sandbox.slots ? [sandbox.slots] : [], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [],
+    readable: [...(sandbox.readable ?? []).filter(d => existsSync(d)), own] });
   await fs.writeFile(profileFile, profile, { mode: 0o600 });
   return { command: SANDBOX_EXEC, args: ['-f', profileFile, claude, ...args], env, secret: credential?.value ?? null };
 }
@@ -508,9 +561,10 @@ async function keepStderr(file, text, dropped) {
 // under runs/<run>/sessions/, which outlives the run directory).
 export async function runSession({ claude, role, cwd, input, schema, settings, sessionDir, resume = null, timeoutMs, baseEnv = process.env, stderrFile = null, budget = null,
   sandbox = null, apiBaseUrl = null }) {
-  const { settingsFile } = await prepareSession({ sessionDir, settings });
+  const { settingsFile, files } = await prepareSession({ sessionDir, settings, files: await sessionFiles(sandbox) });
   const args = sessionArgs({ role, settingsFile, schema, resume, budget });
-  const how = await sessionLaunch({ claude, args, cwd: real(cwd), sessionDir: real(sessionDir), baseEnv, sandbox, apiBaseUrl });
+  // cwd and sessionDir as the host made them: never resolved again here.
+  const how = await sessionLaunch({ claude, args, cwd, sessionDir, baseEnv, sandbox, apiBaseUrl, files });
   const stream = streamCollector();
   const errors = stderrCollector();
   const secrets = sessionSecrets(baseEnv);
