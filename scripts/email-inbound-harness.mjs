@@ -10,6 +10,23 @@
 // process: the function reads its environment at load time.
 import { registerHooks } from "node:module";
 
+// --- The clock ----------------------------------------------------------------
+// The fixtures are one world dated around the week of 25 September 2026: the
+// forwards arrive on the 25th, a BLS card on file expires 2027-06-30, a DEA
+// 2028-03-31. On the real clock that world ages: from 1 July 2027 (00:00 UTC)
+// the function reads the BLS card as expired and five tests fail, and each
+// later fixture date is the same trap. So the function runs on a clock that
+// starts at a fixed instant and keeps ticking: dates are the fixtures' week on
+// any day the suite runs, and every timeout and time budget still measures
+// real elapsed time.
+export const HARNESS_NOW = Date.parse("2026-09-29T17:00:00Z");
+const RealDate = globalThis.Date;
+const shift = HARNESS_NOW - RealDate.now();
+globalThis.Date = class HarnessDate extends RealDate {
+  constructor(...args) { if (args.length) super(...args); else super(RealDate.now() + shift); }
+  static now() { return RealDate.now() + shift; }
+};
+
 const STUBS = {
   "https://esm.sh/svix@1.40.0": `export class Webhook { constructor() {} verify(raw) { return JSON.parse(raw); } }`,
   "https://esm.sh/@supabase/supabase-js@2.97.0": `export function createClient() { return globalThis.__inboundHarness.db; }`,
