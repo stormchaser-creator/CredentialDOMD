@@ -706,7 +706,52 @@ the runtime's log.
 
 ### Result, 2026-09-29
 
-RESULT_PLACEHOLDER
+Full run with `--fresh` (24 journeys, 3 workers, 5.9 minutes): **19 journeys
+passed, 5 failed, every failure a product bug below** (none from the lab).
+Checklist coverage: **83 of 261 ids exercised: 78 pass, 5 fail,
+0 blocked**; 178 not run yet. By priority: P0 36 pass /
+3 fail / 22 not run; P1 34 / 2 / 96;
+P2 8 / 0 / 60. Lab health: 0 runaway PostgREST
+retries left, 1 zombie row (the restore bug's), 4 client error reports (the
+Delete-All dead end twice, the paused member's refused membership check and
+enrollment).
+
+| File | Journey | Checklist ids | Result |
+|---|---|---|---|
+| `admin-invite-gift.spec.mjs` | owner: invite to join sends one email and grants nothing | ADMIN-001 | pass |
+| `admin-invite-gift.spec.mjs` | owner: lifetime gift by email, claimed by signing up with that address | ADMIN-001, BILL-014 | pass |
+| `billing.spec.mjs` | return from Checkout without paying: notice, nothing charged, dismiss sticks, checkout can be resumed | BILL-002, BILL-010 | pass |
+| `billing.spec.mjs` | paid member: membership card, customer portal, cancel at period end, export | BILL-007, BILL-005, SYNC-019 | pass |
+| `admin-controls.spec.mjs` | owner controls: pause and restore access, lifetime grant, view as member, owner message | ADMIN-001, AUTH-008, ADMIN-006, ADMIN-005, SUPPORT-003 | fail (ADMIN-001) |
+| `account-settings.spec.mjs` | settings: setup card, profile and reminder settings persist, support access, daily reminder email | HOME-001, SETTINGS-007, SETTINGS-002, NOTIFY-004, SETTINGS-006, NOTIFY-001 | pass |
+| `credentials-special.spec.mjs` | protected identity stays on the device and encrypted; a custom category holds synced records | CRED-005, CRED-023, CRED-024 | pass |
+| `device-sync.spec.mjs` | sign out purges the device; signing back in restores the cloud records | AUTH-005, AUTH-002 | pass |
+| `documents.spec.mjs` | documents: smart scan files a license with its file; duplicate and PHI spreadsheet refused; link, unlink, delete | DOCS-001, DOCS-002, DOCS-004, DOCS-008, DOCS-009 | fail (DOCS-008) |
+| `device-sync.spec.mjs` | network drops mid-session: the edit is queued (or refused out loud) and replays after reconnect | SYNC-008 | pass |
+| `device-sync.spec.mjs` | opened offline: the device copy shows as a read-only archive; nothing can be saved; reconnect resumes | SYNC-005 | pass |
+| `expenses-backup.spec.mjs` | expenses: log two with receipts, invoice them to the agency with the receipts attached | PRAC-019, PRAC-007 | pass |
+| `home-vera.spec.mjs` | home and Vera: search opens a record, Vera answers, notification center, acknowledge an alert | HOME-008, VERA-001, NOTIFY-002, HOME-015 | pass |
+| `credentials-sections.spec.mjs` | credentials: every other section adds, edits, survives a reload and deletes | CRED-007, CRED-008, CRED-009, CRED-019, CRED-021, CRED-022, CRED-020, CRED-039, CRED-040, CRED-041, CRED-045, CRED-037, CRED-006 | pass |
+| `expenses-backup.spec.mjs` | backup: export JSON, delete a record, restore it; an invalid file is refused | SYNC-018, SYNC-015 | fail (SYNC-015) |
+| `intake.spec.mjs` | intake: confirm a forwarding address, forward a document to docs@, an unconfirmed sender is not filed | INTAKE-001, INTAKE-002, INTAKE-003 | pass |
+| `expenses-backup.spec.mjs` | a session ended elsewhere: device-only data and queued work are not lost silently | AUTH-006 | pass |
+| `practice.spec.mjs` | practice: agreement, logged time, invoice, email to billing, payment, delete returns entries | PRAC-001, PRAC-009, PRAC-002, PRAC-004, PRAC-005, PRAC-006, PRAC-015 | pass |
+| `signup-checkout.spec.mjs` | new signup: pending gate, $99 founding offer with Practice, checkout, active member | AUTH-001, AUTH-003, AUTH-004, BILL-001, BILL-003, BILL-006, HOME-002 | pass |
+| `signup-checkout.spec.mjs` | welcome email on: the owner approves it in Admin > Emails, the next paid member gets exactly one | ADMIN-001, BILL-003 | pass |
+| `support.spec.mjs` | support: ticket with a screenshot, owner replies in the app, member sees it, reply email captured | SUPPORT-001, ADMIN-002, SUPPORT-006, SUPPORT-002 | fail (ADMIN-002) |
+| `two-devices.spec.mjs` | a delete on device A stays deleted on device B that was offline with a stale copy | SYNC-011 | pass |
+| `member-records.spec.mjs` | full member: licenses added, edited, starred, attached, deleted; Home and a second browser agree | CRED-001, HOME-003, CRED-002, CRED-025, CRED-016, CRED-003, SYNC-001, SYNC-003 | pass |
+| `two-devices.spec.mjs` | Delete All My Data wipes the account; the other device drops its stale cache | SETTINGS-005, SYNC-012 | fail (SETTINGS-005) |
+
+Many P1 stretches check the core path (add, edit, reload, delete, or the
+screen and its rows) rather than every sub-expectation the checklist lists for
+the id; each id's evidence in `results.json` names exactly what was checked.
+Not run yet: most of Practice beyond billing (RVUs, schedule, duty days, call
+timer, CallSync, to-do), CME import and transcripts, the NPI registry import,
+CV import and generation, Vera's filing and packets, sharing and the
+administrator portal, public pages, the scheduled jobs other than reminders,
+and the ops items that are not app features (offsite backup, CI, launchd
+agents).
 
 **Product bugs the journeys found** (production behaves the same: the schema,
 functions and app code are production's; each is in `results.json` under
@@ -716,12 +761,12 @@ functions and app code are production's; each is in `results.json` under
 | Severity | Id | Bug |
 |---|---|---|
 | high | SETTINGS-005 | After **Delete All My Data** the account dead-ends: the app is not signed out, and every later load shows "Your account identity could not be verified. Your existing records have not changed. Reload to try again (ID-INIT-ACCOUNT_UNAVAILABLE-H409)". `profiles.deleted_at` makes `account_is_closed` true, so `initialize-clerk-profile` answers `account_unavailable`; "records have not changed" is false; Data Rights says only closing the sign-in account needs an email to support; the paid subscription stays active and is not cancelled. |
-| medium | ADMIN-001 | Admin > Accounts **Pause / Approve hangs on "Saving…"** (Cancel disabled) when the member's profile changed after the list loaded, which a member using the app does. `admin_change_profile_access` raises "Account changed. Refresh and review it again" with SQLSTATE 40001, which PostgREST (14.14 locally) retries, so the request never answers; a direct call with a stale timestamp did not answer in 40 s. Reloading the page and trying again works. |
+| medium | ADMIN-001 | Admin > Accounts **Pause / Approve hangs on "Saving…"** (Cancel disabled) when the member's profile changed after the list loaded, which a member opening the app does. `admin_change_profile_access` raises "Account changed. Refresh and review it again" with SQLSTATE 40001, and PostgREST (14.14 locally) re-runs 40001 transactions, so the refusal re-runs indefinitely (still running 15 minutes later): each re-run locks the member's profile row, so a second attempt on that member hangs too, and the loop holds PostgREST pool connections until PostgREST restarts. A direct call with a stale timestamp did not answer in 40 s. Production impact depends on its PostgREST version; a deterministic refusal should not use a retryable SQLSTATE. |
 | medium | ADMIN-002 | Admin > Tickets: **a ticket's screenshot never displays**. `TicketAttachments` renders `<img src=signed Storage URL>`, and the app's CSP (`src/main.jsx`) allows images only from `'self' data: blob: https://img.clerk.com`, not the Supabase host. |
 | medium | DOCS-008 | Documents: **once linked, a document cannot be relinked or unlinked** from its card; the "Link to credential..." select renders only while `linkedTo` is empty. |
 | medium | SYNC-015 | **Restore from Backup replaces each section on the device** instead of merging ("This will merge with your current data"): a record added after the backup disappears until a reload (`{...data, ...filtered}`). |
 | medium | SYNC-015 | **A restored record keeps its tombstone**: the row is back but `deleted_items` still holds it (a zombie; the run's lab health counts them). |
-| low | NOTIFY-001 | The **reminder email counts one day too few** after 12:00 UTC ("in 19 days" for a date 20 days away): `dayDiff` in `send-reminders` rounds from midnight UTC, and the daily job runs at 13:00 UTC. |
+| low | NOTIFY-001 | The **reminder email counts one day too few** after 12:00 UTC ("in 19 days" for a date 20 days away): `dayDiff` in `send-reminders` rounds from midnight UTC, and the daily job runs at 13:00 UTC. The journey's check fails only when it runs between 12:00 and 24:00 UTC (it did at 22:36 and 23:24 UTC; the final run above started after midnight UTC and passed). |
 | low | BILL-005 | After **cancelling in the customer portal**, the membership card still reads like a renewing membership (the access snapshot carries no cancel-at-period-end for a normal paid subscription). |
 | low | CRED-003 | Deleting a license **also deletes its attached files, but the confirm does not say so** ("Delete this item? This cannot be undone."). |
 
@@ -755,6 +800,12 @@ exhaust it.
   unloaded and keeps the session, as real Clerk does (it never loads), so the
   app's offline fallback runs instead of a sign-in page.
 - `npm run qa:e2e -- --fresh`, and the post-run lab health section.
+- **Runaway PostgREST retries**: the runner counts sessions re-running a refused
+  `admin_change_profile_access` before and after each run and, if there are any,
+  restarts the lab's PostgREST (the pause/approve bug above leaves such loops
+  behind; left alone they hold rows and pool connections across runs). The
+  owner-controls journey does the same after recording the bug, so its later
+  steps can run.
 
 ### Checklist expectations that differ from the product's design
 
@@ -794,7 +845,8 @@ expectation turned out to be written against an older or assumed design:
 - **Network drops** are Playwright's offline switch; a cold start of the PWA with
   no network at all is not covered.
 - **PostgREST 14.14** runs locally; production's version is not known to the
-  lab, which matters for the pause/approve hang below.
+  lab, which matters for the pause/approve hang above (the lab may only read
+  production's catalog, so it did not probe production's API).
 - The edge runtime logs `Deno.core.runMicrotasks() is not supported` and
   `beforeunload ... Uncaught null` about 50 times a run: the local CLI's runtime,
   not the functions.
