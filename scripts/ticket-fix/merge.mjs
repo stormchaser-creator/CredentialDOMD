@@ -35,7 +35,7 @@ import { promises as fs, readFileSync, lstatSync, existsSync, realpathSync } fro
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, hooksDigest, patchId, trailers, addGatesTrailer, removeWorktree, checkWorktreeLink } from './worktree.mjs';
+import { git, hooksDigest, patchId, trailers, addGatesTrailer, removeWorktree, checkWorktreeLink, pinWorktree } from './worktree.mjs';
 import { verifyRelease } from './release.mjs';
 import { personalDataReport, personalDataSummary } from './gates/personal-data.mjs';
 import { isMain } from './is-main.mjs';
@@ -182,8 +182,14 @@ export async function mergeRun({ work, runId, repo = null, manual = false, hooks
   if (['merged', 'released', 'release_failed'].includes(run.status)) return { status: run.status, fix_commit: run.fix_commit, already: true };
   let gatesText = null;
   try { gatesText = readOwnerFile(path.join(dir, 'gates.json')); } catch { gatesText = null; }
+  // Every git call in the run's worktree from here on names the git
+  // directory the run recorded (worktree.mjs pinWorktree), found again from
+  // the repository's side, never what the worktree's .git file says.
   if (existsSync(run.worktree)) {
-    try { checkWorktreeLink(run.worktree, run.gitdir); } catch (error) { return refuse(`${error.message}; nothing was pushed`); }
+    try {
+      checkWorktreeLink(run.worktree, run.gitdir);
+      pinWorktree(run.repo ?? repo, run.worktree, { binary, gitdir: run.gitdir, attrTree: SHA.test(run.base || '') ? run.base : null });
+    } catch (error) { return refuse(`${error.message}; nothing was pushed`); }
   }
   const blockers = mergeBlockers(run, { gatesText, manual, binary, context: runContext(dir), secrets: credentialValues(env) });
   if (blockers.length) return refuse(blockers.join('; '));

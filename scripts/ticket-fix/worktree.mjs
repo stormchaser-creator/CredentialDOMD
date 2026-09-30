@@ -16,15 +16,17 @@
 //
 // Every git call the host makes ignores the system config, never runs an
 // fsmonitor, an ssh command from config or the ext:: transport, and has no
-// credential helper except for the one push (stage 2 review, finding 8). The
-// gates never run in the model's worktree: they run in a fresh detached
+// credential helper except for the one push (stage 2 review, finding 8). In a
+// worktree the host made, git never finds the repository through the
+// worktree's own .git file: every call names the git directory the host
+// recorded (pinWorktree). The gates never run in the model's worktree: they run in a fresh detached
 // worktree of the commit (gateWorktree), so a git-ignored file the fixer left
 // behind cannot make a tree pass that is not the commit (findings 10, 11).
 // Each worktree gets its own APFS clone of node_modules, never a link to the
 // owner's (finding 1).
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { promises as fs, existsSync, readFileSync, lstatSync, readdirSync, readlinkSync, realpathSync, openSync, readSync, closeSync, rmSync } from 'node:fs';
+import { promises as fs, constants as FS, existsSync, readFileSync, lstatSync, readdirSync, readlinkSync, realpathSync, openSync, readSync, closeSync, fstatSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { hostTemp, dropHostTemp, pinDir, forgetDir } from './sandbox.mjs';
@@ -62,9 +64,15 @@ export const isProduct = file => PRODUCT.some(p => file.startsWith(p));
 export const HOST_GIT_CONFIG = Object.freeze(['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'core.pager=cat', '-c', 'core.fsmonitor=false',
   '-c', 'core.sshCommand=ssh', '-c', 'protocol.ext.allow=never', '-c', 'core.askPass=']);
 // encoding: 'buffer' returns the bytes (a blob as git holds it).
+// In a worktree the host pinned (pinWorktree) git never finds the repository
+// through the worktree's own .git file: see below.
 export function git(dir, args, { env = process.env, allowFail = false, input, binary = 'git', timeout = 120000, credentials = false, encoding = 'utf8' } = {}) {
-  const r = spawnSync(binary, ['-C', dir, ...HOST_GIT_CONFIG, ...(credentials ? [] : ['-c', 'credential.helper=']), ...args],
-    { encoding, env: { ...env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' }, maxBuffer: 64 * 1024 * 1024, timeout, input });
+  const pin = WORKTREE_PINS.get(path.resolve(String(dir))) ?? null;
+  // Refused whatever allowFail says: a changed link is not a failed command.
+  if (pin) verifyPin(pin);
+  const childEnv = pin ? pinnedEnv(env, pin, credentials) : { ...env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' };
+  const r = spawnSync(binary, ['-C', dir, ...HOST_GIT_CONFIG, ...(pin ? pinnedConfig(pin, args) : []), ...(credentials ? [] : ['-c', 'credential.helper=']), ...args],
+    { encoding, env: childEnv, maxBuffer: 64 * 1024 * 1024, timeout, input });
   if (r.error || r.status !== 0) {
     if (allowFail) return null;
     const stderr = r.stderr ? String(r.stderr).trim() : '';
@@ -121,10 +129,130 @@ export function hooksDigest(repo, { binary = 'git', home = os.homedir() } = {}) 
   return hash.digest('hex');
 }
 
+// Worktrees whose git directory the host pinned (review of 2026-09-30,
+// round 4). A worktree's ".git" is a file inside the worktree, and every
+// session and gate step can write the worktree: code there could point the
+// link at a git directory of its own, whose config and attributes the host's
+// next git call there (the mutation check's apply and checkout, the diffs,
+// the removal) would then read, unsandboxed. dirIntact only says the
+// directory is still the one the host made, not what its .git names.
+//
+// So the host never lets git discover a worktree's repository. When it makes
+// a worktree, before anything runs there, it records the administrative
+// directory git keeps for it under <common>/worktrees (found from that side:
+// the one entry whose gitdir file names this worktree; no sandbox can write
+// the common directory), the directory's device and inode and the text of
+// its link. Every host git call in a pinned worktree then names that
+// directory itself (GIT_DIR, GIT_WORK_TREE), passes on no other GIT_*
+// variable but a scratch index and commit identities, reads no global
+// config (except for the one push, which needs the credential helper) and
+// takes attributes from a commit the host names (attr.tree) and the common
+// info/attributes only. Before each call the link is read again (never
+// through a link, never waiting on a pipe) and the directories are checked:
+// any change stops the run (GitStateChanged). With GIT_DIR named, a changed
+// link could steer nothing; it is refused anyway, as the attempt it is.
+export class GitStateChanged extends Error {}
+const WORKTREE_PINS = new Map();
+const PASSED_GIT_ENV = new Set(['GIT_INDEX_FILE', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_AUTHOR_DATE', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL', 'GIT_COMMITTER_DATE']);
+function pinnedEnv(env, pin, credentials) {
+  const out = {};
+  for (const [key, value] of Object.entries(env)) if (!key.startsWith('GIT_') || PASSED_GIT_ENV.has(key)) out[key] = value;
+  return { ...out, GIT_DIR: pin.gitdir, GIT_WORK_TREE: pin.dir, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1', ...(credentials ? {} : { GIT_CONFIG_GLOBAL: '/dev/null' }) };
+}
+// A caller's own attr.tree (attrFrom) comes later on the command line and
+// wins. Not for apply: git 2.54's apply dies (SIGSEGV) with any attribute
+// source set (attr.tree, --attr-source, GIT_ATTR_SOURCE; measured
+// 2026-09-30), so apply reads the worktree's .gitattributes and the common
+// info/attributes. An attribute names a filter or diff driver only as the
+// config defines it, and the config is the common one the pin names (which
+// hooksDigest covers): the worktree's attributes can pick a built-in
+// conversion there, never a command.
+const subcommand = args => { for (let i = 0; i < args.length; i++) { if (args[i] === '-c') { i++; continue; } if (!String(args[i]).startsWith('-')) return args[i]; } return null; };
+const pinnedConfig = (pin, args) => [...(pin.attrTree && subcommand(args) !== 'apply' ? ['-c', `attr.tree=${pin.attrTree}`] : []), '-c', 'core.attributesFile=/dev/null'];
+// The text of <dir>/.git, or null when it is not a small regular file.
+function readLink(dir) {
+  let fd;
+  try {
+    fd = openSync(path.join(dir, '.git'), FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
+    const st = fstatSync(fd);
+    if (!st.isFile() || st.size > 4096) return null;
+    const buffer = Buffer.alloc(st.size);
+    const n = readSync(fd, buffer, 0, st.size, 0);
+    return buffer.subarray(0, n).toString('utf8');
+  } catch { return null; } finally { if (fd !== undefined) closeSync(fd); }
+}
+const sameDir = (p, dev, ino) => {
+  try { const st = lstatSync(p); return !st.isSymbolicLink() && st.isDirectory() && st.dev === dev && st.ino === ino && realpathSync(p) === p; } catch { return false; }
+};
+function verifyPin(pin) {
+  if (!sameDir(pin.dir, pin.dev, pin.ino)) throw new GitStateChanged(`The worktree ${pin.dir} is not the directory the host made for it (removed, moved, replaced or reached through a link); the host's git does not work there`);
+  if (readLink(pin.dir) !== pin.link) throw new GitStateChanged(`The worktree .git link was changed in ${pin.dir}; the host's git does not work there`);
+  if (!sameDir(pin.gitdir, pin.gitdirDev, pin.gitdirIno)) throw new GitStateChanged(`The git directory of the worktree ${pin.dir} was replaced`);
+}
+// Records a worktree the host just made (or, with gitdir, the run's
+// worktree as its record names it) and returns the pin. attrTree: the
+// commit its attributes come from (a trusted base).
+export function pinWorktree(repo, dir, { binary = 'git', attrTree = null, gitdir = null } = {}) {
+  if (attrTree !== null && !SHA.test(attrTree)) throw Error('A worktree\'s attributes come from a full commit id');
+  const key = path.resolve(String(dir));
+  const held = WORKTREE_PINS.get(key);
+  if (held) {
+    verifyPin(held);
+    let named = null;
+    try { named = gitdir === null ? held.gitdir : realpathSync(gitdir); } catch { named = null; }
+    if (named !== held.gitdir) throw new GitStateChanged(`The worktree .git link was changed: ${held.dir} is not the worktree the run recorded`);
+    return held;
+  }
+  let st;
+  try { st = lstatSync(key); } catch { throw new GitStateChanged(`The worktree ${key} is gone`); }
+  if (st.isSymbolicLink() || !st.isDirectory()) throw new GitStateChanged(`The worktree ${key} is not a directory the host made`);
+  const top = realpathSync(key);
+  const common = realpathSync(git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir'], { binary }).trim());
+  const admins = [];
+  let names = [];
+  try { names = readdirSync(path.join(common, 'worktrees')); } catch { names = []; }
+  for (const name of names) {
+    const admin = path.join(common, 'worktrees', name);
+    let named;
+    try { named = readFileSync(path.join(admin, 'gitdir'), 'utf8').replace(/\n$/, ''); } catch { continue; }
+    if (path.basename(named) !== '.git') continue;
+    let at;
+    try { at = realpathSync(path.dirname(named)); } catch { continue; }
+    if (at === top) admins.push(realpathSync(admin));
+  }
+  if (admins.length !== 1) throw new GitStateChanged(`The worktree ${top} has ${admins.length ? 'more than one' : 'no'} git directory in ${common}`);
+  const [admin] = admins;
+  if (gitdir !== null && realpathSync(gitdir) !== admin) throw new GitStateChanged(`The worktree .git link was changed: ${top} is not the worktree the run recorded`);
+  const link = readLink(top);
+  const target = link === null ? null : /^gitdir: (.+)\n?$/.exec(link)?.[1];
+  let resolved = null;
+  try { resolved = target ? realpathSync(path.resolve(top, target)) : null; } catch { resolved = null; }
+  if (resolved !== admin) throw new GitStateChanged(`The worktree .git link was changed in ${top}`);
+  const a = lstatSync(admin);
+  const pin = Object.freeze({ dir: top, dev: st.dev, ino: st.ino, gitdir: admin, gitdirDev: a.dev, gitdirIno: a.ino, common, link, attrTree });
+  WORKTREE_PINS.set(key, pin);
+  WORKTREE_PINS.set(top, pin);
+  return pin;
+}
+// GitStateChanged unless dir is a pinned worktree still as the host made it.
+export function verifyWorktree(dir) {
+  const pin = WORKTREE_PINS.get(path.resolve(String(dir)));
+  if (!pin) throw new GitStateChanged(`The host did not pin the worktree ${dir}`);
+  verifyPin(pin);
+  return pin;
+}
+export function forgetWorktree(dir) {
+  const key = path.resolve(String(dir));
+  const pin = WORKTREE_PINS.get(key);
+  WORKTREE_PINS.delete(key);
+  if (pin) WORKTREE_PINS.delete(pin.dir);
+}
+
 // The model's worktree must still point at the git directory the host made
 // for it. A worktree's ".git" is a file inside the worktree, which the
 // session can write: pointed at a directory of its own choosing, every host
-// git call there would read that directory's config.
+// git call there that did not name its git directory would read that
+// directory's config (pinWorktree).
 export function worktreeGitdir(dir, { binary = 'git' } = {}) {
   return realpathSync(git(dir, ['rev-parse', '--path-format=absolute', '--git-dir'], { binary }).trim());
 }
@@ -181,10 +309,12 @@ export async function createWorktree({ repo, work, ticketId, runId, binary = 'gi
   // Sessions write it, the directory entry included: pinned, so a session
   // that swaps it for a link is refused, not followed (sandbox.mjs grantDir).
   pinDir(dir);
+  // Its git directory too, before any session has run there (pinWorktree).
+  const pin = pinWorktree(repo, dir, { binary, attrTree: base });
   const hooks = hooksDigest(repo, { binary });
   const modules = await moduleSource({ repo, work, base, binary, installNodeModules, env });
   const copied = await cloneModules(modules, dir);
-  return { dir, branch, base, gitdir: worktreeGitdir(dir, { binary }), hooks_sha256: hooks, node_modules: copied ? modules.kind : 'none', modules_source: modules.dir };
+  return { dir, branch, base, gitdir: pin.gitdir, hooks_sha256: hooks, node_modules: copied ? modules.kind : 'none', modules_source: modules.dir };
 }
 
 // Where node_modules comes from for a base: { kind, dir } (dir null: none).
@@ -234,7 +364,11 @@ export async function cloneModules(source, dir) {
 // while they are still what the host made (review of 2026-09-30). The
 // temporary directory is tracked by the host (hostTemp), so a signalled
 // runner removes it too; it holds the tests' PostgreSQL data directories.
-export async function gateWorktree({ repo, work, commit, modules = null, binary = 'git', label = 'gate' }) {
+// Its git directory is pinned as well (pinWorktree), so every host git call
+// there names the directory git keeps for it, never what its .git file says
+// after test code ran; pin is that record. attrTree: the commit attributes
+// come from (default: the commit itself).
+export async function gateWorktree({ repo, work, commit, modules = null, binary = 'git', label = 'gate', attrTree = null }) {
   if (!SHA.test(commit || '')) throw Error('A gate worktree needs a full commit id');
   const root = path.join(work, 'gates');
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
@@ -242,12 +376,14 @@ export async function gateWorktree({ repo, work, commit, modules = null, binary 
   const dir = path.join(root, name);
   // Short, for unix socket paths (sandbox.mjs SHORT_TMP).
   const tmp = hostTemp('ctg-');
+  let pin;
   try {
     git(repo, ['worktree', 'add', '--quiet', '--detach', dir, commit], { binary });
     pinDir(dir);
+    pin = pinWorktree(repo, dir, { binary, attrTree: attrTree ?? commit });
     await cloneModules(modules, dir);
   } catch (error) { removeWorktree({ repo, dir, binary }); dropHostTemp(tmp); throw error; }
-  return { dir, tmp, remove: async () => { removeWorktree({ repo, dir, binary }); dropHostTemp(tmp); } };
+  return { dir, tmp, pin, remove: async () => { removeWorktree({ repo, dir, binary }); dropHostTemp(tmp); } };
 }
 
 // A commit object (on no branch) of base plus the given paths as they are in
@@ -267,12 +403,18 @@ export function snapshotCommit({ dir, base, files, binary = 'git', message = 'Re
 
 // A link found where the worktree was (sandboxed code can replace the
 // directory entry) is removed itself and never handed to git: what it points
-// at is not this worktree.
+// at is not this worktree. A pinned worktree whose .git link or git
+// directory changed is not handed to git either: it is deleted as files and
+// its git directory pruned from the repository's side.
 export function removeWorktree({ repo, dir, branch = null, deleteBranch = false, binary = 'git' }) {
   let link = false;
   try { link = lstatSync(dir).isSymbolicLink(); } catch { link = false; }
+  const pin = WORKTREE_PINS.get(path.resolve(String(dir))) ?? null;
+  let intact = !link;
+  if (pin && intact) { try { verifyPin(pin); } catch { intact = false; } }
+  forgetWorktree(dir);
   if (link) rmSync(dir, { force: true });
-  else git(repo, ['worktree', 'remove', '--force', dir], { binary, allowFail: true });
+  else if (intact) git(repo, ['worktree', 'remove', '--force', dir], { binary, allowFail: true });
   forgetDir(dir);
   if (existsSync(dir)) spawnSync('/bin/rm', ['-rf', dir]);
   git(repo, ['worktree', 'prune'], { binary, allowFail: true });

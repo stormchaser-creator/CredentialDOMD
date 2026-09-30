@@ -106,7 +106,7 @@ import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtrac
   coverageHints, finalStates, unseenItems, untrustedItems, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
 import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
-  checkWorktreeLink, remoteMain, agentCommitsOnMain } from './worktree.mjs';
+  checkWorktreeLink, remoteMain, agentCommitsOnMain, GitStateChanged } from './worktree.mjs';
 import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps, onStop, limitNotice } from './worker.mjs';
 import { recordReproduction, runTestGates, suiteBaseline, gateFailures, validTestRef, readBaseline, DEFAULT_COMMANDS } from './gates/tests.mjs';
 import { protectedReport, blastRadius } from './gates/owner-rules.mjs';
@@ -840,9 +840,11 @@ async function workTicket(o, atEnd) {
       await cleanup();
       return await finishWith(EXIT.usageLimit, 'paused', { reason: `usage limit: ${error.message}`, paused: { role: error.role, detail: error.detail } });
     }
-    // A directory a sandbox writes was swapped (a link, or replaced): an
-    // attempt to widen the next sandbox, held like any host state change.
-    if (!(error instanceof HostStateChanged) && !(error instanceof SandboxDirChanged)) throw error;
+    // A directory a sandbox writes was swapped (a link, or replaced), or a
+    // worktree's .git link changed under the host's git: an attempt to widen
+    // the next sandbox or to steer the host's git, held like any host state
+    // change.
+    if (!(error instanceof HostStateChanged) && !(error instanceof SandboxDirChanged) && !(error instanceof GitStateChanged)) throw error;
     log(`HOST STATE — ${ticket} run ${name}: ${error.message}; nothing recorded, every later run held`);
     await alert('host_state_changed', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: during run ${name} (ticket ${id8}) ${error.message}. Nothing was recorded or merged. Every run is held until ticket-context/HOLD-host-code-changed is removed after review.`);
     return finishWith(EXIT.hostState, 'host_state_changed', { reason: error.message });

@@ -39,7 +39,7 @@ import fsSync, { promises as fs, readFileSync, existsSync, mkdtempSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, isProduct, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES, MEDIA_FILE, gateWorktree, snapshotCommit, ignoredPaths } from '../worktree.mjs';
+import { git, isProduct, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES, MEDIA_FILE, gateWorktree, snapshotCommit, ignoredPaths, verifyWorktree } from '../worktree.mjs';
 import { launch } from '../worker.mjs';
 import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, slotEnv, verifyDir, dirIntact } from '../sandbox.mjs';
 import { personalDataReport, personalDataSummary } from './personal-data.mjs';
@@ -186,7 +186,7 @@ export async function recordReproduction({ dir, repo = null, work, base, tests, 
   const snapshot = snapshotCommit({ dir, base, files: changed, binary });
   const frozen = {};
   for (const file of changed) frozen[file] = committedDigest(repo ?? dir, snapshot, file, { binary });
-  const gate = await gateWorktree({ repo: repo ?? dir, work, commit: snapshot, modules, binary, label: 'repro' });
+  const gate = await gateWorktree({ repo: repo ?? dir, work, commit: snapshot, modules, binary, label: 'repro', attrTree: base });
   try {
     const files = [...new Set(tests.filter(validTestRef).map(t => t.file))];
     const runs = new Map();
@@ -196,8 +196,10 @@ export async function recordReproduction({ dir, repo = null, work, base, tests, 
       results.push({ file: test.file, name: test.name, on_base: verdict, message: verdict === 'red' ? firstFailure(runs.get(test.file), test) : null });
     }
     // The tests ran there: a gate directory swapped for a link is an attempt
-    // to widen the next sandbox (run.mjs holds the run).
+    // to widen the next sandbox, and a changed .git link one to steer the
+    // host's git (run.mjs holds the run either way).
     verifyDir(gate.dir);
+    verifyWorktree(gate.dir);
     return { base, snapshot, tests: results, frozen, recorded: tests.length > 0 && results.every(r => r.on_base === 'red') };
   } finally { await gate.remove(); }
 }
@@ -325,9 +327,11 @@ export function productHunks(dir, base, head, { binary = 'git' } = {}) {
 
 // Critique amendment c: revert each product hunk alone; every reproduction
 // or declared test must fail (or no longer run) under at least one revert.
-// dir is a gate worktree at head.
-export async function mutationCheck({ dir, tmp = null, base, head, tests, env, sandbox = null, node = process.execPath, binary = 'git' }) {
-  const hunks = productHunks(dir, base, head, { binary });
+// dir is a gate worktree at head (pinned: worktree.mjs pinWorktree, so the
+// apply, checkout and clean there name its git directory and refuse a
+// changed .git link); repo, where the hunks are read from the commits.
+export async function mutationCheck({ dir, repo = null, tmp = null, base, head, tests, env, sandbox = null, node = process.execPath, binary = 'git' }) {
+  const hunks = productHunks(repo ?? dir, base, head, { binary });
   if (!hunks.length) return { status: 'not_applicable', hunks: 0, survivors: [] };
   if (hunks.length > MAX_HUNKS) return { status: 'too_many_hunks', hunks: hunks.length, survivors: tests.map(t => `${t.file}::${t.name}`) };
   if (!tests.length) return { status: 'failed', hunks: hunks.length, survivors: [], detail: 'no reproduction or declared test to exercise the change' };
@@ -349,11 +353,12 @@ export async function mutationCheck({ dir, tmp = null, base, head, tests, env, s
         for (const test of tests.filter(t => t.file === file)) if (greenVerdict(run, test) !== 'green') killed.add(`${test.file}::${test.name}`);
       }
     } finally {
+      rmSync(patchDir, { recursive: true, force: true });
+      // A changed .git link throws here (GitStateChanged), allowFail or not.
       if (dirIntact(dir)) {
         git(dir, ['checkout', '--quiet', 'HEAD', '--', '.'], { binary, allowFail: true });
         git(dir, ['clean', '-fdq', '--', 'src', 'public', 'landing'], { binary, allowFail: true });
       }
-      rmSync(patchDir, { recursive: true, force: true });
     }
   }
   const survivors = tests.map(t => `${t.file}::${t.name}`).filter(id => !killed.has(id));
@@ -371,10 +376,11 @@ async function eslintCounts({ dir, tmp, file, content, env, commands, sandbox })
   const messages = results.flatMap(x => x.messages || []).filter(m => m.severity === 2);
   return { errors: messages.length, hooks: messages.filter(m => String(m.ruleId || '').startsWith('react-hooks/')).length };
 }
-export async function lintGate({ dir, tmp, base, files, env, sandbox = null, commands = DEFAULT_COMMANDS, binary = 'git' }) {
+// repo: where base's files are read (default dir).
+export async function lintGate({ dir, repo = null, tmp, base, files, env, sandbox = null, commands = DEFAULT_COMMANDS, binary = 'git' }) {
   const out = [];
   for (const file of files.filter(f => /\.(?:js|jsx)$/.test(f) && existsSync(path.join(dir, f)))) {
-    const before = git(dir, ['show', `${base}:${file}`], { binary, allowFail: true });
+    const before = git(repo ?? dir, ['show', `${base}:${file}`], { binary, allowFail: true });
     const baseCount = before === null ? { errors: 0, hooks: 0 } : await eslintCounts({ dir, tmp, file, content: before, env, commands, sandbox });
     const headCount = await eslintCounts({ dir, tmp, file, env, commands, sandbox });
     out.push({ file, base: baseCount?.errors ?? null, head: headCount?.errors ?? null,
@@ -428,11 +434,16 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
   const checks = [];
   const check = (name, pass, detail = '') => { checks.push({ name, pass: Boolean(pass), detail: String(detail).slice(0, 400) }); return pass; };
   const source = repo ?? dir;
-  const gate = await gateWorktree({ repo: source, work, commit: head, modules, binary, label: 'gate' });
+  // Attributes from base: the change may not alter them (G0).
+  const gate = await gateWorktree({ repo: source, work, commit: head, modules, binary, label: 'gate', attrTree: base });
   try {
     const g = gate.dir;
-    const tree = git(g, ['rev-parse', `${head}^{tree}`], { binary }).trim();
-    const facts = diffFacts(g, base, head, { binary });
+    // What the commits hold is read in the repository, never through the
+    // gate worktree: only the worktree's own state (HEAD, status) and the
+    // mutation check's apply and checkout use git there, pinned to the git
+    // directory the host made for it (worktree.mjs pinWorktree).
+    const tree = git(source, ['rev-parse', `${head}^{tree}`], { binary }).trim();
+    const facts = diffFacts(source, base, head, { binary });
     check('worktree_at_head', git(g, ['rev-parse', 'HEAD'], { binary }).trim() === head && git(g, ['status', '--porcelain', '--untracked-files=no'], { binary }).trim() === '',
       'the gates run in a fresh worktree of the committed head only');
     // Finding 11: a file the commit leaves out because .gitignore matches it.
@@ -460,11 +471,11 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
     if (productChanged) check('acceptance_tests_present', allTests.length > 0, allTests.length ? '' : 'no reproduction or declared test');
 
     // Finding 9: product code may not look at or patch the test runner.
-    const aware = testAwareProduct(g, base, head, facts.files, { binary });
+    const aware = testAwareProduct(source, base, head, facts.files, { binary });
     if (productChanged) check('test_aware_product', aware.length === 0, aware.map(a => `${a.file}: ${a.why}`).join('; '));
 
     // G10.
-    const personal = personalDataReport({ dir: g, base, head, context, secrets, binary });
+    const personal = personalDataReport({ dir: source, base, head, context, secrets, binary });
     check('personal_data', personal.pass, personal.pass ? '' : `remove personal data or secrets (rule and file only): ${personalDataSummary(personal)}`);
 
     // Green at head.
@@ -477,7 +488,7 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
     check('green_on_head', red.length === 0, red.map(t => `${t.file}::${t.name}: ${t.status}${t.message ? ` (${t.message})` : ''}`).join('; '));
 
     // Mutation (amendment c).
-    const mutation = productChanged ? await mutationCheck({ dir: g, tmp: gate.tmp, base, head, tests: allTests, env, sandbox, node, binary }) : { status: 'not_applicable', hunks: 0, survivors: [] };
+    const mutation = productChanged ? await mutationCheck({ dir: g, repo: source, tmp: gate.tmp, base, head, tests: allTests, env, sandbox, node, binary }) : { status: 'not_applicable', hunks: 0, survivors: [] };
     if (productChanged) check('hunk_revert', mutation.status === 'passed', mutation.status === 'passed' ? '' : `${mutation.status}${mutation.survivors?.length ? `: still green with the fix reverted: ${mutation.survivors.join(', ')}` : ''}${mutation.detail ? ` ${mutation.detail}` : ''}`);
 
     // Full suite, against the base count (the reporter's events, not stdout text).
@@ -499,13 +510,13 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
     const build = await gateLaunch({ sandbox, dir: g, tmp: gate.tmp, command, args, env: childEnv(env), timeoutMs: TIMEOUT.build });
     check('build', build.code === 0 && !build.timedOut, build.code === 0 ? '' : `build exited ${build.timedOut ? 'on timeout' : build.code}`);
     // G7's probe strings: only what the head build really contains.
-    const release_probes = build.code === 0 ? releaseCandidates({ dir: g, base, fix: head, binary, builtText: await builtAssets(g, { sandbox, tmp: gate.tmp, node }) }) : { present: [], absent: [] };
+    const release_probes = build.code === 0 ? releaseCandidates({ dir: source, base, fix: head, binary, builtText: await builtAssets(g, { sandbox, tmp: gate.tmp, node }) }) : { present: [], absent: [] };
 
-    const lint = await lintGate({ dir: g, tmp: gate.tmp, base, files: facts.files, env, sandbox, commands, binary });
+    const lint = await lintGate({ dir: g, repo: source, tmp: gate.tmp, base, files: facts.files, env, sandbox, commands, binary });
     check('lint', lint.pass, lint.files.filter(f => !f.pass).map(f => `${f.file}: ${f.base ?? '?'} -> ${f.head ?? '?'} errors${f.new_hooks_errors ? `, ${f.new_hooks_errors} new react-hooks` : ''}`).join('; ') + (lint.hooks_exit === 0 ? '' : ' lint:hooks failed'));
 
     // Save and reload (failure mode 3, critique G2 fix).
-    const reasons = persistenceTrigger(g, base, head, facts.files, { binary });
+    const reasons = persistenceTrigger(source, base, head, facts.files, { binary });
     const persistence = { triggered: reasons.length > 0, reasons, registry: [], reload_test: null };
     if (persistence.triggered) {
       // The registry tests the commit has: the suite could have removed them.
@@ -519,6 +530,9 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
       check('save_and_reload', persistence.registry.every(r => r.pass) && persistence.reload_test !== null,
         persistence.reload_test ? persistence.registry.filter(r => !r.pass).map(r => r.file).join(', ') : `${reasons.join('; ')}: no reproduction or declared test saves and then reloads from a fresh store`);
     }
+    // Every step ran test code there: a changed .git link, even after the
+    // host's last git call in it, holds the run.
+    verifyWorktree(g);
     const { files: _perFile, ...suiteSummary } = suite;
     return { version: 1, producer: PRODUCER, ticket, run_id: runId, base, head, tree, ran_at: new Date().toISOString(), sandboxed: Boolean(sandbox),
       diff: { files: facts.files, product: facts.product, deleted_tests: facts.deleted_tests, added_tests: facts.added_tests, test_changes: facts.test_changes },
