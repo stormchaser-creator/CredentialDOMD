@@ -79,9 +79,12 @@
 // the runner's own code; 5 the run changed files outside its scope; 6 the
 // run changed git state outside its worktree; 7 the checklist could not be
 // extracted; 8 the subscription's session or usage limit stopped a session
-// before the merge (worker.mjs usageLimitHit): the run is recorded "paused",
-// its worktree and branch go, and the shell counts nothing against the
-// ticket and starts no other target this hour; 1 a host step failed. Session
+// before the code outcome was decided (worker.mjs usageLimitHit): the run is
+// recorded "paused", its worktree and branch go, and the shell counts nothing
+// against the ticket and starts no other target this hour. Once the outcome
+// is decided (a change refused or held, or the merge begun) a limited session
+// is an ordinary failed session: the owner may already have been told the
+// branch is kept. 1 a host step failed. Session
 // limits: each role has its own (workerSeconds, reproSeconds, reviewSeconds,
 // extractSeconds); a resume that changes code (the reproduction's test
 // repair, the gate repair, the review revision) has reviseSeconds, and a
@@ -140,9 +143,9 @@ export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state
 }
 // Raised when the host sees git state outside the worktree change (exit 6).
 export class HostStateChanged extends Error {}
-// Raised when the subscription's limit stops a session before the merge
-// (exit 8): the failure says nothing about the ticket (2026-09-29, two
-// tickets parked by three limit exits each).
+// Raised when the subscription's limit stops a session before the code
+// outcome is decided (exit 8): the failure says nothing about the ticket
+// (2026-09-29, two tickets parked by three limit exits each).
 export class UsageLimitReached extends Error {
   constructor(role, r) {
     super(`the ${role} session hit the subscription's usage limit`);
@@ -407,9 +410,12 @@ async function workTicket(o, atEnd) {
   // runs/<run>/sessions/ (redacted, owner-only), and what it cost, how many
   // turns it took and, when it failed, why go on the run record and the log.
   let sessionCount = 0;
-  // Set when the merge begins: from then on a session the subscription's
-  // limit stops is an ordinary failed session (see below).
-  let merging = false;
+  // Set once the code outcome is decided: a change refused (the gates or the
+  // review, or one already held for the ticket), held, or the merge begun.
+  // From then on a session the subscription's limit stops is an ordinary
+  // failed session (see below): the owner may already have been told the
+  // branch is kept, and a pause would delete it and redo the ticket.
+  let decided = false;
   const recordDir = runDirectory(work, name);
   // The session in flight, for the stop hook below.
   let current = null;
@@ -424,9 +430,10 @@ async function workTicket(o, atEnd) {
     log(sessionLine(id8, name, entry));
     await hostCheck(`the ${opts.role} session`);
     // The subscription's limit: every later session would fail the same way,
-    // so the run pauses (exit 8). Once the merge has begun, a limited
-    // re-review is a failed review, which holds the change for the owner.
-    if (!r?.ok && r?.usage_limit === true && !merging) throw new UsageLimitReached(opts.role, r);
+    // so the run pauses (exit 8). Once the outcome is decided, a limited
+    // confirm is not confirmed and a limited re-review holds the change for
+    // the owner, as any failed session does; the branch is kept.
+    if (!r?.ok && r?.usage_limit === true && !decided) throw new UsageLimitReached(opts.role, r);
     return r;
   };
   // The runner signalled (the shell's 3-hour alarm, launchd stopping the job):
@@ -693,6 +700,7 @@ async function workTicket(o, atEnd) {
     if (held) {
       log(`CODE REFUSED — ${ticket}: a change for this ticket is already held (run ${held})`);
       facts.code_outcome = 'refused';
+      decided = true;
       await decide({ outcome: 'refused' });
       await cleanup({ keepBranch: true });
       return finishWith(EXIT.ok, 'refused', { reason: `a change for this ticket is already held (run ${held})`, head: step.head });
@@ -757,6 +765,7 @@ async function workTicket(o, atEnd) {
     if (!gates.pass || !review?.pass) {
       const reason = !gates.pass ? `gates failed: ${run.gates_failures.join(', ')}` : `the independent review did not approve: ${review.reasons.join('; ').slice(0, 400)}`;
       facts.code_outcome = 'refused';
+      decided = true;
       log(`CODE REFUSED — ${ticket} run ${name}: ${!gates.pass ? `gates failed (${run.gates_failures.join(', ')})` : 'review did not approve'}; nothing merged, branch ${wt.branch} kept`);
       await alert('change_refused', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: the change for ticket ${id8} (run ${name}) was not merged: ${!gates.pass ? `its gates failed (${run.gates_failures.join(', ')})` : 'the independent review did not approve it'}. The branch is kept for inspection.`);
       await decide({ outcome: 'refused', gates, review });
@@ -769,6 +778,7 @@ async function workTicket(o, atEnd) {
     if (holdReason) {
       run.status = 'held'; run.hold_reason = holdReason; run.held_at = new Date().toISOString();
       facts.code_outcome = 'held';
+      decided = true;
       await decide({ outcome: 'held', gates, review });
       await saveRun();
       await writeRunFile(work, name, 'HELD.txt', heldSummary(run, gates));
@@ -778,7 +788,7 @@ async function workTicket(o, atEnd) {
       return EXIT.ok;
     }
     run.status = 'ready';
-    merging = true;
+    decided = true;
     await saveRun();
     const support = await mergeSupport({ run, work, launch: reviewLaunch, commands, env: gEnv, binary, sandbox: box, state: denyState, secrets });
     const merged = await mergeRun({ work, runId: name, repo, reviewAgain: support.reviewAgain, regate: support.regate, releaseOptions, binary, env, log,

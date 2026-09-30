@@ -10,7 +10,7 @@ import path from 'node:path';
 import { heldRunFor, readField, finish, EXIT } from '../../scripts/ticket-fix/run.mjs';
 import { readRun, mergeRun, autoMergeEnabled } from '../../scripts/ticket-fix/merge.mjs';
 import { trailers } from '../../scripts/ticket-fix/worktree.mjs';
-import { project, sh, runStub, standardScript, workerResult, approve, FIX_FILES, REPRO_FILES, TICKET, RUN_ID } from './stage2-helpers.mjs';
+import { project, sh, runStub, standardScript, workerResult, approve, context, FIX_FILES, REPRO_FILES, TICKET, RUN_ID } from './stage2-helpers.mjs';
 
 const NAME = `${TICKET.slice(0, 8)}-${RUN_ID}`;
 const passedRelease = async ({ fix }) => ({ version: 1, fix_commit: fix, verified: true, build: `20260928T1200-${fix.slice(0, 7)}`, reason: null, probes: { present: [], absent: [] } });
@@ -393,6 +393,55 @@ test('a usage limit in the merge\'s re-review is a failed review: the change is 
     assert.equal(r.facts.code_outcome, 'held');
     assert.ok(!r.logs.some(l => l.startsWith('PAUSED')), r.logs.join('\n'));
   } finally { r?.cleanup(); p.cleanup(); }
+});
+
+// Review of the pause (2026-09-29): once a change is refused the owner is told
+// "The branch is kept for inspection", and the confirm session runs after
+// that. A limited confirm paused the run, which deleted that branch and redid
+// the ticket. Once the outcome is decided it is an ordinary failed confirm.
+// The extra sentence is an ask the checklist does not quote, so the confirm
+// runs (coverage hint).
+const withUnquotedAsk = () => { const c = context(); c.tickets[0].body += ' Please also add a synthetic footer.'; return c; };
+const productChange = w => opts => { w.write(opts.cwd, FIX_FILES); return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } }); };
+
+test('a usage limit in the confirm after the gates refused a change is a failed confirm: the branch the owner was told is kept stays, nothing paused', async () => {
+  const p = project();
+  let r;
+  try {
+    // A product change with no reproduction: the gates fail, the one repair does not help.
+    r = await runStub(p, standardScript({ repro: () => ({ kind: 'no_code', reason: 'Synthetic.', tests: [] }), worker: productChange(p), confirm: () => ({ ...LIMITED }) }),
+      { context: withUnquotedAsk() });
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    assert.deepEqual(r.calls.map(c => c.role), ['extract', 'repro', 'worker', 'worker', 'confirm', 'confirm'], 'the confirm ran after the refusal, and its rerun');
+    assert.equal(r.facts.code_outcome, 'refused');
+    assert.equal(r.facts.usage_limit, undefined);
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.status, 'refused');
+    assert.equal(r.sent.length, 1);
+    assert.match(r.sent[0], /was not merged: its gates failed .*The branch is kept for inspection/);
+    assert.notEqual(sh(p.repo, ['branch', '--list', run.branch]), '', 'the branch the alert names is still there');
+    assert.ok(r.logs.some(l => l.startsWith(`CONFIRM — ${TICKET.slice(0, 8)}: not confirmed`)), r.logs.join('\n'));
+    assert.ok(!r.logs.some(l => l.startsWith('PAUSED')), r.logs.join('\n'));
+    assert.ok(r.stage3, 'the host decided and wrote the stage 3 record');
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+test('a usage limit in the confirm of a run refused because a change is already held keeps its branch too', async () => {
+  const p = project();
+  let r, s;
+  try {
+    r = await runStub(p, standardScript());
+    assert.equal((await readRun(p.work, NAME)).status, 'held');
+    const second = `${TICKET.slice(0, 8)}-fedcba9876543210`;
+    s = await runStub(p, standardScript({ worker: productChange(p), confirm: () => ({ ...LIMITED }) }), { runId: 'fedcba9876543210', context: withUnquotedAsk() });
+    assert.equal(s.code, EXIT.ok, s.logs.join('\n'));
+    assert.deepEqual(s.calls.map(c => c.role), ['worker', 'confirm', 'confirm']);
+    assert.equal(s.facts.code_outcome, 'refused');
+    const run = await readRun(p.work, second);
+    assert.equal(run.status, 'refused');
+    assert.notEqual(sh(p.repo, ['branch', '--list', run.branch]), '', 'the refused change\'s branch is kept');
+    assert.ok(!s.logs.some(l => l.startsWith('PAUSED')), s.logs.join('\n'));
+  } finally { r?.cleanup(); s?.cleanup(); p.cleanup(); }
 });
 
 // Session limits (2026-09-29): a resume that changes code had the 600 s of a
