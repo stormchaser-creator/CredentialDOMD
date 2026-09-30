@@ -28,7 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { createMailboxRepairHandler } from '../../supabase/functions/_shared/mailboxRepair.mjs';
 
 const exec = promisify(execFile);
@@ -144,7 +144,7 @@ async function confirmForwarding(p, address, nowMs) {
 
 const functionsIn = (text) => [...text.matchAll(/create\s+(?:or\s+replace\s+)?function\s+public\.([a-z_0-9]+)\s*\(/gi)].map((m) => m[1].toLowerCase());
 
-test('mailbox repair migration against the real mailbox functions', { skip: pgSkip(), timeout: 240000 }, async (t) => {
+test('mailbox repair migration against the real mailbox functions', { skip: pgSkip(), timeout: withSlotWait(240000) }, async (t) => {
   pg = await start();
   try {
     await pg.sql(SETUP);

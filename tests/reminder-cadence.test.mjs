@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerHooks } from 'node:module';
-import { pgBin, pgSkip, acquirePgSlot } from './credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from './credential-portal/postgresFixture.mjs';
 import {
   reminderEmailDecision, reminderFingerprint, reminderSnoozed, utcDaysBetween, REMINDER_STATE_COLUMNS,
 } from '../supabase/functions/_shared/reminderCadence.mjs';
@@ -266,7 +266,7 @@ const ROWS = [
   [5, null, null],                                              // never notified
 ];
 
-test('the reminder state migration and rollback on a real PostgreSQL', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('the reminder state migration and rollback on a real PostgreSQL', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(PROFILES);

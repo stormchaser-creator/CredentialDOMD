@@ -1,9 +1,12 @@
 // The machine-wide PostgreSQL test slots (pg-slot.mjs, pg_slot.py): several
 // processes, node and python, never hold more than N; a dead owner's slot is
-// reclaimed, and the cluster it left running is stopped first; a slot comes
-// back on exit and on SIGTERM; a record anyone can write gets no other
-// process signalled; and the runner's sandbox profiles leave the directory
-// writable. Every scenario but the last uses a private slot directory.
+// reclaimed, and the cluster it left running is stopped first; a record that
+// does not prove a live test process holds nothing; two reclaimers never
+// remove a live record; a slot comes back on exit and on SIGTERM; a record
+// anyone can write gets no other process signalled; the slot wait comes on
+// top of a test's own timeout; and the runner's sandboxes get a slot
+// directory of their own that they cannot swap, never the owner's. Every
+// scenario uses a private slot directory, except the cluster test's cover.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -11,10 +14,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { acquirePgSlot, acquirePgSlotSync, defaultSlotDir, slotCount, holders, running, processStart, processCommand } from './pg-slot.mjs';
+import { acquirePgSlot, acquirePgSlotSync, defaultSlotDir, slotCount, holders, running, processStart, processCommand, processInfo, ownerGone, MAX_OWNER_AGE_MS,
+  inspectSlot, reclaimSlot, withSlotWait } from './pg-slot.mjs';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
-import { sandboxAvailable, sandboxProfile, pgSlotDir, SANDBOX_EXEC } from '../../scripts/ticket-fix/sandbox.mjs';
+import { sandboxAvailable, sandboxProfile, runSlotDir, slotEnv, RUN_PG_SLOTS, SANDBOX_EXEC } from '../../scripts/ticket-fix/sandbox.mjs';
 import { gateLaunch } from '../../scripts/ticket-fix/gates/tests.mjs';
+import { sessionLaunch, removeSessionTemps } from '../../scripts/ticket-fix/worker.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NODE_HELPER = pathToFileURL(path.join(HERE, 'pg-slot.mjs')).href;
@@ -53,7 +58,7 @@ async function deadPid() {
   return c.proc.pid;
 }
 
-test('the defaults: 12 slots in one directory per user under /tmp, the same for node, python and the runner sandbox', { skip: pySkip }, () => {
+test('the defaults: 12 slots in one directory per user under /tmp, the same for node and python; each runner run gets its own', { skip: pySkip }, t => {
   assert.equal(slotCount({}), 12);
   assert.equal(slotCount({ PG_TEST_SLOTS: '5' }), 5);
   assert.throws(() => slotCount({ PG_TEST_SLOTS: 'many' }), /PG_TEST_SLOTS must be a whole number/);
@@ -61,7 +66,14 @@ test('the defaults: 12 slots in one directory per user under /tmp, the same for 
   const dir = defaultSlotDir();
   assert.equal(path.dirname(dir), fs.realpathSync('/tmp'));
   assert.match(path.basename(dir), /^credentialdomd-pg-slots-/);
-  assert.equal(pgSlotDir(), dir, 'the sandbox profiles open the directory the helpers use');
+  // A runner run's sandboxed sessions and gates share a fresh directory of
+  // their own, never this one (sandbox.mjs runSlotDir).
+  const run = runSlotDir();
+  t.after(() => fs.rmSync(run, { recursive: true, force: true }));
+  assert.equal(path.dirname(run), path.dirname(dir));
+  assert.ok(path.basename(run).startsWith(`${path.basename(dir)}-run-`) && run !== dir, run);
+  assert.equal(fs.statSync(run).mode & 0o777, 0o700);
+  assert.deepEqual(slotEnv(run), { PG_TEST_SLOT_DIR: run, PG_TEST_SLOTS: String(RUN_PG_SLOTS) });
   const py = spawnSync(python, ['-B', '-c', `import sys; sys.path.insert(0, ${JSON.stringify(HERE)}); import pg_slot; print(pg_slot.default_slot_dir()); print(pg_slot.slot_count())`], { encoding: 'utf8', env: baseEnv });
   assert.equal(py.status, 0, py.stderr);
   assert.deepEqual(py.stdout.trim().split('\n'), [dir, '12']);
@@ -73,6 +85,11 @@ test('concurrent node and python processes never hold more than N slots, and all
   const log = path.join(dir, 'log');
   fs.writeFileSync(log, '');
   const env = { PG_TEST_SLOT_DIR: slots, PG_TEST_SLOTS: '3', PG_TEST_SLOT_TIMEOUT: '60' };
+  // Every slot starts stale (a dead owner), so the first processes all
+  // reclaim the same slots at once.
+  fs.mkdirSync(slots, { mode: 0o700 });
+  const dead = await deadPid();
+  for (let i = 0; i < 3; i++) fs.writeFileSync(path.join(slots, `slot-${i}`), JSON.stringify({ pid: dead, start: Date.now() - 5000, token: `stale-${i}`, label: 'stale', dataDir: null }));
   // "+" is written after the slot is taken and "-" before it is given back,
   // so the running sum at every point of the log is at most the holders.
   const nodeCode = `const s = await slots.acquirePgSlot(null, { label: 'n' + process.pid });
@@ -125,7 +142,7 @@ test('a dead owner\'s slot is reclaimed, a reused pid is recognised, a live owne
   a.release();
   // A live owner (this process, its real start) is waited for, then named.
   plant('slot-0', { pid: process.pid, start: Math.round(Date.now() - process.uptime() * 1000) });
-  plant('slot-1', { pid: process.pid, start: null });
+  plant('slot-1', { pid: process.pid, start: Math.round(Date.now() - process.uptime() * 1000) });
   const began = Date.now();
   await assert.rejects(acquirePgSlot(null, { dir: slots, slots: 2, timeoutMs: 400 }), error => {
     assert.match(error.message, /No PostgreSQL test slot came free in 0 s: all 2 slots in .* are held/);
@@ -276,7 +293,7 @@ ${then}`;
 }
 const postmaster = data => Number(fs.readFileSync(path.join(data, 'postmaster.pid'), 'utf8').split('\n')[0]);
 
-test('a cluster its owner left running is stopped: by the reclaimer after SIGKILL, by the owner on exit and on SIGTERM', { skip: pgSkip() || pySkip, timeout: 240000 }, async t => {
+test('a cluster its owner left running is stopped: by the reclaimer after SIGKILL, by the owner on exit and on SIGTERM', { skip: pgSkip() || pySkip, timeout: withSlotWait(240000) }, async t => {
   // The clusters started here are real: this test holds one slot of the
   // machine's own for them (one at a time) while it plays owners and
   // reclaimers in a private directory.
@@ -324,40 +341,277 @@ test('a cluster its owner left running is stopped: by the reclaimer after SIGKIL
   assert.deepEqual(slotFiles(slots), []);
 });
 
-// The runner runs the suite in its gates sandbox and sessions run it in
-// theirs; the slot directory must be one they share with every other test
-// process, and writable there, while the rest of /tmp stays closed.
+
+// Review of 2026-09-29: a record is not trusted to name a live test process.
+// Before, a record naming pid 1 with no start (kill answers EPERM, and no
+// start skipped the reuse check), or junk dated in the future, held its slot
+// for good, and every later run waited PG_TEST_SLOT_TIMEOUT and failed.
+test('a record that does not prove a live test process holds no slot, in node and in python', { skip: pySkip, timeout: 60000 }, async t => {
+  const dir = scratch(t);
+  const slots = path.join(dir, 'slots');
+  fs.mkdirSync(slots, { mode: 0o700 });
+  const sleeper = spawn('/bin/sleep', ['60'], { stdio: 'ignore' });
+  t.after(() => { try { sleeper.kill('SIGKILL'); } catch { /* gone */ } });
+  await sleep(200);
+  const future = new Date('2030-01-01T00:00:00Z');
+  const readable = processInfo(process.pid).command !== null;
+  const put = (name, value) => fs.writeFileSync(path.join(slots, name), typeof value === 'string' ? value : JSON.stringify({ token: `t-${name}`, label: 'forged', dataDir: null, ...value }));
+  const plant = () => {
+    put('slot-0', { pid: 1 }); // launchd: another user's pid, and no start
+    put('slot-1', { pid: 1, start: processStart(1) ?? Date.now() }); // another user's pid with its real start
+    put('slot-2', { pid: process.pid }); // a live test process, but no start
+    fs.mkdirSync(path.join(slots, 'slot-3')); fs.utimesSync(path.join(slots, 'slot-3'), future, future); // not a record, dated 2030
+    put('slot-4', 'junk'); fs.utimesSync(path.join(slots, 'slot-4'), future, future);
+    put('slot-5', { pid: process.pid, start: Date.now() + 3600 * 1000 }); // a start in the future
+    // A live process that is not node or python, with its real start (where
+    // this process can read command lines).
+    if (readable) put('slot-6', { pid: sleeper.pid, start: processStart(sleeper.pid) });
+  };
+  const n = readable ? 7 : 6;
+  plant();
+  const got = [];
+  for (let i = 0; i < n; i++) got.push(await acquirePgSlot(null, { dir: slots, slots: n, timeoutMs: 3000, label: `n${i}` }));
+  assert.deepEqual(got.map(s => s.name).sort(), Array.from({ length: n }, (_, i) => `slot-${i}`).sort(), 'node reclaimed every forged slot');
+  for (const s of got) s.release();
+  assert.deepEqual(slotFiles(slots), []);
+  plant();
+  const py = await child('python', `got = [pg_slot.acquire(slots=${n}, timeout=3, label='p%d' % i) for i in range(${n})]
+print(' '.join(sorted(s.name for s in got)))
+for s in got: s.release()`, { PG_TEST_SLOT_DIR: slots }).done;
+  assert.equal(py.status, 0, py.err);
+  assert.equal(py.out.trim(), Array.from({ length: n }, (_, i) => `slot-${i}`).sort().join(' '), 'python reclaimed every forged slot');
+  assert.deepEqual(slotFiles(slots), []);
+  // No record holds a slot longer than MAX_OWNER_AGE_MS, whatever it names.
+  const me = processInfo(process.pid);
+  const start = me.start ?? Math.round(Date.now() - process.uptime() * 1000);
+  assert.equal(ownerGone({ pid: process.pid, start }, { start, command: me.command }), false, 'this live node process owns its record');
+  assert.equal(ownerGone({ pid: process.pid, start }, { start, command: me.command }, start + MAX_OWNER_AGE_MS + 1000), true);
+  assert.equal(ownerGone({ pid: process.pid, start }, { start, command: '/bin/zsh -l' }), true, 'only node and python take slots');
+  const pyAge = await child('python', `start, command = pg_slot.process_info(os.getpid())
+record = {'pid': os.getpid(), 'start': start}
+print(pg_slot.owner_gone(record), pg_slot.owner_gone(record, now=start + pg_slot.MAX_OWNER_AGE_MS + 1000), pg_slot.owner_gone(record, (start, '/bin/zsh -l')))`, {}).done;
+  assert.equal(pyAge.status, 0, pyAge.err);
+  assert.equal(pyAge.out.trim(), 'False True True');
+});
+
+// Review of 2026-09-29: reclaim moved the name aside and put back a record it
+// had not judged. A reclaimer holding an old judgment of a stale slot could
+// move aside the live record another process had linked there since; a third
+// process linked into the name in that moment, the put-back failed, and the
+// live record was deleted (13 clusters on 12 slots, one with no record).
+// Now a name is removed only under the lock, and only if it is still what was
+// judged: the name is never free for a moment.
+test('a reclaimer with an old judgment never removes the live record linked there since, in node and in python', { skip: pySkip, timeout: 60000 }, async t => {
+  const dir = scratch(t);
+  const slots = path.join(dir, 'slots');
+  fs.mkdirSync(slots, { mode: 0o700 });
+  const file = path.join(slots, 'slot-0');
+  const other = path.join(slots, '.other-record');
+  fs.writeFileSync(other, JSON.stringify({ pid: process.pid, start: 0, token: 'other' }));
+  const dead = await deadPid();
+  fs.writeFileSync(file, JSON.stringify({ pid: dead, start: Date.now(), token: 'stale', dataDir: null }));
+  const judged = inspectSlot(file); // A judges the stale record...
+  fs.rmSync(file); // ...B removes it first...
+  const live = await acquirePgSlot(null, { dir: slots, slots: 1, timeoutMs: 2000, label: 'live' }); // ...and C links a live record
+  // Whenever slot-0 is free for a moment, a third process links into it.
+  const { renameSync, unlinkSync } = fs;
+  let freed = 0;
+  const race = from => { if (from === file) { freed++; try { fs.linkSync(other, file); } catch { /* taken */ } } };
+  fs.renameSync = (from, to) => { renameSync(from, to); race(from); };
+  fs.unlinkSync = f => { unlinkSync(f); race(f); };
+  let removed;
+  try { removed = reclaimSlot(slots, file, judged); } finally { fs.renameSync = renameSync; fs.unlinkSync = unlinkSync; }
+  assert.equal(removed, false, 'A removed nothing');
+  assert.equal(freed, 0, 'the name was never free');
+  assert.equal(inspectSlot(file).record.token, live.token, 'the live record is still there');
+  live.release();
+  assert.deepEqual(slotFiles(slots), []);
+  // A lock a live process holds keeps reclaimers out (they try again later);
+  // a lock whose owner is gone, or dated in the future, is broken.
+  fs.writeFileSync(file, JSON.stringify({ pid: dead, start: Date.now(), token: 'stale', dataDir: null }));
+  const lock = path.join(slots, 'reclaim.lock');
+  fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, start: Date.now(), token: 'busy' }));
+  assert.equal(reclaimSlot(slots, file, inspectSlot(file)), false, 'a live lock holder keeps the reclaimer out');
+  assert.equal(inspectSlot(file).record.token, 'stale');
+  fs.writeFileSync(lock, JSON.stringify({ pid: dead, start: Date.now(), token: 'dead' }));
+  assert.equal(reclaimSlot(slots, file, inspectSlot(file)), true, 'a dead holder\'s lock is broken');
+  fs.writeFileSync(file, JSON.stringify({ pid: dead, start: Date.now(), token: 'stale', dataDir: null }));
+  fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, start: Date.now(), token: 'future' }));
+  const future = new Date('2030-01-01T00:00:00Z');
+  fs.utimesSync(lock, future, future);
+  assert.equal(reclaimSlot(slots, file, inspectSlot(file)), true, 'a lock dated in the future is broken');
+  assert.deepEqual(fs.readdirSync(slots).sort(), ['.other-record'], 'no lock or draft left');
+  // python: the same race, through os.rename and os.unlink.
+  const py = await child('python', `import json
+d = ${JSON.stringify(slots)}; p = os.path.join(d, 'slot-0'); other = os.path.join(d, '.other-record')
+with open(p, 'w') as f: f.write(json.dumps({'pid': ${dead}, 'start': time.time() * 1000, 'token': 'stale', 'dataDir': None}))
+judged = pg_slot._inspect(p)
+os.unlink(p)
+live = pg_slot.acquire(directory=d, slots=1, timeout=2, label='live')
+freed = [0]
+real_rename, real_unlink = os.rename, os.unlink
+def race(path):
+    if path == p:
+        freed[0] += 1
+        try: os.link(other, p)
+        except OSError: pass
+def rename(a, b): real_rename(a, b); race(a)
+def unlink(a, *args, **kw): real_unlink(a, *args, **kw); race(a)
+os.rename, os.unlink = rename, unlink
+try: removed = pg_slot._reclaim(d, p, judged)
+finally: os.rename, os.unlink = real_rename, real_unlink
+print(json.dumps({'removed': removed, 'freed': freed[0], 'live': pg_slot._inspect(p)['record']['token'] == live.token}))
+live.release()`, {}).done;
+  assert.equal(py.status, 0, py.err);
+  assert.deepEqual(JSON.parse(py.out.trim()), { removed: false, freed: 0, live: true });
+  assert.deepEqual(slotFiles(slots), []);
+});
+
+// Review of 2026-09-29: the wait for a slot happens inside the test body, so
+// with only its own budget a test queued behind other runs timed out (120 s)
+// long before PG_TEST_SLOT_TIMEOUT (600 s), and a good change was refused.
+test('the wait for a slot comes on top of a test\'s own timeout', { timeout: 60000 }, async t => {
+  const dir = scratch(t);
+  const slots = path.join(dir, 'slots');
+  const env = { PG_TEST_SLOT_DIR: slots, PG_TEST_SLOTS: '1', PG_TEST_SLOT_TIMEOUT: '30' };
+  assert.equal(withSlotWait(1000, env), 31000);
+  const holder = child('node', "const s = await slots.acquirePgSlot(null, { label: 'holder' }); console.log('held'); process.stdin.once('data', () => { s.release(); process.exit(0); });", env);
+  await holder.saw('held');
+  const testFile = (name, timeout) => {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, `import test from 'node:test';\nimport { acquirePgSlot, withSlotWait } from ${JSON.stringify(NODE_HELPER)};\n` +
+      `test('takes a slot', { timeout: ${timeout} }, async () => { (await acquirePgSlot(null)).release(); });\n`);
+    return file;
+  };
+  const runTest = file => new Promise(resolve => {
+    const c = spawn(process.execPath, ['--test', file], { env: { ...baseEnv, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    c.stdout.on('data', d => { out += d; }); c.stderr.on('data', d => { out += d; });
+    c.on('close', code => resolve({ code, out }));
+  });
+  const began = Date.now();
+  const bare = runTest(testFile('bare.test.mjs', '1000'));
+  const waits = runTest(testFile('waits.test.mjs', 'withSlotWait(1000)'));
+  await sleep(2500);
+  holder.proc.stdin.write('go\n');
+  const [b, w] = await Promise.all([bare, waits]);
+  assert.notEqual(b.code, 0, 'its own 1 s alone: the wait behind the holder timed it out');
+  assert.match(b.out, /timed out after 1000ms/);
+  assert.equal(w.code, 0, w.out);
+  assert.ok(Date.now() - began >= 2500, 'it waited past its own 1 s and passed');
+  assert.equal((await holder.done).status, 0);
+});
+
+test('every test that takes a slot, itself or through a python fixture, has the slot wait on top of its timeout', () => {
+  const root = path.resolve(HERE, '../..');
+  const walk = (d, out = []) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name.startsWith('.') || e.name === '__pycache__') continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p, out); else out.push(p);
+    }
+    return out;
+  };
+  const all = [...walk(path.join(root, 'tests')), ...walk(path.join(root, 'scripts'))];
+  const python = all.filter(f => f.endsWith('.py') && path.basename(f) !== 'pg_slot.py' && /pg_slot\.acquire\(/.test(fs.readFileSync(f, 'utf8'))).map(f => path.basename(f));
+  assert.ok(python.length >= 15, `python fixtures found: ${python.length}`);
+  const takers = [], bad = [];
+  for (const f of all.filter(f => f.endsWith('.test.mjs') && path.dirname(f) !== HERE)) {
+    const text = fs.readFileSync(f, 'utf8');
+    if (!/acquirePgSlot(?:Sync)?\(|postgresFixture\(/.test(text) && !python.some(p => text.includes(p))) continue;
+    takers.push(f);
+    text.split('\n').forEach((line, i) => { if (/\btest\(/.test(line) && /\btimeout:\s*\d/.test(line)) bad.push(`${path.relative(root, f)}:${i + 1}`); });
+  }
+  assert.ok(takers.length >= 22, `tests that take a slot found: ${takers.length}`);
+  assert.deepEqual(bad, [], 'a literal timeout counts the slot wait against the test: use withSlotWait');
+});
+
+// Review of 2026-09-29: the profile resolved a shared directory's own name,
+// and granted (subpath dir), which covers the directory entry itself: a
+// sandboxed process removed the slot directory, put a symlink to another
+// directory (~/Library/LaunchAgents, a checkout's .git/hooks) in its place,
+// and every later profile made that target writable. Now the name is never
+// resolved, anything but a real directory of this user that only it can write
+// is refused, and only the entries inside it are granted.
+test('a shared sandbox directory is never followed through a symlink, and only its entries are granted', t => {
+  const base = fs.realpathSync(scratch(t, 'pg-slot-shared-'));
+  const work = path.join(base, 'work'); fs.mkdirSync(work);
+  const victim = path.join(base, 'victim'); fs.mkdirSync(victim);
+  const profile = shared => sandboxProfile({ kind: 'gates', home: os.homedir(), writable: [work], shared: [shared] });
+  const planted = path.join(base, 'credentialdomd-pg-slots-planted');
+  fs.symlinkSync(victim, planted);
+  for (const kind of ['gates', 'session']) {
+    assert.throws(() => sandboxProfile({ kind, home: os.homedir(), writable: [work], shared: [planted] }), /not a directory of this user that only it can write/);
+  }
+  const open = path.join(base, 'open-to-others'); fs.mkdirSync(open); fs.chmodSync(open, 0o777);
+  assert.throws(() => profile(open), /only it can write/, 'a directory others can write is refused');
+  assert.throws(() => sandboxProfile({ kind: 'gates', home: os.homedir(), writable: [work], shared: [path.join(work, 'slots')] }), /may not sit in a writable one/);
+  // A missing one is made, owner-only; the profile grants what is inside it,
+  // and the directory itself only to read.
+  const fresh = path.join(base, 'credentialdomd-pg-slots-fresh');
+  const text = profile(fresh);
+  assert.equal(fs.lstatSync(fresh).mode & 0o777, 0o700);
+  assert.ok(text.includes(`(allow file-read* file-write* (subpath "${work}") (regex #"^${fresh}/"))`), text);
+  assert.ok(text.includes(`(require-any (subpath "${work}") (regex #"^${fresh}/") (subpath "/dev"))`), text);
+  assert.ok(text.includes(`(allow file-read* (literal "${fresh}"))`));
+  assert.ok(!text.includes(`(subpath "${fresh}")`) && !text.includes(victim), 'no subpath grant of the directory, and nothing of the symlink\'s target');
+  assert.ok(profile(path.join(base, 'a.b+c')).includes('(regex #"^' + base + '/a\\.b\\+c/")'), 'regex characters in the path are escaped');
+});
+
+// The runner's gates and sessions run the suite in their sandboxes: they take
+// slots in their run's own directory (never the owner's, which they cannot
+// write), and cannot remove, rename or replace that directory.
 const sandboxSkip = process.platform !== 'darwin' ? 'macOS sandbox only' : !sandboxAvailable() ? 'sandbox-exec cannot run inside another sandbox' : false;
-test('inside the gates sandbox a test process takes and gives back a slot in the shared directory', { skip: sandboxSkip || pySkip, timeout: 60000 }, async t => {
+test('inside the gates sandbox a test takes a slot in its run\'s own directory, cannot swap that directory, and cannot touch the owner\'s slots', { skip: sandboxSkip || pySkip, timeout: 60000 }, async t => {
   const dir = fs.realpathSync(scratch(t));
   const tmp = path.join(dir, 'tmp'); fs.mkdirSync(tmp);
   const profileDir = path.join(dir, 'profiles'); fs.mkdirSync(profileDir);
+  const victim = fs.realpathSync(scratch(t, 'pg-slot-victim-'));
+  const run = runSlotDir();
+  t.after(() => fs.rmSync(run, { recursive: true, force: true }));
+  const owner = defaultSlotDir();
+  const sandbox = { home: os.homedir(), profileDir, slots: run };
   const env = { PATH: process.env.PATH, HOME: os.homedir(), LC_ALL: 'C' };
   const script = `import * as slots from ${JSON.stringify(NODE_HELPER)};
-    const s = await slots.acquirePgSlot(null, { label: 'gates-sandbox-probe' });
-    console.log('slot ' + slots.slotDir() + ' ' + s.name); s.release();
     const fs = await import('node:fs');
-    try { fs.writeFileSync(${JSON.stringify(`${fs.realpathSync('/tmp')}/pg-slot-escape-${process.pid}`)}, 'x'); console.log('escaped'); } catch (e) { console.log('closed ' + e.code); }`;
+    const s = await slots.acquirePgSlot(null, { label: 'gates-sandbox-probe' });
+    console.log('slot ' + slots.slotDir() + ' ' + slots.slotCount() + ' ' + s.name); s.release();
+    const tryIt = fn => { try { fn(); return 'allowed'; } catch (e) { return e.code || 'error'; } };
+    console.log('owner ' + tryIt(() => { fs.mkdirSync(${JSON.stringify(owner)}, { recursive: true }); fs.writeFileSync(${JSON.stringify(path.join(owner, `slot-forged-${process.pid}`))}, '{"pid":1}'); }));
+    console.log('rmdir ' + tryIt(() => fs.rmdirSync(${JSON.stringify(run)})));
+    console.log('rename ' + tryIt(() => fs.renameSync(${JSON.stringify(run)}, ${JSON.stringify(`${run}.moved`)})));
+    console.log('victim ' + tryIt(() => fs.writeFileSync(${JSON.stringify(path.join(victim, 'escaped'))}, 'x')));`;
   let err = '';
   const onStderr = text => { err += text; };
-  const r = await gateLaunch({ sandbox: { home: os.homedir(), profileDir }, dir, tmp, command: process.execPath, args: ['--input-type=module', '-e', script], env, timeoutMs: 30000, onStderr });
+  const r = await gateLaunch({ sandbox, dir, tmp, command: process.execPath, args: ['--input-type=module', '-e', script], env, timeoutMs: 30000, onStderr });
+  t.after(() => fs.rmSync(path.join(owner, `slot-forged-${process.pid}`), { force: true }));
   assert.equal(r.code, 0, err);
-  assert.match(r.stdout, new RegExp(`slot ${pgSlotDir()} slot-\\d+`));
-  assert.match(r.stdout, /closed EPERM/, 'the rest of /tmp stays closed');
-  const py = await gateLaunch({ sandbox: { home: os.homedir(), profileDir }, dir, tmp, command: python, env, timeoutMs: 30000, onStderr,
-    args: ['-B', '-c', `import sys; sys.path.insert(0, ${JSON.stringify(HERE)}); import pg_slot; s = pg_slot.acquire(label='gates-sandbox-probe-py'); print('slot', pg_slot.slot_dir(), s.name); s.release()`] });
+  assert.match(r.stdout, new RegExp(`slot ${run} ${RUN_PG_SLOTS} slot-\\d+`), 'the run\'s own directory and count, from the environment');
+  assert.match(r.stdout, /owner EPERM/, 'the owner\'s slots are not writable');
+  assert.match(r.stdout, /rmdir EPERM/);
+  assert.match(r.stdout, /rename EPERM/);
+  assert.match(r.stdout, /victim EPERM/);
+  assert.equal(fs.lstatSync(run).isDirectory(), true, 'the directory is still the directory');
+  const py = await gateLaunch({ sandbox, dir, tmp, command: python, env, timeoutMs: 30000, onStderr,
+    args: ['-B', '-c', `import sys; sys.path.insert(0, ${JSON.stringify(HERE)}); import pg_slot; s = pg_slot.acquire(label='gates-sandbox-probe-py'); print('slot', pg_slot.slot_dir(), pg_slot.slot_count(), s.name); s.release()`] });
   assert.equal(py.code, 0, err);
-  assert.match(py.stdout, new RegExp(`slot ${pgSlotDir()} slot-\\d+`));
-  // Without the shared directory (the profile before it) the same process
-  // cannot take a slot, and says what to do.
+  assert.match(py.stdout, new RegExp(`slot ${run} ${RUN_PG_SLOTS} slot-\\d+`));
+  assert.deepEqual(holders(run), [], 'the probes gave their slots back');
+  // Without the shared directory the same process cannot take a slot, and
+  // says what to do.
   const closed = path.join(profileDir, 'closed.sb');
   fs.writeFileSync(closed, sandboxProfile({ kind: 'gates', home: os.homedir(), writable: [dir, tmp] }));
   const probe = spawnSync(SANDBOX_EXEC, ['-f', closed, process.execPath, '--input-type=module', '-e', `import * as slots from ${JSON.stringify(NODE_HELPER)};
-    try { (await slots.acquirePgSlot(null, { dir: ${JSON.stringify(`${pgSlotDir()}-closed-probe`)} })).release(); console.log('open'); } catch (e) { console.log(e.message); }`], { encoding: 'utf8', env: { ...env, TMPDIR: `${tmp}/` } });
+    try { (await slots.acquirePgSlot(null, { dir: ${JSON.stringify(`${run}-closed-probe`)} })).release(); console.log('open'); } catch (e) { console.log(e.message); }`], { encoding: 'utf8', env: { ...env, TMPDIR: `${tmp}/` } });
   assert.match(probe.stdout, /Cannot create the PostgreSQL test slot directory .* set PG_TEST_SLOT_DIR/, probe.stderr);
-  // The session profile shares it too.
-  const session = sandboxProfile({ kind: 'session', home: os.homedir(), writable: [dir], shared: [pgSlotDir()] });
-  assert.ok(session.includes(`(subpath "${pgSlotDir()}")`));
-  assert.ok(!session.includes(`(remote unix-socket (subpath "${pgSlotDir()}"))`), 'no socket there is a sandboxed process\'s own');
-  assert.equal(holders(pgSlotDir()).some(h => /gates-sandbox-probe/.test(h.label ?? '')), false, 'the probes gave their slots back');
+  // Sessions get the same directory, in their environment and their profile.
+  const sessionDir = path.join(dir, 'session'); fs.mkdirSync(sessionDir);
+  t.after(removeSessionTemps);
+  const how = await sessionLaunch({ claude: '/bin/echo', args: [], cwd: dir, sessionDir, baseEnv: { PATH: '/bin', HOME: os.homedir() }, sandbox });
+  assert.equal(how.env.PG_TEST_SLOT_DIR, run);
+  assert.equal(how.env.PG_TEST_SLOTS, String(RUN_PG_SLOTS));
+  const session = fs.readFileSync(how.args[1], 'utf8');
+  assert.ok(session.includes(`(regex #"^${run}/")`) && !session.includes(`(subpath "${run}")`), session);
+  assert.ok(!session.includes(owner + '"') && !session.includes(owner + '/'), 'the owner\'s slot directory is in no profile');
+  assert.ok(!session.includes(`(remote unix-socket (subpath "${run}"))`), 'no socket there is a sandboxed process\'s own');
 });

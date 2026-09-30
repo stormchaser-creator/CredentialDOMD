@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from './credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from './credential-portal/postgresFixture.mjs';
 
 // The call-day split columns, proven against a real PostgreSQL. A client that
 // writes splitAtDayStart, dayStartHour or splitGroupId before these columns
@@ -50,7 +50,7 @@ const columns = (pg) => pg.sql(`select string_agg(table_name || '.' || column_na
   from information_schema.columns where table_schema = 'public'
   and column_name in ('split_at_day_start', 'day_start_hour', 'split_group_id')`);
 
-test('call-day split columns: shape, apply twice, defaults on existing rows, guarded rollback', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('call-day split columns: shape, apply twice, defaults on existing rows, guarded rollback', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { pgBin, pgSkip, acquirePgSlotSync } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlotSync, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { readVerificationKey, agentReplyBody, labeledBody, sha256Hex, EMAIL_ATTEMPTED } from '../../scripts/ticket-fix/reply.mjs';
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
 import { main as postReply } from '../../scripts/ticket-fix/post-reply.mjs';
@@ -132,7 +132,7 @@ const management = pg => async query => {
   throw Error('Unexpected SQL shape');
 };
 
-test('support reply verification: the database refuses unverified support replies except the admin in the app', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('support reply verification: the database refuses unverified support replies except the admin in the app', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const pg = startPostgres();
   t.after(() => pg.close());
   pg.sql(ROLES);

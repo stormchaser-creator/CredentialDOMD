@@ -12,12 +12,14 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { sandboxAvailable } from '../../scripts/ticket-fix/sandbox.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const python = spawnSync('python3', ['--version']).status === 0 ? 'python3' : null;
-const run = script => spawnSync(python, [script], { cwd: root, encoding: 'utf8', timeout: 480000,
+// Each script takes a PostgreSQL test slot (tests/helpers/pg_slot.py) and may
+// wait for it behind other runs: that wait comes on top of every timeout.
+const run = script => spawnSync(python, [script], { cwd: root, encoding: 'utf8', timeout: withSlotWait(480000),
   env: { ...process.env, PG_BIN: pgBin(), LC_ALL: 'C' } });
 // Both need pgcrypto for the verification migration; a server without it skips.
 function pgcryptoMissing() {
@@ -28,7 +30,7 @@ function pgcryptoMissing() {
 }
 const skipBase = () => pgSkip() || (python ? false : 'python3 not found') || (pgcryptoMissing() ? 'pgcrypto is not installed with this PostgreSQL' : false);
 
-test('publication SQL on PostgreSQL: verified replies, refused operator inserts, status kept', { skip: skipBase(), timeout: 240000 }, () => {
+test('publication SQL on PostgreSQL: verified replies, refused operator inserts, status kept', { skip: skipBase(), timeout: withSlotWait(240000) }, () => {
   const result = run('scripts/ticket-agent-context.postgres.py');
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /\d+ synthetic PostgreSQL checks passed/);
@@ -39,7 +41,7 @@ test('publication SQL on PostgreSQL: verified replies, refused operator inserts,
 // nest: inside the gates' own sandbox this path skips (both at base and head).
 const shellSkip = () => skipBase() || (process.platform !== 'darwin' || !existsSync('/bin/zsh') ? 'the full runner path needs macOS and zsh'
   : !sandboxAvailable() ? 'the full runner path needs sandbox-exec, which cannot run inside another sandbox' : false);
-test('the real runner shell end to end: repair loop, parked skip, alerts, stale lock, verification, host-code hold, timeouts, reconcile, worktrees, refused changes, checklist and attachments', { skip: shellSkip(), timeout: 480000 }, () => {
+test('the real runner shell end to end: repair loop, parked skip, alerts, stale lock, verification, host-code hold, timeouts, reconcile, worktrees, refused changes, checklist and attachments', { skip: shellSkip(), timeout: withSlotWait(480000) }, () => {
   const result = run('scripts/ticket-agent-hostpath.test.py');
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /\d+ synthetic full-host checks passed/);

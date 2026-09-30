@@ -113,7 +113,7 @@ import { protectedReport, blastRadius } from './gates/owner-rules.mjs';
 import { reviewDiff, reviseInput, confirmChecklist, REVIEW_SCHEMA, CONFIRM_SCHEMA, EVIDENCE_MARKER } from './review.mjs';
 import { mergeRun, autoMergeEnabled, writeRun, writeRunFile, readRun, runDirectory, checkRunPaths, credentialValues, RUN_NAME, AUTO_MERGE_FLAG } from './merge.mjs';
 import { raise } from './alert.mjs';
-import { sandboxAvailable } from './sandbox.mjs';
+import { sandboxAvailable, runSlotDir } from './sandbox.mjs';
 import { isMain } from './is-main.mjs';
 import { sessionEvidence, caseHistory, HISTORY_FILE, PROMPT_LIMIT, kb } from './session-context.mjs';
 
@@ -136,12 +136,23 @@ export const FIX_STATE = path.join(os.homedir(), 'Library', 'Application Support
 // flag. profileDir holds the profiles and is written by the host only.
 // attachments: this ticket's attachment directory (stage 3): its root is
 // denied like the run directory and only this directory re-opened, read only,
-// for model sessions (the gates never read it).
-export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state = [], runDir = null, profileDir, attachments = null }) {
+// for model sessions (the gates never read it). slots: the run's own
+// PostgreSQL test slot directory (sandbox.mjs runSlotDir), which the caller
+// made and removes when the run ends; without it a sandboxed test cannot
+// start PostgreSQL.
+export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state = [], runDir = null, profileDir, attachments = null, slots = null }) {
   if (!enabled) return null;
   if (!sandboxAvailable()) throw Error('The ticket runner needs /usr/bin/sandbox-exec (macOS) to run model sessions and gates');
   return { home, denyRead: [...state.filter(Boolean), path.join(work, 'runs'), path.join(work, 'baseline'), ...(runDir ? [runDir] : []), ...(attachments ? [path.dirname(attachments)] : [])],
-    denyFiles: [path.join(work, AUTO_MERGE_FLAG)], profileDir, readable: attachments ? [attachments] : [] };
+    denyFiles: [path.join(work, AUTO_MERGE_FLAG)], profileDir, readable: attachments ? [attachments] : [], slots };
+}
+// The run's PostgreSQL test slot directory, removed when the run ends
+// (undo): sandboxed tests never share slots with the owner's own runs.
+function runSlots(enabled, undo) {
+  if (!enabled || !sandboxAvailable()) return null;
+  const dir = runSlotDir();
+  undo(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
 }
 // Raised when the host sees git state outside the worktree change (exit 6).
 export class HostStateChanged extends Error {}
@@ -346,7 +357,8 @@ async function workTicket(o, atEnd) {
   const seeReads = r => { for (const a of reviewedIds(manifest, r?.reads ?? [])) reviewed.add(a); };
   const attachments = () => modelView(manifest, reviewed);
   // Every model session and every gate step runs sandboxed (finding 1).
-  const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir, attachments: readDir });
+  const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir, attachments: readDir,
+    slots: runSlots(o.sandbox ?? true, undo => atEnd.push(undo)) });
   const launchSession = o.launchSession ?? defaultLauncher({ claude: o.claude, sandbox: box });
   const facts = { run: name, record_repo: repo, base: null, release_file: null, code_outcome: 'none', stage3_file: null };
   const writeFacts = () => fs.writeFile(runFile, `${JSON.stringify(facts)}\n`, { mode: 0o600 });
@@ -862,11 +874,12 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
   // sandbox-exec); the owner's command builds one the first time a gate or
   // review has to run, and stops there if sandbox-exec is missing.
   let box = sandbox;
+  const undo = [];
   const policy = async () => {
     if (box !== undefined) return box;
     const profileDir = path.join(await scratch(), 'sandbox');
     await fs.mkdir(profileDir, { recursive: true, mode: 0o700 });
-    box = sandboxPolicy({ enabled: true, work, state: denyState, runDir: sessions, profileDir });
+    box = sandboxPolicy({ enabled: true, work, state: denyState, runDir: sessions, profileDir, slots: runSlots(true, u => undo.push(u)) });
     return box;
   };
   // The owner's re-review sessions not yet handed to mergeRun.
@@ -894,7 +907,7 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
   }
   return {
     // Review transcripts quote the ticket: removed once the merge is done.
-    cleanup: async () => { removeSessionTemps(); if (sessions) await fs.rm(sessions, { recursive: true, force: true }); },
+    cleanup: async () => { removeSessionTemps(); for (const u of undo.splice(0)) u(); if (sessions) await fs.rm(sessions, { recursive: true, force: true }); },
     regate: async ({ base, head }) => {
       const sandboxed = await policy();
       const baseline = await baselineFor({ repo: run.repo, work, base, env: gEnv, commands, binary, sandbox: sandboxed, modules: run.modules_source ?? null });

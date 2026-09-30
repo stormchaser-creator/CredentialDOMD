@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 
 // Migrations 20260929131500 (the invite-to-join ledger and its limits) and
 // 20260929131600 (an invitation is not access), proven against a real
@@ -75,7 +75,7 @@ const BASE = `
   insert into public.app_admins values ('${ADMIN}'), ('${PENDING_ADMIN}');
 `;
 
-test('invite to join: the ledger, its limits, admin-only reads, and no activation from any invitation', { skip: pgSkip(), timeout: 180000 }, async (t) => {
+test('invite to join: the ledger, its limits, admin-only reads, and no activation from any invitation', { skip: pgSkip(), timeout: withSlotWait(180000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

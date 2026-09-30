@@ -23,7 +23,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 
 // Own port: node --test runs files in parallel and the other suites hold theirs.
 const PORT = '58951';
@@ -93,7 +93,7 @@ async function startPostgres() {
   return { sql, as, value, close };
 }
 
-test('founding Credential includes Practice while the membership is active; early-bird and standard keep the trial', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('founding Credential includes Practice while the membership is active; early-bird and standard keep the trial', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const db = await startPostgres();
   const { sql, as, value } = db;
   try {

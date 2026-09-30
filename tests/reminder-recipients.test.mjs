@@ -6,7 +6,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { pgBin, pgSkip, acquirePgSlot } from './credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from './credential-portal/postgresFixture.mjs';
 import {
   emailRemindersOn, reminderLeadDays, notifyFreqDays, DEFAULT_REMINDER_LEAD_DAYS, DEFAULT_NOTIFY_FREQ_DAYS,
 } from '../src/utils/reminderPreferences.js';
@@ -196,7 +196,7 @@ const ROWS = [
   [8, false, null, 'active'],
 ];
 
-test('recipients, migration and rollback on a real PostgreSQL', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('recipients, migration and rollback on a real PostgreSQL', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(PROFILES);

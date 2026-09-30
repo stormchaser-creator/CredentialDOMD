@@ -11,7 +11,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 
 // Own port: node --test runs files in parallel and the other PostgreSQL suites
 // hold 55479, 56441, 57331, 57419 and 58213.
@@ -86,7 +86,7 @@ const check = (pg, session, actor = ADMIN, subject = 'user_Admin') =>
 const recordFile = (pg, session, document = DOC_A, name = 'DEA certificate.pdf') =>
   pg.sql(service(`select public.member_view_file_record('${ADMIN}', 'user_Admin', '${session}', '${document}', '${name}')`)).then(json);
 
-test('member support view: grants, visits, refusals and the member log', { skip: pgSkip(), timeout: 120000 }, async t => {
+test('member support view: grants, visits, refusals and the member log', { skip: pgSkip(), timeout: withSlotWait(120000) }, async t => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

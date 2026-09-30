@@ -20,7 +20,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 
 // Own port: node --test runs files in parallel and the other suites hold theirs.
 const PORT = '58917';
@@ -84,7 +84,7 @@ async function startPostgres() {
   return { sql, as, value, session, close };
 }
 
-test('an unpaid Checkout can be retired so the buyer switches offer or retries, never two live sessions', { skip: pgSkip(), timeout: 180000 }, async t => {
+test('an unpaid Checkout can be retired so the buyer switches offer or retries, never two live sessions', { skip: pgSkip(), timeout: withSlotWait(180000) }, async t => {
   const db = await startPostgres();
   const { sql, as, value, session } = db;
   try {

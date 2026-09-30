@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { pgBin, pgSkip, acquirePgSlot } from "../credential-portal/postgresFixture.mjs";
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from "../credential-portal/postgresFixture.mjs";
 
 // Migration 20260925130000_invoice_email_sends.sql against a real PostgreSQL:
 // the two server-owned invoice columns (a user token's write keeps them, so a
@@ -61,7 +61,7 @@ const shape = (pg) => pg.sql(`select string_agg(table_name || '.' || column_name
   from information_schema.columns where table_schema = 'public'
   and (table_name = 'invoice_email_sends' or column_name in ('last_emailed_at', 'last_emailed_to'))`);
 
-test("invoice email migration: shape, rerun, server-only ledger, one row per request, guarded rollback", { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test("invoice email migration: shape, rerun, server-only ledger, one row per request, guarded rollback", { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

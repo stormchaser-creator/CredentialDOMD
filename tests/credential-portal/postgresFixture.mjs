@@ -7,8 +7,9 @@ import { acquirePgSlot } from '../helpers/pg-slot.mjs';
 
 // Every disposable cluster holds a machine-wide slot from before initdb until
 // it is stopped (tests/helpers/pg-slot.mjs); the fixtures that start their own
-// take them from here with pgBin and pgSkip.
-export { acquirePgSlot, acquirePgSlotSync } from '../helpers/pg-slot.mjs';
+// take them from here with pgBin and pgSkip. The wait for a slot happens
+// inside the test, so its timeout is withSlotWait(its own budget).
+export { acquirePgSlot, acquirePgSlotSync, withSlotWait } from '../helpers/pg-slot.mjs';
 
 /** Where the PostgreSQL binaries are, and whether they are there at all. */
 export const pgBin = () => process.env.PG_BIN || '/opt/homebrew/opt/postgresql@17/bin';

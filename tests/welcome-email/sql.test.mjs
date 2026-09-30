@@ -20,7 +20,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { welcomeEmailFingerprint, WELCOME_EMAIL_VERSION } from '../../src/utils/welcomeEmail.js';
 import { createWelcomeEmailSender, createWelcomeEmailSweep, welcomeIdempotencyKey } from '../../supabase/functions/_shared/welcomeEmailSender.mjs';
 
@@ -93,7 +93,7 @@ async function startPostgres() {
   return { sql, as, value, close };
 }
 
-test('the welcome email: off until the owner approves the exact content, then once per paid purchase', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('the welcome email: off until the owner approves the exact content, then once per paid purchase', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const db = await startPostgres();
   const { sql, as, value } = db;
   try {

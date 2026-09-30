@@ -41,7 +41,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { git, isProduct, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES, MEDIA_FILE, gateWorktree, snapshotCommit, ignoredPaths } from '../worktree.mjs';
 import { launch } from '../worker.mjs';
-import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, pgSlotDir } from '../sandbox.mjs';
+import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, slotEnv } from '../sandbox.mjs';
 import { personalDataReport, personalDataSummary } from './personal-data.mjs';
 import { releaseCandidates } from '../release.mjs';
 
@@ -84,17 +84,18 @@ const rel = (dir, file) => (file && path.isAbsolute(file) ? path.relative(real(d
 const childEnv = env => Object.fromEntries(Object.entries(env).filter(([key]) => key !== 'NODE_TEST_CONTEXT' && key !== 'NODE_OPTIONS'));
 
 // Runs one command for a gate: in dir, under the gates sandbox when sandbox
-// is set ({ home, denyRead, denyFiles, profileDir }), writing only dir, tmp
-// and the tests' PostgreSQL slot directory (sandbox.mjs pgSlotDir: the suite
-// shares the machine's clusters with every other test run). Without sandbox
+// is set ({ home, denyRead, denyFiles, profileDir, slots }), writing only
+// dir, tmp and the entries of the run's PostgreSQL test slot directory
+// (sandbox.mjs runSlotDir: the suite shares its clusters with the run's other
+// gates and sessions, never with the owner's own test runs). Without sandbox
 // (a machine with no sandbox-exec: tests only) the same command runs plainly.
 let profileCount = 0;
 export async function gateLaunch({ sandbox, dir, tmp, command, args = [], env, ...rest }) {
   if (!sandbox) return launch({ command, args, cwd: dir, env, ...rest });
   const profileFile = path.join(sandbox.profileDir, `gates-${process.pid}-${++profileCount}-${randomBytes(3).toString('hex')}.sb`);
-  const profile = sandboxProfile({ kind: 'gates', home: sandbox.home, writable: [dir, tmp], shared: [pgSlotDir()], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [] });
+  const profile = sandboxProfile({ kind: 'gates', home: sandbox.home, writable: [dir, tmp], shared: sandbox.slots ? [sandbox.slots] : [], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [] });
   writeFileSync(profileFile, profile, { mode: 0o600 });
-  return launch({ command: SANDBOX_EXEC, args: ['-f', profileFile, command, ...args], cwd: dir, env: { ...env, ...sandboxEnv(tmp) }, ...rest });
+  return launch({ command: SANDBOX_EXEC, args: ['-f', profileFile, command, ...args], cwd: dir, env: { ...env, ...sandboxEnv(tmp), ...(sandbox.slots ? slotEnv(sandbox.slots) : {}) }, ...rest });
 }
 
 // The gates reporter's JSON lines from a test runner's stdout.

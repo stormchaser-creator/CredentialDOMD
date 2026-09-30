@@ -15,7 +15,10 @@ before initdb and gives it back once its cluster is stopped.
         slot.release()
 
 A slot still held at exit (normal, an exception, SIGTERM or SIGHUP) is
-released then, after its cluster, if still running, is stopped.
+released then, after its cluster, if still running, is stopped. A record is
+never trusted to name a live test process (see "stale" in pg-slot.mjs), and a
+slot name is removed only under the directory's reclaim.lock, only while it
+is still the file its remover judged.
 Import it with sys.dont_write_bytecode set, so no __pycache__ lands in tests/.
 """
 import atexit
@@ -39,12 +42,17 @@ DEFAULT_TIMEOUT_SECONDS = 600
 START_TOLERANCE_MS = 3000
 MAX_RECORD = 4096
 GARBAGE_AGE_MS = 60 * 1000
+MAX_OWNER_AGE_MS = 2 * 3600 * 1000
 WAIT_NOTICE_SECONDS = 30
 STOP_WAIT_SECONDS = 15
+LOCK_NAME = 'reclaim.lock'
+LOCK_STALE_MS = 10 * 1000
+LOCK_WAIT_SECONDS = 1.0
 LINUX_TICKS = 100
 MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 SLOT_NAME = re.compile(r'^slot-(\d+)$')
 LEFTOVER = re.compile(r'^\.(?:tmp|stale)-(\d+)-[0-9a-f]+$')
+OWNER_PROGRAM = re.compile(r'(?:^|/)(?:node|nodejs|python[0-9.]*|Python)(?:\s|$)')
 PS_ENV = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C', 'TZ': 'UTC'}
 
 
@@ -84,14 +92,12 @@ def slot_timeout():
 
 
 def running(pid):
+    """Whether a process of this user runs. EPERM is another user's process
+    (pid 1 is launchd's), never a slot owner nor one of our clusters."""
     try:
         os.kill(pid, 0)
         return True
-    except PermissionError:
-        return True
-    except (ProcessLookupError, OverflowError, ValueError):
-        return False
-    except OSError:
+    except (OSError, OverflowError, ValueError, TypeError):
         return False
 
 
@@ -172,6 +178,11 @@ def process_command(pid):
     return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else None
 
 
+def process_info(pid):
+    """(start epoch ms, command line), each None when it cannot be told."""
+    return process_start(pid), process_command(pid)
+
+
 def _own_start():
     # None when unknown: never a guess, which would make a live owner look
     # like a reused pid.
@@ -197,14 +208,17 @@ def _read_small(path):
 
 
 def _inspect(path):
+    """None when free, else the name's inode, kind, age, text and record."""
     try:
         st = os.lstat(path)
     except FileNotFoundError:
         return None
-    seen = {'ino': st.st_ino, 'age': time.time() * 1000 - st.st_mtime * 1000, 'record': None}
-    read = _read_small(path) if st.st_mode & 0o170000 == 0o100000 else None
-    if read:
-        seen['ino'] = read[1]
+    mode = st.st_mode & 0o170000
+    kind = 'file' if mode == 0o100000 else 'dir' if mode == 0o040000 else 'other'
+    seen = {'ino': st.st_ino, 'kind': kind, 'age': time.time() * 1000 - st.st_mtime * 1000, 'text': None, 'record': None}
+    read = _read_small(path) if kind == 'file' else None
+    if read and read[1] == st.st_ino:
+        seen['text'] = read[0]
         try:
             record = json.loads(read[0])
             if isinstance(record, dict):
@@ -214,16 +228,31 @@ def _inspect(path):
     return seen
 
 
-def _owner_gone(record):
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and abs(value) != float('inf')
+
+
+def owner_gone(record, info=None, now=None):
+    """Whether a record's owner is gone: see "stale" in pg-slot.mjs. info:
+    the owner's (start, command), and now (epoch ms), for tests."""
     pid = record.get('pid')
     if not isinstance(pid, int) or isinstance(pid, bool) or pid < 1 or not running(pid):
         return True
-    start = record.get('start')
-    if isinstance(start, (int, float)) and not isinstance(start, bool):
-        now = process_start(pid)
-        if now is not None and abs(now - start) > START_TOLERANCE_MS:
-            return True
+    if not _number(record.get('start')):
+        return True
+    start, command = info if info is not None else process_info(pid)
+    if start is not None and abs(start - record['start']) > START_TOLERANCE_MS:
+        return True
+    start = start if start is not None else record['start']
+    now = time.time() * 1000 if now is None else now
+    if now - start > MAX_OWNER_AGE_MS or start - now > START_TOLERANCE_MS:
+        return True
+    if command is not None and not OWNER_PROGRAM.search(command):
+        return True
     return False
+
+
+_owner_gone = owner_gone
 
 
 def _marker(data_dir):
@@ -265,10 +294,19 @@ def _stop_cluster(pid):
     return not running(pid)
 
 
+def _future(age_ms):
+    """Dated in the future: more than the clock's granularity ahead."""
+    return age_ms < -START_TOLERANCE_MS
+
+
+def _garbage(seen):
+    return seen['age'] > GARBAGE_AGE_MS or _future(seen['age'])
+
+
 def _reclaimable(seen):
     record = seen['record']
     if record is None:
-        return seen['age'] > GARBAGE_AGE_MS
+        return _garbage(seen)
     if not _owner_gone(record):
         return False
     state, pid = _cluster_of(record, False)
@@ -287,22 +325,68 @@ def _remove(path):
         pass
 
 
-def _reclaim(directory, path, ino):
-    aside = os.path.join(directory, f'.stale-{os.getpid()}-{secrets.token_hex(6)}')
+def _remove_if_same(path, seen):
+    """Removes a name only if it is still exactly what was seen there."""
+    now = _inspect(path)
+    if not now or now['ino'] != seen['ino'] or now['kind'] != seen['kind'] or now['text'] != seen['text']:
+        return False
+    _remove(path)
+    return True
+
+
+def _lock_stale(seen):
+    record = seen['record']
+    pid = record.get('pid') if record else None
+    return (record is None or seen['age'] > LOCK_STALE_MS or _future(seen['age'])
+            or not isinstance(pid, int) or isinstance(pid, bool) or not running(pid))
+
+
+def _under_lock(directory, fn, wait=LOCK_WAIT_SECONDS):
+    """(True, fn()) holding the directory's lock, or (False, None) when a live
+    holder kept it for `wait` seconds: see underLock in pg-slot.mjs."""
+    lock = os.path.join(directory, LOCK_NAME)
+    token = secrets.token_hex(16)
+    draft = os.path.join(directory, f'.tmp-{os.getpid()}-{token}')
+    fd = os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w') as handle:
+        handle.write(json.dumps({'pid': os.getpid(), 'start': _own_start(), 'token': token, 'label': 'lock',
+                                 'since': datetime.now(timezone.utc).isoformat()}) + '\n')
+    held = False
     try:
-        os.rename(path, aside)
-    except FileNotFoundError:
-        return
+        until = time.time() + wait
+        delay = 0.002
+        while True:
+            try:
+                os.link(draft, lock)
+                held = True
+                break
+            except FileExistsError:
+                pass
+            seen = _inspect(lock)
+            stale = bool(seen) and _lock_stale(seen)
+            if stale:
+                _remove_if_same(lock, seen)
+            if time.time() >= until:
+                break
+            if not stale:
+                time.sleep(delay)
+                delay = min(0.05, delay * 2)
+    finally:
+        _remove(draft)
+    if not held:
+        return False, None
     try:
-        same = os.lstat(aside).st_ino == ino
-    except OSError:
-        same = False
-    if not same:
-        try:
-            os.link(aside, path)
-        except OSError:
-            pass
-    _remove(aside)
+        return True, fn()
+    finally:
+        seen = _inspect(lock)
+        if seen and seen['record'] and seen['record'].get('token') == token:
+            _remove(lock)
+
+
+def _reclaim(directory, path, seen):
+    """Removes a stale slot, judged as seen, if it is still that."""
+    held, removed = _under_lock(directory, lambda: _remove_if_same(path, seen))
+    return held and removed
 
 
 def _sweep(directory):
@@ -317,7 +401,7 @@ def _sweep(directory):
         path = os.path.join(directory, name)
         try:
             age = time.time() - os.lstat(path).st_mtime
-            if not running(int(m.group(1))) or age > 24 * 3600:
+            if not running(int(m.group(1))) or age > 24 * 3600 or _future(age * 1000):
                 _remove(path)
         except OSError:
             pass
@@ -332,8 +416,8 @@ def _ensure_dir(directory):
         raise RuntimeError(f'Cannot create the PostgreSQL test slot directory {directory} ({error.strerror}); '
                            'set PG_TEST_SLOT_DIR to a directory every test process on this machine can write') from error
     st = os.lstat(directory)
-    if not (st.st_mode & 0o170000 == 0o040000) or st.st_uid != os.getuid():
-        raise RuntimeError(f'The PostgreSQL test slot directory {directory} is not a directory owned by this user; set PG_TEST_SLOT_DIR')
+    if not (st.st_mode & 0o170000 == 0o040000) or st.st_uid != os.getuid() or st.st_mode & 0o022:
+        raise RuntimeError(f'The PostgreSQL test slot directory {directory} is not a directory of this user that only it can write; set PG_TEST_SLOT_DIR')
 
 
 _HELD = []
@@ -401,11 +485,18 @@ class Slot:
             state, pid = _cluster_of(self.record, True)
             if state == 'running':
                 _stop_cluster(pid)
-        seen = _inspect(self.file)
-        if seen and seen['record'] and seen['record'].get('token') == self.token:
+        def mine():
+            seen = _inspect(self.file)
+            if seen and seen['record'] and seen['record'].get('token') == self.token:
+                _remove_if_same(self.file, seen)
+        try:
+            held, _ = _under_lock(self.dir, mine)
+            if not held:
+                mine()
+        except OSError:
             try:
-                os.unlink(self.file)
-            except OSError:
+                mine()
+            except OSError:  # the directory is gone
                 pass
         if self.data_dir:
             try:
@@ -475,8 +566,7 @@ def acquire(data_dir=None, *, label=None, slots=None, directory=None, timeout=No
                 for i in range(slots):
                     path = os.path.join(directory, f'slot-{i}')
                     seen = _inspect(path)
-                    if seen and _reclaimable(seen):
-                        _reclaim(directory, path, seen['ino'])
+                    if seen and _reclaimable(seen) and _reclaim(directory, path, seen):
                         freed = True
                 if not freed:
                     break

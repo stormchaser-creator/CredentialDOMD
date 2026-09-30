@@ -25,7 +25,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { pgBin, pgSkip, acquirePgSlotSync } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlotSync, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { agentReplyBody, labeledBody, EMAIL_ATTEMPTED, EMAIL_OWN_TICKET, emailStatus } from '../../scripts/ticket-fix/reply.mjs';
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
 import { postReplySQL } from '../../scripts/ticket-fix/reply.mjs';
@@ -158,7 +158,7 @@ const management = (pg, opts) => async query => {
   throw Error('Unexpected SQL shape');
 };
 
-test('a verified support reply on a member ticket is handed to send-ticket-reply once; nothing else new is', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('a verified support reply on a member ticket is handed to send-ticket-reply once; nothing else new is', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const pg = startPostgres();
   t.after(() => pg.close());
   pg.sql(ROLES);
@@ -388,7 +388,7 @@ const RETRY_SEED = `
     from unnest(array['${Object.values(R).join("','")}']) id;
 `;
 
-test('a reply whose email fails is sent by the retry, exactly once; one still not emailed an hour later alerts the owner', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('a reply whose email fails is sent by the retry, exactly once; one still not emailed an hour later alerts the owner', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const pg = startPostgres(RETRY_PORT);
   t.after(() => pg.close());
   pg.sql(ROLES);

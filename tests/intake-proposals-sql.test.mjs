@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from './credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from './credential-portal/postgresFixture.mjs';
 import { itemsBytes } from '../supabase/functions/_shared/intakeFacts.mjs';
 
 // The informational-mail notes table (migration 20260928170000), proven
@@ -57,7 +57,7 @@ const ITEMS = `'[{"key":"r1","kind":"record","section":"insurance","op":"add","f
 const note = (user, message, extra = '') => `insert into public.intake_proposals (user_id, message_id, sender, summary, items${extra ? ', verified' : ''})
   values ('${user}', '${message}', 'Jordan Sample', 'how the policy covers emergency care', ${ITEMS}${extra ? `, ${extra}` : ''})`;
 
-test('intake proposals: owner reads and answers, only the service role writes, bounded rows, and a safe rollback', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('intake proposals: owner reads and answers, only the service role writes, bounded rows, and a safe rollback', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

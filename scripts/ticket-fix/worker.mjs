@@ -45,7 +45,7 @@
 import { spawn } from 'node:child_process';
 import { promises as fs, rmSync, readdirSync, existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import path from 'node:path';
-import { SANDBOX_EXEC, shortTmpRoot, sandboxProfile, sandboxEnv, real, pgSlotDir } from './sandbox.mjs';
+import { SANDBOX_EXEC, shortTmpRoot, sandboxProfile, sandboxEnv, real, slotEnv } from './sandbox.mjs';
 import { ATTACH_ROOT_PREFIX } from './attachments.mjs';
 import { redactSecrets, redactedLine } from './redact.mjs';
 
@@ -356,8 +356,9 @@ export function launch({ command, args = [], cwd, env, input = '', timeoutMs, st
 // The command line and environment of one session: the CLI under the session
 // sandbox (when sandbox is set), its credential on a pipe. sandbox: null (no
 // sandbox; only for tests on a machine without sandbox-exec) or { home,
-// denyRead, denyFiles, profileDir }: profileDir must be a directory no
-// sandboxed process can write (the profile is read before the sandbox starts).
+// denyRead, denyFiles, profileDir, slots }: profileDir must be a directory no
+// sandboxed process can write (the profile is read before the sandbox starts);
+// slots, the run's PostgreSQL test slot directory (sandbox.mjs runSlotDir).
 let profiles = 0;
 // Each sandboxed session's temporary directory: short (a unix socket path is
 // limited to 104 bytes) and kept for the session's resumes. Removed by
@@ -396,9 +397,9 @@ export async function sessionLaunch({ claude, args, cwd, sessionDir, baseEnv = p
   const tmp = real(await sessionTemp(sessionDir));
   // The CLI keeps its own temporary files under /tmp/claude-<uid> unless told
   // otherwise; that directory holds other sessions' output and is denied.
-  Object.assign(env, sandboxEnv(tmp), { CLAUDE_CODE_TMPDIR: tmp });
+  Object.assign(env, sandboxEnv(tmp), { CLAUDE_CODE_TMPDIR: tmp }, sandbox.slots ? slotEnv(sandbox.slots) : {});
   const profileFile = path.join(sandbox.profileDir, `session-${process.pid}-${++profiles}.sb`);
-  const profile = sandboxProfile({ kind: 'session', home: sandbox.home, writable: [cwd, sessionDir, tmp], shared: [pgSlotDir()], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [],
+  const profile = sandboxProfile({ kind: 'session', home: sandbox.home, writable: [cwd, sessionDir, tmp], shared: sandbox.slots ? [sandbox.slots] : [], denyRead: sandbox.denyRead ?? [], denyFiles: sandbox.denyFiles ?? [],
     readable: (sandbox.readable ?? []).filter(d => existsSync(d)) });
   await fs.writeFile(profileFile, profile, { mode: 0o600 });
   return { command: SANDBOX_EXEC, args: ['-f', profileFile, claude, ...args], env, secret: credential?.value ?? null };

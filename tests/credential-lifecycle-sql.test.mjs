@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from './credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from './credential-portal/postgresFixture.mjs';
 
 // The lifecycle migration (ticket 2c819309), proven against a real PostgreSQL.
 // Every key the client writes becomes a column and one unknown column rejects
@@ -48,7 +48,7 @@ const BASE = `
   insert into public.privileges (id, user_id, type) values ('00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-0000000000aa', 'Surgical Privileges');
 `;
 
-test('credential lifecycle columns: shape, defaults, idempotence, and a guarded rollback', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('credential lifecycle columns: shape, defaults, idempotence, and a guarded rollback', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

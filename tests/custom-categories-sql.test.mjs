@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from './credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from './credential-portal/postgresFixture.mjs';
 
 // The migration that creates the custom category tables, proven against a real
 // PostgreSQL rather than read by eye. A missing table here does not fail
@@ -52,7 +52,7 @@ const BASE = `
   insert into public.profiles values ('${A}'), ('${B}');
 `;
 
-test('custom category tables: shape, isolation, the membership write gate, and a safe rollback', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('custom category tables: shape, isolation, the membership write gate, and a safe rollback', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

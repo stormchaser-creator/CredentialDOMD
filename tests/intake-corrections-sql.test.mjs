@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip, acquirePgSlot } from './credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from './credential-portal/postgresFixture.mjs';
 
 // The intake corrections table (migration 20260928160000), proven against a
 // real PostgreSQL: it applies twice, the owner reads, adds and deletes only
@@ -55,7 +55,7 @@ const BASE = `
 const row = (user, extra = '') => `insert into public.intake_corrections (user_id, action, before, after${extra ? ', request_id' : ''})
   values ('${user}', 'dismiss_request', '{"intent":"request","asks":["malpractice certificate"]}', '{"status":"dismissed"}'${extra ? `, '${extra}'` : ''})`;
 
-test('intake corrections: shape, owner-only access, no updates, bounded rows, and a safe rollback', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('intake corrections: shape, owner-only access, no updates, bounded rows, and a safe rollback', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

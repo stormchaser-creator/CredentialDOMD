@@ -25,7 +25,7 @@ import path from 'node:path';
 import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { pgBin, pgSkip, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { raise, QUEUE_FILE, SENT_FILE } from '../../scripts/ticket-fix/alert.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -151,7 +151,7 @@ function pythonBinDir() {
     : path.dirname(spawnSync('/bin/sh', ['-c', 'command -v python3'], { encoding: 'utf8' }).stdout.trim());
 }
 const skip = () => pgSkip() || (python ? false : 'python3 not found');
-test('signup notifier SQL on PostgreSQL: member replies only, money events, missing tables skipped', { skip: skip(), timeout: 300000 }, async t => {
+test('signup notifier SQL on PostgreSQL: member replies only, money events, missing tables skipped', { skip: skip(), timeout: withSlotWait(300000) }, async t => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE + OPTIONAL + CORE_ROWS + MONEY_ROWS);

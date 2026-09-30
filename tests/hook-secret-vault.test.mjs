@@ -6,7 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { pgBin, pgSkip, acquirePgSlot } from "./credential-portal/postgresFixture.mjs";
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from "./credential-portal/postgresFixture.mjs";
 
 // No function body, cron command or SQL file in this repo may carry a literal
 // hook secret. Until 20260925140000_hook_secret_vault.sql the x-hook-secret
@@ -244,7 +244,7 @@ const MEMBER_TICKET = "00000000-0000-4000-8000-00000000c001";
 const ADMIN_TICKET = "00000000-0000-4000-8000-00000000c002";
 const FIVE = ["dispatch_account_deletions()", "dispatch_guide_emails()", "dispatch_monthly_backups()", "notify_ticket_reply()", "welcome_new_lead()"];
 
-test("hook secret vault migration: the audit finds every copy, then none; callers read the vault at call time", { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test("hook secret vault migration: the audit finds every copy, then none; callers read the vault at call time", { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(ROLES);
