@@ -23,7 +23,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 
 // Own port: node --test runs files in parallel and the other suites hold theirs.
 const PORT = '58963';
@@ -55,6 +55,7 @@ async function startPostgres() {
   const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const exec = (name, args) => run(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
+  const slot = await acquirePgSlot(path.join(root, 'data'));
   await exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   await exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off`, '-w', 'start']);
   const psql = input => new Promise((resolve, reject) => {
@@ -77,7 +78,7 @@ async function startPostgres() {
     if (result.code) throw new Error(result.stderr);
     return result.stdout ? JSON.parse(result.stdout) : null;
   };
-  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); };
+  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); slot.release(); fs.rmSync(root, { recursive: true, force: true }); };
   return { sql, as, value, close };
 }
 
@@ -90,7 +91,7 @@ test('the migration and its rollback exist and follow the deploy rules', () => {
   }
 });
 
-test('a member who cancels can buy again on the first try; a declined card still resumes', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('a member who cancels can buy again on the first try; a declined card still resumes', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const db = await startPostgres();
   const { sql, as, value } = db;
   try {

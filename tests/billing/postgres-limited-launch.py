@@ -2,6 +2,8 @@
 """Additive billing SQL in disposable local PostgreSQL, private socket/no network."""
 import concurrent.futures, hashlib, json, os, subprocess, tempfile
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 BIN=Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin'); ROOT=Path(__file__).resolve().parents[2]
 ENV={k:v for k,v in os.environ.items() if not k.startswith('PG')}; checks=[]
 def check(name,ok):
@@ -10,6 +12,7 @@ def check(name,ok):
 with tempfile.TemporaryDirectory(prefix='limited-billing-',dir='/tmp') as temp:
  root=Path(temp); socket=root/'socket';socket.mkdir()
  def run(*args,**kw):return subprocess.run([str(a) for a in args],text=True,capture_output=True,env=ENV,**kw)
+ slot=pg_slot.acquire(root/'data')
  r=run(BIN/'initdb','-D',root/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8');assert r.returncode==0,r.stderr
  r=run(BIN/'pg_ctl','-D',root/'data','-l',root/'log','-o',f"-k {socket} -p 56430 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off",'-w','start');assert r.returncode==0,r.stderr+(root/'log').read_text()
  def sql(q,ok=True):
@@ -135,3 +138,4 @@ with tempfile.TemporaryDirectory(prefix='limited-billing-',dir='/tmp') as temp:
   print(json.dumps({'count':len(checks),'checks':checks},indent=2))
  finally:
   r=run(BIN/'pg_ctl','-D',root/'data','-m','fast','-w','stop');assert r.returncode==0,r.stderr
+  slot.release()

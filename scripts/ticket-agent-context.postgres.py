@@ -2,6 +2,8 @@
 """Synthetic PostgreSQL regression for the exact context and publication SQL. No network/credentials."""
 import json, os, subprocess, tempfile
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tests' / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = Path(os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
@@ -36,6 +38,7 @@ def js(expression):
 with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
     folder=Path(tmp);sock=folder/'sock';sock.mkdir()
     def run(*args,**kw):return subprocess.run([str(x) for x in args],text=True,capture_output=True,env=ENV,**kw)
+    slot=pg_slot.acquire(folder/'data')
     init=run(BIN/'initdb','-D',folder/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8')
     if init.returncode:raise RuntimeError(init.stderr)
     start=run(BIN/'pg_ctl','-D',folder/'data','-l',folder/'log','-o',f"-k {sock} -p 56431 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off",'-w','start')
@@ -142,4 +145,5 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         for name in checks:print('  ok '+name)
     finally:
         stop=run(BIN/'pg_ctl','-D',folder/'data','-m','immediate','-w','stop')
+        slot.release()
         if stop.returncode:raise RuntimeError('Temporary PostgreSQL failed to stop')

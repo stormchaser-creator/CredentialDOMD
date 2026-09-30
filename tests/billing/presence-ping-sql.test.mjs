@@ -9,7 +9,7 @@
 // Real PostgreSQL with the actual access chain underneath (billingChainFixture).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { billingChain, readOptional } from './billingChainFixture.mjs';
 
 const NAME = '20260930003000_touch_last_seen_any_account';
@@ -27,7 +27,7 @@ test('the migration and its rollback exist and follow the deploy rules', () => {
   }
 });
 
-test('every signed-in account is stamped; a direct write is still refused', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('every signed-in account is stamped; a direct write is still refused', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const db = await billingChain({ port: 58979, label: 'presence-ping', idPrefix: '72000000' });
   const { sql, as, enroll, buy, pid, subject } = db;
   try {

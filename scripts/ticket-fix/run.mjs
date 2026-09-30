@@ -106,14 +106,14 @@ import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtrac
   coverageHints, finalStates, unseenItems, untrustedItems, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
 import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
-  checkWorktreeLink, remoteMain, agentCommitsOnMain } from './worktree.mjs';
+  checkWorktreeLink, remoteMain, agentCommitsOnMain, GitStateChanged } from './worktree.mjs';
 import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps, onStop, limitNotice } from './worker.mjs';
 import { recordReproduction, runTestGates, suiteBaseline, gateFailures, validTestRef, readBaseline, DEFAULT_COMMANDS } from './gates/tests.mjs';
 import { protectedReport, blastRadius } from './gates/owner-rules.mjs';
 import { reviewDiff, reviseInput, confirmChecklist, REVIEW_SCHEMA, CONFIRM_SCHEMA, EVIDENCE_MARKER } from './review.mjs';
 import { mergeRun, autoMergeEnabled, writeRun, writeRunFile, readRun, runDirectory, checkRunPaths, credentialValues, RUN_NAME, AUTO_MERGE_FLAG } from './merge.mjs';
 import { raise } from './alert.mjs';
-import { sandboxAvailable } from './sandbox.mjs';
+import { sandboxAvailable, runSlotDir, retireSlotDir, verifyDir, SandboxDirChanged } from './sandbox.mjs';
 import { isMain } from './is-main.mjs';
 import { sessionEvidence, caseHistory, HISTORY_FILE, PROMPT_LIMIT, kb } from './session-context.mjs';
 
@@ -136,12 +136,30 @@ export const FIX_STATE = path.join(os.homedir(), 'Library', 'Application Support
 // flag. profileDir holds the profiles and is written by the host only.
 // attachments: this ticket's attachment directory (stage 3): its root is
 // denied like the run directory and only this directory re-opened, read only,
-// for model sessions (the gates never read it).
-export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state = [], runDir = null, profileDir, attachments = null }) {
+// for model sessions (the gates never read it). slots: the run's own
+// PostgreSQL test slot directory (sandbox.mjs runSlotDir), which the caller
+// made and removes when the run ends; without it a sandboxed test cannot
+// start PostgreSQL.
+export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state = [], runDir = null, profileDir, attachments = null, slots = null }) {
   if (!enabled) return null;
   if (!sandboxAvailable()) throw Error('The ticket runner needs /usr/bin/sandbox-exec (macOS) to run model sessions and gates');
   return { home, denyRead: [...state.filter(Boolean), path.join(work, 'runs'), path.join(work, 'baseline'), ...(runDir ? [runDir] : []), ...(attachments ? [path.dirname(attachments)] : [])],
-    denyFiles: [path.join(work, AUTO_MERGE_FLAG)], profileDir, readable: attachments ? [attachments] : [] };
+    denyFiles: [path.join(work, AUTO_MERGE_FLAG)], profileDir, readable: attachments ? [attachments] : [], slots };
+}
+// The run's PostgreSQL test slot directory, removed when the run ends
+// (undo) and when the runner is signalled (the stop hooks run instead of
+// undo then): sandboxed tests never share slots with the owner's own runs.
+// Every cluster its records name is stopped first (sandbox.mjs
+// retireSlotDir): a gate killed with the runner leaves its clusters running,
+// in sessions of their own, and without the records nothing else finds them
+// (review of 2026-09-30).
+export function runSlots(enabled, undo) {
+  if (!enabled || !sandboxAvailable()) return null;
+  const dir = runSlotDir();
+  const remove = () => retireSlotDir(dir);
+  const unhook = onStop(remove);
+  undo(() => { unhook(); remove(); });
+  return dir;
 }
 // Raised when the host sees git state outside the worktree change (exit 6).
 export class HostStateChanged extends Error {}
@@ -346,7 +364,8 @@ async function workTicket(o, atEnd) {
   const seeReads = r => { for (const a of reviewedIds(manifest, r?.reads ?? [])) reviewed.add(a); };
   const attachments = () => modelView(manifest, reviewed);
   // Every model session and every gate step runs sandboxed (finding 1).
-  const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir, attachments: readDir });
+  const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir, attachments: readDir,
+    slots: runSlots(o.sandbox ?? true, undo => atEnd.push(undo)) });
   const launchSession = o.launchSession ?? defaultLauncher({ claude: o.claude, sandbox: box });
   const facts = { run: name, record_repo: repo, base: null, release_file: null, code_outcome: 'none', stage3_file: null };
   const writeFacts = () => fs.writeFile(runFile, `${JSON.stringify(facts)}\n`, { mode: 0o600 });
@@ -399,6 +418,9 @@ async function workTicket(o, atEnd) {
   const hostCheck = async where => {
     if (hooksDigest(repo, { binary }) !== wt.hooks_sha256) throw new HostStateChanged(`the shared git hooks or config changed (after ${where})`);
     try { checkWorktreeLink(wt.dir, wt.gitdir); } catch (error) { throw new HostStateChanged(`${error.message} (after ${where})`); }
+    // The sessions can write the worktree's own directory entry: the host's
+    // git works there only while it is the directory the host made.
+    try { verifyDir(wt.dir); } catch (error) { throw new HostStateChanged(`${error.message} (after ${where})`); }
     const now = originAtStart ? remoteMain(repo, { binary, env }) : null;
     if (now && now !== originAtStart) {
       const agent = agentCommitsOnMain(repo, originAtStart, { binary, env });
@@ -818,7 +840,11 @@ async function workTicket(o, atEnd) {
       await cleanup();
       return await finishWith(EXIT.usageLimit, 'paused', { reason: `usage limit: ${error.message}`, paused: { role: error.role, detail: error.detail } });
     }
-    if (!(error instanceof HostStateChanged)) throw error;
+    // A directory a sandbox writes was swapped (a link, or replaced), or a
+    // worktree's .git link changed under the host's git: an attempt to widen
+    // the next sandbox or to steer the host's git, held like any host state
+    // change.
+    if (!(error instanceof HostStateChanged) && !(error instanceof SandboxDirChanged) && !(error instanceof GitStateChanged)) throw error;
     log(`HOST STATE — ${ticket} run ${name}: ${error.message}; nothing recorded, every later run held`);
     await alert('host_state_changed', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: during run ${name} (ticket ${id8}) ${error.message}. Nothing was recorded or merged. Every run is held until ticket-context/HOLD-host-code-changed is removed after review.`);
     return finishWith(EXIT.hostState, 'host_state_changed', { reason: error.message });
@@ -862,11 +888,12 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
   // sandbox-exec); the owner's command builds one the first time a gate or
   // review has to run, and stops there if sandbox-exec is missing.
   let box = sandbox;
+  const undo = [];
   const policy = async () => {
     if (box !== undefined) return box;
     const profileDir = path.join(await scratch(), 'sandbox');
     await fs.mkdir(profileDir, { recursive: true, mode: 0o700 });
-    box = sandboxPolicy({ enabled: true, work, state: denyState, runDir: sessions, profileDir });
+    box = sandboxPolicy({ enabled: true, work, state: denyState, runDir: sessions, profileDir, slots: runSlots(true, u => undo.push(u)) });
     return box;
   };
   // The owner's re-review sessions not yet handed to mergeRun.
@@ -894,7 +921,7 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
   }
   return {
     // Review transcripts quote the ticket: removed once the merge is done.
-    cleanup: async () => { removeSessionTemps(); if (sessions) await fs.rm(sessions, { recursive: true, force: true }); },
+    cleanup: async () => { removeSessionTemps(); for (const u of undo.splice(0)) u(); if (sessions) await fs.rm(sessions, { recursive: true, force: true }); },
     regate: async ({ base, head }) => {
       const sandboxed = await policy();
       const baseline = await baselineFor({ repo: run.repo, work, base, env: gEnv, commands, binary, sandbox: sandboxed, modules: run.modules_source ?? null });

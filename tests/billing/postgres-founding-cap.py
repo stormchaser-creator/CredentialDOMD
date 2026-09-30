@@ -12,6 +12,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 import subprocess
 import tempfile
 
@@ -62,6 +64,7 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/tmp') as temp:
     def run(*args, **kwargs):
         return subprocess.run([str(a) for a in args], text=True, capture_output=True, env=ENV, **kwargs)
 
+    slot = pg_slot.acquire(base / 'data')
     result = run(BIN / 'initdb', '-D', base / 'data', '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8')
     assert result.returncode == 0, result.stderr
     result = run(BIN / 'pg_ctl', '-D', base / 'data', '-l', base / 'log', '-o',
@@ -353,4 +356,5 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/tmp') as temp:
                           'limits': 'Disposable PostgreSQL17; actual billing/access/signup/deferred/cap SQL, synthetic payment proofs and identity-continuity stubs. No Stripe verification or refund operation simulated; the paid-seat persistence and release-denial contract is tested. No provider/live data/network listener.'}, indent=2))
     finally:
         result = run(BIN / 'pg_ctl', '-D', base / 'data', '-m', 'fast', '-w', 'stop')
+        slot.release()
         assert result.returncode == 0, result.stderr

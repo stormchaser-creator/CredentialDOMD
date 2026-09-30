@@ -302,3 +302,139 @@ test('finding 12 / 1: a declared test that pushes, writes outside its worktree o
     assert.ok(!readFileSync(path.join(p.repo, '.git', 'config'), 'utf8').includes('helper'));
   } finally { p.cleanup(); }
 });
+
+// Review of 2026-09-30: after test code ran in a gate worktree, the host read
+// files there by path, following links that code planted: a sandboxed test
+// cannot read a file of the owner's, but it can make a link to one, and the
+// host then hashed it into gates.json, matched it for save-and-reload, or
+// searched it for release probes. The host now takes what a commit holds from
+// git and reads the build through the build's own sandbox.
+import { symlinkSync, linkSync, mkdirSync, mkdtempSync, rmSync, realpathSync, readdirSync } from 'node:fs';
+import os from 'node:os';
+import { createHash } from 'node:crypto';
+import { spawn, spawnSync } from 'node:child_process';
+import { builtAssets } from '../../scripts/ticket-fix/gates/tests.mjs';
+
+const digest = text => createHash('sha256').update(text).digest('hex');
+// Test code that replaces a file of the worktree (relative to the test file;
+// by default the test file itself) with a link to target, as it runs.
+const swapFor = (target, file = null) => `import { rmSync, symlinkSync } from 'node:fs';\nimport { fileURLToPath } from 'node:url';\n` +
+  `const swapped = fileURLToPath(${file ? `new URL(${JSON.stringify(file)}, import.meta.url)` : 'import.meta.url'});\nrmSync(swapped);\nsymlinkSync(${JSON.stringify(target)}, swapped);\n`;
+
+test('review of 2026-09-30: the frozen reproduction is hashed as the snapshot commits it, never through a link a test left in its place', async () => {
+  const p = project();
+  try {
+    const secret = path.join(p.state, 'owner-only.txt');
+    writeFileSync(secret, 'synthetic owner-only text\n', { mode: 0o600 });
+    // The reproduction session also wrote a fixture, frozen with it, which
+    // its test replaces with a link as it runs.
+    const repro = { 'tests/join.test.mjs': `${swapFor(secret, './join-fixture.txt')}${REPRO['tests/join.test.mjs']}`, 'tests/join-fixture.txt': 'synthetic fixture\n' };
+    const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID });
+    p.write(wt.dir, repro);
+    const r = await recordReproduction({ dir: wt.dir, work: p.work, base: wt.base, tests: [reproTest], changed: changedPaths(wt.dir, wt.base), env, sandbox: gatesSandbox(p) });
+    assert.equal(r.tests[0].on_base, 'red', JSON.stringify(r.tests));
+    assert.notEqual(r.frozen['tests/join-fixture.txt'], digest('synthetic owner-only text\n'), 'the host did not hash the file the link names');
+    assert.equal(r.frozen['tests/join-fixture.txt'], digest('synthetic fixture\n'), 'the frozen digest is the fixture the snapshot commits');
+    assert.equal(r.frozen['tests/join.test.mjs'], digest(repro['tests/join.test.mjs']));
+  } finally { p.cleanup(); }
+});
+
+test('review of 2026-09-30: a reproduction committed as a link to a copy of itself is a changed reproduction, not one the host follows', async () => {
+  const p = project();
+  try {
+    const s = await setup(p);
+    const copy = path.join(p.state, 'join-copy.test.mjs');
+    writeFileSync(copy, REPRO['tests/join.test.mjs'], { mode: 0o600 });
+    rmSync(path.join(s.wt.dir, 'tests', 'join.test.mjs'));
+    symlinkSync(copy, path.join(s.wt.dir, 'tests', 'join.test.mjs'));
+    const head = forceCommit(s, 'Synthetic reproduction as a link');
+    assert.equal(sh(s.wt.dir, ['ls-tree', head, '--', 'tests/join.test.mjs']).split(' ')[0], '120000');
+    const gates = await gatesFor(p, { ...s, head });
+    assert.ok(failed(gates).includes('reproduction_frozen'), JSON.stringify(gates.checks));
+  } finally { p.cleanup(); }
+});
+
+test('review of 2026-09-30: save and reload is judged on the committed test, not on a link the suite left in its place', async () => {
+  const p = project();
+  try {
+    const persist = { 'src/format.js': `${FIX['src/format.js']}export const remember = value => globalThis.localStorage?.setItem('synthetic-key', value);\n` };
+    const s = await setup(p, { fix: persist });
+    const text = path.join(p.state, 'owner-notes.txt');
+    writeFileSync(text, 'save(note); reload(note);\n', { mode: 0o600 });
+    // Committed, it neither saves nor reloads; each run makes it a link to
+    // text that does.
+    p.write(s.wt.dir, { 'tests/keep.test.mjs': `import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { joinLines } from '../src/format.js';\n${swapFor(text)}\ntest('keeps lines', () => assert.equal(joinLines(['a', 'b']), 'a\\nb'));\n` });
+    const head = commitWork({ dir: s.wt.dir, base: s.wt.base, subject: 'Keep', ticketId: TICKET, runId: RUN_ID, committer: COMMITTER });
+    const gates = await gatesFor(p, { ...s, head }, { declared: [{ file: 'tests/keep.test.mjs', name: 'keeps lines' }] });
+    assert.equal(gates.persistence.triggered, true);
+    assert.equal(gates.persistence.reload_test, null, JSON.stringify(gates.persistence));
+    assert.ok(failed(gates).includes('save_and_reload'), JSON.stringify(gates.checks));
+  } finally { p.cleanup(); }
+});
+
+// A gate worktree whose build left dist/assets holding a script, a link and a
+// hard link to files of the owner's, and variants where dist or dist/assets
+// is itself a link.
+function plantedBuild() {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'built-assets-')));
+  const owner = path.join(root, 'owner');
+  mkdirSync(path.join(owner, 'assets'), { recursive: true });
+  writeFileSync(path.join(owner, 'linked.js'), 'SYNTHETIC-OWNER-TEXT-1');
+  writeFileSync(path.join(owner, 'hard.js'), 'SYNTHETIC-OWNER-TEXT-2');
+  writeFileSync(path.join(owner, 'assets', 'x.js'), 'SYNTHETIC-OWNER-TEXT-3');
+  const gate = name => { const g = path.join(root, name); mkdirSync(g); return g; };
+  const g = gate('g');
+  mkdirSync(path.join(g, 'dist', 'assets'), { recursive: true });
+  writeFileSync(path.join(g, 'dist', 'assets', 'index-1.js'), 'export const built = "synthetic built text";');
+  symlinkSync(path.join(owner, 'linked.js'), path.join(g, 'dist', 'assets', 'linked.js'));
+  linkSync(path.join(owner, 'hard.js'), path.join(g, 'dist', 'assets', 'hard.js'));
+  const assetsLink = gate('assets-link');
+  mkdirSync(path.join(assetsLink, 'dist'));
+  symlinkSync(path.join(owner, 'assets'), path.join(assetsLink, 'dist', 'assets'));
+  const distLink = gate('dist-link');
+  symlinkSync(owner, path.join(distLink, 'dist'));
+  const tmp = gate('tmp');
+  return { root, owner, g, assetsLink, distLink, tmp, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test('review of 2026-09-30: the built scripts are read only as regular files with one name in real directories', async () => {
+  const b = plantedBuild();
+  try {
+    const text = await builtAssets(b.g);
+    assert.match(text, /synthetic built text/);
+    assert.doesNotMatch(text, /SYNTHETIC-OWNER-TEXT/, 'no link or hard link was read');
+    assert.equal(await builtAssets(b.assetsLink), null, 'dist/assets a link');
+    assert.equal(await builtAssets(b.distLink), null, 'dist a link');
+    // A pipe named like a script never blocks the host.
+    spawnSync('mkfifo', [path.join(b.g, 'dist', 'assets', 'pipe.js')]);
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', `import { builtAssets } from ${JSON.stringify(new URL('../../scripts/ticket-fix/gates/tests.mjs', import.meta.url).href)};\n` +
+      `process.stdout.write(JSON.stringify(await builtAssets(${JSON.stringify(b.g)})));`], { encoding: 'utf8', timeout: 20000 });
+    assert.equal(r.status, 0, `the read did not finish: ${r.signal ?? r.stderr}`);
+    assert.match(JSON.parse(r.stdout), /synthetic built text/);
+  } finally { b.cleanup(); }
+});
+
+test('review of 2026-09-30: with a sandbox the built scripts are read under it, so a link swapped in between two checks still reaches nothing of the owner\'s', { skip: SANDBOX ? false : 'needs sandbox-exec' }, async () => {
+  const b = plantedBuild();
+  const flipper = { kill() {} };
+  try {
+    mkdirSync(path.join(b.root, 'profiles'), { mode: 0o700 });
+    const sandbox = { home: os.homedir(), denyRead: [b.owner], denyFiles: [], profileDir: path.join(b.root, 'profiles') };
+    const text = await builtAssets(b.g, { sandbox, tmp: b.tmp });
+    assert.match(text, /synthetic built text/);
+    assert.doesNotMatch(text, /SYNTHETIC-OWNER-TEXT/);
+    assert.equal(await builtAssets(b.assetsLink, { sandbox, tmp: b.tmp }), null);
+    // A process the build left behind swaps dist for a link to the owner's
+    // directory and back, as fast as it can, while the host reads.
+    for (let i = 0; i < 40; i++) writeFileSync(path.join(b.owner, 'assets', `owner-${i}.js`), `SYNTHETIC-OWNER-TEXT-${i}`);
+    const dist = path.join(b.g, 'dist'), held = path.join(b.g, 'dist-held');
+    const child = spawn(process.execPath, ['-e', `const fs = require('node:fs');
+      for (;;) { try { fs.renameSync(${JSON.stringify(dist)}, ${JSON.stringify(held)}); fs.symlinkSync(${JSON.stringify(b.owner)}, ${JSON.stringify(dist)});
+        fs.unlinkSync(${JSON.stringify(dist)}); fs.renameSync(${JSON.stringify(held)}, ${JSON.stringify(dist)}); } catch {} }`], { stdio: 'ignore' });
+    flipper.kill = () => child.kill('SIGKILL');
+    // Read in-process, the same checks let owner text through about once in
+    // 130 reads (measured 2026-09-30: 15 of 2,000); under the sandbox, never.
+    for (let i = 0; i < 30; i++) assert.doesNotMatch(await builtAssets(b.g, { sandbox, tmp: b.tmp }) ?? '', /SYNTHETIC-OWNER-TEXT/, `read ${i}`);
+    assert.ok(readdirSync(sandbox.profileDir).some(n => /^gates-.*\.sb$/.test(n)), 'the reads ran under a gates profile');
+  } finally { flipper.kill(); b.cleanup(); }
+});

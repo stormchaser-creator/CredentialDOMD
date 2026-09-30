@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { startPostgres } from '../ops/pg.mjs';
 
 const read = rel => fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
@@ -59,7 +59,7 @@ const ticket = (id, owner, status, archived) =>
 const message = (id, author, { admin = false, key = null } = {}) =>
   `insert into public.support_messages (ticket_id, author_id, body, is_admin_reply, client_request_id) values ('${id}', '${author}', 'It broke again.', ${admin}, ${key ? `'${key}'` : 'null'});`;
 
-test('on PostgreSQL: the owner\'s own message reopens its ticket in the same write; nothing else does', { skip: pgSkip(), timeout: 60000 }, async (t) => {
+test('on PostgreSQL: the owner\'s own message reopens its ticket in the same write; nothing else does', { skip: pgSkip(), timeout: withSlotWait(60000) }, async (t) => {
   const pg = await startPostgres(58477, 'reopen-trigger');
   t.after(() => pg.close());
   assert.doesNotMatch(MIGRATION, /^\s*(begin|commit)\s*;/im);

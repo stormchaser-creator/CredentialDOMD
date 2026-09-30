@@ -3,6 +3,13 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { acquirePgSlot } from '../helpers/pg-slot.mjs';
+
+// Every disposable cluster holds a machine-wide slot from before initdb until
+// it is stopped (tests/helpers/pg-slot.mjs); the fixtures that start their own
+// take them from here with pgBin and pgSkip. The wait for a slot happens
+// inside the test, so its timeout is withSlotWait(its own budget).
+export { acquirePgSlot, acquirePgSlotSync, withSlotWait } from '../helpers/pg-slot.mjs';
 
 /** Where the PostgreSQL binaries are, and whether they are there at all. */
 export const pgBin = () => process.env.PG_BIN || '/opt/homebrew/opt/postgresql@17/bin';
@@ -107,6 +114,7 @@ export async function postgresFixture({ port = 56441 } = {}) {
   // valid locale is set, so without this the fixture cannot start at all.
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('PG'))), LC_ALL: 'C' };
   const run = (name, args) => exec(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
+  const slot = await acquirePgSlot(path.join(root, 'data'));
   await run('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   // timezone=UTC, as production runs. initdb otherwise copies the machine's
   // zone, and there started + make_interval(days => 30) keeps the wall-clock
@@ -138,6 +146,6 @@ export async function postgresFixture({ port = 56441 } = {}) {
     root, sql,
     rows: async (query, user) => JSON.parse(await sql(`select coalesce(json_agg(q),'[]'::json) from (${query}) q`, user)),
     rpc: async (name, args, user) => JSON.parse(await sql(`select to_json(public.credential_portal_${name}(${args.map(quote).join(',')}))`, user) || 'null'),
-    async close() { await run('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); },
+    async close() { await run('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); slot.release(); fs.rmSync(root, { recursive: true, force: true }); },
   };
 }

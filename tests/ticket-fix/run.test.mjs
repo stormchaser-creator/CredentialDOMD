@@ -4,13 +4,16 @@
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, chmodSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, chmodSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { heldRunFor, readField, finish, EXIT } from '../../scripts/ticket-fix/run.mjs';
 import { readRun, mergeRun, autoMergeEnabled } from '../../scripts/ticket-fix/merge.mjs';
 import { trailers } from '../../scripts/ticket-fix/worktree.mjs';
 import { project, sh, runStub, standardScript, workerResult, approve, context, FIX_FILES, REPRO_FILES, TICKET, RUN_ID } from './stage2-helpers.mjs';
+import { SANDBOX } from './stage2-helpers.mjs';
+import { RUN_PG_SLOTS } from '../../scripts/ticket-fix/sandbox.mjs';
+import { defaultSlotDir } from '../helpers/pg-slot.mjs';
 
 const NAME = `${TICKET.slice(0, 8)}-${RUN_ID}`;
 const passedRelease = async ({ fix }) => ({ version: 1, fix_commit: fix, verified: true, build: `20260928T1200-${fix.slice(0, 7)}`, reason: null, probes: { present: [], absent: [] } });
@@ -477,4 +480,38 @@ test('a resume that changes code gets reviseSeconds (1200 s); a structured-resul
     assert.match(worker[2].input, /^The host ran the gates on your change/);
     assert.deepEqual(worker.map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 1500000], [true, 600000], [true, 1200000]]);
   } finally { r?.cleanup(); s?.cleanup(); p.cleanup(); q.cleanup(); }
+});
+
+// The run's sandboxed tests take PostgreSQL slots in a directory the host
+// made for this run (sandbox.mjs runSlotDir) and removes when the run ends:
+// never the owner's slots, which a planted record there could hold for good
+// (review of 2026-09-29), and never the directory itself, which a sandboxed
+// process could otherwise swap for a symlink the next profile would open.
+test('the gates take PostgreSQL slots in the run\'s own directory, which they cannot swap, and the host removes it when the run ends', { skip: SANDBOX ? false : 'needs sandbox-exec' }, async () => {
+  const owner = defaultSlotDir();
+  const probe = `import test from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
+test('slot probe', () => {
+  const dir = process.env.PG_TEST_SLOT_DIR;
+  const tryIt = fn => { try { fn(); return 'ok'; } catch (e) { return e.code || 'error'; } };
+  const own = tryIt(() => { fs.writeFileSync(path.join(dir, 'probe'), 'x'); fs.rmSync(path.join(dir, 'probe')); });
+  const owner = tryIt(() => fs.writeFileSync(${JSON.stringify(path.join(owner, 'slot-probe-planted'))}, '{"pid":1}'));
+  const swap = tryIt(() => fs.rmdirSync(dir));
+  console.error('SLOT-PROBE ' + JSON.stringify({ dir, slots: process.env.PG_TEST_SLOTS, own, owner, swap }));
+});
+`;
+  const p = project({ 'tests/slot-probe.test.mjs': probe });
+  let r;
+  try {
+    r = await runStub(p, standardScript());
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    const log = readFileSync(path.join(p.work, 'runs', NAME, 'suite-head.log'), 'utf8');
+    const line = log.split('\n').find(l => l.includes('SLOT-PROBE '));
+    assert.ok(line, log.slice(-2000));
+    const seen = JSON.parse(line.slice(line.indexOf('SLOT-PROBE ') + 'SLOT-PROBE '.length));
+    assert.ok(seen.dir.startsWith(`${owner}-run-`), seen.dir);
+    assert.deepEqual({ slots: seen.slots, own: seen.own, owner: seen.owner, swap: seen.swap }, { slots: String(RUN_PG_SLOTS), own: 'ok', owner: 'EPERM', swap: 'EPERM' });
+    assert.equal(existsSync(seen.dir), false, 'the host removed the run\'s slot directory');
+  } finally { rmSync(path.join(owner, 'slot-probe-planted'), { force: true }); r?.cleanup(); p.cleanup(); }
 });

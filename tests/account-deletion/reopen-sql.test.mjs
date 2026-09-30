@@ -17,7 +17,7 @@ import vm from 'node:vm';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { transformSync } from 'esbuild';
-import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { tombstonePatch } from '../../supabase/functions/delete-account/lib.ts';
 
 const exec = promisify(execFile);
@@ -98,6 +98,7 @@ async function start() {
   const socket = path.join(dir, 'socket'); fs.mkdirSync(socket);
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const run = (name, args) => exec(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
+  const slot = await acquirePgSlot(path.join(dir, 'data'));
   await run('initdb', ['-D', path.join(dir, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   await run('pg_ctl', ['-D', path.join(dir, 'data'), '-l', path.join(dir, 'postgres.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off -c TimeZone=UTC`, '-w', 'start']);
   const base = ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', String(PORT), '-U', 'postgres', '-d', 'postgres'];
@@ -116,7 +117,7 @@ async function start() {
   };
   const json = async (query) => JSON.parse(await sql(query) || 'null');
   const rows = async (query) => json(`select coalesce(json_agg(q), '[]'::json) from (${query}) q`);
-  const stop = async () => { await run('pg_ctl', ['-D', path.join(dir, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(dir, { recursive: true, force: true }); };
+  const stop = async () => { await run('pg_ctl', ['-D', path.join(dir, 'data'), '-m', 'fast', '-w', 'stop']); slot.release(); fs.rmSync(dir, { recursive: true, force: true }); };
   return { sql, file, json, rows, stop };
 }
 
@@ -174,7 +175,7 @@ const forwardingRow = (p, email, token) => pg.sql(`insert into public.forwarding
 /** The confirmation link opened (forwarding-address handleConfirm), as the service role. */
 const confirm = (token) => pg.json(asService(`select public.confirm_forwarding_claim(${q(token)}, ${Date.now()})`));
 
-test('a wiped account reopens empty on sign-in; provider closure and continuity refusals stay closed, paused access stays paused', { skip: pgSkip(), timeout: 240000 }, async (t) => {
+test('a wiped account reopens empty on sign-in; provider closure and continuity refusals stay closed, paused access stays paused', { skip: pgSkip(), timeout: withSlotWait(240000) }, async (t) => {
   pg = await start();
   try {
     await pg.sql(SETUP);

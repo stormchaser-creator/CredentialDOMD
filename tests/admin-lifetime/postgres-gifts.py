@@ -5,6 +5,8 @@ notification triggers. Synthetic gift/identity/billing records only.
 """
 import argparse,json,os,subprocess,tempfile
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 parser=argparse.ArgumentParser();parser.add_argument('--root',required=True);parser.add_argument('--inventory',required=True);parser.add_argument('--base-packet',required=True);parser.add_argument('--gift-packet');parser.add_argument('--founding',required=True);args=parser.parse_args()
 ROOT=Path(args.root); BIN=Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 data={r['section']:r['records'] for r in json.loads(Path(args.inventory).read_text())['rows']}
@@ -62,6 +64,7 @@ env={k:v for k,v in os.environ.items() if not k.startswith('PG')}
 with tempfile.TemporaryDirectory(prefix='launch-baseline-',dir='/tmp') as temp:
  base=Path(temp);sock=base/'socket';sock.mkdir()
  def run(*cmd,**kw):return subprocess.run([str(c) for c in cmd],text=True,capture_output=True,env=env,**kw)
+ slot=pg_slot.acquire(base/'data')
  r=run(BIN/'initdb','-D',base/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8');assert r.returncode==0,r.stderr
  r=run(BIN/'pg_ctl','-D',base/'data','-l',base/'log','-o',f"-k {sock} -p 56439 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off",'-w','start');assert r.returncode==0,r.stderr
  def sql(s):
@@ -207,3 +210,4 @@ with tempfile.TemporaryDirectory(prefix='launch-baseline-',dir='/tmp') as temp:
   print(f'PASS {passed} admin lifetime SQL checks; exact18 base packet + separate19 on63-table fixture; zero provider/email operations.')
  finally:
   run(BIN/'pg_ctl','-D',base/'data','-m','immediate','-w','stop')
+  slot.release()

@@ -13,6 +13,7 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { acquirePgSlot } from '../helpers/pg-slot.mjs';
 
 const PG_ENV = { ...process.env, LC_ALL: 'C' };
 const bin = process.env.PG_BIN || '/opt/homebrew/opt/postgresql@17/bin';
@@ -50,7 +51,9 @@ test('a paused continuity member binds and stays paused; a closed one is still r
   const query = sql => execFileSync(`${bin}/psql`, [...args, '-c', sql], { encoding: 'utf8', env: PG_ENV }).trim();
   const result = expression => JSON.parse(query(`select ${expression}`));
   let started = false;
+  let slot = null;
   try {
+    slot = await acquirePgSlot(data);
     execFileSync(`${bin}/initdb`, ['-D', data, '-A', 'trust', '--no-locale'], { stdio: 'pipe', env: PG_ENV });
     execFileSync(`${bin}/pg_ctl`, ['-D', data, '-l', join(temp, 'postgres.log'), '-o', `-k ${temp} -p 55493 -c listen_addresses=''`, '-w', 'start'], { stdio: 'pipe', env: PG_ENV });
     started = true;
@@ -146,5 +149,6 @@ test('a paused continuity member binds and stays paused; a closed one is still r
     });
   } finally {
     if (started) execFileSync(`${bin}/pg_ctl`, ['-D', data, '-m', 'immediate', 'stop'], { stdio: 'pipe', env: PG_ENV });
+    slot?.release();
   }
 });

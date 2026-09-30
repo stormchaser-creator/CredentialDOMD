@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { startPostgres } from './pg.mjs';
 import { pruneBackups, REMOVE_BATCH } from '../../supabase/functions/prune-backups/lib.ts';
 
@@ -66,7 +66,7 @@ const PLATFORM = `
 const U1 = '00000000-0000-4000-8000-0000000000e1';
 const U2 = '00000000-0000-4000-8000-0000000000e2';
 
-test('on PostgreSQL: the dispatcher fires prune-backups with the vault secret and touches no storage row; the ranking keeps 3 periods per user', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('on PostgreSQL: the dispatcher fires prune-backups with the vault secret and touches no storage row; the ranking keeps 3 periods per user', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres(58471, 'prune-backups');
   t.after(() => pg.close());
   await pg.sql(PLATFORM);

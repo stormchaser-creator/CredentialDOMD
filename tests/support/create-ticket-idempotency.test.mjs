@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import vm from 'node:vm';
-import { pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { startPostgres } from '../ops/pg.mjs';
 
 const OWNER = 'physician-profile';
@@ -178,7 +178,7 @@ test('deployed before the column exists: tickets still save, without the key', a
   assert.ok(!('client_request_id' in s.tickets[0]));
 });
 
-test('on PostgreSQL: the migration adds a per-sender unique key, reruns cleanly and rolls back', { skip: pgSkip(), timeout: 60000 }, async (t) => {
+test('on PostgreSQL: the migration adds a per-sender unique key, reruns cleanly and rolls back', { skip: pgSkip(), timeout: withSlotWait(60000) }, async (t) => {
   const pg = await startPostgres(58474, 'ticket-key');
   t.after(() => pg.close());
   const migration = fs.readFileSync(new URL('../../supabase/migrations/20260930010100_support_ticket_request_key.sql', import.meta.url), 'utf8');

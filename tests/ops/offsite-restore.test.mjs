@@ -17,7 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { startPostgres } from './pg.mjs';
 
 const SOURCE = `
@@ -74,7 +74,7 @@ async function restore(pg, db, archive, dir) {
 const functionsIn = (pg, db) => pg.rows(`select p.oid::regprocedure::text as f from pg_proc p where p.pronamespace = 'public'::regnamespace order by 1`, { db });
 const policiesIn = (pg, db) => pg.rows(`select tablename, policyname from pg_policies where schemaname = 'public' order by 1, 2`, { db });
 
-test('an archive restores every function, policy and identity row, and new rows get fresh ids', { skip: pgSkip(), timeout: 180000 }, async (t) => {
+test('an archive restores every function, policy and identity row, and new rows get fresh ids', { skip: pgSkip(), timeout: withSlotWait(180000) }, async (t) => {
   const pg = await startPostgres(58472, 'offsite-restore');
   t.after(() => pg.close());
   await pg.sql(`create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;`);
@@ -106,7 +106,7 @@ test('an archive restores every function, policy and identity row, and new rows 
   assert.equal(await pg.sql(`select count(*) from pg_class where relkind = 'S' and relname like '%seq1'`, { db: 'dst' }), '0', 'no orphan sequence');
 });
 
-test('an archive written before the fix, with the identity sequences in it, still restores correctly', { skip: pgSkip(), timeout: 180000 }, async (t) => {
+test('an archive written before the fix, with the identity sequences in it, still restores correctly', { skip: pgSkip(), timeout: withSlotWait(180000) }, async (t) => {
   const pg = await startPostgres(58473, 'offsite-restore-old');
   t.after(() => pg.close());
   await pg.sql(`create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;`);

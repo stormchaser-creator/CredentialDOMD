@@ -11,7 +11,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlot, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 
 // Own port: node --test runs files in parallel and the other PostgreSQL suites
 // hold 55479, 56441, 57331, 57419 and 58213.
@@ -39,11 +39,12 @@ async function startPostgres() {
   const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const exec = (name, args) => run(path.join(bin, name), args, { env, maxBuffer: 4 * 1024 * 1024 });
+  const slot = await acquirePgSlot(path.join(root, 'data'));
   await exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   await exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c fsync=off`, '-w', 'start']);
   const sql = async query => (await exec('psql', ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', PORT, '-U', 'postgres', '-d', 'postgres', '-c', query])).stdout.trim();
   const tryRun = async query => { try { return { ok: true, out: await sql(query) }; } catch (e) { return { ok: false, err: String(e.stderr || e.message) }; } };
-  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); };
+  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); slot.release(); fs.rmSync(root, { recursive: true, force: true }); };
   return { sql, tryRun, close };
 }
 
@@ -85,7 +86,7 @@ const check = (pg, session, actor = ADMIN, subject = 'user_Admin') =>
 const recordFile = (pg, session, document = DOC_A, name = 'DEA certificate.pdf') =>
   pg.sql(service(`select public.member_view_file_record('${ADMIN}', 'user_Admin', '${session}', '${document}', '${name}')`)).then(json);
 
-test('member support view: grants, visits, refusals and the member log', { skip: pgSkip(), timeout: 120000 }, async t => {
+test('member support view: grants, visits, refusals and the member log', { skip: pgSkip(), timeout: withSlotWait(120000) }, async t => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE);

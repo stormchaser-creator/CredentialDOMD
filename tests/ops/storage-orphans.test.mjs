@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { startPostgres } from './pg.mjs';
 import { QUERY, removalScript } from '../../scripts/storage-orphans.mjs';
 
@@ -28,7 +28,7 @@ const SUBJECTS = continuity.match(/create or replace function public\.clerk_stor
 const P1 = '00000000-0000-4000-8000-0000000000c1', P2 = '00000000-0000-4000-8000-0000000000c2';
 const D_PATH = '00000000-0000-4000-8000-00000000d001', D_NEW = '00000000-0000-4000-8000-00000000d002', D_OLD = '00000000-0000-4000-8000-00000000d003';
 
-test('on PostgreSQL: a bound account\'s original folder is an existing account, and its <subject>/<doc id> files are claimed', { skip: pgSkip(), timeout: 60000 }, async (t) => {
+test('on PostgreSQL: a bound account\'s original folder is an existing account, and its <subject>/<doc id> files are claimed', { skip: pgSkip(), timeout: withSlotWait(60000) }, async (t) => {
   const pg = await startPostgres(58475, 'storage-orphans');
   t.after(() => pg.close());
   await pg.sql(`

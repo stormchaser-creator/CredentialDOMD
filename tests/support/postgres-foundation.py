@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 import re
 import subprocess
 import tempfile
@@ -44,6 +46,7 @@ def check(name,passed):
 with tempfile.TemporaryDirectory(prefix='support-foundation-') as temporary:
     root=Path(temporary); socket=root/'socket';socket.mkdir()
     def run(*args,**kw): return subprocess.run([str(a) for a in args],text=True,capture_output=True,env=ENV,**kw)
+    slot=pg_slot.acquire(root/'data')
     init=run(BIN/'initdb','-D',root/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8')
     if init.returncode: raise RuntimeError(init.stderr)
     started=run(BIN/'pg_ctl','-D',root/'data','-l',root/'server.log','-o',f"-k {socket} -p 56429 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off",'-w','start')
@@ -288,4 +291,5 @@ with tempfile.TemporaryDirectory(prefix='support-foundation-') as temporary:
         print(json.dumps({'migrationSHA256':hashlib.sha256(MIGRATION.read_bytes()).hexdigest(),'readMigrationSHA256':hashlib.sha256(READ_MIGRATION.read_bytes()).hexdigest(),'passed':len(checks),'checks':checks},indent=2))
     finally:
         stopped=run(BIN/'pg_ctl','-D',root/'data','-m','fast','-w','stop')
+        slot.release()
         if stopped.returncode: raise RuntimeError(stopped.stderr)

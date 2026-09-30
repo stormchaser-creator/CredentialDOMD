@@ -8,7 +8,7 @@
 // Real PostgreSQL with the actual billing chain underneath (billingChainFixture).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { billingChain, readOptional } from './billingChainFixture.mjs';
 
 const NAME = '20260930002000_access_snapshot_billing_status';
@@ -23,7 +23,7 @@ test('the migration and its rollback exist and follow the deploy rules', () => {
   }
 });
 
-test('the snapshot names a subscription that can still be paid; a cancelled or absent one is null', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('the snapshot names a subscription that can still be paid; a cancelled or absent one is null', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const db = await billingChain({ port: 58971, label: 'renewal-failed', idPrefix: '71000000' });
   const { sql, enroll, buy, settle, snapshot, denied } = db;
   try {

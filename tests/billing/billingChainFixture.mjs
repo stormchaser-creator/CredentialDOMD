@@ -12,7 +12,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pgBin } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, acquirePgSlot } from '../credential-portal/postgresFixture.mjs';
 
 const run = promisify(execFile);
 export const readMigration = name => fs.readFileSync(new URL(`../../supabase/migrations/${name}`, import.meta.url), 'utf8');
@@ -36,6 +36,7 @@ export async function billingChain({ port, label, idPrefix }) {
   const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const exec = (name, args) => run(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
+  const slot = await acquirePgSlot(path.join(root, 'data'));
   await exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   await exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${port} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off`, '-w', 'start']);
   const psql = input => new Promise((resolve, reject) => {
@@ -58,7 +59,7 @@ export async function billingChain({ port, label, idPrefix }) {
     if (result.code) throw new Error(result.stderr);
     return result.stdout ? JSON.parse(result.stdout) : null;
   };
-  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); };
+  const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); slot.release(); fs.rmSync(root, { recursive: true, force: true }); };
   try {
     await sql(`create role anon nologin;create role authenticated nologin;create role service_role nologin bypassrls;
       create schema auth;grant usage on schema auth to authenticated,service_role;

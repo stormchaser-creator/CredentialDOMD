@@ -29,7 +29,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
+import { pgBin, pgSkip, acquirePgSlotSync, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { agentReplyBody, labeledBody, EMAIL_ATTEMPTED, EMAIL_OWN_TICKET, emailStatus } from '../../scripts/ticket-fix/reply.mjs';
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
 import { postReplySQL } from '../../scripts/ticket-fix/reply.mjs';
@@ -62,13 +62,14 @@ function startPostgres(port = PORT) {
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const exec = (name, args, input) => spawnSync(path.join(bin, name), args, { env, input, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
   const must = r => { if (r.status !== 0) throw Error(r.stderr || r.stdout); return r; };
+  const slot = acquirePgSlotSync(path.join(root, 'data'));
   must(exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']));
   must(exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${port} -c listen_addresses='' -c fsync=off`, '-w', 'start']));
   const run = (query, { user = 'postgres', db = 'postgres' } = {}) =>
     exec('psql', ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', port, '-U', user, '-d', db], `set time zone 'UTC';\n${query}`);
   const sql = (query, opts) => must(run(query, opts)).stdout.trim();
   const tryRun = (query, opts) => { const r = run(query, opts); return { ok: r.status === 0, out: r.stdout.trim(), err: r.stderr }; };
-  const close = () => { exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); };
+  const close = () => { exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); slot.release(); fs.rmSync(root, { recursive: true, force: true }); };
   return { sql, tryRun, close };
 }
 
@@ -163,7 +164,7 @@ const management = (pg, opts) => async query => {
   throw Error('Unexpected SQL shape');
 };
 
-test('a verified support reply on a member ticket is handed to send-ticket-reply once; nothing else new is', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('a verified support reply on a member ticket is handed to send-ticket-reply once; nothing else new is', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const pg = startPostgres();
   t.after(() => pg.close());
   pg.sql(ROLES);
@@ -393,7 +394,7 @@ const RETRY_SEED = `
     from unnest(array['${Object.values(R).join("','")}']) id;
 `;
 
-test('a reply whose email fails is sent by the retry, exactly once; one still not emailed an hour later alerts the owner', { skip: pgSkip(), timeout: 240000 }, async t => {
+test('a reply whose email fails is sent by the retry, exactly once; one still not emailed an hour later alerts the owner', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const pg = startPostgres(RETRY_PORT);
   t.after(() => pg.close());
   pg.sql(ROLES);

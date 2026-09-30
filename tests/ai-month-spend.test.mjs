@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { transformSync } from 'esbuild';
-import { pgSkip } from './credential-portal/postgresFixture.mjs';
+import { pgSkip, withSlotWait } from './credential-portal/postgresFixture.mjs';
 import { startPostgres } from './ops/pg.mjs';
 
 const read = rel => fs.readFileSync(new URL(rel, import.meta.url), 'utf8');
@@ -54,7 +54,7 @@ test('the status answer shows month.spent and decides over_soft / over_hard on m
   assert.doesNotMatch(PROXY.slice(PROXY.indexOf('---- POST: forward one Gemini call ----')), /holdSpend|ai_month_spend_usd/);
 });
 
-test('ai_month_spend_usd: this month only, by provider, per user, service role only, idempotent, rollback', { skip: pgSkip(), timeout: 120000 }, async (t) => {
+test('ai_month_spend_usd: this month only, by provider, per user, service role only, idempotent, rollback', { skip: pgSkip(), timeout: withSlotWait(120000) }, async (t) => {
   const pg = await startPostgres(57611, 'ai-month-spend');
   t.after(() => pg.close());
   await pg.sql(`

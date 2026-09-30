@@ -7,7 +7,7 @@ import { createCredentialPortalHandler } from '../../supabase/functions/_shared/
 import { CREDENTIAL_PORTAL_POLICY, createPortalCrypto, digest } from '../../supabase/functions/_shared/credentialPortalCrypto.mjs';
 import { ADMIN_ACCESS_SECTIONS, ADMIN_ACCESS_SECTION_KEYS, ADMIN_ACCESS_DENIED, standingInvitationEmail, ownerAllowed } from '../../supabase/functions/_shared/credentialPortalView.mjs';
 import { parseStandingView, documentActions } from '../../public/credential-access/portal.mjs';
-import { postgresFixture, pgSkip, quote as q } from './postgresFixture.mjs';
+import { postgresFixture, pgSkip, quote as q, withSlotWait } from './postgresFixture.mjs';
 
 const MIGRATION = fs.readFileSync(new URL('../../supabase/migrations/20260925040000_credential_portal_admin_access.sql', import.meta.url), 'utf8');
 const id = n => `30000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -22,7 +22,7 @@ function allKeys(value, out = new Set()) {
   return out;
 }
 
-test('administrator access: standing grants on the real migrations', { timeout: 240000, skip: pgSkip() }, async t => {
+test('administrator access: standing grants on the real migrations', { timeout: withSlotWait(240000), skip: pgSkip() }, async t => {
   const db = await postgresFixture({ port: 57419 });
   t.after(() => db.close());
   const alice = { id: id(1), subject: 'user_alicenew', legacy: 'user_alicelegacy', email: 'alice@example.test' };

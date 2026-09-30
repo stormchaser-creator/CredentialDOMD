@@ -5,6 +5,8 @@ triggers and unreviewed function bodies. It is not a production restore.
 """
 import argparse,json,os,subprocess,tempfile
 from pathlib import Path
+import sys; sys.dont_write_bytecode = True; sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'helpers'))
+import pg_slot  # one machine-wide PostgreSQL test slot per disposable cluster (tests/helpers/pg-slot.mjs)
 parser=argparse.ArgumentParser();parser.add_argument('--root',required=True);parser.add_argument('--inventory',required=True);parser.add_argument('--continuity',required=True);parser.add_argument('--founding',required=True);args=parser.parse_args()
 ROOT=Path(args.root); BIN=Path(os.environ.get('ADMIN_TEST_PG_BIN') or os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 data={r['section']:r['records'] for r in json.loads(Path(args.inventory).read_text())['rows']}
@@ -62,6 +64,7 @@ env={k:v for k,v in os.environ.items() if not k.startswith('PG')}
 with tempfile.TemporaryDirectory(prefix='launch-baseline-',dir='/tmp') as temp:
  base=Path(temp);sock=base/'socket';sock.mkdir()
  def run(*cmd,**kw):return subprocess.run([str(c) for c in cmd],text=True,capture_output=True,env=env,**kw)
+ slot=pg_slot.acquire(base/'data')
  r=run(BIN/'initdb','-D',base/'data','-U','postgres','--auth=trust','--no-locale','--encoding=UTF8');assert r.returncode==0,r.stderr
  r=run(BIN/'pg_ctl','-D',base/'data','-l',base/'log','-o',f"-k {sock} -p 56437 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off",'-w','start');assert r.returncode==0,r.stderr
  def sql(s):
@@ -134,3 +137,4 @@ with tempfile.TemporaryDirectory(prefix='launch-baseline-',dir='/tmp') as temp:
   print(json.dumps({'result':'PASS','tables':sum(selected(t['schema'],t['table']) for t in data['tables']),'constraints':len(constraints),'policies':sum(selected(t['schemaname'],t['tablename']) for t in data['policies']),'default_gates_off':True,'limits':'Metadata reconstruction only; no real data, outbound triggers, cron or provider requests.'}))
  finally:
   r=run(BIN/'pg_ctl','-D',base/'data','-m','fast','-w','stop');assert r.returncode==0,r.stderr
+  slot.release()
