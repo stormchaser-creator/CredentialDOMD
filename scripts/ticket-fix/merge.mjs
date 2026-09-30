@@ -16,7 +16,11 @@
 // gets a summary and this one command.
 //
 // A merge is fast-forward only and never forced. If main moved since the run,
-// the change is rebased onto it: a conflict holds it; a changed
+// the change is rebased onto it headlessly (worktree.mjs rebaseCommit:
+// merge-tree and commit-tree, which write objects only; the run's worktree,
+// which a lingering sandboxed process may still write, is never checked out,
+// reset or amended, and the commit pushed is built from the gated commit
+// object, never from that worktree's HEAD): a conflict holds it; a changed
 // `git patch-id --stable` means the reviewed diff is not the one being pushed,
 // so the independent review runs again; the G2 gates always run again on the
 // rebased commit. Hooks are off for every git call here, and the hooks and
@@ -35,7 +39,7 @@ import { promises as fs, readFileSync, lstatSync, existsSync, realpathSync } fro
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, hooksDigest, patchId, trailers, addGatesTrailer, removeWorktree, checkWorktreeLink, pinWorktree } from './worktree.mjs';
+import { git, hooksDigest, patchId, trailers, addGatesTrailer, rebaseCommit, commitParents, removeWorktree, checkWorktreeLink, pinWorktree } from './worktree.mjs';
 import { verifyRelease } from './release.mjs';
 import { personalDataReport, personalDataSummary } from './gates/personal-data.mjs';
 import { isMain } from './is-main.mjs';
@@ -195,19 +199,21 @@ export async function mergeRun({ work, runId, repo = null, manual = false, hooks
   if (blockers.length) return refuse(blockers.join('; '));
   if (!hooksReviewed && hooksDigest(run.worktree, { binary }) !== run.hooks_sha256) return refuse('.git/hooks or the git config changed since the run started; review them, then run again with --hooks-reviewed');
 
-  const agent = { ...env, GIT_COMMITTER_NAME: 'CredentialDOMD Ticket Agent', GIT_COMMITTER_EMAIL: run.committer };
   let target = run.commit, base = run.base;
   for (let attempt = 1; attempt <= 2; attempt++) {
     git(run.worktree, ['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'], { binary, env, timeout: 180000 });
     const origin = git(run.worktree, ['rev-parse', 'refs/remotes/origin/main'], { binary }).trim();
     if (origin !== base) {
       if (git(run.worktree, ['merge-base', '--is-ancestor', base, origin], { binary, allowFail: true }) === null) return refuse('main no longer contains the run\'s base (history was rewritten)');
+      // Headless (rebaseCommit): merge-tree and commit-tree write objects
+      // only; the worktree's files, index, HEAD and branch stay as they are.
+      if (commitParents(run.worktree, target, { binary }).join(' ') !== base) return refuse('the change is not one commit on its base; rerun the ticket');
       const before = patchId(run.worktree, run.base, run.commit, { binary });
-      if (git(run.worktree, ['rebase', '--quiet', '--onto', origin, base], { binary, env: agent, allowFail: true }) === null) {
-        git(run.worktree, ['rebase', '--abort'], { binary, allowFail: true });
-        return refuse('main moved and the change no longer applies cleanly; rerun the ticket');
-      }
-      const rebased = git(run.worktree, ['rev-parse', 'HEAD'], { binary }).trim();
+      const replayed = rebaseCommit({ dir: run.worktree, commit: target, from: base, onto: origin, committer: run.committer, binary, env });
+      if (replayed.reason === 'empty') return refuse('main moved and already holds this change; nothing to push');
+      if (!replayed.commit) return refuse('main moved and the change no longer applies cleanly; rerun the ticket');
+      const rebased = replayed.commit;
+      const rebasedTree = git(run.worktree, ['rev-parse', `${rebased}^{tree}`], { binary }).trim();
       const after = patchId(run.worktree, origin, rebased, { binary });
       run.rebases = [...(run.rebases || []), { onto: origin, commit: rebased, patch_id_changed: before !== after }];
       if (before !== after) {
@@ -222,9 +228,14 @@ export async function mergeRun({ work, runId, repo = null, manual = false, hooks
       const text = `${JSON.stringify(gates, null, 2)}\n`;
       const digest = await writeRunFile(work, runId, 'gates-merge.json', text);
       if (!gates.pass) return refuse(`the gates failed on the rebased commit: ${gates.checks.filter(c => !c.pass).map(c => c.name).join(', ')}`);
+      // The gates name the commit and tree they ran on (runTestGates): the
+      // commit pushed is built from that one, so they must be it.
+      if ((gates.head !== undefined && gates.head !== rebased) || (gates.tree !== undefined && gates.tree !== rebasedTree)) return refuse('the gates ran on another commit than the rebased one');
       if (!hooksReviewed && hooksDigest(run.worktree, { binary }) !== run.hooks_sha256) return refuse('.git/hooks or the git config changed while the gates ran again; review them, then run again with --hooks-reviewed');
       run.merge_release_probes = gates.release_probes ?? null;
-      target = addGatesTrailer({ dir: run.worktree, subject: run.subject, ticketId: run.ticket, runId: run.run_id, committer: run.committer, gatesSha256: digest, binary, env });
+      // The trailer goes on the gated commit object itself, never on
+      // whatever the worktree's HEAD is now.
+      target = addGatesTrailer({ dir: run.worktree, commit: rebased, subject: run.subject, ticketId: run.ticket, runId: run.run_id, committer: run.committer, gatesSha256: digest, binary, env });
       run.merge_gates_sha256 = digest;
       base = origin;
     }

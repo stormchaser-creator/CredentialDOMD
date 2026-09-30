@@ -613,12 +613,69 @@ export function commitWork({ dir, base, subject, ticketId, runId, committer, bin
 }
 
 // Adds the Gates trailer once gates.json exists. The tree is unchanged, so
-// the gates (which record the tree) still describe the commit.
-export function addGatesTrailer({ dir, subject, ticketId, runId, committer, gatesSha256, binary = 'git', env = process.env }) {
+// the gates (which record the tree) still describe the commit. Without
+// commit it amends the worktree's HEAD (the runner's own commit, in its
+// worktree). With commit it is headless: a new commit object of that commit's
+// tree, parents and author with the trailered message, made by commit-tree;
+// no ref, index or work tree changes (the merge's path, see rebaseCommit).
+export function addGatesTrailer({ dir, commit = null, subject, ticketId, runId, committer, gatesSha256, binary = 'git', env = process.env }) {
+  if (commit !== null) {
+    if (!SHA.test(commit)) throw Error('A full commit id is required');
+    const tree = git(dir, ['rev-parse', `${commit}^{tree}`], { binary }).trim();
+    const made = commitLike({ dir, from: commit, tree, parents: commitParents(dir, commit, { binary }), committer, binary, env,
+      message: commitMessage({ subject, ticketId, runId, gatesSha256 }) });
+    if (git(dir, ['rev-parse', `${made}^{tree}`], { binary }).trim() !== tree) throw Error('Amending the trailer changed the tree');
+    return made;
+  }
   const tree = git(dir, ['rev-parse', 'HEAD^{tree}'], { binary }).trim();
   git(dir, ['commit', '--quiet', '--amend', '--no-verify', '-F', '-'], { binary, env: agentEnv(env, committer), input: commitMessage({ subject, ticketId, runId, gatesSha256 }) });
   if (git(dir, ['rev-parse', 'HEAD^{tree}'], { binary }).trim() !== tree) throw Error('Amending the trailer changed the tree');
   return git(dir, ['rev-parse', 'HEAD'], { binary }).trim();
+}
+
+// The parents of a commit, in order.
+export function commitParents(dir, commit, { binary = 'git' } = {}) {
+  return git(dir, ['rev-list', '--parents', '--max-count=1', commit], { binary }).trim().split(/\s+/).slice(1);
+}
+// A commit object of `tree` on `parents` with the author of `from` (name,
+// email and date, which a rebase's pick and an amend both keep), the run's
+// committer identity and `message` (default: from's own message, byte for
+// byte). commit-tree reads no index and no work tree and moves no ref.
+function commitLike({ dir, from, tree, parents, committer, message = null, binary = 'git', env = process.env }) {
+  if (!RUN_COMMITTER.test(committer || '')) throw Error('The run committer identity is required');
+  if (!SHA.test(tree || '') || !parents.every(p => SHA.test(p))) throw Error('A commit needs a full tree id and full parent ids');
+  const raw = git(dir, ['cat-file', 'commit', from], { binary });
+  const end = raw.indexOf('\n\n');
+  const author = /^author ([^<>\n]*) <([^<>\n]*)> (\d+) ([+-]\d{4})$/m.exec(end === -1 ? raw : raw.slice(0, end));
+  if (!author) throw Error('The commit has no author line');
+  return git(dir, ['commit-tree', tree, ...parents.flatMap(p => ['-p', p])], { binary, input: message ?? (end === -1 ? '' : raw.slice(end + 2)),
+    env: { ...env, GIT_AUTHOR_NAME: author[1], GIT_AUTHOR_EMAIL: author[2], GIT_AUTHOR_DATE: `@${author[3]} ${author[4]}`,
+      GIT_COMMITTER_NAME: AGENT_NAME, GIT_COMMITTER_EMAIL: committer } }).trim();
+}
+
+// The agent's one commit replayed onto a moved main without a work tree
+// (review of 2026-09-30, finding). `git rebase` checks its result out in the
+// run's worktree, a directory a lingering sandboxed process can still write,
+// and host git writing files there races that process the way removeWorktree
+// describes. So the merge never rebases in place: git merge-tree --write-tree
+// with the commit's parent as the merge base (a cherry-pick's three-way
+// merge, merge-ort as rebase uses) writes only objects, and commit-tree makes
+// the commit a rebase would have: the same tree, author and message on onto,
+// with the run's committer. Nothing is checked out, no index is written and
+// no ref moves, so a conflict leaves nothing to abort. Attributes come from
+// onto (the trusted main). commit must be one commit on from.
+// Returns { commit, reason: null }, or { commit: null, reason } with reason
+// 'conflict', or 'empty' when onto already holds the change (a rebase would
+// have dropped the commit).
+export function rebaseCommit({ dir, commit, from, onto, committer, binary = 'git', env = process.env }) {
+  for (const sha of [commit, from, onto]) if (!SHA.test(sha || '')) throw Error('A rebase needs full commit ids');
+  if (!RUN_COMMITTER.test(committer || '')) throw Error('The run committer identity is required');
+  if (commitParents(dir, commit, { binary }).join(' ') !== from) throw Error('Only one commit on its base is rebased');
+  const out = git(dir, [...attrFrom(onto), 'merge-tree', '--write-tree', '--no-messages', `--merge-base=${from}`, onto, commit], { binary, allowFail: true });
+  const tree = out === null ? '' : out.split('\n')[0].trim();
+  if (!SHA.test(tree)) return { commit: null, reason: 'conflict' };
+  if (tree === git(dir, ['rev-parse', `${onto}^{tree}`], { binary }).trim()) return { commit: null, reason: 'empty' };
+  return { commit: commitLike({ dir, from: commit, tree, parents: [onto], committer, binary, env }), reason: null };
 }
 
 // Trailers of a commit, parsed from its message.
