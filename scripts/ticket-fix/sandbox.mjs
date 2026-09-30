@@ -29,7 +29,7 @@
 // Every descendant inherits the sandbox, including a detached child in its
 // own process group. Nothing here reads an environment variable: the profile
 // is fixed by the host's arguments, never by the session.
-import { writeFileSync, existsSync, realpathSync, mkdirSync, mkdtempSync, lstatSync } from 'node:fs';
+import { writeFileSync, existsSync, realpathSync, mkdirSync, mkdtempSync, lstatSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -97,11 +97,26 @@ export function shortTmpRoot() {
 // a killed gate left running stops by itself once its data directory (in the
 // run's temporary directories, removed at the end) is gone: the postmaster
 // checks its data directory every minute and shuts down without it (16 s in
-// a measurement), freeing its segment.
+// a measurement), freeing its segment. The runner removes the directory when
+// the run ends and when it is signalled; one a SIGKILLed runner left (its
+// pid is in the name) goes when the next run's is made.
 export const RUN_PG_SLOTS = 6;
 export function runSlotDir() {
   const uid = typeof process.getuid === 'function' ? process.getuid() : 'user';
-  return mkdtempSync(path.join(real('/tmp'), `credentialdomd-pg-slots-${uid}-run-`));
+  const parent = real('/tmp');
+  const prefix = `credentialdomd-pg-slots-${uid}-run-`;
+  let names = [];
+  try { names = readdirSync(parent); } catch { names = []; }
+  for (const name of names) {
+    const pid = name.startsWith(prefix) ? /^(\d+)-[A-Za-z0-9]{6}$/.exec(name.slice(prefix.length))?.[1] : null;
+    if (!pid || Number(pid) === process.pid) continue;
+    try { process.kill(Number(pid), 0); continue; } catch { /* that runner is gone */ }
+    try {
+      const st = lstatSync(path.join(parent, name));
+      if (st.isDirectory() && (typeof process.getuid !== 'function' || st.uid === process.getuid())) rmSync(path.join(parent, name), { recursive: true, force: true });
+    } catch { /* gone meanwhile */ }
+  }
+  return mkdtempSync(path.join(parent, `${prefix}${process.pid}-`));
 }
 // What a sandboxed test process needs to find this run's slots.
 export const slotEnv = dir => ({ PG_TEST_SLOT_DIR: dir, PG_TEST_SLOTS: String(RUN_PG_SLOTS) });

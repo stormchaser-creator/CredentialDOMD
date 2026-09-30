@@ -51,7 +51,7 @@ if (args.includes('--input-format')) {
 }
 process.stderr.write('debug: reading the synthetic ticket\\ndebug: credential ' + credential + '\\n', () => {
   const history = /The case history file, \x60([^\x60]+)\x60/.exec(input)?.[1] ?? null;
-  fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, '..', 'started'), JSON.stringify({ pid: process.pid, history, there: history ? fs.existsSync(history) : false }));
+  fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, '..', 'started'), JSON.stringify({ pid: process.pid, history, there: history ? fs.existsSync(history) : false, slots: process.env.PG_TEST_SLOT_DIR ?? null }));
 });
 setInterval(() => {}, 1000);
 `, { mode: 0o755 });
@@ -80,8 +80,9 @@ test('SIGALRM during a session: its stderr is kept (redacted, owner-only), and t
     const exited = new Promise(resolve => child.on('exit', (code, signal) => { ended = true; resolve({ code, signal }); }));
     const started = path.join(runDir, `${TICKET}-sessions`, 'repro', 'started');
     await until(() => existsSync(started), 120000, () => `the reproduction session to start\n${logs.join('')}`, () => ended);
-    const { pid, history, there } = JSON.parse(readFileSync(started, 'utf8'));
+    const { pid, history, there, slots } = JSON.parse(readFileSync(started, 'utf8'));
     assert.ok(history && there, 'the session could see its case history file');
+    assert.ok(slots && existsSync(slots), 'the session has the run\'s PostgreSQL test slot directory');
     // Its stderr has left the stand-in; give the runner a moment to read it.
     await new Promise(done => setTimeout(done, 500));
     child.kill('SIGALRM');
@@ -106,6 +107,9 @@ test('SIGALRM during a session: its stderr is kept (redacted, owner-only), and t
     assert.ok(!readFileSync(path.join(p.work, 'runs', NAME, 'run.json'), 'utf8').includes(CREDENTIAL));
     assert.equal(existsSync(history), false, 'the case history file and its folder go with the stopped run');
     assert.equal(existsSync(path.dirname(path.dirname(history))), false);
+    // So does the run's slot directory: the stop hooks run instead of the
+    // run's own cleanup, which removed it only when the run ended.
+    assert.equal(existsSync(slots), false, 'the run\'s PostgreSQL test slot directory goes with the stopped run');
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     rmSync(runDir, { recursive: true, force: true });

@@ -147,11 +147,14 @@ export function sandboxPolicy({ enabled = true, home = os.homedir(), work, state
     denyFiles: [path.join(work, AUTO_MERGE_FLAG)], profileDir, readable: attachments ? [attachments] : [], slots };
 }
 // The run's PostgreSQL test slot directory, removed when the run ends
-// (undo): sandboxed tests never share slots with the owner's own runs.
+// (undo) and when the runner is signalled (the stop hooks run instead of
+// undo then): sandboxed tests never share slots with the owner's own runs.
 function runSlots(enabled, undo) {
   if (!enabled || !sandboxAvailable()) return null;
   const dir = runSlotDir();
-  undo(() => rmSync(dir, { recursive: true, force: true }));
+  const remove = () => rmSync(dir, { recursive: true, force: true });
+  const unhook = onStop(remove);
+  undo(() => { unhook(); remove(); });
   return dir;
 }
 // Raised when the host sees git state outside the worktree change (exit 6).

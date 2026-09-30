@@ -58,7 +58,7 @@ async function deadPid() {
   return c.proc.pid;
 }
 
-test('the defaults: 12 slots in one directory per user under /tmp, the same for node and python; each runner run gets its own', { skip: pySkip }, t => {
+test('the defaults: 12 slots in one directory per user under /tmp, the same for node and python', { skip: pySkip }, () => {
   assert.equal(slotCount({}), 12);
   assert.equal(slotCount({ PG_TEST_SLOTS: '5' }), 5);
   assert.throws(() => slotCount({ PG_TEST_SLOTS: 'many' }), /PG_TEST_SLOTS must be a whole number/);
@@ -66,17 +66,37 @@ test('the defaults: 12 slots in one directory per user under /tmp, the same for 
   const dir = defaultSlotDir();
   assert.equal(path.dirname(dir), fs.realpathSync('/tmp'));
   assert.match(path.basename(dir), /^credentialdomd-pg-slots-/);
+  const py = spawnSync(python, ['-B', '-c', `import sys; sys.path.insert(0, ${JSON.stringify(HERE)}); import pg_slot; print(pg_slot.default_slot_dir()); print(pg_slot.slot_count())`], { encoding: 'utf8', env: baseEnv });
+  assert.equal(py.status, 0, py.stderr);
+  assert.deepEqual(py.stdout.trim().split('\n'), [dir, '12']);
+});
+
+// Inside the gates sandbox (the repository's own suite run by the runner)
+// /tmp is not writable: the runner makes these directories, not the tests.
+const nested = process.platform === 'darwin' && !sandboxAvailable() ? 'inside a sandbox /tmp is not writable' : false;
+test('each runner run gets a slot directory of its own next to the owner\'s, and one a killed runner left is removed', { skip: nested }, async t => {
+  const dir = defaultSlotDir();
   // A runner run's sandboxed sessions and gates share a fresh directory of
-  // their own, never this one (sandbox.mjs runSlotDir).
+  // their own, never the owner's (sandbox.mjs runSlotDir).
   const run = runSlotDir();
   t.after(() => fs.rmSync(run, { recursive: true, force: true }));
   assert.equal(path.dirname(run), path.dirname(dir));
   assert.ok(path.basename(run).startsWith(`${path.basename(dir)}-run-`) && run !== dir, run);
   assert.equal(fs.statSync(run).mode & 0o777, 0o700);
   assert.deepEqual(slotEnv(run), { PG_TEST_SLOT_DIR: run, PG_TEST_SLOTS: String(RUN_PG_SLOTS) });
-  const py = spawnSync(python, ['-B', '-c', `import sys; sys.path.insert(0, ${JSON.stringify(HERE)}); import pg_slot; print(pg_slot.default_slot_dir()); print(pg_slot.slot_count())`], { encoding: 'utf8', env: baseEnv });
-  assert.equal(py.status, 0, py.stderr);
-  assert.deepEqual(py.stdout.trim().split('\n'), [dir, '12']);
+  // One a SIGKILLed runner left (its pid is in the name) goes when the next
+  // run's is made; a live runner's stays.
+  assert.ok(path.basename(run).startsWith(`${path.basename(dir)}-run-${process.pid}-`), run);
+  const dead = await deadPid();
+  const live = spawn('/bin/sleep', ['30'], { stdio: 'ignore' });
+  t.after(() => { try { live.kill('SIGKILL'); } catch { /* gone */ } });
+  const left = `${dir}-run-${dead}-AbC123`, running = `${dir}-run-${live.pid}-AbC123`;
+  for (const d of [left, running]) { fs.mkdirSync(d, { mode: 0o700 }); fs.writeFileSync(path.join(d, 'slot-0'), '{}'); }
+  t.after(() => { for (const d of [left, running]) fs.rmSync(d, { recursive: true, force: true }); });
+  const next = runSlotDir();
+  t.after(() => fs.rmSync(next, { recursive: true, force: true }));
+  assert.equal(fs.existsSync(left), false, 'the dead runner\'s directory was removed');
+  assert.equal(fs.existsSync(running), true, 'a live runner\'s directory stays');
 });
 
 test('concurrent node and python processes never hold more than N slots, and all of them get one', { skip: pySkip, timeout: 120000 }, async t => {
