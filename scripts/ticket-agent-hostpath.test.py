@@ -405,6 +405,16 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
               "has stopped at the subscription's usage limit, so no ticket is being worked" in notified(run)[0] and notified(run)[0].endswith("The CLI said: You've hit your session limit · resets 2pm (America/Los_Angeles)") and
               T not in notified(run)[0] and 'Synthetic' not in notified(run)[0] and 'usage_limit_paused' in (state / 'alerts.log').read_text(), (notified(run), log(run)[-2500:]))
         check('the same pause alerts only once', execute(script).returncode == 8 and len(notified(run)) == 1 and status(state)['usage_limit']['runs'] == 4, notified(run))
+        # A pause no run ended (the ticket answered by hand, then idle hours:
+        # nothing reached run.mjs, so nothing called resumed) is over once no
+        # limited run has come for 2 h. The next limit starts a new pause: no
+        # false "every run for 72 h" alert on its first run.
+        record = json.loads(pause_file.read_text())
+        stale = time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime(time.time() - 72 * 3600))
+        record.update(since=stale, last_at=stale, alerted_at=None)
+        write(pause_file, json.dumps(record))
+        check('a pause with no limited run for 72 h is over: the next limit starts a new one and alerts nobody', execute(script).returncode == 8 and len(notified(run)) == 1 and
+              status(state)['usage_limit']['runs'] == 1 and status(state)['usage_limit']['since'] != stale and status(state)['usage_limit']['alerted_at'] is None, (notified(run), status(state)))
         run, state, script, repo = scenario('session_error', parked=2)
         check('a real session failure of the same shape still counts and parks', execute(script).returncode != 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '3' and
               'REJECTED — ' + T + ' model run failed or timed out' in log(run) and 'PAUSED' not in log(run) and len(notified(run)) == 1 and 'parked' in notified(run)[0], log(run)[-2500:])

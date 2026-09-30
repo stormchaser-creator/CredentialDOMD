@@ -56,6 +56,7 @@ test('the real runner shell end to end: repair loop, parked skip, alerts, stale 
     // A pause is not silent, and gives a continuation its attempt back (review of 2026-09-29).
     'the status file shows the pause and its limit sentence, not a clean run', 'a pause that has lasted 6 h alerts the owner once, with the limit sentence and ids only',
     'the same pause alerts only once', 'three limited continuation runs give back every attempt: still pending, due and unspent',
+    'a pause with no limited run for 72 h is over: the next limit starts a new one and alerts nobody',
     'the next run past the limit does the continuation, spends one attempt and ends the pause',
     // Only the runner's own replies leave the personal-data gate's ticket_text rule (review of 2026-09-29).
     "the runner's stored reply is marked as its own from its ledger on the next load",

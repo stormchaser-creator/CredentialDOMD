@@ -111,8 +111,7 @@ test('usage-limit pauses: recorded in status.json, the owner alerted once after 
     assert.equal(status.usage_limit, null);
     assert.equal(existsSync(path.join(state.dir, 'usage-limit.json')), false);
     await alert(['resumed', '--state', state.dir], { now: t0 + 32 * hour });
-    await pause(t0 + 40 * hour);
-    await pause(t0 + 45 * hour);
+    for (let h = 40; h <= 45; h++) await pause(t0 + h * hour);
     assert.equal(sent.length, 1);
     await pause(t0 + 46 * hour);
     assert.equal(sent.length, 2, 'a new pause alerts again after its own 6 h');
@@ -122,6 +121,67 @@ test('usage-limit pauses: recorded in status.json, the owner alerted once after 
     await alert(['paused', '--state', state.dir, '--ticket', T, '--detail', 'limit reached for someone@elsewhere.org'], { send, now: t0 + 51 * hour });
     assert.equal(JSON.parse(readFileSync(path.join(state.dir, 'usage-limit.json'), 'utf8')).notice, 'limit reached for [email removed]');
     await assert.rejects(alert(['paused', '--state', state.dir, '--ticket', 'nope']), /paused needs --ticket UUID/);
+  } finally { state.cleanup(); }
+});
+
+// Review of the pause (2026-09-29, second pass): only a run.mjs exit other
+// than 8 called "resumed". An hour with no run.mjs call (an empty queue, a
+// WAITING or PARKED target, a failed queue query) left usage-limit.json in
+// place, so status.json showed the pause for days and the next, unrelated
+// limit inherited its since and alerted_at.
+test('a pause with no limited run for over 2 h is over: status.json drops it, and the next limit starts a new pause with its own 6 h grace', async () => {
+  const state = privateDir('ticket-pause-gap-');
+  const sent = [];
+  const send = async m => { sent.push(m); return true; };
+  const t0 = Date.parse('2026-09-29T10:00:00Z'), hour = 3600000;
+  const pause = at => alert(['paused', '--state', state.dir, '--ticket', T], { send, now: at });
+  const idle = at => alert(['status', '--state', state.dir, '--rc', '0'], { now: at });
+  const status = () => JSON.parse(readFileSync(path.join(state.dir, 'status.json'), 'utf8'));
+  const record = () => JSON.parse(readFileSync(path.join(state.dir, 'usage-limit.json'), 'utf8'));
+  try {
+    // A late run (launchd, a slow start) is still the same pause.
+    await pause(t0);
+    await pause(t0 + 1.5 * hour);
+    assert.deepEqual([record().since, record().runs], [new Date(t0).toISOString(), 2]);
+    // The ticket leaves the queue (answered by hand): the idle runs never reach
+    // run.mjs, so nothing calls resumed.
+    await idle(t0 + 2.5 * hour);
+    assert.equal(status().usage_limit.runs, 2, 'an hour after the last limited run the pause may still be on');
+    await idle(t0 + 4 * hour);
+    assert.equal(status().usage_limit, null, 'no limited run for over 2 h: status.json shows no pause');
+    // Days later a new ticket meets a fresh limit: not "every run for 72 h".
+    await pause(t0 + 72 * hour);
+    assert.deepEqual(sent, [], 'the first limited run of a new pause alerts nobody');
+    assert.deepEqual(record(), { since: '2026-10-02T10:00:00.000Z', last_at: '2026-10-02T10:00:00.000Z', runs: 1, ticket: T.slice(0, 8), notice: null, alerted_at: null });
+    assert.equal(status().usage_limit.runs, 1);
+    for (let h = 73; h <= 77; h++) await pause(t0 + h * hour);
+    assert.deepEqual(sent, [], 'the new pause gets its own 6 h grace');
+    await pause(t0 + 78 * hour);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], /every run for 6 h \(7 runs since 2026-10-02T10:00:00\.000Z\) has stopped/);
+  } finally { state.cleanup(); }
+});
+
+test('an alerted pause that ended while the queue was empty does not silence the next one', async () => {
+  const state = privateDir('ticket-pause-silent-');
+  const sent = [];
+  const send = async m => { sent.push(m); return true; };
+  const t0 = Date.parse('2026-09-29T10:00:00Z'), hour = 3600000;
+  const pause = at => alert(['paused', '--state', state.dir, '--ticket', T], { send, now: at });
+  try {
+    for (let h = 0; h <= 7; h++) await pause(t0 + h * hour);
+    assert.equal(sent.length, 1, 'the first pause alerted at 6 h');
+    // The owner handles the ticket himself; the queue is empty when the limit
+    // resets, so no run gets past it and nothing calls resumed.
+    for (let h = 8; h <= 12; h++) await alert(['status', '--state', state.dir, '--rc', '0'], { now: t0 + h * hour });
+    // Days later the shared subscription meets its limit again.
+    for (let h = 100; h <= 105; h++) await pause(t0 + h * hour);
+    assert.equal(sent.length, 1, 'not before its own 6 h');
+    const record = JSON.parse(readFileSync(path.join(state.dir, 'usage-limit.json'), 'utf8'));
+    assert.deepEqual([record.since, record.runs, record.alerted_at], [new Date(t0 + 100 * hour).toISOString(), 6, null]);
+    await pause(t0 + 106 * hour);
+    assert.equal(sent.length, 2, 'the new pause alerts once it has lasted 6 h');
+    assert.match(sent[1], /every run for 6 h \(7 runs since /);
   } finally { state.cleanup(); }
 });
 

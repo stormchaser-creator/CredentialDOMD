@@ -182,7 +182,9 @@ cd "$REPO" || exit 1
 # is not silent: the run exits 8 (status.json shows the pause), a
 # continuation gets back the attempt its load reserved, and once the pause has
 # lasted 6 h the owner is alerted once (alert.mjs paused). The first run that
-# gets past the limit ends the pause (alert.mjs resumed).
+# gets past the limit ends the pause (alert.mjs resumed), and so do 2 h with
+# no limited run: an idle queue or a WAITING, PARKED or failed step never
+# reaches run.mjs, so the next limit starts a new pause (alert.mjs).
 reject() {
   KEPT="$FAIL_DIR/$TICKET_ID-$(date '+%Y%m%dT%H%M%S').json"
   if [ -s "$OUTPUT" ] && /bin/cp "$OUTPUT" "$KEPT" 2>/dev/null; then
@@ -266,7 +268,8 @@ for TARGET in ${(f)TARGETS}; do
     --attachments-dir "$ATTACHMENTS" --attachments-manifest "$MANIFEST" --auto-merge "$AUTO_MERGE" >> "$LOG" 2>&1
   WORK_RC=$?
   # Any exit but the limit's: a session got past it (or the run failed for
-  # its own reason), so a usage-limit pause is over.
+  # its own reason), so a usage-limit pause is over. Runs that never get
+  # here end a pause by time instead (PAUSE_GAP_HOURS in alert.mjs).
   [ "$WORK_RC" -eq 8 ] || node "$ALERT" resumed --state "$CASE_STATE" >> "$LOG" 2>&1
   if host_code_changed || [ "$WORK_RC" -eq 4 ]; then hold_run runner_code; RC=1; break; fi
   if [ "$WORK_RC" -eq 6 ]; then hold_run host_state; RC=1; break; fi

@@ -45,7 +45,13 @@
 // limit, or a CLI message that matches the limit by mistake, would otherwise
 // stop every ticket for days while every run exits cleanly (review of
 // 2026-09-29). "resumed": a run got past the limit (any other exit), so the
-// pause is over and PAUSE_FILE goes.
+// pause is over and PAUSE_FILE goes. A pause is also over once no limited run
+// has come for PAUSE_GAP_HOURS: an hour that reaches no run.mjs call (an empty
+// queue, a WAITING or PARKED target, a failed queue query, a hold) never calls
+// "resumed", so without this the file outlived the pause. status.json showed
+// it for days, and the next, unrelated limit inherited its since (a false
+// "every run for 72 h" on its first run) or its alerted_at (no alert at all).
+// A stale PAUSE_FILE is ignored everywhere and replaced by the next pause.
 //
 // "hold": a model run changed the runner's own code (the reply checks, the
 // runner, the notifier, the support reply migrations or send-ticket-reply),
@@ -74,6 +80,10 @@ export const SENT_FILE = 'owner-alerts.sent';
 export const DIRECT_SEND_SECONDS = 15;
 export const PAUSE_FILE = 'usage-limit.json';
 export const PAUSE_ALERT_HOURS = 6;
+// The runner starts hourly and a limited run stops within minutes, so the
+// runs of one pause are about an hour apart. Two hours leaves room for a late
+// start; a longer gap means the hours between stopped at nothing.
+export const PAUSE_GAP_HOURS = 2;
 // The queue holds ids and counts only. The messages are built from fixed
 // templates, but a detail can carry a tool's own error text: an email address
 // or the owner's home path in it never reaches the queue.
@@ -126,12 +136,16 @@ export async function lockState(lock, now = Date.now()) {
     stale: ageHours > STALE_LOCK_HOURS, started_ms: Math.floor(started) };
 }
 
-// The current usage-limit pause (PAUSE_FILE), or null.
-export async function pauseState(state) {
+// The current usage-limit pause (PAUSE_FILE), or null: none, unreadable, or
+// over because its last limited run is more than PAUSE_GAP_HOURS before now.
+export async function pauseState(state, { now = Date.now() } = {}) {
+  let pause;
   try {
-    const pause = JSON.parse(await fs.readFile(path.join(state, PAUSE_FILE), 'utf8'));
-    return pause && typeof pause === 'object' && Number.isFinite(Date.parse(pause.since)) && Number.isInteger(pause.runs) ? pause : null;
+    pause = JSON.parse(await fs.readFile(path.join(state, PAUSE_FILE), 'utf8'));
   } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
+  if (!pause || typeof pause !== 'object' || !Number.isFinite(Date.parse(pause.since)) || !Number.isInteger(pause.runs)) return null;
+  const last = Number.isFinite(Date.parse(pause.last_at)) ? Date.parse(pause.last_at) : Date.parse(pause.since);
+  return now - last > PAUSE_GAP_HOURS * 3600000 ? null : pause;
 }
 async function recentAlerts(state, limit = 20) {
   try {
@@ -148,7 +162,7 @@ export async function writeStatus(state, { lock = null, rc = undefined, now = Da
   const status = { version: 1, updated_at: new Date(now).toISOString(), hold,
     last_run: rc === undefined ? previous.last_run ?? null : { rc, finished_at: new Date(now).toISOString() },
     parked: await parkedList(state),
-    usage_limit: await pauseState(state),
+    usage_limit: await pauseState(state, { now }),
     lock: lockInfo && { ...lockInfo, started_ms: undefined },
     alerts: await recentAlerts(state) };
   await writePrivate(path.join(state, 'status.json'), `${JSON.stringify(status, null, 2)}\n`);
@@ -299,7 +313,9 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
   }
   if (command === 'paused') {
     if (!UUID.test(options.ticket || '')) throw Error('paused needs --ticket UUID');
-    const previous = await pauseState(options.state);
+    // A stale pause is over: this run starts a new one (since now, one run,
+    // not alerted), so its 6 h count only consecutive limited runs.
+    const previous = await pauseState(options.state, { now });
     const at = new Date(now).toISOString();
     const notice = queueSafe(options.detail ?? '').slice(0, 160) || previous?.notice || null;
     const pause = { since: previous?.since ?? at, last_at: at, runs: (previous?.runs ?? 0) + 1, ticket: options.ticket.slice(0, 8), notice, alerted_at: previous?.alerted_at ?? null };
@@ -317,7 +333,7 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
     return;
   }
   if (command === 'resumed') {
-    const previous = await pauseState(options.state);
+    const previous = await pauseState(options.state, { now });
     try { await fs.unlink(path.join(options.state, PAUSE_FILE)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
     if (previous) {
       console.log(`${at19(now)} RESUMED — the usage-limit pause since ${previous.since} is over after ${previous.runs} paused run(s)`);
