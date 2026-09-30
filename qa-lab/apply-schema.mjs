@@ -10,8 +10,9 @@
 // grantors match production. A failure leaves the database unchanged.
 // Rebuild from scratch with: npm run qa:down -- --wipe && npm run qa:up
 import { existsSync, readFileSync } from 'node:fs';
-import { SCHEMA_SQL, SEED_SQL, isMain } from './lib/paths.mjs';
-import { localExec, runSqlFile } from './lib/local-db.mjs';
+import { LOCAL_SECRETS_JSON, SCHEMA_SQL, SEED_SQL, isMain } from './lib/paths.mjs';
+import { localExec, localJson, runSqlFile } from './lib/local-db.mjs';
+import { VAULT_HASHES_SQL, assertDatabaseIsOurs } from './lib/checkout-guard.mjs';
 
 /** The version seed.sql stamps into qa_lab.seed_version. */
 export function seedFileVersion(text = readFileSync(SEED_SQL, 'utf8')) {
@@ -29,6 +30,18 @@ export function schemaApplied() {
   return localExec("select to_regclass('qa_lab.applied') is not null") === 't';
 }
 
+/**
+ * Refuses a database another checkout built: its vault holds that checkout's
+ * local dummy values, and this checkout's functions would get its own
+ * (lib/checkout-guard.mjs). Nothing to compare before this checkout has
+ * local-secrets.json.
+ */
+export function assertBuiltHere() {
+  if (!existsSync(LOCAL_SECRETS_JSON)) return;
+  const expected = JSON.parse(readFileSync(LOCAL_SECRETS_JSON, 'utf8')).vault || {};
+  assertDatabaseIsOurs({ expected, databaseHashes: localJson(VAULT_HASHES_SQL) });
+}
+
 function run(file, label) {
   const started = Date.now();
   const r = runSqlFile(file);
@@ -44,8 +57,10 @@ function run(file, label) {
 export function apply({ seed = true, schema = true } = {}) {
   if (schema) {
     if (!existsSync(SCHEMA_SQL)) throw new Error(`${SCHEMA_SQL} is missing: run npm run qa:extract first`);
-    if (schemaApplied()) console.log('Schema already applied (qa_lab.applied exists); skipping. Rebuild with: npm run qa:down -- --wipe && npm run qa:up');
-    else run(SCHEMA_SQL, 'the production schema');
+    if (schemaApplied()) {
+      assertBuiltHere();
+      console.log('Schema already applied (qa_lab.applied exists); skipping. Rebuild with: npm run qa:down -- --wipe && npm run qa:up');
+    } else run(SCHEMA_SQL, 'the production schema');
   }
   if (seed) {
     if (localExec("select exists(select 1 from public.access_policy_settings)") === 't') {
