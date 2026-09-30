@@ -10,14 +10,20 @@
 // constraints, indexes, triggers, policies, privileges per object and per role,
 // default privileges, storage buckets, cron jobs, vault secret names, migration
 // history, extensions, schemas, roles and the seeded configuration rows.
-// Differences listed in qa-lab/parity-known.json are reported as explained;
-// anything else fails the run (exit 1). The report is also written to
-// qa-lab/.generated/parity-report.txt.
+// Differences listed in qa-lab/parity-known.json are reported as explained.
+// When the local database also holds a release's own migrations
+// (release-migrations.mjs, in DEPLOY-PLAN.md order), a difference that is one
+// of the catalog changes those migrations made (same category, key and kind,
+// from the snapshots taken before and after them) is reported as the
+// release's, and listed in full. Anything else fails the run (exit 1). The
+// report is also written to qa-lab/.generated/parity-report.txt.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { CATALOG_JSON, GENERATED_DIR, PARITY_KNOWN, PARITY_REPORT, isMain } from './lib/paths.mjs';
 import { fetchLocalCatalog, fetchLocalConfigRows, fetchProdCatalog, fetchProdConfigRows } from './lib/fetch-catalog.mjs';
 import { compare, explain, grantsPerRole, index, referencedOneSidedPlatformObjects } from './lib/parity.mjs';
 import { localGatewayOrigin } from './lib/config.mjs';
+import { isReleaseChange } from './lib/release-plan.mjs';
+import { loadReleaseDelta } from './release-migrations.mjs';
 
 /**
  * The configuration rows the seed copies, and the founding programs per mode
@@ -59,24 +65,32 @@ async function main() {
   const results = compare(index(prodCatalog, { localOrigin, rewrite: true }), index(localCatalog, { localOrigin, rewrite: false }));
   if (prodConfig) results.push(configDiffs(prodConfig, fetchLocalConfigRows()));
 
+  // A release's own migrations (release-migrations.mjs): the catalog changes they made.
+  const release = loadReleaseDelta();
+  const delta = release.delta;
+
   const out = [];
   const say = (s = '') => out.push(s);
   say(`QA-lab parity: production (${offline ? `saved catalog ${prodCatalog.extracted_at}` : `live, ${new Date().toISOString()}`}) vs local`);
+  if (delta) say(`The local database also holds ${release.migrations.length} release migration(s) from ${release.plan}, applied in its order: their ${delta.length} catalog changes are the release's own differences.`);
+  if (release.why) say(`WARNING: ${release.why}`);
   say('');
-  say(`${'category'.padEnd(22)} ${'prod'.padStart(6)} ${'local'.padStart(6)}  unexplained  explained`);
+  say(`${'category'.padEnd(22)} ${'prod'.padStart(6)} ${'local'.padStart(6)}  unexplained  explained${delta ? '  release' : ''}`);
   let unexplained = 0;
-  const detail = []; const explainedDetail = [];
+  const detail = []; const explainedDetail = []; const releaseDetail = [];
   // A platform object on one side only is never explained once application code names it.
   const referenced = new Set(referencedOneSidedPlatformObjects(results.flatMap((r) => r.diffs), prodCatalog).map((d) => `${d.category}|${d.key}`));
   for (const r of results) {
-    const un = []; const ex = [];
+    const un = []; const ex = []; const rel = [];
     for (const d of r.diffs) {
       const k = referenced.has(`${d.category}|${d.key}`) ? null : explain(d, known);
-      if (k) ex.push({ ...d, reason: k.reason }); else un.push(referenced.has(`${d.category}|${d.key}`) ? { ...d, kind: `${d.kind}, and application code names it` } : d);
+      if (k) ex.push({ ...d, reason: k.reason });
+      else if (delta && isReleaseChange(d, delta)) rel.push(d);
+      else un.push(referenced.has(`${d.category}|${d.key}`) ? { ...d, kind: `${d.kind}, and application code names it` } : d);
     }
     unexplained += un.length;
-    say(`${r.category.padEnd(22)} ${String(r.prod).padStart(6)} ${String(r.local).padStart(6)}  ${String(un.length).padStart(11)}  ${String(ex.length).padStart(9)}`);
-    detail.push(...un); explainedDetail.push(...ex);
+    say(`${r.category.padEnd(22)} ${String(r.prod).padStart(6)} ${String(r.local).padStart(6)}  ${String(un.length).padStart(11)}  ${String(ex.length).padStart(9)}${delta ? `  ${String(rel.length).padStart(7)}` : ''}`);
+    detail.push(...un); explainedDetail.push(...ex); releaseDetail.push(...rel);
   }
 
   say('');
@@ -94,6 +108,18 @@ async function main() {
     say(`UNEXPLAINED DIFFERENCES (${detail.length}):`);
     for (const d of detail) say(`  [${d.category}] ${d.key}: ${d.kind}${d.prod !== undefined ? `\n      prod : ${d.prod}` : ''}${d.local !== undefined ? `\n      local: ${d.local}` : ''}`);
   }
+  if (delta) {
+    say('');
+    say(`The release's own differences (${releaseDetail.length}), every one a change its migrations made here (${release.plan}):`);
+    const kindWord = { 'only local': 'new', 'missing locally': 'dropped', differs: 'changed' };
+    for (const d of releaseDetail) say(`  [${d.category}] ${d.key}: ${kindWord[d.kind] || d.kind}`);
+    const seen = new Set(releaseDetail.map((d) => `${d.category}|${d.key}|${d.kind}`));
+    const already = delta.filter((d) => !seen.has(`${d.category}|${d.key}|${d.kind}`));
+    if (already.length) {
+      say(`  Release changes production already matches (${already.length}; deployed since the extraction, or no-ops there):`);
+      for (const d of already) say(`    [${d.category}] ${d.key}: ${kindWord[d.kind] || d.kind}`);
+    }
+  }
   say('');
   say(`Explained differences (${explainedDetail.length}), reasons in qa-lab/parity-known.json and qa-lab/README.md:`);
   const byReason = new Map();
@@ -104,7 +130,8 @@ async function main() {
     if (!verbose && ds.length > 3) say(`      ... ${ds.length - 3} more (--verbose)`);
   }
   say('');
-  say(unexplained ? `PARITY FAILED: ${unexplained} unexplained difference(s).` : 'PARITY OK: every difference is explained.');
+  say(unexplained ? `PARITY FAILED: ${unexplained} unexplained difference(s).`
+    : delta ? `PARITY OK: every difference is explained or is one of the release's own ${releaseDetail.length}.` : 'PARITY OK: every difference is explained.');
 
   const text = out.join('\n');
   console.log(text);

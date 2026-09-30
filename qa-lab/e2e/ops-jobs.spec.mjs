@@ -429,7 +429,8 @@ test('deployed functions: each has a caller or is retired, and the uncalled ones
     const notDeployed = source.filter((f) => !deployed.includes(f));
     const noSource = deployed.filter((f) => !source.includes(f));
     qa.check('every deployed function has source', noSource.length === 0, noSource.join(', '));
-    qa.check('functions in source but not deployed are the documented retirements (npi-proxy, send-onboarding-email, support-operations)', notDeployed.sort().join(',') === ['npi-proxy', 'send-onboarding-email', 'support-operations'].join(','), notDeployed.join(', '));
+    // release/qa1 deletes send-onboarding-email's source and deploys prune-backups (listed in the template as its plan deploys it).
+    qa.check('functions in source but not deployed are the documented retirements (npi-proxy, support-operations)', notDeployed.sort().join(',') === ['npi-proxy', 'support-operations'].join(','), notDeployed.join(', '));
     const uncalled = deployed.filter((f) => !callers[f].length);
     qa.check(`deployed functions nothing calls: ${uncalled.join(', ') || 'none'}`, true, JSON.stringify(callers));
     // Named in src/ but unreachable: trackEvent() has no call site, and the legacy checkout and portal

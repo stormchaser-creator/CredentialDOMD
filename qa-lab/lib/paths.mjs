@@ -44,6 +44,16 @@ export const QA_APP_DIST = path.join(GENERATED_DIR, 'app-dist');
 export const LAB_LOG_DIR = path.join(GENERATED_DIR, 'logs');
 export const QA_VITE_CONFIG = path.join(QA_LAB_DIR, 'app', 'vite.config.mjs');
 
+// A release's own migrations on top of production's schema (release-migrations.mjs).
+/** The deploy plan a release branch carries; its "## Order" table orders the migrations. */
+export const DEPLOY_PLAN = path.join(REPO_ROOT, 'DEPLOY-PLAN.md');
+export const MIGRATIONS_DIR = path.join(REPO_ROOT, 'supabase', 'migrations');
+/** Catalog snapshots before and after the release migrations, and what they changed (qa:parity reads it). */
+export const RELEASE_DIR = path.join(GENERATED_DIR, 'release');
+export const RELEASE_BEFORE_JSON = path.join(RELEASE_DIR, 'catalog-before.json');
+export const RELEASE_AFTER_JSON = path.join(RELEASE_DIR, 'catalog-after.json');
+export const RELEASE_DELTA_JSON = path.join(RELEASE_DIR, 'delta.json');
+
 /** True when the module at `metaUrl` is the script node was started with. */
 export function isMain(metaUrl) {
   if (!process.argv[1]) return false;

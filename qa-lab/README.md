@@ -49,8 +49,13 @@ npm run qa:down -- --wipe      # stop and delete the local volumes (next qa:up r
 Rebuild after production's schema changed:
 `npm run qa:down -- --wipe && npm run qa:up -- --extract && npm run qa:parity`
 
+On a release branch (one that carries `DEPLOY-PLAN.md`), `qa:up` and `qa:lab`
+then apply the release's own migrations on top, in the plan's order (section
+"A release branch" below); `--no-release` skips them.
+
 Lower-level commands: `npm run qa:extract` (catalog to `.generated/`),
 `npm run qa:apply` (schema + seed onto a running stack; `--no-seed`, `--seed-only`),
+`npm run qa:release` (a release's migrations onto a running stack; `-- --dry-run`),
 `node qa-lab/extract-schema.mjs --offline` (regenerate DDL from the saved
 catalog), `node qa-lab/parity.mjs --offline` (compare against the saved catalog
 instead of live production), `--verbose` (list every explained difference).
@@ -203,6 +208,63 @@ Safety rules applied to every definition before it is written:
 - **Default privileges** are set to production's (the legacy "grant all to anon,
   authenticated, service_role" in `public`), so a migration tested here gets the
   same privileges it would get in production.
+
+## A release branch: production's schema plus the release's migrations
+
+Production's catalog has none of a release's migrations, so a lab built on a
+release branch would test the release's app and functions against a database
+the deploy never produces. `qa-lab/release-migrations.mjs` (run by `qa:up` and
+`qa:lab` after the schema and the seed; `npm run qa:release` by hand) adds them
+the way the plan says the deploy will:
+
+- **Which and in what order.** The ``Migration `<name>` `` rows of the
+  plan's "## Order" table, top to bottom (not file-name order: release/qa1 runs
+  `20260930032000` at step 17 and `20260930031500` at step 30). The migration
+  files the branch adds over `main` (`--live-ref`) must be exactly the plan's
+  list, or it stops: a forgotten file, a listed file the branch lacks, or a
+  listed file already on `main` (a stale plan) is refused. With no
+  `DEPLOY-PLAN.md`, or every listed file already on `main`, it does nothing.
+- **How.** Each file as it is, as `postgres`, in one request (`psql -c`: one
+  simple-query message, one implicit transaction, as the SQL editor and the
+  Management API query endpoint run it), with the one lab rewrite every
+  production definition gets: the production API origin becomes the local
+  gateway (release/qa1's `20260930010000` points `prune_old_backups()` at the
+  `prune-backups` function; locally it calls the lab's). A file that still names
+  the production project, or holds credential-shaped text, is refused.
+- **Checked with the plan's own probes.** Check A (and check F for the
+  reply-email migration) must answer `false` in every column before the first
+  file (production's schema lacks all of it) and `true` after the last.
+- **Scheduled jobs stay off.** A job a migration (re)schedules is switched off
+  again, as extract-schema creates every job.
+- **Recorded.** `qa_lab.release_migrations` (name, step, sha256): a second run
+  is a no-op, a changed file asks for a rebuild. Catalog snapshots from before
+  the first file and after the last go to `.generated/release/`, and what
+  changed between them to `.generated/release/delta.json`.
+
+`qa:parity` then reports, besides the explained differences, a `release`
+column: a difference is the release's only when applying the release made
+exactly that change (same category, key and kind in the before/after
+snapshots). Drift in any other object, or a release object that differs from
+what the migrations made, stays unexplained. Every release difference is
+listed in full.
+
+Functions a release deploys for the first time are in the stack template as
+its plan deploys them (`prune-backups`, `verify_jwt = false`, step 1). The lab
+serves every function of the branch at once, which is the plan's end state;
+the plan's function-before-migration orderings are not reproduced.
+
+### Result, 2026-09-30 09:06 UTC (release/qa1 merged into the lab, fresh database)
+
+`npm run qa:down -- --wipe && npm run qa:up -- --extract`, then `npm run qa:lab`:
+production's schema (114 tables, 192 functions, extracted live), the seed, then
+16 migrations in plan order (steps 2-13, 15, 16, 17, 30); every probe column
+false before (16) and true after (16); no job switched on. `npm run qa:parity`:
+0 unexplained; 52 explained (the same as without the release); 63 the
+release's own: 1 table, 11 columns (10 new, `profiles.theme` default changed),
+25 functions (14 new, 11 changed), 7 constraints, 1 index, 2 triggers, 1
+policy, 1 table grant, 14 function grants. `qa:smoke` 9/9 and
+`qa:smoke -- --checkout` 15/15; `select public.prune_old_backups()` reached the
+lab's `prune-backups` through pg_net and the local gateway (200).
 
 ## Seed (`seed.sql`)
 
@@ -1607,6 +1669,7 @@ checked (each id's evidence names what was checked instead):
 | `lib/local-db.mjs` | psql against the local stack only: the URL is rebuilt from a checked loopback host, numeric port and plain database name, any query parameter but `sslmode` is refused (libpq would let `host=`, `hostaddr=`, `service=` or `port=` there override the host), and psql runs without the caller's `PG*` connection variables |
 | `lib/config.mjs`, `lib/paths.mjs` | values from the stack template; paths via `fileURLToPath` |
 | `supabase-config.template.toml` | the lab's Supabase CLI config (migrations/seed off, analytics off, the lab token key, per-function `verify_jwt` as deployed); copied into `.generated/stack/`, never to `supabase/config.toml` |
+| `release-migrations.mjs`, `lib/release-plan.mjs` | `npm run qa:release`: a release branch's migrations in `DEPLOY-PLAN.md` order, checked with the plan's probes; the release's differences for `qa:parity` |
 | `lib/api-proxy.mjs` | the app's Supabase URL: a cross-origin proxy to the local gateway (Origin presented as production's, production's Allow-Origin renamed back) |
 | `cors-check.mjs` | `npm run qa:cors`: the CORS contract of every function the browser calls |
 | `lab.mjs` | `npm run qa:lab` |
@@ -1653,6 +1716,13 @@ push` keeps applying migrations.
   query, host lists, remote hosts, a missing port and odd database names are
   refused; the URL handed to psql is rebuilt; psql gets no `PG*` variables.
 - `tests/path-with-space-guard.test.mjs` now also scans `qa-lab/`.
+- `tests/qa-lab/release-plan.test.mjs`: a release's migrations come from the
+  plan's Order table in step order; the probes are one SELECT each; the
+  production origin is rewritten and a file still naming production (or
+  holding a credential shape) is refused; the branch's added migrations must be
+  the plan's; a parity difference is the release's only with the same
+  category, key and kind as a change applying it made; `qa:up`/`qa:lab` run it
+  after the schema; this branch's plan lists files that exist.
 
 Step 2 (also offline, no Docker needed):
 

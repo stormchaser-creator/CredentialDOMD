@@ -88,6 +88,17 @@ export function runSqlFile(file, { user = 'supabase_admin', quiet = true } = {})
   return { ok: r.status === 0, stdout: r.stdout, stderr: r.stderr };
 }
 
+/**
+ * Sends `sql` as ONE request (psql -c: one simple-query message, no psql
+ * parsing), as the Supabase SQL editor and the Management API query endpoint
+ * send a migration: every statement in it runs in one implicit transaction,
+ * and the first error rolls all of it back.
+ */
+export function runSqlRequest(sql, { user = 'supabase_admin' } = {}) {
+  const r = spawnSync(psqlPath(), ['-X', '-v', 'ON_ERROR_STOP=1', '-c', sql, connectionUrl(user)], { encoding: 'utf8', env: env(), maxBuffer: 64 * 1024 * 1024 });
+  return { ok: r.status === 0, stdout: r.stdout, stderr: r.stderr };
+}
+
 /** Runs one read-only query whose single row has one JSON column; returns the parsed value. */
 export function localJson(sql, { user = 'supabase_admin' } = {}) {
   const wrapped = `begin transaction read only; set local search_path = pg_catalog; ${sql.trim().replace(/;\s*$/, '')}\n; commit;`;

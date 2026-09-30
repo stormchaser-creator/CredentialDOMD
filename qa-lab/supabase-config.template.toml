@@ -439,7 +439,9 @@ enabled = true
 
 # Edge functions: verify_jwt exactly as deployed in production (read from the Management API
 # function list on 2026-09-29). Functions in supabase/functions that production has not
-# deployed (npi-proxy, send-onboarding-email, support-operations) keep the CLI default.
+# deployed (npi-proxy, support-operations) keep the CLI default. A function a release
+# deploys for the first time is listed as its deploy plan deploys it (prune-backups:
+# release/qa1 DEPLOY-PLAN step 1, --no-verify-jwt; pg_net calls it with the hook secret).
 
 [functions.activate-billing-invitation]
 verify_jwt = false
@@ -523,6 +525,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.public-record]
+verify_jwt = false
+
+[functions.prune-backups]
 verify_jwt = false
 
 [functions.reply-ticket]

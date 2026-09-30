@@ -26,7 +26,8 @@
     "qa:stripe": "node qa-lab/stripe-cli.mjs",
     "qa:e2e": "node qa-lab/e2e/run.mjs",
     "qa:founding-reset": "node qa-lab/founding-reset.mjs",
-    "qa:cors": "node qa-lab/cors-check.mjs"
+    "qa:cors": "node qa-lab/cors-check.mjs",
+    "qa:release": "node qa-lab/release-migrations.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

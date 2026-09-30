@@ -17,6 +17,8 @@
 //   --dev              vite dev server (hot reload; import.meta.env.DEV is true, unlike production)
 //   --no-build         serve the existing QA build (preview mode) without rebuilding
 //   --extract          re-read production's catalog before applying (read-only)
+//   --no-release       production's schema only: skip a release branch's own migrations
+//                      (by default DEPLOY-PLAN.md's are applied on top, in its order: release-migrations.mjs)
 //   --app-port N / --mock-port N / --api-port N   preferred ports (the next free one is used)
 //   --quiet            do not echo child output (logs are in qa-lab/.generated/logs/)
 //
@@ -113,7 +115,7 @@ async function httpStatus(url, init) {
 
 export async function runLab(argv = process.argv.slice(2)) {
   const { values } = parseArgs({ args: argv, options: {
-    dev: { type: 'boolean', default: false }, 'no-build': { type: 'boolean', default: false }, extract: { type: 'boolean', default: false },
+    dev: { type: 'boolean', default: false }, 'no-build': { type: 'boolean', default: false }, extract: { type: 'boolean', default: false }, 'no-release': { type: 'boolean', default: false },
     'app-port': { type: 'string' }, 'mock-port': { type: 'string' }, 'api-port': { type: 'string' }, quiet: { type: 'boolean', default: false },
   } });
   const existing = readRuntime();
@@ -128,6 +130,7 @@ export async function runLab(argv = process.argv.slice(2)) {
   step('starting the local Supabase stack (lab workdir: lab token key, functions pointed at the mocks)');
   const status = startStack({ functionsEnv: fnEnv });
   runNode('apply-schema.mjs');
+  if (!values['no-release']) runNode('release-migrations.mjs', ['--if-planned']);
   labDatabaseSetup();
   const appOrigin = `http://127.0.0.1:${appPort}`;
   const mockUrl = `http://127.0.0.1:${mockPort}`;
