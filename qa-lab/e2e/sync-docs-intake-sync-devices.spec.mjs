@@ -149,12 +149,14 @@ test('device-only secrets and settings stay on the device they were set on', { t
     await selectNear(page, 'Your own Gemini key').fill(geminiKey);
     await selectNear(page, 'Vera answers with').selectOption('opus');
     await sleep(1500);
-    // An ANMG agreement makes the CallSync card appear under Practice > Sched.
+    // An agreement whose short name is ANMG (the group CallSync serves; src/utils/callsync.js
+    // detectContract matches the short name alone) makes the CallSync card appear under
+    // Practice > Sched. The facility is synthetic.
     await goTab(page, 'Practice');
     await page.getByRole('button', { name: 'Contracts', exact: true }).first().click();
     await page.getByRole('button', { name: 'Add Agreement' }).first().click();
     const d = page.getByRole('dialog', { name: 'Add Agreement' });
-    await d.getByPlaceholder('e.g. Riverside Community Hospital').fill('QA Arrowhead Regional Medical Center');
+    await d.getByPlaceholder('e.g. Riverside Community Hospital').fill('QA CallSync Group Hospital');
     await d.getByPlaceholder('e.g. ANMG').fill('ANMG');
     await d.locator('select').first().selectOption({ label: 'CA, California' }).catch(() => {});
     await d.getByPlaceholder('250').fill('200');
