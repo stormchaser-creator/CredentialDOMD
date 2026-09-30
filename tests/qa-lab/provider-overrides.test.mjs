@@ -81,7 +81,40 @@ const OVERRIDES = [
   ['_shared/supportDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['_shared/limitedLaunchDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['_shared/inviteToJoinDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
+  ['_shared/invoiceEmailDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
 ];
+// The Clerk and Stripe overrides are read in one place each (tests above).
+const SINGLE_READERS = [
+  ['_shared/clerkContinuity.ts', 'CLERK_PRODUCTION_ISSUER'],
+  ['_shared/clerkContinuity.ts', 'CLERK_API_BASE'],
+  ['_shared/clerkContinuity.ts', 'CLERK_JWKS_URL'],
+  ['_shared/billingDependencies.ts', 'STRIPE_API_BASE'],
+];
+const OVERRIDE_NAMES = ['CLERK_API_BASE', 'CLERK_JWKS_URL', 'CLERK_PRODUCTION_ISSUER', 'STRIPE_API_BASE', 'RESEND_API_BASE', 'ANTHROPIC_API_BASE', 'GEMINI_API_BASE'];
+
+function* functionSources(dir = FUNCTIONS) {
+  for (const name of readdirSync(dir)) {
+    const full = path.join(dir, name);
+    if (statSync(full).isDirectory()) yield* functionSources(full);
+    else if (/\.(ts|mjs|js)$/.test(name)) yield { rel: path.relative(FUNCTIONS, full).split(path.sep).join('/'), text: readFileSync(full, 'utf8') };
+  }
+}
+
+/** Every place a function names an override variable as a string: { rel, name, before, after, line }. */
+function overrideReads() {
+  const out = [];
+  const literal = new RegExp(`(["'\`])(${OVERRIDE_NAMES.join('|')})\\1`, 'g');
+  for (const { rel, text } of functionSources()) {
+    for (const m of text.matchAll(literal)) {
+      const lineStart = text.lastIndexOf('\n', m.index) + 1;
+      const lineEnd = text.indexOf('\n', m.index);
+      const line = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
+      if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue;   // comments
+      out.push({ rel, name: m[2], before: text.slice(Math.max(0, m.index - 40), m.index), after: text.slice(m.index + m[0].length, m.index + m[0].length + 1), line, text });
+    }
+  }
+  return out;
+}
 
 test('every override defaults to the real provider when its variable is unset', () => {
   for (const [rel, name, real] of OVERRIDES) {
@@ -114,4 +147,61 @@ test('no function calls a provider host except through an override (comments asi
     }
   })(FUNCTIONS);
   assert.deepEqual(problems, [], 'give each new provider URL a *_API_BASE override that defaults to it (see _shared/clerkContinuity.ts)');
+});
+
+test('the list above is every override a function reads (a new one must name its real default here)', () => {
+  const key = ([rel, name]) => `${rel} ${name}`;
+  const found = [...new Set(overrideReads().map((r) => `${r.rel} ${r.name}`))].sort();
+  const listed = [...new Set([...OVERRIDES, ...SINGLE_READERS].map(key))].sort();
+  assert.deepEqual(found, listed);
+});
+
+test('every override is read from the function\'s own environment, never from a request', () => {
+  const problems = [];
+  for (const r of overrideReads()) {
+    const where = `${r.rel}: ${r.line.trim().slice(0, 140)}`;
+    // Exactly Deno.env.get("NAME"), or a one-line helper that is nothing but Deno.env.get.
+    const reader = /(Deno\.env\.get|\benv|\bclerkLocation)\($/.exec(r.before)?.[1];
+    if (!reader || r.after !== ')') { problems.push(`not an environment read: ${where}`); continue; }
+    if (reader === 'env' && !/const env = \((\w+)(?:: string)?\) => Deno\.env\.get\(\1\)/.test(r.text)) problems.push(`env() here is not Deno.env.get: ${where}`);
+    if (reader === 'clerkLocation' && !/const clerkLocation = \(name: string\): string =>\s*\(\(globalThis as \{[^\n]*?\}\)\.Deno\?\.env\.get\(name\) \|\| ""\)/.test(r.text)) problems.push(`clerkLocation() here is not Deno.env.get: ${where}`);
+    // Nothing a caller sends takes part in the choice of host.
+    if (/\breq\b|\brequest\b|headers|searchParams|\bbody\b|\.json\(|formData|payload|params\b/i.test(r.line)) problems.push(`request input next to the override: ${where}`);
+  }
+  assert.deepEqual(problems, []);
+  // The two helpers that take a value: the Stripe host is only ever the environment's, and a
+  // JWKS location is only ever built for an issuer the function's own environment names.
+  const sources = [...functionSources()];
+  const stripeCalls = sources.flatMap(({ rel, text }) => [...text.matchAll(/stripeHostOptions\(([^)]*)\)/g)].filter((m) => !/^\s*base\s*=/.test(m[1])).map((m) => `${rel}: ${m[0]}`));
+  assert.deepEqual(stripeCalls, ['_shared/billingDependencies.ts: stripeHostOptions()'], 'stripeHostOptions is called with no argument, so STRIPE_API_BASE is the only input');
+  for (const { rel, text } of sources) {
+    for (const m of text.matchAll(/clerkJwksUrl\(([^)]*)\)/g)) {
+      const arg = m[1].trim();
+      if (arg === 'issuer: string' || arg === '') continue;   // the definition, and the import list
+      if (arg === 'PRODUCTION_CLERK_ISSUER') continue;
+      assert.ok(['issuer', 'ISSUER'].includes(arg), `${rel}: clerkJwksUrl(${arg})`);
+      assert.match(text, new RegExp(`const ${arg} = (?:Deno\\.env\\.get|env)\\(["']CLERK_ISSUER["']\\)`), `${rel}: ${arg} must come from CLERK_ISSUER`);
+    }
+  }
+});
+
+test('with no override set, a function\'s environment still decides nothing but the provider host it already had', () => {
+  // clerkContinuity.ts ignores every other variable: a lab-looking value under another name changes nothing.
+  const prod = load('_shared/clerkContinuity.ts', { CLERK_API_URL: 'http://127.0.0.1:1', CLERK_BASE: 'http://127.0.0.1:1', QA_LAB: '1', VITE_QA_LAB: '1' });
+  assert.equal(prod.CLERK_API_BASE, 'https://api.clerk.com');
+  assert.equal(prod.PRODUCTION_CLERK_ISSUER, 'https://clerk.credentialdomd.com');
+  assert.equal(prod.clerkJwksUrl('https://clerk.credentialdomd.com').href, 'https://clerk.credentialdomd.com/.well-known/jwks.json');
+  const stripe = load('_shared/billingDependencies.ts', { STRIPE_BASE: 'http://127.0.0.1:1', QA_LAB: '1' });
+  assert.deepEqual(JSON.parse(JSON.stringify(stripe.stripeHostOptions())), {});
+});
+
+test('no edge function names the QA lab, its domain or a QA_* switch (only the override comments point at its README)', () => {
+  const problems = [];
+  for (const { rel, text } of functionSources()) {
+    text.split('\n').forEach((line, i) => {
+      if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+      if (/qa-lab|qa\.credentialdomd\.test|VITE_QA_LAB|QA_LAB|env\.get\(\s*["'`]QA_|host\.docker\.internal/.test(line)) problems.push(`${rel}:${i + 1}: ${line.trim().slice(0, 120)}`);
+    });
+  }
+  assert.deepEqual(problems, []);
 });
