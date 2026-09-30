@@ -66,6 +66,11 @@ export async function initializeProductionProfile(
     }
   }
   assertFresh();
+  // identity.email is more than identity evidence: when this sign-in reopens
+  // an account whose data was deleted, the database routes that address back
+  // to the account (docs@ intake, email ticket replies; migration
+  // 20260930051700), stamped with updatedMs and checked against checkedAt. It
+  // must stay the verified primary readProductionIdentity returned.
   const { data, error } = await db.rpc("initialize_clerk_profile", {
     p_target_subject: identity.subject, p_verified_primary_email: identity.email,
     p_target_issuer: issuer, p_provider_updated_ms: identity.updatedMs, p_checked_at: checkedAt,

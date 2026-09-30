@@ -25,7 +25,10 @@ const SUBJECT = 'user_SynthMember';
 const PROFILE = '00000000-0000-4000-8000-0000000000a1';
 const WIPED = '2026-09-29T12:00:00.123+00:00';
 
-function boot({ dataDeletedAt = null } = {}) {
+const MEMBER = { id: SUBJECT, created_at: 1700000000000, updated_at: 1789820000000,
+  primary_email_address_id: 'idn_1', email_addresses: [{ id: 'idn_1', email_address: 'member@example.invalid', verification: { status: 'verified' } }] };
+
+function boot({ dataDeletedAt = null, user = MEMBER } = {}) {
   const served = [], rpc = [];
   const env = { SUPABASE_URL: 'https://synthetic.supabase.test', SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-role',
     CLERK_ISSUER: ISSUER, CLERK_SECRET_KEY: 'sk_live_SYNTHETIC_initialize', CLERK_CONTINUITY_ENABLED: 'true' };
@@ -42,8 +45,7 @@ function boot({ dataDeletedAt = null } = {}) {
       return { payload: { sub: SUBJECT } };
     } },
   };
-  const fetch = async () => new Response(JSON.stringify({ id: SUBJECT, created_at: 1700000000000, updated_at: 1789820000000,
-    primary_email_address_id: 'idn_1', email_addresses: [{ id: 'idn_1', email_address: 'member@example.invalid', verification: { status: 'verified' } }] }));
+  const fetch = async () => new Response(JSON.stringify(user));
   const module = { exports: {} };
   vm.runInNewContext(code, {
     module, exports: module.exports, require: name => { if (!(name in modules)) throw new Error(`unexpected import ${name}`); return modules[name]; },
@@ -98,6 +100,36 @@ test('any other body is refused before the provider or the database is asked', a
     assert.deepEqual(answer.body, { error: 'empty_object_required' });
     assert.equal(f.rpc.length, 0);
   }
+});
+
+// 20260930051700: the sign-in that reopens a wiped account also routes the
+// address the database is handed here back to that account (docs@ intake and
+// email ticket replies), so it must be Clerk's VERIFIED PRIMARY, normalized,
+// with Clerk's own clock and the time of the read, and never another address
+// on the Clerk user. tests/account-deletion/reopen-mailbox-sql.test.mjs runs
+// this same entrypoint against PostgreSQL.
+test('the database is handed only the verified primary Clerk returns, with Clerk\'s clock and the time of the read', async () => {
+  const user = { id: SUBJECT, created_at: 1700000000000, updated_at: 1789820000123, primary_email_address_id: 'idn_2', email_addresses: [
+    { id: 'idn_1', email_address: 'other.verified@example.invalid', verification: { status: 'verified' } },
+    { id: 'idn_2', email_address: '  Member.Primary@Example.Invalid ', verification: { status: 'verified' } },
+    { id: 'idn_3', email_address: 'pending@example.invalid', verification: { status: 'unverified' } }] };
+  const f = boot({ dataDeletedAt: WIPED, user });
+  const before = Date.now();
+  const answer = await f.call(CURRENT);
+  assert.equal(answer.status, 200);
+  const init = f.rpc.find(c => c.name === 'initialize_clerk_profile');
+  assert.equal(init.args.p_verified_primary_email, 'member.primary@example.invalid');
+  assert.equal(init.args.p_provider_updated_ms, 1789820000123);
+  assert.ok(Date.parse(init.args.p_checked_at) >= before - 1 && Date.parse(init.args.p_checked_at) <= Date.now(), init.args.p_checked_at);
+  assert.equal(JSON.stringify(f.rpc).includes('other.verified@'), false);
+  assert.equal(JSON.stringify(f.rpc).includes('pending@'), false);
+
+  // A primary Clerk has not verified reaches no database call at all.
+  const unverified = boot({ dataDeletedAt: WIPED, user: { ...user, email_addresses: user.email_addresses.map(e => e.id === 'idn_2' ? { ...e, verification: { status: 'unverified' } } : e) } });
+  const refused = await unverified.call(CURRENT);
+  assert.equal(refused.status, 409);
+  assert.deepEqual(refused.body, { error: 'verified_primary_required' });
+  assert.deepEqual(unverified.rpc, []);
 });
 
 // The two helpers, from the shared module the entrypoint bundles.
