@@ -43,6 +43,44 @@ test('eight words in a row from the ticket thread count as copied text', () => {
   assert.equal(evidenceShingles(null).size, 0);
 });
 
+// The runner's own verified reply (a message with a verification_id) is
+// written from the acceptance criteria and the test names; a reproduction test
+// named after its criterion, as the runner requires, matched it, and a frozen
+// reproduction file can never be repaired (2026-09-29). Synthetic text.
+const CRITERION = 'Renewal list: the expired badge shows on the card once the renewal date has passed';
+const verifiedReply = { id: '00000000-0000-4000-8000-000000000301', body: `CredentialDOMD Support · Automated\n\nFixed and verified: ${CRITERION}. The test that checks it passed on the released build.`,
+  is_admin_reply: true, verification_id: '00000000-0000-4000-8000-000000000302', actor_label: 'owner_support_reply' };
+const ownerNote = { id: '00000000-0000-4000-8000-000000000303', body: 'Admin note, no verification: the orange banner on the credentials page overlaps the search field on narrow phones',
+  is_admin_reply: true, verification_id: null, actor_label: 'recorded_admin_author' };
+const memberAsk = { id: '00000000-0000-4000-8000-000000000304', body: 'Please make the reminder email name the licence that expires first, not the newest one',
+  is_admin_reply: false, verification_id: null, actor_label: 'recorded_customer_author' };
+
+test('the runner\'s own verified reply is not ticket text; an admin reply without a verification and the member\'s words still are', () => {
+  const shingles = evidenceShingles({ tickets: [{ subject: 'Synthetic', body: 'Synthetic opening', messages: [verifiedReply, ownerNote, memberAsk] }] });
+  assert.ok(!shingles.has('the expired badge shows on the card once the'), 'the verified reply is the runner\'s own words');
+  assert.ok(!shingles.has('credentialdomd support automated fixed and verified renewal list'));
+  assert.ok(shingles.has('banner on the credentials page overlaps the search'), 'an admin reply with no verification still counts');
+  assert.ok(shingles.has('reminder email name the licence that expires first'), 'the member\'s own words still count');
+});
+
+test('the report: a reproduction test named after an acceptance criterion passes when only the runner\'s verified reply repeats it', () => {
+  const p = project({ 'tests/existing.test.mjs': '// Existing fixture\n' });
+  try {
+    const base = sh(p.repo, ['rev-parse', 'HEAD']);
+    p.write(p.repo, { 'tests/renewal-badge.test.mjs': `test(${JSON.stringify(CRITERION)}, () => {});\n` });
+    sh(p.repo, ['add', '-A']); sh(p.repo, ['commit', '-q', '-m', 'Synthetic reproduction']);
+    const head = sh(p.repo, ['rev-parse', 'HEAD']);
+    const thread = messages => ({ target_id: 'x', tickets: [{ id: 'x', subject: 'Synthetic', body: 'Synthetic opening', messages }] });
+    assert.deepEqual(personalDataReport({ dir: p.repo, base, head, context: thread([memberAsk, verifiedReply]) }), { pass: true, hits: [], files: 1 });
+    // The same words from the member, or from an admin reply the runner did not
+    // verify, are still copied ticket text.
+    const fromMember = personalDataReport({ dir: p.repo, base, head, context: thread([{ ...memberAsk, body: `I think ${CRITERION}, but it does not.` }, verifiedReply]) });
+    assert.deepEqual(fromMember.hits, [{ rule: 'ticket_text', file: 'tests/renewal-badge.test.mjs' }]);
+    const fromAdmin = personalDataReport({ dir: p.repo, base, head, context: thread([{ ...verifiedReply, verification_id: null }]) });
+    assert.deepEqual(fromAdmin.hits, [{ rule: 'ticket_text', file: 'tests/renewal-badge.test.mjs' }]);
+  } finally { p.cleanup(); }
+});
+
 test('the report: added lines only, a value already public at base is not counted, the runner\'s credential always is, and no value is recorded', async () => {
   const p = project({ 'tests/existing.test.mjs': `// Existing fixture: ${EMAIL} is already in the public repo\n` });
   try {
