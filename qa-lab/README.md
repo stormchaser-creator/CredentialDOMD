@@ -166,7 +166,9 @@ Safety rules applied to every definition before it is written:
 Configuration only, applied after the schema:
 
 - `access_policy_settings` and `vera_source_settings`: copied from production on
-  2026-09-29 (singletons; launch gates and price phase). Parity compares them with
+  2026-09-29 (singletons; launch gates and price phase). `welcome_email_settings`:
+  the OFF singleton production has (seed version 3); the owner turns the
+  paid-member welcome on in Admin > Emails. Parity compares them with
   production on every live run, so drift is reported.
 - **Founding programs for both modes** (`livemode = false` and `true`, capacity
   100 each), each with two synthetic promised places
@@ -525,7 +527,7 @@ invoices, invoice items, billing portal configuration and sessions;
 | `GET /qa/stripe/sessions` (`customer`, `status`, `profile`, `subject`) | checkout sessions |
 | `POST /qa/stripe/checkout/:id/complete` `{send?, endpoint?}` | the buyer paid: a subscription and its paid first invoice, then signed `checkout.session.completed`, `customer.subscription.created`, `invoice.paid` to `limited-stripe-webhook` |
 | `POST /qa/stripe/checkout/:id/expire`, `POST /qa/stripe/subscriptions/:id/cancel` `{atPeriodEnd}` | with `checkout.session.expired`, `customer.subscription.updated`/`deleted` |
-| `POST /qa/stripe/events/:id/resend`, `GET /qa/stripe/deliveries` | resend an event; every delivery and its answer |
+| `POST /qa/stripe/events/:id/resend`, `GET /qa/stripe/deliveries` | resend an event; every delivery and its answer, with the `object` and `customer` it was about |
 | `/qa/stripe/hosted/checkout/:id`, `/qa/stripe/hosted/portal/:token` | stand-ins for Stripe's hosted pages (the smoke's browser is routed there from `checkout.stripe.com` and `billing.stripe.com`) |
 
 The same from a terminal: `npm run qa:stripe -- sessions | complete | expire |
@@ -549,7 +551,9 @@ attachments.
 `/gemini/v1beta/models/<model>:generateContent|countTokens`. Mocked by default:
 a canned answer in the provider's shape (Gemini JSON mode answers `{}`), or the
 next scripted one: `POST /qa/ai/next {provider: "anthropic"|"gemini", response:
-{text} | {json} | {content}}` (first in, first out, per provider),
+{text} | {json} | {content}, match?}` (first in, first out, per provider; with
+`match`, at least 8 characters, only a request whose body contains that text
+gets it),
 `DELETE /qa/ai/next`, `GET /qa/ai` (mode, cap, calls). Real calls only with
 `QA_AI=real` plus `QA_ANTHROPIC_API_KEY` / `QA_GEMINI_API_KEY` in `qa:lab`'s
 environment (never from `app_secrets`, which only hold placeholders), capped at
@@ -603,6 +607,198 @@ schema is production's):
   Stripe's and are not reproduced). The founding welcome goes to waitlist leads
   only, and `send-welcome` holds it for owner review (`owner_review_required`).
 
+## The journeys (step 3): the app used like a physician
+
+`npm run qa:e2e` runs Playwright journeys against the QA build. Each journey
+creates its own test physician on the QA sign-in, pays on the Checkout stand-in
+when it needs a member (the founding offer, as a new physician would), then uses
+the app through its screens. After the steps that matter it checks both sides:
+what the screen shows, and the local database (read-only `psql` against the lab
+stack) or the email the mock Resend captured.
+
+### Running them
+
+```sh
+npm run qa:e2e                          # every journey; starts npm run qa:lab first when no lab is running
+npm run qa:e2e -- --fresh               # rebuild the lab database first (empty, re-seeded)
+npm run qa:e2e -- practice              # journeys whose file name matches
+npm run qa:e2e -- --grep @CRED-001      # journeys tagged with a checklist id
+npm run qa:e2e -- --headed --workers 1  # watch them
+npm run qa:e2e -- --list                # list journeys (keeps the last results.json)
+```
+
+Anything after `--` goes to `playwright test`. A lab the runner started is
+stopped at the end (the stack keeps running, as with `qa:lab`). Three workers by
+default (`QA_E2E_WORKERS`); a full run takes about 6 minutes plus 3 for `--fresh`.
+Playwright's own Chromium (1.63, revision 1243) is used; `QA_BROWSER_CHANNEL=chrome`
+uses the installed Google Chrome instead.
+
+**Founding places.** Every journey that pays takes one of the lab's 100 founding
+places, and a full run takes about 27. Once they are gone the gate offers the
+early-bird price and the signup journey's "$99" checks fail for a lab reason. The
+runner prints how many are left and warns under 25; `--fresh` (or
+`npm run qa:down -- --wipe && npm run qa:up`) starts over.
+
+Output (all under the gitignored `qa-lab/.generated/`):
+
+| Path | What |
+|---|---|
+| `results.json` | checklist id to `pass` / `fail` / `blocked` / `not_run`, with evidence (below) |
+| `e2e/html/` | Playwright's HTML report (`npx playwright show-report qa-lab/.generated/e2e/html`) |
+| `e2e/shots/` | screenshots each journey takes at its key steps and on failure |
+| `e2e/artifacts/` | traces and failure screenshots of failed journeys |
+
+### How a journey is written
+
+- `e2e/support/fixtures.mjs` extends Playwright's `test`:
+  - every browser context refuses requests to hosts that are not this machine
+    (and the journey fails if the app tried), sends Stripe's hosted pages to the
+    mock's stand-ins, and serves signed Storage links the functions make (they
+    name the stack's internal host `kong:8000`) from the local gateway;
+  - console errors, page errors, failed requests and native dialogs are recorded
+    per journey (`qa.report`); native `confirm()`s are accepted, as the physician
+    who pressed the button would, unless the journey sets `qa.onDialog`;
+  - `qa.feature(id, title, fn, { soft })` runs one checklist item's stretch of the
+    journey; `qa.check(name, ok, detail)` is a soft check (the journey goes on and
+    fails at the end); `qa.bug({...})` records a product bug with its step,
+    expected and actual result and a screenshot; `qa.blocked(id, reason)` records
+    what the lab cannot exercise; `qa.shot(name)` saves a screenshot;
+  - `secondBrowser()` opens a clean second browser (no shared storage) for the
+    two-device checks.
+- `e2e/support/lab.mjs` has the steps and reads every journey shares: create a
+  physician, sign in, pay for the membership, open a tab or section, fill a form
+  field by its label (the app's `<label>`s are not tied to their inputs, so
+  fields are found as the label's sibling), find a record's star/share/edit/delete
+  buttons (only the star has an accessible name), the pending-ops queue, Home's
+  ring and tiles, synthetic PDF/PNG files, the captured email, SQL rows, the
+  access snapshot the database computes for a member, PostgREST as a member, the
+  Stripe events of a member, and `scriptAi(provider, answer, match)`.
+- Specs are tagged with the checklist ids they cover (`@CRED-001`), so
+  `--grep @CRED-001` runs them.
+
+**The AI in journeys.** The mock AI answers every request, so a journey that
+needs a particular answer queues one with `scriptAi`, naming text the request
+must contain (a slice of the uploaded file's base64, or the question asked), so
+parallel journeys never take each other's answers.
+
+### `results.json`
+
+```json
+{
+  "summary": { "pass": 0, "fail": 0, "blocked": 0, "not_run": 0 },
+  "byPriority": { "P0": { "pass": 0, "fail": 0, "blocked": 0, "not_run": 0 } },
+  "journeys": [ { "title": "...", "file": "qa-lab/e2e/x.spec.mjs", "status": "passed", "features": ["CRED-001"], "error": null } ],
+  "bugs": [ { "feature": "DOCS-008", "title": "...", "step": "...", "expected": "...", "actual": "...", "severity": "medium", "screenshot": "..." } ],
+  "features": { "CRED-001": { "status": "pass", "name": "...", "priority": "P0", "evidence": [ { "journey": "...", "checks": [ { "name": "...", "ok": true, "detail": "..." } ], "screenshots": ["..."] } ] } },
+  "labHealth": { "clientErrors": [], "zombies": [], "edgeFunctionErrors": [] }
+}
+```
+
+An id is `fail` if any journey's stretch for it failed, `pass` if one passed it
+and none failed it, `blocked` if the lab could not exercise it or the journey
+stopped before reaching it, `not_run` if no journey covers it yet. The checklist
+itself (261 features, `features.json`) is not in this repository; the runner
+reads it from `QA_FEATURES` or `../qa-data/features.json` beside the worktree,
+for names and priorities. `labHealth` is what the lab saw during the run beyond
+the journeys' own checks: client error reports the app sent, zombie rows (a row
+whose id is also tombstoned in `deleted_items`), and edge-function error lines in
+the runtime's log.
+
+### Result, 2026-09-29
+
+RESULT_PLACEHOLDER
+
+**Product bugs the journeys found** (production behaves the same: the schema,
+functions and app code are production's; each is in `results.json` under
+`bugs` with its step, expected and actual result and a screenshot in
+`.generated/e2e/shots/`):
+
+| Severity | Id | Bug |
+|---|---|---|
+| high | SETTINGS-005 | After **Delete All My Data** the account dead-ends: the app is not signed out, and every later load shows "Your account identity could not be verified. Your existing records have not changed. Reload to try again (ID-INIT-ACCOUNT_UNAVAILABLE-H409)". `profiles.deleted_at` makes `account_is_closed` true, so `initialize-clerk-profile` answers `account_unavailable`; "records have not changed" is false; Data Rights says only closing the sign-in account needs an email to support; the paid subscription stays active and is not cancelled. |
+| medium | ADMIN-001 | Admin > Accounts **Pause / Approve hangs on "Saving…"** (Cancel disabled) when the member's profile changed after the list loaded, which a member using the app does. `admin_change_profile_access` raises "Account changed. Refresh and review it again" with SQLSTATE 40001, which PostgREST (14.14 locally) retries, so the request never answers; a direct call with a stale timestamp did not answer in 40 s. Reloading the page and trying again works. |
+| medium | ADMIN-002 | Admin > Tickets: **a ticket's screenshot never displays**. `TicketAttachments` renders `<img src=signed Storage URL>`, and the app's CSP (`src/main.jsx`) allows images only from `'self' data: blob: https://img.clerk.com`, not the Supabase host. |
+| medium | DOCS-008 | Documents: **once linked, a document cannot be relinked or unlinked** from its card; the "Link to credential..." select renders only while `linkedTo` is empty. |
+| medium | SYNC-015 | **Restore from Backup replaces each section on the device** instead of merging ("This will merge with your current data"): a record added after the backup disappears until a reload (`{...data, ...filtered}`). |
+| medium | SYNC-015 | **A restored record keeps its tombstone**: the row is back but `deleted_items` still holds it (a zombie; the run's lab health counts them). |
+| low | NOTIFY-001 | The **reminder email counts one day too few** after 12:00 UTC ("in 19 days" for a date 20 days away): `dayDiff` in `send-reminders` rounds from midnight UTC, and the daily job runs at 13:00 UTC. |
+| low | BILL-005 | After **cancelling in the customer portal**, the membership card still reads like a renewing membership (the access snapshot carries no cancel-at-period-end for a normal paid subscription). |
+| low | CRED-003 | Deleting a license **also deletes its attached files, but the confirm does not say so** ("Delete this item? This cannot be undone."). |
+
+Also seen, not recorded as bugs: the paid-member welcome logs every normal
+outcome at error level (`[Error] {"event":"welcome_email","state":"disabled"}`
+about 75 times a run), which buries real errors in the function logs; many
+icon-only buttons (record star/share/edit/delete except the star, the top bar's
+bell and theme) have no accessible name, and form labels are not tied to their
+inputs; "Pause" in Admin writes `access_status = 'revoked'` and its dialog says
+"will change from active to revoked"; the invite-to-join counter is service
+wide (20 a day), so more than about 20 journey runs a day without `--fresh`
+exhaust it.
+
+### What the lab needed for step 3
+
+- **The 0929 release.** `main` was merged into this branch so the journeys test
+  invite to join, the paid-member welcome email and the support reply email.
+  The base-URL overrides were re-applied where the merge replaced code
+  (`limitedLaunchDependencies.ts`: `CLERK_API_BASE`, `RESEND_API_BASE` for the
+  welcome email; `send-ticket-reply`); `config.toml` gained `invite-to-join`
+  (`verify_jwt = false`, as deployed). Production had moved too (the reply
+  email retry table and job), so the lab database was rebuilt from a fresh
+  extraction.
+- **Seed version 3**: `welcome_email_settings`, the OFF singleton production has
+  (without it Admin > Emails said "welcome email settings missing" and could not
+  be approved). Parity now compares it (`enabled` only).
+- **Mock Stripe**: every webhook delivery records the object and customer it was
+  about, so a journey finds its own events among parallel journeys.
+- **Mock AI**: scripted answers can name text the request must contain (`match`).
+- **QA sign-in offline**: when the device is offline, the QA Clerk stays
+  unloaded and keeps the session, as real Clerk does (it never loads), so the
+  app's offline fallback runs instead of a sign-in page.
+- `npm run qa:e2e -- --fresh`, and the post-run lab health section.
+
+### Checklist expectations that differ from the product's design
+
+The journeys check the product's intended behaviour where the checklist's
+expectation turned out to be written against an older or assumed design:
+
+| Id | Checklist says | The product does (by design) |
+|---|---|---|
+| AUTH-001 | a `clerk_continuity_accounts` row for a new account | rows exist only for staged legacy (pre-migration) accounts |
+| BILL-001 | `billing-quote` writes a quote on review | reviewing writes nothing; `limited-checkout` writes the consented quote on Continue |
+| BILL-003 | `billing_checkout_attempts` status `completed` after payment | the attempt stays `open` and is closed lazily at the member's next checkout (`closeCheckout`) |
+| SETTINGS-005 | `backup_monthly` and `ack_requests` reset to true | the client pass writes true, then `delete-account`'s tombstone patch sets both false on purpose (no archive, no acknowledgement for an emptied account) |
+| SYNC-005 | offline, edits are refused with a message and the form keeps its input | offline, Credentials opens as a read-only archive with no editor at all ("These records are read-only", Download saved records); Vera says it is unavailable offline |
+| PRAC-007 | "send" the expense invoice to a QA inbox | it goes to the device's share sheet (`navigator.share`) with the PDF and receipts; the lab records what the sheet receives |
+| (step 2 note) | "Setup · 1 of 6" lights the last bar segment | each segment is one Tier 1 task in list order; the done task is the last one. Not a bug |
+
+### Lab limitations
+
+- **Clerk's own screens are not reproduced**: the sign-up form, email codes,
+  passwords, passkeys, sign-in methods and the account page (AUTH-010, AUTH-012,
+  AUTH-013 not run). A session "revoked elsewhere" is ended through the mock
+  Clerk's API (AUTH-006).
+- **Stripe's hosted pages are stand-ins**: Pay, Cancel, and a portal with
+  "Cancel at period end". No cards, 3-D Secure, invoices by email or refunds.
+- **AI is mocked**: answers are canned or scripted; `QA_AI=real` with a lab key
+  calls the real providers, capped.
+- **Signed Storage links** from functions name the stack's internal gateway
+  (`kong:8000`). Journeys serve them from the local gateway; opened by hand in
+  the lab they do not load. They are also what the app's CSP blocks as images
+  (a product bug, below), and production's would be blocked the same way.
+- **The public site** (landing page, state guides, `credential-access` portal)
+  is not served by the lab app server: PUBLIC-*, SHARE-001 not run.
+- **Scheduled jobs are off**: journeys run a job's dispatch function by hand
+  (`dispatch_daily_reminders()`), which exercises the same function and edge
+  function the cron job would.
+- **Desk viewport only** (1280 x 900); phone layouts are not covered.
+- **Network drops** are Playwright's offline switch; a cold start of the PWA with
+  no network at all is not covered.
+- **PostgREST 14.14** runs locally; production's version is not known to the
+  lab, which matters for the pause/approve hang below.
+- The edge runtime logs `Deno.core.runMicrotasks() is not supported` and
+  `beforeunload ... Uncaught null` about 50 times a run: the local CLI's runtime,
+  not the functions.
+
 ## Files
 
 | Path | What |
@@ -632,7 +828,12 @@ schema is production's):
 | `app/vite.config.mjs` | the QA-lab build: Clerk alias, issuer rewrite, gateway, output folder |
 | `app/clerk-shim.jsx`, `app/qa-clerk.js`, `app/QaSignIn.jsx` | the QA sign-in |
 | `mocks/server.mjs` | the mock server (`clerk.mjs`, `stripe.mjs`, `stripe-params.mjs`, `resend.mjs`, `ai.mjs`, `signing.mjs`, `store.mjs`, `http.mjs`) |
-| `.generated/` (gitignored) | `catalog.json`, `schema.sql`, `local-secrets.json`, `parity-report.txt`; step 2: `lab-secrets.json`, `stack/`, `functions.env`, `lab.json`, `lab-ports.json`, `mocks/`, `app-dist/`, `logs/`, `smoke/` |
+| `e2e/run.mjs` | `npm run qa:e2e` (starts the lab if needed, `--fresh`, lab health) |
+| `e2e/playwright.config.mjs` | Playwright settings: Chromium, desk viewport, three workers, reporters |
+| `e2e/*.spec.mjs` | the journeys (list below) |
+| `e2e/support/fixtures.mjs`, `e2e/support/lab.mjs` | the journeys' fixtures and shared steps |
+| `e2e/support/results-reporter.mjs` | writes `.generated/results.json` |
+| `.generated/` (gitignored) | `catalog.json`, `schema.sql`, `local-secrets.json`, `parity-report.txt`; step 2: `lab-secrets.json`, `stack/`, `functions.env`, `lab.json`, `lab-ports.json`, `mocks/`, `app-dist/`, `logs/`, `smoke/`; step 3: `results.json`, `e2e/` |
 | `../supabase/config.toml` | local stack config: migrations/seed off, analytics off, per-function `verify_jwt` as deployed |
 
 `supabase/config.toml` also governs `supabase functions deploy` from this repo:
@@ -671,3 +872,17 @@ Step 2 (also offline, no Docker needed):
   the lab; a production build has no QA sign-in code (with a negative control).
 - `tests/qa-lab/public-repo-safety.test.mjs`: also the continuity seed (reserved
   `.test` issuers only).
+
+Step 3 (offline):
+
+- `tests/qa-lab/e2e-results.test.mjs`: how the reporter turns journeys into
+  pass / fail / blocked / not_run per checklist id, and that `--list` keeps the
+  last results.
+- `tests/qa-lab/mocks.test.mjs`: also matched AI scripts and Stripe deliveries
+  naming their object and customer.
+- `tests/qa-lab/public-repo-safety.test.mjs`: the journeys may name the
+  product's own intake address and the app's placeholder examples, nothing else
+  outside the reserved domains.
+
+The journeys themselves (`*.spec.mjs`) need the running lab and are not part of
+`npm test`.

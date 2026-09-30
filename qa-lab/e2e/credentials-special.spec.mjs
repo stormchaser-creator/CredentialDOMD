@@ -85,9 +85,13 @@ test('protected identity stays on the device and encrypted; a custom category ho
 
   await qa.feature('CRED-024', 'Records in a custom category', async () => {
     await openCredentials(page, 'QA Hospital Badges');
-    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
-    const d = page.getByRole('dialog').last();
-    await d.waitFor();
+    await page.getByRole('heading', { name: /QA Hospital Badges/ }).waitFor();
+    const d = page.getByRole('dialog').filter({ hasText: 'Badge number' });
+    for (let attempt = 0; attempt < 3 && !(await d.isVisible().catch(() => false)); attempt++) {
+      await page.getByRole('button', { name: 'Add', exact: true }).first().click();
+      await d.waitFor({ timeout: 5000 }).catch(() => {});
+    }
+    await d.waitFor({ timeout: 5000 });
     const labels = await d.locator('label').allTextContents();
     await qa.shot('category record form');
     qa.check('the form has the category\'s own fields', ['Badge number', 'Facility', 'Access level'].every((f) => labels.some((l) => l.includes(f))), labels.join(' | '));

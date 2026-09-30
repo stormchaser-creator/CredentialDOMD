@@ -82,6 +82,27 @@ export function labHealth(since) {
   return out;
 }
 
+/**
+ * PostgREST re-runs a transaction that fails with SQLSTATE 40001, and
+ * admin_change_profile_access raises its deterministic "Account changed"
+ * refusal with 40001, so one stale Pause/Approve keeps re-running forever,
+ * holding the member's profile row and pool connections (a product bug the
+ * admin-controls journey records). Count such sessions and, if any, restart
+ * the lab's PostgREST so the next journeys start clean.
+ */
+export async function clearRunawayRetries() {
+  let n = 0;
+  try {
+    n = Number(localJson("select json_build_object('n', count(*)) ->> 'n' from pg_stat_activity where datname = 'postgres' and state <> 'idle' and query like '%admin_change_profile_access%' and query not like '%pg_stat_activity%'"));
+  } catch { return null; }
+  if (n > 0) {
+    console.log(`qa-e2e: ${n} PostgREST session(s) are re-running a refused admin_change_profile_access; restarting the lab's PostgREST`);
+    spawnSync('docker', ['restart', 'supabase_rest_credentialdomd-qa-lab'], { stdio: 'ignore' });
+    await waitFor('PostgREST', async () => (await fetch('http://127.0.0.1:54321/rest/v1/', { signal: AbortSignal.timeout(3000) }).catch(() => null))?.status < 500, { timeoutMs: 60000, intervalMs: 1000 }).catch(() => {});
+  }
+  return n;
+}
+
 /** Stops a running lab, deletes the local database volumes and the mocks' memory; the next start rebuilds. */
 async function rebuildLab() {
   const rt = readRuntime();
@@ -100,6 +121,7 @@ export async function runE2e(argv = process.argv.slice(2)) {
   const since = new Date().toISOString();
   if (argv.includes('--fresh')) { argv = argv.filter((a) => a !== '--fresh'); await rebuildLab(); }
   const { child } = await ensureLab();
+  await clearRunawayRetries();
   const left = Number(foundingPlacesLeft());
   if (Number.isFinite(left)) {
     console.log(`qa-e2e: ${left} founding places left in the lab (a full run takes about 20)`);
@@ -109,9 +131,10 @@ export async function runE2e(argv = process.argv.slice(2)) {
   if (!argv.includes('--list') && existsSync(RESULTS_JSON)) {
     const results = JSON.parse(readFileSync(RESULTS_JSON, 'utf8'));
     results.labHealth = labHealth(since);
+    results.labHealth.runawayPostgrestRetries = await clearRunawayRetries();
     writeFileSync(RESULTS_JSON, JSON.stringify(results, null, 2) + '\n');
     const h = results.labHealth;
-    console.log(`qa-e2e: lab health: ${Array.isArray(h.clientErrors) ? h.clientErrors.reduce((n, e) => n + e.n, 0) : '?'} client error report(s), ${Array.isArray(h.zombies) ? h.zombies.length : '?'} zombie row(s), ${Array.isArray(h.edgeFunctionErrors) ? h.edgeFunctionErrors.reduce((n, e) => n + e.n, 0) : '?'} edge-function error line(s)`);
+    console.log(`qa-e2e: lab health: ${Array.isArray(h.clientErrors) ? h.clientErrors.reduce((n, e) => n + e.n, 0) : '?'} client error report(s), ${Array.isArray(h.zombies) ? h.zombies.length : '?'} zombie row(s), ${Array.isArray(h.edgeFunctionErrors) ? h.edgeFunctionErrors.reduce((n, e) => n + e.n, 0) : '?'} edge-function error line(s), ${h.runawayPostgrestRetries ?? '?'} runaway PostgREST retry session(s)`);
   }
   if (child) {
     child.kill('SIGTERM');

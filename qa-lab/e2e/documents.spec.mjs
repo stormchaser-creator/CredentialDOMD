@@ -4,7 +4,7 @@
 // linking and unlinking a stored document, and deleting one.
 import { test } from './support/fixtures.mjs';
 import {
-  base64Marker, chooseFiles, goTab, newMember, openCredentials, row, rows, scriptAi, sleep, syntheticPdf, tableRow, tombstones, waitFor,
+  base64Marker, chooseFiles, goTab, newMember, openCredentials, row, rows, scriptAi, sleep, syntheticPdf, tableRow, tombstones, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 
 const upload = (page) => page.getByRole('button', { name: 'Upload' }).first();
@@ -30,7 +30,8 @@ test('documents: smart scan files a license with its file; duplicate and PHI spr
     qa.check('the review card shows the detected type and fields', /License \/ Certification/.test(await page.locator('body').innerText()) && (await page.getByRole('textbox').evaluateAll((els) => els.map((e) => e.value))).includes(number));
     doc = await waitFor('the stored document', async () => row(`select * from public.documents where user_id = '${profile.id}' and name = 'qa-scan-license.pdf'`), { timeoutMs: 30000 }).catch(() => null);
     qa.check('a documents row with its file in Storage', !!doc?.storage_path && !!row(`select 1 as x from storage.objects where bucket_id = 'documents' and name = '${doc?.storage_path}'`), doc?.storage_path);
-    await chooseFiles(page, upload(page), [{ name: 'qa-scan-license-again.pdf', mimeType: 'application/pdf', buffer: pdf }]);
+    // The checklist's case: the same file (same name) a second time.
+    await chooseFiles(page, upload(page), [{ name: 'qa-scan-license.pdf', mimeType: 'application/pdf', buffer: pdf }]);
     const dup = await page.getByText(/already uploaded.*Skipped duplicate/).first().waitFor({ timeout: 30000 }).then(() => true, () => false);
     qa.check('the same file again is skipped as a duplicate, with a message', dup);
     qa.check('no second documents row', rows(`select id from public.documents where user_id = '${profile.id}'`).length === 1);
@@ -53,6 +54,36 @@ test('documents: smart scan files a license with its file; duplicate and PHI spr
     await openCredentials(page, 'Licenses');
     qa.check('the license appears in Credentials > Licenses', await tableRow(page, number).isVisible().catch(() => false));
   });
+
+  await qa.feature('DOCS-001', 'The same bytes under another name, after a reload, are still recognised', async () => {
+    // After a reload the device holds the stored document without its bytes (they live in
+    // Storage), so a byte comparison has nothing to compare against.
+    await page.reload();
+    await waitForMemberApp(page);
+    await goTab(page, 'Documents');
+    const before = rows(`select id from public.documents where user_id = '${profile.id}'`).length;
+    await chooseFiles(page, upload(page), [{ name: 'qa-scan-license-copy.pdf', mimeType: 'application/pdf', buffer: pdf }]);
+    const dup = await page.getByText(/already uploaded|Skipped duplicate/).first().waitFor({ timeout: 20000 }).then(() => true, () => false);
+    await sleep(3000);
+    const after = rows(`select id from public.documents where user_id = '${profile.id}'`).length;
+    qa.check('a renamed copy of a stored file is recognised as a duplicate', dup && after === before, `${before} -> ${after} documents; message ${dup}`);
+    if (!dup && after > before) {
+      qa.bug({
+        title: 'Smart Scan stores a second copy of a file already uploaded when the copy has another name and the page was reloaded',
+        step: 'Documents > Upload a PDF; reload; Upload the same PDF saved under another file name',
+        expected: 'Skipped as a duplicate ("already uploaded"), as it is before the reload',
+        actual: 'A second documents row and Storage object. findDuplicateDoc (src/utils/docPrefill.js) matches on identical bytes in doc.data or on the same name and size, and after a reload the stored document has no bytes on the device (they are fetched from Storage), so only the name can match',
+        severity: 'low',
+      });
+      const extra = rows(`select id from public.documents where user_id = '${profile.id}' and name = 'qa-scan-license-copy.pdf'`)[0];
+      if (extra) {
+        // Remove the copy so the later stretches see one file, as a physician would.
+        const card = page.locator('div').filter({ hasText: 'qa-scan-license-copy.pdf' }).filter({ has: page.getByRole('button', { name: /View PDF/ }) }).last();
+        await card.getByRole('button').filter({ hasNotText: /\S/ }).first().click().catch(() => {});
+        await sleep(1500);
+      }
+    }
+  }, { soft: true });
 
   await qa.feature('DOCS-004', 'A spreadsheet with a patient identifier column is refused', async () => {
     await goTab(page, 'Documents');

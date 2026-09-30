@@ -54,7 +54,9 @@ test('owner: invite to join sends one email and grants nothing', { tag: ['@ADMIN
     await page.getByRole('button', { name: 'Preview email' }).click();
     await sleep(2000);
     const again = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
-    qa.check('the daily limit counter shows 1 of 20 invitations sent in the last 24 hours', /1 of 20 invitations sent in the last 24 hours/.test(again));
+    // The limit is for the whole service (20 in any rolling 24 hours), so earlier runs count too.
+    const counted = Number((/(\d+) of 20 invitations sent in the last 24 hours/.exec(again) || [])[1]);
+    qa.check('the service-wide counter shows this send (n of 20 in the last 24 hours)', counted >= 1, again.match(/\d+ of 20 invitations[^.]*/)?.[0]);
     qa.check('a second invite to the same address inside 24 hours is flagged (already invited / send again)', /already (been )?invited|send again|invited .* ago|within 24 hours/i.test(again), again.match(/[^.]*(already|send again|within 24 hours)[^.]*/i)?.[0] || again.slice(0, 200));
   });
 

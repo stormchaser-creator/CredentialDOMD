@@ -4,6 +4,7 @@
 // view a member's account read-only after they allowed support access, and a
 // message from the owner that the member reads and answers on Home.
 import { test } from './support/fixtures.mjs';
+import { clearRunawayRetries } from './run.mjs';
 import {
   createPhysician, goTab, landing, letters, makeAdmin, newMember, openMore, profileOf, row, rows, signIn, sleep, waitFor, waitForMemberApp, accessSnapshot,
 } from './support/lab.mjs';
@@ -41,18 +42,22 @@ test('owner controls: pause and restore access, lifetime grant, view as member, 
     await confirm.click();
     let err = '';
     if (!(await d.waitFor({ state: 'detached', timeout: 15000 }).then(() => true, () => false))) {
-      err = (await d.innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300);
+      const full = (await d.innerText().catch(() => '')).replace(/\s+/g, ' ');
+      const saving = /Saving/.test(full);
+      err = saving ? 'still "Saving…" after 15 s (no answer)' : full.slice(-300);
       const shot = await qa.shot('pause stuck saving');
-      if (/Saving/.test(err)) {
+      if (saving) {
         qa.bug({
           title: 'Admin > Accounts: Pause / Approve hangs on "Saving…" forever when the member\'s profile changed after the list loaded',
           step: 'Admin opens Accounts while the member is using the app (their app writes profiles.updated_at), then Pause access > reason > Confirm',
           expected: 'The refusal "Account changed. Refresh and review it again" comes back at once and the dialog says to refresh',
-          actual: 'The request never returns (browser shows "Saving…" with Cancel disabled; Kong logs 499 when the client gives up). admin_change_profile_access raises that refusal with errcode 40001 (serialization_failure), and PostgREST (14.14 in the lab) retries 40001 transactions, so the same deterministic refusal is re-run over and over (5 PostgREST sessions re-executing it, seen in pg_stat_activity). A direct call with a stale p_expected_updated_at did not answer within 40 s. Production impact depends on the deployed PostgREST version; a deterministic state mismatch should not use a retryable SQLSTATE either way.',
+          actual: 'The request never returns (browser shows "Saving…" with Cancel disabled; Kong logs 499 when the client gives up). admin_change_profile_access raises that refusal with errcode 40001 (serialization_failure), and PostgREST (14.14 in the lab) re-runs 40001 transactions, so the same deterministic refusal runs again and again, indefinitely (still running 15 minutes later, 2-5 PostgREST sessions, seen in pg_stat_activity). Each re-run takes the target profile FOR UPDATE, so a second Pause/Approve on that member also hangs, and the loop holds PostgREST pool connections until PostgREST restarts. A direct call with a stale p_expected_updated_at did not answer within 40 s. Production impact depends on the deployed PostgREST version; a deterministic state mismatch should not use a retryable SQLSTATE either way.',
           severity: 'medium', screenshot: shot,
         });
       }
-      // The admin's way out: leave the page, reload the list, try again.
+      // An admin has no way out (the loop keeps the member's row locked). The lab restarts
+      // PostgREST to end the loop, then the journey reloads the list and tries again.
+      await clearRunawayRetries();
       await page.reload();
       await waitForMemberApp(page);
       await findAccount(page, memberName);
