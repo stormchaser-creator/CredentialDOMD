@@ -319,7 +319,7 @@ a:hover { color: var(--emerald-light); }
 /* RESPONSIVE */
 @media (max-width: 768px) {
   .facts-grid { grid-template-columns: repeat(2, 1fr); }
-  .nav-links a:not(.nav-cta) { display: none; }
+  .nav-links > a:not(.nav-cta) { display: none; }
   .cta-section { padding: 32px 24px; }
   .footer-inner { flex-direction: column; text-align: center; }
   .related-grid { grid-template-columns: 1fr 1fr; }
@@ -329,19 +329,43 @@ a:hover { color: var(--emerald-light); }
   .facts-grid { grid-template-columns: 1fr; }
   .related-grid { grid-template-columns: 1fr; }
 }
+
+/* SUPPORT MENU (public/support-nav.css + .js, as on / and /help/). This
+   header has no mobile drawer, so the menu stays a dropdown at every width
+   instead of support-nav.css's stacked drawer layout (PUBLIC-008). */
+.nav .nav-links .support-menu { width: auto; }
+.nav .nav-links .support-menu > summary { font-size: 14px; }
+.nav .nav-links .support-links { position: absolute; margin-top: 0; box-shadow: 0 10px 30px #0005; }
+@media (max-width: 560px) {
+  /* Logo on the first line, Support and the call to action under it. */
+  .nav-inner { flex-wrap: wrap; row-gap: 8px; padding: 12px 16px; }
+  .nav-links { width: 100%; justify-content: space-between; gap: 16px; }
+  .nav .nav-links .support-links { right: auto; left: 0; }
+  .breadcrumb { padding-top: 112px; }
+}
 </style>
+<link rel="stylesheet" href="/support-nav.css">
+<script src="/support-nav.js" defer></script>
 </head>
 <body>
 
 <!-- NAV -->
 <header class="nav">
   <div class="nav-inner">
-    <a href="https://credentialdomd.com" class="nav-logo">Credential<span>DOMD</span></a>
+    <a href="/" class="nav-logo">Credential<span>DOMD</span></a>
     <div class="nav-links">
-      <a href="https://credentialdomd.com/#features">Features</a>
+      <a href="/#features">Features</a>
       <a href="/app/"><span data-membership-action>Create your account</span></a>
       <a href="/states/">All States</a>
       <a href="/cme/">CME</a>
+      <details class="support-menu">
+        <summary>Support</summary>
+        <div class="support-links">
+          <a href="/help/">Help &amp; videos</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/security">Security &amp; data handling</a>
+        </div>
+      </details>
       <a class="nav-cta" href="/app/"><span data-membership-action>Create your account</span></a>
     </div>
   </div>
