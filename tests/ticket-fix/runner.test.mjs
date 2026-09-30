@@ -12,7 +12,7 @@ import { queueSQL, parkedTargets, collectQueue, saveReview, loadContext, context
 import { main as alert, lockState, HOLD_FILE } from '../../scripts/ticket-fix/alert.mjs';
 import { reconcile, reconcileSQL, unsentInstalledSQL, unsentSQL } from '../../scripts/ticket-fix/reconcile.mjs';
 import { ReplyRuleError } from '../../scripts/ticket-fix/claims.mjs';
-import { uuid, privateDir } from './helpers.mjs';
+import { uuid, privateDir, tempRepo } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = rel => readFileSync(path.join(root, rel), 'utf8');
@@ -305,7 +305,7 @@ test('the runner shell: lock owner, park alert, status on every exit; the model 
 test('the runner judges a run with host code copied before the model ran, and holds on any change to it (review)', () => {
   const sh = read('scripts/ticket-agent.sh');
   const firstModel = sh.indexOf('ticket-fix/run.mjs" work');
-  const copy = sh.indexOf('/usr/bin/git -C "$REPO" archive "$HOST_HEAD"');
+  const copy = sh.indexOf('/usr/bin/git -C "$REPO" archive --format=tar -o "$HOST_DIR/.host-code.tar" "$HOST_HEAD"');
   assert.ok(copy > 0 && copy < firstModel, 'the copy is taken before any model runs');
   for (const file of ['scripts/ticket-agent-context.mjs', 'scripts/ticket-agent-isolated.mjs', 'scripts/ticket-agent-prompt.md', 'scripts/ticket-fix', 'scripts/notify-owner.sh']) {
     assert.ok(sh.slice(copy, copy + 400).includes(file), file);
@@ -324,6 +324,44 @@ test('the runner judges a run with host code copied before the model ran, and ho
   // run.mjs's own list of the runner's code matches the shell's.
   const worktree = read('scripts/ticket-fix/worktree.mjs');
   for (const p of ['scripts\\/ticket-fix\\/', 'scripts\\/ticket-agent', 'scripts\\/notify-owner\\.sh', 'supabase\\/migrations\\/[^/]*support_reply', 'supabase\\/functions\\/send-ticket-reply\\/']) assert.ok(worktree.includes(p), p);
+});
+
+// The copy went through a pipe into tar, which stops reading at the
+// end-of-archive marker: git archive, still writing its record padding, could
+// die of SIGPIPE, and pipefail made that a failed copy. On a loaded machine 7%
+// of copies failed (2026-09-29) and the run stopped with "cannot copy the host
+// code" before any ticket; it was also the runner-python test's intermittent
+// failure. This git writes more zero records after the marker than a pipe
+// holds, which makes that certain for a pipe; the copy must still succeed.
+test('the host code copy survives a tar that stops reading at the end-of-archive marker', { skip: existsSync('/bin/zsh') ? false : 'the runner shell needs zsh' }, () => {
+  const sh = read('scripts/ticket-agent.sh');
+  const start = sh.indexOf('HOST_DIR=$(mktemp');
+  const end = sh.indexOf('HOST="$HOST_DIR/scripts"\n');
+  assert.ok(start > 0 && end > start, 'the host copy block');
+  const repo = tempRepo({ 'scripts/ticket-agent-context.mjs': '// Synthetic.\n', 'scripts/ticket-agent-isolated.mjs': '// Synthetic.\n',
+    'scripts/ticket-agent-prompt.md': 'Synthetic.\n', 'scripts/ticket-fix/run.mjs': '// Synthetic.\n', 'scripts/notify-owner.sh': '#!/bin/sh\n' });
+  const scratch = privateDir('ticket-host-copy-');
+  const quote = value => `'${String(value).replace(/'/g, "'\\''")}'`;
+  try {
+    const git = path.join(scratch.dir, 'git');
+    writeFileSync(git, ['#!/bin/sh',
+      'case " $* " in *" archive "*) ;; *) exec /usr/bin/git "$@" ;; esac',
+      'out=; prev=',
+      'for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done',
+      '/usr/bin/git "$@" || exit $?',
+      'if [ -n "$out" ]; then /bin/dd if=/dev/zero bs=65536 count=16 2>/dev/null >> "$out"; else exec /bin/dd if=/dev/zero bs=65536 count=16 2>/dev/null; fi', ''].join('\n'), { mode: 0o700 });
+    const block = sh.slice(start, end + 'HOST="$HOST_DIR/scripts"\n'.length).replaceAll('/usr/bin/git', git);
+    const log = path.join(scratch.dir, 'runner.log');
+    const script = `set -u\nREPO=${quote(repo.dir)}\nLOG=${quote(log)}\nTMPDIR=${quote(scratch.dir)}\n${block}` +
+      '[ -f "$HOST/ticket-agent-context.mjs" ] && [ -f "$HOST/ticket-fix/run.mjs" ] && [ "$(/bin/ls -A "$HOST_DIR")" = scripts ] && echo copied\n';
+    for (let i = 0; i < 3; i++) {
+      const r = spawnSync('/bin/zsh', ['-c', script], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: scratch.dir } });
+      const logged = existsSync(log) ? readFileSync(log, 'utf8') : '';
+      assert.equal(r.status, 0, `${r.stderr}${logged}`);
+      assert.equal(r.stdout.trim(), 'copied', logged);
+      assert.doesNotMatch(logged, /cannot copy the host code/);
+    }
+  } finally { repo.cleanup(); scratch.cleanup(); }
 });
 
 test('the runner: per-run key and committer, timeouts count, rule names only in the log (review)', () => {
