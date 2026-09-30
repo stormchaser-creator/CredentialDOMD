@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.97.0';
 import { createRemoteJWKSet, jwtVerify } from 'https://esm.sh/jose@5';
 import { Webhook } from 'https://esm.sh/svix@1.40.0';
 import { resendOutcome } from './supportPolicy.mjs';
+import { clerkJwksUrl } from './clerkContinuity.ts';
 
 /** No credential is exposed to the answer decision or an engineering worker. */
 export function supportDependencies() {
@@ -12,7 +13,7 @@ export function supportDependencies() {
   };
   const rpc = (name: string, args: Record<string, unknown> = {}) => checked(db.rpc(name, args));
   const issuer = env('CLERK_ISSUER');
-  const jwks = issuer ? createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`)) : null;
+  const jwks = issuer ? createRemoteJWKSet(clerkJwksUrl(issuer)) : null;
   async function sameSecret(given: string, expected: string) {
     if (expected.length < 32 || !given || given.length > 512) return false;
     const hash = async (s: string) => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
@@ -56,7 +57,8 @@ export function supportDependencies() {
       // runtime gates and the verified-recipient check have succeeded.
       const key=env('RESEND_API_KEY');
       if (!key) return { outcome:'failed',providerId:null }; // known pre-submission failure
-      const response=await fetch('https://api.resend.com/emails', {
+      // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
+      const response=await fetch(`${(env('RESEND_API_BASE') || 'https://api.resend.com').replace(/\/+$/, '')}/emails`, {
         method:'POST', signal:AbortSignal.timeout(20000),
         headers:{ Authorization:`Bearer ${key}`,'Content-Type':'application/json','Idempotency-Key':envelope.idempotency_key },
         body:JSON.stringify({ from:'CredentialDOMD Support <support@credentialdomd.com>',to:[envelope.recipient],reply_to:'support@credentialdomd.com',

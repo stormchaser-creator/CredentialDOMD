@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createRemoteJWKSet, jwtVerify } from 'https://esm.sh/jose@5';
 import { CREDENTIAL_PORTAL_POLICY, createPortalCrypto } from './credentialPortalCrypto.mjs';
+import { clerkJwksUrl } from './clerkContinuity.ts';
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
 
@@ -33,7 +34,7 @@ export function credentialPortalDependencies() {
       const matched = /^Bearer (\S+)$/.exec(req.headers.get('authorization') || '');
       if (!matched || !issuer) return null;
       try {
-        jwks ||= createRemoteJWKSet(new URL(`${issuer.replace(/\/$/, '')}/.well-known/jwks.json`));
+        jwks ||= createRemoteJWKSet(clerkJwksUrl(issuer));
         const { payload } = await jwtVerify(matched[1], jwks, { issuer, algorithms: ['RS256'], requiredClaims: ['sub', 'exp', 'iat'], maxTokenAge: '1 hour' });
         if (typeof payload.sub !== 'string' || !/^user_[A-Za-z0-9]+$/.test(payload.sub) || (payload.azp && payload.azp !== CREDENTIAL_PORTAL_POLICY.origin)) return null;
         const profile = await checked(db().from('profiles').select('id,auth_user_id').eq('auth_user_id', payload.sub).maybeSingle()) as { id: string; auth_user_id: string } | null;
@@ -51,7 +52,8 @@ export function credentialPortalDependencies() {
         // reply_to is the physician's verified mailbox (send-packet-email does the
         // same), so an administrator's reply reaches the physician, not docs@.
         const replyTo = typeof payload.replyTo === 'string' && /^[^\s@]+@[^\s@]+$/.test(payload.replyTo) ? { reply_to: payload.replyTo } : {};
-        const response = await fetch('https://api.resend.com/emails', {
+        // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
+        const response = await fetch(`${(Deno.env.get('RESEND_API_BASE') || 'https://api.resend.com').replace(/\/+$/, '')}/emails`, {
           method: 'POST', headers: { Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
           body: JSON.stringify({ from: 'CredentialDOMD <docs@credentialdomd.com>', to: [payload.to], subject: payload.subject, text: payload.text, ...replyTo }), signal: AbortSignal.timeout(20000),
         });

@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { billingDependencies } from './billingDependencies.ts';
 import { LIMITED_LAUNCH } from './limitedLaunchCatalog.mjs';
+import { CLERK_API_BASE } from './clerkContinuity.ts';
 import { createWelcomeEmailSender, createWelcomeEmailSweep, welcomeConsoleLog } from './welcomeEmailSender.mjs';
 
 /** IDs are configuration, never inferred from names or shared with historical v1. */
@@ -23,7 +24,7 @@ export function limitedLaunchDependencies() {
     if (!/^user_[A-Za-z0-9]+$/.test(subject)) throw Error('Invalid Clerk subject');
     const key = Deno.env.get('CLERK_SECRET_KEY') || '';
     if (!/^sk_(test|live)_/.test(key)) throw Error('Clerk backend verification is not configured');
-    const response = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
+    const response = await fetch(`${CLERK_API_BASE}/v1/users/${encodeURIComponent(subject)}`, {
       headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(timeoutMs), redirect: 'error',
     });
     if (!response.ok) throw Error('Clerk mailbox verification unavailable');
@@ -54,7 +55,8 @@ export function limitedLaunchDependencies() {
       return primary?.verification?.status === 'verified' && typeof primary.email_address === 'string' ? primary.email_address : null;
     },
     deliver: async ({ from, replyTo, to, subject, text, idempotencyKey }: { from: string; replyTo: string; to: string; subject: string; text: string; idempotencyKey: string }) => {
-      const response = await fetch('https://api.resend.com/emails', {
+      // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
+      const response = await fetch(`${(Deno.env.get('RESEND_API_BASE') || 'https://api.resend.com').replace(/\/+$/, '')}/emails`, {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
         headers: { Authorization: `Bearer ${resendKey()}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify({ from, to: [to], reply_to: replyTo, subject, text }),

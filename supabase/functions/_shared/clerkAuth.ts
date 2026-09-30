@@ -39,6 +39,7 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5";
+import { clerkJwksUrl } from "./clerkContinuity.ts";
 
 const ISSUER = Deno.env.get("CLERK_ISSUER") || "";
 if (!ISSUER) {
@@ -48,7 +49,7 @@ if (!ISSUER) {
 // whole function down with an opaque boot error.
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 function getJwks() {
-  if (!jwks) jwks = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`));
+  if (!jwks) jwks = createRemoteJWKSet(clerkJwksUrl(ISSUER));
   return jwks;
 }
 

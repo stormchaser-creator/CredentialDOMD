@@ -22,13 +22,14 @@
 // A preview is the default and changes nothing; { "action": "apply" } applies.
 // The answer is counts only. No address, subject or profile id leaves this
 // handler, and the Clerk secret goes to api.clerk.com and nowhere else: it is
-// never returned, logged or put in an error.
-import { PRODUCTION_CLERK_ISSUER, verifiedPrimaryIdentity } from './clerkContinuity.ts';
+// never returned, logged or put in an error. (CLERK_API_BASE moves that host
+// only in the local QA lab, to its mock Clerk; production never sets it.)
+import { CLERK_API_BASE, PRODUCTION_CLERK_ISSUER, verifiedPrimaryIdentity } from './clerkContinuity.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SUBJECT = /^user_[A-Za-z0-9]+$/;
 const OUTCOME = /^[a-z_]{1,40}$/;
-const CLERK_USERS = 'https://api.clerk.com/v1/users';
+const CLERK_USERS = `${CLERK_API_BASE}/v1/users`;
 export const PAGE_SIZE = 500;
 export const MAX_PAGES = 20;
 const MAX_PAGE_BYTES = 16 * 1024 * 1024;

@@ -1,12 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5";
-import { PRODUCTION_CLERK_ISSUER, readProductionIdentity, initializeProductionProfile, initializeRequest, mayLoadAccount } from "../_shared/clerkContinuity.ts";
+import { PRODUCTION_CLERK_ISSUER, clerkJwksUrl, readProductionIdentity, initializeProductionProfile, initializeRequest, mayLoadAccount } from "../_shared/clerkContinuity.ts";
 
 const ISSUER = Deno.env.get("CLERK_ISSUER") || "";
 const ENABLED = Deno.env.get("CLERK_CONTINUITY_ENABLED") === "true";
 const SECRET = Deno.env.get("CLERK_SECRET_KEY") || "";
-const jwks = createRemoteJWKSet(new URL(`${PRODUCTION_CLERK_ISSUER}/.well-known/jwks.json`));
+const jwks = createRemoteJWKSet(clerkJwksUrl(PRODUCTION_CLERK_ISSUER));
 const cors = { "Access-Control-Allow-Origin": "https://credentialdomd.com", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
 

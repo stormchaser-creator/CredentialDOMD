@@ -15,7 +15,18 @@
     "lint:hooks": "node --test tests/hooks-rules.test.mjs",
     "pretest": "node scripts/build-credential-portal.mjs",
     "test:admin-db": "python3 tests/admin-operations/postgres-operations.py",
-    "test:pg-suites": "node scripts/run-pg-suites.mjs"
+    "test:pg-suites": "node scripts/run-pg-suites.mjs",
+    "qa:up": "bash qa-lab/up.sh",
+    "qa:down": "bash qa-lab/down.sh",
+    "qa:extract": "node qa-lab/extract-schema.mjs",
+    "qa:apply": "node qa-lab/apply-schema.mjs",
+    "qa:parity": "node qa-lab/parity.mjs",
+    "qa:lab": "node qa-lab/lab.mjs",
+    "qa:smoke": "node qa-lab/smoke.mjs",
+    "qa:stripe": "node qa-lab/stripe-cli.mjs",
+    "qa:e2e": "node qa-lab/e2e/run.mjs",
+    "qa:founding-reset": "node qa-lab/founding-reset.mjs",
+    "qa:cors": "node qa-lab/cors-check.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -33,6 +44,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.63.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
@@ -40,6 +52,10 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jose": "^5.10.0",
+    "playwright-core": "^1.63.0",
+    "stripe": "15.12.0",
+    "svix": "1.40.0",
     "vite": "^7.3.1"
   }
 }

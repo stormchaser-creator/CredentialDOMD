@@ -58,3 +58,6 @@ AI-APP-BUILDING-INSTRUCTIONS.md
 
 # Python bytecode (the notifier and runner scripts compile on every run)
 __pycache__/
+
+# QA lab: generated from the production catalog (holds function bodies); never commit
+/qa-lab/.generated/

@@ -347,7 +347,8 @@ const MAX_CONTACTS_PER_EMAIL = 25;       // a multi-select share, not a mailing 
 // SCAN_TIMEOUT_MS; all of one email's calls together may take SCAN_BUDGET_MS,
 // so ten attachments cannot run the function past its wall-clock limit (a
 // file the budget does not reach is kept, unfiled, and the reply says so).
-const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/";
+// GEMINI_API_BASE is unset in production (the real host); only the local QA lab points it at its mock.
+const GEMINI_BASE = `${(Deno.env.get("GEMINI_API_BASE") || "https://generativelanguage.googleapis.com").replace(/\/+$/, "")}/v1beta/`;
 const GEMINI_SECRET_NAME = "gemini_shared_key";
 const SCAN_TIMEOUT_MS = 45_000;
 const SCAN_CONCURRENCY = 3;

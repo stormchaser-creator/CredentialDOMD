@@ -187,7 +187,8 @@ Deno.serve(async (req) => {
   if (frozen) payload = stored;
   let r: Response;
   try {
-    r = await fetch("https://api.resend.com/emails", {
+    // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
+    r = await fetch(`${(Deno.env.get("RESEND_API_BASE") || "https://api.resend.com").replace(/\/+$/, "")}/emails`, {
       method: "POST",
       // One key per message, the same on every try, with the same body: a
       // retry of a send that did reach Resend (the answer was lost) gets the
