@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { useApp } from "../../context/AppContext";
 import ComplianceBar from "./ComplianceBar";
+import { TAP_MIN, inlineLinkTap } from "./actionButton";
 import { cat1BucketLabel, cat1Breakdown, cat1RouteNote } from "../../constants/creditEquivalence";
 
 /**
@@ -17,7 +18,7 @@ import { cat1BucketLabel, cat1Breakdown, cat1RouteNote } from "../../constants/c
  * underneath so the gap is legible instead of mysterious.
  */
 function Cat1Bucket({ comp, entries, degreeType, onFindCme }) {
-  const { theme: T } = useApp();
+  const { theme: T, isDesktop } = useApp();
   if (!comp || !(comp.cat1Required > 0)) return null;
 
   const accepted = comp.cat1Keywords || [];
@@ -82,7 +83,7 @@ function Cat1Bucket({ comp, entries, degreeType, onFindCme }) {
           <div style={{ fontWeight: 700, color: T.accent, marginBottom: 2 }}>{route.title}</div>
           <div>{route.body}</div>
           {route.url && (
-            <a href={route.url} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700, textDecoration: "underline" }}>
+            <a href={route.url} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700, textDecoration: "underline", ...inlineLinkTap }}>
               {route.linkLabel}
             </a>
           )}
@@ -91,7 +92,7 @@ function Cat1Bucket({ comp, entries, degreeType, onFindCme }) {
 
       {!comp.cat1Met && onFindCme && (
         <button onClick={onFindCme} style={{
-          padding: "4px 10px", fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
+          padding: "4px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
           backgroundColor: T.accentGlow, color: T.accent, cursor: "pointer", marginTop: 8,
         }}>Find Cat 1 CME &rarr;</button>
       )}

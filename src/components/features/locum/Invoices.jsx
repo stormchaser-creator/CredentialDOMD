@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import { cardActionSize } from "../../shared/actionButton";
+import { cardActionSize, TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
@@ -130,7 +130,7 @@ function Invoices({ onOpenContract }) {
           onClick={() => onOpenContract?.(n.contractId)}
           onKeyDown={(e) => { if (e.key === "Enter") onOpenContract?.(n.contractId); }}
           style={{
-            display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, padding: "4px 0",
+            display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, padding: "4px 0", minHeight: isDesktop ? undefined : TAP_MIN,
             cursor: onOpenContract ? "pointer" : undefined,
           }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{n.facility}</div>
@@ -842,12 +842,12 @@ function Invoices({ onOpenContract }) {
                   }}>Reopen</button>
                 ) : (
                   <button onClick={(ev) => { ev.stopPropagation(); openPayment(inv); }} style={{
-                    flex: 1, padding: "8px 12px", borderRadius: 10, border: "none",
+                    flex: 1, padding: "8px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 10, border: "none",
                     backgroundColor: T.success || "#22c55e", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer",
                   }}>{isPartial ? "＄ Record another payment" : "＄ Record payment"}</button>
                 )}
                 <button onClick={(ev) => { ev.stopPropagation(); if (inv.lines?.length) openSendFor(inv); else resend(inv); }} style={{
-                  padding: "8px 12px", borderRadius: 10, border: "none",
+                  padding: "8px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 10, border: "none",
                   backgroundColor: T.shareGlow, color: T.share, fontSize: 12, fontWeight: 700, cursor: "pointer",
                   display: "inline-flex", alignItems: "center", gap: 5,
                 }}><SendIcon /> Resend</button>

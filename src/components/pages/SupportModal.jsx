@@ -570,7 +570,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
       ? "This tab could not save your draft. Copy your text before closing or signing in again."
       : saved ? "Text draft saved for this account in this tab for up to 24 hours. Closing this support window keeps it; explicit sign-out removes it. Reattach files after reopening."
         : "Text drafts stay in this tab for up to 24 hours. Attached files are not saved in drafts."}</p>
-    {saved !== null && <button onClick={discard} disabled={busy} style={{ padding: "6px 0", border: "none", background: "none", color: T.accent, cursor: "pointer" }}>Discard text draft</button>}
+    {saved !== null && <button onClick={discard} disabled={busy} style={{ position: "relative", padding: "9px 0", margin: "-3px 0", border: "none", background: "none", color: T.accent, cursor: "pointer" }}>Discard text draft</button>}
   </div>;
 
   const renderNew = () => (
@@ -676,7 +676,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
         </h2>
         {archivedTickets.length > 0 && (
           <button onClick={() => setShowArchived((a) => !a)} style={{
-            padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+            padding: "5px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: `1px solid ${T.border}`,
             backgroundColor: showArchived ? T.card : "transparent", color: showArchived ? T.text : T.textMuted,
             fontSize: 11.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
           }}>{showArchived ? "Back to active" : `Archived (${archivedTickets.length})`}</button>
@@ -734,7 +734,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
   const renderThread = () => (
     <>
       <button onClick={leaveThread} style={{
-        background: "none", border: "none", padding: 0, minHeight: TAP_MIN, margin: "-8px 0 0", cursor: "pointer",
+        background: "none", border: "none", position: "relative", padding: 0, minHeight: TAP_MIN, margin: "-8px 0 0", cursor: "pointer",
         color: T.accent, fontSize: 13, fontWeight: 700,
       }}>{"←"} All tickets</button>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>

@@ -85,7 +85,7 @@ const WORK_STATE_HINT = `Where the work physically happens. Tax Prep allocates t
  * the terms and the paper live together.
  */
 function Contracts() {
-  const { data, addItem, editItem: editCtx, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem: editCtx, deleteItem, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -353,7 +353,7 @@ function Contracts() {
                 <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: i ? 10 : 0, borderTop: i ? `1px solid ${T.border}` : "none" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={cap}>Starts</span>
-                    <button aria-label={`Remove block ${i + 1}`} onClick={() => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "4px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Remove</button>
+                    <button aria-label={`Remove block ${i + 1}`} onClick={() => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "4px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Remove</button>
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input type="date" aria-label={`Block ${i + 1} start date`} value={p.start || ""} onChange={set("start")} style={dateS} />

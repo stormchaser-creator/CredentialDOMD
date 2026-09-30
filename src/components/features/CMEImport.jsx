@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
+import { TAP_MIN } from "../shared/actionButton";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getCMECategories } from "../../constants/credentialTypes";
 import { generateId } from "../../utils/helpers";
@@ -35,7 +36,7 @@ const SRC_AI = { id: "ai", label: "AI-structured transcript", verified: false, n
 const SRC_LINES = { id: "lines", label: "Text, read line by line", verified: false, note: "Each line with a date became a row; hours are the number next to a credit word, the longest remaining text is the title. Check every row." };
 
 function CMEImport({ open, onClose }) {
-  const { data, addItem, theme: T } = useApp();
+  const { data, addItem, theme: T, isDesktop } = useApp();
   const deg = data.settings.degreeType;
   const apiKey = data.settings.apiKey; // own key, or undefined for the shared key
   const aiOn = useAiAvailable(data.settings);
@@ -365,7 +366,7 @@ function CMEImport({ open, onClose }) {
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                       {(r.topics || []).map(t => (
-                        <button key={t} type="button" aria-label={`Remove topic ${t}`} onClick={() => setRow(r.key, { topics: r.topics.filter(x => x !== t) })} title="Remove topic" style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 12, border: "none", backgroundColor: T.accent, color: "#fff", cursor: "pointer" }}>{t} &times;</button>
+                        <button key={t} type="button" aria-label={`Remove topic ${t}`} onClick={() => setRow(r.key, { topics: r.topics.filter(x => x !== t) })} title="Remove topic" style={{ padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 600, borderRadius: 12, border: "none", backgroundColor: T.accent, color: "#fff", cursor: "pointer" }}>{t} &times;</button>
                       ))}
                       <select aria-label="Add a topic" value="" onChange={e => { const t = e.target.value; if (t && !(r.topics || []).includes(t)) setRow(r.key, { topics: [...(r.topics || []), t] }); }} style={{ ...small, width: "auto", fontSize: 11.5, padding: "3px 6px", appearance: "auto" }}>
                         <option value="">+ topic</option>

@@ -101,7 +101,7 @@ function OtherDocumentReview({ extracted, onFile, onDiscard, idPrefix = "other-d
         );
       })}
       <button type="button" onClick={() => setFacts(fs => [...fs, { label: "", value: "" }])}
-        style={{ border: "none", background: "none", color: T.accent, fontWeight: 700, cursor: "pointer", padding: "4px 0", fontSize: 13, fontFamily: "inherit" }}>
+        style={{ border: "none", background: "none", color: T.accent, fontWeight: 700, cursor: "pointer", position: "relative", padding: "9px 0", margin: "-5px 0", fontSize: 13, fontFamily: "inherit" }}>
         + Add a detail
       </button>
       {withheld.length > 0 && (

@@ -1,6 +1,6 @@
 import LimitedLaunchMembership from "./LimitedLaunchMembership.jsx";
 import { useState, useEffect, useRef } from "react";
-import { TAP_MIN } from "../shared/actionButton";
+import { TAP_MIN, inlineLinkTap } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { FREE_BETA_LABEL, FREE_BETA_BLURB } from "../../constants/beta";
@@ -128,7 +128,7 @@ export default function PricingModal({ open, onClose }) {
         <div style={{ padding: "4px 20px 28px", textAlign: "center", fontSize: 12, lineHeight: 1.7, color: T.textMuted }}>
           {!billingAvailable && <p style={{ margin: "0 0 12px" }}>{MEMBERSHIP_COPY.lifetimePolicy}</p>}
           <p style={{ margin: "0 0 6px" }}>For physician credential records. Do not upload patient information.</p>
-          <a href="https://credentialdomd.com/security.html" target="_blank" rel="noopener noreferrer" style={{ color: T.text }}>
+          <a href="https://credentialdomd.com/security.html" target="_blank" rel="noopener noreferrer" style={{ color: T.text, ...inlineLinkTap }}>
             Security and data handling
           </a>
           <p style={{ margin: "8px 0 0", color: T.textDim }}>

@@ -6,7 +6,7 @@ import { invoicePdfFile, invoiceTextPdfFile } from "../../utils/invoicePdf";
 import { callDayStartHour } from "../../utils/billing";
 import { sentDay } from "../../utils/helpers";
 import { archiveSections, documentDetail, documentLabel } from "../../utils/readOnlyArchive.js";
-import { actionButtonStyle } from "../shared/actionButton.js";
+import { actionButtonStyle, inlineLinkTap } from "../shared/actionButton.js";
 import { credentialOnlyMembership, renewalPaymentFailed } from "../../utils/limitedLaunchAccess.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 
@@ -79,7 +79,7 @@ export default function ReadOnlyRecords({ scope }) {
         {trialEnded && `Your Practice trial ended on ${trialEnded}. `}Your Credential membership continues. Practice is not part of it, so these Practice records are read-only. You can view and download them.
       </p>
       <p style={{ color: T.textMuted, lineHeight: 1.6, margin: "0 0 8px", fontSize: 14 }}>
-        <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}
+        <a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}
       </p>
       <button type="button" style={button(false)} onClick={() => navigate("more", "settings")}>Profile &amp; settings</button>
     </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, memo } from "react";
+import { useState, useEffect, useMemo, useRef, memo } from "react";
 import { cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
@@ -30,8 +30,8 @@ import {
  * clinical day, was call taken and where, was teaching logged. The invoice
  * unit is the month, so that is what the header totals.
  */
-function DutyLog({ contract }) {
-  const { data, addItem, editItem, deleteItem, theme: T, user, userIdRef } = useApp();
+function DutyLog({ contract, onBusyChange }) {
+  const { data, addItem, editItem, deleteItem, theme: T, user, userIdRef, isDesktop } = useApp();
   const iS = useInputStyle();
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
@@ -59,6 +59,12 @@ function DutyLog({ contract }) {
   // screen asks first.
   const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id });
   useUnloadWarning(!!unrecorded);
+  // Work is told while a day, an invoice or Mark as sent is open here, so the
+  // agreement on screen is never swapped out from under it (a schedule that
+  // loads late, a call day turning over): the invoice records against it.
+  const busy = !!(editing || placement || invoicePick || invoicePreview || markSent || unrecorded);
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
   // After a send: where the full cover letter is (the WorkLog notice, here too).
   const [notice, setNotice] = useState(null);
 
@@ -430,7 +436,7 @@ function DutyLog({ contract }) {
 
       {/* An invoice from this agreement that went out without a record and
           was left behind: said here until it is recorded or forgotten. */}
-      {!invoicePreview && UnrecordedNotes({ T, list: leftUnrecorded, what: "its days", onForget: forgetUnrecorded })}
+      {!invoicePreview && UnrecordedNotes({ T, isDesktop, list: leftUnrecorded, what: "its days", onForget: forgetUnrecorded })}
 
       {/* Invoice CTA — same pick-the-days flow as the time engine. Counts
           DAYS (two rows on one date are still one day) to match the picker. */}

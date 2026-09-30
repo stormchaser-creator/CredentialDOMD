@@ -5,12 +5,13 @@
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdirSync, chmodSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, chmodSync, existsSync, readdirSync, lstatSync, readlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { mergeRun, mergeBlockers, pushArgs, readRun, writeRun, discardRun, autoMergeEnabled, checkRunPaths } from '../../scripts/ticket-fix/merge.mjs';
 import { finish, mergeSupport, CASE_STATE, FIX_STATE } from '../../scripts/ticket-fix/run.mjs';
-import { trailers } from '../../scripts/ticket-fix/worktree.mjs';
+import { trailers, commitMessage, AGENT_NAME } from '../../scripts/ticket-fix/worktree.mjs';
 import { project, sh, runStub, standardScript, TICKET, RUN_ID } from './stage2-helpers.mjs';
 
 const NAME = `${TICKET.slice(0, 8)}-${RUN_ID}`;
@@ -264,4 +265,160 @@ console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false
     assert.equal(after.cost_usd, Math.round((before.cost_usd + 0.25) * 10000) / 10000);
     assert.deepEqual(logs, [`SESSION — ${TICKET.slice(0, 8)}: merge review 4 turn(s), $0.2500`]);
   } finally { q.p.cleanup(); }
+});
+
+// The headless rebase (review of 2026-09-30). The run's worktree is a
+// directory a sandboxed session wrote and a process of it can outlive the
+// session, so the merge's host git never writes it: no checkout, reset,
+// rebase or amend there. Every git call is recorded through a wrapper binary.
+const WRITES_WORK_TREE = new Set(['rebase', 'checkout', 'switch', 'restore', 'reset', 'merge', 'cherry-pick', 'revert', 'am', 'apply', 'stash', 'clean', 'pull',
+  'read-tree', 'checkout-index', 'commit', 'add', 'rm', 'mv', 'update-index', 'sparse-checkout', 'submodule', 'worktree']);
+// What the merge may run with the run's worktree as its directory: commands
+// that read objects and refs, or write only objects and remote refs.
+const OBJECTS_ONLY = new Set(['fetch', 'rev-parse', 'merge-base', 'merge-tree', 'commit-tree', 'cat-file', 'rev-list', 'diff', 'patch-id', 'log', 'grep', 'config', 'push']);
+function recordingGit(root) {
+  const real = spawnSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
+  const file = path.join(root, 'git-calls.log');
+  const binary = path.join(root, 'recording-git');
+  // Arguments end with US (0x1f), calls with RS (0x1e).
+  writeFileSync(binary, `#!/bin/sh\n{ printf '%s\\037' "$@"; printf '\\036'; } >> '${file}'\nexec '${real}' "$@"\n`, { mode: 0o755 });
+  const calls = () => (existsSync(file) ? readFileSync(file, 'utf8') : '').split('\x1e').filter(Boolean).map(record => {
+    const args = record.split('\x1f').slice(0, -1);
+    let dir = null, i = 0;
+    for (; i < args.length; i++) {
+      if (args[i] === '-C') dir = args[++i];
+      else if (args[i] === '-c') i++;
+      else break;
+    }
+    return { dir, subcommand: args[i] ?? null, args: args.slice(i) };
+  });
+  return { binary, calls };
+}
+// Every entry under dir (the .git link included): type and mode, size,
+// modification time and content, so a rewrite with the same bytes shows too.
+function snapshot(dir, { skip = [] } = {}) {
+  const out = [];
+  const walk = rel => {
+    for (const name of readdirSync(path.join(dir, rel)).sort()) {
+      const r = path.join(rel, name);
+      if (skip.includes(r)) continue;
+      const full = path.join(dir, r);
+      const st = lstatSync(full);
+      out.push(`${r} ${st.mode} ${st.size} ${st.mtimeMs} ${st.isFile() ? createHash('sha256').update(readFileSync(full)).digest('hex') : st.isSymbolicLink() ? readlinkSync(full) : ''}`);
+      if (st.isDirectory() && !st.isSymbolicLink()) walk(r);
+    }
+  };
+  walk('');
+  return out;
+}
+// A commit's message byte for byte (sh trims its output).
+const commitBody = (dir, commit) => { const raw = spawnSync('git', ['-C', dir, 'cat-file', 'commit', commit], { encoding: 'utf8' }).stdout; return raw.slice(raw.indexOf('\n\n') + 2); };
+const authorOf = (dir, commit) => sh(dir, ['log', '-1', '--date=raw', '--format=%an <%ae> %ad', commit]);
+
+test('headless rebase: the merge runs no git command that writes the run\'s worktree, and what a lingering session left there is neither pushed nor touched', async () => {
+  const { p, run } = await held({ 'src/other.js': 'export const other = 1;\n' });
+  try {
+    // A session process that outlived its session keeps writing its worktree.
+    writeFileSync(path.join(run.worktree, 'src', 'format.js'), '// synthetic: written after the commit\n');
+    writeFileSync(path.join(run.worktree, 'src', 'leftover.js'), 'export const leftover = true;\n');
+    const moved = p.moveMain({ 'src/other.js': 'export const other = 2;\n' });
+    // FETCH_HEAD is the fetch's own record in the worktree's git directory.
+    const worktreeBefore = snapshot(run.worktree), gitdirBefore = snapshot(run.gitdir, { skip: ['FETCH_HEAD'] });
+    const recorder = recordingGit(p.root);
+    const result = await mergeRun({ work: p.work, runId: NAME, manual: true, verify: noRelease, binary: recorder.binary, regate: passGates([]), reviewAgain: async () => ({ pass: true, reasons: [] }) });
+    assert.equal(result.status, 'released', JSON.stringify(result));
+    const pushed = p.originHead();
+    assert.equal(sh(p.origin, ['rev-parse', `${pushed}^`]), moved);
+    const calls = recorder.calls();
+    for (const name of ['merge-tree', 'commit-tree', 'push']) assert.ok(calls.some(c => c.subcommand === name), `the merge ran git ${name}`);
+    assert.deepEqual(calls.filter(c => WRITES_WORK_TREE.has(c.subcommand)).map(c => c.args.join(' ')), [], 'no git command that writes a work tree, index or HEAD');
+    const inWorktree = [...new Set(calls.filter(c => c.dir === run.worktree).map(c => c.subcommand))].sort();
+    assert.ok(inWorktree.length > 0);
+    assert.deepEqual(inWorktree.filter(s => !OBJECTS_ONLY.has(s)), [], `git in the run's worktree ran ${inWorktree.join(', ')}`);
+    assert.deepEqual(snapshot(run.worktree), worktreeBefore, 'every file of the worktree is as the session left it');
+    assert.deepEqual(snapshot(run.gitdir, { skip: ['FETCH_HEAD'] }), gitdirBefore, 'its HEAD, index and logs are unchanged');
+    assert.equal(sh(p.repo, ['rev-parse', `refs/heads/${run.branch}`]), run.commit, 'the run\'s branch did not move');
+    // What was pushed is the committed change on the moved main, never a file of the worktree.
+    assert.equal(sh(p.origin, ['diff', '--name-only', moved, pushed]), 'src/format.js\ntests/join.test.mjs');
+    assert.equal(sh(p.origin, ['rev-parse', `${pushed}:src/format.js`]), sh(p.repo, ['rev-parse', `${run.commit}:src/format.js`]));
+    assert.equal(sh(p.origin, ['show', `${pushed}:src/other.js`]), 'export const other = 2;');
+  } finally { p.cleanup(); }
+});
+
+test('headless rebase: a conflict refuses with nothing to abort; the worktree, its git directory and branch are exactly as they were, and a retry refuses the same way', async () => {
+  const { p, run } = await held();
+  try {
+    writeFileSync(path.join(run.worktree, 'src', 'leftover.js'), 'export const leftover = true;\n');
+    const original = readFileSync(path.join(p.repo, 'src/format.js'), 'utf8');
+    p.moveMain({ 'src/format.js': original.replace("return lines.join(' ');", "return lines.join(', ');") });
+    const origin = p.originHead();
+    const worktreeBefore = snapshot(run.worktree), gitdirBefore = snapshot(run.gitdir, { skip: ['FETCH_HEAD'] });
+    const recorder = recordingGit(p.root);
+    let asked = 0;
+    const merge = () => mergeRun({ work: p.work, runId: NAME, manual: true, verify: noRelease, binary: recorder.binary,
+      regate: async () => { asked++; return { pass: true, checks: [] }; }, reviewAgain: async () => { asked++; return { pass: true, reasons: [] }; } });
+    const result = await merge();
+    assert.equal(result.status, 'refused');
+    assert.equal(result.reason, 'main moved and the change no longer applies cleanly; rerun the ticket');
+    assert.equal(asked, 0, 'no review or gate runs on a change that does not apply');
+    assert.equal(p.originHead(), origin);
+    const calls = recorder.calls();
+    assert.ok(calls.some(c => c.subcommand === 'merge-tree'));
+    assert.deepEqual(calls.filter(c => WRITES_WORK_TREE.has(c.subcommand) || c.subcommand === 'push').map(c => c.args.join(' ')), []);
+    assert.deepEqual(snapshot(run.worktree), worktreeBefore);
+    assert.deepEqual(snapshot(run.gitdir, { skip: ['FETCH_HEAD'] }), gitdirBefore, 'no rebase state, ORIG_HEAD or reflog entry');
+    assert.equal(sh(p.repo, ['rev-parse', `refs/heads/${run.branch}`]), run.commit);
+    const after = await readRun(p.work, NAME);
+    assert.equal(after.status, 'held');
+    assert.equal(after.merge_attempts.at(-1).result, 'refused');
+    assert.equal(after.rebases, undefined, 'no rebased commit is recorded');
+    const again = await merge();
+    assert.equal(again.reason, result.reason, 'nothing was left half done');
+    assert.equal(p.originHead(), origin);
+  } finally { p.cleanup(); }
+});
+
+test('headless rebase: the pushed commit is the gated commit with its Gates trailer (same tree and parent, the rebase\'s author and message, the run committer), whatever the worktree\'s HEAD is', async () => {
+  const { p, run } = await held({ 'src/other.js': 'export const other = 1;\n' });
+  try {
+    const moved = p.moveMain({ 'src/other.js': 'export const other = 2;\n' });
+    // Gates that report a tree other than the rebased commit's: refused, nothing pushed.
+    const lying = await mergeRun({ work: p.work, runId: NAME, manual: true, verify: noRelease, reviewAgain: async () => ({ pass: true, reasons: [] }),
+      regate: async ({ head }) => ({ pass: true, head, tree: sh(p.repo, ['rev-parse', `${run.base}^{tree}`]), checks: [{ name: 'suite', pass: true }] }) });
+    assert.equal(lying.status, 'refused');
+    assert.match(lying.reason, /gates ran on another commit than the rebased one/);
+    assert.equal(p.originHead(), moved);
+    const gated = [];
+    const logs = [];
+    const result = await mergeRun({ work: p.work, runId: NAME, manual: true, verify: noRelease, log: line => logs.push(line), reviewAgain: async () => ({ pass: true, reasons: [] }),
+      regate: async ({ base, head }) => {
+        const tree = sh(p.repo, ['rev-parse', `${head}^{tree}`]);
+        gated.push({ base, head, tree });
+        // The worktree's HEAD moves while the gates run: the push must not follow it.
+        sh(run.worktree, ['reset', '--quiet', '--soft', run.base]);
+        return { pass: true, head, tree, checks: [{ name: 'suite', pass: true }] };
+      } });
+    assert.equal(result.status, 'released', JSON.stringify(result));
+    assert.equal(gated.length, 1);
+    const [{ base, head, tree }] = gated;
+    const pushed = p.originHead();
+    assert.equal(pushed, result.fix_commit);
+    assert.equal(base, moved);
+    assert.equal(sh(p.origin, ['rev-parse', `${pushed}^{tree}`]), tree, 'the pushed tree is the gated tree');
+    assert.equal(sh(p.origin, ['rev-list', '--parents', '--max-count=1', pushed]), `${pushed} ${base}`, 'on the gated base, one parent');
+    assert.equal(sh(p.repo, ['diff', head, pushed]), '');
+    const after = await readRun(p.work, NAME);
+    assert.equal(after.rebases.at(-1).commit, head, 'the recorded rebase is the gated commit');
+    // The gates file that justified the push is the one the trailer names.
+    const digest = createHash('sha256').update(readFileSync(path.join(p.work, 'runs', NAME, 'gates-merge.json'))).digest('hex');
+    assert.equal(after.merge_gates_sha256, digest);
+    assert.equal(commitBody(p.origin, pushed), commitMessage({ subject: run.subject, ticketId: run.ticket, runId: run.run_id, gatesSha256: digest }));
+    assert.ok(logs.includes(`PUSHING — run ${NAME}: commit ${pushed} tree ${tree} gates ${digest}`), logs.join('\n'));
+    // A rebase keeps the author and message; the host's commits carry the run committer.
+    assert.equal(commitBody(p.repo, head), commitBody(p.repo, run.commit));
+    for (const commit of [head, pushed]) {
+      assert.equal(authorOf(p.repo, commit), authorOf(p.repo, run.commit));
+      assert.equal(sh(p.repo, ['log', '-1', '--format=%cn <%ce>', commit]), `${AGENT_NAME} <${run.committer}>`);
+    }
+  } finally { p.cleanup(); }
 });

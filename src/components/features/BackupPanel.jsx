@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
-import { TAP_MIN } from "../shared/actionButton";
+import { TAP_MIN, inlineLinkTap } from "../shared/actionButton";
 
 /**
  * Monthly server-built backup.
@@ -344,7 +344,7 @@ function BackupPanel() {
                   {links[r.id] && (
                     <div style={{ fontSize: 12, marginTop: 5, lineHeight: 1.5 }}>
                       Your browser blocked the new tab.{" "}
-                      <a href={links[r.id]} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, fontWeight: 700 }}>
+                      <a href={links[r.id]} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, fontWeight: 700, ...inlineLinkTap }}>
                         Open the download
                       </a>
                       {" "}(works for 15 minutes)

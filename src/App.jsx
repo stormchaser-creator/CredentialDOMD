@@ -65,7 +65,7 @@ import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
 import { supportDeepLink } from "./utils/supportDeepLink.js";
 import { RequestPacketSummary, ApproveSendButton, ReviewButton, canSendOnOneTap, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
-import { actionButtonStyle, cardActionSize } from "./components/shared/actionButton";
+import { actionButtonStyle, cardActionSize, TAP_MIN } from "./components/shared/actionButton";
 import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
@@ -1385,7 +1385,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>To do</h3>
           <button onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
             background: "none", border: "none", fontSize: 13, fontWeight: 600,
-            color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
+            color: T.accent, cursor: "pointer", position: "relative", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
           }}>View All</button>
         </div>
         {openTasks.length === 0 ? (
@@ -1753,7 +1753,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Credentials</h3>
           <button onClick={() => { setTab("credentials"); setSubPage(null); }} style={{
             background: "none", border: "none", fontSize: 13, fontWeight: 600,
-            color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
+            color: T.accent, cursor: "pointer", position: "relative", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
           }}>View All</button>
         </div>
         <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
@@ -1804,7 +1804,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>CME Progress</h3>
         <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
           background: "none", border: "none", fontSize: 13, fontWeight: 600,
-          color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
+          color: T.accent, cursor: "pointer", position: "relative", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
         }}>Find CME</button>
       </div>
     );
@@ -2150,7 +2150,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <div className="cmd-h-scroll" style={{ display: "flex", gap: 6, marginBottom: 16 }}>
           {fTabs.map(t => (
             <button key={t.k} aria-pressed={shareFilter === t.k} onClick={() => setShareFilter(t.k)} style={{
-              padding: "6px 14px", fontSize: 13, borderRadius: 20, flexShrink: 0,
+              padding: "6px 14px", fontSize: 13, borderRadius: 20, flexShrink: 0, minHeight: isDesktop ? undefined : TAP_MIN,
               border: `1px solid ${shareFilter === t.k ? T.accent : T.border}`,
               backgroundColor: shareFilter === t.k ? T.accent : "transparent",
               color: shareFilter === t.k ? "#fff" : T.textMuted, fontWeight: 600,
@@ -3070,7 +3070,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
               padding: "6px 12px", background: "none", border: "none", cursor: "pointer",
               color: active ? T.tabActive : T.tabInactive, fontSize: 11,
-              fontWeight: active ? 700 : 500, minWidth: 56, position: "relative",
+              fontWeight: active ? 700 : 500, minWidth: 56, minHeight: TAP_MIN, position: "relative",
               transition: "color 0.2s",
             }}>
               <div style={{

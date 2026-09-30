@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { smallSpecialtyNote } from "../../constants/creditEquivalence";
+import { inlineLinkTap } from "./actionButton";
 
 /**
  * The AOA's fewer-than-300-certificate-holders exception, surfaced as a note
@@ -33,7 +34,7 @@ function SmallSpecialtyNote({ degreeType }) {
         Not applied automatically. Confirm eligibility with your certifying board before counting on it.
       </div>
       {note.url && (
-        <a href={note.url} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700, textDecoration: "underline" }}>
+        <a href={note.url} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700, textDecoration: "underline", ...inlineLinkTap }}>
           {note.linkLabel}
         </a>
       )}

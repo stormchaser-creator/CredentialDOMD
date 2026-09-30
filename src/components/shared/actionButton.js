@@ -21,6 +21,18 @@ export function actionButtonStyle(T, { primary = false, isDesktop = false } = {}
 export const TAP_MIN = 32;
 
 /**
+ * A link inside a sentence (a plain inline <a>, 11 px text or larger): 10 px
+ * of padding above and below makes the box a finger hits at least TAP_MIN
+ * tall without moving a word, since an inline box's vertical padding takes no
+ * part in line layout. `position: relative` puts that box over the next line
+ * of the sentence, which the browser would otherwise hit first (measured in
+ * Chromium: 26 px of a 35 px box without it, all 35 with it). Nothing is
+ * drawn in the padding (links here have no background), so the desk and the
+ * phone look exactly as before. Spread into the link's own style.
+ */
+export const inlineLinkTap = { position: "relative", paddingTop: 10, paddingBottom: 10 };
+
+/**
  * The star, send, edit and delete buttons on a phone record card: each at
  * least TAP_MIN square with its icon centred, and CARD_ACTION_GAP apart so a
  * slightly-off tap on edit does not land on delete. Spread into the button's

@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import NpiPanel from "./setup/NpiPanel";
+import { TAP_MIN } from "../shared/actionButton";
 import { generateId } from "../../utils/helpers";
 import { alertWriteRefused } from "../../utils/limitedLaunchAccess.js";
 import { fetchPublicRecord } from "../../utils/publicRecordApi";
@@ -196,10 +197,12 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
     const inner = chip(f.source?.name || "Public register", T.textMuted, T.neutralDim);
     if (!f.source?.url) return inner;
     // The row toggles on click, so the source link must not also tick the box.
+    // Its padding makes the box a finger hits TAP_MIN tall around the chip,
+    // and the same margin pulled back keeps the chip row as it was.
     return (
       <a href={f.source.url} target="_blank" rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
-        style={{ textDecoration: "none" }} title={`Open ${f.source.name}`}>
+        style={{ textDecoration: "none", position: "relative", padding: "9px 0", margin: "-9px 0" }} title={`Open ${f.source.name}`}>
         {chip(`${f.source.name} ↗`, T.accent, T.accentGlow)}
       </a>
     );
@@ -269,13 +272,18 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
             {!locked && replaces && chip("replaces what you have", T.warning, T.warningDim)}
             {!locked && needs && chip(`you add the ${needs}`, T.info, T.infoDim)}
             {note && f.detail && (
+              // The chip is drawn by the span; the button around it is a
+              // TAP_MIN box pulled back into the row like the source link.
               <button type="button"
                 onClick={(e) => { e.stopPropagation(); setOpenDetail((d) => ({ ...d, [f.id]: !d[f.id] })); }}
                 style={{
-                  fontSize: 10.5, fontWeight: 800, color: T.textMuted, backgroundColor: T.neutralDim,
-                  padding: "2px 7px", borderRadius: 8, border: "none", cursor: "pointer",
+                  position: "relative", padding: "8px 0", margin: "-8px 0", minWidth: TAP_MIN,
+                  border: "none", background: "none", cursor: "pointer",
                 }}>
-                {openDetail[f.id] ? "less" : "what the register says"}
+                <span style={{
+                  fontSize: 10.5, fontWeight: 800, color: T.textMuted, backgroundColor: T.neutralDim,
+                  padding: "2px 7px", borderRadius: 8,
+                }}>{openDetail[f.id] ? "less" : "what the register says"}</span>
               </button>
             )}
           </div>

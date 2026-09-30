@@ -382,7 +382,7 @@ function SettingsSection({ onUpgrade }) {
                 ))}
               </div>
               <button onClick={() => { setNpiResults(null); setNpiNote(""); }} style={{
-                marginTop: 6, padding: "6px 0", width: "100%", border: "none",
+                position: "relative", margin: "2px 0 -4px", padding: "10px 0", width: "100%", border: "none",
                 backgroundColor: "transparent", color: T.textDim, fontSize: 12, cursor: "pointer",
               }}>Dismiss</button>
             </div>
@@ -476,7 +476,7 @@ function SettingsSection({ onUpgrade }) {
 
       {/* Email: the addresses inbound mail may be forwarded from. The
           "not registered" reply points a physician here by name. */}
-      <EmailBlock accountEmail={s.email || ""} verifiedEmail={s.verifiedEmail || ""} T={T} iS={iS} />
+      <EmailBlock accountEmail={s.email || ""} verifiedEmail={s.verifiedEmail || ""} T={T} iS={iS} isDesktop={isDesktop} />
 
       {/* AI */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
@@ -928,7 +928,7 @@ function SettingsSection({ onUpgrade }) {
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                           <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>{t.hours} hrs</span>
                           <button onClick={() => navigate("credentials", "findCme:" + t.topic)} style={{
-                            padding: "3px 8px", borderRadius: 6, border: "none",
+                            padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 6, border: "none",
                             backgroundColor: T.accentDim, color: T.accent,
                             fontSize: 11, fontWeight: 600, cursor: "pointer",
                           }}>Find</button>
@@ -1082,7 +1082,7 @@ function SpecialtyPicker({ selected, onChange, degreeType, iS, T }) {
       )}
 
       <button onClick={() => setOpen(!open)} style={{
-        ...iS, width: "100%", textAlign: "left", cursor: "pointer",
+        ...iS, width: "100%", minHeight: TAP_MIN, textAlign: "left", cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <span style={{ color: selected.length ? T.text : T.textDim }}>
@@ -1183,7 +1183,7 @@ function SpecialtyPicker({ selected, onChange, degreeType, iS, T }) {
  * sentence is what shows, because it is the one that knows whether another
  * account already holds the address.
  */
-function EmailBlock({ accountEmail, verifiedEmail, T, iS }) {
+function EmailBlock({ accountEmail, verifiedEmail, T, iS, isDesktop }) {
   const { rows, loading, error, busyId, add, resend, remove } = useForwardingAddresses();
   const [draft, setDraft] = useState("");
   const [note, setNote] = useState(null);          // { ok: bool, text }
@@ -1270,7 +1270,7 @@ function EmailBlock({ accountEmail, verifiedEmail, T, iS }) {
   };
 
   const smallBtn = (tone) => ({
-    padding: "7px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+    padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
     border: tone === "danger" ? "none" : `1px solid ${T.border}`,
     backgroundColor: tone === "danger" ? T.dangerDim : "transparent",
     color: tone === "danger" ? T.danger : T.textMuted,

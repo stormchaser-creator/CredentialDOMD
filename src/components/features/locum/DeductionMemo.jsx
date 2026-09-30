@@ -19,7 +19,7 @@
 
 import { deductionCategoryLabel } from "../../../utils/deductionCategoryLabel";
 import { useState, useMemo } from "react";
-import { cardActionSize } from "../../shared/actionButton";
+import { cardActionSize, TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { allDeductions, deductionsCsv } from "../../../utils/deductions";
 // A real uuid: every synced table keys rows by one, and the old
@@ -66,7 +66,7 @@ const BLANK_FORM = {
 };
 
 export default function DeductionMemo() {
-  const { data, addItem, deleteItem, theme: T } = useApp();
+  const { data, addItem, deleteItem, theme: T, isDesktop } = useApp();
   const [showImport, setShowImport] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(BLANK_FORM);
@@ -146,7 +146,7 @@ export default function DeductionMemo() {
           </p>
         </div>
         <button onClick={() => setShowImport(true)} style={{
-          padding: "6px 12px", borderRadius: 8, border: "none",
+          padding: "6px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none",
           backgroundColor: T.accent, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0,
         }}>Import statement</button>
         <select

@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import { cardActionSize } from "../../shared/actionButton";
+import { cardActionSize, TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Field from "../../shared/Field";
@@ -219,7 +219,7 @@ function TaxPrep() {
             </div>
           </div>
           <button onClick={() => openRecord(j.id)} style={{
-            padding: "7px 12px", borderRadius: 9, border: "none", backgroundColor: T.accent, color: "#fff",
+            padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: "none", backgroundColor: T.accent, color: "#fff",
             fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
           }}>Record</button>
         </div>

@@ -23,7 +23,12 @@ export const BASE_KEYS = {
   chat: "credentialdomd-assistant-chat",
   archives: "credentialdomd-assistant-archives",
   timer: "credentialdomd-live-timer",
-  lastContract: "credentialdomd-last-contract",
+  lastContract: "credentialdomd-last-contract", // the Work Log contract last used, a bare id
+  // The Work Log contract picked for one call day, { contractId, callDay }
+  // (utils/scheduledContract.js): it outranks the schedule for that call day
+  // only. Kept apart from lastContract so the contract last used stays a bare
+  // id and neither overwrites the other.
+  contractPick: "credentialdomd-contract-pick",
   pendingOps: "credentialdomd-pending-ops", // writes that failed to reach the cloud, replayed next load
   // Who last completed a signed-in load on this device (offline fallback
   // identity, src/utils/offlineSession.js). Listed here so purgeUserStorage

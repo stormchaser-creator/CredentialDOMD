@@ -7,6 +7,7 @@ import { transformSync } from 'esbuild';
 import vm from 'node:vm';
 import * as secretBox from '../../src/utils/secretBox.js';
 import * as identity from '../../src/utils/protectedIdentity.js';
+import * as actionButton from '../../src/components/shared/actionButton.js';
 import { isDeviceOnlySection } from '../../src/utils/pausedApplicationRecords.js';
 import { scrubSsn, hasSsnShape, SSN_REMOVED } from '../../src/utils/outgoingText.js';
 import { DEVICE_KEYS_BASE } from '../../src/utils/storageScope.js';
@@ -149,6 +150,8 @@ async function screen({ storage, records = [] }) {
     '../shared/Modal': { __esModule: true, default: 'Modal' }, '../shared/Field': { __esModule: true, default: 'Field' },
     '../../utils/helpers': { generateId: () => 'new-record', formatDate: d => d },
     '../../utils/secretBox': secretBox, '../../utils/protectedIdentity': identity,
+    // The phone tap floor (TAP_MIN): plain styles, no app context.
+    '../shared/actionButton': actionButton,
   };
   const module = { exports: {} };
   const ctx = vm.createContext({ module, exports: module.exports, require: n => { assert.ok(n in imports, `unexpected import ${n}`); return imports[n]; }, window: { confirm: () => true }, navigator: {}, console });

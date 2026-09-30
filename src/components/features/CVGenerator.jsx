@@ -6,6 +6,7 @@ import { shareCvPdf } from "../../utils/cvPdf";
 import { buildCvContent } from "../../utils/cvContent";
 import { cvPlainText } from "../../utils/shareText";
 import CvImportReview from "./CvImportReview";
+import { TAP_MIN } from "../shared/actionButton";
 import Modal from "../shared/Modal";
 
 
@@ -21,7 +22,7 @@ const CV_TEMPLATES = [
 ];
 
 function CVGenerator() {
-  const { data, theme: T } = useApp();
+  const { data, theme: T, isDesktop } = useApp();
   const [template, setTemplate] = useState("clinical");
   const [preview, setPreview] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -143,7 +144,7 @@ function CVGenerator() {
       {hasData && (
         <div>
           <button onClick={() => setPreview(!preview)} style={{
-            padding: "6px 12px", fontSize: 13, fontWeight: 600, borderRadius: 8,
+            padding: "6px 12px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 13, fontWeight: 600, borderRadius: 8,
             border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted,
             cursor: "pointer", marginBottom: 10,
           }}>{preview ? "Hide Preview" : "Show Preview"}</button>
