@@ -119,22 +119,27 @@ const caArgs = (opts) => computeCompliance([
   cme("AMA PRA Category 1", 30, "2026-03-15"), // inside either window
 ], "CA", "DO", { licenseExpiration: CA_EXP, ...opts });
 
+// The window's bounds are local midnights (parseLocalDate), so they are read
+// back as the local calendar date: toISOString() names the UTC date, which is
+// the day before for any zone east of UTC.
+const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 // 1. Unset behaves EXACTLY as before: window is expiration minus the cycle.
 const noStart = caArgs({});
-eq("no cycleStart: window start is expiration minus cycle", noStart.windowStart.toISOString().slice(0, 10), "2025-09-30");
+eq("no cycleStart: window start is expiration minus cycle", localDay(noStart.windowStart), "2025-09-30");
 eq("no cycleStart: pre-window entry excluded", noStart.totalEarned, 30);
 eq("no cycleStart: source is the derived cycle", noStart.windowSource, "cycle");
 ok("no cycleStart: window is neither short nor long", noStart.windowShort === false && noStart.windowLong === false);
 ok("no cycleStart: no state proration surfaced", noStart.firstCycleRule === null);
 // An unparseable value must fall back to the derived window, not empty it.
-eq("garbage cycleStart falls back to the derived window", caArgs({ cycleStart: "not-a-date" }).windowStart.toISOString().slice(0, 10), "2025-09-30");
+eq("garbage cycleStart falls back to the derived window", localDay(caArgs({ cycleStart: "not-a-date" }).windowStart), "2025-09-30");
 
 // 2. Set EARLIER widens the window. This is the owner's case and 16 CCR
 //    1635(d)'s: a CA DO's first requirement period runs from initial licensure
 //    to the first expiration and may exceed 24 months. The 20 hours he logged
 //    on 2025-07-01 stop being discarded, and he still owes the full 50.
 const wide = caArgs({ cycleStart: "2025-07-01" });
-eq("earlier cycleStart widens the window", wide.windowStart.toISOString().slice(0, 10), "2025-07-01");
+eq("earlier cycleStart widens the window", localDay(wide.windowStart), "2025-07-01");
 eq("earlier cycleStart counts the previously-dropped hours", wide.totalEarned, 50);
 eq("earlier cycleStart counts them toward the AOA minimum too", wide.cat1Earned, 20);
 ok("earlier cycleStart marks the window long", wide.windowLong === true && wide.windowShort === false);
@@ -144,7 +149,7 @@ eq("window label is plain text", wide.windowLabel, "Counting CME dated Jul 1, 20
 
 // 3. Set LATER narrows the window and drops entries before it.
 const narrow = caArgs({ cycleStart: "2026-01-01" });
-eq("later cycleStart narrows the window", narrow.windowStart.toISOString().slice(0, 10), "2026-01-01");
+eq("later cycleStart narrows the window", localDay(narrow.windowStart), "2026-01-01");
 eq("entry dated before the cycle start is excluded", narrow.totalEarned, 30);
 ok("later cycleStart marks the window short", narrow.windowShort === true && narrow.windowLong === false);
 eq("narrowing does NOT lower the hour target", narrow.totalRequired, 50);
@@ -163,7 +168,7 @@ eq("both boundary days count, the day before does not", bounds.totalEarned, 7);
 // 5. A cycle start on or after the window end is refused, not applied: it
 //    would empty the window and silently discard every logged hour.
 const bad = caArgs({ cycleStart: "2028-01-01" });
-eq("cycleStart after the window end falls back to the derived window", bad.windowStart.toISOString().slice(0, 10), "2025-09-30");
+eq("cycleStart after the window end falls back to the derived window", localDay(bad.windowStart), "2025-09-30");
 ok("refused cycleStart is reported", bad.cycleStartIgnored === true && bad.windowSource === "cycle");
 eq("refused cycleStart does not discard hours", bad.totalEarned, 30);
 
