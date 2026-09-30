@@ -11,6 +11,10 @@
 // signup-notify.sh). The first version sent from python3, which macOS would
 // have refused as it refused node: the job tests below check that the
 // notifier's parent is the job's zsh, and hold the lock across the send.
+// The stand-in notifier records its parent's pid ($PPID), which the test
+// compares with the pid of the zsh it started itself: ps is denied inside the
+// gates' sandbox, where `ps -o command=` printed nothing and failed every
+// ticket run's suite (2026-09-29).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, chmodSync, symlinkSync, rmSync, existsSync, realpathSync, lstatSync, copyFileSync } from 'node:fs';
@@ -160,8 +164,8 @@ function pythonBinDir() {
 const step = (command, dir, extra = []) => spawnSync(python, [DRAIN, command, '--state', dir, ...extra], { encoding: 'utf8', timeout: 60000 });
 
 // A copy of the launchd job, in folders with spaces, next to a stand-in for
-// notify-owner.sh that records each message and the command of the process
-// that started it. The keychain has no token here, so the job stops after the
+// notify-owner.sh that records each message and the pid of the process that
+// started it. The keychain has no token here, so the job stops after the
 // drain. Flag files make the stand-in fail, wait, or hang.
 function jobCopy(base) {
   const scripts = path.join(base, 'job copy', 'scripts');
@@ -176,8 +180,7 @@ function jobCopy(base) {
 : > "${flag('started')}"
 while [ -e "${flag('hold')}" ]; do sleep 0.1; done
 [ -e "${flag('hang')}" ] && exec sleep 60
-parent=$(ps -o command= -p $PPID)
-python3 -c 'import json,sys; print(json.dumps({"message": sys.argv[1], "parent": sys.argv[2]}))' "$1" "$parent" >> "${record}"
+python3 -c 'import json,sys; print(json.dumps({"message": sys.argv[1], "parent": int(sys.argv[2])}))' "$1" "$PPID" >> "${record}"
 `, { mode: 0o755 });
   writeFileSync(path.join(bin, 'security'), '#!/bin/sh\nexit 44\n', { mode: 0o755 });
   const pythonDir = pythonBinDir();
@@ -345,11 +348,32 @@ test('the job drains: its own zsh starts the notifier (python3 never does), one 
     assert.match(sent.message, /^CredentialDOMD ticket agent: 2 alerts\n/);
     // macOS allows the job's /bin/zsh to drive Messages and refused node; the
     // Command Line Tools' python3 is no more a system binary than node is.
-    assert.equal(sent.parent, `/bin/zsh ${copy.job}`, 'the notifier is a direct child of the job\'s zsh');
+    assert.ok(Number.isInteger(first.pid) && first.pid > 0);
+    assert.equal(sent.parent, first.pid, 'the notifier is a direct child of the job\'s zsh, the one this test started');
     assert.match(copy.log(), /owner alerts: sent 2 \(parked [0-9a-f]{8}, change_refused [0-9a-f]{8}\)/);
     assert.deepEqual(new Set(sentIds(state.dir)), new Set(queue(state.dir).map(e => e.id)));
     assert.equal(copy.run(state.dir).status, 0);
     assert.equal(copy.sent().length, 1, 'nothing is sent twice');
+  } finally { state.cleanup(); }
+});
+
+// The check above has teeth: the first version's mistake, put back in a copy
+// of the job, is caught (the notifier's parent is python3, not the job's zsh).
+test('the parent check catches a notifier python3 starts', { skip: jobSkip }, async () => {
+  const state = stateDir();
+  try {
+    const copy = jobCopy(state.base);
+    const script = readFileSync(copy.job, 'utf8');
+    const direct = '"$NOTIFY" "$2" </dev/null';
+    assert.ok(script.includes(direct), 'the job starts the notifier itself');
+    writeFileSync(copy.job, script.replace(direct, `python3 -c 'import subprocess,sys; sys.exit(subprocess.call(sys.argv[1:]))' ${direct}`));
+    await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
+    const r = copy.run(state.dir);
+    assert.equal(r.status, 0, r.stderr + copy.log());
+    const [sent] = copy.sent();
+    assert.equal(copy.sent().length, 1);
+    assert.ok(Number.isInteger(sent.parent) && sent.parent > 0);
+    assert.notEqual(sent.parent, r.pid, 'python3 started it, not the job\'s zsh');
   } finally { state.cleanup(); }
 });
 

@@ -341,8 +341,12 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     for (const f of ['signup-notify.sh', 'signup-notify.py']) fs.copyFileSync(path.join(root, 'scripts', f), path.join(job, f));
     const sentLog = path.join(pg.base, 'imessages.jsonl');
     const failFlag = path.join(pg.base, 'messages refuses');
-    // The stand-in for Messages records each message and who started it.
-    fs.writeFileSync(path.join(job, 'notify-owner.sh'), `#!/bin/sh\n[ -e "${failFlag}" ] && exit 1\nparent=$(ps -o command= -p $PPID)\npython3 -c 'import json,sys; print(json.dumps({"message": sys.argv[1], "parent": sys.argv[2]}))' "$1" "$parent" >> "${sentLog}"\n`, { mode: 0o755 });
+    // The stand-in for Messages records each message and the pid of the
+    // process that started it ($PPID; ps is denied inside the gates' sandbox,
+    // where `ps -o command=` printed nothing and failed every ticket run's
+    // suite, 2026-09-29). runJob below compares it with the pid of the zsh
+    // that run started.
+    fs.writeFileSync(path.join(job, 'notify-owner.sh'), `#!/bin/sh\n[ -e "${failFlag}" ] && exit 1\npython3 -c 'import json,sys; print(json.dumps({"message": sys.argv[1], "parent": int(sys.argv[2])}))' "$1" "$PPID" >> "${sentLog}"\n`, { mode: 0o755 });
     fs.writeFileSync(path.join(bin, 'security'), '#!/bin/sh\necho synthetic-management-token\n', { mode: 0o755 });
     const curlLog = path.join(pg.base, 'curl.log');
     fs.writeFileSync(path.join(bin, 'curl'), `#!/usr/bin/env python3
@@ -361,8 +365,16 @@ sys.stdout.write(r.stdout.strip())
 `, { mode: 0o755 });
     const pythonDir = pythonBinDir();
     const env = { HOME: home, PATH: [bin, pythonDir, '/usr/bin', '/bin'].join(':'), LC_ALL: 'C' };
-    const runJob = () => spawnSync('/bin/zsh', [path.join(job, 'signup-notify.sh')], { encoding: 'utf8', env, timeout: 120000 });
     const records = () => (fs.existsSync(sentLog) ? fs.readFileSync(sentLog, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
+    // Each run: the pid of the zsh it started and the parents of the sends it made.
+    const jobs = [];
+    const runJob = () => {
+      const before = records().length;
+      const r = spawnSync('/bin/zsh', [path.join(job, 'signup-notify.sh')], { encoding: 'utf8', env, timeout: 120000 });
+      assert.ok(Number.isInteger(r.pid) && r.pid > 0);
+      jobs.push({ pid: r.pid, parents: records().slice(before).map(x => x.parent) });
+      return r;
+    };
     const sent = () => records().map(r => r.message);
     const log = () => fs.readFileSync(path.join(home, '.credentialdomd-signup-notify.log'), 'utf8');
 
@@ -393,7 +405,7 @@ sys.stdout.write(r.stdout.strip())
     assert.match(log(), /owner alerts: sent 2 \(change_refused [0-9a-f]{8}, parked [0-9a-f]{8}\)/);
     assert.ok(fs.readFileSync(curlLog, 'utf8').startsWith('select part, coalesce('), 'the probe runs first');
     // Both sends came from the job's own zsh: the queued alerts as well.
-    assert.deepEqual(records().map(r => r.parent), [`/bin/zsh ${path.join(job, 'signup-notify.sh')}`, `/bin/zsh ${path.join(job, 'signup-notify.sh')}`]);
+    assert.deepEqual(records().map(r => r.parent), [first.pid, first.pid]);
     const since = fs.readFileSync(path.join(home, '.credentialdomd-signup-notify'), 'utf8').trim();
     assert.notEqual(since, EARLIER, 'the window moved on');
 
@@ -463,7 +475,8 @@ sys.stdout.write(r.stdout.strip())
     assert.equal(sent().length, 9);
     assert.match(sent()[8], /^CredentialDOMD notifier: working again/);
     assert.equal(fs.existsSync(path.join(home, '.credentialdomd-signup-notify.health')), false);
-    assert.ok(records().every(r => r.parent === `/bin/zsh ${path.join(job, 'signup-notify.sh')}`), 'every send from the job\'s zsh');
+    assert.equal(jobs.reduce((n, j) => n + j.parents.length, 0), records().length);
+    assert.deepEqual(jobs.flatMap(j => j.parents.filter(p => p !== j.pid)), [], 'every send from the zsh of the run that made it');
     assert.doesNotMatch(sent().join('\n'), /\u2014/);
   });
 });
