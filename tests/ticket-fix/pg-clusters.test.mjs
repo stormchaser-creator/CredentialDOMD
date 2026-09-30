@@ -20,7 +20,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { acquirePgSlot, withSlotWait, defaultSlotDir } from '../helpers/pg-slot.mjs';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
-import { sandboxAvailable, shortTmpRoot } from '../../scripts/ticket-fix/sandbox.mjs';
+import { sandboxAvailable, shortTmpRoot, RUN_PG_SLOTS } from '../../scripts/ticket-fix/sandbox.mjs';
+import { stopRecordedClusters } from '../../scripts/ticket-fix/pg-clusters.mjs';
 import { launch } from '../../scripts/ticket-fix/worker.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -252,4 +253,66 @@ test('a new run stops the clusters a SIGKILLed runner left and removes its slot 
   assert.equal(fs.existsSync(pool), false, 'the dead runner\'s slot directory was removed');
   assert.equal(fs.existsSync(deadTmp), false, 'so was its temporary directory');
   assert.equal(fs.existsSync(liveTmp), true, 'a live runner\'s stays');
+});
+
+// Review of 2026-09-30: sandboxed code writes the entries of its run's slot
+// directory, and the host, stopping the run, read every slot-N name there and
+// ran a ps for each record whose marker and pid checked out: one forged
+// record hard-linked to millions of names kept the stop handler busy for
+// hours. The host reads only the pool's own names (the helpers take slot-0 ..
+// slot-5 there), looks each cluster up once, and stops looking when its
+// budget is spent. The "postmaster" here is node started as "postgres ... -D
+// <data directory>": it passes every check without being PostgreSQL.
+const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+function forged(t) {
+  const root = scratch(t, 'pg-forged-');
+  const fake = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '--', '-D', path.join(root, 'cts-0', 'data')], { argv0: 'postgres', stdio: 'ignore' });
+  t.after(() => { try { fake.kill('SIGKILL'); } catch { /* gone */ } });
+  const slots = path.join(root, 'slots');
+  fs.mkdirSync(slots);
+  // A data directory with its marker and a postmaster.pid naming the fake;
+  // the record for it, written once.
+  const cluster = i => {
+    const dataDir = path.join(root, `cts-${i}`, 'data');
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(`${dataDir}.pg-slot`, `synthetic-token-${i}\n`);
+    fs.writeFileSync(path.join(dataDir, 'postmaster.pid'), `${fake.pid}\n${dataDir}\n`);
+    const record = path.join(root, `record-${i}.json`);
+    fs.writeFileSync(record, JSON.stringify({ token: `synthetic-token-${i}`, dataDir }));
+    return record;
+  };
+  return { root, fake, slots, cluster };
+}
+
+test('a forged record under slot names past the run\'s pool is never looked up; the same record under a pool name is', async t => {
+  const f = forged(t);
+  const record = f.cluster(0);
+  for (const i of [RUN_PG_SLOTS, RUN_PG_SLOTS + 1, 999]) fs.linkSync(record, path.join(f.slots, `slot-${i}`));
+  assert.deepEqual(stopRecordedClusters(f.slots, { waitMs: 0 }).stopped, []);
+  await sleep(200);
+  assert.equal(running(f.fake.pid), true, 'nothing a name past the pool names was signalled');
+  // The same record in the pool: the fake passes every check, which is what
+  // makes the result above mean something.
+  fs.linkSync(record, path.join(f.slots, 'slot-0'));
+  assert.deepEqual(stopRecordedClusters(f.slots, { waitMs: 0 }).stopped, [f.fake.pid]);
+  assert.equal(await until(() => !running(f.fake.pid), 5000), true);
+});
+
+test('one record under every pool name is looked up once, and lookups stop when their budget is spent', t => {
+  const f = forged(t);
+  const record = f.cluster(0);
+  for (let i = 0; i < RUN_PG_SLOTS; i++) fs.linkSync(record, path.join(f.slots, `slot-${i}`));
+  const calls = [];
+  assert.deepEqual(stopRecordedClusters(f.slots, { waitMs: 0, command: pid => { calls.push(pid); return null; } }).stopped, []);
+  assert.deepEqual(calls, [f.fake.pid], 'one lookup, not one per name');
+  // A distinct cluster under every pool name, each lookup slow.
+  const other = path.join(f.root, 'slots-distinct');
+  fs.mkdirSync(other);
+  for (let i = 0; i < RUN_PG_SLOTS; i++) fs.copyFileSync(f.cluster(i), path.join(other, `slot-${i}`));
+  calls.length = 0;
+  const started = Date.now();
+  stopRecordedClusters(other, { waitMs: 0, budgetMs: 150, command: pid => { calls.push(pid); sleepSync(100); return null; } });
+  assert.ok(calls.length >= 1 && calls.length <= 2, `${calls.length} lookups within a 150 ms budget of 100 ms lookups`);
+  assert.ok(Date.now() - started < 1500);
+  assert.equal(running(f.fake.pid), true);
 });

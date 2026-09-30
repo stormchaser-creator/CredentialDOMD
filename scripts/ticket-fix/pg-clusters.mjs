@@ -22,8 +22,14 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 export const KEY_SPAN = 10;
+// The slots of one run's slot directory (sandbox.mjs runSlotDir, slotEnv):
+// the helpers there take slot-0 .. slot-5 and no other name.
+export const RUN_PG_SLOTS = 6;
 const MAX_SMALL = 4096;
 const STOP_WAIT_MS = 15 * 1000;
+// How long the host looks for the postmasters a slot directory's records
+// name (a ps for each) before it stops looking.
+const LOOKUP_BUDGET_MS = 20 * 1000;
 const TOOL_ENV = { PATH: '/usr/bin:/bin', LC_ALL: 'C', TZ: 'UTC' };
 const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
@@ -149,13 +155,16 @@ export function postmasterOf(record, { command = processCommand } = {}) {
   return /(?:^|\/)(?:postgres|postmaster)$/.test(program) && (line.includes(` -D ${dataDir} `) || line.endsWith(` -D ${dataDir}`)) ? pid : null;
 }
 
-// The slot records in a slot directory (slot-N names only).
-export function slotRecords(dir) {
-  let names = [];
-  try { names = fs.readdirSync(dir); } catch { return []; }
+// The slot records in a run's slot directory: slot-0 .. slot-<slots - 1>,
+// the names its helpers take, each read by name and no other. Sandboxed code
+// writes the entries of that directory and can give it any number of slot-N
+// names (a hard link of one forged record costs it half a millisecond); read
+// by listing, each cost the host a ps when it stopped the run, hours of
+// synchronous work in the stop handler (review of 2026-09-30).
+export function slotRecords(dir, slots = RUN_PG_SLOTS) {
   const out = [];
-  for (const name of names.filter(n => /^slot-\d+$/.test(n))) {
-    const text = readSmall(path.join(dir, name));
+  for (let i = 0; i < slots; i++) {
+    const text = readSmall(path.join(dir, `slot-${i}`));
     let record = null;
     try { record = text ? JSON.parse(text) : null; } catch { record = null; }
     if (record && typeof record === 'object' && !Array.isArray(record)) out.push(record);
@@ -169,16 +178,27 @@ export function slotRecords(dir) {
 // signalled, or a runner that died left it): once the records are gone no
 // reclaimer can find those clusters, and a postmaster whose data directory
 // still exists holds its segment for good. SIGQUIT is PostgreSQL's immediate
-// shutdown, which frees the segment. Returns { stopped, running, segments }.
-export function stopRecordedClusters(dir, { waitMs = STOP_WAIT_MS } = {}) {
-  const records = slotRecords(dir);
+// shutdown, which frees the segment. The records are sandboxed code's to
+// write, so the work is bounded: the pool's names only, one lookup per data
+// directory and token, and no lookup once budgetMs is spent (a cluster left
+// running stops itself within a minute of its data directory's removal:
+// PostgreSQL rechecks its lock file). Returns { stopped, running, segments }.
+// command is for tests.
+export function stopRecordedClusters(dir, { waitMs = STOP_WAIT_MS, budgetMs = LOOKUP_BUDGET_MS, slots = RUN_PG_SLOTS, command = processCommand } = {}) {
+  const deadline = Date.now() + budgetMs;
+  const records = slotRecords(dir, slots);
+  const looked = new Set();
   const stopped = [];
   for (const record of records) {
-    const pid = postmasterOf(record);
-    if (pid === null) continue;
+    if (Date.now() >= deadline) break;
+    const key = JSON.stringify([record.dataDir ?? null, record.token ?? null]);
+    if (looked.has(key)) continue;
+    looked.add(key);
+    const pid = postmasterOf(record, { command });
+    if (pid === null || stopped.includes(pid)) continue;
     try { process.kill(pid, 'SIGQUIT'); stopped.push(pid); } catch { /* gone meanwhile */ }
   }
   for (const until = Date.now() + waitMs; stopped.some(running) && Date.now() < until;) sleepSync(50);
-  const segments = removeOrphanSegments(records.flatMap(clusterInodes));
+  const segments = removeOrphanSegments([...new Set(records.flatMap(clusterInodes))]);
   return { stopped, running: stopped.filter(running), segments };
 }

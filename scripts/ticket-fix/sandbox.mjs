@@ -35,7 +35,7 @@ import { writeFileSync, existsSync, realpathSync, mkdirSync, mkdtempSync, lstatS
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { stopRecordedClusters, running } from './pg-clusters.mjs';
+import { stopRecordedClusters, running, RUN_PG_SLOTS } from './pg-clusters.mjs';
 
 export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
 // Whether a sandbox can be applied here: macOS, sandbox-exec present, and
@@ -217,7 +217,8 @@ export function sweepHostTemps(root = shortTmpRoot()) {
 // postmaster in a session of its own that no group kill reaches, and once
 // the records are gone no reclaimer can find it. The runner's temporary
 // directories, which hold the data directories, go too.
-export const RUN_PG_SLOTS = 6;
+// RUN_PG_SLOTS lives in pg-clusters.mjs, which reads no other slot name.
+export { RUN_PG_SLOTS };
 export function runSlotDir() {
   const uid = typeof process.getuid === 'function' ? process.getuid() : 'user';
   const parent = real('/tmp');
