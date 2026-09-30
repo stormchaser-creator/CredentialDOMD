@@ -26,7 +26,7 @@
 // owner's (finding 1).
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { promises as fs, constants as FS, existsSync, readFileSync, lstatSync, readdirSync, readlinkSync, realpathSync, openSync, readSync, closeSync, fstatSync, rmSync } from 'node:fs';
+import { promises as fs, constants as FS, existsSync, readFileSync, lstatSync, readdirSync, readlinkSync, realpathSync, openSync, readSync, closeSync, fstatSync, rmSync, renameSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { hostTemp, dropHostTemp, pinDir, forgetDir } from './sandbox.mjs';
@@ -401,24 +401,71 @@ export function snapshotCommit({ dir, base, files, binary = 'git', message = 'Re
   } finally { try { spawnSync('/bin/rm', ['-f', index]); } catch { /* gone */ } }
 }
 
-// A link found where the worktree was (sandboxed code can replace the
-// directory entry) is removed itself and never handed to git: what it points
-// at is not this worktree. A pinned worktree whose .git link or git
-// directory changed is not handed to git either: it is deleted as files and
-// its git directory pruned from the repository's side.
+// The commit `head` with one product hunk reversed, computed in the trusted
+// repository through a scratch index (git apply --cached touches no work
+// tree), or null when the reverse does not apply cleanly. The mutation check
+// runs each such commit in a fresh gate worktree instead of reverting hunks in
+// place in a worktree a sandbox can write: the host's apply, checkout and
+// clean there would resolve the work-tree path again at exec and follow a
+// subdirectory swapped for a symlink, writing or deleting outside the worktree
+// as the host user (review of 2026-09-30, finding). repo must not be a pinned
+// worktree (apply reads the index, and git 2.54's apply dies with any
+// attribute source, which the pin would add).
+export function revertHunkCommit({ repo, head, patch, binary = 'git', message = 'Mutation: one product hunk reverted' }) {
+  if (!SHA.test(head || '')) throw Error('A full commit id is required');
+  const scratch = path.join(os.tmpdir(), `ticket-mutation-${process.pid}-${randomBytes(6).toString('hex')}`);
+  const index = `${scratch}.index`;
+  const patchFile = `${scratch}.patch`;
+  const env = { ...process.env, GIT_INDEX_FILE: index };
+  try {
+    writeFileSync(patchFile, patch, { mode: 0o600 });
+    git(repo, ['read-tree', head], { binary, env });
+    if (git(repo, ['apply', '--cached', '-R', '--unidiff-zero', '--whitespace=nowarn', patchFile], { binary, env, allowFail: true }) === null) return null;
+    const tree = git(repo, ['write-tree'], { binary, env }).trim();
+    return git(repo, ['commit-tree', tree, '-p', head, '-m', message], { binary, env: { ...env, GIT_AUTHOR_NAME: AGENT_NAME, GIT_AUTHOR_EMAIL: AGENT_EMAIL,
+      GIT_COMMITTER_NAME: AGENT_NAME, GIT_COMMITTER_EMAIL: AGENT_EMAIL } }).trim();
+  } finally { try { spawnSync('/bin/rm', ['-f', index, patchFile]); } catch { /* gone */ } }
+}
+
+// The host never hands a worktree to `git worktree remove`. git's recursive
+// delete re-lstats each entry and then opendir()s or unlink()s the path
+// string, so a subdirectory a lingering sandboxed process (or test code that
+// already ran there) swapped for a symlink is followed, and git deletes the
+// files the link points at, as the host user, outside the worktree (review of
+// 2026-09-30, finding). verifyPin only looks at the worktree root, not its
+// subdirectories, so a swapped subdirectory would still count as intact.
+// Instead the worktree is renamed out of the path any sandbox was granted
+// (removeTree: a `.trash-*` sibling under the host-owned worktrees/gates root,
+// which no profile grants), on the same filesystem so rename is atomic and a
+// lingering process loses write access even through its cwd, then deleted with
+// /bin/rm (macOS fts, which checks dev/ino on every chdir), and its git
+// directory pruned from the repository's side. A link found where the worktree
+// was is removed itself, never followed.
 export function removeWorktree({ repo, dir, branch = null, deleteBranch = false, binary = 'git' }) {
   let link = false;
   try { link = lstatSync(dir).isSymbolicLink(); } catch { link = false; }
-  const pin = WORKTREE_PINS.get(path.resolve(String(dir))) ?? null;
-  let intact = !link;
-  if (pin && intact) { try { verifyPin(pin); } catch { intact = false; } }
   forgetWorktree(dir);
-  if (link) rmSync(dir, { force: true });
-  else if (intact) git(repo, ['worktree', 'remove', '--force', dir], { binary, allowFail: true });
   forgetDir(dir);
-  if (existsSync(dir)) spawnSync('/bin/rm', ['-rf', dir]);
+  if (link) rmSync(dir, { force: true });
+  else if (existsSync(dir)) removeTree(dir);
   git(repo, ['worktree', 'prune'], { binary, allowFail: true });
   if (deleteBranch && branch) git(repo, ['branch', '-D', branch], { binary, allowFail: true });
+}
+// Deletes a directory tree without git's recursive delete and without ever
+// following a subdirectory that was swapped for a symlink. It first renames
+// the tree to a sibling the sandbox never granted (same filesystem: rename is
+// atomic and severs a lingering process's write access, which was granted for
+// the old path only), then removes the renamed tree with /bin/rm -rf (fts,
+// physical: it does not descend through a symlink). A tree that cannot be
+// moved (already gone, or a cross-device boundary) falls back to /bin/rm in
+// place, still never to git's recursive delete.
+function removeTree(dir) {
+  const resolved = path.resolve(String(dir));
+  const trash = path.join(path.dirname(resolved), `.trash-${process.pid}-${randomBytes(6).toString('hex')}`);
+  let moved = false;
+  try { renameSync(resolved, trash); moved = true; } catch { moved = false; }
+  const target = moved ? trash : resolved;
+  if (existsSync(target)) spawnSync('/bin/rm', ['-rf', '--', target]);
 }
 
 // Every path the worktree differs from base in: committed, staged, unstaged
@@ -459,13 +506,32 @@ export function ignoredPaths(dir, { binary = 'git', limit = 200 } = {}) {
 // Source files git would treat as binary if they held a NUL byte; one is
 // refused, so no host diff or grep can skip it.
 const TEXT_FILE = /\.(?:m?js|cjs|jsx|ts|tsx|css|html?|json|md|svg|txt|ya?ml)$/i;
-function hasNul(file) {
+// True when the source file cannot be read as the plain regular file `st`
+// (its lstat) names, or holds a NUL byte. It is opened without following a
+// link and without blocking (O_NOFOLLOW | O_NONBLOCK, like readLink above),
+// so a regular file swapped for a FIFO between the lstat and the open cannot
+// block the whole runner on open() (the 3 h SIGALRM backstop cannot end an
+// open() the kernel restarts under SA_RESTART), and a symlink swapped in is
+// not followed. fstat then requires the descriptor to be the same regular
+// file the lstat saw, and no more than that many bytes are read, so a file
+// that keeps growing cannot keep the loop running (review of 2026-09-30,
+// finding). Anything unexpected counts as special (refused), never skipped.
+export function hasNul(file, st) {
   let fd;
+  try { fd = openSync(file, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0)); } catch { return true; }
   try {
-    fd = openSync(file, 'r');
+    const f = fstatSync(fd);
+    if (!f.isFile() || f.dev !== st.dev || f.ino !== st.ino) return true;
+    const size = f.size;
     const buffer = Buffer.alloc(64 * 1024);
-    for (let offset = 0; ;) { const n = readSync(fd, buffer, 0, buffer.length, offset); if (!n) return false; if (buffer.subarray(0, n).includes(0)) return true; offset += n; }
-  } catch { return false; } finally { if (fd !== undefined) closeSync(fd); }
+    for (let offset = 0; offset < size;) {
+      const n = readSync(fd, buffer, 0, Math.min(buffer.length, size - offset), offset);
+      if (n <= 0) break;
+      if (buffer.subarray(0, n).includes(0)) return true;
+      offset += n;
+    }
+    return false;
+  } catch { return true; } finally { closeSync(fd); }
 }
 // Paths no change may carry whatever their directory: git metadata files, a
 // symbolic link, a nested repository or directory entry, an ignored file, or
@@ -477,7 +543,7 @@ export function specialPaths(dir, files, { ignored = [] } = {}) {
     let stat = null;
     try { stat = lstatSync(path.join(dir, file)); } catch { stat = null; }
     if (stat && (stat.isSymbolicLink() || stat.isDirectory() || !stat.isFile())) special.push(file);
-    else if (stat && TEXT_FILE.test(file) && hasNul(path.join(dir, file))) special.push(file);
+    else if (stat && TEXT_FILE.test(file) && hasNul(path.join(dir, file), stat)) special.push(file);
   }
   return special;
 }

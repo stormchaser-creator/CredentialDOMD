@@ -39,9 +39,9 @@ import fsSync, { promises as fs, readFileSync, existsSync, mkdtempSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, isProduct, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES, MEDIA_FILE, gateWorktree, snapshotCommit, ignoredPaths, verifyWorktree } from '../worktree.mjs';
+import { git, isProduct, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES, MEDIA_FILE, gateWorktree, snapshotCommit, revertHunkCommit, ignoredPaths, verifyWorktree } from '../worktree.mjs';
 import { launch } from '../worker.mjs';
-import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, slotEnv, verifyDir, dirIntact } from '../sandbox.mjs';
+import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, slotEnv, verifyDir } from '../sandbox.mjs';
 import { personalDataReport, personalDataSummary } from './personal-data.mjs';
 import { releaseCandidates } from '../release.mjs';
 
@@ -327,11 +327,17 @@ export function productHunks(dir, base, head, { binary = 'git' } = {}) {
 
 // Critique amendment c: revert each product hunk alone; every reproduction
 // or declared test must fail (or no longer run) under at least one revert.
-// dir is a gate worktree at head (pinned: worktree.mjs pinWorktree, so the
-// apply, checkout and clean there name its git directory and refuse a
-// changed .git link); repo, where the hunks are read from the commits.
-export async function mutationCheck({ dir, repo = null, tmp = null, base, head, tests, env, sandbox = null, node = process.execPath, binary = 'git' }) {
-  const hunks = productHunks(repo ?? dir, base, head, { binary });
+// Each hunk is reversed in the trusted repository through a scratch index
+// (worktree.mjs revertHunkCommit: no work tree touched) and the tests run in a
+// FRESH gate worktree of that reverted commit. The host never reverts a hunk
+// in place in a worktree a sandbox can write and never runs checkout or clean
+// there afterwards: test code that ran there could have swapped a
+// subdirectory for a symlink, which the host's git would follow and write or
+// delete outside the worktree (review of 2026-09-30, finding). repo is the
+// trusted repository the hunks are read from; work, where the fresh worktrees
+// are made; modules, the node_modules the tests need.
+export async function mutationCheck({ repo, work, base, head, tests, env, sandbox = null, node = process.execPath, binary = 'git', modules = null }) {
+  const hunks = productHunks(repo, base, head, { binary });
   if (!hunks.length) return { status: 'not_applicable', hunks: 0, survivors: [] };
   if (hunks.length > MAX_HUNKS) return { status: 'too_many_hunks', hunks: hunks.length, survivors: tests.map(t => `${t.file}::${t.name}`) };
   if (!tests.length) return { status: 'failed', hunks: hunks.length, survivors: [], detail: 'no reproduction or declared test to exercise the change' };
@@ -340,26 +346,19 @@ export async function mutationCheck({ dir, repo = null, tmp = null, base, head, 
   const skipped = [];
   for (const [index, hunk] of hunks.entries()) {
     if (hunk.binary || !hunk.patch) { skipped.push(index); continue; }
-    const patchDir = mkdtempSync(path.join(os.tmpdir(), 'ticket-hunk-'));
-    const patchFile = path.join(patchDir, 'hunk.patch');
-    writeFileSync(patchFile, hunk.patch);
+    const reverted = revertHunkCommit({ repo, head, patch: hunk.patch, binary });
+    if (!reverted) { skipped.push(index); continue; }
+    // A fresh worktree of the reverted commit: no sandboxed code has run in it
+    // when the host checks it out, and the tests then run there under their own
+    // sandbox. It is removed (worktree.mjs removeWorktree, which never follows a
+    // swapped subdirectory) before the next hunk.
+    const gate = await gateWorktree({ repo, work, commit: reverted, modules, binary, label: 'mutation', attrTree: base });
     try {
-      // The host's git writes here, after test code ran here: only while it
-      // is still the gate worktree (not a link to a checkout of the owner's).
-      verifyDir(dir);
-      if (git(dir, ['apply', '-R', '--unidiff-zero', '--whitespace=nowarn', patchFile], { binary, allowFail: true }) === null) { skipped.push(index); continue; }
       for (const file of files) {
-        const run = await runTestFile({ dir, tmp, file, env, sandbox, node });
+        const run = await runTestFile({ dir: gate.dir, tmp: gate.tmp, file, env, sandbox, node });
         for (const test of tests.filter(t => t.file === file)) if (greenVerdict(run, test) !== 'green') killed.add(`${test.file}::${test.name}`);
       }
-    } finally {
-      rmSync(patchDir, { recursive: true, force: true });
-      // A changed .git link throws here (GitStateChanged), allowFail or not.
-      if (dirIntact(dir)) {
-        git(dir, ['checkout', '--quiet', 'HEAD', '--', '.'], { binary, allowFail: true });
-        git(dir, ['clean', '-fdq', '--', 'src', 'public', 'landing'], { binary, allowFail: true });
-      }
-    }
+    } finally { await gate.remove(); }
   }
   const survivors = tests.map(t => `${t.file}::${t.name}`).filter(id => !killed.has(id));
   return { status: survivors.length ? 'failed' : 'passed', hunks: hunks.length, skipped_hunks: skipped, survivors };
@@ -488,7 +487,7 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
     check('green_on_head', red.length === 0, red.map(t => `${t.file}::${t.name}: ${t.status}${t.message ? ` (${t.message})` : ''}`).join('; '));
 
     // Mutation (amendment c).
-    const mutation = productChanged ? await mutationCheck({ dir: g, repo: source, tmp: gate.tmp, base, head, tests: allTests, env, sandbox, node, binary }) : { status: 'not_applicable', hunks: 0, survivors: [] };
+    const mutation = productChanged ? await mutationCheck({ repo: source, work, base, head, tests: allTests, env, sandbox, node, binary, modules }) : { status: 'not_applicable', hunks: 0, survivors: [] };
     if (productChanged) check('hunk_revert', mutation.status === 'passed', mutation.status === 'passed' ? '' : `${mutation.status}${mutation.survivors?.length ? `: still green with the fix reverted: ${mutation.survivors.join(', ')}` : ''}${mutation.detail ? ` ${mutation.detail}` : ''}`);
 
     // Full suite, against the base count (the reporter's events, not stdout text).

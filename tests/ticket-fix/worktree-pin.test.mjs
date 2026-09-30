@@ -10,10 +10,10 @@
 // Every value is synthetic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync, readdirSync, existsSync, realpathSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readdirSync, existsSync, realpathSync, symlinkSync, chmodSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { createWorktree, commitWork, changedPaths, gateWorktree, pinWorktree, verifyWorktree, git, GitStateChanged } from '../../scripts/ticket-fix/worktree.mjs';
-import { recordReproduction, runTestGates, suiteBaseline } from '../../scripts/ticket-fix/gates/tests.mjs';
+import { createWorktree, commitWork, changedPaths, gateWorktree, pinWorktree, verifyWorktree, removeWorktree, revertHunkCommit, git, GitStateChanged } from '../../scripts/ticket-fix/worktree.mjs';
+import { recordReproduction, runTestGates, suiteBaseline, mutationCheck, productHunks } from '../../scripts/ticket-fix/gates/tests.mjs';
 import { gatesEnv } from '../../scripts/ticket-fix/worker.mjs';
 import { EXIT } from '../../scripts/ticket-fix/run.mjs';
 import { readRun } from '../../scripts/ticket-fix/merge.mjs';
@@ -129,6 +129,86 @@ test('a changed link after the host\'s last git call in the gate worktree (no pr
     await assert.rejects(runTestGates({ dir: s.wt.dir, base: s.wt.base, head: s.head, repro: null, declared: [relinkTest], env, work: p.work, commands: COMMANDS,
       baseline: s.baseline, sandbox: s.sandbox }), CHANGED_LINK);
     assert.deepEqual(gatesLeft(p), []);
+  } finally { p.cleanup(); }
+});
+
+// Finding (removal): git's recursive delete follows a subdirectory swapped for
+// a symlink, so `git worktree remove --force` on an otherwise intact worktree
+// could delete files outside it. removeWorktree must never hand an intact
+// worktree to git; it renames the tree away and removes it with /bin/rm.
+test('removeWorktree does not hand an intact worktree to git worktree remove, and a swapped subdirectory is not followed', () => {
+  const p = project();
+  try {
+    const commit = sh(p.repo, ['rev-parse', 'HEAD']);
+    const dir = path.join(p.root, 'wt-remove');
+    sh(p.repo, ['worktree', 'add', '--detach', '-q', dir, commit]);
+    // A canary outside the worktree, with a sentinel file git must not reach.
+    const canary = path.join(p.root, 'canary');
+    mkdirSync(canary, { recursive: true });
+    const sentinel = path.join(canary, 'sentinel');
+    writeFileSync(sentinel, 'keep me\n');
+    // Benign tampering: replace the worktree's src/ subdirectory with a symlink
+    // to the canary. verifyPin only checks the worktree root, so this is intact.
+    rmSync(path.join(dir, 'src'), { recursive: true, force: true });
+    symlinkSync(canary, path.join(dir, 'src'));
+    // A stub git that records its subcommands and does nothing else, so the
+    // test observes whether the intact worktree was handed to git for deletion.
+    const log = path.join(p.root, 'git-calls.log');
+    const stub = path.join(p.root, 'git-record.sh');
+    writeFileSync(stub, `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(log)}\nexit 0\n`, { mode: 0o755 });
+    chmodSync(stub, 0o755);
+    removeWorktree({ repo: p.repo, dir, binary: stub });
+    const calls = existsSync(log) ? readFileSync(log, 'utf8') : '';
+    assert.doesNotMatch(calls, /worktree remove/, 'the intact worktree was handed to git worktree remove');
+    assert.match(calls, /worktree prune/, 'the git directory is pruned from the repository side');
+    assert.equal(existsSync(dir), false, 'the worktree is gone');
+    assert.equal(existsSync(sentinel), true, 'files outside the worktree are not deleted');
+    assert.equal(readFileSync(sentinel, 'utf8'), 'keep me\n');
+  } finally { p.cleanup(); }
+});
+
+// Finding (mutation check): the mutation check reverted each hunk in place in a
+// sandbox-writable worktree, then ran attacker test code there, then checked
+// out and cleaned there. In the gap between the pin check and git's exec a
+// lingering session process could swap the worktree so the host's git wrote or
+// deleted outside it (git's own leading-symlink protections and dirIntact block
+// every STATIC swap, so this residual is a microsecond race, not reproducible
+// by benign static tampering). The fix removes those in-loop host git work-tree
+// writes: each hunk is reversed in the trusted repository through a scratch
+// index (revertHunkCommit, no work tree) and its tests run in a fresh worktree
+// of the reverted commit. These guard that mechanism; they fail against the old
+// signature, which needed an in-place head worktree (dir) to write.
+test('revertHunkCommit reverses one product hunk in the repository, no work tree touched', async () => {
+  const p = project();
+  try {
+    const s = await setup(p, FIX_FILES);
+    const before = sh(p.repo, ['status', '--porcelain']);
+    const hunks = productHunks(p.repo, s.wt.base, s.head);
+    assert.equal(hunks.length, 1, 'one product hunk');
+    const reverted = revertHunkCommit({ repo: p.repo, head: s.head, patch: hunks[0].patch });
+    assert.match(reverted, /^[0-9a-f]{40}$/);
+    // The reverted commit's file matches base (the hunk is reversed), its
+    // parent is head, and the repository's own work tree is untouched.
+    assert.equal(sh(p.repo, ['show', `${reverted}:src/format.js`]), sh(p.repo, ['show', `${s.wt.base}:src/format.js`]));
+    assert.equal(sh(p.repo, ['rev-parse', `${reverted}^`]), s.head);
+    assert.equal(sh(p.repo, ['status', '--porcelain']), before, 'the repository work tree is unchanged');
+  } finally { p.cleanup(); }
+});
+
+test('the reworked mutation check runs each reverted hunk in a fresh worktree and returns the right verdict', async () => {
+  const p = project();
+  try {
+    const s = await setup(p, FIX_FILES);
+    // The reproduction fails when the fix hunk is reverted: killed, none survive.
+    const killed = await mutationCheck({ repo: p.repo, work: p.work, base: s.wt.base, head: s.head, tests: [reproTest], env, sandbox: s.sandbox, modules: s.wt.modules_source });
+    assert.equal(killed.status, 'passed', JSON.stringify(killed));
+    // A test that does not depend on the fix passes even when it is reverted:
+    // it survives, so the change is not exercised.
+    const titleTest = { file: 'tests/format.test.mjs', name: 'the title is set' };
+    const survived = await mutationCheck({ repo: p.repo, work: p.work, base: s.wt.base, head: s.head, tests: [titleTest], env, sandbox: s.sandbox, modules: s.wt.modules_source });
+    assert.equal(survived.status, 'failed', JSON.stringify(survived));
+    assert.deepEqual(survived.survivors, ['tests/format.test.mjs::the title is set']);
+    assert.deepEqual(gatesLeft(p), [], 'no mutation worktree is left behind');
   } finally { p.cleanup(); }
 });
 
