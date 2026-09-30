@@ -61,12 +61,14 @@ export const isProduct = file => PRODUCT.some(p => file.startsWith(p));
 // contents).
 export const HOST_GIT_CONFIG = Object.freeze(['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'core.pager=cat', '-c', 'core.fsmonitor=false',
   '-c', 'core.sshCommand=ssh', '-c', 'protocol.ext.allow=never', '-c', 'core.askPass=']);
-export function git(dir, args, { env = process.env, allowFail = false, input, binary = 'git', timeout = 120000, credentials = false } = {}) {
+// encoding: 'buffer' returns the bytes (a blob as git holds it).
+export function git(dir, args, { env = process.env, allowFail = false, input, binary = 'git', timeout = 120000, credentials = false, encoding = 'utf8' } = {}) {
   const r = spawnSync(binary, ['-C', dir, ...HOST_GIT_CONFIG, ...(credentials ? [] : ['-c', 'credential.helper=']), ...args],
-    { encoding: 'utf8', env: { ...env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' }, maxBuffer: 64 * 1024 * 1024, timeout, input });
+    { encoding, env: { ...env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' }, maxBuffer: 64 * 1024 * 1024, timeout, input });
   if (r.error || r.status !== 0) {
     if (allowFail) return null;
-    throw Error(`git ${args.filter(a => !a.includes('\n')).slice(0, 3).join(' ')} failed in ${dir}${r.stderr ? `: ${r.stderr.trim().split('\n').slice(-1)[0].slice(0, 200)}` : ''}`);
+    const stderr = r.stderr ? String(r.stderr).trim() : '';
+    throw Error(`git ${args.filter(a => !a.includes('\n')).slice(0, 3).join(' ')} failed in ${dir}${stderr ? `: ${stderr.split('\n').slice(-1)[0].slice(0, 200)}` : ''}`);
   }
   return r.stdout;
 }

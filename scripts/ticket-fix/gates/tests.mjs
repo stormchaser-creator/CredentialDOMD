@@ -35,7 +35,7 @@
 // only cross-checked, never trusted. Every step runs with gatesEnv (no model
 // or database credential).
 import { createHash, randomBytes } from 'node:crypto';
-import { promises as fs, readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import fsSync, { promises as fs, readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,7 +56,7 @@ export const DEFAULT_COMMANDS = Object.freeze({
   lintHooks: ['npm', 'run', 'lint:hooks'],
   eslint: ['npx', '--no-install', 'eslint'],
 });
-const TIMEOUT = { file: 5 * 60 * 1000, suite: 20 * 60 * 1000, build: 10 * 60 * 1000, lint: 5 * 60 * 1000 };
+const TIMEOUT = { file: 5 * 60 * 1000, suite: 20 * 60 * 1000, build: 10 * 60 * 1000, lint: 5 * 60 * 1000, assets: 2 * 60 * 1000 };
 export const REGISTRY_TESTS = Object.freeze(['tests/credential-schema-contract.test.mjs', 'tests/collection-registry.test.mjs', 'tests/check-columns-exist.test.mjs']);
 // Files whose change can lose a saved record on the next device or reload
 // (failure mode 3: the device cache hid failed saves).
@@ -80,6 +80,36 @@ export const TEST_AWARE = Object.freeze([
 ]);
 
 const sha256 = data => createHash('sha256').update(data).digest('hex');
+
+// A path of a commit as git holds it: { mode, type, oid, content } (content,
+// the blob's bytes; null for a directory or submodule), or null when the
+// commit has no such path. The host reads what a commit holds this way, in
+// the repository, never from a gate worktree after test code ran there: that
+// code can replace any file of the worktree with a link to a file of the
+// owner's that no sandboxed process can read, which the host would follow,
+// or with a pipe that blocks it (review of 2026-09-30).
+export function committedFile(repo, commit, file, { binary = 'git' } = {}) {
+  const listing = git(repo, ['--literal-pathspecs', 'ls-tree', '-z', '--full-tree', commit, '--', file], { binary, allowFail: true });
+  const entry = (listing ?? '').split('\0').map(e => /^(\d{6}) (\w+) ([0-9a-f]{40,64})\t([\s\S]*)$/.exec(e)).find(m => m && m[4] === file);
+  if (!entry) return null;
+  const [, mode, type, oid] = entry;
+  const content = type === 'blob' ? git(repo, ['cat-file', 'blob', oid], { binary, encoding: 'buffer' }) : null;
+  return { mode, type, oid, content };
+}
+// The digest a frozen file is recorded and checked by: the sha256 of its
+// bytes (a link's: of its target, marked as a link, never what it points at;
+// a directory or submodule: of its object id), null when it is not there.
+export function committedDigest(repo, commit, file, { binary = 'git' } = {}) {
+  const f = committedFile(repo, commit, file, { binary });
+  if (!f) return null;
+  if (f.type !== 'blob') return sha256(`${f.type}\0${f.oid}`);
+  return f.mode === '120000' ? sha256(Buffer.concat([Buffer.from('symlink\0'), f.content])) : sha256(f.content);
+}
+// A committed test file's text (a link, directory or submodule has none).
+const committedText = (repo, commit, file, binary) => {
+  const f = committedFile(repo, commit, file, { binary });
+  return f?.type === 'blob' && f.mode !== '120000' ? f.content.toString('utf8') : '';
+};
 const rel = (dir, file) => (file && path.isAbsolute(file) ? path.relative(real(dir), real(file)) : file);
 const childEnv = env => Object.fromEntries(Object.entries(env).filter(([key]) => key !== 'NODE_TEST_CONTEXT' && key !== 'NODE_OPTIONS'));
 
@@ -149,10 +179,13 @@ export function validTestRef(test) {
 // (tests only, checked by the caller) are snapshotted onto base as a commit
 // on no branch, and the tests run in a fresh worktree of that snapshot:
 // every reproduction test must fail on an assertion. Freezes every file the
-// reproduction session changed (its content in the snapshot).
+// reproduction session changed: its content in the snapshot, as git holds it
+// (committedDigest), taken before any test runs.
 export async function recordReproduction({ dir, repo = null, work, base, tests, changed, env, sandbox = null, modules = null, node = process.execPath, binary = 'git' }) {
   const results = [];
   const snapshot = snapshotCommit({ dir, base, files: changed, binary });
+  const frozen = {};
+  for (const file of changed) frozen[file] = committedDigest(repo ?? dir, snapshot, file, { binary });
   const gate = await gateWorktree({ repo: repo ?? dir, work, commit: snapshot, modules, binary, label: 'repro' });
   try {
     const files = [...new Set(tests.filter(validTestRef).map(t => t.file))];
@@ -162,10 +195,9 @@ export async function recordReproduction({ dir, repo = null, work, base, tests, 
       const verdict = validTestRef(test) && runs.has(test.file) ? redVerdict(runs.get(test.file), test) : 'invalid_reference';
       results.push({ file: test.file, name: test.name, on_base: verdict, message: verdict === 'red' ? firstFailure(runs.get(test.file), test) : null });
     }
-    // The tests ran there: the host reads it only while it is still the gate.
+    // The tests ran there: a gate directory swapped for a link is an attempt
+    // to widen the next sandbox (run.mjs holds the run).
     verifyDir(gate.dir);
-    const frozen = {};
-    for (const file of changed) frozen[file] = existsSync(path.join(gate.dir, file)) ? sha256(readFileSync(path.join(gate.dir, file))) : null;
     return { base, snapshot, tests: results, frozen, recorded: tests.length > 0 && results.every(r => r.on_base === 'red') };
   } finally { await gate.remove(); }
 }
@@ -395,7 +427,8 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
   binary = 'git', baseline = null, logDir = null, ticket = null, runId = null, sandbox = null, modules = null, context = null, secrets = [] }) {
   const checks = [];
   const check = (name, pass, detail = '') => { checks.push({ name, pass: Boolean(pass), detail: String(detail).slice(0, 400) }); return pass; };
-  const gate = await gateWorktree({ repo: repo ?? dir, work, commit: head, modules, binary, label: 'gate' });
+  const source = repo ?? dir;
+  const gate = await gateWorktree({ repo: source, work, commit: head, modules, binary, label: 'gate' });
   try {
     const g = gate.dir;
     const tree = git(g, ['rev-parse', `${head}^{tree}`], { binary }).trim();
@@ -414,7 +447,7 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
     // reproduction must fail here too.
     if (Object.keys(repro?.frozen ?? {}).length || productChanged) {
       const current = {};
-      for (const file of Object.keys(repro?.frozen ?? {})) current[file] = existsSync(path.join(g, file)) ? sha256(readFileSync(path.join(g, file))) : null;
+      for (const file of Object.keys(repro?.frozen ?? {})) current[file] = committedDigest(source, head, file, { binary });
       const altered = Object.keys(repro?.frozen ?? {}).filter(f => current[f] !== repro.frozen[f]);
       check('reproduction_frozen', altered.length === 0, altered.length ? `changed after it was recorded: ${altered.join(', ')}` : '');
     }
@@ -466,7 +499,7 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
     const build = await gateLaunch({ sandbox, dir: g, tmp: gate.tmp, command, args, env: childEnv(env), timeoutMs: TIMEOUT.build });
     check('build', build.code === 0 && !build.timedOut, build.code === 0 ? '' : `build exited ${build.timedOut ? 'on timeout' : build.code}`);
     // G7's probe strings: only what the head build really contains.
-    const release_probes = build.code === 0 ? releaseCandidates({ dir: g, base, fix: head, binary, builtText: builtAssets(g) }) : { present: [], absent: [] };
+    const release_probes = build.code === 0 ? releaseCandidates({ dir: g, base, fix: head, binary, builtText: await builtAssets(g, { sandbox, tmp: gate.tmp, node }) }) : { present: [], absent: [] };
 
     const lint = await lintGate({ dir: g, tmp: gate.tmp, base, files: facts.files, env, sandbox, commands, binary });
     check('lint', lint.pass, lint.files.filter(f => !f.pass).map(f => `${f.file}: ${f.base ?? '?'} -> ${f.head ?? '?'} errors${f.new_hooks_errors ? `, ${f.new_hooks_errors} new react-hooks` : ''}`).join('; ') + (lint.hooks_exit === 0 ? '' : ' lint:hooks failed'));
@@ -475,11 +508,13 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
     const reasons = persistenceTrigger(g, base, head, facts.files, { binary });
     const persistence = { triggered: reasons.length > 0, reasons, registry: [], reload_test: null };
     if (persistence.triggered) {
-      for (const file of REGISTRY_TESTS.filter(f => existsSync(path.join(g, f)))) {
+      // The registry tests the commit has: the suite could have removed them.
+      for (const file of REGISTRY_TESTS.filter(f => committedFile(source, head, f, { binary }) !== null)) {
         const run = await runTestFile({ dir: g, tmp: gate.tmp, file, env, sandbox, node });
         persistence.registry.push({ file, pass: run.exit === 0 && run.tests.every(t => t.status !== 'fail') });
       }
-      const reload = allTests.find(t => { try { const text = readFileSync(path.join(g, t.file), 'utf8'); return SAVES.test(text) && RELOADS.test(text); } catch { return false; } });
+      // The committed test, never the worktree file the suite left.
+      const reload = allTests.find(t => { const text = committedText(source, head, t.file, binary); return SAVES.test(text) && RELOADS.test(text); });
       persistence.reload_test = reload ? `${reload.file}::${reload.name}` : null;
       check('save_and_reload', persistence.registry.every(r => r.pass) && persistence.reload_test !== null,
         persistence.reload_test ? persistence.registry.filter(r => !r.pass).map(r => r.file).join(', ') : `${reasons.join('; ')}: no reproduction or declared test saves and then reloads from a fresh store`);
@@ -494,19 +529,59 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
   } finally { await gate.remove(); }
 }
 
-// The text of the head build's scripts (dist/assets/*.js), bounded.
-export function builtAssets(dir, limit = 64 * 1024 * 1024) {
-  const assets = path.join(dir, 'dist', 'assets');
-  let text = '';
+// The text of the head build's scripts (dist/assets/*.js), bounded, or null
+// when there is none. The build and the suite before it ran sandboxed code
+// that can write every entry of the gate worktree, and a process of theirs
+// can outlive them: a script there can be a link to a file of the owner's
+// that no sandboxed process can read, a hard link to one or a pipe that
+// blocks whoever opens it, and dist or dist/assets can be swapped for a link
+// between any two checks the host makes (review of 2026-09-30). So the host
+// reads nothing there itself: a reader under the build's own sandbox does
+// (in-process only without a sandbox, on a machine with no sandbox-exec),
+// and it takes only regular files with one name, opened without following a
+// link or blocking, in dist/assets as real directories.
+export async function builtAssets(dir, { sandbox = null, tmp = null, node = process.execPath, limit = 64 * 1024 * 1024 } = {}) {
+  if (!sandbox) return readAssets(fsSync, dir, limit);
+  const r = await gateLaunch({ sandbox: { ...sandbox, slots: null }, dir, tmp, command: node, args: ['--input-type=module', '-e', READ_ASSETS, dir, String(limit)],
+    env: { PATH: '/usr/bin:/bin' }, timeoutMs: TIMEOUT.assets, stdoutLimit: limit + 1024 * 1024 });
+  return r.code === 0 && !r.timedOut ? r.stdout : null;
+}
+// Self-contained: its source is the sandboxed reader's program.
+function readAssets(fsm, dir, limit) {
+  const flags = fsm.constants.O_RDONLY | (fsm.constants.O_NOFOLLOW ?? 0) | (fsm.constants.O_NONBLOCK ?? 0);
+  const assets = `${dir}/dist/assets`;
+  let names;
   try {
-    for (const name of readdirSync(assets).filter(n => /\.m?js$/.test(n)).sort()) {
-      const file = path.join(assets, name);
-      if (text.length + statSync(file).size > limit) break;
-      text += `\n${readFileSync(file, 'utf8')}`;
+    for (const d of [`${dir}/dist`, assets]) {
+      const st = fsm.lstatSync(d);
+      if (st.isSymbolicLink() || !st.isDirectory()) return null;
     }
+    names = fsm.readdirSync(assets).filter(n => /\.m?js$/.test(n)).sort();
   } catch { return null; }
+  let text = '';
+  for (const name of names) {
+    let fd;
+    try { fd = fsm.openSync(`${assets}/${name}`, flags); } catch { continue; }
+    try {
+      const st = fsm.fstatSync(fd);
+      if (!st.isFile() || st.nlink !== 1) continue;
+      if (text.length + st.size > limit) break;
+      const buffer = Buffer.alloc(st.size);
+      let got = 0;
+      while (got < st.size) {
+        const n = fsm.readSync(fd, buffer, got, st.size - got, got);
+        if (n <= 0) break;
+        got += n;
+      }
+      text += `\n${buffer.subarray(0, got).toString('utf8')}`;
+    } catch { /* unreadable: left out */ } finally { fsm.closeSync(fd); }
+  }
   return text;
 }
+const READ_ASSETS = `import fs from 'node:fs';
+const text = (${readAssets.toString()})(fs, process.argv[1], Number(process.argv[2]));
+if (text === null) process.exitCode = 3; else process.stdout.write(text);
+`;
 
 // The lines a repair prompt may carry: check names and details (test names
 // and first assertion lines), never ticket text.
