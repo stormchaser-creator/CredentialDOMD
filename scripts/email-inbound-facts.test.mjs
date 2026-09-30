@@ -75,6 +75,16 @@ const fresh = (opts = {}, auth = AUTH_PASS) => { resetWorld(); harness.rawAuth =
 before(async () => { await loadFunction(); });
 beforeEach(() => fresh());
 
+/**
+ * What the stored rows say, as JSON, with the values every write generates
+ * taken out: row ids and the proposal's link to its inbound email (random
+ * UUIDs) and the write's timestamps (the clock). A search of this for a
+ * refused value cannot match by chance: a random UUID holds "2027" about once
+ * in 4,400 draws, and every timestamp holds it from 1 January 2027.
+ */
+const GENERATED = new Set(["id", "created_at", "updated_at", "inbound_email_id", "recordId"]);
+const stored = (...tables) => JSON.stringify(tables.map((t) => rows(t)), (k, v) => (GENERATED.has(k) ? undefined : v));
+
 /** The insurance row with the columns every write sets taken out, for comparing two writes of one fact. */
 const content = (row) => Object.fromEntries(Object.entries(row).filter(([k]) => !["id", "user_id", "created_at", "updated_at"].includes(k)));
 
@@ -364,7 +374,11 @@ test("a value the email does not state is dropped, and the rest of the fact stil
   // goes; the start the coverage has is the attached agreement's own
   // ("effective March 1, 2026"), which the host reads for itself.
   assert.equal(ins.effective_date, "2026-03-01");
-  assert.ok(!/Brightline|5000000|2027|2026-04-01/.test(JSON.stringify(rows("insurance")) + JSON.stringify(rows("intake_proposals"))));
+  // Nowhere in what was stored, in any field or any wording: the carrier it
+  // invented, the aggregate, the expiration's year, the start it gave.
+  const written = stored("insurance", "intake_proposals");
+  assert.match(written, /"coverage_per_claim":"1000000"/, "the search sees the stored content");
+  assert.ok(!/Brightline|5000000|2027|2026-04-01/.test(written), written);
 });
 
 test("the per-incident and aggregate limits cannot be swapped", async () => {
@@ -454,8 +468,9 @@ test("identifiers are never written: a policy, DEA or NPI number or a patient de
   ]) }]) });
   const [ins] = rows("insurance");
   assert.equal(ins.coverage_per_claim, "1000000");
-  const stored = JSON.stringify([rows("insurance"), rows("intake_proposals")]);
-  for (const id of ["PL-4471902", "4471902", "1234567893", "FW1234567"]) assert.ok(!stored.includes(id), `${id} is never written`);
+  const written = stored("insurance", "intake_proposals");
+  assert.match(written, /"coverage_per_claim":"1000000"/, "the search sees the stored content");
+  for (const id of ["PL-4471902", "4471902", "1234567893", "FW1234567"]) assert.ok(!written.includes(id), `${id} is never written`);
   assert.equal(ins.policy_number, undefined);
 });
 
