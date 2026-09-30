@@ -11,10 +11,12 @@ const owner = '10000000-0000-4000-8000-000000000001';
 const other = '10000000-0000-4000-8000-000000000002';
 if (!directory?.startsWith('/')) throw Error('Synthetic fixture directory required');
 
+// The whole suite runs files in parallel; a loaded machine can hold psql for
+// seconds, and no check here is about how fast the database answers.
 export function sql(statement) {
   const result = spawnSync(process.env.SUPPORT_FIXTURE_PSQL, ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
     '-h', process.env.SUPPORT_FIXTURE_SOCKET, '-p', '56432', '-U', 'postgres', '-d', 'postgres'], {
-    input: `set time zone 'UTC';${statement}`, encoding: 'utf8', timeout: 10000,
+    input: `set time zone 'UTC';${statement}`, encoding: 'utf8', timeout: 60000,
     env: { PATH: '/usr/bin:/bin' },
   });
   if (result.error || result.status !== 0) throw Error(`Synthetic database failed: ${result.stderr}`);
