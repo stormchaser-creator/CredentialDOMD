@@ -40,6 +40,10 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
   // Invoices' "Needs invoicing" opens Work on that one contract, even on a
   // day the schedule shows another (WorkLog's openContractId). Any other way
   // into a sub-view carries no contract, so Work opens on its own default.
+  // The open is also written as the contract last used (a bare id, as it
+  // always was); a contract picked for today has its own slot
+  // (BASE_KEYS.contractPick), which this never touches, so the next visit to
+  // Work still opens on that pick.
   const [openContractId, setOpenContractId] = useState(null);
   const showSub = (id) => { setOpenContractId(null); setSub(id); };
   // A later navigation to another sub-view, while Practice stays on screen.

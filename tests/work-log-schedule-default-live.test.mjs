@@ -148,14 +148,25 @@ test('live: Days & call holds its agreement while a day is open in it', async ()
   assert.equal(shown(), NORTH.id, 'closed: the schedule default applies');
 });
 
-test('live: stopping a restored timer leaves the picker where it was', async () => {
-  const timer = { contractId: NORTH.id, type: 'Call', startedAt: '2026-09-29T12:40:00.000Z' };
+test('live: stopping a restored timer in its own call day leaves the picker where it was', async () => {
+  const timer = { contractId: NORTH.id, type: 'Call', startedAt: '2026-09-29T14:40:00.000Z' }; // 8:40 AM, the Sep 29 call day
   const p = page({ contracts: [NORTH, SOUTH], scheduleDays: [row(SOUTH.id)], storage: { timer } });
   assert.equal(shown(), NORTH.id);
   press('Stop & Log');
   await settle();
   assert.equal(p.data.workLog.at(-1)?.contractId, NORTH.id, "logged on the timer's contract");
   assert.equal(shown(), NORTH.id, 'no flip to the schedule');
+});
+
+test("live: stopping last night's timer after its call day ended hands the picker to today's schedule", async () => {
+  const timer = { contractId: NORTH.id, type: 'Call', startedAt: '2026-09-29T12:40:00.000Z' }; // 6:40 AM, the Sep 28 call day
+  const p = page({ contracts: [NORTH, SOUTH], scheduleDays: [row(SOUTH.id)], storage: { timer } });
+  assert.equal(shown(), NORTH.id, 'while it runs: the timer');
+  press('Stop & Log');
+  await settle();
+  assert.equal(p.data.workLog.at(-1)?.contractId, NORTH.id, "logged on the timer's contract");
+  assert.equal(shown(), SOUTH.id, "10 AM: the Sep 28 call day is over, so the Sep 29 schedule");
+  assert.ok(doc.body.textContent.includes('On your schedule today'));
 });
 
 test('live: the call day turning over while Work is open moves the default', async () => {

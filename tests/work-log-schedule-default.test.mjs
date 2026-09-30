@@ -57,7 +57,8 @@ test('AC-2: the scheduled default can still be changed, and the pick sticks', ()
   picker(m.render()).props.onChange({ target: { value: EAST.id } });
   assert.equal(shown(m), EAST.id, 'the pick shows');
   assert.equal(shown(m), EAST.id, 'and holds across renders');
-  assert.deepEqual(readContractPick(m.storage.lastContract), { contractId: EAST.id, callDay: TODAY }, 'remembered with the call day it was made on');
+  assert.deepEqual(readContractPick(m.storage.contractPick), { contractId: EAST.id, callDay: TODAY }, 'remembered with the call day it was made on');
+  assert.equal(m.storage.lastContract, EAST.id, 'and as the contract last used, a bare id as before');
 });
 
 // ── Objection 1: only live, pickable contracts; the call-day boundary ─
@@ -85,7 +86,8 @@ test("today is the call day in progress: before its start hour the previous day'
   try {
     const m = mount(WorkLog, { data: { locumContracts: [NORTH, early, EAST], workLog: [], scheduleDays: days }, storage: { lastContract: NORTH.id } });
     // At 6:30 NORTH (7 AM rule) is still on the Sep 28 call day; the 5 AM
-    // agreement is already on Sep 29. Both are scheduled: the one last used first.
+    // agreement is already on Sep 29. Both are scheduled: the call day that
+    // began first (the call still running) first.
     assert.deepEqual(scheduledContractIds(days, [NORTH, early, EAST], new Date()).sort(), [early.id, NORTH.id].sort(), "each agreement's own call day");
     assert.equal(shown(m), NORTH.id, "last night's call is still in progress");
     const only = mount(WorkLog, { data: { locumContracts: [NORTH, SOUTH, EAST], workLog: [], scheduleDays: [row(NORTH.id, '2026-09-28'), row(SOUTH.id, '2026-09-29')] }, storage: { lastContract: EAST.id } });
@@ -110,7 +112,7 @@ test('with nothing scheduled today the picker opens exactly as before', () => {
 });
 
 test('with nothing scheduled today, a pick stored with an earlier call day is still the contract last used', () => {
-  assert.equal(shown(open({ data: { scheduleDays: [] }, storage: { lastContract: contractPickValue(EAST.id, '2026-09-20') } })), EAST.id);
+  assert.equal(shown(open({ data: { scheduleDays: [] }, storage: { lastContract: EAST.id, contractPick: contractPickValue(EAST.id, '2026-09-20') } })), EAST.id);
 });
 
 // ── The pure rules ───────────────────────────────────────────────────

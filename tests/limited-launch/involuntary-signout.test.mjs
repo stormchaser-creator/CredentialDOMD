@@ -49,7 +49,7 @@ function seed(store, native) {
   store.set(key(BASE_KEYS.timer), JSON.stringify({ startedAt: '2026-09-29T12:00:00.000Z' }));
   store.set(key(BASE_KEYS.unrecordedInvoices), JSON.stringify([{ number: 'INV-20260929-01', sentAt: '2026-09-29T17:00:00.000Z', kind: 'INV', contractId: 'contract-synthetic', total: 250 }]));
   store.set(key(BASE_KEYS.vault), JSON.stringify({ 'workLog:synthetic': 'Synthetic note' }));
-  for (const name of ['chat', 'archives', 'callsync', 'lastContract', 'lastIdentity']) store.set(key(BASE_KEYS[name]), '{"synthetic":true}');
+  for (const name of ['chat', 'archives', 'callsync', 'lastContract', 'contractPick', 'lastIdentity']) store.set(key(BASE_KEYS[name]), '{"synthetic":true}');
   store.set(key(DEVICE_KEYS_BASE), '{"identityLockCode":"synthetic"}');
   store.set(key(BASE_KEYS.data, OTHER), JSON.stringify({ identityVault: [{ id: 'identity-other' }] }));
 }
@@ -65,7 +65,7 @@ test('session expiry keeps Protected Identity, the Answer Bank, queued edits and
   assert.ok(store.has(key(BASE_KEYS.unrecordedInvoices)), 'an invoice that went out unrecorded is still remembered');
   assert.ok(store.has(key(BASE_KEYS.vault)), 'the private vault survives, as before');
   assert.ok(store.has(key(DEVICE_KEYS_BASE)), 'the lock code that opens Protected Identity survives, as before');
-  for (const name of ['chat', 'archives', 'callsync', 'lastContract', 'lastIdentity']) {
+  for (const name of ['chat', 'archives', 'callsync', 'lastContract', 'contractPick', 'lastIdentity']) {
     assert.equal(store.has(key(BASE_KEYS[name])), false, `${name} is removed`);
   }
   assert.ok(store.has(key(BASE_KEYS.data, OTHER)), 'another account is untouched');

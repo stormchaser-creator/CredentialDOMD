@@ -10,7 +10,9 @@ import { readContractPick, contractPickValue } from '../src/utils/scheduledContr
 //  3. A pick holds for its call day across leaving Work and coming back; a
 //     pick from an earlier day does not outrank today's schedule.
 //  4. A timer restored from the device keeps its contract while it runs,
-//     and stopping (or discarding) it does not flip the picker.
+//     and stopping (or discarding) it does not flip the picker while the
+//     timer's own call day lasts; once that call day has ended, the new
+//     day's schedule takes over.
 //  5. The default follows a schedule that arrives after Work opened and a
 //     call day that turns over while it is open, unless he picked for that
 //     day, and never while a form or an invoice is open on screen.
@@ -92,17 +94,17 @@ test('3: a pick made on a scheduled day holds after leaving Work and coming back
   const m = work({ scheduleDays: days });
   assert.equal(shown(m), SOUTH.id);
   pick(m, EAST.id);
-  assert.deepEqual(readContractPick(m.storage.lastContract), { contractId: EAST.id, callDay: TODAY });
+  assert.deepEqual(readContractPick(m.storage.contractPick), { contractId: EAST.id, callDay: TODAY });
   const back = work({ scheduleDays: days, storage: { ...m.storage } });
   assert.equal(shown(back), EAST.id, 'the pick for today, not the schedule');
 });
 
 test("3: a pick from an earlier call day does not outrank today's schedule", () => {
-  const m = work({ scheduleDays: [row(SOUTH.id)], storage: { lastContract: contractPickValue(EAST.id, '2026-09-28') } });
+  const m = work({ scheduleDays: [row(SOUTH.id)], storage: { lastContract: EAST.id, contractPick: contractPickValue(EAST.id, '2026-09-28') } });
   assert.equal(shown(m), SOUTH.id);
 });
 
-test("3: time logged for another day switches the view but is not today's pick", () => {
+test("3: time logged for another day is not today's pick: the view goes back to the schedule", () => {
   const days = [row(SOUTH.id)];
   const m = work({ scheduleDays: days });
   assert.equal(shown(m), SOUTH.id);
@@ -117,23 +119,27 @@ test("3: time logged for another day switches the view but is not today's pick",
   if (yes) yes.props.onClick();
   const saved = m.calls.find(c => c[0] === 'add' && c[1] === 'workLog')?.[2];
   assert.equal(saved?.contractId, EAST.id, 'the entry is saved where it was logged');
-  assert.equal(shown(m), EAST.id, 'the view goes where the entry went');
-  assert.deepEqual(readContractPick(m.storage.lastContract), { contractId: EAST.id, callDay: '2026-09-27' }, "remembered for the entry's own call day");
+  assert.equal(shown(m), SOUTH.id, "the form closed: today's schedule, as the next visit will show");
+  assert.equal(m.storage.lastContract, EAST.id, 'remembered as the contract last used');
+  assert.equal(m.storage.contractPick, undefined, 'not as a pick for today');
   assert.equal(shown(work({ scheduleDays: days, storage: { ...m.storage } })), SOUTH.id, "coming back, today's schedule again");
   assert.equal(shown(work({ scheduleDays: [], storage: { ...m.storage } })), EAST.id, 'with nothing scheduled, the contract last used, as before');
 });
 
 // ── 4. A running timer keeps its contract ────────────────────────────
 
-const TIMER = { contractId: NORTH.id, type: 'Call', startedAt: '2026-09-29T12:40:00.000Z' }; // 6:40 AM, the Sep 28 call day
+const TIMER = { contractId: NORTH.id, type: 'Call', startedAt: '2026-09-29T14:40:00.000Z' }; // 8:40 AM, the Sep 29 call day
+const OVERNIGHT = { ...TIMER, startedAt: '2026-09-29T12:40:00.000Z' }; // 6:40 AM, the Sep 28 call day
 
 test('4: a restored timer keeps its contract while it runs, over the schedule and a pick for today', () => {
-  const m = work({ scheduleDays: [row(SOUTH.id)], storage: { timer: TIMER, lastContract: contractPickValue(EAST.id, TODAY) } });
-  assert.equal(shown(m), NORTH.id);
-  assert.ok(textOf(m.render()).includes('Call in progress'));
+  for (const timer of [TIMER, OVERNIGHT]) {
+    const m = work({ scheduleDays: [row(SOUTH.id)], storage: { timer, lastContract: EAST.id, contractPick: contractPickValue(EAST.id, TODAY) } });
+    assert.equal(shown(m), NORTH.id);
+    assert.ok(textOf(m.render()).includes('Call in progress'));
+  }
 });
 
-test('4: stopping a restored timer does not flip the picker to the schedule', () => {
+test('4: stopping a restored timer in its own call day does not flip the picker to the schedule', () => {
   const m = work({ scheduleDays: [row(SOUTH.id)], storage: { timer: TIMER } });
   assert.equal(shown(m), NORTH.id);
   click(m, 'Stop & Log');
@@ -142,6 +148,7 @@ test('4: stopping a restored timer does not flip the picker to the schedule', ()
   assert.equal(m.storage.timer, undefined, 'the timer is over');
   assert.equal(shown(m), NORTH.id, 'the picker stays where the timer was');
   assert.equal(shown(m), NORTH.id);
+  assert.deepEqual(readContractPick(m.storage.contractPick), { contractId: NORTH.id, callDay: TODAY }, 'and the next visit today agrees');
 });
 
 test('4: discarding a restored timer does not flip the picker either', () => {
@@ -151,7 +158,34 @@ test('4: discarding a restored timer does not flip the picker either', () => {
   assert.equal(shown(m), NORTH.id);
 });
 
-test('4: a timer started on this visit keeps its contract when the call day turns over under it', () => {
+test("4: stopping or discarding last night's timer after its call day ended hands the picker to today's schedule", () => {
+  for (const end of ['Stop & Log', 'Discard']) {
+    const m = work({ scheduleDays: [row(SOUTH.id)], storage: { timer: OVERNIGHT } });
+    assert.equal(shown(m), NORTH.id, 'while it runs: the timer');
+    click(m, end);
+    assert.equal(m.storage.timer, undefined);
+    if (end === 'Stop & Log') {
+      const saved = m.calls.find(c => c[0] === 'add' && c[1] === 'workLog')?.[2];
+      assert.equal(saved?.contractId, NORTH.id, "the entry is saved on the timer's contract");
+      assert.equal(saved?.callDay, '2026-09-28');
+    }
+    assert.equal(shown(m), SOUTH.id, `${end}: the Sep 28 call day is over, so the Sep 29 schedule`);
+    assert.equal(m.storage.contractPick, undefined, 'nothing is held for today');
+    click(m, 'Got a call? Start the timer');
+    assert.equal(m.storage.timer?.contractId, SOUTH.id, 'the next timer bills the scheduled contract');
+  }
+});
+
+test('4: a contract picked for today while a timer runs stays after the timer stops', () => {
+  const m = work({ scheduleDays: [row(SOUTH.id)], storage: { timer: OVERNIGHT } });
+  pick(m, EAST.id);
+  assert.equal(shown(m), EAST.id);
+  click(m, 'Stop & Log');
+  assert.equal(m.calls.find(c => c[0] === 'add' && c[1] === 'workLog')?.[2]?.contractId, NORTH.id, "the time goes to the timer's contract");
+  assert.equal(shown(m), EAST.id, 'the pick stays on screen');
+});
+
+test('4: a timer started on this visit keeps its contract when the call day turns over under it, until it stops', () => {
   clock.setNow('2026-09-29T06:50:00-06:00');
   try {
     const m = work({ scheduleDays: [row(NORTH.id, '2026-09-28'), row(SOUTH.id)] });
@@ -162,7 +196,7 @@ test('4: a timer started on this visit keeps its contract when the call day turn
     assert.equal(shown(m), NORTH.id, 'still on the timer while it runs');
     click(m, 'Stop & Log');
     assert.equal(m.calls.find(c => c[0] === 'add' && c[1] === 'workLog')?.[2]?.contractId, NORTH.id);
-    assert.equal(shown(m), NORTH.id, 'and after it stops');
+    assert.equal(shown(m), SOUTH.id, "after it stops, the Sep 28 call day is over: today's schedule");
   } finally { clock.setNow('2026-09-29T10:00:00-06:00'); }
 });
 
