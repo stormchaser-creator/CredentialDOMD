@@ -36,6 +36,7 @@ import {
   startedCoverageDays, stipendMinutesOf, outsideChargeOf, coveragePartsOf, callDayCuts,
 } from "../../../utils/billing";
 import { hasTimedPeriods, isTimedPeriod, periodHasCallDay, clockLabel, contractZone } from "../../../utils/coverageBlocks";
+import { scheduledContracts, readContractPick, contractPickValue, pickHolds, callDaysKey } from "../../../utils/scheduledContract";
 
 // What a saved entry's time before or after its timed coverage block bills,
 // said once at save (null when none of it is outside the block).
@@ -106,7 +107,7 @@ function fmtHM(m) {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-function WorkLog({ billDraft, onBillDraftDone }) {
+function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   const { data, addItem, editItem, deleteItem, theme: T, isDesktop, user, userIdRef } = useApp();
   const iS = useInputStyle();
 
@@ -123,17 +124,65 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const [showEnded, setShowEnded] = useState(false);
   const timeContracts = useMemo(() => pickableContracts(billableContracts, null, { showEnded }), [billableContracts, showEnded]);
 
-  // Default to: running timer's contract → explicitly remembered pick →
-  // the contract of the most recent log entry → first contract.
-  const [contractId, setContractId] = useState(() => {
+  // "Logging against" opens on, first match wins (the chain is resolved
+  // below, where `contract` is worked out):
+  //  1. a contract chosen for the call day in progress: picked in the
+  //     picker, a timer started on it, time logged to it for that call day,
+  //     or opened from Invoices' "Needs invoicing" (that one for this visit
+  //     only). A pick is kept on the device with its call day, in its own
+  //     slot (BASE_KEYS.contractPick), so it holds across leaving Work and
+  //     coming back that day, and a pick from an earlier day never outranks
+  //     today's schedule;
+  //  2. a running timer's contract, while it runs (restored from the device);
+  //  3. the contract the schedule shows for the call day in progress;
+  //  4. the contract last used (BASE_KEYS.lastContract, a bare id, the
+  //     pre-schedule default, unchanged);
+  //  then the contract of the most recent log entry and the first on file.
+  const [now, setNow] = useState(Date.now());
+  const [chosen, setChosen] = useState(() => {
+    if (openContractId) return { contractId: openContractId, callDay: currentCallDay(contracts.find(c => c.id === openContractId), new Date()) };
     try {
-      return loadTimer()?.contractId || lsGet(BASE_KEYS.lastContract) || "";
-    } catch { return ""; }
+      // A running timer shows its own contract on arrival, as it always has.
+      if (loadTimer()?.contractId) return null;
+      const pick = readContractPick(lsGet(BASE_KEYS.contractPick));
+      return pick.contractId && pick.callDay ? pick : null;
+    } catch { return null; }
   });
-  const rememberContract = useCallback((id) => {
-    setContractId(id);
+  const [lastUsedId, setLastUsedId] = useState(() => {
+    try { return readContractPick(lsGet(BASE_KEYS.lastContract)).contractId; } catch { return ""; }
+  });
+  // An "open this contract" hand-off that arrives while Work is already on
+  // screen (on arrival the initializer above takes it).
+  const [openedFor, setOpenedFor] = useState(openContractId || null);
+  if ((openContractId || null) !== openedFor) {
+    setOpenedFor(openContractId || null);
+    if (openContractId) {
+      setChosen({ contractId: openContractId, callDay: currentCallDay(contracts.find(c => c.id === openContractId), new Date()) });
+      setLastUsedId(openContractId);
+    }
+  }
+  // The contract on screen while something is open (a form, an invoice, an
+  // entry, Days & call's own forms): a schedule that loads late or a call day
+  // that turns over never swaps the agreement out from under it, since an
+  // invoice records against the contract on screen when it is sent.
+  const [heldId, setHeldId] = useState(null);
+  const [dutyBusy, setDutyBusy] = useState(false);
+  // Remember `id` as the contract last used and, when `callDay` (default:
+  // the call day in progress) IS the call day in progress for it, as the pick
+  // for that call day. Time logged for another day is only the contract last
+  // used: it never holds today, never replaces a pick made for today, and
+  // this visit shows what the next one will.
+  const rememberContract = useCallback((id, callDay) => {
+    const today = currentCallDay(contracts.find(c => c.id === id), new Date());
+    setLastUsedId(id);
     try { lsSet(BASE_KEYS.lastContract, id); } catch { /* noop */ }
-  }, []);
+    if ((callDay === undefined ? today : callDay) === today) {
+      setChosen({ contractId: id, callDay: today });
+      setHeldId(h => (h ? id : h));
+      try { lsSet(BASE_KEYS.contractPick, contractPickValue(id, today)); } catch { /* noop */ }
+    }
+    setNow(Date.now());
+  }, [contracts]);
   const lastLoggedContractId = useMemo(() => {
     let best = null, bestKey = "";
     for (const e of entries) {
@@ -143,7 +192,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     return best;
   }, [entries]);
   const [timer, setTimer] = useState(loadTimer);
-  const [now, setNow] = useState(Date.now());
   const [showManual, setShowManual] = useState(false);
   const [manual, setManual] = useState({});
   const [invoicePreview, setInvoicePreview] = useState(null); // { text, entryIds, total, contract }
@@ -183,19 +231,38 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const dictTextRef = useRef("");
   useEffect(() => () => { try { dictRecRef.current?.stop(); } catch { /* stopped */ } }, []);
 
-  // The remembered pick holds unless it has since been archived with nothing
-  // left to invoice (a running timer's contract always holds). Invoices'
-  // "Needs invoicing" opens a contract by remembering it, archived ones
-  // included, so an archived contract with unbilled work must still open.
-  // The fallbacks never land on an archived or long-ended contract while any
-  // other is on file.
+  // Tap-anywhere detail view for a work entry
+  const [viewEntry, setViewEntry] = useState(null);
+  const [placement, setPlacement] = useState(null); // schedule warning awaiting confirmation
+
+  // A contract opens unless it has since been archived with nothing left to
+  // invoice (a running timer's contract always opens). Invoices' "Needs
+  // invoicing" opens archived ones too, so an archived contract with unbilled
+  // work must still open. The fallbacks never land on an archived or
+  // long-ended contract while any other is on file.
   const hasUnbilled = (id) => entries.some(e => e.contractId === id && !e.invoiceId)
     || (data.dutyDays || []).some(d => d.contractId === id && !d.invoiceId);
+  const openable = (id) => (id ? contracts.find(c => c.id === id && (!isArchived(c) || c.id === timer?.contractId || hasUnbilled(c.id))) : null);
   const pickable = pickableContracts(contracts, null);
-  const contract = contracts.find(c => c.id === contractId && (!isArchived(c) || c.id === timer?.contractId || hasUnbilled(c.id)))
+  // The schedule's contracts for the call day in progress, best first (see
+  // utils/scheduledContract.js). `now` moves when the call day turns over.
+  const scheduled = useMemo(
+    () => scheduledContracts(data.scheduleDays, contracts, new Date(now), { prefer: lastUsedId }),
+    [data.scheduleDays, contracts, now, lastUsedId]
+  );
+  const scheduledId = scheduled[0]?.id || "";
+  const chosenId = pickHolds(chosen, contracts, new Date(now)) ? chosen.contractId : "";
+  // With nothing on the schedule for today this is the old default exactly:
+  // the running timer's contract, else the one last used.
+  const preferredId = chosenId || timer?.contractId || scheduledId || lastUsedId;
+  const resolved = openable(preferredId) || openable(scheduledId)
     || pickable.find(c => c.id === lastLoggedContractId)
     || pickable[0]
     || contracts.find(c => !isArchived(c)) || contracts[0] || null;
+  const busy = !!(showManual || invoicePick || invoicePreview || markSent || unrecorded || viewEntry || placement || dictating || dictBusy || dutyBusy);
+  if (busy && !heldId && resolved) setHeldId(resolved.id);
+  if (!busy && heldId) setHeldId(null);
+  const contract = (busy && heldId && contracts.find(c => c.id === heldId)) || resolved;
 
   // Invoices for this agreement that went out unrecorded and were left
   // behind (closed, reloaded): kept on the device until they are on the
@@ -203,16 +270,39 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id });
   useUnloadWarning(!!unrecorded);
 
-  // Tap-anywhere detail view for a work entry
-  const [viewEntry, setViewEntry] = useState(null);
-  const [placement, setPlacement] = useState(null); // schedule warning awaiting confirmation
-
   // Tick while a timer runs
   useEffect(() => {
     if (!timer) return;
     const iv = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(iv);
   }, [timer]);
+
+  // With no timer ticking, `now` still moves when a call day turns over
+  // while Work stays open (checked each minute, and on coming back to the
+  // app): the schedule's contract for the new day takes over unless one was
+  // picked for it, and the stipend countdown reads the new day.
+  useEffect(() => {
+    if (timer) return undefined;
+    const check = () => setNow(prev => (callDaysKey(contracts, new Date(prev)) === callDaysKey(contracts, new Date()) ? prev : Date.now()));
+    const iv = setInterval(check, 60000);
+    const doc = typeof document === "undefined" ? null : document;
+    const onShow = () => { if (doc?.visibilityState === "visible") check(); };
+    doc?.addEventListener?.("visibilitychange", onShow);
+    return () => { clearInterval(iv); doc?.removeEventListener?.("visibilitychange", onShow); };
+  }, [timer, contracts]);
+
+  // A timer that ends (logged or discarded) leaves "Logging against" on its
+  // contract for the rest of the timer's OWN call day: nothing flips under
+  // his hand while that call day lasts. Once it has ended (last night's call
+  // stopped after 7 AM) the new day's schedule takes over, as it would have
+  // with no timer. A contract picked for today while the timer ran stays.
+  const keepContractShown = useCallback(() => {
+    if (timer && !pickHolds(chosen, contracts, new Date())) {
+      const c = contracts.find(x => x.id === timer.contractId);
+      if (c) rememberContract(c.id, deriveCallDay(timer.startedAt, c));
+    }
+    setNow(Date.now());
+  }, [timer, chosen, contracts, rememberContract]);
 
   // Shared with Forecast (see utils/billing.js) so the schedule calendar's
   // est-vs-actual math can never drift from what the invoice computes.
@@ -462,8 +552,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     } else if (timer.type !== "Orientation") {
       noticeSaved(c, rows);
     }
+    keepContractShown();
     setTimer(null); saveTimer(null);
-  }, [timer, contracts, contract, addRows, finalizeEntry, noticeSaved, showNotice]);
+  }, [timer, contracts, contract, addRows, finalizeEntry, noticeSaved, showNotice, keepContractShown]);
 
   // Work is logged AFTER it happens. A start time in the future almost
   // always means the date is wrong (the old UTC-date bug filed 9 PM work
@@ -650,7 +741,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (task && !task.completedAt) editItem("taskNotes", { ...task, completedAt: new Date().toISOString(), workLogId: newId });
     if (type !== "CallDay" && type !== "Orientation") noticeSaved(target, rows);
 
-    rememberContract(target.id);
+    rememberContract(target.id, rows[0]?.callDay || manual.date);
     setShowManual(false); setManual({});
   }, [contract, contracts, billableContracts, timeContracts, manual, entries, addItem, addRows, editItem, deleteItem, rememberContract, noticeSaved, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices, data.taskNotes]);
 
@@ -662,12 +753,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     // a stale one pointing at the day-rate agreement) goes to the contract
     // he is CURRENTLY working — the pre-existing behavior — and only then to
     // the first billable one. If the picker sits on the day-rate agreement,
-    // it flips to the draft's target so the view behind the modal is the
-    // time engine that entry will actually land in.
+    // the view behind the form is held on the draft's target, the time
+    // engine that entry will actually land in, while the form is open. It is
+    // the contract last used, not a pick for today: saving the entry decides
+    // that (by its call day), and closing the form puts the view back.
     const draftTarget = billableContracts.some(c => c.id === billDraft.contractId)
       ? billDraft.contractId
       : ((contract?.payModel !== "daily" ? contract?.id : null) || timeContracts[0]?.id || "");
-    if (contract?.payModel === "daily" && draftTarget) rememberContract(draftTarget);
+    if (contract?.payModel === "daily" && draftTarget) { rememberContract(draftTarget, ""); setHeldId(draftTarget); }
     setManual({
       contractId: draftTarget,
       type: billDraft.type || "Call",
@@ -1278,6 +1371,18 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       Math.max(1, Math.round((now - new Date(timer.startedAt)) / 60000)), timerContract).billed
     : 0;
 
+  // Under the picker when it shows a contract on the schedule. When more than
+  // one is scheduled for the call day in progress (a day at one, call at
+  // another), every one is named with what it is booked for, so the default
+  // is never a silent choice between them.
+  const kindWord = (k) => (k === "day+call" ? "day and call" : k === "day" || k === "call" ? k : "");
+  const bookedAs = (s) => `${contracts.find(c => c.id === s.id)?.facility || "Another contract"}${kindWord(s.kind) ? ` (${kindWord(s.kind)})` : ""}`;
+  const shownBooking = contract ? scheduled.find(s => s.id === contract.id) : null;
+  const otherBookings = shownBooking ? scheduled.filter(s => s.id !== shownBooking.id) : [];
+  const scheduleNote = !shownBooking ? ""
+    : !otherBookings.length ? "On your schedule today"
+    : `On your schedule today${kindWord(shownBooking.kind) ? ` (${kindWord(shownBooking.kind)})` : ""}. Also scheduled: ${otherBookings.map(bookedAs).join(", ")}`;
+
   // One picker, always — what changes underneath it is the ENGINE. A
   // day-rate agreement has no clock: picking it swaps the timer and time
   // log for days-and-call logging. (While a timer runs for another
@@ -1292,6 +1397,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         {pickableContracts(contracts, contract?.id, { showEnded }).map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
         {hiddenEndedCount(contracts, contract?.id, { showEnded }) > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEndedCount(contracts, contract?.id, { showEnded }))}</option>}
       </select>
+      {scheduleNote && (
+        <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>{scheduleNote}</div>
+      )}
     </div>
   );
 
@@ -1321,7 +1429,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         {noticeEl}
         {/* Keyed by contract so a mid-flow contract switch can never carry
             one agreement's picker/preview state onto another's rows */}
-        <DutyLog key={contract.id} contract={contract} />
+        <DutyLog key={contract.id} contract={contract} onBusyChange={setDutyBusy} />
         {strandedRows.length > 0 && (
           <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 12, backgroundColor: T.card, border: `1px solid ${T.warning || "#f59e0b"}` }}>
             <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text, marginBottom: 4 }}>
@@ -1421,7 +1529,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             }}>
               Stop & Log
             </button>
-            <button onClick={() => { if (window.confirm("Discard this timer without logging any time?")) { setTimer(null); saveTimer(null); } }} style={{
+            <button onClick={() => { if (window.confirm("Discard this timer without logging any time?")) { keepContractShown(); setTimer(null); saveTimer(null); } }} style={{
               width: "100%", padding: "10px", borderRadius: 12, border: "none", marginTop: 8,
               backgroundColor: "transparent", color: T.textMuted,
               fontSize: 13, fontWeight: 700, cursor: "pointer",
