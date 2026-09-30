@@ -21,7 +21,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { acquirePgSlot, withSlotWait, defaultSlotDir } from '../helpers/pg-slot.mjs';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
 import { sandboxAvailable, shortTmpRoot, RUN_PG_SLOTS } from '../../scripts/ticket-fix/sandbox.mjs';
-import { stopRecordedClusters } from '../../scripts/ticket-fix/pg-clusters.mjs';
+import { stopRecordedClusters, processCommand } from '../../scripts/ticket-fix/pg-clusters.mjs';
 import { launch } from '../../scripts/ticket-fix/worker.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -284,7 +284,12 @@ function forged(t) {
   return { root, fake, slots, cluster };
 }
 
-test('a forged record under slot names past the run\'s pool is never looked up; the same record under a pool name is', async t => {
+// Its second half needs the host's own lookup, /bin/ps, which is setuid: the
+// gates' sandbox does not exec it (processCommand returns null there), so no
+// record would be found either way. The host's stop handler, which this tests,
+// never runs sandboxed.
+const psSkip = processCommand(process.pid) ? false : '/bin/ps cannot run here (inside the gates\' sandbox); the host\'s stop handler always can';
+test('a forged record under slot names past the run\'s pool is never looked up; the same record under a pool name is', { skip: psSkip }, async t => {
   const f = forged(t);
   const record = f.cluster(0);
   for (const i of [RUN_PG_SLOTS, RUN_PG_SLOTS + 1, 999]) fs.linkSync(record, path.join(f.slots, `slot-${i}`));

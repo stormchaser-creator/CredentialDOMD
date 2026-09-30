@@ -56,8 +56,13 @@ test('a pinned worktree: the host\'s git names the git directory the host record
       assert.match(status, /^ARG=core\.attributesFile=\/dev\/null$/m);
       // apply: no attribute source (git 2.54's apply dies with one).
       assert.doesNotMatch(seen(['apply', '-R', 'x.patch']), /^ARG=attr\.tree=/m);
-      // The one push keeps the owner's global config, for its credential helper.
-      assert.match(seen(['push', 'origin'], { credentials: true }), /^GIT_CONFIG_GLOBAL=unset$/m);
+      // The one push keeps the owner's global config, for its credential helper:
+      // ~/.gitconfig, or the file the caller's own environment names (inside the
+      // gates' sandbox /dev/null, since git stops on the ~/.gitconfig it denies).
+      const noGlobal = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== 'GIT_CONFIG_GLOBAL'));
+      assert.match(seen(['push', 'origin'], { credentials: true, env: noGlobal }), /^GIT_CONFIG_GLOBAL=unset$/m);
+      assert.match(seen(['push', 'origin'], { credentials: true, env: { ...noGlobal, GIT_CONFIG_GLOBAL: '/dev/null' } }), /^GIT_CONFIG_GLOBAL=\/dev\/null$/m);
+      assert.match(seen(['status'], { env: { ...noGlobal, GIT_CONFIG_GLOBAL: path.join(p.root, 'elsewhere.gitconfig') } }), /^GIT_CONFIG_GLOBAL=\/dev\/null$/m, 'no other call reads one');
       // The owner's repository is not pinned: git finds it as it always did.
       assert.doesNotMatch(git(p.repo, ['status', '--porcelain'], { binary: stub }), /^GIT_DIR=\//m);
     } finally { await gate.remove(); }

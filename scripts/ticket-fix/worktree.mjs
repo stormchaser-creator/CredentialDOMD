@@ -154,10 +154,18 @@ export function hooksDigest(repo, { binary = 'git', home = os.homedir() } = {}) 
 export class GitStateChanged extends Error {}
 const WORKTREE_PINS = new Map();
 const PASSED_GIT_ENV = new Set(['GIT_INDEX_FILE', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_AUTHOR_DATE', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL', 'GIT_COMMITTER_DATE']);
+// The one push reads the global config for its credential helper: the file
+// the caller's environment names, which is the host's own (like HOME, which
+// names ~/.gitconfig), else ~/.gitconfig. Dropping the caller's name with the
+// other GIT_* variables made git read ~/.gitconfig where the caller had turned
+// it off: inside the gates' sandbox, which denies that file and sets
+// GIT_CONFIG_GLOBAL=/dev/null (sandbox.mjs sandboxEnv), git stopped on it and
+// every push was "rejected twice" (the merge and runner tests, 2026-09-30).
 function pinnedEnv(env, pin, credentials) {
   const out = {};
   for (const [key, value] of Object.entries(env)) if (!key.startsWith('GIT_') || PASSED_GIT_ENV.has(key)) out[key] = value;
-  return { ...out, GIT_DIR: pin.gitdir, GIT_WORK_TREE: pin.dir, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1', ...(credentials ? {} : { GIT_CONFIG_GLOBAL: '/dev/null' }) };
+  const global = !credentials ? { GIT_CONFIG_GLOBAL: '/dev/null' } : typeof env.GIT_CONFIG_GLOBAL === 'string' ? { GIT_CONFIG_GLOBAL: env.GIT_CONFIG_GLOBAL } : {};
+  return { ...out, GIT_DIR: pin.gitdir, GIT_WORK_TREE: pin.dir, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1', ...global };
 }
 // A caller's own attr.tree (attrFrom) comes later on the command line and
 // wins. Not for apply: git 2.54's apply dies (SIGSEGV) with any attribute
