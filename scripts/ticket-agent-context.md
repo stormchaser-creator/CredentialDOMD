@@ -294,8 +294,10 @@ passes it on. For each loaded ticket it runs `scripts/ticket-fix/run.mjs work`:
    worktree on a new branch `agent/<id8>-<runid>` under
    `~/Library/Application Support/CredentialDOMD/ticket-work/worktrees/`. The owner's
    checkout and branch are never touched. `node_modules` is an APFS clone (`cp -c`) of
-   the owner's when the lockfiles match, otherwise of `ticket-work/modules/<lock sha>`,
-   installed once with `npm ci --ignore-scripts`. It is never a link into the owner's.
+   the owner's when the lockfiles match and `node_modules/.package-lock.json` shows that
+   lockfile installed (a checkout pulled forward without `npm ci` does not), otherwise of
+   `ticket-work/modules/<lock sha>`, installed once with `npm ci --ignore-scripts`. It is
+   never a link into the owner's.
 2. **Reproduction.** A separate session (`repro-prompt.md`) sees the ticket and the base
    code and may write only under `tests/`. The host snapshots those tests onto base and
    runs them in a fresh worktree of the snapshot; each must fail with `ERR_ASSERTION`

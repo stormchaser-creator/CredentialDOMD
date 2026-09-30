@@ -29,6 +29,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { promises as fs, constants as FS, existsSync, readFileSync, lstatSync, readdirSync, readlinkSync, realpathSync, openSync, readSync, closeSync, fstatSync, rmSync, renameSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { hostTemp, dropHostTemp, pinDir, forgetDir } from './sandbox.mjs';
 
 export const AGENT_NAME = 'CredentialDOMD Ticket Agent';
@@ -300,7 +301,8 @@ export function branchName(ticketId, runId) {
 // working tree and branch are never touched) and adds a worktree on a new
 // branch. node_modules is an APFS clone (copy on write: seconds, no extra
 // space) of a host-owned source: the owner's checkout when its lockfile is
-// base's, otherwise <work>/modules/<lockfile sha256>, installed once with
+// base's and its node_modules is that lockfile installed (ownerModulesCurrent),
+// otherwise <work>/modules/<lockfile sha256>, installed once with
 // installNodeModules (npm ci --ignore-scripts by default). Never a link: a
 // test the model wrote could write through it into the owner's modules.
 export async function createWorktree({ repo, work, ticketId, runId, binary = 'git', fetch = true, installNodeModules = defaultInstall, env = process.env }) {
@@ -330,8 +332,14 @@ export async function moduleSource({ repo, work, base, binary = 'git', installNo
   const lock = file => { try { return readFileSync(file); } catch { return null; } };
   const ownerLock = lock(path.join(repo, 'package-lock.json'));
   const baseLock = git(repo, ['show', `${base}:package-lock.json`], { binary, allowFail: true });
-  const same = (ownerLock === null && baseLock === null) || (ownerLock !== null && baseLock !== null && ownerLock.equals(Buffer.from(baseLock, 'utf8')));
-  if (same) return { kind: 'cloned', dir: existsSync(path.join(repo, 'node_modules')) ? path.join(repo, 'node_modules') : null };
+  // No lockfile on either side: nothing to install from or check against.
+  if (ownerLock === null && baseLock === null) return { kind: 'cloned', dir: existsSync(path.join(repo, 'node_modules')) ? path.join(repo, 'node_modules') : null };
+  // The owner's lockfile is base's, and its node_modules is what that lockfile
+  // installs. A checkout pulled forward without `npm ci` has base's lockfile
+  // but the old tree, which lacks what base added: cloning it would fail every
+  // run's gates, so that case installs into the cache instead.
+  const same = ownerLock !== null && baseLock !== null && ownerLock.equals(Buffer.from(baseLock, 'utf8'));
+  if (same && ownerModulesCurrent(repo, ownerLock)) return { kind: 'cloned', dir: path.join(repo, 'node_modules') };
   const key = createHash('sha256').update(baseLock ?? '').digest('hex');
   const cache = path.join(work, 'modules', key);
   const target = path.join(cache, 'node_modules');
@@ -344,6 +352,46 @@ export async function moduleSource({ repo, work, base, binary = 'git', installNo
   await fs.mkdir(target, { recursive: true });
   await fs.writeFile(path.join(cache, '.complete'), '', { mode: 0o600 });
   return { kind: 'installed', dir: target };
+}
+// Whether <repo>/node_modules is the install of `lock` (the owner's
+// package-lock.json, as bytes or text), judged by npm's own record of the
+// tree, node_modules/.package-lock.json, which npm writes on every install:
+// each package the lockfile names is recorded there with the same entry
+// (version, resolved, integrity, flags), nothing else is, and a package that
+// is absent is an optional one npm skips on this platform (os, cpu, libc).
+// Anything unreadable is not current.
+export function ownerModulesCurrent(repo, lock, { platform = process.platform, arch = process.arch } = {}) {
+  let want, have;
+  try {
+    want = JSON.parse(Buffer.isBuffer(lock) ? lock.toString('utf8') : String(lock)).packages;
+    have = JSON.parse(readFileSync(path.join(repo, 'node_modules', '.package-lock.json'), 'utf8')).packages;
+  } catch { return false; }
+  if (!want || typeof want !== 'object' || !have || typeof have !== 'object') return false;
+  for (const key of Object.keys(have)) if (key !== '' && !Object.hasOwn(want, key)) return false;
+  for (const [key, entry] of Object.entries(want)) {
+    if (key === '') continue;
+    if (Object.hasOwn(have, key)) { if (!isDeepStrictEqual(entry, have[key])) return false; continue; }
+    if (!(entry?.optional === true && !platformAllows(entry, platform, arch))) return false;
+  }
+  return true;
+}
+// npm-install-checks' rule: a list of values, "!" negating one, "any" for all.
+function platformList(value, list) {
+  if (list === undefined || list === null) return true;
+  const entries = typeof list === 'string' ? [list] : Array.isArray(list) ? list : [];
+  if (entries.length === 1 && entries[0] === 'any') return true;
+  let negated = 0, match = false;
+  for (const item of entries) {
+    if (typeof item !== 'string') continue;
+    if (item.startsWith('!')) { negated++; if (item.slice(1) === value) return false; } else if (item === value) match = true;
+  }
+  return match || (entries.length > 0 && negated === entries.length);
+}
+function platformAllows(entry, platform, arch) {
+  // A libc constraint only ever passes on Linux; there it cannot be judged
+  // here, so the package counts as allowed (and its absence as stale).
+  if (entry.libc !== undefined && platform !== 'linux') return false;
+  return platformList(platform, entry.os) && platformList(arch, entry.cpu);
 }
 function defaultInstall(dir, env) {
   const r = spawnSync('npm', ['ci', '--no-audit', '--no-fund', '--ignore-scripts'], { cwd: dir, env, stdio: 'ignore', timeout: 15 * 60 * 1000 });
