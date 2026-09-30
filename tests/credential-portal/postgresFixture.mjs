@@ -116,7 +116,13 @@ export async function postgresFixture({ port = 56441 } = {}) {
   const run = (name, args) => exec(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
   const slot = await acquirePgSlot(path.join(root, 'data'));
   await run('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
-  await run('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'postgres.log'), '-o', `-k ${socket} -p ${port} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off`, '-w', 'start']);
+  // timezone=UTC, as production runs. initdb otherwise copies the machine's
+  // zone, and there started + make_interval(days => 30) keeps the wall-clock
+  // time across a daylight-saving change: a grant whose 30 or 180 days span
+  // one ends an hour off the N x 24 hours the tests and the invitation email
+  // count. In US Pacific time that failed standing.test.mjs on 289 days a
+  // year, from 2 October 2026 to 13 March 2027 and 11 May to 13 September.
+  await run('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'postgres.log'), '-o', `-k ${socket} -p ${port} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off -c timezone=UTC`, '-w', 'start']);
   const sql = async (query, user = 'service_role') => {
     const { stdout } = await run('psql', ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', String(port), '-U', user, '-d', 'postgres', '-c', query]); return stdout.trim();
   };

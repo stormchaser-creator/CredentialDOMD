@@ -8,6 +8,18 @@ import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from '../../supabase/fun
 import { validateAccessSnapshot, accessAt, canReviewBillingOffer } from '../../src/utils/limitedLaunchAccess.js';
 import { isPinnedBetaChargeDate, membershipDate, quoteMatchesBetaWindow } from '../../src/utils/membershipTiming.js';
 
+// The fixtures stand on 2030-10-01 12:00 UTC (the snapshot's evaluatedAt; the
+// quote expires ten minutes later), so the page runs on that clock, ticking,
+// rather than the machine's: on the real clock the quote expires on
+// 2030-10-01 at 12:10 UTC and two tests fail every run after it.
+const RealDate = globalThis.Date;
+const shift = Date.parse('2030-10-01T12:00:00Z') - RealDate.now();
+globalThis.Date = class extends RealDate {
+  constructor(...args) { if (args.length) super(...args); else super(RealDate.now() + shift); }
+  static now() { return RealDate.now() + shift; }
+};
+test.after(() => { globalThis.Date = RealDate; });
+
 const owner = 'user_synthetic_deferred';
 const betaEnd = '2030-10-20T12:00:00.000123+00:00';
 const chargeAt = '2030-10-20T12:00:01Z';

@@ -11,6 +11,13 @@ import { fakeWorld, expenseInvoice, workInvoice, contract, settings, IDS, SUBJEC
 // functions.invoke (fakeWorld.mjs). Hooks run synchronously, as in
 // tests/send-notices.test.mjs. Nothing leaves the process.
 
+// The screen prints the send's local date and the fake world's clock stands
+// at 15:00 UTC on Sep 25, which is Sep 26 east of UTC+9: pin a zone so the
+// dates asserted below are the same on every machine.
+const originalTimezone = process.env.TZ;
+process.env.TZ = "America/Chicago";
+test.after(() => { if (originalTimezone === undefined) delete process.env.TZ; else process.env.TZ = originalTimezone; });
+
 const require = createRequire(import.meta.url);
 // Load the PDF library before any test stubs `window`: its node build
 // switches to browser code paths when it sees one.

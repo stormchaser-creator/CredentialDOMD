@@ -274,7 +274,12 @@ test('finding 7 (G10): personal data, copied ticket text or a credential in the 
     assert.ok(failed(gates).includes('personal_data'), JSON.stringify(gates.checks));
     const detail = gates.checks.find(c => c.name === 'personal_data').detail;
     for (const rule of ['email in tests/fixture.test.mjs', 'npi in tests/fixture.test.mjs', 'phone in tests/fixture.test.mjs', 'ticket_text in tests/fixture.test.mjs']) assert.ok(detail.includes(rule), `${rule}: ${detail}`);
-    assert.ok(!new RegExp(`gmail|${npi}|4477`).test(JSON.stringify(gates)), 'no matched value is recorded');
+    // The record with its object names taken out: the base and head commit ids
+    // change every run (they hash the commit time) and a 40-hex id holds "4477"
+    // about once in 1,800 commits. A value the gates copied would be text, not a whole id.
+    const recorded = JSON.stringify(gates).replace(/"(?:[0-9a-f]{40}|[0-9a-f]{64})"/g, '"<object id>"');
+    assert.match(recorded, /"base":"<object id>","head":"<object id>"/, 'only whole object ids are taken out');
+    assert.ok(!new RegExp(`gmail|${npi}|4477`).test(recorded), 'no matched value is recorded');
   } finally { p.cleanup(); }
 });
 

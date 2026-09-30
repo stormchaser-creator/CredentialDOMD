@@ -533,7 +533,12 @@ test('the member allows support access for 24 hours and can end it at any time',
   assert.match(card.pageText(), /Support access is off\. You ended it on/);
 });
 
-test('the member\'s log shows the view and each file opened: who, when, what and why', async () => {
+test('the member\'s log shows the view and each file opened: who, when, what and why', async (t) => {
+  // The log prints each event's date in the machine's zone: 15:04 UTC is
+  // Sep 25 west of UTC+9 and Sep 26 east of it, so pin the member's zone.
+  const zone = process.env.TZ;
+  process.env.TZ = 'America/Denver';
+  t.after(() => { if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone; });
   const events = [
     { id: uuid(91), created_at: '2026-09-25T15:04:00Z', event: 'file_opened', actor_name: 'Eric Whitney', reason: 'Ticket 4411: CME hours on Home look wrong', document_name: 'DEA certificate.pdf' },
     { id: uuid(90), created_at: '2026-09-25T15:02:00Z', event: 'view_started', actor_name: 'Eric Whitney', reason: 'Ticket 4411: CME hours on Home look wrong', document_name: null },
