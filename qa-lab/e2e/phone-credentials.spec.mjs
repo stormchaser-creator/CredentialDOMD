@@ -55,12 +55,22 @@ const SECTIONS = [
 const BUGS = [
   {
     key: 'card-actions', feature: 'CRED-001', kind: 'small', severity: 'low',
+    // Not on the Favorites list: its star is App.jsx's own (the favorites-star entry below).
+    not: 'Favorites',
     // The icons carry names since 43341dc1 ("Share", "Edit", "Delete"; the CME card's "... entry").
     match: /^button "(Add to Favorites|Remove from Favorites|(Share|Edit|Delete)( entry)?)"$|^button \(no text; icon\)$/,
     title: 'Phone record cards: the star, send, edit and delete buttons are 26 to 28 px tall',
     step: 'Credentials > any section with a record, on a phone: the four buttons on the right of each card',
     expected: 'Each card action at least 32 x 32 px (they sit 3 px apart, so a slightly-off tap hits the neighbour: edit is beside delete)',
     actual: 'Each is a 16 px icon with padding 6px 8px and a 3 px gap: CrudSection.jsx:1290-1295 (phone cards of every generic section) and :98 (the star), HealthRecordsSection.jsx:392-396, ScreeningsSection.jsx (same style); CMESection.jsx:827-831 uses padding 5px 7px, 26 px tall.',
+  },
+  {
+    key: 'favorites-star', feature: 'CRED-025', kind: 'small', severity: 'low', only: 'Favorites',
+    match: /^button "Remove from Favorites"$/,
+    title: 'Phone Favorites list: each row\'s "Remove from Favorites" star is 31 px tall',
+    step: 'Credentials > Favorites on a phone, with a starred record',
+    expected: 'The star at least 32 x 32 px, like the star on every record card (cardActionSize, 32 px floor, since 892f1af8)',
+    actual: 'App.jsx:2317-2330 (the Favorites list, not a section card) styles it padding 7px 9px around a 17 px StarIcon with no minimum: 35 x 31.',
   },
   {
     key: 'filter-chips', feature: 'CRED-026', kind: 'small', severity: 'low',
@@ -164,7 +174,8 @@ for (const width of [375, 390]) {
     }, async ({ page, qa, browser }) => {
       test.setTimeout(20 * 60 * 1000);
       // A bug marked `only` is looked for on that one screen (its pattern is broad).
-      const file = (audit, screen = '') => fileLayoutBugs(qa, audit, BUGS.filter((b) => !b.only || [].concat(b.only).includes(screen)), P.name);
+      // A bug marked `not` is left out on those screens (another entry names what is there).
+      const file = (audit, screen = '') => fileLayoutBugs(qa, audit, BUGS.filter((b) => (!b.only || [].concat(b.only).includes(screen)) && ![].concat(b.not || []).includes(screen)), P.name);
       const { user, profile } = await newPhoneMember(page, { firstName: 'Casey', lastName: `Cards ${width}` });
       const rowFor = (s) => row(`select t.id, row_to_json(t)::text as j from public.${s.table} t where user_id = '${profile.id}' and row_to_json(t)::text like '%${s.mark.replace(/'/g, "''")}%'`);
       const known = anyOf(exceptChrome(), ...BUGS.filter((b) => b.kind === 'small' && !b.only).map((b) => b.match));
@@ -308,7 +319,7 @@ for (const width of [375, 390]) {
         await phoneCredentials(page, 'Favorites');
         await sleep(800);
         qa.check('Favorites lists the starred privileges', !!text && await page.getByText(text).first().isVisible().catch(() => false));
-        file(await auditScreen(qa, page, 'Favorites', { allowSmall: known }));
+        file(await auditScreen(qa, page, 'Favorites', { allowSmall: known }), 'Favorites');
         await backButton(page).tap();
       }, { soft: true });
 

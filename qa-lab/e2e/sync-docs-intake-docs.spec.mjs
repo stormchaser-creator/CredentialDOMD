@@ -157,7 +157,11 @@ test('the camera: a photo is taken into the review queue and kept; Cancel stores
     const shown = await msg.waitFor({ timeout: 10000 }).then(() => true, () => false);
     await qa.shot('camera refused');
     qa.check('"Could not access camera" is shown', shown);
-    const close = msg.getByRole('button').first();
+    // Since a4c693fc (DOCS-002) the message and its 32 x 32 "Dismiss notice" x sit side by side
+    // in the notice, no longer the x inside the message's own text.
+    const notice = page.locator('div').filter({ has: msg }).filter({ has: page.getByRole('button', { name: 'Dismiss notice' }) }).last();
+    const close = notice.getByRole('button', { name: 'Dismiss notice' });
+    qa.check('the message has one "Dismiss notice" button', shown && (await close.count()) === 1, `${await close.count()} button(s)`);
     if (shown) await close.click().catch(() => {});
     await sleep(500);
     qa.check('the message can be dismissed', !(await msg.isVisible().catch(() => false)));
