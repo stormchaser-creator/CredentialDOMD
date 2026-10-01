@@ -9,7 +9,7 @@ const offer = (phase = 'founding', availability = 'available') => ({schemaVersio
   annualCents:{founding:9900,earlybird:14900,standard:19900}[phase], checkoutEnabled:availability !== 'paused', availability});
 const deferred = () => { let resolve; return {promise:new Promise(done => {resolve=done;}),resolve}; };
 const root = () => {
-  const actions = [{textContent:'Membership signup'}], statuses = [{textContent:'Your offer is confirmed before payment. Creating an account does not reserve a founding place.'}];
+  const actions = [{textContent:'Membership signup'}], statuses = [{textContent:'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.'}];
   const nodes = Object.fromEntries(['headline','price','price-label','heading','phase','review-action','hero-headline','hero-note','rate','bundle-label'].map(key=>[key,[{textContent:''}]]));
   return {actions,statuses,nodes,querySelectorAll:selector=>selector === '[data-membership-action]' ? actions
     : selector === '[data-membership-status]' ? statuses : nodes[selector.slice(17,-1)] || []};
@@ -59,7 +59,7 @@ test('a verified pause retains the actual phase and price instead of hiding them
     assert.equal(dom.nodes.price[0].textContent, price);
     assert.ok(dom.nodes['hero-headline'][0].textContent.includes(`${price}/year`));
     assert.match(dom.statuses[0].textContent, /Paid checkout is paused/);
-    assert.match(dom.statuses[0].textContent, /no payment will be taken/);
+    assert.match(dom.statuses[0].textContent, /No payment will be taken; your account opens when payment completes\./);
     assert.equal(dom.actions[0].textContent, 'Create your account');
     if (phase === 'founding') assert.equal(dom.nodes['review-action'][0].textContent, 'See the $99 founding plan');
     else assert.doesNotMatch(JSON.stringify(dom.nodes), /\$99|first 100|founding/i);
@@ -74,7 +74,10 @@ test('a verified pause retains the actual phase and price instead of hiding them
 test('public GET sends no identity or authorization and never caches or redirects', async () => {
   let request;
   const result = await fetchPublicOffer(endpoint,{fetchImpl:async(...args)=>{request=args;return Response.json(offer());}});
-  assert.match(result.status,/does not reserve a founding place/);
+  assert.match(result.status,/Your account opens when payment completes/);
+  assert.match(result.status,/100% money back guarantee/);
+  assert.doesNotMatch(result.status,/[-\u2013\u2014]/, "public copy carries no hyphen or dash");
+  assert.doesNotMatch(result.status,/Creating an account/);
   assert.equal(request[0],endpoint);
   assert.deepEqual(request[1].headers,{Accept:'application/json'});
   for (const [key,value] of Object.entries({method:'GET',credentials:'omit',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer'})) assert.equal(request[1][key],value);
@@ -95,9 +98,9 @@ test('unknown configuration uses qualified founding policy, while a later failur
   await refresh();assert.match(dom.nodes['review-action'][0].textContent,/149/);
   await refresh();assert.equal(dom.actions[0].textContent,'Create your account');
   assert.equal(dom.nodes.price[0].textContent, '$149');
-  assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Creating an account does not reserve a founding place.');
+  assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.');
   await createOfferUpdater(dom,undefined,{fetchImpl:()=>{throw Error('Must not fetch');}})();
-  assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Creating an account does not reserve a founding place.');
+  assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.');
   assert.equal(dom.nodes.price[0].textContent, '$99');
   assert.match(dom.nodes.headline[0].textContent, /First 100 paid founding memberships/);
 });

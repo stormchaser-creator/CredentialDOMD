@@ -104,7 +104,17 @@ function find(tree, predicate) {
 const textOf = node => renderToStaticMarkup(node).replace(/<[^>]+>/g, '');
 const button = (f, label) => find(f.render(), n => n.type === 'button' && textOf(n).includes(label));
 const tick = (f, checked = true) => find(f.render(), n => n.type === 'input' && n.props.type === 'checkbox').props.onChange({ target: { checked } });
-const reviewCore = f => button(f, 'Review Credential offer').props.onClick();
+// Pay first: a pending account's one action opens the current offer's review
+// (the page also opens it by itself once, on its first effects); with the
+// offer on screen the same review is its Refresh offer.
+const settleTicks = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)); };
+const quotes = f => f.calls.filter(c => c[0] === 'quote').length;
+const reviewCore = async f => {
+  const before = quotes(f);
+  f.render(); active.flush(); await settleTicks();
+  if (quotes(f) > before) return;
+  await (button(f, 'Complete payment') || button(f, 'Refresh offer')).props.onClick();
+};
 
 test('an unticked Continue looks unavailable, and a tap on it says to tick the box instead of doing nothing', async () => {
   const f = fixture();
@@ -373,8 +383,8 @@ test('Refresh offer on a stale answer asks for a fresh one, then quotes; with no
   assert.deepEqual(f.calls, [['quote', 'core'], ['refresh']], 'a fresh answer was asked for; no quote without one');
   assert.match(f.html(), /Your membership could not be confirmed just now\./);
   assert.deepEqual(f.reports.map(r => [r[0], r[2].phase]), [['Membership quote stopped on the page (access_unconfirmed)', 'client']]);
-  // The reviews stay reachable on the last answer; a tap refreshes first and then quotes.
-  const review = button(f, 'Review Credential offer');
+  // Paying stays reachable on the last answer; a tap refreshes first and then quotes.
+  const review = button(f, 'Complete payment');
   assert.equal(review.props.disabled, false);
   f.context.limitedLaunch.refresh = async () => { f.calls.push(['refresh']); f.context.limitedLaunch.access.needsRefresh = false; };
   await review.props.onClick();
@@ -390,22 +400,26 @@ test('Refresh offer on a stale answer asks for a fresh one, then quotes; with no
 });
 
 test('an offer this account cannot review looks unavailable, not like a live button', () => {
-  const f = fixture();
-  f.context.limitedLaunch.access.checkoutEligible = false;
-  for (const label of ['Review Credential offer', 'Review Credential + Practice offer']) {
-    const b = button(f, label);
-    assert.equal(b.props.disabled, true);
-    assert.equal(b.props.style.background, THEME.neutralDim, label);
-    assert.equal(b.props.style.color, THEME.textDim, label);
-    assert.equal(b.props.style.cursor, 'not-allowed', label);
-    assert.equal(b.props.style.fontSize, 16);
+  // Pay first (a pending account) and the offer chooser (an account whose paid membership ended).
+  for (const [accessStatus, labels, resumeLabel] of [['pending', ['Complete payment', 'Pay for Credential + Practice instead'], 'Complete payment'], ['active', ['Review Credential offer', 'Review Credential + Practice offer'], 'Resume checkout']]) {
+    const f = fixture();
+    Object.assign(f.context.limitedLaunch.access, { accessStatus, checkoutEligible: false });
+    for (const label of labels) {
+      const b = button(f, label);
+      assert.equal(b.props.disabled, true);
+      assert.equal(b.props.style.background, THEME.neutralDim, label);
+      assert.equal(b.props.style.color, THEME.textDim, label);
+      assert.equal(b.props.style.cursor, 'not-allowed', label);
+      assert.equal(b.props.style.fontSize, 16);
+    }
+    f.context.limitedLaunch.access = { ...snapshot(), accessStatus, checkoutResumeAvailable: true, checkoutResumeOfferId: 'core_locum', billingEnabled: false };
+    const resume = button(f, resumeLabel);
+    assert.equal(resume.props.disabled, true);
+    assert.equal(resume.props.style.cursor, 'not-allowed');
+    const g = fixture();
+    g.context.limitedLaunch.access.accessStatus = accessStatus;
+    assert.equal(button(g, labels[0]).props.style.background, THEME.card, 'an available one keeps its look');
   }
-  f.context.limitedLaunch.access = { ...snapshot(), checkoutResumeAvailable: true, checkoutResumeOfferId: 'core_locum', billingEnabled: false };
-  const resume = button(f, 'Resume checkout');
-  assert.equal(resume.props.disabled, true);
-  assert.equal(resume.props.style.cursor, 'not-allowed');
-  const g = fixture();
-  assert.equal(button(g, 'Review Credential offer').props.style.background, THEME.card, 'an available one keeps its look');
 });
 
 test('back from a completed Checkout, the page offers nothing more to buy until the membership shows it', () => {
@@ -418,7 +432,9 @@ test('back from a completed Checkout, the page offers nothing more to buy until 
   }
   const canceled = fixture();
   canceled.context.limitedLaunch.billingReturn = { kind: 'canceled', phase: 'canceled', retry() {}, dismiss() {} };
-  assert.match(canceled.html(), /Review Credential offer/, 'canceled keeps the offers');
+  // Pay first: back from an abandoned Checkout, the one thing to do is pay.
+  assert.match(canceled.html(), /Complete payment/, 'canceled keeps the payment a tap away');
+  assert.doesNotMatch(canceled.html(), /Review Credential offer|Choose whether to purchase/);
   const landed = fixture();
   landed.context.limitedLaunch.billingReturn = { kind: 'complete', phase: 'confirmed', retry() {}, dismiss() {} };
   assert.doesNotMatch(landed.html(), /nothing more to choose or pay/);
@@ -468,4 +484,129 @@ test('a payment page made after the answer changed is not opened, and that is re
   assert.deepEqual(f.redirects, []);
   assert.deepEqual(f.reports.map(r => [r[0], r[2].phase, r[2].code]), [['Membership checkout stopped on the page (checkout_discarded)', 'client', 'checkout_discarded']]);
   assert.ok(!JSON.stringify(f.reports).includes('checkout.stripe.com'));
+});
+
+// Pay first (owner, 2026-09-30): signing up and paying are one step.
+test('pay first: a new account opens the current offer review by itself, once, and the only action is paying', async () => {
+  const f = fixture();
+  const html = f.html();
+  assert.match(html, /Complete your payment to open your account\./);
+  assert.match(html, /Your account opens as soon as payment completes/);
+  assert.match(html, /100% money-back guarantee/);
+  assert.doesNotMatch(html, /Creating an account does not charge you|Choose whether to purchase|Review Credential offer/);
+  f.render(); active.flush(); await settleTicks();
+  assert.deepEqual(f.calls, [['quote', 'core']], 'the current offer, reviewed at once');
+  const opened = f.html();
+  assert.match(opened, /100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals\./, 'the terms, with the offer');
+  assert.match(opened, /type="checkbox"/, 'the consent screen is still the one place the offer is confirmed');
+  assert.deepEqual(f.redirects, [], 'nothing opens Stripe without the tick and Continue');
+  f.render(); active.flush(); await settleTicks();
+  assert.equal(quotes(f), 1, 'opened once, not on every render');
+  tick(f);
+  await button(f, 'Continue to secure payment').props.onClick();
+  assert.deepEqual(f.redirects, ['https://checkout.stripe.com/c/pay/synthetic']);
+});
+
+test('pay first: an unfinished checkout reopens its own offer; the chooser is kept for accounts that are not new', async () => {
+  const f = fixture();
+  Object.assign(f.context.limitedLaunch.access, { checkoutEligible: false, checkoutResumeAvailable: true, checkoutResumeOfferId: 'core_locum' });
+  f.render(); active.flush(); await settleTicks();
+  assert.deepEqual(f.calls, [['quote', 'core_locum']]);
+  const active2 = fixture();
+  active2.context.limitedLaunch.access.accessStatus = 'active';
+  active2.render(); active.flush(); await settleTicks();
+  assert.deepEqual(active2.calls, [], 'an existing account chooses for itself');
+  assert.match(active2.html(), /Review Credential offer/);
+});
+
+test('pay first is only for a new paid signup: not a free beta, lifetime access, a scheduled purchase, invitation activation or a completed Checkout', async () => {
+  const { payFirstMode } = await import('../../src/utils/payFirst.js');
+  const launch = (patch = {}) => ({ enabled: true, publicSignupEnabled: true, ...patch });
+  const access = (patch = {}) => ({ ...snapshot(), ...patch });
+  assert.equal(payFirstMode(launch(), access(), null), true);
+  assert.equal(payFirstMode(launch({ billingReturn: { kind: 'canceled', phase: 'canceled' } }), access(), null), true, 'back from an abandoned Checkout');
+  assert.equal(payFirstMode(launch({ publicSignupEnabled: false }), access(), null), false);
+  assert.equal(payFirstMode(launch(), access({ accessStatus: 'active' }), null), false);
+  assert.equal(payFirstMode(launch(), access({ lifetime: { credential: true, practice: true } }), null), false, 'an admin gift');
+  assert.equal(payFirstMode(launch(), access({ freeBeta: { state: 'active' } }), null), false);
+  assert.equal(payFirstMode(launch(), access({ scheduledMembership: { offerId: 'core' } }), null), false);
+  assert.equal(payFirstMode(launch(), access({ invitationActivationEnabled: true }), 'synthetic_token'), false);
+  assert.equal(payFirstMode(launch(), access(), 'synthetic_token'), true, 'an Invite to join link pays like everyone else');
+  for (const phase of ['confirming', 'delayed']) assert.equal(payFirstMode(launch({ billingReturn: { kind: 'complete', phase } }), access(), null), false);
+});
+
+// Review fix (2026-09-30): a member who paid, whose confirmation is slow and
+// who dismisses the notice, is never asked to pay again.
+test('back from a completed Checkout, dismissing the slow confirmation keeps the page from asking for payment', async () => {
+  const { payFirstMode } = await import('../../src/utils/payFirst.js');
+  const r = returnFixture('?billing=complete', snapshot());
+  r.render();
+  await settle();
+  let value = r.render();
+  assert.equal(value.phase, 'delayed');
+  value.dismiss();
+  value = r.render();
+  assert.equal(value?.kind, 'complete', 'the completed Checkout is still known');
+  assert.equal(value.phase, 'delayed');
+  assert.equal(value.dismissed, true);
+  assert.equal(payFirstMode({ enabled: true, publicSignupEnabled: true, billingReturn: value }, snapshot(), null), false, 'not pay first');
+  // Once it lands, a dismissed notice has nothing more to say.
+  r.launch.access = { ...snapshot(), accessStatus: 'active', purchasedOfferId: 'core' };
+  assert.equal(r.render(), null);
+  // A dismissed canceled return is gone: pay first applies again.
+  const canceled = returnFixture('?billing=canceled', snapshot());
+  canceled.render().dismiss();
+  assert.equal(canceled.render(), null);
+  // The notice goes; the membership card says it is being confirmed and offers a check.
+  const f = fixture();
+  f.context.limitedLaunch.billingReturn = { kind: 'complete', phase: 'delayed', dismissed: true, deferred: null, retry: () => f.calls.push(['retry']), dismiss() {} };
+  active.begin();
+  assert.equal(Notice({}), null);
+  f.render(); active.flush(); await settleTicks();
+  assert.equal(quotes(f), 0, 'no offer review opens by itself');
+  const html = f.html();
+  assert.match(html, /Your checkout is being confirmed\. There is nothing more to choose or pay here\./);
+  assert.doesNotMatch(html, /Complete your payment|Complete payment/);
+  button(f, 'Check again').props.onClick();
+  assert.deepEqual(f.calls.at(-1), ['retry']);
+});
+
+// Review round 2 (2026-09-30): a member who paid, on another device or in a
+// reopened app, before the webhook settles the purchase.
+test('pay first: a paid Checkout still being confirmed is never asked to pay again, from the quote or from Continue', async () => {
+  const pending = () => Object.assign(Error('x'), { code: 'checkout_awaiting_settlement', httpStatus: 409, phase: 'http' });
+  const f = fixture();
+  f.client.quote = async ({ offerId }) => { f.calls.push(['quote', offerId]); throw pending(); };
+  f.render(); active.flush(); await settleTicks();
+  assert.deepEqual(f.calls, [['quote', 'core'], ['refresh']], 'the membership answer is asked for again');
+  let html = f.html();
+  assert.match(html, /Your checkout is being confirmed\. There is nothing more to choose or pay here\./);
+  assert.doesNotMatch(html, /Complete your payment|Complete payment|Continue to secure payment|A second purchase/);
+  assert.equal(f.reports.length, 0, 'not a checkout failure');
+  f.render(); active.flush(); await settleTicks();
+  assert.equal(quotes(f), 1, 'the review does not reopen by itself');
+  await button(f, 'Check again').props.onClick();
+  assert.deepEqual(f.calls.at(-1), ['refresh']);
+  // The quote went through (the subscription appeared a moment later): Continue is refused the same way.
+  const g = fixture();
+  g.client.checkout = async input => { g.calls.push(['checkout', input]); throw pending(); };
+  await reviewCore(g);
+  tick(g);
+  await button(g, 'Continue to secure payment').props.onClick();
+  html = g.html();
+  assert.match(html, /Your checkout is being confirmed\./);
+  assert.doesNotMatch(html, /A second purchase cannot start here|Continue to secure payment/);
+  assert.deepEqual(g.redirects, []);
+});
+
+test('a renewal that failed still shows a refund request on record, with the button that finishes it', async () => {
+  const f = fixture();
+  f.context.limitedLaunch.access = { ...snapshot(), accessStatus: 'active', billingSubscriptionStatus: 'past_due' };
+  f.client.refundStatus = async () => { f.calls.push(['status']); return { schemaVersion: 1, state: 'resume', paymentId: 'in_Latest', amountCents: 14900, currency: 'usd', paidAt: '2026-09-10T15:00:00.000Z', offerId: 'core', subscriptionCanceled: false, supportTicket: false }; };
+  f.html(); active.flush(); await settle();
+  const html = f.html();
+  assert.match(html, /Update payment method/);
+  assert.ok(f.calls.some(c => c[0] === 'status'), 'the record is looked for');
+  assert.match(html, /Your refund request did not finish/);
+  assert.match(html, /Finish refund/);
 });

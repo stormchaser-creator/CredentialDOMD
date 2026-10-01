@@ -11,6 +11,11 @@ import { checklistErrors, isSupportReply, hostItemWork, AGENT_REPLY_MAX, REMAINI
 import { isMain } from './ticket-fix/is-main.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
+// A refund ticket the refund ledger opened by itself (20260930071000,
+// context_payload.source 'limited_refund', which only the ledger may write)
+// is the owner's to finish in Stripe: never queued on the admin rule alone,
+// even on an admin's own account, only once the owner releases it.
+export const REFUND_HELD = "NOT (coalesce(t.context_payload->>'source', '') = 'limited_refund' AND t.agent_approved_at IS NULL)";
 export const AWAITING = `t.status IN ('open', 'in_progress', 'resolved')
   AND (t.agent_last_reply_at IS NULL OR EXISTS (
     SELECT 1 FROM support_messages m WHERE m.ticket_id=t.id
@@ -32,7 +37,7 @@ const FIELDS = `t.id,t.user_id,t.subject,left(t.body,24000) AS body,
 export function queueSQL(includeArchived = false, parked = []) {
   const skip = parked.length ? ` AND t.id NOT IN (${parked.map(p => `'${id(p)}'::uuid`).join(',')})` : '';
   return readOnly(`SELECT t.id,t.updated_at,public.is_admin(t.user_id) AS from_admin FROM support_tickets t
-    WHERE ${APPROVED} AND ${AWAITING}${includeArchived ? '' : ' AND t.archived_at IS NULL'}${skip}
+    WHERE ${APPROVED} AND ${AWAITING} AND ${REFUND_HELD}${includeArchived ? '' : ' AND t.archived_at IS NULL'}${skip}
     ORDER BY t.created_at,t.id LIMIT 2`);
 }
 export const PARK_AFTER = 3;
@@ -67,12 +72,12 @@ export function approvalSQL(approval) {
 export function continuationSQL(record) {
   const approval = approvalSQL(record.approval);
   return readOnly(`SELECT ${FIELDS},(${AWAITING}) AS awaiting_reply FROM support_tickets t WHERE t.id='${id(record.target_id)}'::uuid
-    AND t.user_id='${id(record.owner_id)}'::uuid AND ${APPROVED} AND ${approval}
+    AND t.user_id='${id(record.owner_id)}'::uuid AND ${APPROVED} AND ${approval} AND ${REFUND_HELD}
     AND t.status IN ('open','in_progress') AND t.archived_at IS NULL`);
 }
 export function targetSQL(ticketId, includeArchived = false) {
   return readOnly(`SELECT ${FIELDS} FROM support_tickets t WHERE t.id='${id(ticketId)}'::uuid
-    AND ${APPROVED} AND ${AWAITING}${includeArchived ? '' : ' AND t.archived_at IS NULL'}`);
+    AND ${APPROVED} AND ${AWAITING} AND ${REFUND_HELD}${includeArchived ? '' : ' AND t.archived_at IS NULL'}`);
 }
 export function historySQL(ownerId, cursor = null) {
   const after = cursor ? `AND (t.created_at,t.id)>(${literal(cursor.created_at)}::timestamptz,'${id(cursor.id)}'::uuid)` : '';

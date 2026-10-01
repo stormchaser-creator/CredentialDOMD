@@ -21,6 +21,9 @@ export const MEMBERSHIP_COPY = Object.freeze({
   promisedBeta: view.promisedBeta,
   availability: "Open More > Profile & settings and review your membership offer under Your membership. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed before payment; viewing an offer does not reserve a place. Paid membership requires a card at checkout and your explicit agreement. You keep the same account and saved records.",
   refundGuarantee: view.refundGuarantee,
+  // The terms the offer and the welcome email state (WELCOME_MONEY_BACK),
+  // beside Cancel and get a refund. A test holds the three equal.
+  refundTerms: "100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals.",
   billingOff: "Billing is off; no payment is collected.",
   // After "Contact support about adding Practice", wherever it is offered
   // (Profile & settings, the app-wide notice, the Practice archive).

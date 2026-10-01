@@ -15,6 +15,15 @@ export function supportMessageFromTeam(message) {
   return message.identity_source === "support-operations" && ["automated", "support"].includes(message.actor_kind);
 }
 
+// A ticket the server opened for the member (20260930071000: a refund that
+// needs a person) is filed in the member's name so it shows in their list,
+// but its opening text is CredentialDOMD's, not theirs. Only the refund
+// ledger may write this source (limited_refund_ticket_guard), so the label
+// cannot be claimed by a member's own text.
+export function ticketOpenedBySupport(ticket) {
+  return ticket?.context_payload?.source === "limited_refund";
+}
+
 const idPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const sessionUnavailable = () => new Error("Your sign-in changed. Reopen Support and try again.");
 

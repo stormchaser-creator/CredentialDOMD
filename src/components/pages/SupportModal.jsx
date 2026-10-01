@@ -9,7 +9,7 @@ import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../u
 import { scrubSsn } from "../../utils/outgoingText.js";
 import TicketAttachments from "../shared/TicketAttachments";
 import { createSupportTextDrafts, supportReceiptConfirmed, supportRequestHash, supportSubmissionError } from "../../utils/supportTextDrafts";
-import { SUPPORT_OPERATIONS_ENABLED, createSupportOperationsClient, supportActorLabel, supportMessageFromTeam } from "../../utils/supportOperationsClient";
+import { SUPPORT_OPERATIONS_ENABLED, createSupportOperationsClient, supportActorLabel, supportMessageFromTeam, ticketOpenedBySupport } from "../../utils/supportOperationsClient";
 
 const CATEGORIES = [
   { id: "bug",             label: "Bug / something broken" },
@@ -314,7 +314,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
       if (SUPPORT_OPERATIONS_ENABLED) {
         const result = await operations.read(t.id);
         if (!current()) return;
-        setOpenTicket(result.ticket); setThread(result.messages); setBeforeMessageId(result.before_message_id);
+        setOpenTicket({ context_payload: t.context_payload, ...result.ticket }); setThread(result.messages); setBeforeMessageId(result.before_message_id);
         setReply(operations.replyDraft(t.id)?.body || "");
         await loadAttachmentUrls(result.ticket, result.messages, current);
       } else {
@@ -384,7 +384,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
         if (SUPPORT_OPERATIONS_ENABLED) {
           const result = await operations.read(openTicket.id);
           if (!current()) return;
-          setOpenTicket(result.ticket); setThread(result.messages); setBeforeMessageId(result.before_message_id);
+          setOpenTicket({ context_payload: openTicket.context_payload, ...result.ticket }); setThread(result.messages); setBeforeMessageId(result.before_message_id);
           await loadAttachmentUrls(result.ticket, result.messages, current);
         } else {
           const { data, error } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
@@ -750,15 +750,17 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
       {threadLoading && <div style={{ fontSize: 13, color: T.textMuted }}>Loading...</div>}
       {beforeMessageId && <button onClick={loadEarlier} disabled={earlierLoading} style={{ padding: "8px 0", background: "none", border: "none", color: T.accent, cursor: "pointer" }}>{earlierLoading ? "Loading earlier replies..." : "Show earlier replies"}</button>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {openTicket.body && (
-          <div style={{ padding: "9px 11px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
-              You {"·"} {new Date(openTicket.created_at).toLocaleString()}
+        {openTicket.body && (() => {
+          // A ticket the server opened for the member reads as Support's, styled as a team reply.
+          const fromTeam = ticketOpenedBySupport(openTicket);
+          return <div style={{ padding: "9px 11px", borderRadius: 10, backgroundColor: fromTeam ? (T.accentDim || "rgba(59,130,246,0.12)") : T.input, border: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: fromTeam ? T.accent : T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
+              {fromTeam ? "CredentialDOMD Support" : "You"} {"·"} {new Date(openTicket.created_at).toLocaleString()}
             </div>
             <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{openTicket.body}</div>
             <TicketAttachments urls={attachmentUrls} size={160} />
-          </div>
-        )}
+          </div>;
+        })()}
         {thread.map(m => <SupportMessage key={m.id} message={m} theme={T} ownProfileId={ownProfileId} urls={replyUrls[m.id]} />)}
         {!threadLoading && thread.length === 0 && (
           <div style={{ fontSize: 12.5, color: T.textMuted, padding: "6px 0" }}>

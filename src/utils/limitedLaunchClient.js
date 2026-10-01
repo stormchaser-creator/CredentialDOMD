@@ -16,6 +16,16 @@ const SAFE_ERROR_CODES = new Set([
   "checkout_needs_reconciliation", "invalid_request", "request_too_large",
   // The billing portal for an account that never had a subscription (404).
   "billing_account_not_found",
+  // Cancel and get a refund (limited-refund).
+  "no_paid_membership", "no_refundable_payment", "refund_not_available", "refund_needs_support", "refund_in_progress",
+  "refund_pending", "refund_quote_changed", "refund_confirmation_required", "subscription_owner_mismatch", "refund_unavailable",
+  // limited-checkout while a cancelled membership's refund is unfinished.
+  "refund_unfinished",
+  // limited-refund: the payment was refunded in full already (the dashboard).
+  "payment_already_refunded",
+  // billing-quote and limited-checkout: a pending account's paid Checkout is
+  // waiting for its settlement (another device, or the app reopened).
+  "checkout_awaiting_settlement",
 ]);
 // Where a request stopped, for the failure report (ticket fe321c16). Never
 // a server message, token or address: only one of these words.
@@ -96,6 +106,24 @@ function validatePortal(value) {
   if (url.protocol !== "https:" || url.hostname !== "billing.stripe.com" || url.port
     || url.username || url.password || url.pathname === "/") throw unavailable();
   return { url: url.href };
+}
+
+// limited-refund's answer: what would be refunded, or what was.
+const REFUND_AMOUNTS = new Set([9900, 14900, 19900, 24500]);
+const REFUND_STATES = { status: ["resume", "refunded", "needs_support"], quote: ["available", "resume", "refunded", "needs_support"], refund: ["refunded", "needs_support", "resume"] };
+function validateRefund(value, step) {
+  if (step === "status" && object(value) && value.schemaVersion === 1 && value.state === "none" && Object.keys(value).length === 2) return { schemaVersion: 1, state: "none" };
+  if (!object(value) || value.schemaVersion !== 1 || !REFUND_STATES[step].includes(value.state)
+    || typeof value.paymentId !== "string" || !/^in_[A-Za-z0-9]{1,250}$/.test(value.paymentId)
+    || !REFUND_AMOUNTS.has(value.amountCents) || value.currency !== "usd" || !date(value.paidAt)
+    || !["core", "core_locum"].includes(value.offerId) || typeof value.subscriptionCanceled !== "boolean"
+    || (value.periodEnd != null && !date(value.periodEnd))
+    || (value.refundedAt != null && !date(value.refundedAt))
+    || (value.refundStatus != null && !["pending", "succeeded", "requires_action", "failed", "canceled"].includes(value.refundStatus))
+    || (value.supportTicket != null && typeof value.supportTicket !== "boolean")
+    || (value.reviewOnly != null && typeof value.reviewOnly !== "boolean")
+    || (value.state === "refunded" && !date(value.refundedAt))) throw unavailable();
+  return structuredClone(value);
 }
 
 function validateActivation(value) {
@@ -230,6 +258,15 @@ export function createLimitedLaunchClient({
       if (!fields(input, ["quoteId", "consentHash", "consent"]) || !uuid(input.quoteId)
         || !hash(input.consentHash) || input.consent !== true) throw unavailable("quote_consent_required");
       return validateCheckout(await request("limited-checkout", { quoteId: input.quoteId, consentHash: input.consentHash, consent: true }));
+    },
+    // Cancel and get a refund: first what would be refunded (nothing changes),
+    // then the refund of exactly that payment, confirmed.
+    async refundStatus() { return validateRefund(await request("limited-refund", { action: "status" }), "status"); },
+    async refundQuote() { return validateRefund(await request("limited-refund", { action: "quote" }), "quote"); },
+    async refund(input) {
+      if (!fields(input, ["paymentId", "amountCents", "confirm"]) || typeof input.paymentId !== "string" || !/^in_[A-Za-z0-9]{1,250}$/.test(input.paymentId)
+        || !REFUND_AMOUNTS.has(input.amountCents) || input.confirm !== true) throw unavailable("refund_confirmation_required");
+      return validateRefund(await request("limited-refund", { action: "refund", paymentId: input.paymentId, amountCents: input.amountCents, confirm: true }), "refund");
     },
     async activateInvitation(input) {
       if (!fields(input, ["invitationToken"]) || !isLaunchInvitationToken(input.invitationToken)) throw unavailable("invalid_request");

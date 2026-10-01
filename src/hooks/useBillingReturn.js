@@ -41,10 +41,17 @@ export function useBillingReturn(limitedLaunch, accountId, { win = globalThis.wi
     next();
     return () => { stopped = true; clearTimeout(timer); };
   }, [state, landed, ready, refresh, delays]);
-  if (!state || state.dismissed) return null;
+  if (!state) return null;
+  const phase = landed ? "confirmed" : state.phase;
+  // Dismissing hides the notice. A completed Checkout still waiting to show
+  // stays known (dismissed: true), so the page never asks a member who has
+  // just paid to pay again (payFirstMode) and keeps saying it is being
+  // confirmed; anything else dismissed has nothing more to say.
+  if (state.dismissed && !(state.kind === "complete" && phase !== "confirmed")) return null;
   return {
     kind: state.kind,
-    phase: landed ? "confirmed" : state.phase,
+    phase,
+    dismissed: state.dismissed,
     // A beta holder's opt-in is charged at the beta's end, not at Checkout.
     // Unknown (null) until there is a fresh answer: a page loaded back from
     // Stripe has none yet, and a device's remembered one can be out of date.

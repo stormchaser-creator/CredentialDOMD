@@ -11,7 +11,7 @@ import { actionButtonStyle, inlineLinkTap } from "./actionButton.js";
 export default function BillingReturnNotice({ onReviewOffers }) {
   const { limitedLaunch, theme: T, isDesktop } = useApp();
   const notice = limitedLaunch?.billingReturn;
-  if (!limitedLaunch?.enabled || !notice) return null;
+  if (!limitedLaunch?.enabled || !notice || notice.dismissed) return null;
   // "Payment received" only when the answer says the buyer was charged now.
   const copy = notice.phase === "confirming"
     ? (notice.deferred === true ? BILLING_RETURN_COPY.confirmingDeferred : notice.deferred === false ? BILLING_RETURN_COPY.confirming : BILLING_RETURN_COPY.confirmingUnknown)

@@ -8,6 +8,36 @@ import { expiredFoundingCheckoutProof } from './foundingCheckout.mjs';
 const id = value => typeof value === 'string' ? value : value?.id;
 class Refusal extends Error { constructor(status, code) { super(code); this.status = status; } }
 const refuse = (status, code) => { throw new Refusal(status, code); };
+// refund_needs_support with the fixed reason a request records when it has
+// one (a person settles the payment first: a dispute, a partial refund).
+const needsPerson = reason => { const e = new Refusal(409, 'refund_needs_support'); e.reason = reason; throw e; };
+// A refund Stripe accepted: settled, on its way, or waiting on the bank.
+const REFUND_ACCEPTED = Object.freeze(['pending', 'succeeded', 'requires_action']);
+// Every status a refund can report later; failed and canceled send the money back.
+const REFUND_STATUSES = Object.freeze([...REFUND_ACCEPTED, 'failed', 'canceled']);
+// A subscription's latest invoice that is no payment (yet): the renewal Stripe
+// drafts when a new period begins, one it is still collecting (past_due), or
+// one that was given up on. The most recent annual payment is then the last
+// paid invoice.
+const UNPAID_INVOICE = Object.freeze(['draft', 'open', 'uncollectible', 'void']);
+// needs_support stops where a refund may not be owed as asked, or may not be
+// possible: a person looks first and nothing is promised. The same list as
+// the ticket's neutral text (limited_refund_support_ticket, 20260930071000).
+export const REFUND_REVIEW_ONLY = Object.freeze(['charge_disputed', 'charge_mismatch', 'charge_partly_refunded', 'refunded_payment_not_latest',
+  'refund_payment_changed', 'subscription_mismatch', 'charge_missing']);
+// The refund sweep (pg_cron limited-refund-sweep, 20260930072000): requests
+// idle this long are finished in the background; a request goes to a person
+// instead only once it has had this many attempts in all (presses and
+// sweeps) AND was asked for this long ago, so taps during a short outage
+// never cut the background retries short.
+const SWEEP_IDLE_SECONDS = 600, SWEEP_LIMIT = 10, SWEEP_FINAL_ATTEMPTS = 12, SWEEP_FINAL_AGE_MS = 2 * 60 * 60 * 1000, SWEEP_BUDGET_MS = 45000;
+// The hook secret pg_net callers present (x-hook-secret), compared in constant time.
+function sameSecret(presented, expected) {
+  if (typeof presented !== 'string' || typeof expected !== 'string' || !expected) return false;
+  let diff = presented.length ^ expected.length;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ (presented.charCodeAt(i) || 0);
+  return diff === 0;
+}
 const sha256 = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(x => x.toString(16).padStart(2, '0')).join('');
 
 // What a failure log may carry: fixed words and numbers, never a message
@@ -109,6 +139,25 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (data.offerId === 'core' && ['reserved', 'disabled', 'unavailable'].includes(eligibility.founding_state)) refuse(409, 'founding_capacity_pending');
     // While this buyer's offer is founding, $99 Credential already includes Practice.
     if (data.offerId === 'core_locum' && eligibility.bundle_available === false) refuse(409, 'bundle_unavailable');
+    // Pay first: an account still pending whose Checkout already made its
+    // subscription is waiting for limited-stripe-webhook to settle it, not for
+    // a second payment (another device, or the app reopened without the
+    // Checkout return). limited-checkout would refuse the purchase anyway; the
+    // member is told the payment is being confirmed instead of being asked to
+    // pay. A provider read that fails leaves the quote as it was: checkout
+    // checks again.
+    if (profile.access_status === 'pending') {
+      trace.phase = 'stripe_subscriptions';
+      let settling = false;
+      try {
+        const account = await deps.store.account(profile.id, live);
+        if (account?.profile_id === profile.id && /^cus_[A-Za-z0-9]+$/.test(account.stripe_customer_id || '')) {
+          const listed = await deps.stripe().subscriptions.list({ customer: account.stripe_customer_id, status: 'all', limit: 100 });
+          settling = Array.isArray(listed?.data) && listed.data.some(s => id(s.customer) === account.stripe_customer_id && !['canceled', 'incomplete_expired', 'incomplete'].includes(s.status));
+        }
+      } catch { /* Unknown: the quote goes ahead, and limited-checkout decides. */ }
+      if (settling) refuse(409, 'checkout_awaiting_settlement');
+    }
     trace.phase = 'preview';
     const preview = await deps.store.createPreview(profile.id, profile.auth_user_id, live, data.offerId);
     const offer = limitedOffer(preview.offer_id, preview.price_phase, config.productIds);
@@ -171,6 +220,11 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const data = await input(req, 'checkout');
     const { profile, eligibility } = await purchaser(req, data, live, trace);
     if (eligibility.checkout_enabled !== true) refuse(503, 'billing_disabled');
+    // A cancelled membership whose refund has not finished is finished first
+    // (Cancel and get a refund): a new subscription would take its place in
+    // Profile, which follows the current subscription, and hide it.
+    trace.phase = 'refund';
+    if (await deps.store.unfinishedRefund(profile.id, live)) refuse(409, 'refund_unfinished');
     trace.phase = 'preview';
     const preview = await deps.store.previewById(data.quoteId);
     if (!preview || preview.profile_id !== profile.id || preview.clerk_subject !== profile.auth_user_id || preview.livemode !== live || preview.policy_version !== config.policyVersion || preview.consent_hash !== data.consentHash || !Number.isFinite(Date.parse(preview.expires_at)) || Date.parse(preview.expires_at) <= (deps.now?.() ?? Date.now())) refuse(409, 'quote_expired');
@@ -195,7 +249,9 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const unfinished = existing.data.filter(s => !['canceled', 'incomplete_expired'].includes(s.status));
     // The pinned pre-Basil Checkout API can create an incomplete subscription
     // after a card failure. Resume only its already-saved, owned open session.
-    if (unfinished.length > 1 || unfinished.some(s => s.status !== 'incomplete')) refuse(409, 'subscription_already_exists');
+    // A pending account with one is a paid Checkout whose settlement has not
+    // arrived yet (quote says the same): not a second purchase.
+    if (unfinished.length > 1 || unfinished.some(s => s.status !== 'incomplete')) refuse(409, profile.access_status === 'pending' ? 'checkout_awaiting_settlement' : 'subscription_already_exists');
     trace.phase = 'claim';
     let claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
     // The other offer, or a retry after a first attempt that never reached a
@@ -277,6 +333,63 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     await deps.store.saveCheckout(profile.id, live, claim.attempt_id, claim.token, session.id);
     return reply(200, { url: session.url });
   }, 'checkout');
+  // One subscription settled from a fresh provider read under the account's
+  // reconciliation lease: the path every subscription change takes, a
+  // verified Stripe event and a refund's cancellation alike, so the app
+  // state after a refund is the state a deleted-subscription event leaves.
+  // `first` is the provider read that identified the account; the second
+  // read under the lease is the one settled. Returns { state: 'duplicate' }
+  // for an event already applied, else { state: 'settled', welcome } where
+  // welcome is the subscription whose first paid period this settled.
+  async function settleSubscription(stripe, live, first, event, trace) {
+    const subId = first.id;
+    if (first.metadata?.catalog_version !== config.version) refuse(409, 'subscription_catalog_mismatch');
+    const account = await deps.store.accountByCustomer(id(first.customer), live);
+    if (!account || account.profile_id !== first.metadata.profile_id) refuse(409, 'subscription_owner_mismatch');
+    trace.phase = 'reconcile';
+    const lease = await deps.store.claimReconcile(account.profile_id, live, account.stripe_customer_id, event.id);
+    if (lease.state === 'duplicate') return { state: 'duplicate' };
+    if (lease.state !== 'claimed') refuse(503, 'billing_reconciliation_pending');
+    let welcome = null;
+    try {
+      trace.phase = 'verify_subscription';
+      const sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });
+      const profile = await deps.store.profile(account.profile_id);
+      const q = await deps.store.quoteByAttempt(sub.metadata?.checkout_attempt_id);
+      if (!profile || !q || q.profile_id !== profile.id || q.clerk_subject !== profile.auth_user_id || q.livemode !== live || q.offer_id !== sub.metadata.offer_id || q.price_phase !== sub.metadata.price_phase || q.policy_version !== config.policyVersion || sub.metadata.pricing_policy_version !== config.policyVersion || sub.metadata.clerk_user_id !== profile.auth_user_id || sub.metadata.profile_id !== profile.id || id(sub.customer) !== account.stripe_customer_id || sub.livemode !== live || sub.metadata.catalog_version !== config.version || sub.items?.data?.length !== 1 || sub.items.data[0].quantity !== 1 || sub.items.data[0].price.id !== q.price_id) refuse(409, 'subscription_owner_mismatch');
+      const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id });
+      assertLimitedPrice(sub.items.data[0].price, offer, live, { allowInactive: true, pinnedPriceId: q.price_id });
+      const billingAnchor = assertDeferredSubscription(sub, q);
+      const end = sub.current_period_end ?? sub.items.data[0].current_period_end;
+      if (!Number.isSafeInteger(end) || end <= 0 || !/^evt_[A-Za-z0-9]+$/.test(event.id || '') || !Number.isSafeInteger(event.created)) refuse(503, 'invalid_subscription_state');
+      let proof = null;
+      if (sub.status === 'active' && id(sub.latest_invoice)) {
+        const invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
+        // A deferred purchase's $0 opening invoice is paid but is no payment:
+        // it settles as the scheduled membership, with no paid proof.
+        if (invoice.status === 'paid' && invoice.paid === true && !deferredOpeningInvoice({ account, subscription: sub, invoice, billingAnchor, livemode: live })) proof = verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote: q, livemode: live });
+      }
+      trace.phase = 'settle';
+      await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token, p_cancel_at_period_end: sub.cancel_at_period_end === true, p_billing_anchor: billingAnchor }, q.attempt_id, proof);
+      // Settled with the verified payment for the first paid period: the
+      // purchase's welcome email may follow. A renewal, or a first payment
+      // only observed at renewal, never asks.
+      if (proof?.initial === true) welcome = sub.id;
+    } finally { await deps.store.releaseReconcile(account.profile_id, live, lease.token); }
+    return { state: 'settled', welcome };
+  }
+  // The refund of a charge Stripe holds, read fresh: the charge refunded in
+  // full and the refund that did it (the newest one not failed or canceled).
+  // Null while the charge is not refunded in full.
+  async function providerRefund(stripe, chargeId, live) {
+    const charge = await stripe.charges.retrieve(chargeId);
+    if (charge?.id !== chargeId || charge.livemode !== live) refuse(503, 'refund_unavailable');
+    if (!Number.isSafeInteger(charge.amount) || charge.amount <= 0 || charge.amount_refunded !== charge.amount) return null;
+    const refunds = await stripe.refunds.list({ charge: chargeId, limit: 100 });
+    if (!Array.isArray(refunds?.data)) refuse(503, 'refund_unavailable');
+    const refund = refunds.data.filter(r => id(r.charge) === chargeId && /^re_[A-Za-z0-9]+$/.test(r.id || '') && REFUND_ACCEPTED.includes(r.status)).sort((a, b) => (b.created || 0) - (a.created || 0))[0];
+    return refund ? { charge, refund } : null;
+  }
   const webhook = route(async (req, trace) => {
     trace.phase = 'config';
     const live = mode();
@@ -305,48 +418,85 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       await deps.store.releaseFoundingCheckout(q.profile_id, q.clerk_subject, live, q.attempt_id, proof);
       return reply(200, { received: true });
     }
+    if (event.type === 'charge.refunded') {
+      // A refund of a payment the app recorded a refund request for (a press
+      // whose answer was lost, or support finishing it in the dashboard). The
+      // event only names the charge; its refunds are read fresh.
+      const eventCharge = event.data?.object;
+      if (!/^(ch|py)_[A-Za-z0-9]+$/.test(eventCharge?.id || '')) refuse(400, 'invalid_charge_event');
+      trace.phase = 'refunded_charge';
+      const stripe = deps.stripe();
+      const found = await providerRefund(stripe, eventCharge.id, live);
+      if (!found) return reply(200, { received: true });
+      trace.phase = 'record_refund';
+      let confirmed = await deps.store.confirmRefund(eventCharge.id, live, found.refund.id, found.refund.status, found.charge.amount_refunded);
+      if (confirmed === 'not_found') {
+        // Support refunding a renewal a request not cancelled yet could not
+        // follow: the request moves to it, and is finished below.
+        trace.phase = 'refund_adopt';
+        const adopted = await adoptRenewalRefund(stripe, live, found, trace);
+        if (adopted === 'busy') refuse(503, 'refund_in_progress');
+        if (adopted === 'adopted') confirmed = await deps.store.confirmRefund(eventCharge.id, live, found.refund.id, found.refund.status, found.charge.amount_refunded);
+      }
+      if (confirmed === 'not_found') {
+        // A full refund with no request here (support refunded it in the
+        // dashboard, not through Cancel and get a refund). A refund alone
+        // cancels nothing, but a membership of this app that still renews
+        // after its payment was refunded is flagged for the owner.
+        trace.phase = 'refund_without_request';
+        try {
+          const invoice = id(found.charge.invoice) ? await stripe.invoices.retrieve(id(found.charge.invoice)) : null;
+          const subId = id(invoice?.subscription) || id(invoice?.parent?.subscription_details?.subscription);
+          const sub = subId ? await stripe.subscriptions.retrieve(subId) : null;
+          if (sub?.metadata?.app === config.app && sub.status !== 'canceled' && sub.cancel_at_period_end !== true) log({ ...failureLog('webhook', trace, 200, 'refunded_membership_renews'), event: 'refund_without_request' });
+        } catch { /* A flag must never change the answer. */ }
+        return reply(200, { received: true });
+      }
+      if (confirmed === 'cancel_required') {
+        // The member confirmed the cancellation and the refund together, and
+        // the refund was made before the cancellation happened (support
+        // finishing a request that stopped at its first step). It is finished
+        // here as a press would finish it, under the request's lease, so a
+        // refunded membership never keeps running or renews. A busy lease is
+        // a press at work: Stripe delivers the event again.
+        trace.phase = 'refund_claim';
+        const lease = await deps.store.leaseRefund(eventCharge.id, live);
+        if (lease?.state === 'busy') refuse(503, 'refund_in_progress');
+        if (lease?.state === 'claimed' && lease.token && lease.request?.id) await complete(stripe, live, lease.request, lease.token, trace, { route: 'webhook', known: found.refund });
+      }
+      return reply(200, { received: true });
+    }
+    if (['charge.refund.updated', 'refund.updated', 'refund.failed'].includes(event.type)) {
+      // A refund's later status: settled, or failed after Stripe accepted it
+      // (a closed card, say; the money goes back to the Stripe balance). A
+      // failure moves the refunded request to needs_support, so the member
+      // reads that it did not go through and support is told. The event only
+      // names the refund; it is read fresh.
+      const eventRefund = event.data?.object;
+      if (!/^re_[A-Za-z0-9]+$/.test(eventRefund?.id || '')) refuse(400, 'invalid_refund_event');
+      trace.phase = 'refund_status';
+      const fresh = await deps.stripe().refunds.retrieve(eventRefund.id);
+      const chargeId = id(fresh?.charge);
+      if (fresh?.id !== eventRefund.id || !/^(ch|py)_[A-Za-z0-9]+$/.test(chargeId || '')) refuse(503, 'refund_unavailable');
+      if (!REFUND_STATUSES.includes(fresh.status)) return reply(200, { received: true });
+      const reason = typeof fresh.failure_reason === 'string' && ERROR_CODE.test(fresh.failure_reason) ? fresh.failure_reason : null;
+      trace.phase = 'record_refund';
+      const updated = await deps.store.updateRefund(chargeId, live, fresh.id, fresh.status, ['failed', 'canceled'].includes(fresh.status) ? reason : null);
+      if (updated === 'needs_support') try { log({ ...failureLog('webhook', trace, 200, `refund_${fresh.status}`), event: 'refund_needs_support' }); } catch { /* A log must never change the answer. */ }
+      return reply(200, { received: true });
+    }
     if (!['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed'].includes(event.type)) return reply(200, { received: true });
     const obj = event.data.object;
     const subId = event.type.startsWith('customer.subscription.') ? obj.id : id(obj.subscription) || id(obj.parent?.subscription_details?.subscription);
     if (!subId || (event.type.startsWith('checkout.') && obj.mode !== 'subscription')) return reply(200, { received: true });
     trace.phase = 'subscription';
     const stripe = deps.stripe();
-    let sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });
+    const sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });
     if (sub.metadata?.app !== config.app) return reply(200, { received: true });
     if (sub.metadata.catalog_version === BILLING_CATALOG.version) return createBillingHandlers(deps, { ...BILLING_CATALOG, billingEnabled: true }).webhook(new Request(req.url, { method: 'POST', headers: req.headers, body: raw }));
-    if (sub.metadata.catalog_version !== config.version) refuse(409, 'subscription_catalog_mismatch');
-    const account = await deps.store.accountByCustomer(id(sub.customer), live);
-    if (!account || account.profile_id !== sub.metadata.profile_id) refuse(409, 'subscription_owner_mismatch');
-    trace.phase = 'reconcile';
-    const lease = await deps.store.claimReconcile(account.profile_id, live, account.stripe_customer_id, event.id);
-    if (lease.state === 'duplicate') return reply(200, { received: true });
-    if (lease.state !== 'claimed') refuse(503, 'billing_reconciliation_pending');
-    let welcomeSubscription = null;
-    try {
-      trace.phase = 'verify_subscription';
-      sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });
-      const profile = await deps.store.profile(account.profile_id);
-      const q = await deps.store.quoteByAttempt(sub.metadata?.checkout_attempt_id);
-      if (!profile || !q || q.profile_id !== profile.id || q.clerk_subject !== profile.auth_user_id || q.livemode !== live || q.offer_id !== sub.metadata.offer_id || q.price_phase !== sub.metadata.price_phase || q.policy_version !== config.policyVersion || sub.metadata.pricing_policy_version !== config.policyVersion || sub.metadata.clerk_user_id !== profile.auth_user_id || sub.metadata.profile_id !== profile.id || id(sub.customer) !== account.stripe_customer_id || sub.livemode !== live || sub.metadata.catalog_version !== config.version || sub.items?.data?.length !== 1 || sub.items.data[0].quantity !== 1 || sub.items.data[0].price.id !== q.price_id) refuse(409, 'subscription_owner_mismatch');
-      const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id });
-      assertLimitedPrice(sub.items.data[0].price, offer, live, { allowInactive: true, pinnedPriceId: q.price_id });
-      const billingAnchor = assertDeferredSubscription(sub, q);
-      const end = sub.current_period_end ?? sub.items.data[0].current_period_end;
-      if (!Number.isSafeInteger(end) || end <= 0 || !/^evt_[A-Za-z0-9]+$/.test(event.id || '') || !Number.isSafeInteger(event.created)) refuse(503, 'invalid_subscription_state');
-      let proof = null;
-      if (sub.status === 'active' && id(sub.latest_invoice)) {
-        const invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
-        // A deferred purchase's $0 opening invoice is paid but is no payment:
-        // it settles as the scheduled membership, with no paid proof.
-        if (invoice.status === 'paid' && invoice.paid === true && !deferredOpeningInvoice({ account, subscription: sub, invoice, billingAnchor, livemode: live })) proof = verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote: q, livemode: live });
-      }
-      trace.phase = 'settle';
-      await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token, p_cancel_at_period_end: sub.cancel_at_period_end === true, p_billing_anchor: billingAnchor }, q.attempt_id, proof);
-      // Settled with the verified payment for the first paid period: the
-      // purchase's welcome email may follow. A renewal, or a first payment
-      // only observed at renewal, never asks.
-      if (proof?.initial === true) welcomeSubscription = sub.id;
-    } finally { await deps.store.releaseReconcile(account.profile_id, live, lease.token); }
+    const settled = await settleSubscription(stripe, live, sub, event, trace);
+    if (settled.state === 'duplicate') return reply(200, { received: true });
+    const welcomeSubscription = settled.welcome;
     // After the lease is released, so a slow mailbox never holds up the next
     // event for this account. The database decides whether it is sent
     // (welcomeEmailSender.mjs): off until the owner approves the exact email,
@@ -366,5 +516,423 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     trace.phase = 'portal';
     return createBillingHandlers(deps, { ...BILLING_CATALOG, billingEnabled: true }).portal(req);
   }, 'portal');
-  return { activate, quote, checkout, webhook, portal };
+  // Cancel and get a refund (owner request 2026-09-30), under the terms every
+  // offer states: "100% no-hassle money-back guarantee on your most recent
+  // annual membership payment, including renewals." One route:
+  //   { action: 'status' } answers the recorded outcome, or state 'none',
+  //     from the ledger alone (no provider call): what Profile shows a
+  //     member whose refund is done, or unfinished.
+  //   { action: 'quote' } answers what would be refunded (the latest paid
+  //     invoice of the live subscription, read fresh from Stripe and checked
+  //     against the verified purchase), or the recorded outcome.
+  //   { action: 'refund', paymentId, amountCents, confirm: true } does it,
+  //     for exactly the payment the member was shown: cancels the
+  //     subscription now with no proration credit, ends access through
+  //     settleSubscription (the webhook's own path), and refunds that charge
+  //     in full. Every step is recorded in limited_refund_requests
+  //     (20260930070000), one row per payment; pressing again finishes an
+  //     interrupted request or shows the recorded outcome, and never
+  //     refunds twice.
+  // A member's unfinished request comes first, whatever subscription it was
+  // for, and a new purchase waits for it (limited-checkout).
+  // Lifetime access, gifts, a free beta or a scheduled purchase with no
+  // payment yet have nothing to refund here.
+  async function refundInput(req) {
+    let data; try { data = JSON.parse(await text(req, 4096)); } catch (e) { if (e instanceof Refusal) throw e; refuse(400, 'invalid_request'); }
+    if (!data || Array.isArray(data) || typeof data !== 'object') refuse(400, 'invalid_request');
+    if (['quote', 'status'].includes(data.action) && Object.keys(data).length === 1) return data;
+    if (data.action !== 'refund' || Object.keys(data).some(k => !['action', 'paymentId', 'amountCents', 'confirm'].includes(k))) refuse(400, 'invalid_request');
+    if (data.confirm !== true || !/^in_[A-Za-z0-9]+$/.test(data.paymentId || '') || !Number.isSafeInteger(data.amountCents) || data.amountCents <= 0) refuse(400, 'refund_confirmation_required');
+    return data;
+  }
+  const iso = value => value == null ? null : new Date(value).toISOString();
+  // What the member reads about a recorded request. No ids but the invoice.
+  // subscriptionCanceled is the record's own: a request is never refunded on
+  // record before its cancellation is.
+  // supportTicket: the request needed a person and a ticket was opened for
+  // the member in Get help (20260930071000); false where it never needed one,
+  // or before that migration.
+  // reviewOnly: needs_support for a reason where a person looks before
+  // anything is promised (REFUND_REVIEW_ONLY), as the ticket says.
+  const outcome = r => ({ schemaVersion: 1, state: r.state === 'requested' ? 'resume' : r.state, paymentId: r.invoice_id, amountCents: r.amount_cents, currency: 'usd',
+    paidAt: iso(r.paid_at), offerId: r.offer_id, subscriptionCanceled: r.subscription_canceled_at != null,
+    refundStatus: r.refund_status ?? null, refundedAt: iso(r.refunded_at), supportTicket: typeof r.support_ticket_id === 'string',
+    reviewOnly: r.state === 'needs_support' && REFUND_REVIEW_ONLY.includes(r.error_code) });
+  const recordedPayment = (r, periodEnd) => ({ subscriptionId: r.subscription_id, invoiceId: r.invoice_id, chargeId: r.charge_id, customerId: r.customer_id,
+    offerId: r.offer_id, pricePhase: r.price_phase, amountCents: r.amount_cents, paidAt: iso(r.paid_at), periodEnd });
+  // The subscription's last paid invoice, newest first, or null: read when
+  // its latest invoice is no payment yet (UNPAID_INVOICE).
+  async function lastPaidInvoiceId(stripe, sub) {
+    const listed = await stripe.invoices.list({ subscription: sub.id, status: 'paid', limit: 1 });
+    if (!Array.isArray(listed?.data)) refuse(503, 'refund_unavailable');
+    const found = listed.data[0];
+    if (!found) return null;
+    const invoiceSub = id(found.subscription) || id(found.parent?.subscription_details?.subscription);
+    if (found.status !== 'paid' || invoiceSub !== sub.id || !/^in_[A-Za-z0-9]+$/.test(found.id || '')) refuse(503, 'refund_unavailable');
+    return found.id;
+  }
+  // The invoice of the most recent annual payment of a subscription: its
+  // latest invoice when that is paid, else its last paid one (a renewal
+  // drafted, or still being collected, is not paid yet).
+  async function mostRecentPaidInvoiceId(stripe, sub) {
+    const latest = id(sub.latest_invoice);
+    if (!latest) return null;
+    const invoice = await stripe.invoices.retrieve(latest);
+    if (invoice?.id !== latest) refuse(503, 'refund_unavailable');
+    if (invoice.status === 'paid') return latest;
+    if (!UNPAID_INVOICE.includes(invoice.status)) refuse(503, 'refund_unavailable');
+    return lastPaidInvoiceId(stripe, sub);
+  }
+  // The latest annual payment of the member's live subscription, verified
+  // exactly as settlement verifies a payment, and its charge. `orNone`: null
+  // (not a refusal) when the subscription is no longer active.
+  // While the renewal Stripe drafts when a new period begins is unpaid, the
+  // most recent annual payment is still the one before it: that invoice is
+  // verified for the year it paid for, and no period end is quoted (the
+  // period running now is not paid).
+  async function latestPayment(stripe, profile, account, row, live, trace, { orNone = false } = {}) {
+    trace.phase = 'verify_payment';
+    const sub = await stripe.subscriptions.retrieve(row.subscription_id, { expand: ['items.data.price.product'] });
+    if (sub?.id !== row.subscription_id || sub.metadata?.app !== config.app || sub.metadata.catalog_version !== config.version) needsPerson('subscription_mismatch');
+    if (id(sub.customer) !== account.stripe_customer_id || sub.livemode !== live || sub.metadata.profile_id !== profile.id || sub.metadata.clerk_user_id !== profile.auth_user_id) refuse(409, 'subscription_owner_mismatch');
+    if (orNone && sub.status !== 'active') return null;
+    // Canceled, past due, unpaid, incomplete: no paid year is running to refund.
+    if (sub.status !== 'active' || !id(sub.latest_invoice)) refuse(409, 'no_refundable_payment');
+    const q = await deps.store.quoteByAttempt(sub.metadata.checkout_attempt_id);
+    if (!q || q.profile_id !== profile.id || q.clerk_subject !== profile.auth_user_id || q.livemode !== live || q.offer_id !== sub.metadata.offer_id || q.price_phase !== sub.metadata.price_phase) refuse(409, 'subscription_owner_mismatch');
+    const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id });
+    let invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
+    let paidFor = sub, earlier = false;
+    if (invoice?.id === id(sub.latest_invoice) && UNPAID_INVOICE.includes(invoice.status)) {
+      const paidId = await lastPaidInvoiceId(stripe, sub);
+      if (!paidId) refuse(409, 'no_refundable_payment');
+      invoice = await stripe.invoices.retrieve(paidId, { expand: ['lines.data.price'] });
+      const period = invoice?.lines?.data?.[0]?.period;
+      paidFor = { ...sub, current_period_start: period?.start, current_period_end: period?.end };
+      earlier = true;
+    }
+    let proof;
+    try {
+      // A scheduled purchase's $0 opening invoice is no payment.
+      if (deferredOpeningInvoice({ account, subscription: paidFor, invoice, billingAnchor: assertDeferredSubscription(paidFor, q), livemode: live })) throw Error('No payment yet');
+      proof = verifiedLimitedPayment({ profile, account, subscription: paidFor, invoice, offer, quote: q, livemode: live });
+    } catch { refuse(409, 'no_refundable_payment'); }
+    const chargeId = id(invoice.charge);
+    if (!/^(ch|py)_[A-Za-z0-9]+$/.test(chargeId || '')) needsPerson('charge_missing');
+    trace.phase = 'verify_charge';
+    const charge = await stripe.charges.retrieve(chargeId);
+    if (charge?.id !== chargeId || id(charge.customer) !== account.stripe_customer_id || charge.livemode !== live || charge.currency !== 'usd' || charge.amount !== proof.annualCents
+      || charge.paid !== true || charge.status !== 'succeeded' || (charge.invoice != null && id(charge.invoice) !== invoice.id)) needsPerson('charge_mismatch');
+    // A disputed or partly refunded charge is for a person to settle.
+    if (charge.disputed === true) needsPerson('charge_disputed');
+    if (charge.amount_refunded > 0 && charge.amount_refunded !== charge.amount) needsPerson('charge_partly_refunded');
+    // Refunded in full already (support, in the dashboard): nothing is left
+    // to refund. A request on record for it is finished as recorded.
+    return { subscriptionId: sub.id, invoiceId: invoice.id, chargeId, customerId: account.stripe_customer_id, offerId: q.offer_id, pricePhase: q.price_phase,
+      amountCents: proof.annualCents, paidAt: proof.paidAt, periodEnd: earlier ? null : proof.periodEnd, alreadyRefunded: charge.amount_refunded === charge.amount };
+  }
+  // Before a request not cancelled yet moves to a renewal (the sweep's
+  // followRenewal, a press's claim): the payment it recorded, read fresh, must
+  // have no refund and no dispute. One support refunded in the dashboard
+  // (whose charge.refunded the webhook could not finish yet) or the member
+  // disputed is already money going back for this request: moving on would
+  // refund the renewal as well (review round 5). A person reconciles it.
+  async function recordedChargeUntouched(stripe, chargeId, live) {
+    const charge = await stripe.charges.retrieve(chargeId);
+    if (charge?.id !== chargeId || charge.livemode !== live) refuse(503, 'refund_unavailable');
+    if (charge.disputed === true) needsPerson('charge_disputed');
+    if (!Number.isSafeInteger(charge.amount_refunded) || charge.amount_refunded !== 0) needsPerson('refunded_payment_not_latest');
+  }
+  // The sweep's leased request, not cancelled yet, whose subscription has paid
+  // a renewal since (`lastPaid`): moved to that payment, verified exactly as
+  // a press verifies it (latestPayment, limited_refund_follow), under the
+  // same lease. Answers the moved request, or null when it cannot follow;
+  // a refusal latestPayment raises is the caller's.
+  async function followRenewal(stripe, live, request, token, lastPaid, trace) {
+    const profile = await deps.store.profile(request.profile_id);
+    if (!profile || profile.id !== request.profile_id || profile.auth_user_id !== request.clerk_subject) return null;
+    const account = await deps.store.account(profile.id, live);
+    const row = account ? await deps.store.subscriptionRow(profile.id, live) : null;
+    if (!account || account.profile_id !== profile.id || account.stripe_customer_id !== request.customer_id || !row || row.profile_id !== profile.id || row.subscription_id !== request.subscription_id) return null;
+    await recordedChargeUntouched(stripe, request.charge_id, live);
+    const payment = await latestPayment(stripe, profile, account, row, live, trace, { orNone: true });
+    if (!payment || payment.subscriptionId !== request.subscription_id || payment.invoiceId !== lastPaid) return null;
+    const { alreadyRefunded: _refunded, ...claimed } = payment;
+    const moved = await deps.store.followRefund(request.id, token, claimed);
+    return moved?.id === request.id && moved.charge_id === payment.chargeId && moved.invoice_id === payment.invoiceId ? moved : null;
+  }
+  // charge.refunded for a charge no request holds: support refunded the
+  // renewal of a subscription whose request is not cancelled yet and could
+  // not follow that renewal itself (refund_payment_changed, review round 5).
+  // When the refunded charge is that subscription's most recent annual
+  // payment, verified as a press verifies it (latestPayment), the request
+  // moves to it (limited_refund_adopt) and the webhook then cancels, settles
+  // and records it as for any dashboard refund, so the member's Profile and
+  // ticket read refunded. Answers 'adopted', 'busy' or null (nothing to move:
+  // the refund-without-request flag stands).
+  async function adoptRenewalRefund(stripe, live, found, trace) {
+    const invoiceId = id(found.charge.invoice);
+    if (!/^in_[A-Za-z0-9]+$/.test(invoiceId || '')) return null;
+    const invoice = await stripe.invoices.retrieve(invoiceId);
+    const subId = id(invoice?.subscription) || id(invoice?.parent?.subscription_details?.subscription);
+    if (invoice?.id !== invoiceId || !/^sub_[A-Za-z0-9]+$/.test(subId || '')) return null;
+    const sub = await stripe.subscriptions.retrieve(subId);
+    const profileId = sub?.metadata?.profile_id;
+    if (sub?.id !== subId || sub.metadata?.app !== config.app || sub.status !== 'active' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(profileId || '')) return null;
+    const profile = await deps.store.profile(profileId);
+    if (!profile || profile.id !== profileId) return null;
+    const account = await deps.store.account(profile.id, live);
+    const row = account ? await deps.store.subscriptionRow(profile.id, live) : null;
+    if (!account || account.profile_id !== profile.id || !row || row.profile_id !== profile.id || row.subscription_id !== subId) return null;
+    const request = await deps.store.refundForSubscription(profile.id, live, subId);
+    if (!request || request.subscription_id !== subId || request.subscription_canceled_at != null || request.state === 'refunded' || request.charge_id === found.charge.id) return null;
+    let payment;
+    try { payment = await latestPayment(stripe, profile, account, row, live, trace, { orNone: true }); } catch (e) { if (e instanceof Refusal && e.status === 409) return null; throw e; }
+    if (!payment || payment.subscriptionId !== subId || payment.invoiceId !== invoiceId || payment.chargeId !== found.charge.id || !payment.alreadyRefunded) return null;
+    const { alreadyRefunded: _refunded, ...claimed } = payment;
+    const adopted = await deps.store.adoptRefund(live, claimed, found.charge.amount_refunded);
+    return ['adopted', 'busy'].includes(adopted) ? adopted : null;
+  }
+  // The work on a leased request, for a press and for limited-stripe-webhook
+  // alike: cancel the subscription now with no proration credit, end access
+  // the way a deleted-subscription event ends it, then refund the charge in
+  // full, or record the refund Stripe already holds (`known`: one support
+  // made in the dashboard). Every stop is recorded; a retryable one gives the
+  // lease back and answers 503 refund_pending, so the next press (or Stripe's
+  // next delivery of the event) resumes where this one stopped.
+  // `final` (the sweep, after SWEEP_FINAL_ATTEMPTS): a stop that would
+  // otherwise wait for another try goes to a person instead (needs_support,
+  // which opens the member's ticket, 20260930071000).
+  // Answers 'refunded', 'needs_support' or 'lease_lost'; a retryable stop
+  // throws refund_pending.
+  // `follow` (the sweep): a request not cancelled yet follows a renewal paid
+  // since it was recorded (followRenewal), as the member's next press would.
+  async function complete(stripe, live, request, token, trace, { route: name = 'refund', known = null, final = false, follow = false } = {}) {
+    const attempt = Number.isSafeInteger(request.attempts) ? request.attempts : 0;
+    const record = async (step, refundId = null, status = null, code = null) => deps.store.recordRefund(request.id, token, step, refundId, status, code);
+    const needsSupport = async (code, refundId = null, status = null, e = null) => {
+      await record('needs_support', refundId, status, code);
+      try { log({ ...failureLog(name, trace, 200, code, e), event: 'refund_needs_support' }); } catch { /* A log must never change the answer. */ }
+      return 'needs_support';
+    };
+    const retry = async (code, e) => {
+      if (final) { await needsSupport(code, null, null, e); refuse(409, 'refund_needs_support'); }
+      try { await record('retry', null, null, code); } catch { /* The lease runs out on its own. */ }
+      if (e) try { log({ ...failureLog(name, trace, 503, code, e), event: 'refund_retryable' }); } catch { /* A log must never change the answer. */ }
+      refuse(503, 'refund_pending');
+    };
+    // 1. Cancel now, no proration credit: the refund is the whole payment.
+    trace.phase = 'cancel_subscription';
+    let sub;
+    try { sub = await stripe.subscriptions.retrieve(request.subscription_id); } catch (e) { await retry('cancel_failed', e); }
+    if (sub?.id !== request.subscription_id || id(sub.customer) !== request.customer_id) await retry('cancel_unconfirmed');
+    if (sub.status !== 'canceled') {
+      // Not cancelled yet, so the payment must still be the subscription's
+      // most recent paid one: after a paid renewal the recorded one is not
+      // what the guarantee refunds (a press is quoted afresh; a refund made
+      // elsewhere of the older payment is for a person to reconcile). A
+      // renewal Stripe has only drafted, or is still collecting (past_due,
+      // unpaid), is no payment: the member's cancellation goes ahead, and
+      // with it Stripe stops collecting that invoice.
+      if (request.subscription_canceled_at == null && id(sub.latest_invoice) !== request.invoice_id) {
+        let lastPaid = null;
+        try { lastPaid = await mostRecentPaidInvoiceId(stripe, sub); } catch (e) { await retry('payment_unconfirmed', e); }
+        if (lastPaid !== request.invoice_id) {
+          if (known) return needsSupport('refunded_payment_not_latest', known.id, known.status);
+          // The sweep follows the renewal as the member's next press would
+          // (the claim moves a press's request): nobody may press again.
+          if (!follow) await retry('refund_payment_changed');
+          let moved = null;
+          try { moved = await followRenewal(stripe, live, request, token, lastPaid, trace); } catch (e) {
+            if (e instanceof Refusal && e.message === 'refund_needs_support' && e.reason) return needsSupport(e.reason);
+            await retry(e instanceof Refusal && e.status === 409 ? 'refund_payment_changed' : 'payment_unconfirmed', e instanceof Refusal ? undefined : e);
+          }
+          if (!moved) await retry('refund_payment_changed');
+          request = moved;
+          trace.phase = 'cancel_subscription';
+        }
+      }
+      try {
+        // Keyed per attempt: Stripe replays a key's first answer for a day,
+        // errors included, and a cancellation is safe to ask for again (the
+        // subscription is read first, under the request's lease).
+        sub = await stripe.subscriptions.cancel(request.subscription_id, { prorate: false, invoice_now: false }, { idempotencyKey: `${config.app}:refund-cancel:${request.charge_id}:${attempt}` });
+      } catch (e) { await retry('cancel_failed', e); }
+      if (sub?.id !== request.subscription_id || sub.status !== 'canceled' || id(sub.customer) !== request.customer_id) await retry('cancel_unconfirmed');
+    }
+    if (!await record('canceled')) return 'lease_lost';
+    // 2. Access ends the way a deleted-subscription event ends it. A failure
+    // here is not the member's: Stripe's own customer.subscription.deleted
+    // event settles the same state, so the refund goes ahead.
+    trace.phase = 'settle';
+    try {
+      await settleSubscription(stripe, live, sub.metadata ? sub : await stripe.subscriptions.retrieve(request.subscription_id), { id: `evt_refund${request.id.replaceAll('-', '')}`, created: Math.floor((deps.now?.() ?? Date.now()) / 1000) }, trace);
+    } catch (e) { try { log({ ...failureLog(name, trace, 200, 'refund_settlement_deferred', e), event: 'refund_settlement_deferred' }); } catch { /* A log must never change the answer. */ } }
+    // 3. Refund the charge in full, once.
+    trace.phase = 'refund';
+    let accepted = known, whole = !!known;
+    if (!accepted) {
+      try {
+        // Keyed per attempt, as the cancellation is: Stripe replays a key's
+        // first answer for a day, a 500 included. A second full refund of the
+        // charge is refused by Stripe itself and found below as the outcome.
+        accepted = await stripe.refunds.create({ charge: request.charge_id, amount: request.amount_cents, reason: 'requested_by_customer',
+          metadata: { app: config.app, profile_id: request.profile_id, subscription_id: request.subscription_id, invoice_id: request.invoice_id, refund_request_id: request.id } },
+        { idempotencyKey: `${config.app}:refund:${request.charge_id}:${attempt}` });
+      } catch (e) {
+        // Already refunded (an answer lost on the way back, or support did it)
+        // is the outcome; a refusal Stripe will repeat needs a person; anything
+        // else may pass on the next press.
+        let found = null;
+        try { found = await providerRefund(stripe, request.charge_id, live); } catch { /* Unknown: retry below. */ }
+        if (found) { accepted = found.refund; whole = true; }
+        else if (e?.type === 'StripeInvalidRequestError' || e?.type === 'StripeCardError') {
+          return needsSupport(typeof e?.code === 'string' && ERROR_CODE.test(e.code) ? e.code : 'refund_refused', null, null, e);
+        } else await retry('refund_failed', e);
+      }
+    }
+    trace.phase = 'record_refund';
+    // A refund found on the charge refunds it in full (it may be one of several).
+    if (id(accepted?.charge) !== request.charge_id || (!whole && accepted.amount !== request.amount_cents) || accepted.currency !== 'usd' || !/^re_[A-Za-z0-9]+$/.test(accepted.id || '')) await retry('refund_unconfirmed');
+    if (!REFUND_ACCEPTED.includes(accepted.status)) return needsSupport('refund_not_accepted', accepted.id, ['failed', 'canceled'].includes(accepted.status) ? accepted.status : null);
+    return await record('refunded', accepted.id, accepted.status) ? 'refunded' : 'lease_lost';
+  }
+  const refund = route(async (req, trace) => {
+    trace.phase = 'config';
+    const live = mode();
+    trace.phase = 'input';
+    const data = await refundInput(req);
+    trace.phase = 'identity';
+    const identity = await deps.authenticate(req);
+    if (!identity?.profileId || !identity.clerkSubject) refuse(401, 'unauthorized');
+    const profile = await deps.store.profile(identity.profileId);
+    if (!profile || profile.id !== identity.profileId || profile.auth_user_id !== identity.clerkSubject || !/^user_[A-Za-z0-9]+$/.test(profile.auth_user_id || '')) refuse(403, 'membership_unavailable');
+    trace.phase = 'membership';
+    const account = await deps.store.account(profile.id, live);
+    const row = account ? await deps.store.subscriptionRow(profile.id, live) : null;
+    const none = { schemaVersion: 1, state: 'none' };
+    if (!account || account.profile_id !== profile.id || !row || row.profile_id !== profile.id) {
+      if (data.action === 'status') return reply(200, none);
+      refuse(404, 'no_paid_membership');
+    }
+    // The unfinished request first, whatever subscription it was for; else
+    // this subscription's.
+    const recorded = await deps.store.refundForSubscription(profile.id, live, row.subscription_id);
+    if (recorded && (recorded.profile_id !== profile.id || recorded.clerk_subject !== profile.auth_user_id)) refuse(409, 'subscription_owner_mismatch');
+    if (data.action === 'status') return reply(200, recorded ? outcome(recorded) : none);
+    // A recorded outcome is the answer to every later press.
+    if (recorded && recorded.state !== 'requested') return reply(200, outcome(recorded));
+    if (!recorded && await deps.store.hasLifetime(profile.id, profile.auth_user_id, live)) refuse(409, 'refund_not_available');
+    const stripe = deps.stripe();
+    // A request whose subscription is cancelled, or is not the one this
+    // account holds now, finishes the payment it recorded. One not cancelled
+    // yet refunds its subscription's latest payment while that subscription
+    // is active (a renewal since the request is what the guarantee refunds;
+    // the claim moves the request to it), else the payment it recorded.
+    const current = recorded?.subscription_id === row.subscription_id;
+    let payment = null;
+    if (!recorded || (current && recorded.subscription_canceled_at == null)) {
+      try {
+        payment = await latestPayment(stripe, profile, account, row, live, trace, { orNone: !!recorded });
+        // A renewal since the request: it moves there only while the payment
+        // it recorded has nothing going back already.
+        if (recorded && payment && payment.chargeId !== recorded.charge_id) await recordedChargeUntouched(stripe, recorded.charge_id, live);
+      } catch (e) {
+        // An unfinished request whose payment a person has to settle first (a
+        // dispute opened, part of it refunded elsewhere): recorded as needing
+        // support under the request's lease, which opens the member's ticket
+        // (20260930071000), and answered as that outcome. Without a request
+        // there is nothing on record to hand over: the refusal stands.
+        if (!recorded || !(e instanceof Refusal) || e.message !== 'refund_needs_support' || !e.reason) throw e;
+        trace.phase = 'refund_hold';
+        const lease = await deps.store.leaseRefund(recorded.charge_id, live);
+        if (lease?.state === 'busy') refuse(409, 'refund_in_progress');
+        if (lease?.state === 'claimed' && lease.token && lease.request?.id === recorded.id) {
+          if (!await deps.store.recordRefund(recorded.id, lease.token, 'needs_support', null, null, e.reason)) refuse(503, 'refund_pending');
+          try { log({ ...failureLog('refund', trace, 200, e.reason), event: 'refund_needs_support' }); } catch { /* A log must never change the answer. */ }
+        } else if (!['needs_support', 'refunded'].includes(lease?.state)) throw e;
+        return reply(200, outcome(await deps.store.refundForSubscription(profile.id, live, row.subscription_id)));
+      }
+    }
+    // Refunded in full already, with no request here (support refunded it in
+    // the dashboard): the app never offers that money again.
+    if (!recorded && payment?.alreadyRefunded) refuse(409, 'payment_already_refunded');
+    // A period end is quoted only while that period is paid and running.
+    payment ??= recordedPayment(recorded, current && row.status === 'active' ? iso(row.period_end) : null);
+    if (data.action === 'quote') {
+      return reply(200, { schemaVersion: 1, state: recorded ? 'resume' : 'available', paymentId: payment.invoiceId, amountCents: payment.amountCents, currency: 'usd',
+        paidAt: payment.paidAt, offerId: payment.offerId, periodEnd: payment.periodEnd ?? null, subscriptionCanceled: recorded?.subscription_canceled_at != null,
+        supportTicket: typeof recorded?.support_ticket_id === 'string' });
+    }
+    // Exactly the payment and amount the member confirmed.
+    if (data.paymentId !== payment.invoiceId || data.amountCents !== payment.amountCents) refuse(409, 'refund_quote_changed');
+    trace.phase = 'claim';
+    const { alreadyRefunded: _refunded, ...claimed } = payment;
+    const claim = await deps.store.claimRefund(profile.id, profile.auth_user_id, live, claimed);
+    if (claim?.state === 'refunded' || claim?.state === 'needs_support') return reply(200, outcome(claim.request));
+    if (claim?.state === 'busy') refuse(409, 'refund_in_progress');
+    if (claim?.state === 'lifetime') refuse(409, 'refund_not_available');
+    if (claim?.state === 'no_paid_membership') refuse(404, 'no_paid_membership');
+    if (claim?.state !== 'claimed' || !claim.token || !claim.request?.id) refuse(503, 'refund_pending');
+    const request = claim.request;
+    if (request.charge_id !== payment.chargeId || request.invoice_id !== payment.invoiceId || request.amount_cents !== payment.amountCents || request.subscription_id !== payment.subscriptionId) refuse(409, 'refund_quote_changed');
+    await complete(stripe, live, request, claim.token, trace);
+    return reply(200, outcome(await deps.store.refundForSubscription(profile.id, live, request.subscription_id)));
+  }, 'refund');
+  // The refund sweep (owner review 2026-09-30): pg_cron's limited-refund-sweep
+  // (20260930072000) posts here every 10 minutes with the hook secret. Every
+  // request left unfinished (a press that stopped before or after its
+  // cancellation, a worker that died holding the lease) and idle for
+  // SWEEP_IDLE_SECONDS is finished as the member's next press would finish
+  // it: the member confirmed the cancellation and the refund together, so
+  // nothing waits for them to come back. After SWEEP_FINAL_ATTEMPTS attempts
+  // in all, and at least SWEEP_FINAL_AGE_MS after the request, a stop goes to
+  // a person (needs_support, which opens the member's ticket) instead of
+  // waiting for another try. One stopped before its cancellation stays
+  // cancellable: the owner's full refund in the dashboard reopens it and the
+  // webhook cancels (limited_refund_confirm). One summary log line per run
+  // that had work: counts only, no ids.
+  const refundSweep = async req => {
+    const answer = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    if (req.method !== 'POST') return answer(405, { error: 'method_not_allowed' });
+    const note = entry => { try { log({ event: 'limited_refund_sweep', ...entry }); } catch { /* A log must never change the answer. */ } };
+    // Closed with billing off, as every route is, before anything else.
+    let live;
+    try { live = mode(); } catch (e) { const state = e instanceof Refusal ? e.message : 'billing_unavailable'; return answer(503, { state }); }
+    if (!sameSecret(req.headers.get('x-hook-secret'), deps.hookSecret?.())) return answer(401, { error: 'not_authorized' });
+    let stalled;
+    try { stalled = await deps.store.stalledRefunds(live, SWEEP_IDLE_SECONDS, SWEEP_LIMIT); } catch { note({ state: 'unavailable' }); return answer(503, { state: 'unavailable' }); }
+    const charges = Array.isArray(stalled) ? stalled.filter(c => typeof c === 'string' && /^(ch|py)_[A-Za-z0-9]+$/.test(c)).slice(0, SWEEP_LIMIT) : [];
+    const clock = () => deps.now?.() ?? Date.now();
+    const started = clock(), outcomes = {};
+    let deferred = 0, stripe = null;
+    for (const chargeId of charges) {
+      // The next run picks up whatever this one had no time for.
+      if (clock() - started >= SWEEP_BUDGET_MS) { deferred += 1; continue; }
+      const trace = { phase: 'refund_claim' };
+      let result;
+      try {
+        const lease = await deps.store.leaseRefund(chargeId, live);
+        if (lease?.state !== 'claimed' || !lease.token || !lease.request?.id) result = lease?.state;
+        else {
+          stripe ??= deps.stripe();
+          // Final only after enough tries AND enough time: a request with no
+          // readable time counts as old enough (attempts alone decide).
+          const age = clock() - Date.parse(lease.request.requested_at);
+          const final = Number.isSafeInteger(lease.request.attempts) && lease.request.attempts >= SWEEP_FINAL_ATTEMPTS && !(age < SWEEP_FINAL_AGE_MS);
+          result = await complete(stripe, live, lease.request, lease.token, trace, { route: 'sweep', final, follow: true });
+        }
+      } catch (e) { result = e instanceof Refusal ? e.message : 'unavailable'; }
+      result = typeof result === 'string' && ERROR_CODE.test(result) ? result : 'unavailable';
+      outcomes[result] = (outcomes[result] || 0) + 1;
+    }
+    const summary = { state: 'ready', requests: charges.length, outcomes, deferred };
+    if (charges.length) note(summary);
+    return answer(200, summary);
+  };
+  // limited-refund's entry: the sweep arrives with an x-hook-secret header (a
+  // browser never sends one; CORS does not allow it), everything else is a
+  // member's request.
+  const refundWithSweep = req => (req.headers.has('x-hook-secret') ? refundSweep(req) : refund(req));
+  return { activate, quote, checkout, webhook, portal, refund, refundSweep, refundWithSweep };
 }

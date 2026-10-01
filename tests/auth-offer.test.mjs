@@ -12,7 +12,7 @@ const founding = { schemaVersion: 1, phase: 'founding', annualCents: 9900, check
 test('shows the founding offer exactly as the public site words it', async () => {
   const offer = await loadAuthOffer({ ...base, fetchImpl: reply(founding) });
   assert.deepEqual(offer, { headline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
-    status: 'Your offer is confirmed before payment. Creating an account does not reserve a founding place.' });
+    status: 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.' });
   // The endpoint also says the bundle waits for founding to end; a reply that disagrees is refused.
   assert.equal((await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, bundleAvailable: false }) })).headline, offer.headline);
   assert.equal(await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, bundleAvailable: true }) }), null);
@@ -26,7 +26,7 @@ test('follows the live phase rather than a hardcoded price', async () => {
 
 test('when checkout is paused or founding is full it says so in the words the site uses', async () => {
   const paused = await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, checkoutEnabled: false, availability: 'paused' }) });
-  assert.equal(paused.status, 'Paid checkout is paused. You can create your account now; no payment will be taken.');
+  assert.equal(paused.status, 'Paid checkout is paused. No payment will be taken; your account opens when payment completes.');
   const full = await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, availability: 'temporarily_full' }) });
   assert.equal(full.status, 'Founding checkout is temporarily unavailable. Creating an account does not reserve a place.');
   // An inconsistent reply (paused but checkout enabled) is refused by the module, so nothing shows.

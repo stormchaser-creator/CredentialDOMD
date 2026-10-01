@@ -23,7 +23,9 @@ the usual subscription path. No key was created, rotated, or copied for this cha
   context. At most two targets per scheduled invocation. Due worker follow-ups resume
   without a new customer message in action-only mode; owner decisions wait quietly.
 - The September 16 rule is enforced in trusted SQL: owner tickets or tickets with
-  `agent_approved_at`. Archived tickets are excluded. A failed query raises an error;
+  `agent_approved_at`. A refund ticket the refund ledger opened by itself
+  (`context_payload.source` `limited_refund`) needs `agent_approved_at` even on the
+  owner's own account (`REFUND_HELD`). Archived tickets are excluded. A failed query raises an error;
   it cannot become an empty queue.
 - A disposable, non-root container gets client-source files only. It gets no home
   mount, `.git`, SSH agent, Docker socket, production environment, database token,

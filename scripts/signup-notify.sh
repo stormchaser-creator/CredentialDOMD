@@ -12,9 +12,12 @@
 #      errors and beta activations. Eric's own tickets and feedback stay quiet.
 #   3. money events: a checkout started, a paid purchase, a subscription active
 #      with no recorded payment, a lifetime gift claimed, an invitation sent
-#      (or refused, or never confirmed). These are keyed and remembered in
-#      $SEEN, so a payment that settles after the window moved on is still
-#      reported, once. A table that does not exist yet is skipped.
+#      (or refused, or never confirmed), and a refund the owner has to finish
+#      (needs support, cancelled and not refunded for 15 minutes, or asked
+#      for an hour ago and still not cancelled). These
+#      are keyed and remembered in $SEEN, so a payment that settles after the
+#      window moved on is still reported, once. A table that does not exist
+#      yet is skipped.
 #   4. the notifier itself: when the activity query fails, or an optional
 #      table's columns no longer match what it reads, 3 runs in a row, one
 #      short message says so (and one more when it works again).

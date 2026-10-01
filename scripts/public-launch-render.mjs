@@ -173,7 +173,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     if (slot === 'signup-heading') return `<span data-membership-heading>${escapeHtml(text)}</span>`;
     if (slot === 'founding-headline') return `<span data-membership-headline>${escapeHtml(text)}</span>`;
     if (slot === 'audience-badge') return 'For MDs and DOs · <span data-membership-phase>Membership options</span>';
-    return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Your offer is confirmed before payment. Creating an account does not reserve a founding place.</span>' : '');
+    return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.</span>' : '');
   });
   for (const [slot, count] of Object.entries(minimumSlots[surface])) {
     if ((counts[slot] || 0) < count) throw Error(`Incomplete ${surface} migration: ${slot} needs ${count} slots`);

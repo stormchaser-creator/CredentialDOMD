@@ -6,9 +6,12 @@ import { readLaunchInvitation, clearLaunchInvitation } from "../../utils/launchI
 import { accessAuthority, canReviewBillingOffer, renewalPaymentFailed } from "../../utils/limitedLaunchAccess.js";
 import { membershipDate, membershipPrice, membershipRenewalCopy, quoteMatchesBetaWindow, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
+import { REFUND_COPY } from "../../content/refundCopy.js";
 import { reportError } from "../../lib/errorReport.js";
 import { createCheckoutFailureReporter } from "../../utils/checkoutFailure.js";
 import { BILLING_RETURN_COPY } from "../../utils/billingReturn.js";
+import RefundSection from "./RefundSection.jsx";
+import { payFirstMode } from "../../utils/payFirst.js";
 
 const messages = {
   signup_disabled: "New membership enrollment is not open yet. Please check again later.",
@@ -31,6 +34,10 @@ const messages = {
   access_unconfirmed: "Your membership could not be confirmed just now. Check your connection and try again. Nothing was charged.",
   offer_unavailable: "This offer is no longer available for this account. Nothing was charged.",
   bundle_unavailable: `${MEMBERSHIP_COPY.bundleDuringFounding} Nothing was charged.`,
+  // limited-checkout: a cancelled membership's refund is finished first.
+  refund_unfinished: REFUND_COPY.finishBeforeJoining,
+  // A pending account whose paid Checkout is waiting for its settlement.
+  checkout_awaiting_settlement: BILLING_RETURN_COPY.membershipPending,
 };
 const messageFor = error => messages[error?.code] || "Membership could not be updated. Your saved records have not changed. Please try again.";
 const TICK_HINT = "Tick the box above to continue.";
@@ -39,7 +46,7 @@ const reportCheckoutFailure = createCheckoutFailureReporter(reportError);
 // A refusal the page made itself: no request was sent, or its answer was not used.
 const refusedHere = (action, code) => reportCheckoutFailure(action, { code, phase: "client" });
 
-/** Explicit invitation activation and separately consented paid opt-in. No automatic actions. */
+/** Explicit invitation activation and separately consented paid opt-in. The only automatic action: a pay-first account's offer review opens by itself. */
 export default function LimitedLaunchMembership({ onActivated }) {
   const { user } = useApp();
   return <MembershipForAccount key={user?.id || "signed-out"} accountId={user?.id} onActivated={onActivated} />;
@@ -55,6 +62,10 @@ function MembershipForAccount({ accountId, onActivated }) {
   const [message, setMessage] = useState(null);
   // The quote a tap on the unticked Continue was for; a new quote starts clean.
   const [tickHintFor, setTickHintFor] = useState(null);
+  // The server says this pending account's Checkout was paid and is being
+  // confirmed (checkout_awaiting_settlement): another device, or the app
+  // reopened without the Checkout return. Nothing more to pay.
+  const [settling, setSettling] = useState(false);
   const request = useRef(0);
   const offerHeading = useRef(null);
   const messageLine = useRef(null);
@@ -138,8 +149,15 @@ function MembershipForAccount({ accountId, onActivated }) {
       else if (!currentlyPermitted(offerId)) { refusedHere("quote", "offer_unavailable"); setMessage(messages.offer_unavailable); }
       else if (quoteMatchesBetaWindow(result, accessAuthority.state(accountId))) setQuote(result);
       else { refusedHere("quote", "quote_expired"); setMessage(messages.quote_expired); }
-    } catch (error) { if (mine(turn)) { reportCheckoutFailure("quote", error); setMessage(messageFor(error)); } }
-    finally { if (mine(turn)) setBusy(false); }
+    } catch (error) {
+      if (!mine(turn)) return;
+      if (error?.code === "checkout_awaiting_settlement") { awaitSettlement(); return; }
+      reportCheckoutFailure("quote", error); setMessage(messageFor(error));
+    } finally { if (mine(turn)) setBusy(false); }
+  };
+  const awaitSettlement = () => {
+    setSettling(true); setQuote(null); setConsent(false); setMessage(null);
+    void Promise.resolve().then(() => limitedLaunch.refresh?.()).catch(() => { /* The access hook reports its own failures. */ });
   };
   const purchase = async () => {
     if (busy || !quote) return;
@@ -161,13 +179,29 @@ function MembershipForAccount({ accountId, onActivated }) {
       // A payment page was made but the answer changed meanwhile: it is not opened.
       else { refusedHere("checkout", "checkout_discarded"); setMessage(messages.access_unconfirmed); }
     } catch (error) {
-      if (mine(turn)) {
+      if (mine(turn) && error?.code === "checkout_awaiting_settlement") awaitSettlement();
+      else if (mine(turn)) {
         reportCheckoutFailure("checkout", error);
         setConsent(false); setMessage(messageFor(error));
         if (["quote_expired", "founding_capacity_pending", "bundle_unavailable"].includes(error.code)) setQuote(null);
       }
     } finally { if (mine(turn)) setBusy(false); }
   };
+  // Pay first (owner, 2026-09-30): a new account is not usable until it is
+  // paid, so a signed-up member goes straight to the current offer's review,
+  // the one place its terms are confirmed before Stripe Checkout. Coming
+  // back from an abandoned Checkout lands here again with the same offer.
+  const payFirst = payFirstMode(limitedLaunch, access, invitation);
+  const payOffer = access?.checkoutResumeAvailable === true && access.checkoutResumeOfferId ? access.checkoutResumeOfferId : "core";
+  const payFirstKey = payFirst && !settling && !quote && canReviewBillingOffer(shown, payOffer) ? `${accountId}:${payOffer}` : null;
+  const openedFor = useRef(null);
+  useEffect(() => {
+    if (!payFirstKey || openedFor.current === payFirstKey) return;
+    openedFor.current = payFirstKey;
+    void review(payOffer);
+    // review is this render's closure; the key alone decides when it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payFirstKey]);
   if (!limitedLaunch.enabled) return null;
   const lifetime = access?.lifetime.credential || access?.lifetime.practice;
   // Founding Credential includes Practice while active: no trial and nothing to add.
@@ -192,7 +226,7 @@ function MembershipForAccount({ accountId, onActivated }) {
   // Back from a completed Stripe Checkout, before the membership shows it:
   // nothing more to choose or pay, so no purchase buttons.
   const returning = limitedLaunch.billingReturn?.kind === "complete" && ["confirming", "delayed"].includes(limitedLaunch.billingReturn.phase);
-  const permittedQuote = !!quote && !returning && canReviewBillingOffer(shown, quote.offerId) && quoteMatchesBetaWindow(quote, shown);
+  const permittedQuote = !!quote && !returning && !settling && canReviewBillingOffer(shown, quote.offerId) && quoteMatchesBetaWindow(quote, shown);
   const panelShown = permittedQuote && !lifetime && !scheduled;
   const deferredResumeAfterBeta = quote?.paymentTiming === "after_beta" && access?.freeBeta?.state === "expired";
   // A billing-quote deployed before 20260928190000 sends no practiceIncluded.
@@ -220,23 +254,41 @@ function MembershipForAccount({ accountId, onActivated }) {
           {access.purchasedOfferId === "core" && !foundingPractice && access.practiceTrial.state === "active" && <p>Your Practice trial runs until {membershipDate(access.practiceTrial.endsAt)}. It does not charge automatically. Your Credential membership continues separately.</p>}
           {access.purchasedOfferId === "core" && !foundingPractice && !access.capabilities.practice.write && <p>{access.practiceTrial.state === "expired" ? "Your Practice trial has ended. " : ""}Saved Practice records remain available to read and export. <a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}</p>}
           <button style={button} onClick={manage}>Manage paid subscription</button>
+          <p style={{ marginTop: 16 }}>Or cancel now and get your money back: {MEMBERSHIP_COPY.refundTerms}</p>
+          <RefundSection paid />
         </div>
           : renewalPaymentFailed(access) ? <div>
             <p>{MEMBERSHIP_COPY.renewalPaymentFailed}</p>
             <button style={button} onClick={manage}>Update payment method</button>
+            {/* A refund requested before the renewal failed is shown and finished here too. */}
+            <RefundSection />
           </div>
-          : returning ? <p role="status">{BILLING_RETURN_COPY.membershipPending}</p>
+          : returning || settling ? <div>
+            <p role="status">{BILLING_RETURN_COPY.membershipPending}</p>
+            {/* The notice with its own Check again was dismissed. */}
+            {returning && limitedLaunch.billingReturn.dismissed && limitedLaunch.billingReturn.phase === "delayed" && <button style={button} onClick={limitedLaunch.billingReturn.retry}>Check again</button>}
+            {!returning && <button style={button} disabled={busy} onClick={limitedLaunch.refresh}>Check again</button>}
+          </div>
           : <>
             {beta && <p>Your free beta is active until {membershipDate(access.freeBeta.endsAt)}. No card is required to keep this beta, and it will not charge automatically. {betaCanReview ? "You may choose a paid membership now with no charge before your original beta ends; its paid year starts at that original end date. Review the exact date and terms below. Keep using this account; your saved records stay in place." : "Your original beta end date has not changed. A paid offer is not available right now."}</p>}
             {!beta && invitation && access?.invitationActivationEnabled === true && <div style={{ marginBottom: 18 }}>
               <p>Activate the personal invitation for your verified account. If it includes the grandfathered free beta, no card or payment is collected.</p>
               <button style={button} disabled={busy} onClick={activate}>{busy ? "Checking…" : "Activate my invitation"}</button>
             </div>}
-            {access?.accessStatus === "pending" && (!invitation || limitedLaunch.publicSignupEnabled) && <p>{limitedLaunch.publicSignupEnabled
-              ? "Your account is signed in. Review an eligible membership below; paid access begins after checkout is confirmed. Creating an account does not charge you."
+            {access?.accessStatus === "pending" && !payFirst && (!invitation || limitedLaunch.publicSignupEnabled) && <p>{limitedLaunch.publicSignupEnabled
+              ? "Your account opens when payment completes. Review your membership offer below and confirm it before paying."
               : "Open your personal invitation link and sign in with its verified email address. Account approval and payment eligibility are checked securely."}</p>}
             {invitation && access?.invitationActivationEnabled !== true && !limitedLaunch.publicSignupEnabled && <p>Invitation activation is not open yet. Please check again later.</p>}
-            {(!beta || betaCanReview) && (resumeOffer ? <>
+            {access?.accessStatus !== "pending" && <RefundSection />}
+            {payFirst ? <div>
+              <p><strong>Complete your payment to open your account.</strong> Your account opens as soon as payment completes; nothing in it is available before then. Every membership has a 100% money-back guarantee on your most recent annual payment.</p>
+              {access?.pricePhase === "founding" && <p>{MEMBERSHIP_COPY.credentialPrices} Viewing an offer does not reserve a founding place.</p>}
+              {!(access?.billingEnabled && (access?.checkoutEligible || resumeOffer)) && <p>Payment is not open for this account right now. Please check again later. Nothing has been charged.</p>}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {!panelShown && <button style={offerButton(reviewable(payOffer))} disabled={busy || !reviewable(payOffer)} onClick={() => review(payOffer)}>{busy ? "Loading your offer…" : "Complete payment"}</button>}
+                {bundleOffered && !resumeOffer && <button style={offerButton(reviewable(quote?.offerId === "core_locum" ? "core" : "core_locum"))} disabled={busy || !reviewable(quote?.offerId === "core_locum" ? "core" : "core_locum")} onClick={() => review(quote?.offerId === "core_locum" ? "core" : "core_locum")}>{quote?.offerId === "core_locum" ? "Pay for Credential instead" : "Pay for Credential + Practice instead"}</button>}
+              </div>
+            </div> : (!beta || betaCanReview) && (resumeOffer ? <>
               <p>You have an unfinished {resumeOffer === "core" ? "Credential" : "Credential + Practice"} checkout. Review its current terms and confirm them before returning to payment.</p>
               <button style={offerButton(reviewable(resumeOffer))} disabled={busy || !reviewable(resumeOffer)} onClick={() => review(resumeOffer)}>Resume checkout</button>
             </> : <>

@@ -33,7 +33,7 @@ function fixture(offerId='core',phase='founding') {
   };
   const deps={mode:'test',now:()=>now,assertConfigured:()=>{},authenticate:async()=>({profileId:profile.id,clerkSubject:'user_a'}),verifiedEmails:async()=>['member@example.invalid'],stripe:()=>stripe,verifyEvent:async()=>event,
     store:{profile:async()=>profile,previewById:async()=>preview,createPreview:async(id,subject,live,offerId)=>({...preview,offer_id:offerId,price_phase:offerId==='core_locum'?'standard':eligibility.price_phase,annual_cents:limitedOffer(offerId,eligibility.price_phase,config.productIds).unitAmount}),eligibility:async()=>eligibility,bindInvitation:async(...args)=>calls.push(['bind',...args]),account:async()=>account,bindAccount:async()=>account,accountByCustomer:async()=>account,
-      claimLimitedCheckout:async()=>({state:'claimed',attempt_id:q.attempt_id,token:'syntheticLease',quote:structuredClone(q)}),pinPrice:async(...args)=>calls.push(['pin',...args]),saveCheckout:async(...args)=>calls.push(['save',...args]),closeCheckout:async()=>{},
+      unfinishedRefund:async()=>null,claimLimitedCheckout:async()=>({state:'claimed',attempt_id:q.attempt_id,token:'syntheticLease',quote:structuredClone(q)}),pinPrice:async(...args)=>calls.push(['pin',...args]),saveCheckout:async(...args)=>calls.push(['save',...args]),closeCheckout:async()=>{},
       claimReconcile:async()=>({state:'claimed',token:'syntheticLease'}),releaseReconcile:async()=>calls.push(['release']),quoteByAttempt:async()=>q,settleLimited:async(...args)=>calls.push(['settle',...args]),
     }};
   return{deps,calls,profile,offer,price,q,preview,eligibility,sub,invoice,event,stripe};
@@ -104,6 +104,17 @@ test('unrelated products, discounts/cadence changes and inactive sale prices are
 test('existing subscription and uncertain attempt prevent a second Checkout',async()=>{
   const f=fixture();f.stripe.subscriptions.list=async()=>({data:[{status:'past_due'}],has_more:false});assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,409);assert.equal(f.calls.some(c=>c[0]==='checkout'),false);
   f.stripe.subscriptions.list=async()=>({data:[],has_more:false});f.deps.store.claimLimitedCheckout=async()=>({state:'reconciliation_required'});assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,503);
+});
+test('a cancelled membership whose refund is unfinished is finished before a new purchase: no customer, no Checkout',async()=>{
+  const f=fixture();
+  const stripeCalls=[];
+  f.deps.stripe=()=>new Proxy({},{get:(_,name)=>{stripeCalls.push(name);return f.stripe[name];}});
+  f.deps.store.unfinishedRefund=async(profileId,live)=>{f.calls.push(['unfinished',profileId,live]);return{state:'requested',subscription_id:'sub_Old',subscription_canceled_at:'2026-09-29T18:00:00Z'};};
+  const r=await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest());
+  assert.equal(r.status,409);assert.equal((await r.json()).error,'refund_unfinished');
+  assert.deepEqual(f.calls,[['unfinished',f.profile.id,false]]);assert.deepEqual(stripeCalls,[],'nothing reaches Stripe');
+  f.deps.store.unfinishedRefund=async()=>null;
+  assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,200,'with none open, the purchase goes ahead');
 });
 test('durable price and quote keep exact same Checkout parameters across retries',async()=>{
   const f=fixture();const h=createLimitedLaunchHandlers(f.deps,config);await h.checkout(paidRequest());f.eligibility.price_phase='standard';await h.checkout(paidRequest());

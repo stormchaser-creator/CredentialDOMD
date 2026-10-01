@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, LEGACY_RESULT_SCHEMA, assertReplyVerificationInstalled } from './ticket-agent-context.mjs';
+import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, LEGACY_RESULT_SCHEMA, assertReplyVerificationInstalled, REFUND_HELD } from './ticket-agent-context.mjs';
 import { customerReplyText } from './ticket-fix/claims.mjs';
 import { checkVerification, verificationInsertSQL } from './ticket-fix/reply.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
@@ -111,7 +111,7 @@ export function replySQL(ticket, reply, { includeArchived = false, verification,
     SELECT t.id, t.user_id INTO target FROM support_tickets t WHERE t.id = '${ticket.id}'::uuid
       AND t.user_id = '${ticket.owner_id}'::uuid
       AND t.updated_at = ${sqlText(ticket.updated_at)}::timestamptz
-      AND ${awaiting} AND ${APPROVED} AND ${approval} FOR UPDATE;
+      AND ${awaiting} AND ${APPROVED} AND ${approval} AND ${REFUND_HELD} FOR UPDATE;
     IF NOT FOUND THEN RETURN; END IF;
     ${verificationInsertSQL(verification)};
     INSERT INTO support_messages (id, ticket_id, author_id, body, is_admin_reply, created_at, verification_id)

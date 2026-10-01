@@ -19,6 +19,7 @@ import { waitlistView, leadState } from "../../utils/adminWaitlist";
 import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { loadAdminSupportThread } from "../../utils/adminSupportThread";
+import { ticketOpenedBySupport } from "../../utils/supportOperationsClient";
 import { ADMIN_TICKET_CATEGORIES, adminTicketDraftProblem } from "../../utils/adminTicketDraft";
 import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
@@ -522,7 +523,7 @@ function AdminDashboardContent() {
               )}
             </div>
             <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 10 }}>
-              {openTicket.user_email} · {new Date(openTicket.created_at).toLocaleString()}
+              {ticketOpenedBySupport(openTicket) ? `CredentialDOMD (automatic) for ${openTicket.user_email}` : openTicket.user_email} · {new Date(openTicket.created_at).toLocaleString()}
               {openTicket.context_page ? ` · from ${openTicket.context_page}` : ""}
             </div>
             <div style={{ fontSize: 14, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.55, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>

@@ -53,6 +53,7 @@ function fixture({ priorState = 'open' } = {}) {
   };
   const deps = { mode: 'test', now: () => now, assertConfigured: () => {}, authenticate: async () => ({ profileId: PROFILE, clerkSubject: 'user_a' }), stripe: () => stripe, log: entry => calls.push(['log', entry]),
     store: { profile: async () => profile, previewById: async () => preview, eligibility: async () => eligibility, account: async () => account,
+      unfinishedRefund: async () => null,
       claimLimitedCheckout: async () => { calls.push(['claim']); return structuredClone(claims.shift() || { state: 'busy' }); },
       // As supersede_limited_checkout: the retirement and the new claim in one call.
       supersedeCheckout: async (...args) => { calls.push(['supersede', ...args]); return structuredClone(claims.shift() || { state: 'busy' }); },
@@ -254,7 +255,47 @@ test('a completed earlier Checkout whose subscription is still live is refused a
     f.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_Live', status }], has_more: false });
     const response = await createLimitedLaunchHandlers(f.deps, config).checkout(paidRequest());
     assert.equal(response.status, 409, status);
-    assert.deepEqual(await response.json(), { error: 'subscription_already_exists' });
+    // A pending account whose Checkout made a live subscription is waiting for
+    // its settlement (review 2026-09-30), not starting a second purchase.
+    assert.deepEqual(await response.json(), { error: status === 'incomplete' ? 'subscription_already_exists' : 'checkout_awaiting_settlement' }, status);
     assert.equal(f.calls.some(c => ['create', 'pin', 'save'].includes(c[0])), false, status);
   }
+  // An active account (a paid member) is refused as before.
+  const f = fixture();
+  (await f.deps.store.profile()).access_status = 'active';
+  f.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_Live', status: 'active' }], has_more: false });
+  const response = await createLimitedLaunchHandlers(f.deps, config).checkout(paidRequest());
+  assert.deepEqual(await response.json(), { error: 'subscription_already_exists' });
+});
+
+// Review round 2 (2026-09-30): pay first on another device, or in an app
+// reopened without the Checkout return, before the webhook settles.
+test('a pending account whose Checkout already made its subscription is told it is being confirmed, not quoted a second purchase', async () => {
+  const quoteRequest = () => request({ offerId: 'core' });
+  const run = async (patch, profileStatus = 'pending') => {
+    const f = fixture();
+    (await f.deps.store.profile()).access_status = profileStatus;
+    f.deps.store.createPreview = async () => { f.calls.push(['preview']); throw Error('synthetic: stop after the preview is asked for'); };
+    patch(f);
+    const response = await createLimitedLaunchHandlers(f.deps, config).quote(quoteRequest());
+    return { status: response.status, body: await response.json(), previewed: f.calls.some(c => c[0] === 'preview') };
+  };
+  for (const status of ['active', 'trialing', 'past_due']) {
+    const r = await run(f => { f.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_Paid', customer: 'cus_A', status }], has_more: false }); });
+    assert.deepEqual([r.status, r.body, r.previewed], [409, { error: 'checkout_awaiting_settlement' }, false], status);
+  }
+  // Nothing made yet, an incomplete one (Resume checkout), an ended one, or Stripe unreachable: the quote goes ahead.
+  for (const [label, patch] of [
+    ['none', () => {}],
+    ['incomplete', f => { f.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_Open', customer: 'cus_A', status: 'incomplete' }], has_more: false }); }],
+    ['canceled', f => { f.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_Old', customer: 'cus_A', status: 'canceled' }], has_more: false }); }],
+    ['unreachable', f => { f.stripe.subscriptions.list = async () => { throw Error('synthetic outage'); }; }],
+    ['no account', f => { f.deps.store.account = async () => null; f.stripe.subscriptions.list = async () => { throw Error('unexpected'); }; }],
+  ]) {
+    const r = await run(patch);
+    assert.equal(r.previewed, true, label);
+  }
+  // An active account is not asked about (its offers are its own to review).
+  const active = await run(f => { f.stripe.subscriptions.list = async () => { throw Error('unexpected'); }; }, 'active');
+  assert.equal(active.previewed, true);
 });

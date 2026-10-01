@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateConfig, safeSourcePath, validateResult, reserveBudget,
   replySQL, containerArgs, QUEUE_SQL, APPROVED } from './ticket-agent-isolated.mjs';
+import { REFUND_HELD } from './ticket-agent-context.mjs';
 import { agentReplyBody } from './ticket-fix/reply.mjs';
 import { signForTest } from '../tests/ticket-fix/helpers.mjs';
 
@@ -72,6 +73,9 @@ test('host broker enforces approval, queue scope, freshness, verification and ke
   assert.throws(() => replySQL(ticket, injected), /verified reply is required/);
   const sql = replySQL(ticket, injected, verified(injected));
   assert.ok(sql.includes(APPROVED));
+  // A refund ticket the ledger opened is held for the owner at the re-check too (20260930071000).
+  assert.ok(QUEUE_SQL.includes(REFUND_HELD));
+  assert.match(sql, new RegExp(`AND ${REFUND_HELD.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} FOR UPDATE`));
   assert.match(sql, /t.updated_at = convert_from/);
   assert.match(sql, /FOR UPDATE/);
   assert.match(sql, /IF NOT FOUND THEN RETURN/);

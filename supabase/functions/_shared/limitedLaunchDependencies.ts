@@ -83,6 +83,8 @@ export function limitedLaunchDependencies() {
     log: welcomeConsoleLog,
   });
   return { ...base, welcome, welcomeSweep,
+    // The hook secret pg_net callers present (x-hook-secret): the refund sweep's, as the welcome sweep's.
+    hookSecret: () => Deno.env.get('WELCOME_HOOK_SECRET') || '',
     verifiedEmails: async (subject: string) => {
       const user = await clerkUser(subject);
       return (user.email_addresses || []).filter((a: { verification?: { status?: string }; email_address?: string }) => a.verification?.status === 'verified' && typeof a.email_address === 'string')
@@ -100,6 +102,38 @@ export function limitedLaunchDependencies() {
       // Retires an unpaid attempt after the handler expired its Stripe sessions, and makes the new claim, in one transaction (20260928180000_checkout_offer_switch.sql).
       supersedeCheckout: (id: string, subject: string, live: boolean, attempt: string, proof: unknown, offer: string, preview: string, consentHash: string) => checked(db().rpc('supersede_limited_checkout', { p_profile_id: id, p_clerk_subject: subject, p_livemode: live, p_attempt_id: attempt, p_proof: proof, p_offer_id: offer, p_preview_id: preview, p_consent_hash: consentHash })),
       pinPrice: (attempt: string, id: string, subject: string, live: boolean, product: string, price: string) => checked(db().rpc('pin_limited_billing_price', { p_attempt_id: attempt, p_profile_id: id, p_clerk_subject: subject, p_livemode: live, p_product_id: product, p_price_id: price })),
+      // Cancel and get a refund (20260930070000_limited_refunds.sql).
+      subscriptionRow: (id: string, live: boolean) => checked(db().from('billing_subscriptions').select('profile_id,livemode,subscription_id,offer_id,status,period_end').eq('profile_id', id).eq('livemode', live).maybeSingle()),
+      hasLifetime: async (id: string, subject: string, live: boolean) => {
+        const rows = await checked(db().from('access_grants').select('profile_id').eq('profile_id', id).eq('clerk_subject', subject).eq('livemode', live).eq('kind', 'lifetime').is('revoked_at', null).lte('starts_at', new Date().toISOString()).limit(1));
+        return Array.isArray(rows) && rows.length > 0;
+      },
+      // The unfinished request first, whatever subscription it was for; else the one for this subscription.
+      refundForSubscription: (id: string, live: boolean, subscription: string) => checked(db().rpc('limited_refund_for_subscription', { p_profile_id: id, p_livemode: live, p_subscription_id: subscription })),
+      // Only an unfinished request (limited-checkout refuses a new purchase while one is open).
+      // Fails open only when the function does not exist (PGRST202): the refund
+      // ledger was rolled back with it (docs/rollback/20260930070000), so there
+      // is no request to wait for, and checkout must not stop on a missing
+      // function. Every other error still stops the checkout.
+      unfinishedRefund: async (id: string, live: boolean) => {
+        const { data, error } = await db().rpc('limited_refund_for_subscription', { p_profile_id: id, p_livemode: live, p_subscription_id: null });
+        if (error) {
+          if ((error as { code?: string }).code === 'PGRST202') return null;
+          throw Error('Limited billing database operation failed');
+        }
+        return data;
+      },
+      // The refund sweep's list: charges of requests idle long enough (20260930072000).
+      stalledRefunds: (live: boolean, idleSeconds: number, limit: number) => checked(db().rpc('limited_refund_stalled', { p_livemode: live, p_idle_seconds: idleSeconds, p_limit: limit })),
+      claimRefund: (id: string, subject: string, live: boolean, payment: unknown) => checked(db().rpc('limited_refund_claim', { p_profile_id: id, p_clerk_subject: subject, p_livemode: live, p_payment: payment })),
+      leaseRefund: (charge: string, live: boolean) => checked(db().rpc('limited_refund_lease', { p_charge_id: charge, p_livemode: live })),
+      // The sweep's leased request follows a renewal paid since (limited_refund_follow): the moved request, or null.
+      followRefund: (request: string, token: string, payment: unknown) => checked(db().rpc('limited_refund_follow', { p_id: request, p_token: token, p_payment: payment })),
+      // charge.refunded of a renewal its subscription's request not cancelled yet could not follow (limited_refund_adopt): 'adopted', 'busy' or 'not_found'.
+      adoptRefund: (live: boolean, payment: unknown, amountRefunded: number) => checked(db().rpc('limited_refund_adopt', { p_livemode: live, p_payment: payment, p_amount_refunded: amountRefunded })),
+      recordRefund: async (request: string, token: string, step: string, refundId: string | null, status: string | null, code: string | null) => (await checked(db().rpc('limited_refund_record', { p_id: request, p_token: token, p_step: step, p_refund_id: refundId, p_refund_status: status, p_error: code }))) === true,
+      confirmRefund: (charge: string, live: boolean, refundId: string, status: string, amountRefunded: number) => checked(db().rpc('limited_refund_confirm', { p_charge_id: charge, p_livemode: live, p_refund_id: refundId, p_refund_status: status, p_amount_refunded: amountRefunded })),
+      updateRefund: (charge: string, live: boolean, refundId: string, status: string, code: string | null) => checked(db().rpc('limited_refund_update', { p_charge_id: charge, p_livemode: live, p_refund_id: refundId, p_refund_status: status, p_error: code })),
       settleLimited: async (args: Record<string, unknown>, quote: string, proof: unknown) => {
         const result = await checked(db().rpc('settle_limited_billing_subscription', { p_args: args, p_quote_id: quote, p_paid_proof: proof }));
         if (!['applied', 'duplicate'].includes(result as string)) throw Error('Limited billing settlement failed');

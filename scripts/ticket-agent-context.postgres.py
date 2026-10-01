@@ -27,6 +27,8 @@ T = '20000000-0000-4000-8000-000000000001'
 R = '20000000-0000-4000-8000-000000000002'
 U = '20000000-0000-4000-8000-000000000003'
 X = '20000000-0000-4000-8000-000000000004'
+C = '10000000-0000-4000-8000-000000000003'
+H = '20000000-0000-4000-8000-000000000005'
 VERSION = '2026-09-19T12:00:00+00:00'
 checks = []
 def check(name, okay):
@@ -79,6 +81,17 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         check('migration creates a random verification key',len(key)==64)
         target=rows(js(f"targetSQL('{T}')"));check('approved target selected',len(target)==1 and target[0]['id']==T)
         check('unapproved ticket cannot become action target',rows(js(f"targetSQL('{U}')"))==[])
+        # A refund ticket the refund ledger opened (20260930071000) on an
+        # admin's own account is the owner's to finish, not the agent's.
+        sql(f"""insert into profiles values('{C}',true);
+          insert into support_tickets values('{H}','{C}','Your refund of $99.00 will be finished for you','CredentialDOMD opened this ticket for you automatically.','open','2026-08-01','{VERSION}',null,null,null,'{{"source":"limited_refund"}}'),
+            ('{X[:-1]}6','{C}','Admin own','An ordinary admin ticket','open','2026-08-02','{VERSION}',null,null,null,'{{}}')""")
+        check('an ordinary admin ticket is still queued on the admin rule',any(x['id']==X[:-1]+'6' for x in rows(js('queueSQL()'))))
+        check('an admin-owned refund ticket the ledger opened stays out of the queue',all(x['id']!=H for x in rows(js('queueSQL()'))))
+        check('an admin-owned refund ticket cannot become an action target',rows(js(f"targetSQL('{H}')"))==[])
+        sql(f"update support_tickets set agent_approved_at=now() where id='{H}'")
+        check('released by the owner, a refund ticket is a target like any other',[x['id'] for x in rows(js(f"targetSQL('{H}')"))]==[H])
+        sql(f"delete from support_tickets where user_id='{C}'")
         history=rows(js(f"historySQL('{A}')"))
         check('same-customer history includes resolved archive and closed/unapproved context',set(x['id'] for x in history)=={T,R,U})
         check('other customer excluded',all(x['id']!=X for x in history))

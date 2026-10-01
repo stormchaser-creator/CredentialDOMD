@@ -55,8 +55,8 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
   // Founding Credential includes Practice while active: no trial notice, nothing to add.
   const trialMembership = access.purchasedOfferId === "core" && access.practiceIncluded !== true;
   if (access.accessStatus === "pending" && !hasSavedRecords) {
-    title = "Choose your membership";
-    copy = "Review your eligible offer and its renewal terms before choosing to pay. Creating an account does not charge you.";
+    title = "Complete your payment";
+    copy = "Your account opens when payment completes. Review your offer and its renewal terms, then continue to secure payment.";
   } else if (access.lifetime.credential && access.lifetime.practice) {
     title = "Free for life"; copy = "Your lifetime membership includes Credential and Practice.";
   } else if (access.scheduledMembership) {

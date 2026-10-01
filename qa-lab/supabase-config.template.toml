@@ -518,6 +518,9 @@ verify_jwt = false
 [functions.limited-customer-portal]
 verify_jwt = false
 
+[functions.limited-refund]
+verify_jwt = false
+
 [functions.limited-stripe-webhook]
 verify_jwt = false
 

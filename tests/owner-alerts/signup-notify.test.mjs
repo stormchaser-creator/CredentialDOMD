@@ -18,6 +18,7 @@
 //   a notifier that keeps failing, or keeps skipping a part, tells the owner
 //   after 3 runs, once, and again when it works.
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -69,6 +70,9 @@ create table billing_subscriptions(profile_id uuid, livemode boolean, subscripti
 create table lifetime_gift_reservations(id uuid primary key, email text, livemode boolean, claimed_profile_id uuid, claimed_at timestamptz, revoked_at timestamptz);
 create table invite_to_join_sends(id uuid primary key, invited_by uuid, email text not null, name text, status text not null, explicit_resend boolean not null default false,
   offer_phase text not null, offer_annual_cents integer not null, provider_id text, created_at timestamptz default now(), sent_at timestamptz, updated_at timestamptz default now());
+create table limited_refund_requests(id uuid primary key, profile_id uuid, livemode boolean, offer_id text, amount_cents integer, paid_at timestamptz,
+  state text not null default 'requested', subscription_canceled_at timestamptz, refund_id text, refund_status text, error_code text, support_ticket_id uuid,
+  lease_until timestamptz, requested_at timestamptz default now(), updated_at timestamptz default now());
 `;
 const CORE_ROWS = `
 insert into profiles(id, name, email) values
@@ -157,7 +161,7 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
   await pg.sql(BASE + OPTIONAL + CORE_ROWS + MONEY_ROWS);
 
   await t.test('the probe names every optional table that exists', async () => {
-    assert.equal(await present(pg), 'feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations,invite_to_join_sends');
+    assert.equal(await present(pg), 'feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations,invite_to_join_sends,limited_refund_requests');
   });
 
   await t.test('(c) a TICKET REPLY is a member reply only', async () => {
@@ -259,7 +263,7 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     const probe = JSON.stringify(await pg.rows(py(['probe']), 'drift'));
     const presentRun = spawnSync(python, [PY, 'present'], { input: probe, encoding: 'utf8' });
     assert.equal(presentRun.status, 0, presentRun.stderr);
-    assert.equal(presentRun.stdout.trim(), 'feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations');
+    assert.equal(presentRun.stdout.trim(), 'feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations,limited_refund_requests');
     assert.equal(presentRun.stderr.trim(), 'signup-notify: invite_to_join_sends is not reported until the notifier matches its columns (missing invite_to_join_sends.offer_annual_cents)');
     assert.equal(py(['drifted'], probe).trim(), 'invite_to_join_sends');
     const rows = await pg.rows(py(['query', '--since', EARLIER, '--now', iso(60), '--present', presentRun.stdout.trim()]), 'drift');
@@ -320,6 +324,71 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     assert.deepEqual(lines(rows, 'TICKET REPLY').map(r => r.email), ['member@example.test']);
     // Naming a table that is not there is exactly what the probe prevents.
     await assert.rejects(pg.rows(py(['query', '--since', EARLIER, '--now', iso(60), '--present', 'invite_to_join_sends']), 'bare'), /invite_to_join_sends/);
+  });
+
+  // Cancel and get a refund (2026-09-30): a refund the owner has to finish is
+  // one keyed line per row and standing, with the amount, where it stands and
+  // the row's short id; nothing about a card.
+  await t.test('refunds that need the owner: needs support, or cancelled and not refunded for 15 minutes; each once', async () => {
+    await pg.sql('create database refunds');
+    await pg.sql(BASE + OPTIONAL + CORE_ROWS, 'refunds');
+    const R = n => `3${String(n).padStart(7, '0')}-0000-4000-8000-000000000000`;
+    await pg.sql(`insert into limited_refund_requests(id, profile_id, livemode, offer_id, amount_cents, paid_at, state, subscription_canceled_at, refund_status, error_code, updated_at) values
+      ('${R(1)}', '${BUYER}', true, 'core', 9900, now() - interval '20 days', 'needs_support', null, null, 'charge_disputed', now() - interval '1 hour'),
+      ('${R(2)}', '${TRIAL}', true, 'core', 14900, now() - interval '20 days', 'needs_support', now() - interval '2 days', 'failed', 'expired_or_canceled_card', now()),
+      ('${R(3)}', '${MEMBER}', true, 'core_locum', 24500, now() - interval '20 days', 'requested', now() - interval '20 minutes', null, 'refund_failed', now() - interval '20 minutes'),
+      ('${R(4)}', '${OTHER}', true, 'core', 19900, now() - interval '20 days', 'requested', now() - interval '5 minutes', null, 'refund_failed', now() - interval '5 minutes'),
+      ('${R(5)}', '${GIFTED}', true, 'core', 9900, now() - interval '20 days', 'requested', null, null, 'cancel_failed', now() - interval '1 day'),
+      ('${R(6)}', '${GIFTED}', true, 'core', 9900, now() - interval '20 days', 'refunded', now() - interval '1 day', 'succeeded', null, now()),
+      ('${R(7)}', '${OTHER}', false, 'core', 9900, now() - interval '20 days', 'needs_support', now(), null, 'refund_refused', now()),
+      ('${R(8)}', '${MEMBER}', true, 'core', 9900, now() - interval '60 days', 'needs_support', null, null, null, now() - interval '8 days')`, 'refunds');
+    // Requested before the cancellation stopped: R(5) a day ago (reported), R(9) 20 minutes ago (the sweep still has it).
+    await pg.sql(`update limited_refund_requests set requested_at = now() - interval '1 day' where id = '${R(5)}';
+      insert into limited_refund_requests(id, profile_id, livemode, offer_id, amount_cents, paid_at, state, subscription_canceled_at, refund_status, error_code, requested_at, updated_at) values
+      ('${R(9)}', '${TRIAL}', false, 'core', 9900, now() - interval '20 days', 'requested', null, null, 'cancel_failed', now() - interval '20 minutes', now() - interval '20 minutes')`, 'refunds');
+    const refundRows = async (since = EARLIER, now = iso(60)) => (await pg.rows(py(['query', '--since', since, '--now', now, '--present', 'limited_refund_requests']), 'refunds'))
+      .filter(r => r.kind.startsWith('REFUND'));
+    const rows = await refundRows();
+    // The needs_support key carries a digest of why and of the refund it names (round 3).
+    const stop = (code, refund, status) => createHash('md5').update(`${code ?? ''}|${refund ?? ''}|${status ?? ''}`).digest('hex').slice(0, 12);
+    assert.deepEqual(rows.map(r => [r.kind, r.email, r.extra, r.key]).sort((a, b) => a[3].localeCompare(b[3])), [
+      ['REFUND NEEDS SUPPORT', 'buyer@example.test', `$99, needs support, not cancelled yet (charge_disputed), row ${R(1).slice(0, 8)}`, `refund:${R(1)}:needs_support:${stop('charge_disputed')}`],
+      ['REFUND NEEDS SUPPORT', 'trial@example.test', `$149, needs support, refund failed (expired_or_canceled_card), row ${R(2).slice(0, 8)}`, `refund:${R(2)}:needs_support:${stop('expired_or_canceled_card', null, 'failed')}`],
+      ['REFUND UNFINISHED', 'member@example.test', `$245, cancelled, not refunded (refund_failed), row ${R(3).slice(0, 8)}`, `refund:${R(3)}:unfinished`],
+      ['REFUND UNFINISHED', 'gifted@example.test', `$99, not cancelled yet, not refunded (cancel_failed), row ${R(5).slice(0, 8)}`, `refund:${R(5)}:not_cancelled`],
+      ['REFUND NEEDS SUPPORT', 'other@example.test', `$99, needs support (refund_refused), row ${R(7).slice(0, 8)} (test mode)`, `refund:${R(7)}:needs_support:${stop('refund_refused')}`],
+    ], 'not one cancelled 5 minutes ago, not one asked for 20 minutes ago, not a refunded one, not one older than the lookback');
+    const seen = path.join(pg.base, 'refund keys.json');
+    const msg = py(['format', '--seen', seen], JSON.stringify(rows)).trim();
+    const [header, ...body] = msg.split('\n');
+    assert.equal(header, 'CredentialDOMD money: 3 refunds needing you, 2 refunds unfinished');
+    assert.ok(body.includes(`• [REFUND UNFINISHED] Synthetic Member (member@example.test): $245, cancelled, not refunded (refund_failed), row ${R(3).slice(0, 8)}`), body.join('\n'));
+    assert.doesNotMatch(msg, /\u2014|ch_|re_|cus_|in_|sub_/, 'no provider ids, no em dash');
+    py(['remember', '--seen', seen], JSON.stringify(rows));
+    assert.equal(py(['format', '--seen', seen], JSON.stringify(await refundRows(iso(1), iso(61)))), '', 'each once, across runs');
+    // The one cancelled 5 minutes ago passes 15; the unfinished one then needs support: each is new, once.
+    await pg.sql(`update limited_refund_requests set subscription_canceled_at = now() - interval '16 minutes' where id = '${R(4)}';
+      update limited_refund_requests set state = 'needs_support', updated_at = now() where id = '${R(3)}'`, 'refunds');
+    const later = await refundRows(iso(1), iso(61));
+    const next = py(['format', '--seen', seen], JSON.stringify(later)).trim();
+    assert.equal(next, `CredentialDOMD money: 1 refund needing you, 1 refund unfinished\n• [REFUND UNFINISHED] Synthetic Other (other@example.test): $199, cancelled, not refunded (refund_failed), row ${R(4).slice(0, 8)}`
+      + `\n• [REFUND NEEDS SUPPORT] Synthetic Member (member@example.test): $245, needs support (refund_failed), row ${R(3).slice(0, 8)}`, 'oldest first');
+    py(['remember', '--seen', seen], JSON.stringify(later));
+    assert.equal(py(['format', '--seen', seen], JSON.stringify(await refundRows(iso(1), iso(61)))), '');
+    // Round 3: the owner refunds R(2) in the dashboard (refunded, not listed),
+    // and days later that refund fails: it needs support again, reported once.
+    await pg.sql(`update limited_refund_requests set state = 'refunded', refund_id = 're_Owner2', refund_status = 'succeeded', error_code = null, updated_at = now() where id = '${R(2)}'`, 'refunds');
+    const refunded = await refundRows(iso(1), iso(61));
+    assert.equal(refunded.some(r => r.key.startsWith(`refund:${R(2)}:`)), false);
+    py(['remember', '--seen', seen], JSON.stringify(refunded));
+    await pg.sql(`update limited_refund_requests set state = 'needs_support', refund_status = 'failed', error_code = 'refund_failed', updated_at = now() where id = '${R(2)}'`, 'refunds');
+    const again = await refundRows(iso(1), iso(61));
+    const alert = py(['format', '--seen', seen], JSON.stringify(again)).trim();
+    assert.equal(alert, `CredentialDOMD money: 1 refund needing you\n• [REFUND NEEDS SUPPORT] Synthetic Trial (trial@example.test): $149, needs support, refund failed (refund_failed), row ${R(2).slice(0, 8)}`,
+      'a refund that failed after the owner made it is a new alert, not one already seen');
+    assert.doesNotMatch(JSON.stringify(again.map(r => r.key)), /re_Owner2/, 'no provider id in the key file');
+    py(['remember', '--seen', seen], JSON.stringify(again));
+    assert.equal(py(['format', '--seen', seen], JSON.stringify(await refundRows(iso(1), iso(61)))), '', 'and once');
   });
 
   await t.test('the query refuses a malformed last-run time and an unknown table name', () => {

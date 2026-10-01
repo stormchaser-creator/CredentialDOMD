@@ -5,6 +5,7 @@ import { generateCredentialZip, downloadBlob } from "../../utils/credentialExpor
 import { supabase } from "../../lib/supabase";
 import { membershipRenewalCopy, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
+import RefundSection from "./RefundSection.jsx";
 
 function CancellationPage() {
   const { data, theme: T, userIdRef, navigate, hasSubscription, isFreeBeta, limitedLaunch, manage } = useApp();
@@ -74,6 +75,9 @@ function CancellationPage() {
   // renewal is cancelled, so "will not renew ... after it ends" is false there.
   const lifetime = limitedLaunch.access?.lifetime?.credential || limitedLaunch.access?.lifetime?.practice;
   const renewalLine = membershipRenewalCopy(limitedLaunch.access);
+  // A membership that was paid for: cancel now with a refund of its most
+  // recent annual payment, beside cancelling at the end of the paid period.
+  const paidMembership = !!limitedLaunch.access?.purchasedOfferId && !lifetime && !limitedLaunch.access?.scheduledMembership;
 
   if (limitedLaunch.enabled) return <section style={{ color: T.text, maxWidth: 520, margin: "0 auto" }}>
     <h1 style={{ fontSize: 22 }}>Membership and cancellation</h1>
@@ -86,7 +90,14 @@ function CancellationPage() {
       {renewalLine && <p>{renewalLine}</p>}
       <p>Manage renewal or cancel your paid subscription in the secure billing portal. Your saved records remain available for viewing and export after membership ends.</p>
       <button style={{ minHeight: TAP_MIN }} onClick={manage}>Manage paid subscription</button>
-    </> : <p>No active paid subscription was found.</p>}
+      {paidMembership && <>
+        <p style={{ marginTop: 16 }}>Or cancel now and get your money back: {MEMBERSHIP_COPY.refundTerms}</p>
+        <RefundSection paid />
+      </>}
+    </> : <>
+      <p>No active paid subscription was found.</p>
+      <RefundSection />
+    </>}
     <button style={{ marginLeft: 10, minHeight: TAP_MIN }} onClick={() => navigate("more", "export")}>Export saved records</button>
   </section>;
 

@@ -116,9 +116,12 @@ test('public signup replaces invitation-only instructions while requiring a sepa
   value.limitedLaunch.publicSignupEnabled = true;
   Object.assign(value.limitedLaunch.access, { accessStatus: 'pending', freeBeta: { state: 'none' }, billingEnabled: true, checkoutEligible: true });
   const html = render(Membership);
-  assert.match(html, /Creating an account does not charge you/);
+  // Pay first: the account opens when payment completes; the offer is still
+  // confirmed separately (the review opens by itself after mount).
+  assert.match(html, /Complete your payment to open your account\./);
+  assert.doesNotMatch(html, /Creating an account does not charge you/);
   assert.doesNotMatch(html, /Open your personal invitation link|type="checkbox"|Continue to secure payment/);
-  assert.doesNotMatch(html, /disabled=""[^>]*>Review Credential offer/);
+  assert.doesNotMatch(html, /disabled=""[^>]*>Complete payment/);
   value.limitedLaunch.enrollmentError = 'verified_primary_email_required';
   assert.match(render(Membership), /Verify the primary email address/);
   assert.match(render(Membership), /Check membership again/);
@@ -132,9 +135,9 @@ test('public signup with a saved token shows purchase guidance while manual-only
     Object.assign(value.limitedLaunch.access, { accessStatus: 'pending', freeBeta: { state: 'none' }, billingEnabled: true, checkoutEligible: true });
     value.limitedLaunch.publicSignupEnabled = true;
     const html = render(Membership);
-    assert.match(html, /Creating an account does not charge you/);
+    assert.match(html, /Complete your payment to open your account\./);
     assert.doesNotMatch(html, /Invitation activation is not open yet|Activate my invitation/);
-    assert.doesNotMatch(html, /disabled=""[^>]*>Review Credential offer/);
+    assert.doesNotMatch(html, /disabled=""[^>]*>Complete payment/);
     value.limitedLaunch.publicSignupEnabled = false;
     assert.match(render(Membership), /Invitation activation is not open yet/);
   } finally { globalThis.window = previous; }
@@ -146,7 +149,9 @@ test('fresh pending account gets purchase guidance while saved records retain re
   value.data = { settings: {}, licenses: [], documents: [] };
   value.limitedLaunch.access.accessStatus = 'pending';
   value.limitedLaunch.access.freeBeta = { state: 'none' };
-  assert.match(render(Notice), /Choose your membership/);
+  assert.match(render(Notice), /Complete your payment/);
+  assert.match(render(Notice), /Your account opens when payment completes/);
+  assert.doesNotMatch(render(Notice), /Creating an account does not charge you/);
   assert.doesNotMatch(render(Notice), /Saved records are available/);
   value.data.licenses.push({ id: 'saved-license' });
   assert.match(render(Notice), /Saved records are available/);

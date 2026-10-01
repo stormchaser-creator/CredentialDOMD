@@ -55,6 +55,20 @@ Money events (checkouts, payments, gifts, invitations) are keyed instead and
 looked for over the last LOOKBACK_DAYS: a payment is written when its webhook
 settles, stamped with the time it was paid, which can be before the last run.
 The key file remembers what was reported, so each one is reported once.
+
+A refund that needs the owner (limited_refund_requests, 20260930070000) is
+keyed too, one line per row and standing: a row in needs_support (changed in
+the last LOOKBACK_DAYS), and a row whose membership was cancelled more than
+REFUND_STUCK_MINUTES ago and is still not refunded (a press that failed or
+stopped), and a request made more than REFUND_STALLED_MINUTES ago whose
+membership is still not cancelled (the refund sweep, 20260930072000, has
+had several tries by then). The line carries the amount, where it stands and
+the row's short id. The server has also opened the member's support ticket by then
+(20260930071000); this line is the owner's own alert, and still arrives when
+that ticket could not be written. A stuck row still stuck after
+REMEMBER_DAYS is reported again, and a row that needs support again for a
+new reason (a refund that failed after the owner made it) is reported at
+once. A needs_support row whose membership is not cancelled yet says so.
 """
 import datetime as dt
 import errno
@@ -73,6 +87,8 @@ PREFIX = 'CredentialDOMD ticket agent: '
 DRAIN_MAX = 10
 LOOKBACK_DAYS = 7
 REMEMBER_DAYS = 30
+REFUND_STUCK_MINUTES = 15
+REFUND_STALLED_MINUTES = 60
 
 # Every part of the activity query and what it reads: {table: columns} and
 # the functions it calls. The probe checks each one, so a part runs only when
@@ -116,6 +132,8 @@ OPTIONAL_PARTS = {
     'lifetime_gift_reservations': ({'lifetime_gift_reservations': ('id', 'email', 'livemode', 'claimed_profile_id', 'claimed_at'), 'profiles': PROFILE}, ()),
     'invite_to_join_sends': ({'invite_to_join_sends': ('id', 'email', 'name', 'status', 'explicit_resend', 'offer_phase', 'offer_annual_cents',
                                                        'created_at', 'sent_at', 'updated_at')}, ()),
+    'limited_refund_requests': ({'limited_refund_requests': ('id', 'profile_id', 'livemode', 'amount_cents', 'state', 'subscription_canceled_at',
+                                                             'refund_id', 'refund_status', 'error_code', 'requested_at', 'updated_at'), 'profiles': PROFILE}, ()),
 }
 OPTIONAL = tuple(OPTIONAL_PARTS)
 PARTS = {**CORE, **OPTIONAL_PARTS}
@@ -130,6 +148,8 @@ MONEY = {
     'INVITE SENT': ('invitation sent', 'invitations sent'),
     'INVITE UNCONFIRMED': ('invitation unconfirmed', 'invitations unconfirmed'),
     'INVITE FAILED': ('invitation failed', 'invitations failed'),
+    'REFUND NEEDS SUPPORT': ('refund needing you', 'refunds needing you'),
+    'REFUND UNFINISHED': ('refund unfinished', 'refunds unfinished'),
 }
 
 
@@ -466,6 +486,33 @@ def query_sql(since, present, now=None):
   from invite_to_join_sends s
   where (s.status in ('sent', 'failed', 'unknown') or (s.status = 'sending' and s.created_at < now() - interval '10 minutes'))
     and coalesce(s.sent_at, s.updated_at) > {back}""")
+    if 'limited_refund_requests' in has:
+        # A refund the owner has to finish: needs_support (every path that
+        # records it), cancelled and still not refunded REFUND_STUCK_MINUTES
+        # later, or requested REFUND_STALLED_MINUTES ago and still not
+        # cancelled. One key per row and standing, so a stuck row that later
+        # needs support is reported again, once. A needs_support key also
+        # carries a digest of why and of the refund it names (no provider id
+        # in the key file), so a row that needs support again after it was
+        # refunded (the owner's dashboard refund failed later) is reported
+        # again, once, while the same stop is not. A row not cancelled yet
+        # says so: refunding it is not enough, the membership still renews.
+        at = f"'{now}'::timestamptz" if now else 'now()'
+        parts.append(f"""select case r.state when 'needs_support' then 'REFUND NEEDS SUPPORT' else 'REFUND UNFINISHED' end, {person('p')},
+  '$' || (r.amount_cents / 100)::text || ', '
+    || case when r.state <> 'needs_support' and r.subscription_canceled_at is null then 'not cancelled yet, not refunded'
+            when r.state <> 'needs_support' then 'cancelled, not refunded'
+            when r.subscription_canceled_at is null then 'needs support, not cancelled yet'
+            when r.refund_status in ('failed', 'canceled') then 'needs support, refund ' || r.refund_status
+            else 'needs support' end
+    || coalesce(' (' || r.error_code || ')', '') || ', row ' || left(r.id::text, 8) || {mode('r.livemode')},
+  r.updated_at, 'refund:' || r.id::text || ':' || case when r.state = 'needs_support'
+      then 'needs_support:' || left(md5(coalesce(r.error_code, '') || '|' || coalesce(r.refund_id, '') || '|' || coalesce(r.refund_status, '')), 12)
+    when r.subscription_canceled_at is null then 'not_cancelled' else 'unfinished' end
+  from limited_refund_requests r left join profiles p on p.id = r.profile_id
+  where (r.state = 'needs_support' and r.updated_at > {back})
+     or (r.state = 'requested' and r.subscription_canceled_at <= {at} - interval '{REFUND_STUCK_MINUTES} minutes')
+     or (r.state = 'requested' and r.subscription_canceled_at is null and r.requested_at <= {at} - interval '{REFUND_STALLED_MINUTES} minutes')""")
     return '\nunion all '.join(parts) + '\norder by created_at'
 
 
