@@ -14,7 +14,7 @@ import { EXIT } from '../../scripts/ticket-fix/run.mjs';
 import { verifyAgentClaims, hostFollowUps, disputedItems } from '../../scripts/ticket-fix/stage3.mjs';
 import { askSources, applyAskVerdicts, checklistErrors, finalStates, renderFooter, extendChecklist, emptyChecklist, itemsDigest } from '../../scripts/ticket-fix/checklist.mjs';
 import { confirmChecklist, combineEdges, edgeReasons, reviewInput, reviewDiff, EVIDENCE_MARKER } from '../../scripts/ticket-fix/review.mjs';
-import { deliverAttachments, modelView, imageSize, sniff, sipsIn } from '../../scripts/ticket-fix/attachments.mjs';
+import { deliverAttachments, modelView, imageSize, sniff, sipsIn, attachRootPrefix } from '../../scripts/ticket-fix/attachments.mjs';
 import { sandboxAvailable } from '../../scripts/ticket-fix/sandbox.mjs';
 import { createWorktree, commitWork } from '../../scripts/ticket-fix/worktree.mjs';
 import { validateAssessment, saveReview, actorLabel } from '../../scripts/ticket-agent-context.mjs';
@@ -32,7 +32,7 @@ const toMap = value => new Map(Object.entries(value).map(([k, v]) => [k, new Set
 
 // The runner's attachment step with a stub download, as stage3-run does it.
 async function withAttachments() {
-  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'credentialdomd-attachments.')));
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), attachRootPrefix())));
   chmodSync(root, 0o700);
   const ctx = { ...context(), attachments: [{ ticket_id: TICKET, source_id: TICKET, storage_path: `tickets/${TICKET}/screenshot.png`, access: 'not_loaded', path_valid: true }] };
   const manifest = await deliverAttachments({ context: ctx, outDir: path.join(root, TICKET), fetchObject: async () => PNG, convert: { toPng() {}, dimensions: () => ({ width: 1, height: 1 }), shrink() {} } });
@@ -225,7 +225,7 @@ const tempDir = () => {
 };
 test('the real sips, in a credentialdomd-attachments.* root in the user temporary directory (where ticket-agent.sh puts it): HEIC becomes PNG, 2800 px becomes 2000, a sibling folder stays closed',
   { skip: !existsSync('/usr/bin/sips') ? 'needs /usr/bin/sips' : !sandboxAvailable() ? 'needs sandbox-exec (not inside another sandbox)' : false }, async () => {
-  const root = realpathSync(mkdtempSync(path.join(tempDir(), 'credentialdomd-attachments.')));
+  const root = realpathSync(mkdtempSync(path.join(tempDir(), attachRootPrefix())));
   const scratch = privateDir('ticket-sips-src-');
   try {
     const small = path.join(scratch.dir, 'in.png');

@@ -412,8 +412,10 @@ adds three host steps and changes what the worker returns.
    bytes decide the type (PNG, JPEG, GIF, WebP, HEIC/HEIF, PDF; anything else is refused),
    HEIC becomes PNG and images over 2000 px are shrunk with `/usr/bin/sips`, files over 10 MB
    are refused, and each file is written `att-<n>.<ext>` (0600) into
-   `$TMPDIR/credentialdomd-attachments.XXXXXX/<ticket>/`, next to the run directory and
-   removed with it (and after each ticket's run). The host's manifest goes to
+   `$TMPDIR/credentialdomd-attachments.<pid>.XXXXXX/<ticket>/`, next to the run directory and
+   removed with it (and after each ticket's run). A later run removes a root a killed run
+   left behind, and spares one whose process (the `<pid>` in its name) is still alive: the
+   tests make roots there too. The host's manifest goes to
    `<run dir>/<ticket>-attachments.json`. The log carries the ticket id and storage path
    only. A failed download is `unavailable` with a reason, internal work for the next run,
    never a request to the customer.

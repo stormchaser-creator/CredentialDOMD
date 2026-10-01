@@ -98,9 +98,19 @@ RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-ticket-context.XXXXXX") || {
 # Attachments (stage 3, G6) live next to the run directory, not in it: every
 # session is denied the run directory, and this ticket's sessions may read
 # their own attachment folder. Folders a killed run left behind hold another
-# ticket's files; the lock is ours, so nothing is using them.
-for STALE in "${TMPDIR:-/tmp}"/credentialdomd-attachments.*(N/); do /bin/rm -rf "$STALE"; done
-ATTACH_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-attachments.XXXXXX") || { /bin/rm -rf "$RUN_DIR"; /bin/rm -f "$LOCK/owner"; rmdir "$LOCK"; exit 1; }
+# ticket's files and are removed here. Each root's name carries the process
+# that made it (credentialdomd-attachments.<pid>.XXXXXX; run.mjs and the tests
+# name theirs the same way): one whose process is still alive is in use and
+# stays. The lock only says no other runner is working; this temporary
+# directory is the user's own, where npm test makes roots of the same shape,
+# and removing those mid-run failed a test as host_failed (2026-10-01). A root
+# left here is still denied to every session (worker.mjs attachmentRules).
+for STALE in "${TMPDIR:-/tmp}"/credentialdomd-attachments.*(N/); do
+  OWNER=${${STALE:t}#credentialdomd-attachments.}; OWNER=${OWNER%%.*}
+  [[ ${STALE:t} == credentialdomd-attachments.<->.* ]] && kill -0 "$OWNER" 2>/dev/null && continue
+  /bin/rm -rf "$STALE"
+done
+ATTACH_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-attachments.$$.XXXXXX") || { /bin/rm -rf "$RUN_DIR"; /bin/rm -f "$LOCK/owner"; rmdir "$LOCK"; exit 1; }
 trap 'EXIT_RC=$?; node "$ALERT" status --state "$CASE_STATE" --rc "$EXIT_RC" >> "$LOG" 2>&1; /bin/rm -rf "$RUN_DIR" "$ATTACH_ROOT" "$HOST_DIR"; /bin/rm -f "$LOCK/owner"; rmdir "$LOCK" 2>/dev/null' EXIT
 HOST_FINGERPRINT=$(host_fingerprint)
 case "$HOST_FINGERPRINT" in *FAILED*) echo "$(date '+%F %T') ERROR — cannot read the state of the runner's own code" >> "$LOG"; exit 1 ;; esac

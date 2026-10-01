@@ -48,6 +48,10 @@ export const MAX_DIMENSION = 2000;
 // directory), named so the sessions' denial of credentialdomd-ticket-* does
 // not cover it; each ticket gets its own subdirectory, removed after its run.
 export const ATTACH_ROOT_PREFIX = 'credentialdomd-attachments.';
+// A root's name also carries the process that made it, so the runner's sweep
+// of roots a killed run left behind (ticket-agent.sh) spares one in use: the
+// tests make roots in the same user temporary directory while it runs.
+export const attachRootPrefix = (pid = process.pid) => `${ATTACH_ROOT_PREFIX}${pid}.`;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
 const sha256 = data => createHash('sha256').update(data).digest('hex');

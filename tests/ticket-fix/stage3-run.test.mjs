@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { EXIT } from '../../scripts/ticket-fix/run.mjs';
 import { readRun, writeRun } from '../../scripts/ticket-fix/merge.mjs';
-import { deliverAttachments } from '../../scripts/ticket-fix/attachments.mjs';
+import { deliverAttachments, attachRootPrefix } from '../../scripts/ticket-fix/attachments.mjs';
 import { readChecklist } from '../../scripts/ticket-fix/checklist.mjs';
 import { project, sh, runStub, standardScript, workerResult, approve, confirmResult, context, CHECKLIST_RESULT, TICKET, OWNER, RUN_ID } from './stage2-helpers.mjs';
 import { liveBuild } from './helpers.mjs';
@@ -23,7 +23,7 @@ const question = { items: [{ requirement: 'Answer where the summary title comes 
 // The runner's attachment step, done here with a stub download: the root
 // next to the run directory, the ticket's own folder, the private manifest.
 async function withAttachments() {
-  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'credentialdomd-attachments.')));
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), attachRootPrefix())));
   chmodSync(root, 0o700);
   const ctx = { ...context(), attachments: [{ ticket_id: TICKET, source_id: TICKET, storage_path: SHOT, access: 'not_loaded', path_valid: true }] };
   const manifest = await deliverAttachments({ context: ctx, outDir: path.join(root, TICKET), fetchObject: async () => PNG, convert: { toPng() {}, dimensions: () => ({ width: 1, height: 1 }), shrink() {} } });

@@ -101,7 +101,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareResult, refusalHead, RESULT_SCHEMA } from '../ticket-agent-context.mjs';
-import { readManifest, reviewedIds, modelView, selectAttachments, ATTACH_ROOT_PREFIX } from './attachments.mjs';
+import { readManifest, reviewedIds, modelView, selectAttachments, attachRootPrefix } from './attachments.mjs';
 import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtraction, confirmPrompt, extendChecklist, writeChecklist, applyAskVerdicts,
   coverageHints, finalStates, unseenItems, untrustedItems, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
@@ -308,10 +308,11 @@ function writeRunSync(work, value) {
 // This ticket's own folder the sessions may read (stage 3, G6): the
 // attachment folder the download step made and the manifest vouches for, or
 // else a fresh one of the same shape (the case history file goes in it), so
-// the sandbox and the permission rules treat it the same way.
+// the sandbox and the permission rules treat it the same way. Its name
+// carries this process, so the runner's sweep leaves it alone while it runs.
 async function sessionReadable(attachDir, ticket) {
   if (attachDir) return { dir: attachDir, remove: () => {} };
-  const root = realpathSync(await fs.mkdtemp(path.join(realpathSync(os.tmpdir()), ATTACH_ROOT_PREFIX)));
+  const root = realpathSync(await fs.mkdtemp(path.join(realpathSync(os.tmpdir()), attachRootPrefix())));
   const dir = path.join(root, ticket);
   await fs.mkdir(dir, { mode: 0o700 });
   return { dir, remove: () => rmSync(root, { recursive: true, force: true }) };
