@@ -30,7 +30,7 @@ const RATE_LOCKS = Object.freeze({
 // package is a later price, not a plan beside the $99 one.
 const BUNDLE_LABELS = Object.freeze({ founding: ' / year, after founding', later: ' / year total' });
 const FALLBACK = Object.freeze({ action: 'Create your account', reviewAction: 'See membership plans',
-  status: 'Your offer is confirmed before payment. Creating an account does not reserve a founding place.',
+  status: 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.',
   headline: 'First 100 paid founding memberships: $99/year', price: '$99', priceLabel: ' / year, founding rate for the first 100 paid members',
   heroHeadline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
   heroNote: 'The founding annual rate stays locked for life while membership remains active.',
@@ -48,10 +48,10 @@ export function offerPresentation(value) {
   const phase = value.phase === 'founding' ? 'Founding' : value.phase === 'earlybird' ? 'Early bird' : 'Standard';
   const rate = `$${value.annualCents / 100}/year`;
   const status = value.availability === 'paused'
-    ? 'Paid checkout is paused. You can create your account now; no payment will be taken.'
+    ? 'Paid checkout is paused. No payment will be taken; your account opens when payment completes.'
     : value.availability === 'temporarily_full'
       ? 'Founding checkout is temporarily unavailable. Creating an account does not reserve a place.'
-      : 'Your offer is confirmed before payment. Creating an account does not reserve a founding place.';
+      : 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.';
   return { action: 'Create your account', reviewAction: value.phase === 'founding' ? 'See the $99 founding plan' : `See the ${rate} plan`, status,
     heroHeadline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid members, Practice included while you are a member' : ''}`,
     heroNote: value.phase === 'standard' ? 'One annual membership for your credentials, CME and professional records.' : `Your $${value.annualCents / 100} annual rate stays locked for life while membership remains active.`,
