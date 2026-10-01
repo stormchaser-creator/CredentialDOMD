@@ -15,7 +15,7 @@ const {
   COLLECTION_TABLES, USER_TABLES, DOCUMENTS_BUCKET, BACKUPS_BUCKET, TICKETS_FOLDER,
   PROFILE_TOMBSTONE_PATCH, PROFILE_KEEP_COLUMNS, HOOK_REQUESTER,
   isSafePrefix, storagePrefixes, chunk, tombstonePatch, isMissingTableError,
-  keepRecentBefore, INVOICE_NUMBER_KEEP_DAYS,
+  keepRecentBefore, INVOICE_NUMBER_KEEP_DAYS, keepRecentBlankPatch, isMissingColumnError,
 } = await import("../supabase/functions/delete-account/lib.ts");
 
 let pass = 0, fail = 0;
@@ -77,7 +77,14 @@ eq("the invoice number ledger is matched by user_id", USER_TABLES.find((t) => t.
 {
   const ledger = USER_TABLES.find((t) => t.table === "invoice_number_reservations");
   eq("only the invoice number ledger keeps recent rows", USER_TABLES.filter((t) => t.keepRecent).map((t) => t.table), ["invoice_number_reservations"]);
-  eq("it keeps the numbers reserved in the last six days", ledger.keepRecent, { column: "reserved_at", days: 6 });
+  eq("it keeps the numbers reserved in the last six days", { column: ledger.keepRecent.column, days: ledger.keepRecent.days }, { column: "reserved_at", days: 6 });
+  // Numbers only: when each went to the share sheet, and the contract it
+  // billed (20260930230000), are cleared on the rows it keeps.
+  eq("the kept rows lose their share stamps", keepRecentBlankPatch(ledger), { shared_at: null, shared_contract_id: null });
+  eq("every other table is kept whole or deleted whole", USER_TABLES.filter((t) => t !== ledger).map(keepRecentBlankPatch).filter(Boolean), []);
+  ok("a stamp column not there yet is tolerated (PGRST204)", isMissingColumnError({ code: "PGRST204", message: "Could not find the 'shared_at' column of 'invoice_number_reservations' in the schema cache" }));
+  ok("a stamp column not there yet is tolerated (42703)", isMissingColumnError({ code: "42703", message: "column \"shared_at\" does not exist" }));
+  ok("any other error is not", !isMissingColumnError({ code: "42501", message: "permission denied" }));
   eq("six days: a number the allocator can still reach was reserved within five", INVOICE_NUMBER_KEEP_DAYS, 6);
   const at = Date.parse("2026-10-01T23:59:59.000Z");
   eq("its cut is six days before the deletion", keepRecentBefore(ledger, at), { column: "reserved_at", before: "2026-09-25T23:59:59.000Z" });

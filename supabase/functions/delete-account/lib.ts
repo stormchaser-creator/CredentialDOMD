@@ -81,9 +81,10 @@ export interface UserTable {
    * Rows whose `column` is at or after `days` before the deletion stay; only
    * older ones are counted and deleted (keepRecentBefore). For a ledger whose
    * recent rows are what stops the account being handed something again
-   * after it reopens.
+   * after it reopens. `blank`: columns of the kept rows set to null, so
+   * what stays is the number alone.
    */
-  keepRecent?: { column: string; days: number };
+  keepRecent?: { column: string; days: number; blank?: string[] };
 }
 export const USER_TABLES: UserTable[] = [
   { table: "assistant_log", column: "user_id" },
@@ -155,8 +156,10 @@ export const USER_TABLES: UserTable[] = [
   // date, so a number reserved more than 5 days before the deletion can never
   // be issued again and goes; the last INVOICE_NUMBER_KEEP_DAYS days' numbers
   // (numbers only: no amount, recipient or invoice) stay under the tombstoned
-  // profile.
-  { table: "invoice_number_reservations", column: "user_id", optional: true, keepRecent: { column: "reserved_at", days: INVOICE_NUMBER_KEEP_DAYS } },
+  // profile. Their share stamps (when each went to the share sheet, and the
+  // id of the contract it billed, 20260930230000) are cleared, so only the
+  // number stays.
+  { table: "invoice_number_reservations", column: "user_id", optional: true, keepRecent: { column: "reserved_at", days: INVOICE_NUMBER_KEEP_DAYS, blank: ["shared_at", "shared_contract_id"] } },
 ];
 
 /**
@@ -167,6 +170,27 @@ export const USER_TABLES: UserTable[] = [
 export function keepRecentBefore(t: UserTable, nowMs: number): { column: string; before: string } | null {
   if (!t.keepRecent) return null;
   return { column: t.keepRecent.column, before: new Date(nowMs - t.keepRecent.days * DAY_MS).toISOString() };
+}
+
+/**
+ * The patch that clears a keepRecent table's `blank` columns on the rows it
+ * keeps, or null when it keeps them whole (every other table).
+ */
+export function keepRecentBlankPatch(t: UserTable): Record<string, null> | null {
+  const cols = t.keepRecent?.blank ?? [];
+  return cols.length ? Object.fromEntries(cols.map((c) => [c, null])) : null;
+}
+
+/**
+ * True for the error a column that does not exist yet gives (a `blank`
+ * column whose migration is not applied): PGRST204 from PostgREST, 42703
+ * from Postgres.
+ */
+export function isMissingColumnError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  if (code === "PGRST204" || code === "42703") return true;
+  return typeof message === "string" && /could not find the '.*' column|column .* does not exist/i.test(message);
 }
 
 /**

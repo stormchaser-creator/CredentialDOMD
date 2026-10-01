@@ -19,13 +19,15 @@ const STUBS = {
   // useNotifications and AppProvider are for App.jsx; a test that renders the
   // app shell sets globalThis.__screen.notifications to change the answer.
   'context/AppContext': 'export const useApp = () => globalThis.__screen.app; export const useNotifications = () => globalThis.__screen.notifications ?? { browserPermission: "default", requestPermission: async () => "default", checkAndNotify() {} }; export const AppProvider = ({ children }) => children;',
-  'utils/storageScope': 'export const BASE_KEYS = { timer: "timer", lastContract: "lastContract", contractPick: "contractPick", unrecordedInvoices: "unrecordedInvoices" }; const m = () => globalThis.__screen.storage; export const lsGet = (k) => m()[k] ?? null; export const lsSet = (k, v) => { m()[k] = v; }; export const lsGetJSON = (k) => m()[k] ?? null; export const lsSetJSON = (k, v) => { m()[k] = v; }; export const lsRemove = (k) => { delete m()[k]; };',
+  'utils/storageScope': 'export const BASE_KEYS = { timer: "timer", lastContract: "lastContract", contractPick: "contractPick", unrecordedInvoices: "unrecordedInvoices" }; const m = () => globalThis.__screen.storage; const full = () => globalThis.__screen.storageFull === true; export const lsGet = (k) => m()[k] ?? null; export const lsSet = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsGetJSON = (k) => m()[k] ?? null; export const lsSetJSON = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsRemove = (k) => { delete m()[k]; };',
   'utils/privateVault': 'const v = () => globalThis.__screen.vault; export const getPrivate = (s, id) => v()[s + ":" + id] || ""; export const setPrivate = (s, id, t) => { v()[s + ":" + id] = t; }; export const removePrivate = (s, id) => { delete v()[s + ":" + id]; }; export const looksLikePHI = () => null;',
   // A stored file comes back as null (not reachable) unless a test sets
   // globalThis.__screen.download to hand one back.
   // Invoice numbers are worked out on the device (no server) unless a test
   // sets globalThis.__screen.allocate to answer allocate_invoice_number.
-  'lib/supabase': 'export const supabase = {}; export const downloadDocumentBlob = async (p) => (globalThis.__screen?.download ? globalThis.__screen.download(p) : null); export const allocateInvoiceNumberRpc = (...a) => (globalThis.__screen?.allocate ? globalThis.__screen.allocate(...a) : null); export const uploadDocumentFile = async () => globalThis.__screen?.uploadDocumentFile?.() ?? null; export default {};',
+  // The share stamps (mark_invoice_number_shared, list_shared_invoice_numbers)
+  // go nowhere unless a test sets globalThis.__screen.markShared / listShared.
+  'lib/supabase': 'export const supabase = {}; export const downloadDocumentBlob = async (p) => (globalThis.__screen?.download ? globalThis.__screen.download(p) : null); export const allocateInvoiceNumberRpc = (...a) => (globalThis.__screen?.allocate ? globalThis.__screen.allocate(...a) : null); export const markInvoiceNumberSharedRpc = (...a) => (globalThis.__screen?.markShared ? globalThis.__screen.markShared(...a) : null); export const listSharedInvoiceNumbersRpc = () => (globalThis.__screen?.listShared ? globalThis.__screen.listShared() : null); export const uploadDocumentFile = async () => globalThis.__screen?.uploadDocumentFile?.() ?? null; export default {};',
   'hooks/useDeskKeys': 'export const useDeskAddShortcut = () => {}; export const useDeskKeyboard = () => {};',
 };
 // Sign-in (Clerk) for screens that read the signed-in user, such as Settings.
@@ -133,7 +135,13 @@ export const textOf = (n) => (typeof n === 'string' || typeof n === 'number' ? S
 export const find = (tree, pred, what) => { const hit = nodes(tree).find(pred); assert.ok(hit, `not found: ${what}`); return hit; };
 export const button = (tree, label) => find(tree, n => n.type === 'button' && textOf(n).includes(label), label);
 export const field = (tree, label) => find(tree, n => n.props?.label === label, label);
-export const click = (m, label) => button(m.render(), label).props.onClick({ stopPropagation() {} });
+// A disabled button does nothing when tapped, as in a browser: pressing one
+// here throws, so a test can never pass on a tap no physician could make.
+export const click = (m, label) => {
+  const b = button(m.render(), label);
+  assert.ok(!b.props.disabled, `"${label}" is disabled`);
+  return b.props.onClick({ stopPropagation() {} });
+};
 
 /** Pin the zone and the clock; returns a setter for "now" and restores both after the file. */
 export function pinClock(test, zone, now) {

@@ -52,6 +52,18 @@ export const BASE_KEYS = {
   unrecordedInvoices: "credentialdomd-unrecorded-invoices",
 };
 
+// The invoice hand-off notes (utils/invoiceHandoffStore.js purgeHandoffStores)
+// go with the unrecorded-invoice notes: kept when a session merely ended,
+// removed by Sign out and Delete All My Data. They live in sessionStorage and
+// IndexedDB too, so main.jsx hands the purge in at launch and this module
+// imports nothing more. Its IndexedDB half is recorded before the purge
+// returns and finished before the notes are read again (HANDOFF_PURGE_BASE),
+// so it is not awaited here.
+let purgeInvoiceHandoff = null;
+export function setInvoiceHandoffPurge(fn) {
+  purgeInvoiceHandoff = typeof fn === "function" ? fn : null;
+}
+
 // The profiles.deleted_at stamp this device last purged its cache for
 // (AppContext, after a server-side account deletion). Deliberately NOT in
 // BASE_KEYS: purgeUserStorage and the sign-out purge must leave it, or every
@@ -1857,6 +1869,8 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
     if (name === "accessAnswer" && keepVault && !retireRecovery) continue;
     if (keepLocal && name === "pendingOps") { markQueueKept(userId); continue; }
     if (keepLocal && (name === "timer" || name === "unrecordedInvoices")) continue;
+    // The invoice hand-off notes go with the unrecorded-invoice notes.
+    if (name === "unrecordedInvoices" && purgeInvoiceHandoff) { try { purgeInvoiceHandoff(userId); } catch { /* the purge goes on */ } }
     if (keepLocal && name === "data") {
       const raw = lsGet(base, userId);
       if (raw == null) continue;

@@ -8,7 +8,8 @@ import { build } from 'esbuild';
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bundled = await build({
-  entryPoints: [`${root}src/components/shared/UpdatePrompt.jsx`], bundle: true, write: false,
+  stdin: { contents: 'export { default } from "./src/components/shared/UpdatePrompt.jsx"; export { markInvoiceBusy } from "./src/utils/invoiceBusy.js";', resolveDir: root, loader: 'jsx' },
+  bundle: true, write: false,
   format: 'cjs', platform: 'node', jsx: 'automatic', external: ['react', 'react/jsx-runtime'],
   define: { 'import.meta.env.BASE_URL': '"/app/"', __APP_BUILD_ID__: '"old-build"' },
 });
@@ -65,6 +66,8 @@ async function fixture(run, options = {}) {
   new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(
     name => name === 'react' ? runtime : require(name), mod, mod.exports);
   const Page = mod.exports.default.type;
+  const { markInvoiceBusy } = mod.exports;
+  if (options.invoiceOpen) markInvoiceBusy('test', true);
   const render = allowed => { cursor = 0; return Page({ allowAutomaticUpdates: allowed }); };
   const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
   try {
@@ -75,7 +78,7 @@ async function fixture(run, options = {}) {
       cleanups.forEach(fn => fn());
       cleanups = mountedEffects.map(fn => fn()).filter(Boolean);
     }
-    await run({ observed, render, flush, timers, intervals, listeners, workerListeners, values });
+    await run({ observed, render, flush, timers, intervals, listeners, workerListeners, values, markInvoiceBusy });
     cleanups.forEach(fn => fn());
   } finally {
     for (const [key, descriptor] of originals) {
@@ -165,4 +168,39 @@ test('Strict Mode setup-cleanup-setup leaves auth updates manual', async () => {
     assert.equal(timers.length, 0);
     assert.equal(render(false).props['aria-label'], 'Update app to the new version');
   }, { strictMode: true, waiting: true });
+});
+
+// Ticket "Invoicce" (2026-09-30): an automatic update reloaded the page as the
+// physician came back from Mail, and the invoice that had just gone to the
+// agency was never recorded. While an invoice is open the update waits for a
+// tap instead (utils/invoiceBusy.js).
+test('an invoice open on screen: no automatic cache wipe or reload, the pill instead', async () => {
+  await fixture(async ({ observed, render, flush, timers, listeners, values }) => {
+    await flush();
+    listeners.get('focus')(); await flush();
+    assert.deepEqual(observed.cacheDeletes, []);
+    assert.equal(observed.reloads, 0);
+    assert.equal(timers.length, 0);
+    assert.equal(values.size, 0, 'the automatic attempt is not spent while the invoice is open');
+    const button = render(true);
+    assert.equal(button.props['aria-label'], 'Update app to the new version');
+    await button.props.onClick(); await flush();
+    timers.find(timer => timer.delay === 600).fn();
+    assert.equal(observed.reloads, 1, 'a tap still updates');
+  }, { allowed: true, invoiceOpen: true });
+});
+
+test('an invoice opened after the automatic update began: the delayed reload does not run', async () => {
+  await fixture(async ({ observed, render, flush, timers, workerListeners, markInvoiceBusy }) => {
+    await flush();
+    markInvoiceBusy('test', true);
+    try {
+      workerListeners.get('controllerchange')();
+      timers.find(timer => timer.delay === 600).fn();
+      assert.equal(observed.reloads, 0);
+      assert.equal(render(true).props['aria-label'], 'Update app to the new version');
+    } finally {
+      markInvoiceBusy('test', false);
+    }
+  }, { allowed: true, waiting: true });
 });

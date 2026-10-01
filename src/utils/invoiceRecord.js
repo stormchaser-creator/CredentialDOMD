@@ -138,16 +138,62 @@ const periodOf = (n) => (n.periodStart
   ? `${formatDate(n.periodStart)}${n.periodEnd && n.periodEnd !== n.periodStart ? ` to ${formatDate(n.periodEnd)}` : ""}`
   : "");
 
-/** The screen's line for a remembered note. `what` names its work ("its entries"). */
-export const unrecordedBanner = (note, what = "its entries") => {
+/**
+ * The screen's line for a remembered note. `what` names its work ("its
+ * entries"). A `handed` note (utils/invoiceHandoff.js) is one whose file went
+ * to the share sheet or the clipboard and whose sheet never answered: it may
+ * or may not have gone out. `record` when the screen offers Record it.
+ */
+export const unrecordedBanner = (note, what = "its entries", { record = false } = {}) => {
   const period = periodOf(note);
-  return `${note.number} went out ${formatDate(sentDay(note.sentAt))}${Number(note.total) > 0 ? ` for ${money(note.total)}` : ""} but is not on the Invoices tab, and ${what} are still unbilled. `
-    + `To record it, build its invoice${period ? ` (${period})` : ""} and tap Mark as sent: its number and date are filled in.`;
+  const how = record
+    ? "tap Record it: its number and date are filled in"
+    : `build its invoice${period ? ` (${period})` : ""} and tap Mark as sent: its number and date are filled in`;
+  const total = Number(note.total) > 0 ? ` for ${money(note.total)}` : "";
+  // Known only from the server's stamp: the device that sent it may have
+  // recorded it already, with the record still on its way (offline, or a
+  // membership check running there).
+  if (note.handed && !note.refused && note.fromServer) {
+    return `${note.number} went to the share sheet ${formatDate(sentDay(note.sentAt))} (noted on the server) and is not on the Invoices tab yet, so ${what} are still unbilled here. `
+      + `If another device sent it, open the app there first: its record may not have synced yet. If it went out and is recorded nowhere, ${how}. If it did not go out, tap Forget it.`;
+  }
+  if (note.handed && !note.refused) {
+    return `${note.number} went to the share sheet ${formatDate(sentDay(note.sentAt))}${total} and was never recorded, so ${what} are still unbilled. `
+      + `If it went out, ${how}. If it did not, tap Forget it.`;
+  }
+  return `${note.number} went out ${formatDate(sentDay(note.sentAt))}${total} but is not on the Invoices tab, and ${what} are still unbilled. `
+    + `To record it, ${how}.`;
 };
 
 /** The Mark as sent form's hint when it is filled in from a remembered note. */
-export const unrecordedHint = (note) =>
-  `Filled in from ${note.number}, which went out ${formatDate(sentDay(note.sentAt))} without a record. Check it against the copy you sent.`;
+export const unrecordedHint = (note) => (note.handed && !note.refused
+  ? `Filled in from ${note.number}, which went to the share sheet ${formatDate(sentDay(note.sentAt))} and was never recorded. Check it against the copy you sent.`
+  : `Filled in from ${note.number}, which went out ${formatDate(sentDay(note.sentAt))} without a record. Check it against the copy you sent.`);
+
+/** Asked before Record it records a note known only from the server's stamp. */
+export const serverNoteRecordQuestion = (number) =>
+  `${number} is noted only on the server. If another device recorded it and has not synced yet, recording it here too makes a second ${number}. Record it here?`;
+
+/**
+ * The day picker's line when Record it opened it: `matched` when the days the
+ * note billed are all still unbilled here and are checked; otherwise none is
+ * checked and the physician picks them from the copy that was sent.
+ */
+export const pickFromNoteHint = (number, matched) => (matched
+  ? `The days ${number} billed are checked. Check them against the copy that was sent.`
+  : `This device does not know which days ${number} billed, or they have changed since. Check the days on the copy that was sent.`);
+
+/** Asked before Mark as sent records a note's number for days that come to another total. */
+export const noteTotalQuestion = (number, sentTotal, total) =>
+  `${number} went out for ${money(sentTotal)}, and the days checked here come to ${money(total)}. Record ${number} for these days anyway?`;
+
+/**
+ * The preview's line when its file is with the share sheet and the sheet has
+ * not answered although the page is back in front (iOS can leave it
+ * unanswered for good). Mark as sent opens with the preview's number.
+ */
+export const shareUnansweredNotice = (number) =>
+  `The share sheet has not said whether ${number} went out. If it did, tap Mark as sent below: its number is filled in. Until then nothing is recorded.`;
 
 /** Asked before a remembered note is dropped. */
 export const forgetUnrecordedQuestion = (number) =>

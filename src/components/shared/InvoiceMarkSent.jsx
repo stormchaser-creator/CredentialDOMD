@@ -105,10 +105,12 @@ export default function InvoiceMarkSent({
 
 /**
  * The screen's reminder of each invoice that went out from it unrecorded and
- * was left behind (the preview closed, the page reloaded): what it was and
- * how to record it, and a way to forget it. Called as a function.
+ * was left behind (the preview closed, the page reloaded, or its share sheet
+ * never answered): what it was and how to record it, and a way to forget
+ * it. With `onRecord(note)`, Record it builds its invoice again with Mark as
+ * sent filled in. Called as a function.
  */
-export function UnrecordedNotes({ T, isDesktop = false, list, what, onForget }) {
+export function UnrecordedNotes({ T, isDesktop = false, list, what, onForget, onRecord = null }) {
   if (!list?.length) return null;
   return (
     <div style={{ marginBottom: 12 }}>
@@ -118,11 +120,19 @@ export function UnrecordedNotes({ T, isDesktop = false, list, what, onForget }) 
           backgroundColor: T.warningDim || T.card, border: `1px solid ${T.warning}`, color: T.text,
         }}>
           <div style={{ fontWeight: 800, marginBottom: 4 }}>{n.number} is not recorded</div>
-          <div style={{ color: T.textMuted, marginBottom: 8 }}>{unrecordedBanner(n, what)}</div>
-          <button onClick={() => { if (globalThis.window?.confirm?.(forgetUnrecordedQuestion(n.number))) onForget(n.number); }} style={{
-            padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: `1px solid ${T.border}`,
-            backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-          }}>Forget it</button>
+          <div style={{ color: T.textMuted, marginBottom: 8 }}>{unrecordedBanner(n, what, { record: !!onRecord })}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {onRecord && (
+              <button onClick={() => onRecord(n)} style={{
+                padding: "7px 14px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: "none",
+                background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer",
+              }}>Record it</button>
+            )}
+            <button onClick={() => { if (globalThis.window?.confirm?.(forgetUnrecordedQuestion(n.number))) onForget(n.number, { unstamp: true }); }} style={{
+              padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+            }}>Forget it</button>
+          </div>
         </div>
       ))}
     </div>

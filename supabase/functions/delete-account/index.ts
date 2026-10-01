@@ -30,7 +30,8 @@
  *           forwarding_address_sends, and invoice_number_reservations
  *           reserved more than INVOICE_NUMBER_KEEP_DAYS ago (the recent
  *           numbers stay, so the reopened account is never issued a number
- *           a billing office already holds; lib.ts says why)
+ *           a billing office already holds; lib.ts says why), the kept ones
+ *           with their share stamps cleared (keepRecent.blank)
  *   objects documents/<clerkId>/, documents/tickets/<id>/ for each ticket,
  *           backups/<clerkId>/ and backups/<profileId>/, plus any object a
  *           backups row still points at
@@ -80,9 +81,11 @@ import {
   TICKETS_FOLDER,
   USER_TABLES,
   chunk,
+  isMissingColumnError,
   isMissingTableError,
   isSafePrefix,
   keepRecentBefore,
+  keepRecentBlankPatch,
   storagePrefixes,
   tombstonePatch,
   type UserTable,
@@ -125,6 +128,16 @@ async function deleteRows(db: SupabaseClient, table: string, column: string, val
   const { error } = await (olderThan ? rows.lt(olderThan.column, olderThan.before) : rows);
   if (error && optional && isMissingTableError(error)) { console.warn(`delete-account: ${table} does not exist yet; nothing to delete`); return; }
   if (error) throw new Error(`could not delete from ${table}: ${error.message}`);
+}
+
+// The rows a keepRecent table keeps lose its `blank` columns (lib.ts
+// keepRecentBlankPatch). A table or column not there yet has nothing to clear.
+async function blankKeptRows(db: SupabaseClient, t: UserTable, userId: string): Promise<void> {
+  const patch = keepRecentBlankPatch(t);
+  if (!patch) return;
+  const { error } = await db.from(t.table).update(patch).eq(t.column, userId);
+  if (error && ((t.optional === true && isMissingTableError(error)) || isMissingColumnError(error))) { console.warn(`delete-account: ${t.table} has no ${Object.keys(patch).join("/")} yet; nothing to clear`); return; }
+  if (error) throw new Error(`could not clear ${t.table}: ${error.message}`);
 }
 
 /** Every value of `select` on the rows where column = value, paged past the 1,000-row cap. */
@@ -248,6 +261,7 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
   await ticketMessages(db, ticketIds, userId, true);
   for (const t of COLLECTION_TABLES) await deleteRows(db, t, "user_id", userId);
   for (const t of USER_TABLES) await deleteRows(db, t.table, t.column, userId, t.optional === true, keepRecentBefore(t, startedMs));
+  for (const t of USER_TABLES) await blankKeptRows(db, t, userId);
   for (const subject of ownedSubjects) await unresolvedErrors(db, subject, userId, true);
 
   // 4. The account closes in ONE transaction (close_account_for_data_deletion,

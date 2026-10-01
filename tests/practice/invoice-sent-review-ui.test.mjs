@@ -226,7 +226,8 @@ test('an invoice that went out unrecorded and was closed: the work log says so, 
 
   const text = shownText(m);
   assert.match(text, /INV-20260910-01 is not recorded/);
-  assert.match(text, /INV-20260910-01 went out Sep 10, 2026 for \$250\.00 but is not on the Invoices tab, and its entries are still unbilled\. To record it, build its invoice \(Sep 9, 2026\) and tap Mark as sent: its number and date are filled in\./);
+  assert.match(text, /INV-20260910-01 went out Sep 10, 2026 for \$250\.00 but is not on the Invoices tab, and its entries are still unbilled\. To record it, tap Record it: its number and date are filled in\./);
+  assert.ok(btn(m, t => t === 'Record it', 'Record it'), 'the work log offers to record it (utils/invoiceHandoff.js, 2026-09-30)');
 
   clock.setNow('2026-09-10T15:20:00-05:00');
   openWorkPreview(m);

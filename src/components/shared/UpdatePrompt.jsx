@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { invoiceBusy } from "../../utils/invoiceBusy";
 
 /**
  * UpdatePrompt — CallSync-style silent auto-update.
@@ -17,6 +18,9 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
  *    instead of yanking the page out from under the user mid-task.
  *  - Authentication keeps this component's cache wipe and reload as a manual
  *    choice. Background service-worker installation/activation is unchanged.
+ *  - Never while an invoice is open (utils/invoiceBusy.js): the pill again.
+ *    An automatic reload as the physician came back from Mail threw away an
+ *    invoice that had gone to the agency before anything recorded it.
  */
 
 const CURRENT_BUILD = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
@@ -65,7 +69,7 @@ function UpdatePrompt({ allowAutomaticUpdates = true } = {}) {
   }, [allowAutomaticUpdates]);
 
   const pauseAutomaticUpdate = useCallback(() => {
-    if (updateKind.current !== "automatic" || automaticAllowed.current) return false;
+    if (updateKind.current !== "automatic" || (automaticAllowed.current && !invoiceBusy())) return false;
     setMode("pill");
     return true;
   }, []);
@@ -117,7 +121,7 @@ function UpdatePrompt({ allowAutomaticUpdates = true } = {}) {
     }
     if (!newBuild) return;
 
-    if (silent && automaticAllowed.current && !autoAttempted(newBuild)) {
+    if (silent && automaticAllowed.current && !invoiceBusy() && !autoAttempted(newBuild)) {
       markAutoAttempt(newBuild);
       applyUpdate(true);
     } else {

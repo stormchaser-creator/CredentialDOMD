@@ -7,7 +7,7 @@ import { Modal, Field } from "../../shared";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import { generateId, formatDate, copyToClipboard, localDay, sentDay } from "../../../utils/helpers";
 import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
-import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint } from "../../../utils/invoiceRecord";
+import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint, shareUnansweredNotice } from "../../../utils/invoiceRecord";
 import { allocateInvoiceNumberRpc } from "../../../lib/supabase";
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import { exportInvoice } from "../../../utils/invoiceExport";
@@ -19,6 +19,8 @@ import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import InvoiceLinesTable from "../../shared/InvoiceLinesTable";
 import InvoiceMarkSent, { UnrecordedNotes } from "../../shared/InvoiceMarkSent";
 import useUnrecordedInvoices, { useUnloadWarning } from "../../shared/useUnrecordedInvoices";
+import { handOffInvoice, watchUnanswered } from "../../../utils/invoiceHandoff";
+import { markInvoiceBusy } from "../../../utils/invoiceBusy";
 import {
   dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
   monthKey, monthLabel, hasGrid, defaultCallSite,
@@ -57,8 +59,15 @@ function DutyLog({ contract, onBusyChange }) {
   // One left behind (the preview closed, the page reloaded) is kept on the
   // device until it is on the Invoices tab; leaving the page while one is on
   // screen asks first.
-  const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id });
+  // Handed to the share sheet too (WorkLog's; utils/invoiceHandoff.js).
+  // The Clerk user id: the same offline and online (WorkLog's).
+  const account = user?.id || "";
+  const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id, account });
   useUnloadWarning(!!unrecorded);
+  // The app never reloads itself for an update while a preview is open.
+  const previewOpen = !!invoicePreview;
+  useEffect(() => { markInvoiceBusy("dutylog", previewOpen); }, [previewOpen]);
+  useEffect(() => () => markInvoiceBusy("dutylog", false), []);
   // Work is told while a day, an invoice or Mark as sent is open here, so the
   // agreement on screen is never swapped out from under it (a schedule that
   // loads late, a call day turning over): the invoice records against it.
@@ -252,7 +261,9 @@ function DutyLog({ contract, onBusyChange }) {
       return false;
     }
     recordedRef.current = number;
-    forgetUnrecorded(number);
+    // Recorded: the share stamp goes from the server too (WorkLog's).
+    forgetUnrecorded(number, { unstamp: true });
+    if (number !== invoicePreview.number) forgetUnrecorded(invoicePreview.number, { unstamp: true });
     setUnrecorded(null); setSendNote(null); setMarkSent(null);
     for (const id of invoicePreview.dutyIds) {
       const d = (data.dutyDays || []).find(x => x.id === id);
@@ -277,7 +288,7 @@ function DutyLog({ contract, onBusyChange }) {
   // number only when its file went to a share sheet, else the newest invoice
   // from this agreement that went out unrecorded, else nothing.
   const markSentStart = () => {
-    if (invoicePreview && sendNote?.shared === invoicePreview.number) return { number: invoicePreview.number, day: localDay() };
+    if (invoicePreview && (sendNote?.shared === invoicePreview.number || sending === "out")) return { number: invoicePreview.number, day: localDay() };
     const last = leftUnrecorded[leftUnrecorded.length - 1];
     if (last) return { number: last.number, day: sentDay(last.sentAt), from: unrecordedHint(last), at: last.sentAt };
     return { number: "", day: localDay() };
@@ -316,6 +327,12 @@ function DutyLog({ contract, onBusyChange }) {
     await whenWriteAllowed(() => sendDutyFile(format));
   };
   // Copy: billed only once the text is really on the clipboard.
+  // Noted (device and server) as the file goes to the share sheet, before
+  // it answers (WorkLog's handOff).
+  const handOff = () => handOffInvoice(account, {
+    number: invoicePreview.number, sentAt: new Date().toISOString(), kind: "INV", contractId: contract.id,
+    total: invoicePreview.total, periodStart: invoicePreview.periodStart || null, periodEnd: invoicePreview.periodEnd || null,
+  });
   const copyDutyInvoice = async () => {
     if (sent || sending || recordedRef.current || invoicePreview?.numberPending) return;
     await whenWriteAllowed(async () => {
@@ -338,16 +355,35 @@ function DutyLog({ contract, onBusyChange }) {
       totalMin: 0, total: invoicePreview.total,
     };
     setSendNote(null);
+    const number = invoicePreview.number;
+    const opened = previewSeqRef.current;
+    handOff();
+    const stopWatch = watchUnanswered(() => {
+      if (recordedRef.current || previewSeqRef.current !== opened) return;
+      setSendNote({ text: shareUnansweredNotice(number), shared: number });
+    });
     let how;
     try {
       how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
     } catch (err) {
-      setSendNote({ text: sendFailedNotice(err), shared: null });
+      forgetUnrecorded(number, { unstamp: true });
+      if (previewSeqRef.current === opened) setSendNote({ text: sendFailedNotice(err), shared: null });
       return;
+    } finally {
+      stopWatch();
     }
     // Closed without reporting a send: said in the preview, with the way to
-    // record one that did go out.
-    if (how === null) { setSendNote({ text: shareClosedNotice(invoicePreview.number), shared: invoicePreview.number }); return; }
+    // record one that did go out. Answered after the preview was closed or
+    // replaced: the note stays for the banner to decide (WorkLog's sendInvoice).
+    if (how === null) {
+      if (previewSeqRef.current !== opened) return;
+      forgetUnrecorded(number, { unstamp: true });
+      setSendNote({ text: shareClosedNotice(number), shared: number });
+      return;
+    }
+    // Answered only after this preview was closed or replaced: nothing is
+    // recorded from the old one (WorkLog's sendInvoice).
+    if (previewSeqRef.current !== opened) return;
     const msg = invoiceCoverNotice(how);
     if (msg) {
       setNotice(msg);
@@ -598,7 +634,7 @@ function DutyLog({ contract, onBusyChange }) {
                 </div>
                 {InvoiceMarkSent({
                   T, iS, pending: unrecorded, note: sendNote?.text, start: markSentStart(),
-                  form: markSent, setForm: setMarkSent, today: localDay(), waiting: invoicePreview.numberPending || !!sending,
+                  form: markSent, setForm: setMarkSent, today: localDay(), waiting: invoicePreview.numberPending || sending === "checking",
                   onRecordPending: () => unrecorded && markDutyBilled(unrecorded.method, { number: unrecorded.number, sentAt: unrecorded.sentAt, retry: true }),
                   onRecordMarked: recordMarkedSent, unbilled: "these days",
                 })}

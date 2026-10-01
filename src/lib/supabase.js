@@ -1954,6 +1954,26 @@ export function allocateInvoiceNumberRpc(kind, day, atLeast) {
 }
 
 /**
+ * Stamp on the server that the invoice numbered `number` was handed to the
+ * share sheet or the clipboard (`shared` false clears it: the share was
+ * cancelled, or the note was forgotten). `sharedAt` is when the device
+ * handed it over (ISO): a stamp sent again later is dated then, not on
+ * arrival. Migration 20260930230000_invoice_number_shared.sql. A thenable of
+ * { data, error } (the request is sent once it is awaited or .then'd), or
+ * null without a cloud client. See utils/invoiceHandoff.js.
+ */
+export function markInvoiceNumberSharedRpc(number, { shared = true, contractId = null, sharedAt = null } = {}) {
+  if (!supabase) return null;
+  return supabase.rpc("mark_invoice_number_shared", { p_number: number, p_shared: shared, p_contract_id: contractId, p_shared_at: shared ? sharedAt || null : null });
+}
+
+/** The account's numbers handed to the share sheet that no invoice carries yet: [{ number, shared_at, contract_id }]. */
+export function listSharedInvoiceNumbersRpc() {
+  if (!supabase) return null;
+  return supabase.rpc("list_shared_invoice_numbers");
+}
+
+/**
  * The file as a Blob, or null. downloadDocumentFile below re-encodes the same
  * bytes as a base64 data URL, which costs roughly five copies of the file in
  * memory once the caller decodes it again. Anything that only needs a File

@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { cardActionSize, dismissButtonStyle, TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
@@ -7,7 +7,9 @@ import Modal from "../../shared/Modal";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { generateId, formatDate, nextInvoiceNumber, deleteConfirmText, localDay, sentDay } from "../../../utils/helpers";
 import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
-import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, recordRefusedNotice, unrecordedHint } from "../../../utils/invoiceRecord";
+import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, recordRefusedNotice, unrecordedHint, shareUnansweredNotice } from "../../../utils/invoiceRecord";
+import { handOffInvoice, watchUnanswered } from "../../../utils/invoiceHandoff";
+import { markInvoiceBusy } from "../../../utils/invoiceBusy";
 import InvoiceMarkSent, { UnrecordedNotes } from "../../shared/InvoiceMarkSent";
 import useUnrecordedInvoices, { useUnloadWarning } from "../../shared/useUnrecordedInvoices";
 import { invoicePdfFile } from "../../../utils/invoicePdf";
@@ -222,8 +224,14 @@ function Expenses() {
   // One left behind (the sheet closed, the page reloaded) is kept on the
   // device until it is on the Invoices tab; leaving the page while one is on
   // screen asks first.
-  const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "EXP" });
+  // Handed to the share sheet too (WorkLog's; utils/invoiceHandoff.js).
+  // The Clerk user id: the same offline and online (WorkLog's).
+  const account = user?.id || "";
+  const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "EXP", account });
   useUnloadWarning(!!unrecorded);
+  // The app never reloads itself for an update while the invoice sheet is open.
+  useEffect(() => { markInvoiceBusy("expenses", !!invOpen); }, [invOpen]);
+  useEffect(() => () => markInvoiceBusy("expenses", false), []);
   const [invAgency, setInvAgency] = useState("");
   const [checked, setChecked] = useState({});
   // Bill-to chips: the contract agencies plus any agency an unbilled expense
@@ -241,6 +249,9 @@ function Expenses() {
     wentOutRef.current = null;
     recordedRef.current = null;
     sheetRef.current += 1;
+    // A send from an earlier sheet whose share sheet never answered holds
+    // nothing here (its own finally is for its own sheet).
+    setBusy(false);
     setUnrecorded(null); setSendNote(null); setMarkSent(null);
     // Send waits for a membership answer that is only old (confirmWriteAllowed):
     // asked now, while the expenses are picked, so the tap finds it back.
@@ -353,7 +364,9 @@ function Expenses() {
     }
     recordedRef.current = record.number;
     wentOutRef.current = null;
-    forgetUnrecorded(record.number);
+    // Recorded: the share stamp goes from the server too (WorkLog's).
+    forgetUnrecorded(record.number, { unstamp: true });
+    if (expNumber?.number && expNumber.number !== record.number) forgetUnrecorded(expNumber.number, { unstamp: true });
     setUnrecorded(null); setSendNote(null); setMarkSent(null);
     setExpNumber(null);
     const invoiceId = record.id;
@@ -403,7 +416,7 @@ function Expenses() {
   // number only when its file went to a share sheet, else the newest expense
   // invoice that went out unrecorded, else nothing.
   const markSentStart = () => {
-    if (expNumber?.number && sendNote?.shared === expNumber.number) return { number: expNumber.number, day: localDay() };
+    if (expNumber?.number && (sendNote?.shared === expNumber.number || busy === "building")) return { number: expNumber.number, day: localDay() };
     const last = leftUnrecorded[leftUnrecorded.length - 1];
     if (last) return { number: last.number, day: sentDay(last.sentAt), from: unrecordedHint(last), at: last.sentAt };
     return { number: "", day: localDay() };
@@ -411,9 +424,10 @@ function Expenses() {
 
   // Not while the file is on its way. A send still waiting for the
   // membership check is dropped instead: nothing goes out once the sheet is
-  // closed.
+  // closed. A share sheet that never answered (the preview says so) no
+  // longer holds the sheet open: its number stays noted (useUnrecordedInvoices).
   const closeInvoiceSheet = () => {
-    if (busy && busy !== "checking") return;
+    if (busy && busy !== "checking" && !(expNumber?.number && sendNote?.shared === expNumber.number)) return;
     if (unrecorded && !window.confirm(closeUnrecordedQuestion(unrecorded.number))) return;
     sheetRef.current += 1;
     setBusy(false);
@@ -459,13 +473,41 @@ function Expenses() {
       // Clipboard letter (count-free), share text and PDF each claim only the
       // receipts that ride in that attempt; the invoice goes alone if the OS
       // refuses the bundle, and downloads when files cannot be shared.
-      const sent = await sendExpenseInvoiceFiles({
-        inv, files: attached, attachedExpenseIds: attachedExpenseIds(receiptDocs, missingDocs),
-        nav: navigator, pdfFor: invoicePdfFile, download: downloadFiles,
+      // Noted (device and server) before the share sheet opens: the record
+      // is written only once it answers (WorkLog's handOff).
+      handOffInvoice(account, {
+        number, sentAt: new Date().toISOString(), kind: "EXP", contractId: null,
+        total: inv.total, periodStart: inv.periodStart || null, periodEnd: inv.periodEnd || null,
       });
+      const stopWatch = watchUnanswered(() => {
+        if (recordedRef.current || sheetRef.current !== opened) return;
+        setSendNote({ text: shareUnansweredNotice(number), shared: number });
+      });
+      let sent;
+      try {
+        sent = await sendExpenseInvoiceFiles({
+          inv, files: attached, attachedExpenseIds: attachedExpenseIds(receiptDocs, missingDocs),
+          nav: navigator, pdfFor: invoicePdfFile, download: downloadFiles,
+        });
+      } catch (err) {
+        forgetUnrecorded(number, { unstamp: true });
+        throw err;
+      } finally {
+        stopWatch();
+      }
       // Closed without reporting a send: record nothing, and say how to
-      // record one that did go out.
-      if (!sent) { setSendNote({ text: shareClosedNotice(number), shared: number }); return; }
+      // record one that did go out. Answered after the sheet was closed or a
+      // new one opened: the note stays for the banner to decide.
+      if (!sent) {
+        if (sheetRef.current !== opened) return;
+        forgetUnrecorded(number, { unstamp: true });
+        setSendNote({ text: shareClosedNotice(number), shared: number });
+        return;
+      }
+      // Answered only after this sheet was closed or a new one opened (Mark
+      // as sent recorded it, and the next invoice is being picked): nothing is
+      // recorded from the old one, which would bill its expenses a second time.
+      if (sheetRef.current !== opened) return;
       const { how, coverCopied, droppedForSize } = sent;
       const outcome = { how, coverCopied, droppedForSize, attached: attached.length, missingDocs };
       const recorded = recordExpenseInvoice(expenseRecord(inv, sel, sent.lines, new Date().toISOString()), { outcome });
@@ -750,7 +792,7 @@ function Expenses() {
         </div>
         {InvoiceMarkSent({
           T, iS, pending: unrecorded, note: sendNote?.text, start: markSentStart(),
-          form: markSent, setForm: setMarkSent, today: localDay(), waiting: busy || !!expNumber?.pending,
+          form: markSent, setForm: setMarkSent, today: localDay(), waiting: busy === "checking" || !!expNumber?.pending,
           onRecordPending: recordPending,
           onRecordMarked: recordMarkedSent, unbilled: "these expenses",
         })}

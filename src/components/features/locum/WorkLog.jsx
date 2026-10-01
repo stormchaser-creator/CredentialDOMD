@@ -14,7 +14,9 @@ import { TAP_MIN } from "../../shared/actionButton";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard, localDay, sentDay } from "../../../utils/helpers";
 import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
-import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint } from "../../../utils/invoiceRecord";
+import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint, shareUnansweredNotice, serverNoteRecordQuestion, pickFromNoteHint, noteTotalQuestion } from "../../../utils/invoiceRecord";
+import { handOffInvoice, watchUnanswered } from "../../../utils/invoiceHandoff";
+import { markInvoiceBusy } from "../../../utils/invoiceBusy";
 import { allocateInvoiceNumberRpc } from "../../../lib/supabase";
 import { invoiceSubject } from "../../../utils/invoicePdf";
 import { invoiceCoverNotice } from "../../../utils/invoiceCover";
@@ -268,8 +270,17 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   // Invoices for this agreement that went out unrecorded and were left
   // behind (closed, reloaded): kept on the device until they are on the
   // Invoices tab. Leaving the page while one is on screen asks first.
-  const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id });
+  // Handed to the share sheet too (utils/invoiceHandoff.js): noted before
+  // the file goes, so a reload or iOS closing the app in Mail leaves a note.
+  // Keyed by the Clerk user id: the same offline and online (the profile id
+  // is known only after an online load), and the id Sign out purges by.
+  const account = user?.id || "";
+  const { list: leftUnrecorded, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id, account });
   useUnloadWarning(!!unrecorded);
+  // The app never reloads itself for an update while a preview is open.
+  const previewOpen = !!invoicePreview;
+  useEffect(() => { markInvoiceBusy("worklog", previewOpen); }, [previewOpen]);
+  useEffect(() => () => markInvoiceBusy("worklog", false), []);
 
   // Tick while a timer runs
   useEffect(() => {
@@ -996,7 +1007,13 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   // once, and the picker shows them grouped into Sun–Sat weeks — one agency
   // invoices weekly, another biweekly, so the window is chosen per invoice,
   // never configured per contract.
-  const openInvoicePicker = useCallback(() => {
+  // `from`: a note of an invoice that went out unrecorded (Record it): the
+  // preview opens Mark as sent with its number and date. Its days are checked
+  // only when the note lists them and every one is still unbilled here;
+  // otherwise none is (a server note knows no days, and a day deleted or
+  // re-dated since means the copy that was sent is the only guide), and the
+  // physician picks them from the copy that was sent.
+  const openInvoicePicker = useCallback((from = null) => {
     if (!contract || contract.payModel === "daily") return;
     const billing = computeBilling(contract, unbilled, true, contractEntries, data.invoices);
     const byDay = new Map();
@@ -1022,7 +1039,10 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     }
     // Future-dated days (a coverage marker logged ahead) list but start
     // UNCHECKED — invoicing a day that hasn't happened should be deliberate.
-    setInvoicePick({ days, selected: new Set(days.filter(d => d.key <= todayKey).map(d => d.key)) });
+    const listed = from && Array.isArray(from.days) && from.days.length ? from.days : null;
+    const matched = !!listed && listed.every(k => days.some(d => d.key === k));
+    const selected = from ? (matched ? days.filter(d => listed.includes(d.key)) : []) : days.filter(d => d.key <= todayKey);
+    setInvoicePick({ days, selected: new Set(selected.map(d => d.key)), from, matched });
   }, [contract, unbilled, computeBilling, contractEntries, data.invoices, showNotice, todayKey]);
 
   // An entry inside another entry's span ("no separate charge") ships on the
@@ -1054,7 +1074,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     return computeBilling(contract, list, true, contractEntries, data.invoices, sel).total;
   }, [invoicePick, contract, unbilled, computeBilling, contractEntries, data.invoices, waitsForContainer]);
 
-  const buildInvoice = useCallback((daySet = null) => {
+  const buildInvoice = useCallback((daySet = null, from = null) => {
     // A day-rate contract's money lives in duty days — the time engine would
     // price its rows at $0 and stamp them billed for nothing.
     if (!contract || contract.payModel === "daily") return;
@@ -1108,7 +1128,11 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     previewSeqRef.current += 1;
     setSending(null);
     setSent(false); // a fresh preview never inherits a stale ✓
-    setUnrecorded(null); setSendNote(null); setMarkSent(null);
+    setUnrecorded(null); setSendNote(null);
+    // Record it (a note of one that went out unrecorded): Mark as sent opens
+    // with its number and date, to check against the copy that was sent.
+    // Its total, when the note has one, is checked against these days' on Record.
+    setMarkSent(from?.number ? { number: from.number, day: sentDay(from.sentAt) || localDay(), from: unrecordedHint(from), at: from.sentAt || null, problem: null, tries: 0, noteNumber: from.number, noteTotal: Number(from.total) > 0 ? Number(from.total) : null } : null);
     // Send waits for a membership answer that is only old (confirmWriteAllowed):
     // asked now, while the invoice is read, so the tap finds it back.
     prepareWriteCheck("practice");
@@ -1121,7 +1145,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       text, textArgs, numberPending: reserved.pending, entryIds: selEntries.map(e => e.id), total: billing.total,
       number: num, orientationIncluded: billing.orientationIncluded,
       lines: billing.lines, totalMin: billing.totalMin, terms: termsText,
-      periodStart: dates[0] || null, periodEnd: dates[dates.length - 1] || null,
+      periodStart: dates[0] || null, periodEnd: dates[dates.length - 1] || null, days: dates,
       emptyStipendDays: billing.emptyStipendDays || [],
       dayOverMin: billing.dayOverMin || {},
     });
@@ -1188,6 +1212,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         rememberUnrecorded({
           number, sentAt, kind: "INV", contractId: contract.id, total: invoicePreview.total,
           periodStart: invoicePreview.periodStart || null, periodEnd: invoicePreview.periodEnd || null,
+          days: invoicePreview.days || [],
         });
         // An alert as well: it may have been refused while the physician was
         // in another app, and the banner alone could go unread.
@@ -1196,7 +1221,12 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       return false;
     }
     recordedRef.current = number;
-    forgetUnrecorded(number);
+    // Recorded: its share stamp goes from the server too, so no device says
+    // it was never recorded (not even once this invoice is deleted later).
+    forgetUnrecorded(number, { unstamp: true });
+    // Recorded under the number on the copy that was sent: this preview's own
+    // number, if its file went to a share sheet, bills nothing now.
+    if (number !== invoicePreview.number) forgetUnrecorded(invoicePreview.number, { unstamp: true });
     setUnrecorded(null); setSendNote(null); setMarkSent(null);
     if (invoicePreview.orientationIncluded && contract) {
       editItem("locumContracts", { ...contract, orientationBilled: true }, SENT_WORK);
@@ -1238,6 +1268,11 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     const number = String(markSent.number ?? "").trim();
     const problem = markSentProblem({ number, day: markSent.day, invoices: data.invoices, today: localDay() });
     if (problem) { setMarkSent(f => (f ? { ...f, problem } : f)); return; }
+    // Record it: the days checked must come to what that invoice went out for.
+    const sentTotal = markSent.noteTotal;
+    if (sentTotal && number.toLowerCase() === String(markSent.noteNumber || "").trim().toLowerCase()
+      && Math.abs(sentTotal - (Number(invoicePreview.total) || 0)) > 0.005
+      && !window.confirm(noteTotalQuestion(number, sentTotal, invoicePreview.total))) return;
     markBilledAndLog(MARKED_SENT, { number, sentAt: markedSentAt(markSent) });
   }, [invoicePreview, markSent, data.invoices, markBilledAndLog]);
 
@@ -1247,7 +1282,9 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   // invoice from this agreement that went out unrecorded, said as such, or
   // an empty number to type from the copy that was sent.
   const markSentStart = () => {
-    if (invoicePreview && sendNote?.shared === invoicePreview.number) return { number: invoicePreview.number, day: localDay() };
+    // Its file is with the share sheet now (sending "out"), or the sheet
+    // closed without saying: this preview's number.
+    if (invoicePreview && (sendNote?.shared === invoicePreview.number || sending === "out")) return { number: invoicePreview.number, day: localDay() };
     const last = leftUnrecorded[leftUnrecorded.length - 1];
     if (last) return { number: last.number, day: sentDay(last.sentAt), from: unrecordedHint(last), at: last.sentAt };
     return { number: "", day: localDay() };
@@ -1318,6 +1355,17 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       if (previewSeqRef.current === opened) setSending(null);
     }
   }, []);
+  // The note kept (device and server) as this preview's file is handed over,
+  // before the share sheet opens: the record is written only once the sheet
+  // answers, and on an iPhone the page can be reloaded or dropped first.
+  const handOff = useCallback(() => {
+    if (!invoicePreview || !contract) return;
+    handOffInvoice(account, {
+      number: invoicePreview.number, sentAt: new Date().toISOString(), kind: "INV", contractId: contract.id,
+      total: invoicePreview.total, periodStart: invoicePreview.periodStart || null, periodEnd: invoicePreview.periodEnd || null,
+      days: invoicePreview.days || [],
+    });
+  }, [invoicePreview, contract, account]);
   const sendInvoice = useCallback(async (format) => {
     // Already recorded (copied or sent): a second send would go out as a
     // second invoice with the same number. One Send or Copy at a time.
@@ -1325,23 +1373,48 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     await whenWriteAllowed(async () => {
       setSendNote(null);
       const args = pdfArgsFor(invoicePreview);
+      const number = invoicePreview.number;
+      const opened = previewSeqRef.current;
+      handOff();
+      // A sheet still unanswered once the page is back in front: said, and
+      // Mark as sent (never disabled by it) opens with this number.
+      const stopWatch = watchUnanswered(() => {
+        if (recordedRef.current || previewSeqRef.current !== opened) return;
+        setSendNote({ text: shareUnansweredNotice(number), shared: number });
+      });
       // PDF / Word / Excel, physician's choice — share sheet, download fallback
       let how;
       try {
         how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
       } catch (err) {
         // A file that could not be built used to fail with nothing said.
-        setSendNote({ text: sendFailedNotice(err), shared: null });
+        forgetUnrecorded(number, { unstamp: true });
+        if (previewSeqRef.current === opened) setSendNote({ text: sendFailedNotice(err), shared: null });
         return;
+      } finally {
+        stopWatch();
       }
       // The share sheet closed without reporting a send: usually a cancel, but
       // not always, so the preview says how to record one that did go out.
-      if (how === null) { setSendNote({ text: shareClosedNotice(invoicePreview.number), shared: invoicePreview.number }); return; }
+      // Answered only after the preview was closed or replaced, there is no
+      // preview to say it in: the note and its stamp stay, and the "never
+      // recorded" banner's Record it or Forget it decides.
+      if (how === null) {
+        if (previewSeqRef.current !== opened) return;
+        forgetUnrecorded(number, { unstamp: true });
+        setSendNote({ text: shareClosedNotice(number), shared: number });
+        return;
+      }
+      // A sheet that answers only after this preview was closed or replaced
+      // (Mark as sent recorded it, and the next invoice is open) records
+      // nothing: this call holds the old preview and entries, and would
+      // record its number a second time. Not recorded yet, its note stays.
+      if (previewSeqRef.current !== opened) return;
       const coverMsg = invoiceCoverNotice(how);
       if (coverMsg) showNotice(coverMsg);
       markBilledAndLog(`${how.startsWith("share") ? "share" : "download"}-${format}`);
     });
-  }, [invoicePreview, markBilledAndLog, pdfArgsFor, showNotice, sent, sending, whenWriteAllowed]);
+  }, [invoicePreview, markBilledAndLog, pdfArgsFor, showNotice, sent, sending, whenWriteAllowed, handOff, forgetUnrecorded]);
 
   // Copy: billed only once the text is really on the clipboard. An alert,
   // not the notice: the notice sits under this preview.
@@ -1614,14 +1687,21 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
 
       {/* An invoice from this agreement that went out without a record and
           was left behind: said here until it is recorded or forgotten. */}
-      {!invoicePreview && UnrecordedNotes({ T, isDesktop, list: leftUnrecorded, what: "its entries", onForget: forgetUnrecorded })}
+      {!invoicePreview && UnrecordedNotes({
+        T, isDesktop, list: leftUnrecorded, what: "its entries", onForget: forgetUnrecorded,
+        // Known only from the server: asked first, as the device that sent it
+        // may hold its record still on the way.
+        onRecord: hasOutstanding && contract?.payModel !== "daily"
+          ? (n) => { if (!n.fromServer || window.confirm(serverNoteRecordQuestion(n.number))) openInvoicePicker(n); }
+          : null,
+      })}
 
       {/* Unbilled summary + invoice CTA — never for a day-rate contract,
           whose invoicing lives in duty days, not the time engine. Gated on
           outstanding MONEY, not entries: an on-call day with zero calls
           still owes its stipend and must stay invoiceable. */}
       {hasOutstanding && (
-        <button onClick={openInvoicePicker} style={{
+        <button onClick={() => openInvoicePicker()} style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "14px 16px", borderRadius: 14, border: `2px solid ${T.accent}`,
           backgroundColor: T.card, cursor: "pointer", marginBottom: 14, boxShadow: T.shadow1,
@@ -1781,6 +1861,11 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       <Modal open={!!invoicePick} onClose={() => setInvoicePick(null)} title="Which days go on this invoice?">
         {invoicePick && (
           <>
+            {invoicePick.from && (
+              <div role="status" style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.45, marginBottom: 10 }}>
+                {pickFromNoteHint(invoicePick.from.number, invoicePick.matched)}
+              </div>
+            )}
             <InvoiceDayPicker
               T={T}
               days={invoicePick.days.map(d => ({
@@ -1791,7 +1876,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
               onChange={(s2) => setInvoicePick(p => ({ ...p, selected: s2 }))}
             />
             <button
-              onClick={() => { const s2 = new Set(invoicePick.selected); setInvoicePick(null); buildInvoice(s2); }}
+              onClick={() => { const s2 = new Set(invoicePick.selected); const from = invoicePick.from || null; setInvoicePick(null); buildInvoice(s2, from); }}
               disabled={invoicePick.selected.size === 0}
               style={{
                 width: "100%", padding: "14px", borderRadius: 12, border: "none", marginTop: 4,
@@ -1836,7 +1921,9 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
             </div>
             {!sent && InvoiceMarkSent({
               T, iS, pending: unrecorded, note: sendNote?.text, start: markSentStart(),
-              form: markSent, setForm: setMarkSent, today: localDay(), waiting: invoicePreview.numberPending || !!sending,
+              // Only the membership check holds Mark as sent back: a share sheet
+              // that never answers must not (recordedRef stops a late second record).
+              form: markSent, setForm: setMarkSent, today: localDay(), waiting: invoicePreview.numberPending || sending === "checking",
               onRecordPending: () => unrecorded && markBilledAndLog(unrecorded.method, { number: unrecorded.number, sentAt: unrecorded.sentAt, retry: true }),
               onRecordMarked: recordMarkedSent,
             })}

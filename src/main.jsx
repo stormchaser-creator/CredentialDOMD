@@ -8,12 +8,19 @@ import "./styles/base.css";
 import { sweepLapsedQueues, sweepSignOutIntents, watchSignOutIntents, sweepPendingOfflinePurges } from "./utils/storageScope";
 import { SIGN_IN_LOCALIZATION } from "./utils/signInMethods";
 import { appContentSecurityPolicy } from "./utils/appCsp";
+import { setInvoiceHandoffPurge } from "./utils/storageScope";
+import { purgeHandoffStores, sweepHandoffPurges } from "./utils/invoiceHandoffStore.js";
 
 // Global error sink (window.onerror + unhandledrejection -> report-error
 // function -> public.client_errors). Installed before anything renders so a
 // crash inside Clerk or App init is still captured.
 captureLaunchInvitation();
 installErrorReporting();
+// Sign out and Delete All My Data remove the invoice hand-off notes with the
+// account's other keys (utils/invoiceHandoffStore.js). Its IndexedDB half,
+// when an earlier page could not finish it, is finished now.
+setInvoiceHandoffPurge(purgeHandoffStores);
+sweepHandoffPurges().catch(() => {});
 // Writes a lapsed session left on this device whose account never came back
 // (utils/storageScope.js purgeUserStorage) go after their time limit.
 sweepLapsedQueues();
