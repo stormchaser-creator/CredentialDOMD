@@ -759,7 +759,15 @@ a:hover { color: var(--emerald-light); }
       post('/api/waitlist', 'waitlist_signup', payload).then(function(res) {
         if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label; }
         if (!msg) return;
-        if (res.ok || res.status === 409) {
+        if (res.status === 208) {
+          // waitlist_signup: this state's guide already went to this address
+          // in the last 24 hours, so nothing is sent again. The waitlist
+          // answer was still recorded.
+          msg.style.color = 'var(--amber)';
+          msg.textContent = wantsWaitlist
+            ? 'This guide was already sent to this address in the last 24 hours. Check your spam or junk folder. You can ask for it again once 24 hours have passed. You are on the waitlist, and Eric will email you when your spot opens.'
+            : 'This guide was already sent to this address in the last 24 hours. Check your spam or junk folder. You can ask for it again once 24 hours have passed.';
+        } else if (res.ok || res.status === 409) {
           msg.style.color = 'var(--emerald)';
           msg.textContent = wantsWaitlist
             ? 'The guide is on its way, usually within 15 minutes, and you are on the waitlist. Eric will email you when your spot opens.'
@@ -767,6 +775,14 @@ a:hover { color: var(--emerald-light); }
           form.reset();
           if (placement === 'sticky') { form.hidden = true; try { localStorage.setItem('cdomd_guide_bar', 'off'); } catch (e2) {} }
           else hideBar(true);
+        } else if (res.status === 403) {
+          // waitlist_signup: this address already asked for three guides in
+          // the last 24 hours (a rolling window, not a calendar day). The
+          // waitlist answer was still recorded.
+          msg.style.color = 'var(--amber)';
+          msg.textContent = wantsWaitlist
+            ? 'This address has asked for three guides in the last 24 hours, the most we send in that time. Ask for this one again in 24 hours. You are on the waitlist, and Eric will email you when your spot opens.'
+            : 'This address has asked for three guides in the last 24 hours, the most we send in that time. Ask for this one again in 24 hours.';
         } else if (res.status === 429) {
           msg.style.color = 'var(--amber)';
           msg.textContent = 'Busy right now. Try again in a few minutes.';

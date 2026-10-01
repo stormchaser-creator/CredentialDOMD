@@ -47,12 +47,16 @@ export function offerPresentation(value) {
     || (value.bundleAvailable !== undefined && value.bundleAvailable !== (value.phase !== 'founding'))) throw Error('Unavailable');
   const phase = value.phase === 'founding' ? 'Founding' : value.phase === 'earlybird' ? 'Early bird' : 'Standard';
   const rate = `$${value.annualCents / 100}/year`;
-  const status = value.availability === 'paused'
-    ? 'Paid checkout is paused. No payment will be taken; your account opens when payment completes.'
+  // Paused: an account made now is held at the pay first gate until checkout
+  // reopens, so the line and the button say that rather than promising an
+  // account that opens now.
+  const paused = value.availability === 'paused';
+  const status = paused
+    ? 'Paid checkout is paused, so no payment is taken now. An account you create today opens when checkout reopens and your payment completes.'
     : value.availability === 'temporarily_full'
       ? 'Founding checkout is temporarily unavailable. Creating an account does not reserve a place.'
       : 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.';
-  return { action: 'Create your account', reviewAction: value.phase === 'founding' ? 'See the $99 founding plan' : `See the ${rate} plan`, status,
+  return { action: paused ? 'Create your account for later' : 'Create your account', reviewAction: value.phase === 'founding' ? 'See the $99 founding plan' : `See the ${rate} plan`, status,
     heroHeadline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid members, Practice included while you are a member' : ''}`,
     heroNote: value.phase === 'standard' ? 'One annual membership for your credentials, CME and professional records.' : `Your $${value.annualCents / 100} annual rate stays locked for life while membership remains active.`,
     headline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid founding members, Practice included while you are a member' : ''}.`,
