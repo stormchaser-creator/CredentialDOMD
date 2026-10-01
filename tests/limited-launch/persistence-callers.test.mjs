@@ -6,6 +6,7 @@ import { localFallbackReference, profileSupportReference, profileInitializationE
 import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from '../../src/utils/accountRecordsLoad.js';
 import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
 import { applyHeldQueue } from '../../src/utils/heldChanges.js';
+import { localChangesSince, rebaseLocalChanges } from '../../src/utils/loadRebase.js';
 import { accountDataDeletedAt, sameDeletionStamp } from '../../src/utils/dataDeletion.js';
 
 // Execute the actual provider functions with synthetic dependencies. Extracting
@@ -20,7 +21,7 @@ const guardStart = source.indexOf('  const guardedSetData = useCallback(');
 const guardEnd = source.indexOf('  // Account deletion', guardStart);
 if (guardStart < 0 || guardEnd < guardStart) throw new Error('AppContext state guard could not be located');
 const guardCode = `${source.slice(guardStart, guardEnd)}\nglobalThis.api.guardedSetData = guardedSetData;`;
-const cacheStart = source.indexOf('  // Persist to localStorage on change');
+const cacheStart = source.indexOf('  // Persist the offline copy on change');
 const cacheEnd = source.indexOf('  // ─── Subscription', cacheStart);
 if (cacheStart < 0 || cacheEnd < cacheStart) throw new Error('AppContext cache effect could not be located');
 const cacheCode = source.slice(cacheStart, cacheEnd);
@@ -83,10 +84,11 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     lsSet: (...args) => record('lsSet', args),
     readCachedData: (...args) => record('readCachedData', args) ?? null,
     withLocalOnlySettings: cloud => cloud,
-    hasLegacyStorage: () => false, adoptLegacyStorage: () => null,
+    hasLegacyStorage: () => false, offlineCopyUnread: () => false, adoptLegacyStorage: () => null, markOfflineCopyRead: () => false, cachedRecordsRef: { current: null }, adoptOfflineCopyRead: () => false, deviceOnlyForLoad: () => null, offlineCopyUnchangedSinceKnown: () => false,
+    deviceOnlySaveBlocked: () => null, retryOfflineSave: async () => false,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [],
     // The REAL reconciler, so the harness exercises the actual sweep.
-    reconcileDocumentLinks, applyHeldQueue,
+    reconcileDocumentLinks, applyHeldQueue, localChangesSince, rebaseLocalChanges, localCopyCurrent: () => true,
     setData: update => { calls.push({ name: 'setData', actor }); if (deferReact) queuedUpdates.push(update); else applyUpdate(update); },
     setProfileIssue: value => { calls.push({ name: 'setProfileIssue', actor, value }); },
     setRecordsLoadIssue: value => { calls.push({ name: 'setRecordsLoadIssue', actor, value }); },
@@ -289,7 +291,7 @@ function cacheFixture() {
   const window = { Clerk: { user: { id: ownerA } } };
   const storage = new Map();
   const context = {
-    data, dataOwnerRef, dataLoadGeneration, cacheWriteGeneration: { current: 0 }, window, user: { id: ownerA }, loaded: true, offlineMode: false,
+    data, dataOwnerRef, dataLoadGeneration, cacheWriteGeneration: { current: 0 }, cachedRecordsRef: { current: null }, window, user: { id: ownerA }, loaded: true, offlineMode: false,
     loadedDeletionRef: { current: { owner: ownerA, stamp: null, fence: null } }, WIPE_SEEN_KEY: 'synthetic-wipe', sameDeletionStamp,
     lsGet: (base, owner) => storage.get(`${base}:${owner}`) ?? null,
     // storageScope.localCopyCurrent over this fixture's storage.

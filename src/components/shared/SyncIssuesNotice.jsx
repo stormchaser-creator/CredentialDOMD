@@ -14,7 +14,7 @@ import { actionButtonStyle } from "./actionButton.js";
  * Shown on every tab, because it is a failed save, not account chrome.
  */
 export default function SyncIssuesNotice() {
-  const { syncIssues, pendingWrites, awaitingAccessWrites, accessRefusedWrites, offlineMode, offlineCopyStale, data, theme: T, isDesktop, navigate } = useApp();
+  const { syncIssues, pendingWrites, awaitingAccessWrites, accessRefusedWrites, offlineMode, offlineCopyStale, deviceOnlyUnsaved, data, theme: T, isDesktop, navigate } = useApp();
   const lines = useMemo(() => describeSyncIssues(syncIssues, data), [syncIssues, data]);
   // Offline, the offline banner already says changes are waiting.
   const unsent = offlineMode ? 0 : Math.max(0, (pendingWrites || 0) - lines.length);
@@ -34,12 +34,30 @@ export default function SyncIssuesNotice() {
   const keptLine = kept > 0
     ? <>{kept === 1 ? "1 change is" : `${kept} changes are`} saved on this device and will sync to your account when the app reconnects. </>
     : null;
+  // Why the offline copy is older than the screen (utils/storage.js
+  // cacheStaleReason): out of space, an offline store that would not open,
+  // or a stored copy this load could not read. Only the first is "full".
   const stale = offlineCopyStale
     ? <p style={{ margin: lines.length || waiting || kept || refused ? "10px 0 0" : 0, fontSize: isDesktop ? 14 : 16, lineHeight: 1.5, color: T.textMuted }}>
-        This device&rsquo;s storage is full, so its offline copy of your records could not be updated. What opens offline is older than what you see now.
+        {offlineCopyStale === "unread"
+          ? <>This device&rsquo;s offline storage could not be read, so Protected Identity and the Answer Bank, kept only on this device, may not all be shown and cannot be changed, and its offline copy of your records is not being updated. The app tries again on its own; reload the app to try again now.</>
+          : offlineCopyStale === "unavailable"
+            ? <>This device&rsquo;s offline storage could not be opened, so its offline copy of your records could not be updated. What opens offline is older than what you see now.</>
+            : <>This device&rsquo;s storage is full, so its offline copy of your records could not be updated. What opens offline is older than what you see now.</>}
       </p>
     : null;
-  if (!lines.length && !waiting && !kept && !refused && !stale) return null;
+  // Protected Identity or Answer Bank changes that are in no copy of the
+  // offline file (utils/storage.js deviceOnlyUnsavedState): kept aside on this
+  // device until a save takes them, or on screen only. Those sections have no
+  // cloud copy, so the one way to keep them safe meanwhile is a JSON backup.
+  const deviceOnly = deviceOnlyUnsaved === "held" || deviceOnlyUnsaved === "memory"
+    ? <p data-device-only-unsaved="" style={{ margin: lines.length || waiting || kept || refused || stale ? "10px 0 0" : 0, fontSize: isDesktop ? 14 : 16, lineHeight: 1.5, color: T.textMuted }}>
+        {deviceOnlyUnsaved === "held"
+          ? <>A change to Protected Identity or the Answer Bank is not in this device&rsquo;s offline copy yet. It is kept aside on this device and saved into the offline copy as soon as the copy can be saved. Until then, save a full JSON backup under More, Data &amp; Backup.</>
+          : <>A change to Protected Identity or the Answer Bank is on this screen only: this device could not save it anywhere. Save a full JSON backup under More, Data &amp; Backup now; closing the app loses it.</>}
+      </p>
+    : null;
+  if (!lines.length && !waiting && !kept && !refused && !stale && !deviceOnly) return null;
   const one = lines.length === 1;
   const button = actionButtonStyle(T, { primary: false, isDesktop });
   if (!lines.length) {
@@ -50,6 +68,7 @@ export default function SyncIssuesNotice() {
         {keptLine}
         {waiting > 0 && <>{waiting === 1 ? "1 change has" : `${waiting} changes have`} not reached your account yet. {waiting === 1 ? "It is" : "They are"} sent again each time the app opens.</>}
         {stale}
+        {deviceOnly}
       </aside>
     );
   }
@@ -82,6 +101,7 @@ export default function SyncIssuesNotice() {
         </p>
       )}
       {stale}
+      {deviceOnly}
     </aside>
   );
 }

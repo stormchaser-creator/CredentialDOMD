@@ -131,10 +131,10 @@ ok("lastIdentity slot is part of BASE_KEYS (so purgeUserStorage covers it)",
 
 store.clear();
 localStorage.setItem(offlineCacheKey(A), JSON.stringify({ settings: { name: "Dr. A" }, licenses: [] }));
-ok("cache parses for its owner", cachedDataParses(A) === true);
-ok("another user's cache is invisible (own namespace only)", cachedDataParses(B) === false);
+ok("cache parses for its owner", (await cachedDataParses(A)) === true);
+ok("another user's cache is invisible (own namespace only)", (await cachedDataParses(B)) === false);
 localStorage.setItem(offlineCacheKey(A), "{corrupt");
-ok("corrupt cache does not parse", cachedDataParses(A) === false);
+ok("corrupt cache does not parse", (await cachedDataParses(A)) === false);
 
 // ── Sign-out purge covers the identity slot ─────────────────────────────
 
@@ -142,12 +142,12 @@ store.clear();
 setActiveUserId(A);
 recordLastIdentity({ id: A, fullName: "Dr. A" });
 localStorage.setItem(offlineCacheKey(A), JSON.stringify({ settings: {} }));
-ok("precondition: identity + cache present", readLastIdentity()?.authUserId === A && cachedDataParses(A));
+ok("precondition: identity + cache present", readLastIdentity()?.authUserId === A && (await cachedDataParses(A)));
 await purgeUserStorage(A, { keepVault: false });
 ok("sign-out purge removes the identity slot", readLastIdentity() === null);
-ok("sign-out purge removes the cached file", cachedDataParses(A) === false);
+ok("sign-out purge removes the cached file", (await cachedDataParses(A)) === false);
 ok("after purge the fallback can never activate",
-  shouldActivateOfflineFallback({ onLine: false, clerkLoaded: false, clerkTimedOut: true, probeFailed: true, identity: readLastIdentity(), cacheOk: cachedDataParses(A) }) === false);
+  shouldActivateOfflineFallback({ onLine: false, clerkLoaded: false, clerkTimedOut: true, probeFailed: true, identity: readLastIdentity(), cacheOk: (await cachedDataParses(A)) }) === false);
 
 // Involuntary sign-out (keepVault: true — session expiry, remote revocation)
 // also removes the identity slot: a revoked session must not reopen offline.
@@ -165,7 +165,7 @@ recordLastIdentity({ id: B, fullName: "Dr. B" });
 localStorage.setItem(offlineCacheKey(B), JSON.stringify({ settings: {} }));
 await purgeUserStorage(A, { keepVault: false });
 eq("purge of A leaves B's identity", readLastIdentity()?.authUserId, B);
-ok("purge of A leaves B's cache", cachedDataParses(B) === true);
+ok("purge of A leaves B's cache", (await cachedDataParses(B)) === true);
 
 // ── Explicit Sign out: purgeForSignOut ──────────────────────────────────
 // The Sign out button (src/context/AppContext.jsx handleSignOut) and Delete
@@ -206,20 +206,20 @@ await purgeForSignOut(A);
   const left = [...store.keys()].filter((k) => k.endsWith(`:${A}`));
   ok("sign-out leaves no key of A on the device", left.length === 0, left.join(","));
 }
-ok("sign-out clears the cached file", cachedDataParses(A) === false);
+ok("sign-out clears the cached file", (await cachedDataParses(A)) === false);
 ok("sign-out clears the vault", store.get(scopedKey(BASE_KEYS.vault, A)) === undefined);
 ok("sign-out clears the device-key slot (AI keys, lock code)", store.get(`${DEVICE_KEYS_BASE}:${A}`) === undefined);
 ok("sign-out clears the unsynced-edits queue", pendingOpCount(A) === 0);
 ok("after sign-out A's offline fallback can never activate",
-  shouldActivateOfflineFallback({ onLine: false, clerkLoaded: false, clerkTimedOut: true, probeFailed: true, identity: readLastIdentity()?.authUserId === A ? readLastIdentity() : null, cacheOk: cachedDataParses(A) }) === false);
+  shouldActivateOfflineFallback({ onLine: false, clerkLoaded: false, clerkTimedOut: true, probeFailed: true, identity: readLastIdentity()?.authUserId === A ? readLastIdentity() : null, cacheOk: (await cachedDataParses(A)) }) === false);
 // The still-signed-in account on the same device keeps everything,
 // including the offline fallback: a sign-out is one account's, not the device's.
 eq("sign-out of A leaves B's identity", readLastIdentity()?.authUserId, B);
-ok("sign-out of A leaves B's cache", cachedDataParses(B) === true);
+ok("sign-out of A leaves B's cache", (await cachedDataParses(B)) === true);
 ok("sign-out of A leaves B's device keys", store.has(`${DEVICE_KEYS_BASE}:${B}`));
 ok("sign-out of A leaves app-level keys", store.has("credentialdomd-shared-ai"));
 ok("B, still signed in on this device, keeps the offline fallback",
-  shouldActivateOfflineFallback({ onLine: false, clerkLoaded: false, clerkTimedOut: true, probeFailed: true, identity: readLastIdentity(), cacheOk: cachedDataParses(B) }) === true);
+  shouldActivateOfflineFallback({ onLine: false, clerkLoaded: false, clerkTimedOut: true, probeFailed: true, identity: readLastIdentity(), cacheOk: (await cachedDataParses(B)) }) === true);
 
 // The involuntary path stays as it was: keepVault keeps the vault AND the
 // device-key slot (the lock code must survive a token timing out).

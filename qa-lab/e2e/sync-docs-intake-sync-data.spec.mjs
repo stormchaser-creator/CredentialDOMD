@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { test } from './support/fixtures.mjs';
+import { readDeviceJSON } from './support/device-store.mjs';
 import {
   base64Marker, chooseFiles, field, goTab, newMember, openCredentials, openMore, pendingOps, row, rows, scriptAi, sleep, syntheticPdf, waitFor,
 } from './support/lab.mjs';
@@ -130,13 +131,15 @@ test('four ~3 MB documents in one session: no quota warning, and the offline cop
     const n = row(`select count(*)::int as n from public.documents where user_id = '${profile.id}' and uploaded_at > '${started}'`).n;
     qa.check('four documents rows, each with its file in Storage', n === 4, `${n}`);
     await sleep(3000);
-    const quota = qa.report.console.slice(mark).filter((l) => /localStorage quota exceeded/i.test(l));
-    qa.check('no "localStorage quota exceeded" warning', quota.length === 0, `${quota.length} warning(s)`);
-    const cached = await page.evaluate(() => {
-      const raw = localStorage.getItem(`credentialdomd-data:${window.Clerk.user.id}`);
-      try { const d = JSON.parse(raw || '{}'); return { docs: (d.documents || []).map((x) => ({ name: x.name, bytes: (x.data || '').length })), size: (raw || '').length }; } catch { return { docs: [], size: (raw || '').length }; }
-    });
-    qa.check('the device copy (localStorage) lists all four', files.every((f) => cached.docs.some((d) => d.name === f.name)), `${cached.docs.map((d) => `${d.name}:${d.bytes}`).join(', ')} (${cached.size} chars)`);
+    // The warning the offline copy prints when a store refused it (utils/storage.js saveText),
+    // and the one older builds printed.
+    const quota = qa.report.console.slice(mark).filter((l) => /offline copy was not updated|localStorage quota exceeded/i.test(l));
+    qa.check('no "offline copy was not updated" warning', quota.length === 0, `${quota.length} warning(s)`);
+    // Where the app keeps it: IndexedDB, or localStorage when IndexedDB refused (support/device-store.mjs).
+    const uid = await page.evaluate(() => window.Clerk.user.id);
+    const file = await readDeviceJSON(page, `credentialdomd-data:${uid}`);
+    const cached = { docs: (file.value.documents || []).map((x) => ({ name: x.name, bytes: (x.data || '').length })), size: file.size };
+    qa.check('the device copy (IndexedDB or localStorage) lists all four', files.every((f) => cached.docs.some((d) => d.name === f.name)), `${cached.docs.map((d) => `${d.name}:${d.bytes}`).join(', ')} (${cached.size} chars)`);
     await context.setOffline(true);
     await page.reload().catch(() => {});
     await page.getByText(/Offline\. Showing this device's copy/).first().waitFor({ timeout: 30000 }).catch(() => {});

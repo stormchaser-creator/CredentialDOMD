@@ -557,11 +557,27 @@ export function requestAccessCheck(authority = accessAuthority) {
 // are, so an import of a hundred refused records sends one row.
 let writeAccessReporter = null;
 const writeAccessReported = new Set();
+let writeAccessSession = 0;
 const SECTION = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
-/** Where refused and kept saves are reported: fn(message, extra). A new reporter starts a new session's once-each. */
+// Refusals that can be the page being left rather than a lost save. A reload
+// or a navigation ends the account load still in flight (the reconcile load
+// that runs once the membership answer opens writes), the load's catch stops
+// writes (suspendWrites, AppContext), and the Setup board's pagehide flush
+// (useSetupState) then meets that stop: "Save refused (suspended, settings)"
+// for a member who only left. The stop's own report is dropped on a page
+// being left (reportUnlessLeaving, OPS-008); this refusal is dropped the same
+// way. A stop on a page that stays is still reported, a moment later.
+const REPORTED_UNLESS_LEAVING = new Set(["suspended"]);
+/**
+ * Where refused and kept saves are reported: fn(message, extra, options). A
+ * new reporter starts a new session's once-each. `options` is given for a
+ * refusal the page being left can cause: { unlessLeaving: true, onDropped },
+ * for errorReport's reportUnlessLeaving; a dropped report is not counted as sent.
+ */
 export function setWriteAccessReporter(fn) {
   writeAccessReporter = typeof fn === "function" ? fn : null;
   writeAccessReported.clear();
+  writeAccessSession += 1;
 }
 export function reportWriteAccess(event, reason, section = null) {
   const code = typeof reason === "string" && /^[a-z_]{1,40}$/.test(reason) ? reason : "unknown";
@@ -570,7 +586,11 @@ export function reportWriteAccess(event, reason, section = null) {
   if (writeAccessReported.has(key)) return false;
   writeAccessReported.add(key);
   const label = event === "write_refused" ? "Save refused" : "Save kept on device awaiting membership check";
-  try { writeAccessReporter?.(`${label} (${code}${where ? `, ${where}` : ""})`, { event, reason: code, section: where }); } catch { /* reporting never blocks a save */ }
+  const session = writeAccessSession;
+  const options = event === "write_refused" && REPORTED_UNLESS_LEAVING.has(code)
+    ? { unlessLeaving: true, onDropped: () => { if (session === writeAccessSession) writeAccessReported.delete(key); } }
+    : undefined;
+  try { writeAccessReporter?.(`${label} (${code}${where ? `, ${where}` : ""})`, { event, reason: code, section: where }, options); } catch { /* reporting never blocks a save */ }
   return true;
 }
 

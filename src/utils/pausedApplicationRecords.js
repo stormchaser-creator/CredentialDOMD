@@ -24,6 +24,33 @@ export function isDeviceOnlySection(key) {
   return typeof key === "string" && Object.hasOwn(DEVICE_ONLY_SECTIONS, key);
 }
 
+/**
+ * Does `next` hold different device-only records from `before`? A missing
+ * section counts as empty. Used while this session could not read the
+ * device's offline copy (storageScope.js offlineCopyUnread): the sections
+ * then exist only in that copy, which nothing is saved over until a load has
+ * read it, so a change to them would be saved nowhere (AppContext refuses it).
+ */
+export function deviceOnlySectionsChanged(before, next) {
+  const rows = (value) => JSON.stringify(Array.isArray(value) ? value : []);
+  return Object.keys(DEVICE_ONLY_SECTIONS).some(section => rows(before?.[section]) !== rows(next?.[section]));
+}
+
+/** Said when a change to a device-only section is refused for that reason. */
+export const DEVICE_ONLY_UNREAD_MESSAGE = "This device's offline storage could not be read, so Protected Identity and the Answer Bank cannot be changed now: a change would not be saved anywhere. Reload the app to try again.";
+
+/**
+ * Said when a change to a device-only section is refused because the latest
+ * save of the device's offline copy was taken by no store (storage.js
+ * deviceOnlySaveBlocked: full, or its storage would not open).
+ */
+export const DEVICE_ONLY_UNSAVED_MESSAGE = "This device could not save its offline copy just now, so Protected Identity and the Answer Bank cannot be changed: a change would not be saved anywhere. Try again in a moment. If it still fails, free some storage on this device or reload the app.";
+
+/** The message for a device-only change refused for `reason` (deviceOnlySaveBlocked). */
+export function deviceOnlyBlockedMessage(reason) {
+  return reason === "unread" ? DEVICE_ONLY_UNREAD_MESSAGE : DEVICE_ONLY_UNSAVED_MESSAGE;
+}
+
 // Of the device-only sections, the ones holding personal identifiers. They
 // appear on their own screen and in the physician's full JSON backup, and
 // nowhere else: no packet, no account export ZIP, no read-only view, no

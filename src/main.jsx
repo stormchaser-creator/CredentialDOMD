@@ -5,7 +5,7 @@ import { ClerkProvider, useUser } from "@clerk/clerk-react";
 import App from "./App";
 import { install as installErrorReporting, ErrorBoundary, setErrorUser } from "./lib/errorReport";
 import "./styles/base.css";
-import { sweepLapsedQueues, sweepSignOutIntents, watchSignOutIntents } from "./utils/storageScope";
+import { sweepLapsedQueues, sweepSignOutIntents, watchSignOutIntents, sweepPendingOfflinePurges } from "./utils/storageScope";
 import { SIGN_IN_LOCALIZATION } from "./utils/signInMethods";
 import { appContentSecurityPolicy } from "./utils/appCsp";
 
@@ -23,6 +23,10 @@ sweepLapsedQueues();
 // (utils/storageScope.js SIGNOUT_INTENT_BASE).
 watchSignOutIntents();
 sweepSignOutIntents();
+// A Sign out or data deletion whose IndexedDB half could not be reached then
+// (the store would not open) is finished now, before any account loads
+// (utils/storageScope.js OFFLINE_PURGE_BASE).
+sweepPendingOfflinePurges().catch(() => {});
 
 // Attaches the Clerk user id to error reports once auth resolves. Lives
 // inside ClerkProvider so it can use the hook without touching App.

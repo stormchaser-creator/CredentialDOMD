@@ -22,7 +22,7 @@
  *  - Activation requires ALL of: real network failure (not merely slow
  *    Clerk), a recorded identity, and a parseable cache for that identity.
  */
-import { BASE_KEYS, scopedKey, lsSetJSON } from "./storageScope.js";
+import { BASE_KEYS, scopedKey, lsSetJSON, readOfflineText } from "./storageScope.js";
 
 /** How long Clerk gets to reach loaded state before the probe decides. */
 export const CLERK_LOAD_TIMEOUT_MS = 6000;
@@ -90,13 +90,21 @@ export function offlineCacheKey(authUserId) {
   return scopedKey(BASE_KEYS.data, authUserId);
 }
 
-/** True when the namespaced cache for this identity exists and parses. */
-export function cachedDataParses(authUserId) {
+/**
+ * True when the namespaced cache for this identity exists and parses.
+ * Asynchronous: the file lives in IndexedDB now (src/utils/offlineStore.js),
+ * with localStorage as the fallback store and the place older builds left it.
+ * Reading localStorage alone found nothing once the file had moved, and the
+ * offline archive never opened. An IndexedDB open that fails (iOS has builds
+ * whose first open never answers) gets a second try at once before the
+ * offline archive is given up on.
+ */
+export async function cachedDataParses(authUserId) {
   if (!authUserId) return false;
   try {
-    const raw = localStorage.getItem(offlineCacheKey(authUserId));
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
+    const found = await readOfflineText(offlineCacheKey(authUserId), { retryOpen: true });
+    if (!found?.text) return false;
+    const parsed = JSON.parse(found.text);
     return !!parsed && typeof parsed === "object";
   } catch {
     return false;
@@ -154,7 +162,7 @@ export async function evaluateOfflineFallback({ clerkLoaded, clerkTimedOut }) {
   if (clerkLoaded) return null;
   const identity = readLastIdentity();
   if (!identity?.authUserId) return null;
-  const cacheOk = cachedDataParses(identity.authUserId);
+  const cacheOk = await cachedDataParses(identity.authUserId);
   if (!cacheOk) return null;
 
   const onLine = typeof navigator !== "undefined" ? navigator.onLine : true;

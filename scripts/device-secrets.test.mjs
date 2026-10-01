@@ -417,7 +417,7 @@ eq("no reportError call passes app settings", reportErrorCalls, []);
   // ── readCachedData returns clean, and cleans the disk ──────────────────
   store.clear();
   store.set(cacheKey(A), JSON.stringify(legacy()));
-  const out = storage.readCachedData(A);
+  const out = await storage.readCachedData(A);
   // "Carries no value", not "has no key": withDefaults merges DEFAULT_DATA's
   // settings underneath, and that shape declares apiKey as an empty string.
   // An empty string is not a secret; a stale one is.
@@ -436,12 +436,12 @@ eq("no reportError call passes app settings", reportErrorCalls, []);
   store.clear();
   const cleanBlob = JSON.stringify(realisticCache({}));
   store.set(cacheKey(A), cleanBlob);
-  storage.readCachedData(A);
+  await storage.readCachedData(A);
   eq("a clean cache is left byte-identical", store.get(cacheKey(A)), cleanBlob);
 
   // No user, no read.
-  eq("readCachedData with no user reads nothing", storage.readCachedData(null), null);
-  eq("readCachedData with no cache is null", (store.clear(), storage.readCachedData(A)), null);
+  eq("readCachedData with no user reads nothing", await storage.readCachedData(null), null);
+  eq("readCachedData with no cache is null", (store.clear(), await storage.readCachedData(A)), null);
 
   // ── the hydrate CLEANS, it does not merge over ────────────────────────
   store.clear();
@@ -589,7 +589,7 @@ eq("no reportError call passes app settings", reportErrorCalls, []);
   // colleague's account and pulls the wrong call schedule.
   store.clear();
   store.set(STORAGE_KEY, JSON.stringify(legacy({ anthropicApiKey: "sk-ant-A" })));
-  const forB = storage.readCachedData(B);
+  const forB = await storage.readCachedData(B);
   eq("B reads nothing from A's un-namespaced blob", forB, null);
   const keysForB = loadDeviceKeys(B);
   eq("B adopts none of A's device keys", keysForB, {});

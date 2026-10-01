@@ -104,7 +104,7 @@ test('AppContext saves, edits, stars and deletes a device-only record without an
     accessAuthority: { allowsMutation: () => true }, membershipWriteError: () => new Error('read-only'),
     sbInsert: record('sbInsert'), sbUpdate: record('sbUpdate'), sbSetFavorite: record('sbSetFavorite'),
     sbDelete: record('sbDelete'), recordTombstone: record('recordTombstone'),
-    isDeviceOnlySection,
+    isDeviceOnlySection, offlineCopyUnread: () => false, deviceOnlySaveBlocked: () => null, retryOfflineSave: async () => false, deviceOnlyBlockedMessage: () => '',
     // Every add and edit is shaped by the real storage rules (src/utils/recordWrite.js).
     prepareRecord: (await import('../../src/utils/recordWrite.js')).prepareRecord,
   };

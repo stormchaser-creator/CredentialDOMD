@@ -16,6 +16,9 @@
 import { STORAGE_KEY, LOCAL_ONLY_SETTINGS } from "../constants/defaults.js";
 import { clearSupportTextDrafts } from "./supportTextDrafts.js";
 import { DEVICE_ONLY_SECTIONS } from "./pausedApplicationRecords.js";
+import { changesBetween } from "./heldChanges.js";
+import { rebaseLocalChanges } from "./loadRebase.js";
+import { offlineRead, offlineWrite, offlineUpdate, offlineRemove, offlineStoreSupported, isQuotaError, OfflineStoreUnavailable } from "./offlineStore.js";
 
 export const BASE_KEYS = {
   data: STORAGE_KEY,                       // the whole file (mirror of the cloud)
@@ -145,6 +148,11 @@ let activeUserId = null;
 export function setActiveUserId(id) {
   activeUserId = id || null;
   if (activeUserId) reclaimKeptQueue(activeUserId);
+  // The large stores are read from IndexedDB into memory from the moment the
+  // account is known, long before any screen of it renders: the Assistant
+  // reads its transcript synchronously when it mounts. The load awaits the
+  // same hydration (storage.js readCachedData).
+  if (activeUserId) hydrateOfflineStores(activeUserId).catch(() => {});
 }
 export function getActiveUserId() { return activeUserId; }
 
@@ -226,6 +234,1535 @@ export function lsRemove(base, userId) {
   try { localStorage.removeItem(k); } catch { /* unavailable */ }
 }
 
+// ─── The large stores, in IndexedDB (src/utils/offlineStore.js) ─────────
+// The offline copy of the file and the Assistant transcript and archives
+// grow with the account, and Safari gives localStorage about 5 MB for the
+// whole origin (UTF-16). A 1,500-case-log account filled it, the cache write
+// threw, and what opened offline was older than the screen. These three live
+// in IndexedDB now, under the same scoped key; everything small (markers,
+// settings, the device keys, the vault, the write queue) stays here.
+//
+// One rule makes the two stores safe together: a localStorage copy of one of
+// these keys, when there is one, is never older than the IndexedDB copy.
+// Every IndexedDB write that lands removes the localStorage copy, and
+// localStorage is written only when IndexedDB refused (unavailable, full).
+// Readers therefore take localStorage first when it has the key.
+//
+// A second keeps "could not look" apart from "nothing there". An IndexedDB
+// that will not open (iOS has builds whose open never answers; WebKit loses
+// the connection of an installed app that was in the background) may still
+// hold the only copy of Protected Identity and the Answer Bank. A read that
+// could not look says so (OfflineStoreUnavailable), and what a tab builds
+// from such a read is never written over the stored copy (unreadKeys).
+export const OFFLINE_STORE_BASES = Object.freeze([BASE_KEYS.data, BASE_KEYS.chat, BASE_KEYS.archives]);
+// Read synchronously by the Assistant (useState initialisers), so they are
+// held in memory once hydrated (hydrateOfflineStores) and written through.
+const MIRRORED_BASES = Object.freeze([BASE_KEYS.chat, BASE_KEYS.archives]);
+const mirror = new Map();          // scoped key -> text or null: the stored copy, once read
+// Written this session over a stored copy that could not be read: held in
+// memory for this session only, never stored over the copy it never saw.
+const sessionOnly = new Map();     // scoped key -> text
+// Keys whose stored copy this tab could not read, so what it holds of them
+// was begun from nothing. Nothing is written over them until a read succeeds.
+const unreadKeys = new Set();
+const hydrated = new Map();        // userId -> Promise of the hydration
+const writeSeq = new Map();        // scoped key -> the latest write begun
+const writesInFlight = new Map();  // scoped key -> writes begun and not yet finished
+let writeCounter = 0;
+
+// The purge fence (LOCAL_FENCE_KEY) this tab's in-memory copies of an
+// account's large stores were read under. A purge clears those copies only
+// in the tab that runs it; another tab's Delete All My Data, or a server
+// deletion honored there, moves the fence, and a tab that still held the
+// deleted transcript in memory handed it to the Assistant, which wrote it
+// back. Every reader and writer of that memory checks the fence first
+// (syncMemoryToFence) and, once it has moved, starts again from what is
+// stored.
+const memoryFences = new Map();    // userId -> fence value (null before any)
+
+/** Forget what this tab holds in memory of `userId`'s large stores. */
+function forgetLargeStoreMemory(userId) {
+  hydrated.delete(userId);
+  for (const base of OFFLINE_STORE_BASES) {
+    const key = scopedKey(base, userId);
+    mirror.delete(key);
+    sessionOnly.delete(key);
+    unreadKeys.delete(key);
+  }
+}
+
+function syncMemoryToFence(userId) {
+  if (!userId) return;
+  const fence = localFence(userId) ?? null;
+  if (!memoryFences.has(userId)) { memoryFences.set(userId, fence); return; }
+  if (memoryFences.get(userId) === fence) return;
+  memoryFences.set(userId, fence);
+  forgetLargeStoreMemory(userId);
+}
+
+/** Is `key` one of the IndexedDB-backed stores? */
+export function isOfflineStoreKey(key) {
+  return typeof key === "string" && OFFLINE_STORE_BASES.some((base) => key.startsWith(`${base}:`));
+}
+const isMirroredKey = (key) => typeof key === "string" && MIRRORED_BASES.some((base) => key.startsWith(`${base}:`));
+
+/** The account a key of one of the large stores belongs to, or null. */
+function keyOwner(key) {
+  if (typeof key !== "string") return null;
+  const base = OFFLINE_STORE_BASES.find((b) => key.startsWith(`${b}:`));
+  return base ? key.slice(base.length + 1) || null : null;
+}
+
+// Every purge of an account in this tab moves its epoch. A write begun before
+// the purge (an IndexedDB write waits for the database to open) is refused
+// when it finally runs, so a Sign out cannot be undone by a save in flight.
+const purgeEpochs = new Map();
+const purgeEpoch = (userId) => purgeEpochs.get(userId) || 0;
+function bumpPurgeEpoch(userId) { purgeEpochs.set(userId, purgeEpoch(userId) + 1); }
+
+// ─── The purge generation: every purge, in every tab ──────────
+// A random value that every purge of the large stores moves synchronously,
+// before it removes anything (purgeUserStorage: Sign out, session expiry,
+// Delete All My Data, a server deletion). A write of the large stores reads
+// it as it begins and again as it commits (the IndexedDB commit guard, and
+// just before a localStorage fallback), and is cancelled when it moved: what
+// it holds predates the purge. The purge epoch above only sees this tab's
+// purges, and the purge record and the home record could not see another
+// tab's Sign out that ran to the end while a write waited on IndexedDB: the
+// record was written and removed again (the same value at both checks), and
+// on an account's first write there was no home record to vanish. A value
+// that is never the same twice is not fooled by a record that came and went.
+//
+// One key for the device, not one per account: it outlives every purge, and
+// a key named after the account would say who used the device after Sign
+// out. The cost is that another account's purge on this device cancels a
+// write of this one that was in flight; the next save writes it again. It
+// holds a random marker only.
+export const OFFLINE_GENERATION_KEY = "credentialdomd-offline-generation";
+function offlineGeneration() {
+  try { return localStorage.getItem(OFFLINE_GENERATION_KEY); } catch { return null; }
+}
+/** Move the generation. False when localStorage refused (full, blocked). */
+function advanceOfflineGeneration() {
+  // Random only: a timestamp would say when the device was last signed out of.
+  const value = `${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
+  try {
+    localStorage.setItem(OFFLINE_GENERATION_KEY, value);
+    return localStorage.getItem(OFFLINE_GENERATION_KEY) === value;
+  } catch { return false; }
+}
+
+/**
+ * Taken as a save of `userId`'s file begins: `otherAccountOnly()` says,
+ * once that save was stopped, whether only another account's purge stopped
+ * it. The purge generation is one for the device (a key per account would
+ * name who used it), so another account's Sign out or session end on this
+ * device cancels this account's write on its way. True only when the
+ * generation moved and nothing of this account did: not this tab's purge
+ * epoch, not the purge fence, no purge recorded, and every per-account
+ * marker the save began with (the offline identity, the file's write stamp,
+ * the home record) still there, as every purge of this account removes one.
+ */
+export function saveStopGuard(userId) {
+  const epoch = purgeEpoch(userId);
+  const generation = offlineGeneration();
+  const fence = localFence(userId) ?? null;
+  const present = () => ({
+    identity: lsGet(BASE_KEYS.lastIdentity, userId) != null,
+    stamp: offlineWriteStamp(userId) != null,
+    home: lsGet(OFFLINE_HOME_BASE, userId) != null,
+  });
+  const had = present();
+  return {
+    otherAccountOnly() {
+      if (!userId || offlineGeneration() === generation) return false;
+      if (purgeEpoch(userId) !== epoch || (localFence(userId) ?? null) !== fence || !localCopyCurrent(userId)) return false;
+      if (pendingPurge(userId) || getActiveUserId() !== userId) return false;
+      if (!had.identity && !had.stamp && !had.home) return false;
+      const now = present();
+      return (!had.identity || now.identity) && (!had.stamp || now.stamp) && (!had.home || now.home);
+    },
+  };
+}
+
+/**
+ * A check for one write into `userId`'s local copy, taken when the write is
+ * begun and run again immediately before it commits (offlineWrite's guard,
+ * synchronous with the transaction's creation). False once this tab purged
+ * the account since, once any tab began a purge of the large stores since
+ * (OFFLINE_GENERATION_KEY: another tab's Sign out), once the device's purge
+ * fence moved since (another tab ran Delete All My Data or honored a server
+ * deletion), or, for a writer holding records (`adopted`), once this tab's
+ * records predate the fence. Moving a stored copy from one store to the
+ * other holds no records from memory and passes adopted:false.
+ */
+export function localWriteGuard(userId, { adopted = true } = {}) {
+  const epoch = purgeEpoch(userId);
+  const generation = offlineGeneration();
+  const fence = localFence(userId) ?? null;
+  return () => purgeEpoch(userId) === epoch
+    && offlineGeneration() === generation
+    && (localFence(userId) ?? null) === fence
+    && (!adopted || localCopyCurrent(userId));
+}
+
+// ─── Where the account's large stores may be, and purges still owed ─────
+// Set by every IndexedDB write of this account as its transaction is created
+// (putOffline), and kept while IndexedDB may hold any of its large stores;
+// removed once a purge has left nothing of them there, and never otherwise
+// (not when a write fails: another tab's may have landed). Without it nothing
+// of the account was ever put in IndexedDB, so an IndexedDB that will not
+// open has nothing of it either, and localStorage is the only copy (private
+// modes, browsers without IndexedDB). One exception: a move with no room in
+// localStorage for it, where the localStorage copy being moved stands in for
+// it until the move sets it (moveToOfflineStore, hasLocalLargeCopy). Holds
+// "1". Outside BASE_KEYS: only a purge that committed may remove it.
+export const OFFLINE_HOME_BASE = "credentialdomd-offline-home";
+// A purge of this account's IndexedDB copies that has not committed yet
+// (IndexedDB would not open, or refused). Written synchronously before the
+// purge's first await and removed only once IndexedDB has committed it. While
+// it is there, every read and write of the account's large stores finishes
+// the purge first; when that is still impossible a read takes the copies for
+// gone ("all": Sign out, Delete All My Data, a server deletion) or for cut
+// down to what exists only on this device ("trim": the session ended), and no
+// IndexedDB write of the account is made. Value "<mode>.<nonce>". Outside
+// BASE_KEYS, so the purge cannot remove its own record.
+export const OFFLINE_PURGE_BASE = "credentialdomd-offline-purge";
+
+function mayHaveOfflineCopy(userId) {
+  const k = scopedKey(OFFLINE_HOME_BASE, userId);
+  if (!k) return false;
+  // Unreadable localStorage proves nothing: assume there may be a copy.
+  try { return localStorage.getItem(k) !== null; } catch { return true; }
+}
+// Does localStorage hold a copy of any of the account's large stores? While
+// it does, IndexedDB may hold one too without the home record: a move whose
+// home record found no room in localStorage writes IndexedDB first and sets
+// the record only as it removes the localStorage copy, which stands in for
+// the record until then (moveToOfflineStore). A purge asks this before it
+// removes anything.
+function hasLocalLargeCopy(userId) {
+  try {
+    return OFFLINE_STORE_BASES.some((base) => {
+      const k = scopedKey(base, userId);
+      return !!k && localStorage.getItem(k) !== null;
+    });
+  } catch { return true; }
+}
+// Set as the first copy of the account goes into IndexedDB. With no home
+// record, IndexedDB holds nothing of the account (bar the copy a move is
+// writing from localStorage, which is newer than any deletion this device
+// has seen), so nothing there can predate a data deletion another build
+// honored: that deletion is recorded as caught up first (OFFLINE_WIPED_BASE).
+// Without that, a catch-up whose marker found no room purged nothing, the
+// move then freed room and set this record, and the next read's catch-up
+// purged the copy just moved (Protected Identity and the Answer Bank with
+// it). No room for the marker: no record either, and the write is unmarked.
+function markOfflineHome(userId) {
+  const k = scopedKey(OFFLINE_HOME_BASE, userId);
+  if (!k) return false;
+  try {
+    if (localStorage.getItem(k) === null) {
+      if (offlineWipeOwed(userId) && !markOfflineWipe(userId, lsGet(WIPE_SEEN_KEY, userId))) return false;
+      localStorage.setItem(k, "1");
+    }
+    return localStorage.getItem(k) !== null;
+  } catch { return false; }
+}
+function pendingPurge(userId) {
+  const raw = lsGet(OFFLINE_PURGE_BASE, userId);
+  if (raw == null) return null;
+  // Anything but a trim record is a full purge: a damaged record never keeps data.
+  return { raw, mode: raw.startsWith("trim.") ? "trim" : "all" };
+}
+
+// ─── Who wrote the offline file last ─────────────────────────
+// A random value every write of an account's offline file moves,
+// synchronously as the write is committed (putOffline's commit guard, and a
+// localStorage fallback as it is made). A tab remembers the value of its own
+// last read or write (storage.js); a different value now means another tab
+// (or another window of this account) has written the file since, and what
+// this tab holds of Protected Identity and the Answer Bank may be missing
+// rows that tab added. Every purge of the account removes it. Holds a random
+// marker only. Outside BASE_KEYS (a purge removes it explicitly).
+export const OFFLINE_WRITTEN_BASE = "credentialdomd-offline-written";
+
+/** The account's offline-file write stamp now (null when none is recorded). */
+export function offlineWriteStamp(userId) {
+  return lsGet(OFFLINE_WRITTEN_BASE, userId);
+}
+// Move it. When localStorage refuses, the old value is removed instead, so
+// no tab mistakes it for the one it knows; the writer gets a value that
+// matches nothing stored, and so trusts nothing it holds either.
+function bumpWriteStamp(userId) {
+  const k = scopedKey(OFFLINE_WRITTEN_BASE, userId);
+  const value = `${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 8)}`;
+  if (!k) return value;
+  try {
+    localStorage.setItem(k, value);
+    if (localStorage.getItem(k) === value) return value;
+  } catch { /* full, or unavailable */ }
+  try { localStorage.removeItem(k); } catch { /* unavailable */ }
+  return `unrecorded.${value}`;
+}
+// The stamps this window's own writes moved it to, each with the stamp it
+// replaced and whether the write held this window's text alone (`clean`: no
+// other writer's rows merged in). A stamp this window moved is not another
+// writer's: its own save still committing, or one refused after its
+// transaction was created, made the next save merge with this window's own
+// older text (a row deleted meanwhile came back) or refuse a localStorage
+// fallback as unmerged.
+const ownStamps = new Map();
+function noteOwnStamp(stamp, prev, clean) {
+  if (typeof stamp !== "string" || stamp.startsWith("unrecorded.")) return;
+  ownStamps.set(stamp, { prev: prev ?? null, clean: !!clean });
+  if (ownStamps.size > 64) ownStamps.delete(ownStamps.keys().next().value);
+}
+/**
+ * Has a writer other than this window written `owner`'s file since the stamp
+ * `known`? Stamps this window moved with clean writes since are passed over.
+ * No stamp recorded while IndexedDB may hold a copy (localStorage had no room
+ * for it) says nothing: another window's write may be behind it.
+ */
+function writtenSince(owner, known) {
+  let now = offlineWriteStamp(owner);
+  if (now == null) return known != null || mayHaveOfflineCopy(owner);
+  for (let hops = 0; now !== known; hops += 1) {
+    const own = ownStamps.get(now);
+    if (!own || !own.clean || hops > 64) return true;
+    now = own.prev;
+  }
+  return false;
+}
+const isDataKey = (key) => typeof key === "string" && key.startsWith(`${BASE_KEYS.data}:`);
+
+// ─── The device-only sections, compared and merged ───────────
+/** The device-only sections of a file, as lists (a missing one is empty). */
+export function deviceOnlySectionsOf(blob) {
+  const out = {};
+  for (const section of Object.keys(DEVICE_ONLY_SECTIONS)) out[section] = Array.isArray(blob?.[section]) ? blob[section] : [];
+  return out;
+}
+/** Do two sets of device-only sections hold the same rows? */
+export function sameDeviceOnlySections(a, b) {
+  return Object.keys(DEVICE_ONLY_SECTIONS).every(section =>
+    JSON.stringify(Array.isArray(a?.[section]) ? a[section] : []) === JSON.stringify(Array.isArray(b?.[section]) ? b[section] : []));
+}
+/**
+ * `onto` (another copy's device-only sections) with what changed from
+ * `base` to `mine` laid over it: an add goes in, a delete comes out, an edit
+ * sets the fields it changed (utils/loadRebase.js). Rows `onto` has that
+ * `base` never had (another tab added them) stay, and rows deleted here stay
+ * deleted. Returns the sections.
+ */
+export function rebaseDeviceOnlySections(onto, base, mine) {
+  const target = deviceOnlySectionsOf(onto);
+  const changes = changesBetween(deviceOnlySectionsOf(base), deviceOnlySectionsOf(mine))
+    .filter(change => change.kind === "record" && change.id && Object.hasOwn(DEVICE_ONLY_SECTIONS, change.key));
+  if (!changes.length) return target;
+  return deviceOnlySectionsOf(rebaseLocalChanges(target, { changes }));
+}
+
+// ─── Device-only changes held aside ──────────────────────────
+// A Protected Identity or Answer Bank change that was accepted, and whose
+// save of the offline file then landed in no store (IndexedDB would not open
+// or had no room, localStorage could not take the whole file, the copy was
+// unread), or was still on its way when the session ended. The file is large;
+// the changes are small. They are kept here, per account, as the sections
+// the tab's copy was based on and the sections it held (`base`, `mine`), and
+// every read of the file lays them over what it reads (storage.js
+// readCachedData) until a write that holds them lands. A session that merely
+// ended keeps them, as it keeps the rest of what exists only on this device;
+// Sign out and a data deletion remove them. Outside BASE_KEYS.
+//
+// One hold per window, in one record per account that every window shares:
+// { holds: [{ by, base, mine }] }. Each window's hold is its own change from
+// the copy IT was based on, so a second window whose save also landed
+// nowhere adds its change beside the first instead of replacing it (a single
+// hold took the second window's `mine`, which never had the first window's
+// row, and with the first window's base replayed that row as a delete).
+// Every read lays each hold over the file in turn.
+export const DEVICE_ONLY_PENDING_BASE = "credentialdomd-device-only-pending";
+// This window (this page's module instance): whose hold is whose.
+const HOLD_WINDOW_ID = `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 12)}`;
+
+function heldEntry(e) {
+  return e && typeof e === "object" && e.base && typeof e.base === "object" && e.mine && typeof e.mine === "object" ? e : null;
+}
+function readHolds(userId) {
+  const held = lsGetJSON(DEVICE_ONLY_PENDING_BASE, userId);
+  if (!held || typeof held !== "object") return [];
+  if (Array.isArray(held.holds)) return held.holds.map(heldEntry).filter(Boolean);
+  // One hold from before holds were kept per window.
+  const one = heldEntry(held);
+  return one ? [{ by: null, base: one.base, mine: one.mine }] : [];
+}
+// The windows whose hold another window's write carried into the file
+// (releaseHeldDeviceOnlyChanges): `released`, beside the holds. The holding
+// window's records are based on that hold's `mine` from then on
+// (takeReleasedHoldHere). Kept on the copy it was based on, it replayed the
+// held add (or delete) over the file at its next save, after the member had
+// deleted (or restored) the row in the other window.
+function readReleased(userId) {
+  const held = lsGetJSON(DEVICE_ONLY_PENDING_BASE, userId);
+  return held && Array.isArray(held.released) ? held.released.filter((by) => typeof by === "string") : [];
+}
+// This window's hold as it last wrote it, per account.
+const heldHere = new Map();
+function writeHolds(userId, holds, released = readReleased(userId)) {
+  const k = scopedKey(DEVICE_ONLY_PENDING_BASE, userId);
+  if (!k) return false;
+  if (!holds.length && !released.length) { lsRemove(DEVICE_ONLY_PENDING_BASE, userId); return true; }
+  const value = JSON.stringify(released.length ? { holds, released: released.slice(-16) } : { holds });
+  try {
+    localStorage.setItem(k, value);
+    return localStorage.getItem(k) === value;
+  } catch { return false; }
+}
+
+/** The changes held aside for `userId`: [{ by, base, mine }] (one per window), or null. */
+export function heldDeviceOnlyChanges(userId) {
+  const holds = readHolds(userId);
+  return holds.length ? holds : null;
+}
+/**
+ * Hold aside this window's change from `base` to `mine` (device-only
+ * sections). This window's earlier hold, if any, is replaced and keeps its
+ * base: what it held is part of this window's `mine` now. Another window's
+ * hold is left as it is. Written only while this tab's records are still
+ * current for the account's copy (the purge fence). Returns whether it was
+ * stored.
+ */
+export function holdDeviceOnlyChanges(userId, base, mine) {
+  if (!scopedKey(DEVICE_ONLY_PENDING_BASE, userId) || !localCopyCurrent(userId)) return false;
+  // Never while a data deletion another build honored is still owed here
+  // (catchUpOfflineWipe removes what is held then, as predating it).
+  if (offlineWipeOwed(userId)) return false;
+  const holds = readHolds(userId);
+  const earlier = holds.find((h) => h.by === HOLD_WINDOW_ID);
+  const others = holds.filter((h) => h !== earlier);
+  const entry = { by: HOLD_WINDOW_ID, base: deviceOnlySectionsOf(earlier ? earlier.base : base), mine: deviceOnlySectionsOf(mine) };
+  // Nothing changed from the base any more (a row held, then deleted again):
+  // this window's hold goes, or a row deleted since came back at every read.
+  if (sameDeviceOnlySections(entry.base, entry.mine)) {
+    if (!earlier) return true;
+    if (!writeHolds(userId, others)) return false;
+    heldHere.delete(userId);
+    return true;
+  }
+  if (!writeHolds(userId, [...others, entry])) return false;
+  heldHere.set(userId, entry);
+  return true;
+}
+/**
+ * This window's hold, when another window's write has carried it into the
+ * file since (releaseHeldDeviceOnlyChanges): { base, mine }, taken once.
+ * storage.js moves the copy this window's records are based on forward by it.
+ */
+export function takeReleasedHoldHere(userId) {
+  const released = readReleased(userId);
+  if (!released.includes(HOLD_WINDOW_ID)) return null;
+  const hold = heldHere.get(userId) || null;
+  heldHere.delete(userId);
+  writeHolds(userId, readHolds(userId), released.filter((by) => by !== HOLD_WINDOW_ID));
+  return hold;
+}
+/** Does this window hold changes aside for `userId`? */
+export function holdsDeviceOnlyChangesHere(userId) {
+  return readHolds(userId).some((h) => h.by === HOLD_WINDOW_ID);
+}
+function layHold(sections, hold) { return rebaseDeviceOnlySections(sections, hold.base, hold.mine); }
+/** `sections` with the changes held aside for `userId` laid over them, each window's in turn. */
+export function withHeldDeviceOnlyChanges(userId, sections) {
+  return readHolds(userId).reduce(layHold, deviceOnlySectionsOf(sections));
+}
+/**
+ * A write holding `sections` landed: each hold it holds every change of
+ * goes. Returns whether nothing is held aside any more.
+ */
+export function releaseHeldDeviceOnlyChanges(userId, sections) {
+  const holds = readHolds(userId);
+  if (!holds.length) return true;
+  const have = deviceOnlySectionsOf(sections);
+  const left = holds.filter((h) => !sameDeviceOnlySections(layHold(have, h), have));
+  if (left.length === holds.length) return false;
+  const gone = holds.filter((h) => !left.includes(h));
+  if (gone.some((h) => h.by === HOLD_WINDOW_ID)) heldHere.delete(userId);
+  // Another window's hold this write carried in: that window is told.
+  const others = gone.map((h) => h.by).filter((by) => typeof by === "string" && by !== HOLD_WINDOW_ID);
+  const released = readReleased(userId);
+  writeHolds(userId, left, [...released.filter((by) => !others.includes(by)), ...others]);
+  return left.length === 0;
+}
+
+// A session-end purge (the trim) is about to cancel this tab's save of the
+// file still on its way: storage.js holds its device-only changes aside
+// first (setBeforeDeviceOnlyTrim), so the trim, which keeps the device-only
+// sections as they were stored, does not drop the ones that save carried.
+let beforeDeviceOnlyTrim = null;
+export function setBeforeDeviceOnlyTrim(fn) { beforeDeviceOnlyTrim = typeof fn === "function" ? fn : null; }
+
+// ─── localStorage copies this build wrote ─────────────────────
+// The rule that a localStorage copy of a large store is never older than the
+// IndexedDB copy holds for copies this build writes. A build from before the
+// IndexedDB store (a rollback) knows nothing of IndexedDB: it finds no
+// localStorage copy, builds the file from the cloud with no Protected
+// Identity and no Answer Bank, and saves that to localStorage. Taken as
+// newer, that copy replaced the IndexedDB one on the next launch of this
+// build, and the only copy of those sections was gone. So every localStorage
+// copy this build writes is recorded here by its length and a hash, per
+// store; a copy that does not match (written by another build, or by a
+// writer outside this module) is merged with the IndexedDB copy by id
+// instead of replacing it (mergeUntrustedLocal). Holds hashes only.
+export const LOCAL_COPIES_BASE = "credentialdomd-offline-local";
+function textHash(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return `${text.length}.${(h >>> 0).toString(36)}`;
+}
+function baseOfKey(key) {
+  return typeof key === "string" ? OFFLINE_STORE_BASES.find((b) => key.startsWith(`${b}:`)) || null : null;
+}
+function localCopyRecords(owner) {
+  const v = lsGetJSON(LOCAL_COPIES_BASE, owner);
+  return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+}
+function noteOwnLocalCopy(key, text) {
+  const owner = keyOwner(key), base = baseOfKey(key);
+  const k = scopedKey(LOCAL_COPIES_BASE, owner);
+  if (!k || !base) return;
+  const records = localCopyRecords(owner);
+  if (text == null) { if (!(base in records)) return; delete records[base]; }
+  else records[base] = textHash(text);
+  try {
+    if (Object.keys(records).length) localStorage.setItem(k, JSON.stringify(records));
+    else localStorage.removeItem(k);
+  } catch { /* full: the copy then counts as another build's, and is merged, never lost */ }
+}
+function ownLocalCopy(key, text) {
+  const owner = keyOwner(key), base = baseOfKey(key);
+  return !!owner && !!base && typeof text === "string" && localCopyRecords(owner)[base] === textHash(text);
+}
+/**
+ * Write a localStorage copy of one of the large stores on this build's
+ * behalf (a cleaned copy put back where it was read, storage.js), and record
+ * it as this build's. False when localStorage refused.
+ */
+export function writeOwnLocalCopy(key, text) {
+  if (!isOfflineStoreKey(key) || typeof text !== "string") return false;
+  try { putOwnLocalCopy(key, text); } catch { return false; }
+  return true;
+}
+// Write `text` as this build's localStorage copy of `key`: its record first,
+// then the copy. A copy written with no room left for its record counted as
+// another build's at the next launch, and was merged with the older IndexedDB
+// copy, so every row deleted in it came back. No room for the record: no
+// copy (throws, as setItem does). A copy that then does not fit puts the
+// record back as it was.
+function putOwnLocalCopy(key, text) {
+  const owner = keyOwner(key), base = baseOfKey(key);
+  const k = scopedKey(LOCAL_COPIES_BASE, owner);
+  if (!k || !base) { localStorage.setItem(key, text); return; }
+  const before = lsText(k);
+  const records = localCopyRecords(owner);
+  records[base] = textHash(text);
+  localStorage.setItem(k, JSON.stringify(records));
+  try { localStorage.setItem(key, text); }
+  catch (error) {
+    try { if (before == null) localStorage.removeItem(k); else localStorage.setItem(k, before); } catch { /* the copy there then counts as another build's: merged, never lost */ }
+    throw error;
+  }
+}
+/** Is `text` a localStorage copy of `key` this build wrote? */
+export function isOwnLocalCopy(key, text) { return ownLocalCopy(key, text); }
+/** A copy rewritten in place (cleaned, trimmed): still this build's if the one it replaced was. */
+export function rewriteLocalCopy(key, before, after) {
+  const own = ownLocalCopy(key, before);
+  try { localStorage.setItem(key, after); } catch { return false; }
+  if (own) noteOwnLocalCopy(key, after);
+  return true;
+}
+
+/**
+ * A localStorage copy another build wrote (`local`) and the IndexedDB copy
+ * (`stored`), merged so that nothing only one of them holds is lost. The
+ * file: the localStorage copy, with each row only the IndexedDB copy holds
+ * added back by id, in every section (Protected Identity and the Answer
+ * Bank, which exist only here, and the synced sections too: a record whose
+ * cloud write never landed, or a document whose file never uploaded, exists
+ * only in the IndexedDB copy, and an older build that rebuilt the file from
+ * the cloud never had it); a document's file (`data`, with no storage path)
+ * the localStorage copy holds without bytes, taken from the IndexedDB copy;
+ * and a local-only setting it lacks taken from the IndexedDB copy. A record
+ * deleted in the cloud meanwhile is filtered by the load (the deletion
+ * ledger) as any row on the device is. The transcript and archives: merged
+ * by id (mergeLargeList). A side that does not parse leaves the other.
+ */
+// Sections of the file that are not lists of records with ids.
+const COLLECTION_ID_SKIP = new Set(["settings"]);
+function mergeUntrustedLocal(key, stored, local) {
+  const base = baseOfKey(key);
+  if (!base || stored == null) return local;
+  if (base !== BASE_KEYS.data) return mergeLargeStore(base, stored, local);
+  let s, l;
+  try { s = JSON.parse(stored); } catch { return local; }
+  try { l = JSON.parse(local); } catch { return stored; }
+  if (!s || typeof s !== "object") return local;
+  if (!l || typeof l !== "object") return stored;
+  let changed = false;
+  const out = { ...l };
+  for (const [section, theirs] of Object.entries(s)) {
+    if (COLLECTION_ID_SKIP.has(section) || !Array.isArray(theirs)) continue;
+    if (section in l && !Array.isArray(l[section])) continue;
+    let mine = Array.isArray(l[section]) ? l[section] : [];
+    if (section === "documents") {
+      // A file only the IndexedDB copy still holds the bytes of.
+      const bytes = new Map(theirs.filter((d) => d?.id && d.data && !d.storagePath).map((d) => [d.id, d.data]));
+      if (bytes.size && mine.some((d) => d?.id && !d.data && !d.storagePath && bytes.has(d.id))) {
+        mine = mine.map((d) => (d?.id && !d.data && !d.storagePath && bytes.has(d.id) ? { ...d, data: bytes.get(d.id) } : d));
+        out[section] = mine;
+        changed = true;
+      }
+    }
+    const have = new Set(mine.map((row) => row?.id).filter(Boolean));
+    const extra = theirs.filter((row) => row?.id && !have.has(row.id));
+    if (extra.length) { out[section] = [...mine, ...extra]; changed = true; }
+  }
+  const settings = l.settings && typeof l.settings === "object" ? l.settings : {};
+  const was = s.settings && typeof s.settings === "object" ? s.settings : {};
+  const settled = { ...settings };
+  for (const name of LOCAL_ONLY_SETTINGS) {
+    const blank = (v) => v === undefined || v === null || v === "";
+    if (blank(settled[name]) && !blank(was[name])) { settled[name] = was[name]; changed = true; }
+  }
+  if (changed) out.settings = settled;
+  return changed ? JSON.stringify(out) : local;
+}
+
+// ─── A data deletion another build honored ───────────────────
+// WIPE_SEEN_KEY records the deletion stamp this device purged for, and a
+// build from before the IndexedDB store records it after purging
+// localStorage only: the IndexedDB copy from before the deletion stayed, and
+// this build then took the deletion as honored and read it back (and the
+// self-heal pushed it up into the emptied account). This build records, next
+// to it, the stamp its own purge reached IndexedDB for. When the two differ,
+// the IndexedDB copies predate the deletion: they are purged before anything
+// of the account is read from or written to there (settlePendingPurge). The
+// localStorage copy, written after the deletion, stays. Holds a timestamp.
+// Outside BASE_KEYS, like WIPE_SEEN_KEY: no purge removes it.
+export const OFFLINE_WIPED_BASE = "credentialdomd-offline-wiped";
+
+/** This build purged IndexedDB for the deletion `stamp` (recorded with WIPE_SEEN_KEY). */
+export function markOfflineWipe(userId, stamp) {
+  const k = scopedKey(OFFLINE_WIPED_BASE, userId);
+  if (!k || typeof stamp !== "string" || !stamp) return false;
+  try { localStorage.setItem(k, stamp); return localStorage.getItem(k) === stamp; } catch { return false; }
+}
+function offlineWipeOwed(userId) {
+  const seen = lsGet(WIPE_SEEN_KEY, userId);
+  return seen != null && seen !== "" && lsGet(OFFLINE_WIPED_BASE, userId) !== seen;
+}
+// Record the purge the IndexedDB copies owe a deletion another build honored.
+// The marker goes first: a purge that could run again at every read would
+// take what is written after the deletion too. No room for it: nothing is
+// purged (the copy stays as it is, as it did before this existed).
+//
+// Device-only changes held aside (DEVICE_ONLY_PENDING_BASE) go too, first and
+// whether or not the marker fits: none is held while a deletion is owed
+// (holdDeviceOnlyChanges), so any there now predates it. The older build
+// knows nothing of them, and every read laid them back over the emptied file.
+function catchUpOfflineWipe(userId) {
+  if (!userId || !offlineWipeOwed(userId)) return;
+  lsRemove(DEVICE_ONLY_PENDING_BASE, userId);
+  const seen = lsGet(WIPE_SEEN_KEY, userId);
+  const mayHave = offlineStoreSupported() && mayHaveOfflineCopy(userId);
+  if (!markOfflineWipe(userId, seen)) return;
+  if (!mayHave) return;
+  const recorded = beginOfflinePurge(userId, "all", true);
+  if (recorded == null) return;
+  bumpPurgeEpoch(userId);
+  forgetLargeStoreMemory(userId);
+  lsRemove(OFFLINE_WRITTEN_BASE, userId);
+}
+
+/**
+ * Record a purge of `userId`'s IndexedDB copies before it begins. Returns
+ * "none" when IndexedDB holds nothing of the account (nothing is recorded,
+ * nothing needs doing), the pending record, or null when localStorage refused
+ * the record. `mayHave`: whether IndexedDB may hold anything of the account,
+ * as the purge found it before it removed anything (purgeUserStorage).
+ */
+function beginOfflinePurge(userId, mode, mayHave = offlineStoreSupported() && mayHaveOfflineCopy(userId)) {
+  const k = scopedKey(OFFLINE_PURGE_BASE, userId);
+  if (!k) return "none";
+  const pending = pendingPurge(userId);
+  if (!pending && !mayHave) return "none";
+  // A full purge still owed covers a trim.
+  if (pending?.mode === "all" && mode === "trim") return pending;
+  const raw = `${mode}.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    localStorage.setItem(k, raw);
+    return localStorage.getItem(k) === raw ? { raw, mode } : null;
+  } catch { return null; }
+}
+
+/**
+ * Carry out a purge of `userId`'s IndexedDB copies: every one removed ("all"),
+ * or the file cut down to what exists only on this device in one transaction
+ * and the transcript and archives removed ("trim"). Resolves { done, empty }:
+ * done once everything committed; empty when nothing of the account is left
+ * there. The cut is cancelled when a newer purge replaced this one or the
+ * purge fence moved (it was fenced when it lived in localStorage), and a cut
+ * that fails leaves the stored file exactly as it was: the device-only
+ * sections in it exist nowhere else. `mayHave` false (nothing of the account
+ * can be there) skips it; a purge that is recorded always runs, because it
+ * was recorded only when there might be something (beginOfflinePurge), and
+ * the home record alone does not say so (hasLocalLargeCopy).
+ */
+async function purgeOfflineCopies(userId, { raw, mode }, mayHave = true) {
+  if (!offlineStoreSupported() || !mayHave) return { done: true, empty: true };
+  const still = () => (lsGet(OFFLINE_PURGE_BASE, userId) ?? null) === raw;
+  const fenced = localWriteGuard(userId);
+  let done = true, empty = true;
+  for (const base of OFFLINE_STORE_BASES) {
+    const key = scopedKey(base, userId);
+    if (mode === "trim" && base === BASE_KEYS.data) {
+      let left = null;
+      try {
+        const ran = await offlineUpdate(key, (text) => {
+          if (text == null) return undefined;
+          left = deviceOnlyFile(text);
+          return left === text ? undefined : left; // null removes the key
+        }, { guard: () => still() && fenced() });
+        if (!ran) { done = false; left = left ?? "unknown"; }
+      } catch { done = false; left = "unknown"; }
+      if (left !== null) empty = false;
+      continue;
+    }
+    if (!await offlineRemove(key)) { done = false; empty = false; }
+  }
+  return { done, empty };
+}
+
+function clearOfflinePurge(userId, raw, empty) {
+  try {
+    const k = scopedKey(OFFLINE_PURGE_BASE, userId);
+    if (raw != null) {
+      if (localStorage.getItem(k) !== raw) return; // a newer purge keeps its own record
+      localStorage.removeItem(k);
+    } else if (localStorage.getItem(k) !== null) return;
+    if (empty) localStorage.removeItem(scopedKey(OFFLINE_HOME_BASE, userId));
+  } catch { /* unavailable: the record stays, and the next read finishes it */ }
+}
+
+const settling = new Map(); // userId -> { raw, promise }
+/**
+ * Finish `userId`'s pending IndexedDB purge, if one is recorded. Resolves null
+ * when none is pending (any more), or the mode still owed ("all" | "trim")
+ * when IndexedDB could not complete it now. Every read and write of the
+ * account's large stores runs this first.
+ */
+export function settlePendingPurge(userId) {
+  // A deletion another build honored left the IndexedDB copies behind: they
+  // are purged like any purge still owed (catchUpOfflineWipe).
+  catchUpOfflineWipe(userId);
+  const pending = userId ? pendingPurge(userId) : null;
+  if (!pending) return Promise.resolve(null);
+  const inflight = settling.get(userId);
+  if (inflight) {
+    if (inflight.raw === pending.raw) return inflight.promise;
+    return inflight.promise.then(() => settlePendingPurge(userId));
+  }
+  const entry = { raw: pending.raw, promise: null };
+  entry.promise = (async () => {
+    let result = { done: false, empty: false };
+    try { result = await purgeOfflineCopies(userId, pending); } catch { /* still owed */ }
+    if (result.done) clearOfflinePurge(userId, pending.raw, result.empty);
+  })().finally(() => { if (settling.get(userId) === entry) settling.delete(userId); })
+    .then(() => {
+      const now = pendingPurge(userId);
+      if (!now) return null;
+      // A newer purge began meanwhile: finish that one too.
+      if (now.raw !== pending.raw) return settlePendingPurge(userId);
+      return now.mode;
+    });
+  settling.set(userId, entry);
+  return entry.promise;
+}
+
+/**
+ * Run when the app opens (main.jsx), signed in or not: purges an earlier
+ * session recorded and IndexedDB could not complete then (a Sign out while
+ * it would not open) are finished now, so their copies do not wait for the
+ * account to come back.
+ */
+export async function sweepPendingOfflinePurges() {
+  const prefix = `${OFFLINE_PURGE_BASE}:`;
+  const users = [];
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) users.push(k.slice(prefix.length));
+    }
+  } catch { return; }
+  for (const userId of users) { try { await settlePendingPurge(userId); } catch { /* next launch */ } }
+}
+
+// ─── Refusals, reported once per session each ────────────────────
+// A cache write the device refused used to be seen only by the member
+// (SyncIssuesNotice); nothing reached client_errors. The app sets the reporter
+// (AppContext, errorReport.reportError). What is sent: the store, which stores
+// refused and why, and the size rounded to 100 KB. Never contents.
+// "storage_full" only when IndexedDB itself refused for want of space (or the
+// browser has no IndexedDB and localStorage is full); a lost connection or an
+// IndexedDB that would not open is "storage_unavailable", whatever
+// localStorage then said.
+let storageFullReporter = null;
+const storageReported = new Set();
+export function setStorageFullReporter(fn) { storageFullReporter = typeof fn === "function" ? fn : null; }
+
+/** Why a write of the offline copy did not land: "full", "unread" or "unavailable". */
+export function storageRefusalKind(refused) {
+  const list = Array.isArray(refused) ? refused : String(refused || "").split(",");
+  if (list.some((r) => r.startsWith("indexeddb_quota"))) return "full";
+  if (list.includes("indexeddb_unsupported") && list.includes("localstorage_quota")) return "full";
+  // IndexedDB opened and had room; localStorage had none, not even for the
+  // record that IndexedDB holds a copy (putOffline). Full, not unavailable.
+  if (list.includes("indexeddb_unmarked") && list.includes("localstorage_quota")) return "full";
+  if (list.includes("indexeddb_unread")) return "unread";
+  return "unavailable";
+}
+
+export function reportStorageRefusal({ store, reason, chars = 0 }) {
+  const event = storageRefusalKind(reason) === "full" ? "storage_full" : "storage_unavailable";
+  if (storageReported.has(event) || !storageFullReporter) return false;
+  storageReported.add(event);
+  const approxBytes = Math.round((Math.max(0, Number(chars) || 0) * 2) / 100000) * 100000;
+  try { storageFullReporter(`Offline copy not saved: ${event}`, { event, store, reason, approxBytes }); }
+  catch { /* reporting never blocks */ }
+  return true;
+}
+/** Tests only: a new session. */
+export function resetStorageFullReport() { storageReported.clear(); }
+
+function lsText(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+/**
+ * The IndexedDB copy of `key`, as the rules above make it: a purge still owed
+ * is finished first, or applied to what is read when it cannot be. Resolves
+ * the text, or null when there is none. Throws OfflineStoreUnavailable when
+ * IndexedDB could not be read and may hold a copy of the account's (it was
+ * written there before): "could not look" is never "nothing there".
+ * `retryOpen` gives an open that failed a second try at once.
+ */
+export async function readOfflineCopy(key, { retryOpen = false } = {}) {
+  if (!key) return null;
+  const owner = keyOwner(key);
+  const owed = owner ? await settlePendingPurge(owner) : null;
+  if (owed === "all") return null;
+  // Nothing of the account was ever put in IndexedDB (no home record, and no
+  // localStorage copy standing in for one mid-move): there is nothing there
+  // to read, and no reason to wait on an open that may never answer (iOS
+  // builds whose first open hangs held a brand-new account's first screen
+  // for two open timeouts).
+  if (owner && owed == null && !mayHaveOfflineCopy(owner) && !hasLocalLargeCopy(owner)) return null;
+  let text;
+  try { text = await offlineRead(key, { retryOpen }); }
+  catch {
+    // A browser with no IndexedDB at all never stored anything there.
+    if (!owner || !offlineStoreSupported() || !mayHaveOfflineCopy(owner)) return null;
+    throw new OfflineStoreUnavailable();
+  }
+  if (owed === "trim") return key.startsWith(`${BASE_KEYS.data}:`) && text != null ? deviceOnlyFile(text) : null;
+  return text;
+}
+
+/**
+ * The stored text for one IndexedDB-backed key, and where it was found:
+ * { text, where: "local" | "offline" }, or null when neither store holds it.
+ * localStorage first, by the rule above. Throws OfflineStoreUnavailable when
+ * localStorage has none and IndexedDB could not be read (readOfflineCopy).
+ */
+export async function readOfflineText(key, { retryOpen = false } = {}) {
+  if (!key) return null;
+  // A purge still owed is finished whenever it can be, even when localStorage
+  // answers this read: the copies it owes stay out of IndexedDB no longer
+  // than they must.
+  const owner = keyOwner(key);
+  if (owner && (pendingPurge(owner) || offlineWipeOwed(owner))) await settlePendingPurge(owner);
+  const local = lsText(key);
+  if (local != null) {
+    // A copy another build left (a rollback) is merged with the IndexedDB
+    // copy, never taken over it: it may have been built without what only
+    // IndexedDB holds. When IndexedDB cannot be read, this cannot be told,
+    // and the read says it could not look.
+    if (owner && !ownLocalCopy(key, local) && offlineStoreSupported() && mayHaveOfflineCopy(owner)) {
+      const stored = await readOfflineCopy(key, { retryOpen });
+      if (stored != null && stored !== local) return { text: mergeUntrustedLocal(key, stored, local), where: "local" };
+    }
+    return { text: local, where: "local" };
+  }
+  const text = await readOfflineCopy(key, { retryOpen });
+  return text != null ? { text, where: "offline" } : null;
+}
+
+/**
+ * A read of this account's offline file (storage.js readCachedData): what the
+ * records a load puts on screen are built from. When it could not look, even
+ * after a second try at opening IndexedDB, the file is marked unread and no
+ * write of it is made from this tab (writeOfflineText) until a load that read
+ * it has put its records on screen (markOfflineCopyRead): records built
+ * without it have no Protected Identity or Answer Bank, and would replace the
+ * only copy of them.
+ *
+ * A read that gets through never clears the mark itself. The mark belongs to
+ * the records in memory, and those are still the ones built without the file
+ * until the load that read it replaces them: a second load in the same
+ * session read the file at its first step (the id repair), cleared the mark,
+ * and the debounced save of the records still on screen then wrote over the
+ * only copy while that load waited on the cloud. `receipt` (an object) is
+ * given `read` (whether this read got through) and, when it did, `token`,
+ * which markOfflineCopyRead and a write of the text just read
+ * (writeOfflineText `readToken`) accept.
+ */
+export async function readOfflineFile(userId, receipt = null) {
+  const key = scopedKey(BASE_KEYS.data, userId);
+  if (receipt) { receipt.read = false; receipt.token = null; receipt.stamp = null; }
+  if (!key) return null;
+  const epoch = purgeEpoch(userId);
+  // Who had written the file as this read began (OFFLINE_WRITTEN_BASE). None
+  // recorded while IndexedDB may hold a copy (a move or a write that found no
+  // room for it, a session-end trim) is recorded now when there is room: this
+  // read sees every write made before it, and every write after moves it.
+  // Left unrecorded, this window took its own next localStorage fallback for
+  // another writer's and refused it (localstorage_unmerged).
+  if (offlineWriteStamp(userId) == null && mayHaveOfflineCopy(userId)) bumpWriteStamp(userId);
+  const stamp = offlineWriteStamp(userId);
+  try {
+    const found = await readOfflineText(key, { retryOpen: true });
+    if (receipt && purgeEpoch(userId) === epoch) { receipt.read = true; receipt.token = { key, epoch }; receipt.stamp = stamp; }
+    return found;
+  } catch {
+    // The mark belongs to the records on screen. Not set by a read whose load
+    // has been overtaken (`receipt.current`): a newer load has put records on
+    // screen, and a stale read failing afterwards refused every save of the
+    // session. Nor when the records on screen are known to hold at least what
+    // the stored copy holds (`receipt.trustMemory`: built from a read that got
+    // through, and nothing has written the file since but this tab): nothing
+    // is built from this failed read, and those records are saved as usual.
+    const stale = typeof receipt?.current === "function" && !receipt.current();
+    const trusted = typeof receipt?.trustMemory === "function" && receipt.trustMemory();
+    if (purgeEpoch(userId) === epoch && !stale && !trusted) unreadKeys.add(key);
+    return null;
+  }
+}
+
+/**
+ * Can `userId`'s offline file be read now? A read that got through, with
+ * nothing kept of it (the retry of a load that could not read it, AppContext).
+ */
+export async function probeOfflineFile(userId) {
+  const key = scopedKey(BASE_KEYS.data, userId);
+  if (!key) return false;
+  try { await readOfflineText(key, { retryOpen: true }); return true; } catch { return false; }
+}
+
+// A token from a read of `key` that got through (readOfflineFile), taken
+// since this tab last purged the account.
+function readTokenValid(key, token) {
+  if (!token || typeof token !== "object" || token.key !== key) return false;
+  return purgeEpoch(keyOwner(key)) === token.epoch;
+}
+
+/**
+ * A load is putting records on screen built from the read `receipt` came
+ * from (readOfflineFile): the file is read, and the records in memory hold
+ * what it held. Called immediately before that load's setData, after its
+ * last await, and never by a read whose records are not the ones shown (the
+ * id repair's). Returns whether the mark was cleared; a receipt from a read
+ * that could not look, or from before a purge, leaves it.
+ */
+export function markOfflineCopyRead(userId, receipt) {
+  const key = scopedKey(BASE_KEYS.data, userId);
+  if (!key || !readTokenValid(key, receipt?.token)) return false;
+  unreadKeys.delete(key);
+  return true;
+}
+
+/**
+ * True from a load that could not read `userId`'s offline file until a load
+ * that read it puts its records on screen (readOfflineFile, markOfflineCopyRead).
+ */
+export function offlineCopyUnread(userId) {
+  const key = scopedKey(BASE_KEYS.data, userId);
+  return !!key && unreadKeys.has(key);
+}
+
+/**
+ * Bring a localStorage copy of `key` up to `text`, synchronously as a write
+ * of `text` into IndexedDB is committed (putOffline's guard). Without it the
+ * rule above breaks for a moment: once the IndexedDB write has landed and
+ * before the writer removes the localStorage copy, that copy is OLDER than
+ * the IndexedDB one, and another tab's move taken in that moment put it back
+ * over the newer write. With the copy already holding `text`, a move that
+ * read the older copy finds it changed and stands aside, and one that reads
+ * it now moves `text` itself. No room for it: left as it was.
+ */
+function supersedeLocalCopy(key, text) {
+  try {
+    const local = localStorage.getItem(key);
+    if (local != null && local !== text) { localStorage.setItem(key, text); noteOwnLocalCopy(key, text); return true; }
+  } catch { /* full, or unavailable */ }
+  return false;
+}
+
+/**
+ * Put `text` in IndexedDB under `key`, after any purge still owed there.
+ * Resolves "saved", "stopped" (a purge since the write began, or the caller's
+ * guard refused) or the refusal: "indexeddb_purge_pending",
+ * "indexeddb_unsupported", "indexeddb_unmarked" (the home record could not be
+ * written), "indexeddb_quota", "indexeddb_unavailable" or "indexeddb_error".
+ *
+ * `how.generation`: the purge generation when the write began
+ * (OFFLINE_GENERATION_KEY). A purge begun since, in this tab or another,
+ * cancels the write, however that purge ended. `how.latest`: whether this is
+ * still the latest write of the key in this tab (a localStorage copy is
+ * brought up to the latest write only, supersedeLocalCopy). `how.moving`: the
+ * write moves the key's localStorage copy (moveToOfflineStore); `how.markLater`
+ * is then set when it went ahead without the home record.
+ *
+ * The home record (OFFLINE_HOME_BASE) is set in the commit guard,
+ * synchronously as the write transaction is created, so it is set exactly
+ * when a write may land: after the database opened, and with no purge of the
+ * account recorded. It is never taken back when a write fails. A write fails
+ * in one tab while another tab's lands, and neither can see the other's; a
+ * home record left over costs at most a read that says "could not look"
+ * instead of "nothing there", while one removed from under a stored copy
+ * made that copy invisible to every read and every purge after it.
+ *
+ * A write with no room in localStorage for the home record is refused
+ * ("indexeddb_unmarked"), except a move: the localStorage copy it moves shows
+ * that IndexedDB may hold one (every purge looks for it before it removes
+ * anything, hasLocalLargeCopy), and the move sets the record as it removes
+ * that copy, which frees the room.
+ */
+async function putOffline(key, text, guard, how = {}) {
+  const { generation = offlineGeneration(), latest = null, moving = false } = how;
+  const owner = keyOwner(key);
+  if (!owner) return "indexeddb_error";
+  if (!offlineStoreSupported()) return "indexeddb_unsupported";
+  if (await settlePendingPurge(owner)) return "indexeddb_purge_pending";
+  if (!("expectedStamp" in how)) how.expectedStamp = how.knownStamp;
+  how.foreign = !!how.foreign || !!how.mergeAlways;
+  let unmarked = false;
+  const clear = () => {
+    how.markLater = false;
+    // A purge begun since this write began, in any tab, however it ended.
+    if (offlineGeneration() !== generation) return false;
+    // A purge still owed, recorded in any tab.
+    if (pendingPurge(owner) !== null) return false;
+    if (guard && !guard()) return false;
+    if (!markOfflineHome(owner)) {
+      if (!moving || lsText(key) == null) { unmarked = true; return false; }
+      how.markLater = true;
+    }
+    // The localStorage copy as it is before this write brings it up to date:
+    // with one there, it is the newest copy, and a merge is made against it.
+    // Taken once: when the transaction fails and is made again on a fresh
+    // connection (transact), the copy there now is the one this write put
+    // there, and a merge against it was a merge with nothing. Taken again
+    // only when another writer has changed it since.
+    const localNow = lsText(key);
+    if (!("localBefore" in how) || localNow !== ("localWritten" in how ? how.localWritten : how.localBefore)) {
+      how.localBefore = localNow;
+      delete how.localWritten;
+    }
+    // A copy another build wrote (a tab still on a build from before this
+    // store, which never moves the stamp) is another writer's: merged with
+    // the IndexedDB copy, and this write merged with that. Taken as this
+    // window's own, its Protected Identity rows were written over and the
+    // copy then removed.
+    if (typeof how.merge === "function" && how.localBefore != null && !ownLocalCopy(key, how.localBefore)) how.foreign = true;
+    // The file is written: every other tab learns it from the stamp. Whether
+    // another writer has written it since the stamp the caller knew is taken
+    // here, as the transaction is created, not when the write began: a save
+    // begun just after another window's, and created after it, merged with
+    // nothing and wrote over the row that window had just stored.
+    if (isDataKey(key)) {
+      const prev = offlineWriteStamp(owner);
+      if (writtenSince(owner, how.expectedStamp)) how.foreign = true;
+      how.stamp = bumpWriteStamp(owner);
+      noteOwnStamp(how.stamp, prev, !how.foreign);
+      how.expectedStamp = offlineWriteStamp(owner);
+    }
+    // A localStorage copy this build wrote is brought up to what this write
+    // will hold: with a merge, the merge with that copy, never the unmerged
+    // text (which put a copy without the other writer's rows over the only
+    // copy of them). A copy another build wrote is merged with the IndexedDB
+    // copy first, so it is left as it is until the transaction reads that.
+    const local = how.localBefore;
+    let final = text;
+    if (typeof how.merge === "function" && local != null) {
+      if (!ownLocalCopy(key, local)) final = null;
+      else if (how.foreign && local !== text) { const out = how.merge(local); if (typeof out === "string") final = out; }
+    }
+    if (final != null && !moving && (!latest || latest()) && supersedeLocalCopy(key, final)) how.localWritten = final;
+    return true;
+  };
+  how.finalText = text;
+  how.merged = false;
+  try {
+    let ran;
+    if (typeof how.merge === "function") {
+      // Read and written in one transaction: `how.merge(stored)` returns the
+      // text to write in place of `text` (the device-only rows another tab
+      // wrote since this one last read, kept), or nothing to write `text`.
+      // Asked only when the stamp had moved from `how.knownStamp` as the
+      // transaction was created (or `how.mergeAlways`).
+      ran = await offlineUpdate(key, (stored) => {
+        const local = how.localBefore;
+        const theirs = local == null ? stored : ownLocalCopy(key, local) ? local : mergeUntrustedLocal(key, stored, local);
+        let final = text;
+        if (how.foreign && theirs != null && theirs !== text) {
+          const out = how.merge(theirs);
+          if (typeof out === "string") final = out;
+        }
+        how.finalText = final;
+        how.merged = true;
+        if (!moving && (!latest || latest()) && supersedeLocalCopy(key, final)) how.localWritten = final;
+        return final;
+      }, { guard: clear });
+    } else ran = await offlineWrite(key, text, { guard: clear });
+    if (ran) return "saved";
+    return unmarked ? "indexeddb_unmarked" : "stopped";
+  } catch (error) {
+    return isQuotaError(error) ? "indexeddb_quota" : error instanceof OfflineStoreUnavailable ? "indexeddb_unavailable" : "indexeddb_error";
+  }
+}
+
+/**
+ * Move `key`'s localStorage copy into IndexedDB, never losing the only copy:
+ * written, read back and compared, and only then removed from localStorage
+ * (and only if localStorage still holds exactly what was copied). Ordered
+ * with writeOfflineText: the move's write is made only if no write of the key
+ * has begun since the move began, none is still on its way, no purge has
+ * begun since (in any tab), and localStorage still holds what it read,
+ * checked synchronously as the transaction is created; otherwise that write
+ * is newer and the move stands aside. A write in another tab brings the
+ * localStorage copy up to what it writes as its own transaction is created
+ * (supersedeLocalCopy), so the last check also stands the move aside for
+ * another tab's newer write. Returns "moved", "none" (nothing to move), or
+ * "kept" (IndexedDB unavailable, full, refused by the guard, overtaken, or
+ * the read-back differed: localStorage keeps it).
+ *
+ * When localStorage has no room for the home record (an older build left a
+ * large copy there and the rest filled up), the move goes ahead without it:
+ * the copy being moved stands in for the record until, in one synchronous
+ * step, it is removed and the record written in the room it freed. A record
+ * that still does not fit puts the copy back.
+ */
+export async function moveToOfflineStore(key, guard) {
+  const raw = lsText(key);
+  if (raw == null) return "none";
+  const owner = keyOwner(key);
+  const generation = offlineGeneration();
+  const seqAtStart = writeSeq.get(key);
+  const unchanged = () => offlineGeneration() === generation
+    && writeSeq.get(key) === seqAtStart && !writesInFlight.has(key) && lsText(key) === raw;
+  // A copy another build wrote (a rollback) is merged with what IndexedDB
+  // holds, never moved over it (mergeUntrustedLocal). IndexedDB unreadable:
+  // it stays where it is, and the read says it could not look.
+  let text = raw;
+  if (!ownLocalCopy(key, raw) && owner && offlineStoreSupported() && mayHaveOfflineCopy(owner)) {
+    let stored;
+    try { stored = await readOfflineCopy(key); } catch { return "kept"; }
+    if (stored != null && stored !== raw) text = mergeUntrustedLocal(key, stored, raw);
+  }
+  const how = { generation, moving: true };
+  const put = await putOffline(key, text, () => unchanged() && (!guard || guard()), how);
+  if (put !== "saved") {
+    if (put === "indexeddb_quota") reportStorageRefusal({ store: key.slice(0, key.indexOf(":")), reason: "indexeddb_quota_on_move", chars: raw.length });
+    return "kept";
+  }
+  let back;
+  try { back = await offlineRead(key); } catch { return "kept"; }
+  if (back !== text) return "kept";
+  // Overtaken since: the localStorage copy is not this move's to remove.
+  // While it is there it still stands in for a missing home record.
+  if (!unchanged()) return "moved";
+  try { localStorage.removeItem(key); } catch { return "kept"; }
+  noteOwnLocalCopy(key, null);
+  if (how.markLater && !markOfflineHome(owner)) {
+    try { localStorage.setItem(key, raw); } catch { /* the room it freed was taken meanwhile */ }
+    return "kept";
+  }
+  return "moved";
+}
+
+/**
+ * Write one IndexedDB-backed key: IndexedDB first; localStorage only when
+ * IndexedDB refused and no newer write of the key has begun since. Resolves
+ * { saved, stopped, refused: [reasons], chars }. `stopped` is a write the
+ * guard refused (a purge since it began): nothing was written anywhere. A key
+ * whose stored copy could not be read (unreadKeys) is written nowhere:
+ * refused ["indexeddb_unread"]. `how.readToken`: the text is the stored copy
+ * itself, just read (readOfflineFile's receipt) and rewritten (sanitised, its
+ * ids repaired), so it holds everything the stored copy held and the unread
+ * mark does not stop it.
+ *
+ * A write refused only because localStorage had no room for the home record
+ * ("indexeddb_unmarked") while a localStorage copy of the key is still there
+ * (an older build's copy whose move at the start of the session found
+ * IndexedDB closed) moves that copy first, which frees its room and sets the
+ * record in it (moveToOfflineStore), and is then made once more. Without
+ * that, every save of the session was refused as soon as IndexedDB answered
+ * again, and what was added meanwhile existed nowhere.
+ */
+export async function writeOfflineText(key, text, guard, how = {}) {
+  const first = await writeOfflineTextOnce(key, text, guard, how);
+  const { seq, result } = first;
+  if (result.saved || result.stopped || result.superseded || !result.refused.includes("indexeddb_unmarked")) return result;
+  // Only while this is still the latest write of the key, and a copy is there to move.
+  if (writeSeq.get(key) !== seq || lsText(key) == null) return result;
+  if (await moveToOfflineStore(key, guard) !== "moved" || writeSeq.get(key) !== seq) return result;
+  return (await writeOfflineTextOnce(key, text, guard, how)).result;
+}
+
+async function writeOfflineTextOnce(key, text, guard, how) {
+  const seq = ++writeCounter;
+  const generation = offlineGeneration();
+  writeSeq.set(key, seq);
+  writesInFlight.set(key, (writesInFlight.get(key) || 0) + 1);
+  try { return { seq, result: await writeOfflineTextNow(key, text, guard, seq, generation, how) }; }
+  finally {
+    const n = (writesInFlight.get(key) || 1) - 1;
+    if (n > 0) writesInFlight.set(key, n); else writesInFlight.delete(key);
+  }
+}
+
+async function writeOfflineTextNow(key, text, guard, seq, generation, how = {}) {
+  const latest = () => writeSeq.get(key) === seq;
+  const chars = text.length;
+  if (unreadKeys.has(key) && !readTokenValid(key, how.readToken)) return { saved: false, stopped: false, refused: ["indexeddb_unread"], chars };
+  const put_how = { generation, latest, merge: how.merge, knownStamp: how.knownStamp, mergeAlways: how.mergeAlways };
+  const put = await putOffline(key, text, guard, put_how);
+  if (put === "saved") {
+    // Landed: any localStorage copy is older now, and the space it held is
+    // freed. Only by the latest write, so an older fallback is never left
+    // standing over a newer IndexedDB copy.
+    // Not a copy written since the transaction read localStorage (a tab on
+    // an older build): this write never saw it.
+    const seen = "localWritten" in put_how ? put_how.localWritten : put_how.localBefore;
+    if (latest() && (!("localBefore" in put_how) || lsText(key) === seen)) {
+      try { localStorage.removeItem(key); } catch { /* unavailable */ }
+      noteOwnLocalCopy(key, null);
+    }
+    return { saved: true, stopped: false, refused: [], chars, text: put_how.finalText, stamp: put_how.stamp ?? null, where: "offline" };
+  }
+  if (put === "stopped") return { saved: false, stopped: true, refused: [], chars };
+  const refused = [put];
+  if (!latest()) return { saved: false, stopped: false, refused, chars, superseded: true };
+  // A purge begun since this write began (another tab's Sign out, even one
+  // that has finished), or the caller's guard: its text predates it.
+  if (offlineGeneration() !== generation || (guard && !guard())) return { saved: false, stopped: true, refused, chars };
+  // The localStorage copy, when there is one, is the newest: a merge is made
+  // against it here as it is against IndexedDB (putOffline).
+  let final = text;
+  const localNow = lsText(key);
+  const foreign = put_how.foreign || (isDataKey(key) && writtenSince(keyOwner(key), "expectedStamp" in put_how ? put_how.expectedStamp : how.knownStamp))
+    // A copy another build wrote is another writer's here too (putOffline).
+    || (typeof how.merge === "function" && localNow != null && !ownLocalCopy(key, localNow));
+  if (typeof how.merge === "function" && foreign) {
+    const now = lsText(key);
+    // What the transaction saw of localStorage (putOffline), unchanged since:
+    // the copy there is this write's own, and the one to merge with is the
+    // one it replaced.
+    const seen = "localWritten" in put_how ? put_how.localWritten : put_how.localBefore;
+    const unchanged = "localBefore" in put_how && now === seen;
+    // Nothing written since this write's transaction was created.
+    const quiet = !isDataKey(key) || offlineWriteStamp(keyOwner(key)) === put_how.expectedStamp;
+    if (put_how.merged && unchanged && quiet) {
+      // The transaction read the newest copy (IndexedDB's, or localStorage's
+      // merged with it) and merged before it failed: that is the text.
+      final = put_how.finalText;
+    } else {
+      const theirs = unchanged ? put_how.localBefore : now;
+      // Another writer has written the file since this tab's copy, and what
+      // it wrote is in IndexedDB, which this write could not read (no
+      // localStorage copy to merge with), or in a localStorage copy another
+      // build wrote, which is merged with IndexedDB's before it is trusted.
+      // Written here as this build's own copy, it stood in front of the newer
+      // IndexedDB copy for every window, and the next save there merged
+      // against it and removed the rows it lacked. Refused: the device-only
+      // changes are held aside (storage.js), and a later try that can read
+      // IndexedDB merges.
+      // Only while IndexedDB may hold a copy that counts: none was ever put
+      // there, or a full purge of it is owed (a deletion), and there is
+      // nothing newer to lose.
+      const owner = keyOwner(key);
+      const newerThere = offlineStoreSupported() && mayHaveOfflineCopy(owner)
+        && pendingPurge(owner)?.mode !== "all" && !offlineWipeOwed(owner);
+      if (newerThere && (theirs == null || !ownLocalCopy(key, theirs))) {
+        return { saved: false, stopped: false, refused: [...refused, "localstorage_unmerged"], chars };
+      }
+      if (theirs != null && theirs !== text) { const out = how.merge(theirs); if (typeof out === "string") final = out; }
+    }
+  }
+  try {
+    putOwnLocalCopy(key, final);
+    const prev = isDataKey(key) ? offlineWriteStamp(keyOwner(key)) : null;
+    const stamp = isDataKey(key) ? bumpWriteStamp(keyOwner(key)) : null;
+    if (stamp) noteOwnStamp(stamp, prev, !foreign);
+    return { saved: true, stopped: false, refused, chars, text: final, stamp, where: "local" };
+  } catch (error) {
+    refused.push(isQuotaError(error) ? "localstorage_quota" : "localstorage_error");
+  }
+  return { saved: false, stopped: false, refused, chars };
+}
+
+/** Did a write refuse for want of space (in either store)? */
+export function refusedForSpace(refused) {
+  return Array.isArray(refused) && refused.some((r) => r.endsWith("_quota"));
+}
+
+// Write one of the mirrored stores through to IndexedDB (localStorage if it
+// refuses), and report a refusal that kept it from the device.
+function storeMirrored(key, value, userId) {
+  writeOfflineText(key, value, localWriteGuard(userId)).then((result) => {
+    if (result.stopped) return;
+    if (!result.saved || result.refused.includes("indexeddb_quota")) {
+      reportStorageRefusal({ store: key.slice(0, key.indexOf(":")), reason: result.refused.join(","), chars: result.chars });
+    }
+  }, () => {});
+}
+
+/**
+ * Prepare this account's large stores for the session: move each localStorage
+ * copy into IndexedDB (the offline file, the transcript, the archives), and
+ * hold the transcript and archives in memory for their synchronous readers.
+ * Run by the load (storage.js readCachedData) before anything is rendered, so
+ * the Assistant never mounts over an empty transcript and writes it back. Once
+ * per account per tab, when every store was read; a store that could not be
+ * read is left out of memory (unreadKeys) and the next call tries it again. A
+ * purge of the account resets it.
+ */
+export function hydrateOfflineStores(userId) {
+  if (!userId) return Promise.resolve();
+  syncMemoryToFence(userId);
+  const existing = hydrated.get(userId);
+  if (existing) return existing;
+  const epoch = purgeEpoch(userId);
+  const fence = localFence(userId) ?? null;
+  // Purged while this ran, here (the epoch) or in another tab by a deletion
+  // (the fence): what it read predates the purge, and nothing goes into memory.
+  const purged = () => purgeEpoch(userId) !== epoch || (localFence(userId) ?? null) !== fence;
+  const run = (async () => {
+    let complete = true;
+    await moveToOfflineStore(scopedKey(BASE_KEYS.data, userId), localWriteGuard(userId, { adopted: false }));
+    for (const base of MIRRORED_BASES) {
+      const key = scopedKey(base, userId);
+      if (mirror.has(key)) continue;
+      // This session keeps its own copy apart from a stored one it began without.
+      if (sessionOnly.has(key) && !unreadKeys.has(key)) continue;
+      await moveToOfflineStore(key, localWriteGuard(userId, { adopted: false }));
+      let found;
+      try { found = await readOfflineText(key); }
+      catch {
+        if (purged()) return false;
+        unreadKeys.add(key);
+        complete = false;
+        continue;
+      }
+      // Purged while this ran: the purge cleared the mirror; nothing goes back.
+      if (purged()) return false;
+      // A write that happened meanwhile is newer than what was read.
+      if (mirror.has(key)) continue;
+      unreadKeys.delete(key);
+      if (sessionOnly.has(key)) {
+        // Written this session while the stored copy could not be read. If
+        // there was none after all, this session's copy is the copy. If there
+        // was, this session began without it: the two are merged by id
+        // (mergeLargeStore) and the merge is the copy from here on, so
+        // neither the earlier conversation nor this session's is lost. The
+        // Assistant on screen takes the merge in (onLargeStoreMerged); held
+        // apart instead, every later write of this session stayed in memory
+        // and a reload dropped the whole session's conversation.
+        const value = sessionOnly.get(key);
+        sessionOnly.delete(key);
+        const merged = found == null ? value : mergeLargeStore(base, found.text, value);
+        mirror.set(key, merged);
+        if (found == null || merged !== found.text) storeMirrored(key, merged, userId);
+        if (found != null && merged !== value) notifyLargeStoreMerged(base, userId);
+        continue;
+      }
+      mirror.set(key, found ? found.text : null);
+    }
+    return complete;
+  })();
+  hydrated.set(userId, run);
+  const retryNextTime = () => { if (hydrated.get(userId) === run) hydrated.delete(userId); };
+  run.then((complete) => { if (!complete) retryNextTime(); }, retryNextTime);
+  return run;
+}
+
+/**
+ * One of the mirrored stores (the transcript, the archives) merged by id: the
+ * entries of `stored` this session never had, and every entry of `session`,
+ * where an entry on both sides is taken from `session`. The transcript runs
+ * oldest first, so the stored conversation goes above this session's; the
+ * archives run newest first, so this session's stay on top. An entry with no
+ * id is kept from both sides.
+ */
+export function mergeLargeList(base, stored, session) {
+  const idOf = (entry) => (entry && typeof entry === "object" && typeof entry.id === "string" && entry.id ? entry.id : null);
+  const have = new Set((session || []).map(idOf).filter(Boolean));
+  const extra = (stored || []).filter((entry) => { const id = idOf(entry); return !id || !have.has(id); });
+  return base === BASE_KEYS.archives ? [...(session || []), ...extra] : [...extra, ...(session || [])];
+}
+
+/** mergeLargeList over the stored texts. A side that is not a list counts as empty. */
+function mergeLargeStore(base, storedText, sessionText) {
+  const list = (text) => { try { const v = JSON.parse(text); return Array.isArray(v) ? v : null; } catch { return null; } };
+  const stored = list(storedText), session = list(sessionText);
+  if (!stored) return sessionText;
+  if (!session) return storedText;
+  const merged = mergeLargeList(base, stored, session);
+  return merged.length === session.length ? sessionText : JSON.stringify(merged);
+}
+
+// Told when a stored transcript or archives list this session began without
+// has been merged with the session's own (hydrateOfflineStores): the
+// Assistant on screen merges it into what it holds, or its next write would
+// put back only this session's part.
+const largeStoreListeners = new Set();
+/** `listener(base)` for the active account; returns a function that removes it. */
+export function onLargeStoreMerged(listener) {
+  if (typeof listener !== "function") return () => {};
+  largeStoreListeners.add(listener);
+  return () => largeStoreListeners.delete(listener);
+}
+function notifyLargeStoreMerged(base, userId) {
+  if (userId !== activeUserId) return;
+  for (const listener of largeStoreListeners) { try { listener(base); } catch { /* a listener must not stop the merge */ } }
+}
+
+/**
+ * A large-store copy written straight into localStorage by a writer outside
+ * this module (continuity recovery, continuityRecovery.js). localStorage
+ * outranks IndexedDB, so it is the key's value from now on, and the copy the
+ * Assistant reads from memory follows it; its next write moves it into
+ * IndexedDB as usual.
+ */
+export function noteLocalCopyWritten(key, text) {
+  if (!isMirroredKey(key) || typeof text !== "string") return;
+  syncMemoryToFence(keyOwner(key));
+  mirror.set(key, text);
+  sessionOnly.delete(key);
+  unreadKeys.delete(key);
+}
+
+/** One of the mirrored stores (the transcript, the archives), synchronously. */
+export function largeGet(base, userId = activeUserId) {
+  const k = scopedKey(base, userId);
+  if (!k) return null;
+  syncMemoryToFence(userId);
+  if (mirror.has(k)) return mirror.get(k);
+  if (sessionOnly.has(k)) return sessionOnly.get(k);
+  return lsText(k);
+}
+export function largeGetJSON(base, userId = activeUserId) {
+  const raw = largeGet(base, userId);
+  if (raw == null) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+/**
+ * Write one of the mirrored stores: memory at once and IndexedDB behind it,
+ * localStorage only if IndexedDB refuses. Before this account's stores have
+ * been read (hydrateOfflineStores), the write waits for that read and lands
+ * over what it found. A store whose copy could not be read keeps this
+ * session's writes in memory only: begun from an empty read, they would
+ * replace the only copy of the transcript and its archives. Each such write
+ * tries the read again, and once it gets through the two are merged and
+ * written (hydrateOfflineStores).
+ */
+export function largeSet(base, value, userId = activeUserId) {
+  const k = scopedKey(base, userId);
+  if (!k) return false;
+  if (!localCopyCurrent(userId)) return false;
+  syncMemoryToFence(userId);
+  if (mirror.has(k)) {
+    mirror.set(k, value);
+    storeMirrored(k, value, userId);
+    return true;
+  }
+  if (sessionOnly.has(k) || unreadKeys.has(k)) {
+    sessionOnly.set(k, value);
+    // Another try at reading it: there may have been nothing there after all.
+    if (unreadKeys.has(k) && !hydrated.has(userId)) hydrateOfflineStores(userId).catch(() => {});
+    return true;
+  }
+  const pending = hydrated.get(userId) || hydrateOfflineStores(userId);
+  pending.then(() => {
+    if (mirror.has(k) || sessionOnly.has(k) || unreadKeys.has(k)) largeSet(base, value, userId);
+  }, () => {});
+  return true;
+}
+export function largeSetJSON(base, value, userId = activeUserId) {
+  return largeSet(base, JSON.stringify(value), userId);
+}
+
+/**
+ * Read one of the mirrored stores (the transcript, the archives) again from
+ * where it is stored, and hold what was read in memory. IndexedDB tells no
+ * other tab about a write, so what this tab read when the account loaded can
+ * be older than what another tab has stored since (a conversation archived
+ * there). The Assistant reads both again as it opens and writes nothing
+ * until they are back (AssistantSection). Resolves the stored text (null
+ * when none is stored), or undefined when it could not be read: the key is
+ * then unread, and this session's writes are held in memory until a read
+ * gets through and are merged with it then (largeSet, hydrateOfflineStores).
+ * What this tab wrote itself since the read began is newer, and is kept.
+ */
+export async function rereadLargeStore(base, userId = activeUserId) {
+  const key = scopedKey(base, userId);
+  if (!key || !MIRRORED_BASES.includes(base)) return undefined;
+  syncMemoryToFence(userId);
+  const held = () => (mirror.has(key) ? mirror.get(key) : undefined);
+  // Not read in this tab yet, or it could not be: the hydration reads it,
+  // and merges in what this session wrote meanwhile.
+  if (!mirror.has(key)) {
+    try { await hydrateOfflineStores(userId); } catch { /* unread */ }
+    return held();
+  }
+  const epoch = purgeEpoch(userId);
+  const fence = localFence(userId) ?? null;
+  const seq = writeSeq.get(key);
+  const untouched = () => purgeEpoch(userId) === epoch && (localFence(userId) ?? null) === fence
+    && writeSeq.get(key) === seq && !writesInFlight.has(key);
+  if (!untouched()) return held();
+  // A copy another writer left in localStorage (continuity recovery) moves
+  // into IndexedDB first, as the hydration moves one.
+  await moveToOfflineStore(key, localWriteGuard(userId, { adopted: false }));
+  let found;
+  try { found = await readOfflineText(key, { retryOpen: true }); }
+  catch {
+    if (!untouched()) return held();
+    // Could not look. What memory holds may be older than the stored copy,
+    // and nothing begun from it is written over that copy.
+    mirror.delete(key);
+    unreadKeys.add(key);
+    hydrated.delete(userId);
+    return undefined;
+  }
+  if (!untouched()) return held();
+  const text = found ? found.text : null;
+  mirror.set(key, text);
+  return text;
+}
+
 /**
  * The file cut down to what exists only on this device, or null when none of
  * it holds anything: the device-only sections (DEVICE_ONLY_SECTIONS:
@@ -280,16 +1817,38 @@ function deviceOnlyFile(raw) {
  * (setActiveUserId), and sweepLapsedQueues, run whenever the app opens here,
  * removes what its account never came back for. A session revoked on a shared
  * workstation no longer leaves them there for ever.
+ *
+ * Resolves true when the purge is durable: IndexedDB committed it, or it is
+ * recorded (OFFLINE_PURGE_BASE) to be finished before anything of the
+ * account is read from there again. False only when IndexedDB refused and
+ * not even the record could be kept; a deletion is then not marked honored
+ * (dataDeletion.js), so the next load purges again.
  */
 export async function purgeUserStorage(userId, { keepVault = false, retireRecovery = false, keepDeviceOnly = false } = {}) {
-  if (!userId) return;
+  if (!userId) return true;
   const keepLocal = keepDeviceOnly && keepVault && !retireRecovery;
   // A real server wipe may preserve a private vault but must still prevent
   // recovery. Ordinary involuntary sign-out uses keepVault:true without this.
   if (!keepVault || retireRecovery) retireContinuityRecovery(userId);
+  // The session merely ended: a save of the file this tab still has on its
+  // way is about to be cancelled, and the device-only changes it carries are
+  // held aside first (setBeforeDeviceOnlyTrim), as the rest of what exists
+  // only on this device is kept.
+  if (keepLocal && beforeDeviceOnlyTrim) { try { beforeDeviceOnlyTrim(userId); } catch { /* the trim goes on */ } }
+  // Every write of the large stores begun before this point, in this tab or
+  // another, is refused when it comes to commit (the generation, and this
+  // tab's epoch), and the in-memory transcript goes with the rest.
+  const advanced = advanceOfflineGeneration();
+  // Asked before anything is removed: a localStorage copy of a large store is
+  // itself a sign that IndexedDB may hold one (hasLocalLargeCopy).
+  const mayHave = offlineStoreSupported() && (mayHaveOfflineCopy(userId) || hasLocalLargeCopy(userId));
+  bumpPurgeEpoch(userId);
+  forgetLargeStoreMemory(userId);
+  memoryFences.delete(userId);
   // Session expiry keeps this account's text for re-sign-in. Deliberate
   // sign-out/deletion removes it; screenshots are never stored here.
   if (!keepVault || retireRecovery) clearSupportTextDrafts(userId);
+  let keptOwnCopy = null;
   for (const [name, base] of Object.entries(BASE_KEYS)) {
     if (name === "vault" && keepVault) continue;
     // Session expiry also keeps the membership answer (two booleans), so the
@@ -302,20 +1861,52 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
       const raw = lsGet(base, userId);
       if (raw == null) continue;
       const kept = deviceOnlyFile(raw);
-      if (kept) lsSet(base, kept, userId); else lsRemove(base, userId);
+      const own = ownLocalCopy(scopedKey(base, userId), raw);
+      if (kept) { if (lsSet(base, kept, userId)) keptOwnCopy = own ? kept : null; } else lsRemove(base, userId);
       continue;
     }
     lsRemove(base, userId);
+  }
+  // The file's write stamp and the record of this build's localStorage
+  // copies go with the copies (a trimmed copy this build wrote stays its
+  // own). Device-only changes held aside go too, unless the session merely
+  // ended: they exist nowhere else.
+  lsRemove(OFFLINE_WRITTEN_BASE, userId);
+  lsRemove(LOCAL_COPIES_BASE, userId);
+  if (keptOwnCopy != null) noteOwnLocalCopy(scopedKey(BASE_KEYS.data, userId), keptOwnCopy);
+  if (!keepLocal) lsRemove(DEVICE_ONLY_PENDING_BASE, userId);
+  // localStorage was full: the removals above made room for it.
+  if (!advanced) advanceOfflineGeneration();
+  // The IndexedDB copies. The purge is recorded before the first await
+  // (callers rely on everything in localStorage going before it), and the
+  // record stays until IndexedDB has committed it: an IndexedDB that will not
+  // open now, or whose connection was lost, is purged by the next read or
+  // write of the account, or the next launch (sweepPendingOfflinePurges),
+  // before anything of it is read. The file is cut down to what exists only
+  // on this device exactly as above when the session merely ended; everything
+  // else goes. Durable when committed, or recorded to be.
+  const mode = keepLocal ? "trim" : "all";
+  const recorded = beginOfflinePurge(userId, mode, mayHave);
+  let durable = true;
+  if (recorded && recorded !== "none") {
+    await settlePendingPurge(userId);
+  } else if (recorded === null) {
+    // Not even the record could be kept: purge now, and say whether it held.
+    let result = { done: false, empty: false };
+    try { result = await purgeOfflineCopies(userId, { raw: null, mode }, mayHave); } catch { /* not done */ }
+    if (result.done) clearOfflinePurge(userId, null, result.empty);
+    durable = result.done;
   }
   const nativeKey = scopedKey(BASE_KEYS.data, userId);
   try {
     if (keepLocal && window.storage?.get) {
       const r = await window.storage.get(nativeKey);
       const kept = r?.value ? deviceOnlyFile(r.value) : null;
-      if (kept) { await window.storage.set(nativeKey, kept); return; }
+      if (kept) { await window.storage.set(nativeKey, kept); return durable; }
     }
     await window.storage?.remove?.(nativeKey);
   } catch { /* unavailable */ }
+  return durable;
 }
 
 // Set by the Sign out button just before its purge. Clerk's session-end
@@ -504,10 +2095,11 @@ export function sweepLapsedQueues(now = Date.now()) {
  * sweep or the account's next sign-in removes it.
  */
 export async function purgeForSignOut(userId) {
-  if (!userId) return;
-  await purgeUserStorage(userId, { keepVault: false });
+  if (!userId) return true;
+  const durable = await purgeUserStorage(userId, { keepVault: false });
   lsRemove(DEVICE_KEYS_BASE, userId);
   removeSignOutIntentKey(userId);
+  return durable;
 }
 
 /**
@@ -550,6 +2142,14 @@ export function accessRefusedOpCount(userId) {
  * membership..." both hold empty defaults on purpose while the disk copy
  * still has the rows, and both offer Sign out. A row is counted once across
  * the copies by its id; a row without one counts by its position.
+ *
+ * Resolves { counts, unread }. `unread` is true when the IndexedDB copy may
+ * hold rows and could not be read (it would not open, even on a second try)
+ * and no localStorage copy stands in for it: the counts then leave out what
+ * the purge would erase from there, and Sign out has to say so. That is not
+ * only the case after a load that could not read the file (offlineCopyUnread):
+ * Sign out is offered before any load has read it, on the identity-check and
+ * membership screens.
  */
 export async function deviceOnlyRecordCounts(userId, inMemory = null) {
   const seen = {};
@@ -565,6 +2165,17 @@ export async function deviceOnlyRecordCounts(userId, inMemory = null) {
   tally(inMemory);
   const raw = lsGet(BASE_KEYS.data, userId);
   if (raw != null) tally(parse(raw));
+  // The IndexedDB copy, where the file lives now (offlineStore.js), with any
+  // purge still owed applied first.
+  let unread = false;
+  try {
+    const stored = await readOfflineCopy(scopedKey(BASE_KEYS.data, userId), { retryOpen: true });
+    if (stored != null) tally(parse(stored));
+  } catch {
+    // Could not look. A localStorage copy is never older than the IndexedDB
+    // one, so with one counted above nothing is missing.
+    unread = raw == null;
+  }
   const nativeKey = scopedKey(BASE_KEYS.data, userId);
   if (nativeKey) {
     try {
@@ -574,11 +2185,10 @@ export async function deviceOnlyRecordCounts(userId, inMemory = null) {
       }
     } catch { /* unavailable */ }
   }
-  return Object.fromEntries(Object.entries(seen).map(([section, ids]) => [section, ids.size]));
+  return { counts: Object.fromEntries(Object.entries(seen).map(([section, ids]) => [section, ids.size])), unread };
 }
 
 // ─── One-time migration of the pre-namespace keys ─────────────
-const COLLECTION_ID_SKIP = new Set(["settings"]);
 
 function collectIds(blob) {
   const ids = new Set();
@@ -597,14 +2207,22 @@ function removeLegacy(base) {
   try { localStorage.removeItem(base); } catch { /* unavailable */ }
 }
 /** Move a legacy value under the user's key, never overwriting a namespaced one. */
-function moveLegacy(base, userId) {
+function moveLegacy(base, userId, { namespacedExists = false } = {}) {
   const raw = readLegacy(base);
   // An empty placeholder ("[]", "{}", "null") written by a component that
   // mounted before adoption ran does not count as a namespaced value; the
-  // legacy content wins over it.
-  const cur = lsGet(base, userId);
-  const curEmpty = cur == null || /^\s*(\[\s*\]|\{\s*\}|null|"")\s*$/.test(cur);
-  if (raw != null && curEmpty) lsSet(base, raw, userId);
+  // legacy content wins over it. The transcript and archives are read where
+  // they live now (largeGet: memory once hydrated, IndexedDB behind it), and
+  // a file already in IndexedDB (namespacedExists) is never replaced by the
+  // legacy one: a localStorage copy would outrank it on the next read.
+  const mirrored = MIRRORED_BASES.includes(base);
+  // A transcript whose stored copy could not be read this session: the legacy
+  // one stays where it is, for a load that can compare the two.
+  const k = scopedKey(base, userId);
+  if (mirrored && (unreadKeys.has(k) || sessionOnly.has(k))) return;
+  const cur = mirrored ? largeGet(base, userId) : lsGet(base, userId);
+  const curEmpty = !namespacedExists && (cur == null || /^\s*(\[\s*\]|\{\s*\}|null|"")\s*$/.test(cur));
+  if (raw != null && curEmpty) { if (mirrored) largeSet(base, raw, userId); else lsSet(base, raw, userId); }
   removeLegacy(base);
 }
 
@@ -634,10 +2252,18 @@ export function hasLegacyStorage() {
  * untouched, unreadable to anyone but the account whose records it names,
  * because those notes exist nowhere else and no automatic step deletes them.
  *
+ * `readReceipt`: the receipt of the calling load's own read of the file
+ * (readOfflineFile). The unread mark stays until that load puts its records
+ * on screen (markOfflineCopyRead), so a load that did read the file says so.
+ *
  * Returns the adopted legacy file, or null.
  */
-export function adoptLegacyStorage(userId, { cloudIds, cloudHasData }) {
+export function adoptLegacyStorage(userId, { cloudIds, cloudHasData, hasLocalFile = false, readReceipt = null }) {
   if (!userId) return null;
+  // This load could not read the account's file in IndexedDB. A legacy file
+  // put in localStorage now would outrank it, and deciding without it could
+  // discard the newer one: nothing moves, and the next load decides.
+  if (offlineCopyUnread(userId) && !readTokenValid(scopedKey(BASE_KEYS.data, userId), readReceipt?.token)) return null;
   const legacyRaw = readLegacy(BASE_KEYS.data);
   let legacy = null;
   if (legacyRaw) { try { legacy = JSON.parse(legacyRaw); } catch { legacy = null; } }
@@ -651,7 +2277,7 @@ export function adoptLegacyStorage(userId, { cloudIds, cloudHasData }) {
 
   const movable = [BASE_KEYS.data, BASE_KEYS.chat, BASE_KEYS.archives, BASE_KEYS.timer, BASE_KEYS.lastContract];
   if (adopted) {
-    for (const base of movable) moveLegacy(base, userId);
+    for (const base of movable) moveLegacy(base, userId, { namespacedExists: base === BASE_KEYS.data && hasLocalFile });
     // Capacitor copy of the file, when present.
     (async () => {
       try {

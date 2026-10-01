@@ -14,6 +14,8 @@
 //
 // Pure: plain node tests import it.
 
+import { DEVICE_ONLY_SECTIONS, deviceOnlySectionsChanged, deviceOnlyBlockedMessage } from "./pausedApplicationRecords.js";
+
 export const MAX_STR_LEN = 5000;
 // A career case log or a multi-year work log runs to many thousands of rows;
 // a large bound only blunts a hostile deeply-repeated array.
@@ -234,4 +236,48 @@ export function planRestore(current, raw, { collectionKeys, restorableSettings, 
   const on = (v) => v !== false;
   const switchesKept = MESSAGE_SWITCHES.some((k) => k in incomingSettings && on(incomingSettings[k]) !== on(currentSettings[k]));
   return { merged, changed, restoredIds, keptNewer, settings, switchesKept, documentsWithoutFile };
+}
+
+
+/** Said when a restore is refused because the membership is read-only. */
+export const RESTORE_READ_ONLY_MESSAGE = "Restore is unavailable while records are read-only. Your saved records and exports have not changed.";
+
+/**
+ * Why a restore that would change `before` into `next` is refused now, or
+ * null when nothing refuses it here. `deviceOnlyBlocked`: why this device
+ * would keep no change to Protected Identity or the Answer Bank now
+ * (utils/storage.js deviceOnlySaveBlocked: its offline copy is unread, or
+ * the last save of it landed in no store), or null. A backup that brings
+ * Protected Identity back is refused for that reason, and says so; it used
+ * to be refused with the read-only membership message, which pointed the
+ * member away from the reload that fixes it.
+ */
+export function restoreRefusal(before, next, deviceOnlyBlocked = null) {
+  if (deviceOnlyBlocked && deviceOnlySectionsChanged(before, next)) return deviceOnlyBlockedMessage(deviceOnlyBlocked);
+  return null;
+}
+
+/**
+ * `next` with Protected Identity and the Answer Bank exactly as `before`
+ * holds them: a restore applied while this device would keep no change to
+ * those sections (restoreRefusal) restores the rest of the file, the synced
+ * records and settings, and leaves them as they are.
+ */
+export function keepDeviceOnlySections(before, next) {
+  const out = { ...next };
+  for (const section of Object.keys(DEVICE_ONLY_SECTIONS)) {
+    if (before && Object.hasOwn(before, section)) out[section] = before[section];
+    else delete out[section];
+  }
+  return out;
+}
+
+/** Said with such a restore: what was left out, and why (restoreRefusal's message). */
+export function deviceOnlyNotRestoredNote(reason) {
+  return `Protected Identity and Answer Bank records in the file were not restored. ${reason} Then restore the file again to add them.`;
+}
+
+/** The message for a restore the records' own guard refused (setData returned false). */
+export function restoreRefusedMessage(before, next, deviceOnlyBlocked = null) {
+  return restoreRefusal(before, next, deviceOnlyBlocked) || RESTORE_READ_ONLY_MESSAGE;
 }

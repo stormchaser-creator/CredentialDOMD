@@ -127,7 +127,8 @@ function fixture({ records = {}, settings = { name: 'Synthetic Physician' }, onR
     useCallback: fn => fn, structuredClone, console,
     user: { id: ACCOUNT }, offlineMode: false, window: { Clerk: { user: { id: ACCOUNT } }, alert },
     dataOwnerRef: { current: ACCOUNT }, userIdRef: { current: PROFILE }, getActiveUserId: () => ACCOUNT, dataRef, setData,
-    prepareRecord: (_key, raw) => raw, isDeviceOnlySection: () => false, withStoragePath, setSettingsRefusal() {},
+    prepareRecord: (_key, raw) => raw, isDeviceOnlySection: () => false, offlineCopyUnread: () => false, withStoragePath, setSettingsRefusal() {},
+    deviceOnlySaveBlocked: () => null, retryOfflineSave: async () => false, deviceOnlyBlockedMessage: () => '',
     accessAuthority: authority, scopesForWrite: access.scopesForWrite,
     accessVerifying: (_a, scope) => access.accessVerifying(authority, scope),
     alertWriteRefused: options => access.alertWriteRefused({ ...options, authority, alert, now: () => clock.wall }),
@@ -337,7 +338,7 @@ test('a refusal is reported to client_errors: event, reason and section, never t
     location: { href: 'https://synthetic.invalid/app/' }, fetch() {}, console });
   reportModule.exports.setErrorUser(ACCOUNT);
   const f = fixture();
-  vm.runInNewContext(wiring, { useEffect: fn => fn(), setWriteAccessReporter: access.setWriteAccessReporter, reportError: reportModule.exports.reportError });
+  vm.runInNewContext(wiring, { useEffect: fn => fn(), setWriteAccessReporter: access.setWriteAccessReporter, reportError: reportModule.exports.reportError, reportUnlessLeaving: reportModule.exports.reportUnlessLeaving });
   // The member's access ended (a fresh read-only answer): a save is refused.
   f.checks.length = 0;
   f.authority.accept(ACCOUNT, revoked());
@@ -353,6 +354,122 @@ test('a refusal is reported to client_errors: event, reason and section, never t
   // The same refusal again this session is not a second row.
   f.app.addItem('invoices', invoice({ id: 'inv-synthetic-2' }));
   assert.equal(beacons.length, 1);
+});
+
+// QA lab, 2026-09-30: about 21 "Save refused (suspended, settings)" rows, each
+// 7 to 9 s after a new member's account was created, on the member's first
+// reload after Checkout. Once the membership answer opens writes, AppContext
+// loads the account again (the reconcile load). A reload while that load's
+// initialize-clerk-profile request is in flight ends the request; the load's
+// catch stops writes (suspendWrites, the identity stop, whose own report is
+// dropped on a page being left: OPS-008); the Setup board's pagehide flush
+// (useSetupState) then writes its queued setupState and meets that stop. The
+// refusal is right (writes are stopped and the page is going), but the
+// operator was told a save was lost when the member had only reloaded.
+function leavingPage() {
+  const listeners = new Map(), timers = [], beacons = [];
+  let clock = Date.parse('2026-09-30T19:00:00Z');
+  const module = { exports: {} };
+  const code = transformSync(reportSourceText, { loader: 'js', format: 'cjs', define: { 'import.meta.env': JSON.stringify({ VITE_SUPABASE_URL: 'https://synthetic.invalid' }), __APP_BUILD_ID__: '"test"' } }).code;
+  vm.runInNewContext(code, { module, exports: module.exports, JSON, Set, Date: { now: () => clock },
+    require: name => (name === 'react' ? { Component: class {}, createElement() {} } : { redactLaunchInvitation: s => String(s) }),
+    navigator: { sendBeacon: (_url, body) => { beacons.push(JSON.parse(body)); return true; }, userAgent: 'synthetic' },
+    window: { addEventListener: (name, fn) => { if (!listeners.has(name)) listeners.set(name, []); listeners.get(name).push(fn); } },
+    setTimeout: (fn, ms) => { timers.push({ fn, at: clock + ms }); return timers.length; },
+    location: { href: 'https://synthetic.invalid/app/' }, fetch() {}, console });
+  module.exports.install();
+  module.exports.setErrorUser(ACCOUNT);
+  return {
+    api: module.exports, beacons,
+    fire: name => (listeners.get(name) || []).forEach(fn => fn({})),
+    advance(ms) {
+      clock += ms;
+      for (let ran = true; ran;) {
+        ran = false;
+        for (const t of timers.splice(0)) { if (t.at <= clock) { t.fn(); ran = true; } else timers.push(t); }
+      }
+    },
+  };
+}
+const reportSourceText = await readFile(new URL('../../src/lib/errorReport.js', import.meta.url), 'utf8');
+const wireReporter = page => {
+  const wiring = appSource.split('\n').find(line => line.includes('setWriteAccessReporter('));
+  vm.runInNewContext(wiring, { useEffect: fn => fn(), setWriteAccessReporter: access.setWriteAccessReporter,
+    reportError: page.api.reportError, reportUnlessLeaving: page.api.reportUnlessLeaving });
+};
+const setupFlush = () => ({ setupState: { startedAt: '2026-09-30T19:00:05.000Z', progress: { done: 1, total: 6 } } });
+
+test('a reload that cuts off the reconcile load does not report the Setup flush it refuses as a lost save', () => {
+  const f = fixture();
+  const page = leavingPage();
+  wireReporter(page);
+  // The member reloads: beforeunload, the in-flight load ends and its catch
+  // stops writes, then pagehide flushes the Setup board's queued write.
+  page.fire('beforeunload');
+  f.authority.suspendWrites();
+  page.fire('pagehide');
+  assert.equal(f.authority.settingsStatus(setupFlush()).reason, 'suspended', 'the stop refuses it');
+  assert.equal(f.app.updateSettings(setupFlush()), false, 'still refused: nothing is written');
+  assert.deepEqual(f.writes(), []);
+  page.advance(60000);
+  assert.deepEqual(page.beacons.map(b => b.message), [], 'no "Save refused (suspended, settings)" row');
+});
+
+test('writes stopped on a page that stays: the refused save is still reported, and a dropped one is not counted as sent', () => {
+  const f = fixture();
+  const page = leavingPage();
+  wireReporter(page);
+  f.authority.suspendWrites();          // a real identity stop; nobody is leaving
+  assert.equal(f.app.updateSettings({ npi: '1234567893' }), false);
+  assert.deepEqual(page.beacons, [], 'held for a moment, as the stop itself is');
+  page.advance(1500);
+  assert.deepEqual(page.beacons.map(b => b.message), ['Save refused (suspended, settings)']);
+  assert.deepEqual(page.beacons[0].extra, { event: 'write_refused', reason: 'suspended', section: 'settings' });
+
+  // Back-forward cache: dropped while the page was away, reported once it is back and refuses again.
+  const g = fixture();
+  const back = leavingPage();
+  wireReporter(back);
+  g.authority.suspendWrites();
+  back.fire('pagehide');
+  assert.equal(g.app.updateSettings(setupFlush()), false);
+  back.fire('pageshow');
+  back.advance(60000);
+  assert.deepEqual(back.beacons, []);
+  assert.equal(g.app.updateSettings(setupFlush()), false);
+  back.advance(1500);
+  assert.deepEqual(back.beacons.map(b => b.message), ['Save refused (suspended, settings)']);
+
+  // A read-only refusal is not the page leaving: sent at once, leaving or not.
+  const h = fixture();
+  const gone = leavingPage();
+  wireReporter(gone);
+  gone.fire('beforeunload');
+  h.authority.accept(ACCOUNT, revoked());
+  gone.fire('pagehide');
+  assert.equal(h.app.updateSettings(setupFlush()), false);
+  assert.deepEqual(gone.beacons.map(b => b.message), ['Save refused (read_only, settings)']);
+});
+
+test('reportWriteAccess asks for leave-aware reporting only for a stop the page leaving can cause', () => {
+  const calls = [];
+  access.setWriteAccessReporter((message, extra, options) => calls.push({ message, options }));
+  assert.equal(access.reportWriteAccess('write_refused', 'suspended', 'settings'), true);
+  assert.equal(access.reportWriteAccess('write_refused', 'read_only', 'settings'), true);
+  assert.equal(access.reportWriteAccess('write_queued_for_access', 'suspended', 'settings'), true);
+  assert.equal(calls[0].options?.unlessLeaving, true);
+  assert.equal(calls[1].options, undefined);
+  assert.equal(calls[2].options, undefined);
+  assert.equal(access.reportWriteAccess('write_refused', 'suspended', 'settings'), false, 'pending: once');
+  calls[0].options.onDropped();
+  assert.equal(access.reportWriteAccess('write_refused', 'suspended', 'settings'), true, 'dropped: the next one is reported');
+  // A drop from an earlier session never re-arms the new session's row.
+  const earlier = calls.at(-1).options;
+  access.setWriteAccessReporter((message, extra, options) => calls.push({ message, options }));
+  assert.equal(access.reportWriteAccess('write_refused', 'suspended', 'settings'), true);
+  earlier.onDropped();
+  assert.equal(access.reportWriteAccess('write_refused', 'suspended', 'settings'), false, "an earlier session's drop does not re-arm this one");
+  access.setWriteAccessReporter(null);
 });
 
 test('replay does not send a queued write a newer save of the same record replaced while it ran', async () => {

@@ -14,7 +14,7 @@ import { readFile } from 'node:fs/promises';
 import {
   BASE_KEYS, DEVICE_KEYS_BASE, purgeForSignOut, purgeUserStorage, purgeAfterSessionEnd,
   markDeliberateSignOut, clearDeliberateSignOut, watchSignOutIntents, sweepSignOutIntents,
-  SIGNOUT_INTENT_BASE, SIGNOUT_INTENT_MS,
+  SIGNOUT_INTENT_BASE, SIGNOUT_INTENT_MS, OFFLINE_GENERATION_KEY,
 } from '../../src/utils/storageScope.js';
 
 const ACCOUNT = 'user_syntheticSessionEnd';
@@ -111,7 +111,12 @@ test('a file with no device-only rows is removed, not rewritten', withStores(asy
 
 test('session expiry creates nothing that was not there', withStores(async (store) => {
   await purgeAfterSessionEnd(ACCOUNT);
-  assert.equal(store.size, 0);
+  // Every purge moves the device's purge generation, so a write another tab
+  // began before it is refused (storageScope.js OFFLINE_GENERATION_KEY). One
+  // key for the device, a random marker: it names no account and holds nothing.
+  assert.deepEqual([...store.keys()], [OFFLINE_GENERATION_KEY]);
+  assert.match(store.get(OFFLINE_GENERATION_KEY), /^[a-z0-9]+$/);
+  assert.doesNotMatch(OFFLINE_GENERATION_KEY, new RegExp(ACCOUNT));
 }));
 
 // AUTH-005 / AUTH-003 (lab run on release/qa1 218f35a0): the Sign out marker
@@ -237,7 +242,7 @@ test('AppContext: the Clerk listener uses the session-end purge, and Sign out ma
   const source = await readFile(new URL('../../src/context/AppContext.jsx', import.meta.url), 'utf8');
   const listener = source.slice(source.indexOf('clerk.addListener('), source.indexOf('clerk.addListener(') + 400);
   assert.match(listener, /purgeAfterSessionEnd\(ownerId\)/);
-  const signOut = source.slice(source.indexOf('const handleSignOut = useCallback('), source.indexOf('// Persist to localStorage'));
+  const signOut = source.slice(source.indexOf('const handleSignOut = useCallback('), source.indexOf('// Persist the offline copy'));
   const mark = signOut.indexOf('markDeliberateSignOut(ownerId)');
   assert.ok(mark > 0 && mark < signOut.indexOf('await clearLocalData(ownerId)'), 'marked before the purge');
   assert.ok(mark > signOut.indexOf('retireContinuityRecovery(ownerId)'), 'marked only past the point of no return');

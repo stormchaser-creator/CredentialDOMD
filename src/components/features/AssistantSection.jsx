@@ -19,13 +19,24 @@ import { supabase } from "../../lib/supabase";
 import Modal from "../shared/Modal";
 import { TAP_MIN, dismissButtonStyle } from "../shared/actionButton";
 import EmailPacketModal from "./EmailPacketModal";
-import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../../utils/storageScope";
+import { BASE_KEYS, largeGetJSON, largeSetJSON, mergeLargeList, onLargeStoreMerged, rereadLargeStore } from "../../utils/storageScope";
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 
 // Transcript and archives live on-device under the signed-in user's own key
 // (storageScope), so another account on the same device never sees them.
+
+// The stored transcript as the screen opens on it. Trailing user messages
+// with no reply = the app closed mid-send; they are marked failed so they
+// get a Try again instead of looking sent.
+function openedTranscript(saved) {
+  const list = Array.isArray(saved) ? [...saved] : [];
+  for (let i = list.length - 1; i >= 0 && list[i]?.role === "user"; i--) {
+    list[i] = { ...list[i], failed: true };
+  }
+  return list;
+}
 
 // Keep words and reference selection IDs; never persist generated contact text.
 const slimForArchive = (msgs) =>
@@ -57,22 +68,24 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   // Send-packet card handed to the email modal: { msgId, idx, docIds, note }
   const [emailPacket, setEmailPacket] = useState(null);
   const [msgs, setMsgs] = useState(() => {
-    try {
-      const saved = lsGetJSON(BASE_KEYS.chat) || [];
-      // Trailing user messages with no reply = the app closed mid-send;
-      // mark them failed so they get a Try again instead of looking sent.
-      for (let i = saved.length - 1; i >= 0 && saved[i].role === "user"; i--) {
-        saved[i] = { ...saved[i], failed: true };
-      }
-      return saved;
-    } catch { return []; }
+    try { return openedTranscript(largeGetJSON(BASE_KEYS.chat)); } catch { return []; }
   });
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [archives, setArchives] = useState(() => {
-    try { return lsGetJSON(BASE_KEYS.archives) || []; } catch { return []; }
+    try { return largeGetJSON(BASE_KEYS.archives) || []; } catch { return []; }
   });
+  // The transcript and archives above come from what this tab read when the
+  // account loaded. IndexedDB tells no other tab about a write, so another
+  // tab may have stored newer ones since (a conversation archived there):
+  // both are read again as this screen opens, and nothing is written, nor
+  // navigated away from, until they are back. A list is written only once
+  // it differs from what it was opened with or read as. Writing back what it
+  // was opened with put this tab's older copy over the other tab's.
+  const [storesRead, setStoresRead] = useState(false);
+  const unchangedRef = useRef(null);
+  if (unchangedRef.current === null) unchangedRef.current = { chat: msgs, archives };
   const [showArchives, setShowArchives] = useState(false);
   const [viewArchive, setViewArchive] = useState(null);
   const [attachment, setAttachment] = useState(null); // {dataUrl?|text?, name, kind}
@@ -93,19 +106,60 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   const pendingNavRef = useRef(null);
 
   useEffect(() => {
-    try {
-      // sourceAttach can hold a multi-MB file — never persist it (quota).
-      const slim = msgs.slice(-60).map(m => { const c = { ...m }; delete c.sourceAttach; return c; });
-      lsSetJSON(BASE_KEYS.chat, slim);
-    } catch { /* quota */ }
+    let live = true;
+    const opened = unchangedRef.current;
+    const reread = (base) => Promise.resolve().then(() => rereadLargeStore(base)).catch(() => undefined);
+    const list = (text) => { try { const v = JSON.parse(text); return Array.isArray(v) ? v : []; } catch { return []; } };
+    Promise.all([reread(BASE_KEYS.chat), reread(BASE_KEYS.archives)]).then(([chatText, archivesText]) => {
+      if (!live) return;
+      const unchanged = { ...opened };
+      // What was read replaces what the screen opened with; anything this
+      // session changed meanwhile is merged with it by id.
+      if (chatText !== undefined) {
+        const stored = openedTranscript(list(chatText));
+        unchanged.chat = stored;
+        setMsgs(current => (current === opened.chat ? stored : mergeLargeList(BASE_KEYS.chat, stored, current)));
+      }
+      if (archivesText !== undefined) {
+        const stored = list(archivesText);
+        unchanged.archives = stored;
+        setArchives(current => (current === opened.archives ? stored : mergeLargeList(BASE_KEYS.archives, stored, current)));
+      }
+      unchangedRef.current = unchanged;
+      setStoresRead(true);
+    });
+    return () => { live = false; };
+  }, []);
+  useEffect(() => {
+    if (!storesRead) return;
+    if (msgs !== unchangedRef.current.chat) {
+      try {
+        // sourceAttach can hold a multi-MB file — never persist it (quota).
+        const slim = msgs.slice(-60).map(m => { const c = { ...m }; delete c.sourceAttach; return c; });
+        largeSetJSON(BASE_KEYS.chat, slim);
+      } catch { /* quota */ }
+    }
     const go = pendingNavRef.current;
     if (go) { pendingNavRef.current = null; navigate(...go); return; }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs, navigate]);
+  }, [msgs, navigate, storesRead]);
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* stopped */ } }, []);
   useEffect(() => {
-    try { lsSetJSON(BASE_KEYS.archives, archives); } catch { /* quota */ }
-  }, [archives]);
+    if (!storesRead || archives === unchangedRef.current.archives) return;
+    try { largeSetJSON(BASE_KEYS.archives, archives); } catch { /* quota */ }
+  }, [archives, storesRead]);
+  // This screen mounted while the stored transcript and archives could not
+  // be read, so it holds this session's part only. Once they are read they
+  // are merged with it (storageScope.js hydrateOfflineStores): take the
+  // merge in, or the next write above puts back this session's part alone.
+  useEffect(() => onLargeStoreMerged((base) => {
+    try {
+      const stored = largeGetJSON(base);
+      if (!Array.isArray(stored)) return;
+      if (base === BASE_KEYS.chat) setMsgs(current => mergeLargeList(base, stored, current));
+      else if (base === BASE_KEYS.archives) setArchives(current => mergeLargeList(base, stored, current));
+    } catch { /* unreadable: kept as it is */ }
+  }), []);
 
   // ── Archive: the current chat moves out of the way but stays readable ──
   const archiveTitle = (list) => {

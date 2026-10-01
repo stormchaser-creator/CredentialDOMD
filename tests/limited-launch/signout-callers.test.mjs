@@ -8,14 +8,14 @@ import { BASE_KEYS, purgeForSignOut, purgeAfterSessionEnd, markDeliberateSignOut
 import { DEVICE_ONLY_SECTIONS } from '../../src/utils/pausedApplicationRecords.js';
 const source = await readFile(new URL('../../src/context/AppContext.jsx', import.meta.url), 'utf8');
 const start = source.indexOf('  const handleSignOut = useCallback(');
-const end = source.indexOf('  // Persist to localStorage', start);
+const end = source.indexOf('  // Persist the offline copy', start);
 const code = source.slice(start, end) + '\nglobalThis.signOut = handleSignOut;';
-function fixture({ failRetirement = false, cancel = false, accessAuthority, clearLocalData, clerkSignOut, data = {}, confirm, markSignOut } = {}) {
+function fixture({ failRetirement = false, cancel = false, accessAuthority, clearLocalData, clerkSignOut, data = {}, confirm, markSignOut, unread = false } = {}) {
   const calls = [], generation = { current: 7 }, userIdRef = { current: 'profileA' }, dataOwnerRef = { current: 'user_syntheticA' };
   const context = { useCallback: fn => fn, user: { id: 'user_syntheticA' }, getActiveUserId: () => 'user_syntheticA',
     offlineMode: false, vaultCount: () => cancel ? 1 : 0, pendingOpCount: () => 0,
     window: { alert: message => calls.push(['alert', message]), confirm: confirm ? message => { calls.push(['confirm', message]); return confirm(message); } : () => false, location: { reload() { calls.push(['reload']); } } },
-    dataRef: { current: data }, DEVICE_ONLY_SECTIONS, deviceOnlyRecordCounts, markDeliberateSignOut: id => { calls.push(['mark-signout', id]); markSignOut?.(id); },
+    dataRef: { current: data }, DEVICE_ONLY_SECTIONS, deviceOnlyRecordCounts, offlineCopyUnread: () => unread, markDeliberateSignOut: id => { calls.push(['mark-signout', id]); markSignOut?.(id); },
     resetSharedAiStatus: () => calls.push(['ai-reset']), configureSecretContinuity: () => calls.push(['crypto-clear']),
     retireContinuityRecovery: id => { calls.push(['retire', id]); if (failRetirement) { const error = Error('Synthetic storage refusal'); error.code = 'continuity_retirement_unavailable'; throw error; } },
     invalidateAccountWrites: id => calls.push(['invalidate-writes', id]),
@@ -192,7 +192,7 @@ test('a row in memory and on disk is counted once', async () => {
     await f.run();
     assert.match(f.calls.find(v => v[0] === 'confirm')[1], /1 Protected Identity record\b/);
     assert.deepEqual(await deviceOnlyRecordCounts('user_syntheticA', { identityVault: [{ ...identityRecord, id: 'identity-synthetic-new' }] }),
-      { answerBank: 0, identityVault: 2 }, 'a row added since the last cache write is added to the disk rows');
+      { counts: { answerBank: 0, identityVault: 2 }, unread: false }, 'a row added since the last cache write is added to the disk rows');
   });
 });
 test('nothing device-only in memory or on disk: Sign out still asks nothing', async () => {
@@ -202,4 +202,21 @@ test('nothing device-only in memory or on disk: Sign out still asks nothing', as
     assert.equal(f.calls.some(v => v[0] === 'confirm'), false);
     assert.ok(f.calls.some(v => v[0] === 'purge'));
   });
+});
+
+// Review of the IndexedDB move: when this session's load could not read the
+// device's offline copy, Protected Identity and the Answer Bank are not in
+// memory and cannot be counted, and Sign out erased them without a word.
+test('Sign out asks first when the offline copy holding Protected Identity could not be read', async () => {
+  const asked = fixture({ unread: true, confirm: () => false });
+  await asked.run();
+  const question = asked.calls.find(v => v[0] === 'confirm');
+  assert.ok(question, 'asked');
+  assert.match(question[1], /could not be read, so Protected Identity and Answer Bank records kept only on this device could not be counted/);
+  assert.match(question[1], /Reload the app first/);
+  assert.doesNotMatch(question[1], /\u2014/, 'no em dash in member-facing copy');
+  assert.ok(!asked.calls.some(v => v[0] === 'purge'), 'declined: nothing is erased');
+  const read = fixture({ unread: false });
+  await read.run();
+  assert.ok(!read.calls.some(v => v[0] === 'confirm'), 'a copy that was read asks nothing extra');
 });

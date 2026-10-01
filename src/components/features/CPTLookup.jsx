@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { SearchIcon } from "../shared/Icons";
-import { generateId } from "../../utils/helpers";
+import { generateId, copyToClipboard } from "../../utils/helpers";
 import { searchCPT } from "../../utils/cptSearch";
 import { aiCPTLookup } from "../../utils/cptAILookup";
 import { catalogWRVU } from "../../utils/cptCatalog";
@@ -37,6 +37,11 @@ function CPTLookup() {
   const [aiResults, setAiResults] = useState(null);
   const [aiError, setAiError] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  // What the last copy of `expanded` came to: { code, ok } (ok null while it
+  // runs). A browser that refuses clipboard access (permission denied, an
+  // insecure context) rejects the write: said on the row, never an
+  // unhandled rejection or a "Copied" that is not true.
+  const [copied, setCopied] = useState(null);
 
   const debounceRef = useRef(null);
 
@@ -89,9 +94,20 @@ function CPTLookup() {
   }, [query, results, data.settings]);
 
   const copyCode = useCallback((code) => {
-    navigator.clipboard?.writeText(code);
     setExpanded(prev => prev === code ? null : code);
+    setCopied({ code, ok: null });
+    const settle = (ok) => setCopied(prev => (prev?.code === code && prev.ok === null ? { code, ok } : prev));
+    let copying;
+    try { copying = copyToClipboard(code); } catch { copying = Promise.resolve(false); }
+    Promise.resolve(copying).then((ok) => settle(ok === true), () => settle(false));
   }, []);
+  // The line under an open row: copied, or why not.
+  const copyNote = (code, color) => {
+    if (expanded !== code || copied?.code !== code || copied.ok === null) return null;
+    return copied.ok
+      ? <div style={{ fontSize: 11, color, marginTop: 4, fontWeight: 600 }}>Copied to clipboard</div>
+      : <div role="alert" style={{ fontSize: 11, color: T.danger, marginTop: 4, fontWeight: 600 }}>Copy failed. This browser did not allow copying; select the code to copy it.</div>;
+  };
 
   // Looking a code up and billing it are the same errand — log it straight
   // into the RVU ledger instead of making him retype it on the Locum tab.
@@ -261,11 +277,7 @@ function CPTLookup() {
                 }}>{r.totalRVU.toFixed(2)} total</span>
               )}
             </div>
-            {expanded === r.code && (
-              <div style={{ fontSize: 11, color: T.accent, marginTop: 4, fontWeight: 600 }}>
-                Copied to clipboard
-              </div>
-            )}
+            {copyNote(r.code, T.accent)}
           </div>
           {!billingClosed && <LogButton c={r} />}
         </button>
@@ -319,11 +331,7 @@ function CPTLookup() {
                     }}>{r.wRVU.toFixed(2)} wRVU</span>
                   </div>
                 )}
-                {expanded === r.code && (
-                  <div style={{ fontSize: 11, color: T.share, marginTop: 4, fontWeight: 600 }}>
-                    Copied to clipboard
-                  </div>
-                )}
+                {copyNote(r.code, T.share)}
               </div>
               {!billingClosed && <LogButton c={{ ...r, shortDesc: r.description }} />}
             </button>

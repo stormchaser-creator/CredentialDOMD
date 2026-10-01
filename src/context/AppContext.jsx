@@ -2,12 +2,14 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo, u
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { accessAuthority, accessVerifying, alertWriteRefused, dataChangeStatus, holdForAccess, reportWriteAccess, scopesForWrite, setWriteAccessReporter, settleWriteAccess, writeRefusalReason } from "../utils/limitedLaunchAccess.js";
 import { applyHeldQueue, changesBetween, revertChanges } from "../utils/heldChanges.js";
+import { localChangesSince, rebaseLocalChanges } from "../utils/loadRebase.js";
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES, themeNameOf, nextThemeName } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { useBillingReturn } from "../hooks/useBillingReturn.js";
-import { loadData, saveData, readCachedData, clearLocalData, onCacheFullChange, isCacheFull } from "../utils/storage";
-import { setActiveUserId, getActiveUserId, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, adoptLegacyStorage, hasLegacyStorage, lsGet, lsGetJSON, lsSetJSON, scopedKey, BASE_KEYS, WIPE_SEEN_KEY, LOCAL_FENCE_KEY, localFence, adoptLocalFence, localCopyCurrent, pendingOpCount, awaitingAccessOpCount, accessRefusedOpCount, deviceOnlyRecordCounts, retireContinuityRecovery } from "../utils/storageScope";
+import { loadData, saveData, readCachedData, clearLocalData, onCacheFullChange, cacheStaleReason, deviceOnlySaveBlocked, retryOfflineSave,
+  adoptOfflineCopyRead, deviceOnlyForLoad, offlineCopyUnchangedSinceKnown, deviceOnlyUnsavedState, onDeviceOnlyUnsavedChange } from "../utils/storage";
+import { setActiveUserId, getActiveUserId, setStorageFullReporter, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, adoptLegacyStorage, hasLegacyStorage, lsGet, lsGetJSON, lsSetJSON, scopedKey, BASE_KEYS, WIPE_SEEN_KEY, LOCAL_FENCE_KEY, localFence, adoptLocalFence, localCopyCurrent, pendingOpCount, awaitingAccessOpCount, accessRefusedOpCount, deviceOnlyRecordCounts, retireContinuityRecovery, offlineCopyUnread, markOfflineCopyRead, probeOfflineFile } from "../utils/storageScope";
 import { repairStoredIds } from "../utils/idRepair.js";
 import { accountDataDeletedAt, honorAccountDataDeletion, sameDeletionStamp } from "../utils/dataDeletion.js";
 import { recordLastIdentity } from "../utils/offlineSession";
@@ -18,7 +20,7 @@ import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompl
 import { reportError, reportUnlessLeaving } from "../lib/errorReport.js";
 import { DELETION_SUPPORT_REFERENCE } from "../utils/accountDeletionResult.js";
 import { vaultCount } from "../utils/privateVault";
-import { preservePausedApplicationRecords, pausedApplicationLinks, isDeviceOnlySection, DEVICE_ONLY_SECTIONS } from "../utils/pausedApplicationRecords.js";
+import { preservePausedApplicationRecords, pausedApplicationLinks, isDeviceOnlySection, DEVICE_ONLY_SECTIONS, deviceOnlySectionsChanged, deviceOnlyBlockedMessage } from "../utils/pausedApplicationRecords.js";
 import { reconcileDocumentLinks } from "../utils/documentLinks.js";
 import { prepareRecord } from "../utils/recordWrite.js";
 import { withStoragePath } from "../utils/docStoragePath.js";
@@ -130,6 +132,12 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const loadedDeletionRef = useRef(null);
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
+  // The records last handed to saveData for the offline copy (the debounced
+  // write, a load's own save). Records on screen that are not these have a
+  // write still owed; only then does a load begin by writing them
+  // (beginLoadOver). Writing them regardless put this window's older copy
+  // over Protected Identity rows another window had saved.
+  const cachedRecordsRef = useRef(null);
 
   // ─── Desktop breakpoint (>=1024px) ────────────────────────
   // One flag for the whole app: components branch on layout here instead of
@@ -193,14 +201,76 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // record is named on screen until a later save of it lands. Also the count
   // of writes still queued for this account (lib/supabase.js).
   const [syncState, setSyncState] = useState({ issues: [], pending: 0, awaitingAccess: 0, accessRefused: 0 });
-  // The on-device copy could not be updated (storage full): what opens
-  // offline is older than what is on screen.
-  const [offlineCopyStale, setOfflineCopyStale] = useState(() => isCacheFull());
+  // The on-device copy could not be updated: what opens offline is older
+  // than what is on screen. The reason ("full", "unavailable", "unread")
+  // picks the words (SyncIssuesNotice); null when it is current.
+  const [offlineCopyStale, setOfflineCopyStale] = useState(() => cacheStaleReason());
   useEffect(() => onCacheFullChange(setOfflineCopyStale), []);
+  // Protected Identity or Answer Bank changes that are in no copy of the
+  // offline file: "held" (kept aside on this device until a save takes them),
+  // "memory" (on screen only). SyncIssuesNotice says so, and what to do.
+  const [deviceOnlyUnsaved, setDeviceOnlyUnsaved] = useState(null);
+  useEffect(() => {
+    const accountId = user?.id || null;
+    const refresh = () => setDeviceOnlyUnsaved(deviceOnlyUnsavedState(accountId));
+    refresh();
+    const stop = onDeviceOnlyUnsavedChange(refresh);
+    const stopStale = onCacheFullChange(refresh);
+    return () => { stop(); stopStale(); };
+  }, [user?.id]);
+
+  // An offline copy that could not be saved (full, a store that would not
+  // open) or read (unread) is tried again on its own: when the app comes back
+  // to the front, the device comes online, and on a backoff timer. It used to
+  // be tried again only when the member next changed Protected Identity or
+  // the Answer Bank, and a change accepted just before the store stopped
+  // answering stayed in memory until the app closed. A copy that can be read
+  // again is loaded again (the load takes what it holds, and the changes held
+  // aside); a refused save is made again (storage.js retryOfflineSave).
+  useEffect(() => {
+    const ownerId = user?.id || null;
+    const stuck = offlineCopyStale === "full" || offlineCopyStale === "unavailable" || offlineCopyStale === "unread";
+    if (!ownerId || !loaded || !stuck || typeof window === "undefined") return undefined;
+    let stopped = false, busy = false, attempt = 0, timer = null;
+    const retry = async () => {
+      if (stopped || busy || getActiveUserId() !== ownerId || dataOwnerRef.current !== ownerId) return;
+      busy = true;
+      try {
+        if (offlineCopyUnread(ownerId)) {
+          if (await probeOfflineFile(ownerId) && !stopped && dataOwnerRef.current === ownerId && getActiveUserId() === ownerId) void loadDataForUser(ownerId);
+        } else await retryOfflineSave(ownerId);
+      } catch { /* the next try */ }
+      finally { busy = false; }
+    };
+    const schedule = () => {
+      timer = setTimeout(async () => { await retry(); attempt += 1; if (!stopped) schedule(); }, Math.min(5000 * 3 ** attempt, 5 * 60 * 1000));
+    };
+    const onVisible = () => { if (typeof document === "undefined" || document.visibilityState === "visible") void retry(); };
+    const onWake = () => { void retry(); };
+    document.addEventListener?.("visibilitychange", onVisible);
+    window.addEventListener("online", onWake);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("pageshow", onWake);
+    schedule();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener?.("visibilitychange", onVisible);
+      window.removeEventListener("online", onWake);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("pageshow", onWake);
+    };
+  }, [offlineCopyStale, loaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setWriteRejectionReporter((message) => reportError(message)); }, []);
+  // A cache write the device refused for want of space (IndexedDB and
+  // localStorage both, or either one) reaches client_errors once per session:
+  // the store, the reason and the size rounded to 100 KB, never contents.
+  useEffect(() => { setStorageFullReporter((message, extra) => reportError(message, "error", extra)); }, []);
   // Refused saves, and saves kept on this device for want of a membership
-  // answer, reach client_errors too (event, reason code and section only).
-  useEffect(() => { setWriteAccessReporter((message, extra) => reportError(message, "error", extra)); }, []);
+  // answer, reach client_errors too (event, reason code and section only). A
+  // refusal the page being left can cause (writes stopped by a load that a
+  // reload cut off) is dropped with the page, as that load's stop is.
+  useEffect(() => { setWriteAccessReporter((message, extra, options) => (options?.unlessLeaving ? reportUnlessLeaving(message, "error", extra, options) : reportError(message, "error", extra))); }, []);
   useEffect(() => {
     const accountId = user?.id || null;
     if (!accountId) { setSyncState({ issues: [], pending: 0, awaitingAccess: 0, accessRefused: 0 }); return undefined; }
@@ -380,10 +450,21 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const current = () => generation === dataLoadGeneration.current
       && getActiveUserId() === authUserId
       && (offlineMode || window.Clerk?.user?.id === authUserId);
+    // This account's records on screen as this load begins (a load again:
+    // the membership answer, the deletion re-check), which the member can go
+    // on changing while it reads. The replace at the end lays every change
+    // made since over what it read (changesSinceLoadBegan, utils/loadRebase.js);
+    // it used to drop a save that landed after its table was read. The
+    // generation moved above also cancelled the cache write still waiting for
+    // the last change (the debounced one below): it is written now, under the
+    // same purge checks, so the device copy this load reads has it. That write
+    // goes to IndexedDB and commits later: this load reads the device copy
+    // only once it has landed or been refused (begun.flushed).
+    const begun = beginLoadOver(authUserId);
     // Offline session: straight to this identity's own local cache — the
     // same read path the normal load falls back to when the cloud is
     // unreachable. No profile fetch, no Clerk token, no cloud reads.
-    if (offlineMode) return loadLocalData(authUserId, current);
+    if (offlineMode) return loadLocalData(authUserId, current, begun);
     // How far the load got, for the fallback report below: "profile" until
     // the profile is ready (so the membership check can run), then "records".
     let loadStage = "profile";
@@ -425,13 +506,25 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         // here, not at the end, so a purge by another tab while this load runs
         // leaves them fenced instead of adopted.
         const loadedUnder = { owner: authUserId, stamp: lsGet(WIPE_SEEN_KEY, authUserId), fence: localFence(authUserId) };
+        // The device copy is read from here on (the id repair first), once the
+        // write of the records on screen this load began with has settled. A
+        // read taken before it commits misses the last change made before this
+        // load, and Protected Identity and the Answer Bank are nowhere else;
+        // the id repair would also write that older copy back over it.
+        if (begun?.flushed) { await begun.flushed; if (!current()) return; }
         // Records this device saved with an id the cloud can never accept
         // (manual deduction lines were "ded-..."): renamed to real uuids, with
         // their document links, queued writes and private notes, BEFORE the
-        // replay and the self-heal push below try to send them again.
+        // replay and the self-heal push below try to send them again. This
+        // read never clears an earlier load's unread mark (the records on
+        // screen are still that load's); the repaired file is the stored one
+        // it just read, so its save goes through the mark (readToken).
+        // A read that could not look marks the copy unread, unless this load is
+        // overtaken or the records on screen are the newer copy (readOfflineFile).
+        const repairRead = { current, trustMemory: () => memoryIsNewer(authUserId, begun) };
         try {
           await repairStoredIds({
-            readCached: () => readCachedData(authUserId), saveCached: (blob) => saveData(blob, authUserId),
+            readCached: () => readCachedData(authUserId, repairRead), saveCached: (blob) => saveData(blob, authUserId, { readToken: repairRead.token }),
             readQueue: () => lsGetJSON(BASE_KEYS.pendingOps, authUserId), writeQueue: (ops) => lsSetJSON(BASE_KEYS.pendingOps, ops, authUserId),
             readVault: () => lsGetJSON(BASE_KEYS.vault, authUserId), writeVault: (vault) => lsSetJSON(BASE_KEYS.vault, vault, authUserId),
             makeId: generateId,
@@ -488,17 +581,35 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // keys (adopted only when this cloud profile already holds data
           // that overlaps the local file; see adoptLegacyStorage). A new
           // account therefore never pushes someone else's cache up.
-          let local = readCachedData(authUserId);
+          // `localRead`: whether this read got through. An earlier load's
+          // unread mark stays until these records replace that load's on
+          // screen (markOfflineCopyRead below): the debounced save of the
+          // records still shown must not write over the copy meanwhile.
+          const localRead = { current, trustMemory: () => memoryIsNewer(authUserId, begun) };
+          let local = await readCachedData(authUserId, localRead);
+          if (!current()) return;
+          // Could not look, and the screen holds this account's records from a
+          // read that got through: those records stand in for the device copy
+          // (as in loadLocalData). Built from nothing instead, the load dropped
+          // what only the device copy holds (the local-only settings, a
+          // document whose file never uploaded, a record whose push has not
+          // landed), and its own save then wrote that over the stored copy.
+          // `held`: the screen these records keep is still the one the device
+          // copy's last read built (storage.js adoptOfflineCopyRead).
+          if (localRead.read !== true && screenStillHeld(authUserId, begun, loadedUnder)) { local = dataRef.current; localRead.held = true; }
           // Run adoption whenever legacy keys still exist, not only when the
           // namespaced slot is empty: an offline first load may have written
           // empty defaults under the new key, and the legacy vault must not
-          // become unreachable because of that.
-          if (!local || hasLegacyStorage()) {
+          // become unreachable because of that. Not when this device's copy
+          // could not be read (IndexedDB would not open): null then means
+          // "could not look", not "nothing there", and an older legacy file
+          // must not be put over it. The next load decides.
+          if ((!local || hasLegacyStorage()) && localRead.read === true) {
             const cloudIds = new Set();
             for (const key of COLLECTION_KEYS) for (const x of merged[key] || []) if (x?.id) cloudIds.add(x.id);
             const cloudHasData = cloudIds.size > 0 || !!merged.settings?.name;
             try {
-              const adopted = adoptLegacyStorage(authUserId, { cloudIds, cloudHasData });
+              const adopted = adoptLegacyStorage(authUserId, { cloudIds, cloudHasData, hasLocalFile: !!local, readReceipt: localRead });
               local = adopted || local;
             } catch { /* keep local */ }
           }
@@ -524,6 +635,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           try { tombstones = await listTombstones(profileId); }
           catch { if (!current()) return; throw accountRecordsLoadError(); }
           if (!current()) return;
+          // Nothing below waits: what the member changed since this load
+          // began is complete here. The self-heal leaves those records to
+          // their own writes (a copy of them in the device copy may be older,
+          // or deleted since), and they are laid over the read below.
+          const sinceStart = changesSinceLoadBegan(authUserId, begun, loadedUnder);
           if (tombstones.size > 0) {
             for (const key of COLLECTION_KEYS) {
               if (merged[key]?.length) merged[key] = merged[key].filter(x => !tombstones.has(x?.id));
@@ -565,7 +681,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
               // whole row in one step.
               const keepLocal = [];
               for (const x of localItems) {
-                if (!x?.id || tombstones.has(x.id) || heldQueue.deleted.has(x.id)) continue;
+                if (!x?.id || tombstones.has(x.id) || heldQueue.deleted.has(x.id) || sinceStart.touches(key, x.id)) continue;
                 const cloud = cloudById.get(x.id);
                 if (!cloud) { // never reached the cloud
                   if (key === "documents" && !x.storagePath) keepLocal.push(x);
@@ -617,6 +733,18 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
             }
           }
 
+          // Adds, edits, deletes, stars and settings made on this device since
+          // this load began, over what it read: before the link sweep, so a
+          // file linked to a record added meanwhile keeps its link.
+          merged = rebaseLocalChanges(merged, sinceStart, tombstones);
+          // Protected Identity and the Answer Bank when the screen already held
+          // this account's records from a read that got through: those on
+          // screen when nothing else has written the stored copy since (they
+          // are the newer copy: a change whose save landed nowhere is in them,
+          // and a read that failed takes nothing away), otherwise the changes
+          // on screen laid over what was read (deviceOnlyOnScreen).
+          merged = deviceOnlyOnScreen(authUserId, begun, loadedUnder, merged, local, localRead, tombstones);
+
           // Link sweep: a document pointing at an item that no longer exists
           // becomes unlinked (visible in Files) instead of phantom-linked. It
           // clears only links whose collection this version knows, and puts
@@ -651,17 +779,29 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           dataOwnerRef.current = authUserId;
           loadedDeletionRef.current = loadedUnder;
           adoptLocalFence(authUserId, loadedUnder.fence);
+          // The records on screen are built from the file read above: an
+          // earlier load's unread mark goes now, and not before. A read that
+          // could not look leaves it (and set it).
+          markOfflineCopyRead(authUserId, localRead);
+          // The stored copy this read found is what these records are based on
+          // (storage.js knownOfflineCopy).
+          adoptOfflineCopyRead(authUserId, localRead);
+          // At once, not at the next render: a change made before then starts
+          // from these records, not from the ones they replace.
+          dataRef.current = merged;
           setData(merged);
           setLoadedFrom("cloud");
           setLoaded(true);
 
           // Cache on-device under this account's key
+          cachedRecordsRef.current = merged;
           saveData(merged, authUserId).catch(() => {});
 
           // Background: reconcile document FILES with cloud storage.
           //  - file on this device but not in the cloud → upload it
           //  - metadata synced from another device without bytes → download
-          reconcileDocumentFiles(profileId, merged.documents || [], authUserId, current);
+          // A file added while this load ran is uploaded by its own save.
+          reconcileDocumentFiles(profileId, (merged.documents || []).filter(d => !(sinceStart.touches("documents", d?.id) && !d?.storagePath)), authUserId, current);
           return;
         }
       }
@@ -703,7 +843,87 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     }
 
     // Fallback to this account's own local copy (offline)
-    if (current()) loadLocalData(authUserId, current);
+    if (current()) loadLocalData(authUserId, current, begun);
+  }
+
+  // The records on screen as a load of `authUserId` begins, and the purge
+  // they were loaded under; null when the screen holds none of this
+  // account's records (a first load, another account, a purge in progress).
+  // The cache write the new generation cancelled is written here, unless this
+  // device has purged since those records loaded (the cache effect's checks).
+  // It goes through saveData like that write: into IndexedDB under the purge
+  // fence and the unread mark, both checked again as it commits. `flushed`
+  // settles once it has landed or been refused (null when none was begun).
+  //
+  // Only a write that is owed: records on screen that were never handed to
+  // saveData (cachedRecordsRef). With nothing owed, writing them anyway put
+  // this window's older copy over rows another window had saved since, and
+  // the load then read that older copy back.
+  //
+  // `heldFromScreen`: the records on screen were built from a read of the
+  // offline copy that got through (not unread), so what they hold of the
+  // device-only sections counts (deviceOnlyOnScreen, memoryIsNewer).
+  function beginLoadOver(authUserId) {
+    const under = dataOwnerRef.current === authUserId && loadedDeletionRef.current?.owner === authUserId ? loadedDeletionRef.current : null;
+    if (!under || !dataRef.current) return null;
+    const records = dataRef.current;
+    const owed = records !== cachedRecordsRef.current;
+    const flushed = owed && sameDeletionStamp(under.stamp ?? null, lsGet(WIPE_SEEN_KEY, authUserId))
+      && localCopyCurrent(authUserId, under.fence ?? null) ? saveData(records, authUserId).catch(() => false) : null;
+    if (flushed) cachedRecordsRef.current = records;
+    // Also while Protected Identity or Answer Bank changes are on screen only
+    // ("memory": an earlier load whose read failed kept them over the stored
+    // copy it could not read, and there was no room to hold them aside): the
+    // screen is still based on the copy last read (storage.js knownOfflineCopy),
+    // so this load lays those changes over what it reads. Taken for records
+    // built without the file, the retry load dropped them and cleared the notice.
+    // A load that put records built without the file on screen ends that
+    // state (storage.js adoptOfflineCopyRead): it no longer describes them.
+    const heldFromScreen = !offlineCopyUnread(authUserId) || deviceOnlyUnsavedState(authUserId) === "memory";
+    return { records, under, flushed, heldFromScreen };
+  }
+
+  // The records on screen as the load `begun` began are still this account's,
+  // under the same purge, and were built from a read that got through.
+  function screenStillHeld(authUserId, begun, loadedUnder) {
+    if (!begun?.heldFromScreen || dataOwnerRef.current !== authUserId || loadedDeletionRef.current !== begun.under || !dataRef.current) return false;
+    if (loadedUnder && (!sameDeletionStamp(begun.under.stamp ?? null, loadedUnder.stamp ?? null)
+      || (begun.under.fence ?? null) !== (loadedUnder.fence ?? null))) return false;
+    return true;
+  }
+
+  // Are the records on screen the newer copy of Protected Identity and the
+  // Answer Bank than the stored one? Built from a read that got through, and
+  // nothing but this tab has written the stored copy since (storage.js
+  // offlineCopyUnchangedSinceKnown). A read of the copy that fails then takes
+  // nothing from the screen and marks nothing unread (readOfflineFile).
+  function memoryIsNewer(authUserId, begun) {
+    return screenStillHeld(authUserId, begun, null) && offlineCopyUnchangedSinceKnown(authUserId);
+  }
+
+  // `merged` with the device-only sections a load shows when the screen held
+  // this account's records (storage.js deviceOnlyForLoad): the screen's when
+  // they are the newer copy, or when this read could not look (they stay on
+  // screen, and the changes in them are held aside); otherwise the changes on
+  // screen laid over the read. A record in the deletion ledger never returns.
+  // Taken after the load's last await, from the records on screen then, so a
+  // change made during the load is in them. Unchanged when the screen held
+  // nothing of this account's that counts: the read's sections stand.
+  function deviceOnlyOnScreen(authUserId, begun, loadedUnder, merged, read, receipt, tombstones = null) {
+    if (!screenStillHeld(authUserId, begun, loadedUnder)) return merged;
+    const sections = deviceOnlyForLoad(authUserId, dataRef.current, read, receipt?.read === true);
+    return sections ? preservePausedApplicationRecords(merged, sections, tombstones || new Set()) : merged;
+  }
+
+  // What the member changed on screen since the load `begun` began, for the
+  // records it read under `loadedUnder` (utils/loadRebase.js). None when the
+  // screen no longer holds those records, or they belong to another purge:
+  // this device purged since, and they must not come back.
+  function changesSinceLoadBegan(authUserId, begun, loadedUnder) {
+    if (!begun || dataOwnerRef.current !== authUserId || loadedDeletionRef.current !== begun.under) return localChangesSince(null, null);
+    if (!sameDeletionStamp(begun.under.stamp ?? null, loadedUnder?.stamp ?? null)
+      || (begun.under.fence ?? null) !== (loadedUnder?.fence ?? null)) return localChangesSince(null, null);
+    return localChangesSince(begun.records, dataRef.current);
   }
 
   async function reconcileDocumentFiles(profileId, docs, authUserId, current) {
@@ -740,17 +960,38 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     }
   }
 
-  async function loadLocalData(authUserId, current) {
+  async function loadLocalData(authUserId, current, begun = null) {
+    // As on a cloud load: the device copy is read once the write this load
+    // began with has settled (beginLoadOver).
+    if (begun?.flushed) { await begun.flushed; if (!current()) return; }
     const loadedUnder = { owner: authUserId || null, stamp: lsGet(WIPE_SEEN_KEY, authUserId), fence: localFence(authUserId) };
-    const d = await loadData(authUserId);
+    const localRead = { current, trustMemory: () => memoryIsNewer(authUserId, begun) };
+    let d = await loadData(authUserId, localRead);
     if (!current()) return;
     if (d._userId) {
       userIdRef.current = d._userId;
       delete d._userId;
     }
+    if (localRead.read !== true && screenStillHeld(authUserId, begun, loadedUnder)) {
+      // The device copy could not be read, and the screen holds this
+      // account's records from one that could: they stay (the fallback here
+      // is empty defaults, or an older native copy). Their device-only
+      // changes are held aside when another tab has written since.
+      deviceOnlyForLoad(authUserId, dataRef.current, null, false);
+      d = dataRef.current;
+      localRead.held = true;
+    } else {
+      // Changed on screen while the device copy was read: kept, as on a cloud load.
+      d = rebaseLocalChanges(d, changesSinceLoadBegan(authUserId, begun, loadedUnder));
+      d = deviceOnlyOnScreen(authUserId, begun, loadedUnder, d, d, localRead);
+    }
     dataOwnerRef.current = authUserId || null;
     loadedDeletionRef.current = loadedUnder;
     if (authUserId) adoptLocalFence(authUserId, loadedUnder.fence);
+    // As in loadDataForUser: the unread mark goes only as records built from
+    // a read that got through go on screen.
+    if (authUserId) { markOfflineCopyRead(authUserId, localRead); adoptOfflineCopyRead(authUserId, localRead); }
+    dataRef.current = d;
     setData(d);
     setLoadedFrom("local");
     setLoaded(true);
@@ -767,12 +1008,22 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // Counted from the disk copies too, not memory alone: the identity-check
     // failure screen and the membership check hold empty defaults while the
     // disk still has the rows, and both offer Sign out.
-    const onDevice = await deviceOnlyRecordCounts(ownerId, dataRef.current);
+    const { counts: onDevice, unread: uncounted } = await deviceOnlyRecordCounts(ownerId, dataRef.current);
     const deviceOnly = Object.entries(DEVICE_ONLY_SECTIONS)
       .map(([key, label]) => [label, onDevice[key] || 0])
       .filter(([, count]) => count > 0);
     if (deviceOnly.length && typeof window !== "undefined" && !window.confirm(
       `Signing out erases the ${deviceOnly.map(([label, count]) => `${count} ${label} record${count === 1 ? "" : "s"}`).join(" and ")} kept only on this device. Save a full JSON backup under More, Data & Backup first${onDevice.identityVault ? "; its SSN and date of birth stay encrypted with your lock code" : ""}. Sign out anyway?`
+    )) return;
+    // The device's offline copy could not be read, by this session's load or
+    // by the count just now (its offline storage would not open), so the
+    // Protected Identity and Answer Bank rows in it are not in memory and
+    // could not be counted above. Sign out is offered before any load has
+    // read it (the identity-check and membership screens), so the load's
+    // mark alone is not enough. The purge erases them all the same: say so
+    // before it does.
+    if ((uncounted || offlineCopyUnread(ownerId)) && typeof window !== "undefined" && !window.confirm(
+      "This device's offline storage could not be read, so Protected Identity and Answer Bank records kept only on this device could not be counted. Signing out erases them. Reload the app first to see them and save a full JSON backup. Sign out anyway?"
     )) return;
     // The vault is erased with everything else on sign-out and those notes
     // exist nowhere else, so say so once when there is something to lose.
@@ -835,7 +1086,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     }
   }, [clerkSignOut, user?.id, offlineMode]);
 
-  // Persist to localStorage on change (debounced backup), under the key of
+  // Persist the offline copy on change (debounced backup; IndexedDB, with
+  // localStorage as the fallback, utils/storage.js saveData), under the key of
   // the account the data was loaded for.
   const saveTimer = useRef(null);
   const cacheWriteGeneration = useRef(0);
@@ -849,13 +1101,15 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       if (!owner || dataOwnerRef.current !== owner || getActiveUserId() !== owner
         || dataLoadGeneration.current !== generation
         || cacheWriteGeneration.current !== cacheGeneration) return;
+      // Already handed to saveData (the load that put them on screen saved them).
+      if (data === cachedRecordsRef.current) return;
       // Not over a copy this device purged since these records loaded (a
       // server data deletion honored by another tab, or Delete All My Data
       // run in one): records loaded before it must not be written back for
       // the self-heal push to send up again (src/utils/dataDeletion.js).
       const loadedUnder = loadedDeletionRef.current?.owner === owner ? loadedDeletionRef.current : null;
       if (sameDeletionStamp(loadedUnder?.stamp ?? null, lsGet(WIPE_SEEN_KEY, owner))
-        && localCopyCurrent(owner, loadedUnder ? loadedUnder.fence ?? null : undefined)) saveData(data, owner);
+        && localCopyCurrent(owner, loadedUnder ? loadedUnder.fence ?? null : undefined)) { cachedRecordsRef.current = data; saveData(data, owner); }
     }, 300);
     return () => clearTimeout(saveTimer.current);
   }, [data, loaded]);
@@ -900,21 +1154,36 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // already done outside the app (an invoice that went out), so a refusal by
   // that check never takes it back: it stays here, its cloud write is queued
   // marked refused, and the notice says so (lib/supabase.js authorizeOwner).
+  //
+  // A change to Protected Identity or the Answer Bank is refused whenever no
+  // store on this device would keep it (utils/storage.js
+  // deviceOnlySaveBlocked): while this session's records were built without
+  // the device's offline copy (offlineCopyUnread; nothing is saved over it
+  // until a load has read it), and while the latest save of that copy was
+  // taken by no store (full, or its storage would not open). Those sections
+  // exist only in that copy, so the change would live in memory only and be
+  // lost at the next launch. The refused save is made again
+  // (retryOfflineSave), so a store that answers again takes the next try.
+  // The caller says why (deviceOnlyBlockedMessage).
   const guardedSetData = useCallback((updater, { section = null, quiet = false, keepOnRefusal = false } = {}) => {
     if (!user?.id || dataOwnerRef.current !== user.id || getActiveUserId() !== user.id
       || (!offlineMode && window.Clerk?.user?.id !== user.id)) return false;
     if (!accessAuthority.enabled) {
       const ownerId = user.id;
+      if (deviceOnlySaveBlocked(ownerId) && deviceOnlySectionsChanged(dataRef.current,
+        typeof updater === "function" ? updater(structuredClone(dataRef.current)) : updater)) { void retryOfflineSave(ownerId); return false; }
       setData(before => {
         if (dataOwnerRef.current !== ownerId || getActiveUserId() !== ownerId
           || (!offlineMode && window.Clerk?.user?.id !== ownerId)) return before;
-        return typeof updater === "function" ? updater(before) : updater;
+        const next = typeof updater === "function" ? updater(before) : updater;
+        return deviceOnlySaveBlocked(ownerId) && deviceOnlySectionsChanged(before, next) ? before : next;
       });
       return true;
     }
     const before = dataRef.current;
     // An updater receives its own copy: in-place changes cannot alter saved data before authorization.
     const next = typeof updater === "function" ? updater(structuredClone(before)) : updater;
+    if (deviceOnlySaveBlocked(user.id) && deviceOnlySectionsChanged(before, next)) { void retryOfflineSave(user.id); return false; }
     const access = dataChangeStatus(before, next);
     if (access.status === "refuse") return false;
     dataRef.current = next;
@@ -1092,6 +1361,29 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // A device-only section (Protected Identity) is saved to this device's
   // cache and nowhere else: none of the four helpers below calls the cloud
   // for it. src/lib/supabase.js refuses those keys too, as a second wall.
+  //
+  // A change to one is refused, and the member told why, while no store on
+  // this device would keep it (deviceOnlySaveBlocked, see guardedSetData);
+  // the refused save of the offline copy is made again meanwhile.
+  // Why a change to Protected Identity or the Answer Bank would be saved
+  // nowhere now (deviceOnlySaveBlocked), for a caller that changes them in
+  // bulk (the JSON restore) and must say so itself; the refused save of the
+  // offline copy is made again meanwhile.
+  const deviceOnlyBlocked = useCallback(() => {
+    const ownerId = dataOwnerRef.current;
+    const blocked = ownerId ? deviceOnlySaveBlocked(ownerId) : null;
+    if (blocked) void retryOfflineSave(ownerId);
+    return blocked;
+  }, []);
+  const refuseUnsavableDeviceOnly = useCallback((key) => {
+    if (!isDeviceOnlySection(key)) return false;
+    const ownerId = dataOwnerRef.current;
+    const blocked = deviceOnlySaveBlocked(ownerId);
+    if (!blocked) return false;
+    void retryOfflineSave(ownerId);
+    window.alert(deviceOnlyBlockedMessage(blocked));
+    return true;
+  }, []);
   // Every add and edit is shaped once here (src/utils/recordWrite.js), so no
   // path in (forms, the scanner, Vera, importers) can skip a storage rule.
   // `keepOnRefusal`: the record of work already done outside the app (an
@@ -1099,6 +1391,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // this save waits for that answers read-only no longer takes it back
   // (guardedSetData); a save refused at once still returns false.
   const addItem = useCallback((key, raw, { keepOnRefusal = false } = {}) => {
+    // Saved nowhere while no store on this device would keep it (guardedSetData).
+    if (refuseUnsavableDeviceOnly(key)) return false;
     const item = prepareRecord(key, raw, dataRef.current?.settings?.name);
     if (!updateSection(key, items => [...(items || []), item], { keepOnRefusal })) { alertWriteRefused({ scope: scopesForWrite(key, item), section: key }); return false; }
     if (isDeviceOnlySection(key)) return true;
@@ -1115,7 +1409,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       if (dataOwnerRef.current !== ownerId || getActiveUserId() !== ownerId || userIdRef.current !== profileId) return;
       updateSection("documents", docs => withStoragePath(docs, item.id, path));
     }).catch(() => {});
-  }, [updateSection]);
+  }, [updateSection, refuseUnsavableDeviceOnly]);
 
   // Whether addItem would accept this record now, without adding it. For a
   // caller that must do something costly or irreversible first (the Files
@@ -1124,6 +1418,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const canAddItem = useCallback((key, raw) => {
     if (!user?.id || dataOwnerRef.current !== user.id || getActiveUserId() !== user.id
       || (!offlineMode && window.Clerk?.user?.id !== user.id)) return false;
+    if (isDeviceOnlySection(key) && deviceOnlySaveBlocked(user.id)) return false;
     if (!accessAuthority.enabled) return true;
     const before = dataRef.current;
     const item = prepareRecord(key, raw, before?.settings?.name);
@@ -1149,6 +1444,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [canAddItem]);
 
   const editItem = useCallback((key, raw, { keepOnRefusal = false } = {}) => {
+    if (refuseUnsavableDeviceOnly(key)) return false;
     const previous = (dataRef.current[key] || []).find(record => record.id === raw?.id);
     const item = prepareRecord(key, raw, dataRef.current?.settings?.name, previous || null);
     // Stamp the edit time so the self-heal pass can tell a newer local edit
@@ -1158,7 +1454,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     if (isDeviceOnlySection(key)) return true;
     // Sync to Supabase
     sbUpdate(userIdRef.current, key, stamped, previous, user?.id, ...(keepOnRefusal ? [{ keepOnRefusal: true }] : [])).catch(() => {});
-  }, [updateSection, user?.id]);
+  }, [updateSection, user?.id, refuseUnsavableDeviceOnly]);
 
   // Star or unstar a record.
   //
@@ -1181,6 +1477,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [updateSection, user?.id]);
 
   const deleteItemFn = useCallback((key, id) => {
+    if (refuseUnsavableDeviceOnly(key)) return false;
     const before = dataRef.current;
     const target = (before[key] || []).find(item => item.id === id);
     const linkedDocs = key === "documents" ? [] : (before.documents || []).filter(doc => doc.linkedTo === `${key}:${id}`);
@@ -1207,7 +1504,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     sbDelete(profileId, key, id, target).catch(() => {});
     recordTombstone(profileId, key, id, target).catch(() => {});
     return true;
-  }, [guardedSetData]);
+  }, [guardedSetData, refuseUnsavableDeviceOnly]);
 
   // Tracked states: Settings picks plus every state where a medical license
   // is held (src/utils/compliance.js trackedStates).
@@ -1226,14 +1523,14 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     recordsLoadIssue: recordsLoadIssue?.accountId === user?.id ? recordsLoadIssue : null, theme, themeName, isDark, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItem: deleteItemFn, toggleFavorite,
     settingsRefusal: settingsRefusal?.accountId === user?.id ? settingsRefusal : null, clearSettingsRefusal,
-    allTrackedStates, navigate, userIdRef, syncIssues: syncState.issues, pendingWrites: syncState.pending, awaitingAccessWrites: syncState.awaitingAccess, accessRefusedWrites: syncState.accessRefused, offlineCopyStale,
+    allTrackedStates, navigate, userIdRef, syncIssues: syncState.issues, pendingWrites: syncState.pending, awaitingAccessWrites: syncState.awaitingAccess, accessRefusedWrites: syncState.accessRefused, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked,
     // Auth
     user, authChecked, offlineMode,
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
     isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null, billingReturn }, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly,
-  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

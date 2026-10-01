@@ -24,7 +24,7 @@
  * would purge them again. The fence moves first, and that tab writes nothing
  * more to the local copy until it has loaded again.
  */
-import { WIPE_SEEN_KEY, lsGet, lsSet, purgeForSignOut, advanceLocalFence } from "./storageScope.js";
+import { WIPE_SEEN_KEY, lsGet, lsSet, purgeForSignOut, advanceLocalFence, markOfflineWipe } from "./storageScope.js";
 
 const instant = (value) => (typeof value === "string" && value ? Date.parse(value) : NaN);
 
@@ -71,6 +71,8 @@ export function dataDeletionHonored(userId, stamp) {
 export function recordDataDeletionSeen(userId, stamp) {
   if (!userId || !Number.isFinite(instant(stamp))) return false;
   const recorded = lsSet(WIPE_SEEN_KEY, stamp, userId);
+  // This build's purge reached IndexedDB too (storageScope.js OFFLINE_WIPED_BASE).
+  if (recorded) markOfflineWipe(userId, stamp);
   advanceLocalFence(userId);
   return recorded;
 }
@@ -86,12 +88,13 @@ export function recordDataDeletionSeen(userId, stamp) {
  * recovery barrier cannot be saved.
  */
 export async function purgeAccountCopy(userId, { sourceSubject = null } = {}) {
-  if (!userId) return;
+  if (!userId) return true;
   const fenced = advanceLocalFence(userId);
-  await purgeForSignOut(userId);
-  if (sourceSubject && sourceSubject !== userId) await purgeForSignOut(sourceSubject);
+  let durable = await purgeForSignOut(userId);
+  if (sourceSubject && sourceSubject !== userId) durable = (await purgeForSignOut(sourceSubject)) && durable;
   // Storage was too full to take the marker before the purge freed it.
   if (!fenced) advanceLocalFence(userId);
+  return durable;
 }
 
 /**
@@ -104,13 +107,24 @@ export async function purgeAccountCopy(userId, { sourceSubject = null } = {}) {
  * identity of a continuity account (from the authenticated binding only):
  * its old namespace holds the same member's pre-deletion copy and goes too.
  *
+ * The stamp is recorded only once the purge is durable: every copy is gone,
+ * or the IndexedDB half that could not be reached is recorded to be finished
+ * before anything of the account is read from there again (storageScope.js
+ * OFFLINE_PURGE_BASE). A purge that is neither leaves the stamp unrecorded
+ * and returns false, so the next load purges again rather than trusting a
+ * copy that may still hold the deleted records.
+ *
  * Returns true when it purged. Throws continuity_retirement_unavailable when
  * the recovery barrier cannot be saved; nothing is removed then, and the
  * caller must stop rather than load.
  */
 export async function honorAccountDataDeletion(userId, stamp, { sourceSubject = null } = {}) {
   if (!userId || !stamp || dataDeletionHonored(userId, stamp)) return false;
-  await purgeAccountCopy(userId, { sourceSubject });
-  lsSet(WIPE_SEEN_KEY, stamp, userId);
+  if (!await purgeAccountCopy(userId, { sourceSubject })) return false;
+  // Recorded with the stamp: this build's purge reached the IndexedDB copies
+  // as well. A build from before them records WIPE_SEEN_KEY alone, and the
+  // IndexedDB copies it never saw are purged before they are read
+  // (storageScope.js OFFLINE_WIPED_BASE).
+  if (lsSet(WIPE_SEEN_KEY, stamp, userId)) markOfflineWipe(userId, stamp);
   return true;
 }

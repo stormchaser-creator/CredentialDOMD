@@ -18,6 +18,7 @@ import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
 import { repairStoredIds } from '../../src/utils/idRepair.js';
 import { generateId } from '../../src/utils/helpers.js';
 import * as held from '../../src/utils/heldChanges.js';
+import { localChangesSince, rebaseLocalChanges } from '../../src/utils/loadRebase.js';
 
 const { BASE_KEYS, WIPE_SEEN_KEY, localFence, adoptLocalFence } = storageScope;
 const OWNER = 'user_syntheticHeld';
@@ -70,9 +71,9 @@ function load({ cloud, local, queue }) {
     bulkSync: async (_p, key, items) => record('bulkSync', { key, ids: items.map(x => x.id) }),
     sbSaveSettings: async () => {}, sbUpdate: async () => record('sbUpdate'),
     uploadDocumentFile: async () => null, downloadDocumentFile: async () => null,
-    withLocalOnlySettings: settings => settings, hasLegacyStorage: () => false, adoptLegacyStorage: () => null,
+    withLocalOnlySettings: settings => settings, hasLegacyStorage: () => false, offlineCopyUnread: () => false, adoptLegacyStorage: () => null, markOfflineCopyRead: () => false, cachedRecordsRef: { current: null }, adoptOfflineCopyRead: () => false, deviceOnlyForLoad: () => null, offlineCopyUnchangedSinceKnown: () => false,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [], reconcileDocumentLinks,
-    applyHeldQueue: held.applyHeldQueue,
+    applyHeldQueue: held.applyHeldQueue, localChangesSince, rebaseLocalChanges, localCopyCurrent: storageScope.localCopyCurrent,
     accessAuthority: { suspendWrites: () => record('suspendWrites') },
     setData: value => { states.push(value); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },

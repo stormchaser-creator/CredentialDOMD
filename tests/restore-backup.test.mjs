@@ -552,3 +552,69 @@ test('QA3 review: a restore the membership check refuses after it was applied sa
   assert.equal(calls.filter((c) => c[0] === 'bulkSync' || c[0] === 'upload').length, 1, 'nothing more is sent once it is refused');
   assert.equal(calls.some((c) => c[0] === 'saveSettings'), false);
 });
+
+// Fifth review of the IndexedDB offline copy: a restore bringing Protected
+// Identity back while this device would keep no change to it (its offline
+// copy unread, or the last save of it stored nowhere) was refused with the
+// read-only membership message, and the synced records with it. It is
+// refused with the reason, and what to do, before anything changes.
+test('a restore that brings Protected Identity back while the offline copy cannot take it names that reason, not a read-only membership', async () => {
+  const { restoreRefusal, restoreRefusedMessage, RESTORE_READ_ONLY_MESSAGE } = await import('../src/utils/restoreBackup.js');
+  const { DEVICE_ONLY_UNREAD_MESSAGE, DEVICE_ONLY_UNSAVED_MESSAGE } = await import('../src/utils/pausedApplicationRecords.js');
+  const before = { settings: {}, licenses: [], identityVault: [] };
+  const next = { settings: {}, licenses: [{ id: 'lic-synthetic' }], identityVault: [{ id: 'identity-synthetic-restore', label: 'Synthetic application' }] };
+  assert.equal(restoreRefusal(before, next, 'unread'), DEVICE_ONLY_UNREAD_MESSAGE);
+  assert.equal(restoreRefusal(before, next, 'unavailable'), DEVICE_ONLY_UNSAVED_MESSAGE);
+  assert.equal(restoreRefusal(before, next, 'full'), DEVICE_ONLY_UNSAVED_MESSAGE);
+  assert.equal(restoreRefusal(before, next, null), null, 'nothing blocks it while the copy can take it');
+  const syncedOnly = { ...next, identityVault: [] };
+  assert.equal(restoreRefusal(before, syncedOnly, 'unread'), null, 'a backup with no Protected Identity is not refused for it');
+  assert.equal(restoreRefusedMessage(before, syncedOnly, null), RESTORE_READ_ONLY_MESSAGE, 'a guard refusal otherwise is the membership one');
+  assert.doesNotMatch(DEVICE_ONLY_UNREAD_MESSAGE + DEVICE_ONLY_UNSAVED_MESSAGE, /read-only|—/);
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/components/features/DataExport.jsx', import.meta.url), 'utf8');
+  const check = src.indexOf('restoreRefusal(current, plan.merged, deviceOnlyBlocked?.() ?? null)');
+  const apply = src.indexOf('if (setData((latest) =>');
+  assert.ok(check > 0 && check < apply, 'DataExport asks before it changes anything');
+  assert.doesNotMatch(src, /window\.alert\("Restore is unavailable while records are read-only/, 'the read-only message is no longer the only answer');
+});
+
+// Sixth review of the IndexedDB offline copy: a backup holding Protected
+// Identity, restored while this device would keep no change to it (its
+// offline copy full or unavailable), was refused whole, and the synced
+// records in it were not restored either. The rest of the file is restored;
+// Protected Identity and the Answer Bank stay as they are, and the page says
+// why they were left out.
+test('a restore whose Protected Identity part this device cannot keep restores the rest of the file and says what was left out', async () => {
+  const { DEVICE_ONLY_UNSAVED_MESSAGE } = await import('../src/utils/pausedApplicationRecords.js');
+  const protectedIdentity = await import('../src/utils/protectedIdentity.js');
+  const calls = [];
+  const kept = { id: 'identity-synthetic-kept', label: 'Synthetic application on this device' };
+  let state = { settings: { name: 'Synthetic' }, licenses: [], cme: [], publications: [], documents: [], identityVault: [kept], answerBank: [] };
+  const view = await mountComponent('src/components/features/DataExport.jsx', {
+    app: { data: state, setData: (next) => { state = typeof next === 'function' ? next(state) : next; return true; }, userIdRef: { current: 'profileA' }, theme: {},
+      deviceOnlyBlocked: () => 'full' },
+    modules: {
+      restoreBackup, dataCounts, protectedIdentity,
+      supabase: { COLLECTION_KEYS: KEYS, RESTORABLE_SETTINGS: restorable, redactForExport: (s) => s,
+        listTombstones: async () => new Set(),
+        clearTombstones: async () => true,
+        bulkSync: async (uid, key, rows) => { calls.push(['bulkSync', key, rows.map((r) => r.id)]); return 0; },
+        saveSettings: async () => {} },
+      privateVault: { vaultCount: () => 0 },
+    },
+  });
+  const input = view.fileInputs().find((n) => n.props.accept === '.json');
+  const file = { settings: { name: 'Synthetic' }, licenses: [{ id: A, state: 'CA', updatedAt: OLD }],
+    identityVault: [{ id: 'identity-synthetic-from-file', label: 'Synthetic application from the file' }] };
+  await view.pick(input, [new File([JSON.stringify(file)], 'backup.json', { type: 'application/json' })]);
+  await settle();
+  assert.deepEqual(state.licenses.map((l) => l.id), [A], 'the synced records are restored');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['bulkSync', 'licenses', [A]]], 'and sent');
+  assert.deepEqual(state.identityVault, [kept], 'Protected Identity stays as it is on this device');
+  const page = view.pageText();
+  assert.match(page, /Protected Identity and Answer Bank records in the file were not restored\./);
+  assert.ok(page.includes(DEVICE_ONLY_UNSAVED_MESSAGE), 'with the reason and what to do');
+  assert.doesNotMatch(page, /Protected Identity records? restored to this device/);
+  assert.doesNotMatch(page, /—/);
+});

@@ -3,6 +3,7 @@
 // may reach the network or the database) and a custom category the physician
 // creates, with records in it that sync like any other section.
 import { test } from './support/fixtures.mjs';
+import { scanDevice } from './support/device-store.mjs';
 import {
   field, newMember, openCredentials, pendingOps, recordButtons, row, rows, sleep, tombstones, waitForMemberApp,
 } from './support/lab.mjs';
@@ -53,8 +54,9 @@ test('protected identity stays on the device and encrypted; a custom category ho
     const listed = /QA liability application/.test(await page.locator('body').innerText());
     qa.check('the record is listed on this device', listed);
     qa.check('the SSN is not shown in the clear on the list', !(await page.locator('body').innerText()).includes(SSN));
-    const stored = await page.evaluate(([ssn, dob]) => Object.entries(localStorage).filter(([, v]) => typeof v === 'string' && (v.includes(ssn) || v.includes(dob))).map(([k]) => k), [SSN, DOB]);
-    qa.check('localStorage never holds the SSN or date of birth in the clear', stored.length === 0, stored.join(', '));
+    // Both stores: the offline copy of the file lives in IndexedDB (support/device-store.mjs).
+    const stored = await scanDevice(page, [SSN, DOB]);
+    qa.check('neither localStorage nor IndexedDB holds the SSN or date of birth in the clear', stored.length === 0, stored.join(', '));
     const inDb = [...tablesContaining(SSN), ...tablesContaining('QA liability application')];
     qa.check('no database table holds the record or the SSN', inDb.length === 0, JSON.stringify(inDb));
     qa.check('no network request carried the SSN or date of birth', sent.length === 0, sent.join(', '));

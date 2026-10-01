@@ -43,7 +43,9 @@ export async function mountVera({ rec = recorder(), data = {}, props = {}, turn 
       helpers, customCategories, shareText, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors,
       referenceDraft,
       assistant: { assistantTurn: async (args) => { turns.push(args); return turn(args); }, buildSnapshot: () => ({}), splitFields: sectionFields.splitFields },
-      storageScope: { BASE_KEYS: { chat: 'chat', archives: 'archives' }, lsGetJSON: k => store[k], lsSetJSON: (k, v) => { store[k] = v; } },
+      // The transcript and archives are the IndexedDB-backed stores, read and
+      // written through largeGetJSON/largeSetJSON (storageScope.js).
+      storageScope: { BASE_KEYS: { chat: 'chat', archives: 'archives' }, largeGetJSON: k => store[k], largeSetJSON: (k, v) => { store[k] = v; } },
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },
       officeText: { isOfficeFile: f => /\.(docx?|xlsx?|csv|txt|rtf)$/i.test(f?.name || ''), UPLOAD_ACCEPT: '*', extractOfficeText: async () => '' },
       ...modules,

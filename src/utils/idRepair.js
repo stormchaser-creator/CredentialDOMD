@@ -93,7 +93,8 @@ export function repairVaultKeys(vault, remapped) {
  * Returns the remapped ids.
  */
 export async function repairStoredIds({ readCached, saveCached, readQueue, writeQueue, readVault, writeVault, makeId, now }) {
-  const { blob, remapped } = repairRecordIds(readCached(), makeId, now);
+  // The cached file is read asynchronously (it lives in IndexedDB).
+  const { blob, remapped } = repairRecordIds(await readCached(), makeId, now);
   if (remapped.length) await saveCached(blob);
   const queue = repairQueuedIds(readQueue(), remapped);
   if (queue.changed) writeQueue(queue.ops);

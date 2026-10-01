@@ -22,6 +22,7 @@ import { profileInitializationError, profileSupportReference, localFallbackRefer
 import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from '../../src/utils/accountRecordsLoad.js';
 import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
 import { applyHeldQueue } from '../../src/utils/heldChanges.js';
+import { localChangesSince, rebaseLocalChanges } from '../../src/utils/loadRebase.js';
 import { repairStoredIds } from '../../src/utils/idRepair.js';
 import { generateId } from '../../src/utils/helpers.js';
 import * as syncRules from '../../src/utils/syncRules.js';
@@ -29,7 +30,7 @@ import { LOCAL_ONLY_SETTINGS } from '../../src/constants/defaults.js';
 import { deletionUnconfirmedMessage, DELETION_SUPPORT_REFERENCE } from '../../src/utils/accountDeletionResult.js';
 import { accessGateStatus } from '../../src/utils/accessGateStatus.js';
 
-const { BASE_KEYS, DEVICE_KEYS_BASE, WIPE_SEEN_KEY, CONTINUITY_RETIREMENT_BASE, LOCAL_FENCE_KEY, setActiveUserId,
+const { BASE_KEYS, DEVICE_KEYS_BASE, WIPE_SEEN_KEY, OFFLINE_WIPED_BASE, CONTINUITY_RETIREMENT_BASE, LOCAL_FENCE_KEY, setActiveUserId,
   adoptLocalFence, adoptedLocalFence, localFence, localCopyCurrent, advanceLocalFence, lsSet } = storageScope;
 const { accountDataDeletedAt, sameDeletionStamp, dataDeletionHonored, honorAccountDataDeletion, recordDataDeletionSeen, purgeAccountCopy } = dataDeletion;
 
@@ -70,10 +71,11 @@ function staleDevice({ subject = ownerA } = {}) {
   storage.setItem(`${BASE_KEYS.data}:${ownerB}`, JSON.stringify({ settings: { name: 'Another physician on this phone' } }));
   storage.setItem(`${DEVICE_KEYS_BASE}:${ownerB}`, JSON.stringify({ anthropicKey: 'sk-synthetic-b' }));
 }
-// Everything that holds this account's data. The wipe stamp, the purge fence
-// and the recovery barrier are markers that must survive a purge, not data.
+// Everything that holds this account's data. The wipe stamp (and the stamp
+// this build's purge reached IndexedDB for), the purge fence and the recovery
+// barrier are markers that must survive a purge, not data.
 const aKeys = (subject = ownerA) => [...storage.map.keys()].filter(k => k.endsWith(`:${subject}`)
-  && !k.startsWith(WIPE_SEEN_KEY) && !k.startsWith(LOCAL_FENCE_KEY) && !k.startsWith(CONTINUITY_RETIREMENT_BASE));
+  && !k.startsWith(WIPE_SEEN_KEY) && !k.startsWith(OFFLINE_WIPED_BASE) && !k.startsWith(LOCAL_FENCE_KEY) && !k.startsWith(CONTINUITY_RETIREMENT_BASE));
 // Values built inside a vm context have another realm's prototypes.
 const plain = value => JSON.parse(JSON.stringify(value));
 
@@ -97,6 +99,7 @@ test('honoring a deletion purges everything this account keeps on the device, on
   assert.equal(await honorAccountDataDeletion(ownerA, WIPED_DB), true);
   assert.deepEqual(aKeys(), [], 'file, vault, queued writes, offline identity, transcript and device keys are gone');
   assert.equal(storage.getItem(`${WIPE_SEEN_KEY}:${ownerA}`), WIPED_DB);
+  assert.equal(storage.getItem(`${OFFLINE_WIPED_BASE}:${ownerA}`), WIPED_DB, 'recorded with it: this purge reached IndexedDB too');
   assert.ok(storage.getItem(`${BASE_KEYS.data}:${ownerB}`));
   assert.ok(storage.getItem(`${DEVICE_KEYS_BASE}:${ownerB}`));
   // What the member adds after the deletion is never purged for it again.
@@ -275,8 +278,9 @@ function app({ profile, cloud = { licenses: [], documents: [] }, inMemory = null
     bulkSync: async (_p, key, items) => record('bulkSync', { key, ids: items.map(x => x.id) }),
     sbSaveSettings: async () => record('sbSaveSettings'), sbUpdate: async () => record('sbUpdate'),
     uploadDocumentFile: async () => null, downloadDocumentFile: async () => null,
-    withLocalOnlySettings: settings => settings, hasLegacyStorage: () => false, adoptLegacyStorage: () => null,
+    withLocalOnlySettings: settings => settings, hasLegacyStorage: () => false, offlineCopyUnread: () => false, adoptLegacyStorage: () => null, markOfflineCopyRead: () => false, cachedRecordsRef: { current: null }, adoptOfflineCopyRead: () => false, deviceOnlyForLoad: () => null, offlineCopyUnchangedSinceKnown: () => false,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [], reconcileDocumentLinks, applyHeldQueue,
+    localChangesSince, rebaseLocalChanges, localCopyCurrent: storageScope.localCopyCurrent,
     accessAuthority: { suspendWrites: () => record('suspendWrites') },
     setData: value => { states.push(value); record('setData'); }, setLoaded: value => record('setLoaded', { value }),
     setLoadedFrom: value => record('setLoadedFrom', { value }), setProfileOwner() {}, setProfileIssue: value => record('setProfileIssue', { value }),

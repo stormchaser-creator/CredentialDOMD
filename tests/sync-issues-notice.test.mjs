@@ -61,6 +61,28 @@ test('SYNC-017: a full device storage is said, because the offline copy is older
   assert.match(m.html(), /storage is full, so its offline copy of your records could not be updated/);
 });
 
+// Review of the IndexedDB move: a lost connection, or an offline store that
+// would not open, showed "storage is full" (the owner's ticket) with the
+// wrong cause, and a copy the load could not read was never mentioned.
+test('SYNC-017: an offline store that would not open, or could not be read, is said as such, not as full storage', () => {
+  const m = mount(SyncIssuesNotice, { data: {} });
+  Object.assign(globalThis.__screen.app, { syncIssues: [], pendingWrites: 0, offlineMode: false, offlineCopyStale: 'unavailable', navigate() {} });
+  let html = m.html();
+  assert.match(html, /offline storage could not be opened, so its offline copy of your records could not be updated/);
+  assert.doesNotMatch(html, /storage is full/);
+  Object.assign(globalThis.__screen.app, { offlineCopyStale: 'unread' });
+  html = m.html();
+  assert.match(html, /offline storage could not be read, so Protected Identity and the Answer Bank, kept only on this device, may not all be shown/);
+  assert.match(html, /The app tries again on its own; reload the app to try again now\./);
+  assert.doesNotMatch(html, /storage is full/);
+  Object.assign(globalThis.__screen.app, { offlineCopyStale: 'full' });
+  assert.match(m.html(), /storage is full, so its offline copy of your records could not be updated/);
+  for (const reason of ['unavailable', 'unread', 'full']) {
+    Object.assign(globalThis.__screen.app, { offlineCopyStale: reason });
+    assert.doesNotMatch(m.html(), /\u2014|—/, 'no em dashes in the copy');
+  }
+});
+
 test('QA3: saves kept on this device for want of a membership answer say they will sync', () => {
   const m = mount(SyncIssuesNotice, { data: {} });
   Object.assign(globalThis.__screen.app, { syncIssues: [], pendingWrites: 3, awaitingAccessWrites: 2, offlineMode: false, navigate() {} });
@@ -95,4 +117,22 @@ test('QA3: saves kept for want of an answer that the answer then refused say so,
   html = m.html();
   assert.match(html, /Not saved to your account/);
   assert.match(html, /data-sync-refused/);
+});
+
+// Fifth review of the IndexedDB move: a Protected Identity or Answer Bank
+// change that no store took was mentioned only as "the offline copy is
+// older", with nothing about the device-only change or a backup.
+test('SYNC-017: a Protected Identity or Answer Bank change in no copy of the offline file is named, with the backup to make', () => {
+  const m = mount(SyncIssuesNotice, { data: {} });
+  Object.assign(globalThis.__screen.app, { syncIssues: [], pendingWrites: 0, offlineMode: false, offlineCopyStale: null, deviceOnlyUnsaved: 'held', navigate() {} });
+  let html = m.html();
+  assert.match(html, /A change to Protected Identity or the Answer Bank is not in this device.s offline copy yet\. It is kept aside on this device/);
+  assert.match(html, /save a full JSON backup under More, Data &amp; Backup/);
+  Object.assign(globalThis.__screen.app, { deviceOnlyUnsaved: 'memory', offlineCopyStale: 'unavailable' });
+  html = m.html();
+  assert.match(html, /offline storage could not be opened/);
+  assert.match(html, /is on this screen only: this device could not save it anywhere\. Save a full JSON backup under More, Data &amp; Backup now; closing the app loses it\./);
+  assert.doesNotMatch(html, /\u2014|—/, 'no em dashes in the copy');
+  Object.assign(globalThis.__screen.app, { deviceOnlyUnsaved: null, offlineCopyStale: null });
+  assert.equal(m.html(), '');
 });

@@ -21,7 +21,7 @@ function harness({ path = 'user_syntheticA/doc-1', owner = 'user_syntheticA' } =
   const ctx = {
     useCallback: (fn) => fn, prepareRecord: (_k, raw) => raw, dataRef: { current: state },
     updateSection: (key, fn) => { state = { ...state, [key]: fn(state[key]) }; return true; },
-    alertWriteRefused() {}, scopesForWrite() {}, isDeviceOnlySection: () => false,
+    alertWriteRefused() {}, scopesForWrite() {}, isDeviceOnlySection: () => false, refuseUnsavableDeviceOnly: () => false,
     dataOwnerRef: { current: owner }, userIdRef: { current: 'profileA' }, getActiveUserId: () => owner,
     sbInsert: async () => { await inserted; return path; },
     setData: (fn) => { state = typeof fn === 'function' ? fn(state) : fn; }, withStoragePath,

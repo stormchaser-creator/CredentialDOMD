@@ -6,15 +6,22 @@
 //   * the app opened offline shows the device's copy read-only and refuses saves
 //     with a message, keeping what was typed.
 import { test } from './support/fixtures.mjs';
+import { deviceStoreKeys } from './support/device-store.mjs';
 import {
   clerkId, field, goTab, landing, lab, newMember, openCredentials, openMore, pendingOps, recordButtons, row, rows, signIn, sleep, syncWarnings, tableRow,
   waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 
-const storageKeysFor = (page, id) => page.evaluate((cid) => ({
-  local: Object.keys(localStorage).filter((k) => k.includes(cid)),
-  session: Object.keys(sessionStorage).filter((k) => k.includes(cid)),
-}), id);
+// Keys that name the account: localStorage, sessionStorage, and the app's
+// IndexedDB store, where the offline copy, the transcript and the archives
+// live (support/device-store.mjs).
+const storageKeysFor = async (page, id) => ({
+  ...(await page.evaluate((cid) => ({
+    local: Object.keys(localStorage).filter((k) => k.includes(cid)),
+    session: Object.keys(sessionStorage).filter((k) => k.includes(cid)),
+  }), id)),
+  idb: await deviceStoreKeys(page, id),
+});
 
 async function addEducation(page, { name, institution }) {
   await openCredentials(page, 'Education');
@@ -49,7 +56,7 @@ test('sign out purges the device; signing back in restores the cloud records', {
 
   await qa.feature('AUTH-005', 'Sign out purges the device', async () => {
     const keysBefore = await storageKeysFor(page, cid);
-    qa.check('the device holds this account\'s data before sign-out', keysBefore.local.length > 0, keysBefore.local.join(', '));
+    qa.check('the device holds this account\'s data before sign-out', keysBefore.local.length + keysBefore.idb.length > 0, [...keysBefore.local, ...keysBefore.idb].join(', '));
     const dialogs = qa.report.dialogs.length;
     await openMore(page, 'Sign Out');
     await page.getByTestId('qa-signin').waitFor({ timeout: 60000 });
@@ -60,6 +67,7 @@ test('sign out purges the device; signing back in restores the cloud records', {
     qa.check('the device-key slot is gone', deviceKeys === null);
     const idb = await page.evaluate(async (id) => (indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name).filter((n) => n && n.includes(id)) : []), cid);
     qa.check('no IndexedDB database named for that account remains', idb.length === 0, idb.join(', '));
+    qa.check('no entry of that account remains in the app\'s IndexedDB store (file, transcript, archives)', keysAfter.idb.length === 0, keysAfter.idb.join(', '));
     qa.check('the cloud rows are untouched by sign-out', JSON.stringify(counts()) === JSON.stringify(before), JSON.stringify(counts()));
   });
 

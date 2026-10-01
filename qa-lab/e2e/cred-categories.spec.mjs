@@ -2,7 +2,9 @@
 // category, add a field, hide it (its records move to Unsorted records), move
 // an unsorted record into another category, and the Answer Bank's paused,
 // device-only screen with a record this browser already held.
+import { randomUUID } from 'node:crypto';
 import { test } from './support/fixtures.mjs';
+import { readDeviceJSON, writeDeviceText } from './support/device-store.mjs';
 import {
   clerkId, field, newMember, openCredentials, recordButtons, row, sleep, waitForMemberApp,
 } from './support/lab.mjs';
@@ -152,13 +154,12 @@ test('custom categories: rename, add a field, hide, unsorted records moved; the 
     // A record from before the pause, as this browser would hold it (lab setup: written into
     // this account's device cache, where the app keeps it).
     const id = await clerkId(page);
-    const seeded = await page.evaluate((uid) => {
-      const key = `credentialdomd-data:${uid}`;
-      const blob = JSON.parse(localStorage.getItem(key) || '{}');
-      blob.answerBank = [{ id: crypto.randomUUID(), question: 'QA synthetic question: hospital affiliations', answer: 'QA synthetic answer bank reply', createdAt: new Date().toISOString() }];
-      localStorage.setItem(key, JSON.stringify(blob));
-      return Object.keys(blob).length;
-    }, id);
+    // Where the app keeps it: the offline copy in IndexedDB (support/device-store.mjs).
+    const deviceKey = `credentialdomd-data:${id}`;
+    const blob = (await readDeviceJSON(page, deviceKey)).value;
+    blob.answerBank = [{ id: randomUUID(), question: 'QA synthetic question: hospital affiliations', answer: 'QA synthetic answer bank reply', createdAt: new Date().toISOString() }];
+    await writeDeviceText(page, deviceKey, JSON.stringify(blob));
+    const seeded = Object.keys(blob).length;
     qa.check('lab setup: one Answer Bank record written to this account\'s device cache', seeded > 0);
     for (let i = 1; i <= 2; i++) {
       await page.reload();
@@ -169,7 +170,7 @@ test('custom categories: rename, add a field, hide, unsorted records moved; the 
       qa.check(`after load ${i} the screen counts the 1 record this browser holds, with backup guidance`, /This browser has 1 saved record\./.test(body) && /Keep a full JSON backup/.test(body), body.match(/This browser has[^\n]*/)?.[0]);
     }
     await qa.shot('answer bank paused');
-    const kept = await page.evaluate((uid) => (JSON.parse(localStorage.getItem(`credentialdomd-data:${uid}`) || '{}').answerBank || []).length, id);
+    const kept = ((await readDeviceJSON(page, deviceKey)).value.answerBank || []).length;
     qa.check('the device copy is still there', kept === 1, kept);
     const table = row(`select to_regclass('public.answer_bank')::text as t, to_regclass('public.answerbank')::text as u`);
     qa.check('the database has no answer bank table', !table?.t && !table?.u, table);

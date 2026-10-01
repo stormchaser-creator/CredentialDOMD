@@ -3,7 +3,7 @@ import { exportVault, importVault, vaultCount, clearVault } from "../../utils/pr
 import { useApp } from "../../context/AppContext";
 import { STORAGE_KEY } from "../../constants/defaults";
 import { bulkSync, saveSettings, clearTombstones, listTombstones, uploadDocumentFile, COLLECTION_KEYS, RESTORABLE_SETTINGS, redactForExport } from "../../lib/supabase";
-import { planRestore, isBackupFile } from "../../utils/restoreBackup.js";
+import { planRestore, isBackupFile, restoreRefusal, restoreRefusedMessage, keepDeviceOnlySections, deviceOnlyNotRestoredNote } from "../../utils/restoreBackup.js";
 import { recordCounts, totalOf } from "../../utils/dataCounts.js";
 import { mergeIdentityRestore, SECTION as IDENTITY_SECTION } from "../../utils/protectedIdentity";
 import BackupPanel from "./BackupPanel";
@@ -18,7 +18,7 @@ function vaultRestoreMessage(result) {
 }
 
 function DataExport() {
-  const { data, setData, userIdRef, theme: T } = useApp();
+  const { data, setData, userIdRef, theme: T, deviceOnlyBlocked } = useApp();
   // The records as they are now. A restore waits on the network (the
   // deletion ledger) before it plans, and plans on these rather than on the
   // copy from the render the file was picked in.
@@ -162,12 +162,24 @@ function DataExport() {
           return;
         }
         const notes = [];
-        if (plan.identity?.added) notes.push(`${plan.identity.added} Protected Identity record${plan.identity.added === 1 ? "" : "s"} restored to this device.`);
-        if (plan.identity?.droppedPlainSecret) notes.push("An SSN or date of birth that was not encrypted in the file was left out.");
-        if (setData((latest) => (latest === current ? plan.merged : restoreOnto(latest).merged)) === false) {
+        // Protected Identity from the file, while this device would keep no
+        // change to it (its offline copy unread, or its last save stored
+        // nowhere): that part is left out, with the reason and what to do,
+        // and the rest of the file (the synced records, the settings) is
+        // restored. The whole restore used to be refused for it.
+        const deviceOnly = restoreRefusal(current, plan.merged, deviceOnlyBlocked?.() ?? null);
+        if (deviceOnly) {
+          plan.merged = keepDeviceOnlySections(current, plan.merged);
+          notes.push(deviceOnlyNotRestoredNote(deviceOnly));
+        } else {
+          if (plan.identity?.added) notes.push(`${plan.identity.added} Protected Identity record${plan.identity.added === 1 ? "" : "s"} restored to this device.`);
+          if (plan.identity?.droppedPlainSecret) notes.push("An SSN or date of birth that was not encrypted in the file was left out.");
+        }
+        const mergedOnto = (latest) => (deviceOnly ? keepDeviceOnlySections(latest, restoreOnto(latest).merged) : restoreOnto(latest).merged);
+        if (setData((latest) => (latest === current ? plan.merged : mergedOnto(latest))) === false) {
           setImportNote("");
           setImportStatus("error");
-          window.alert("Restore is unavailable while records are read-only. Your saved records and exports have not changed.");
+          window.alert(restoreRefusedMessage(current, plan.merged, deviceOnlyBlocked?.() ?? null));
           return;
         }
         if (plan.documentsWithoutFile) notes.push(`${plan.documentsWithoutFile} document${plan.documentsWithoutFile === 1 ? "" : "s"} in the file had no file with ${plan.documentsWithoutFile === 1 ? "it" : "them"} and ${plan.documentsWithoutFile === 1 ? "was" : "were"} left out.`);

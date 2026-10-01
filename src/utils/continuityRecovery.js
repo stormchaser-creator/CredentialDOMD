@@ -1,5 +1,5 @@
 import { BASE_KEYS, DEVICE_KEYS_BASE, WIPE_SEEN_KEY, CONTINUITY_JOURNAL_BASE,
-  registerContinuityRecoverySubject, assertContinuityRecoveryAllowed } from './storageScope.js';
+  registerContinuityRecoverySubject, assertContinuityRecoveryAllowed, isOfflineStoreKey, readOfflineCopy, noteLocalCopyWritten } from './storageScope.js';
 
 export const PRODUCTION_CLERK_ISSUER = 'https://clerk.credentialdomd.com';
 export const DEVELOPMENT_CLERK_ISSUER = 'https://dynamic-goshawk-87.clerk.accounts.dev';
@@ -102,13 +102,38 @@ export function continuityJournalKey(binding) {
  * and implement compareAndSet atomically within their own storage mechanism.
  * The retirement barrier always uses localStorage, including native adapters.
  */
-export function createLocalContinuityStorage(storage = globalThis.localStorage) {
+export function createLocalContinuityStorage(storage = globalThis.localStorage, { readOffline = readOfflineCopy, onLocalCopy = noteLocalCopyWritten } = {}) {
+  // The file, the transcript and the archives live in IndexedDB now
+  // (storageScope.js OFFLINE_STORE_BASES), and localStorage holds them only
+  // before they move or when IndexedDB refused. A destination there is a
+  // destination that exists: it is never overwritten from the source, as a
+  // populated localStorage slot never was. An IndexedDB that could not be
+  // read is not an empty one: readOffline throws, and recovery stops
+  // (continuity_storage_unavailable) instead of copying over what it could
+  // not see. Every other key stays synchronous.
+  const offline = key => typeof readOffline === 'function' && isOfflineStoreKey(key);
+  const commit = (key, value) => {
+    storage.setItem(key, value);
+    // The transcript the Assistant reads from memory follows what recovery
+    // put in localStorage, which outranks every other copy.
+    if (offline(key) && storage === globalThis.localStorage && typeof onLocalCopy === 'function') onLocalCopy(key, value);
+    return true;
+  };
   return {
-    read(key) { return storage.getItem(key); },
+    read(key) {
+      const value = storage.getItem(key);
+      if (value !== null || !offline(key)) return value;
+      return readOffline(key);
+    },
     compareAndSet(key, expected, value, check) {
       check();
       if (storage.getItem(key) !== expected) return false;
-      check(); storage.setItem(key, value); return true;
+      if (expected !== null || !offline(key)) { check(); return commit(key, value); }
+      return readOffline(key).then(stored => {
+        check();
+        if (stored !== null || storage.getItem(key) !== null) return false;
+        return commit(key, value);
+      });
     },
   };
 }

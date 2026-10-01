@@ -101,3 +101,46 @@ test('PRAC-026: a lapsed membership is told Practice is read-only; a member with
   bill(hit);
   assert.equal(member.calls.find(c => c[0] === 'add' && c[1] === 'encounters')[2].codes[0].wRVU, 31.06, 'a search result bills its wRVU, as before');
 });
+
+// A browser that refuses clipboard access (permission denied) rejects the
+// write. It used to be an unhandled rejection (the QA lab logged it) under a
+// "Copied to clipboard" that was not true.
+test('CPT Lookup: a refused clipboard write says "Copy failed" on the row, never "Copied", and rejects nothing unhandled', async () => {
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  const had = Object.getOwnPropertyDescriptor(globalThis.navigator, 'clipboard');
+  const writes = [];
+  let refuse = true;
+  Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: {
+    writeText: async (text) => { writes.push(text); if (refuse) { const e = new Error('Write permission denied.'); e.name = 'NotAllowedError'; throw e; } },
+  } });
+  try {
+    const m = mount(CPTLookup, { data: { locumContracts: [] } });
+    await search(m, '61343');
+    const rowFor = () => find(m.render(), n => n.type === 'button' && n.key === '61343', 'the 61343 row');
+    rowFor().props.onClick();
+    await settle();
+    assert.deepEqual(writes, ['61343'], 'the copy was tried');
+    let page = textOf(m.render());
+    assert.match(page, /Copy failed\. This browser did not allow copying; select the code to copy it\./);
+    assert.doesNotMatch(page, /Copied to clipboard/);
+    assert.doesNotMatch(page, /—/, 'no em dash');
+    const alert = nodes(m.render()).find(n => n.props?.role === 'alert' && /Copy failed/.test(textOf(n)));
+    assert.ok(alert, 'announced as an alert');
+
+    // Allowed again: the next copy says so.
+    refuse = false;
+    rowFor().props.onClick(); // closes the row
+    rowFor().props.onClick();
+    await settle();
+    page = textOf(m.render());
+    assert.match(page, /Copied to clipboard/);
+    assert.doesNotMatch(page, /Copy failed/);
+    await new Promise(r => setTimeout(r, 20));
+    assert.deepEqual(unhandled, [], 'no unhandled rejection');
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+    if (had) Object.defineProperty(globalThis.navigator, 'clipboard', had); else delete globalThis.navigator.clipboard;
+  }
+});

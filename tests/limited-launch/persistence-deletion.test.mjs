@@ -17,7 +17,7 @@ const appStart = appSource.indexOf('  // Account deletion is an explicit data-ri
 const appEnd = appSource.indexOf('  // Billing is a network surface', appStart);
 if (appStart < 0 || appEnd < appStart) throw new Error('AppContext deletion callbacks could not be located');
 const appCode = `${appSource.slice(appStart, appEnd)}\nglobalThis.api = { beginAccountDeletion, resetAfterAccountDeletion };`;
-const cacheStart = appSource.indexOf('  // Persist to localStorage on change');
+const cacheStart = appSource.indexOf('  // Persist the offline copy on change');
 const cacheEnd = appSource.indexOf('  // ─── Subscription', cacheStart);
 if (cacheStart < 0 || cacheEnd < cacheStart) throw new Error('AppContext cache effect could not be located');
 const cacheCode = appSource.slice(cacheStart, cacheEnd);
