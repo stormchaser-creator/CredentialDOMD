@@ -206,7 +206,8 @@ test('reminder emails skip historical, superseded, pending and date-unknown rows
   const fn = readFileSync(new URL('../supabase/functions/send-reminders/index.ts', import.meta.url), 'utf8');
   // Every row the query returned, custom records after their category names
   // are brought up to date (withCurrentCategoryNames), goes through the loop.
-  assert.match(fn, /let rows = \(data \|\| \[\]\) as any\[\];/);
+  // (The rows are the member's share of the group's read, within their own lead time.)
+  assert.match(fn, /let rows = \(read\.rows\.get\(t\.table\)\?\.get\(p\.id\) \|\| \[\]\)\.filter\(/);
   const start = fn.indexOf('for (const r of rows)');
   assert.ok(start > 0, 'the digest loop reads the rows');
   const loop = fn.slice(start, fn.indexOf('items.push(', start));

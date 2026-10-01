@@ -31,6 +31,7 @@ const DEBOUNCE_MS = 1200;
 let pending = null;      // the setupState waiting to be written, or null
 let writer = null;       // the updateSettings that will write it
 let owner = null;        // the user id the pending write belongs to
+let tapped = false;      // the pending write holds a change the member made
 let timer = null;
 const listeners = new Set();
 const emit = () => { for (const l of [...listeners]) l(); };
@@ -40,20 +41,25 @@ function flushSetupWrites() {
   if (!pending || !writer) return;
   const payload = pending;
   const write = writer;
+  // Only the board's own stamps (started, the score, the last task closed):
+  // nobody did anything, so a save that cannot go through is never alerted.
+  const automatic = !tapped;
   pending = null;
   writer = null;
   owner = null;
-  write({ setupState: payload });
+  tapped = false;
+  write({ setupState: payload }, { automatic });
   emit();
 }
 
-function queueSetupWrite(next, updateSettings, userId) {
+function queueSetupWrite(next, updateSettings, userId, automatic = false) {
   // A queued write belongs to one account. If the account changed under it,
   // drain it first rather than folding the two together.
   if (owner && owner !== userId) flushSetupWrites();
   owner = userId || null;
   pending = next;
   writer = updateSettings;
+  if (!automatic) tapped = true;
   if (timer) clearTimeout(timer);
   timer = setTimeout(flushSetupWrites, DEBOUNCE_MS);
   emit();
@@ -65,11 +71,12 @@ function queueSetupWrite(next, updateSettings, userId) {
  * base), so two writers never overwrite each other. `now` writes at once
  * rather than after the debounce: for a writer outside the Setup board (the
  * CV review) that has no flush of its own on the way out of the app.
+ * `automatic`: the board stamped it on its own, nobody tapped anything.
  */
-export function commitSetupState(mutate, { stored, updateSettings, userId, now = false }) {
+export function commitSetupState(mutate, { stored, updateSettings, userId, now = false, automatic = false }) {
   if (owner && owner !== (userId || null)) flushSetupWrites();
   const base = pending || normalizeSetupState(stored);
-  queueSetupWrite(mutate(base), updateSettings, userId);
+  queueSetupWrite(mutate(base), updateSettings, userId, automatic);
   if (now) flushSetupWrites();
 }
 
@@ -109,6 +116,10 @@ export function useSetupState() {
   const commit = useCallback((mutate) => {
     commitSetupState(mutate, { stored: effective, updateSettings, userId });
   }, [effective, updateSettings, userId]);
+  // The board's own stamps, made with nobody tapping anything.
+  const stamp = useCallback((mutate) => {
+    commitSetupState(mutate, { stored: effective, updateSettings, userId, automatic: true });
+  }, [effective, updateSettings, userId]);
 
   const skip = useCallback((id) => commit((st) => withTask(st, id, "skipped", {}, pruneArgs)), [commit, pruneArgs]);
   const markNa = useCallback((id, why = "") => commit((st) => withTask(st, id, "na", { why }, pruneArgs)), [commit, pruneArgs]);
@@ -128,11 +139,11 @@ export function useSetupState() {
     if (!loaded || loadedFrom !== "cloud") return;
     const patch = firstRenderPatch(setup);
     if (!patch) return;
-    commit((st) => {
+    stamp((st) => {
       const started = withStarted(st, patch.startedAt, pruneArgs);
       return patch.tier1DoneAt ? withTier1Done(started, patch.tier1DoneAt, pruneArgs) : started;
     });
-  }, [loaded, loadedFrom, setup, commit, pruneArgs]);
+  }, [loaded, loadedFrom, setup, stamp, pruneArgs]);
 
   // The board's own score, stamped so somebody who cannot read this
   // physician's records can still see how far they got. Written only when the
@@ -151,12 +162,12 @@ export function useSetupState() {
       && was.t2.done === t2c.done && was.t2.total === t2c.total;
     if (same || scoreRef.current === scoreKey) return;
     scoreRef.current = scoreKey;
-    commit((st) => withProgress(st, {
+    stamp((st) => withProgress(st, {
       done: board.done, total: board.total,
       t1: { done: t1c.done, total: t1c.total },
       t2: { done: t2c.done, total: t2c.total },
     }, new Date().toISOString(), pruneArgs));
-  }, [loaded, loadedFrom, scoreKey, board.done, board.total, t1c.done, t1c.total, t2c.done, t2c.total, effective, commit, pruneArgs]);
+  }, [loaded, loadedFrom, scoreKey, board.done, board.total, t1c.done, t1c.total, t2c.done, t2c.total, effective, stamp, pruneArgs]);
 
   // lastTouched: the last time any task actually closed. The card's copy
   // reads it ("You added 4 licenses on Monday"), so it must not move when
@@ -175,8 +186,8 @@ export function useSetupState() {
     if (!closed.length) return;
     // Which one closed is stored too: the ladder's continuity line names it
     // back to the physician a few days later.
-    commit((st) => ({ ...st, lastTouched: new Date().toISOString(), lastDone: closed[0] }));
-  }, [loaded, doneKey, commit]);
+    stamp((st) => ({ ...st, lastTouched: new Date().toISOString(), lastDone: closed[0] }));
+  }, [loaded, doneKey, stamp]);
 
   /* ─── The Pro denominator ─────────────────────────────────────────
    * The total is the one number on the board a physician is asked to trust,
@@ -198,10 +209,11 @@ export function useSetupState() {
     () => commit((st) => withProSnapshot(st, proSnapshot(setup, { isFreeBeta }), pruneArgs)),
     [commit, setup, isFreeBeta, pruneArgs]
   );
+  // Recorded quietly when the total has not moved: a stamp, not a tap.
   useEffect(() => {
     if (!loaded || subLoading || narration || matches) return;
-    ackNarration();
-  }, [loaded, subLoading, narration, matches, ackNarration]);
+    stamp((st) => withProSnapshot(st, proSnapshot(setup, { isFreeBeta }), pruneArgs));
+  }, [loaded, subLoading, narration, matches, stamp, setup, isFreeBeta, pruneArgs]);
 
   // Flush on unmount and whenever the app is backgrounded: a skip tapped on
   // the way out of the app must still be a skip when it comes back.

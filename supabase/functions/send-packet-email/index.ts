@@ -141,7 +141,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
 import { storageSubjects } from "../_shared/clerkContinuity.ts";
 import { approveRequestBody, longDate, replySubject, shareLogItem, unverifiedApproveRefusal, withoutGuessBlock } from "../_shared/requestFlow.ts";
@@ -396,7 +396,9 @@ interface DocRow {
   size_bytes: number | null;
 }
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503 with these
+// CORS headers, not the runtime's bare 500 (see answerAuthUnavailable).
+serve(answerAuthUnavailable(corsHeaders, async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "POST only" });
   if (!RESEND_API_KEY) return json(500, { error: "Email is not configured" });
@@ -820,4 +822,4 @@ serve(async (req) => {
       ? "The send could not be confirmed. Check the Replied tab before sending again; Reply again by email sends another copy."
       : "Could not send the packet. Try again." });
   }
-});
+}));

@@ -6,7 +6,7 @@ import { build } from 'esbuild';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from '../../supabase/functions/_shared/accessPolicy.mjs';
 import { validateAccessSnapshot, accessAt, canReviewBillingOffer, renewalPaymentFailed, hasManageableSubscription } from '../../src/utils/limitedLaunchAccess.js';
-import { isPinnedBetaChargeDate, membershipDate, quoteMatchesBetaWindow } from '../../src/utils/membershipTiming.js';
+import { isPinnedBetaChargeDate, membershipDate, quoteMatchesBetaWindow, scheduledMembershipCopy } from '../../src/utils/membershipTiming.js';
 
 // The fixtures stand on 2030-10-01 12:00 UTC (the snapshot's evaluatedAt; the
 // quote expires ten minutes later), so the page runs on that clock, ticking,
@@ -316,4 +316,25 @@ test('only the exact owned deferred checkout can resume after beta with new expl
   assert.equal(quoteMatchesBetaWindow(quoteFor('core_locum'), f.context.limitedLaunch.access), false);
   f.context.limitedLaunch.access.checkoutResumeAvailable = false;
   assert.equal(quoteMatchesBetaWindow(quoteFor(), f.context.limitedLaunch.access), false);
+});
+
+// BILL-005 review: a scheduled purchase cancelled on a Dashboard date before
+// its first charge. The period ends at the first charge, so the card named
+// startsAt; Stripe cancels on the earlier date. 20261001081000 sends it as
+// scheduledMembership.cancelsAt.
+test('a scheduled purchase cancelled before its first charge names the cancellation date', () => {
+  const early = '2030-10-15T12:00:00+00:00';
+  const access = { ...snapshot(), checkoutEligible: false, scheduledMembership: { ...scheduled('canceling'), cancelsAt: early } };
+  const valid = validateAccessSnapshot(access);
+  assert.equal(valid.scheduledMembership.cancelsAt, early);
+  const copy = scheduledMembershipCopy(valid.scheduledMembership);
+  assert.ok(copy.includes(`will cancel on ${membershipDate(early)}, before its first annual charge`), copy);
+  assert.ok(!copy.includes(membershipDate(chargeAt)), 'not the first charge date');
+  assert.ok(scheduledMembershipCopy(scheduled('canceling')).includes(`will cancel on ${membershipDate(chargeAt)}`), 'without a date: startsAt, as before');
+  for (const bad of [
+    { ...scheduled('canceling'), cancelsAt: chargeAt },
+    { ...scheduled('canceling'), cancelsAt: 'soon' },
+    { ...scheduled('canceling'), firstChargeCanceled: false, cancelsAt: early },
+    { ...scheduled('scheduled'), cancelsAt: early },
+  ]) assert.throws(() => validateAccessSnapshot({ ...access, scheduledMembership: bad }), /Scheduled membership/, JSON.stringify(bad));
 });

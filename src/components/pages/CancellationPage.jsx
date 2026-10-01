@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, useRef, memo } from "react";
 import { TAP_MIN } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { generateCredentialZip, downloadBlob } from "../../utils/credentialExport";
@@ -13,6 +13,9 @@ function CancellationPage() {
   const [exported, setExported] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [error, setError] = useState(null);
+  // What the refund section showed, kept across the branch change a refund
+  // press causes (RefundSection's `carry`).
+  const refundCarry = useRef(null);
 
   // Nothing to cancel: no live subscription (always the case during the free
   // beta) and no cancellation on record. Never show a data-wipe countdown to
@@ -92,11 +95,11 @@ function CancellationPage() {
       <button style={{ minHeight: TAP_MIN }} onClick={manage}>Manage paid subscription</button>
       {paidMembership && <>
         <p style={{ marginTop: 16 }}>Or cancel now and get your money back: {MEMBERSHIP_COPY.refundTerms}</p>
-        <RefundSection paid />
+        <RefundSection paid carry={refundCarry} />
       </>}
     </> : <>
       <p>No active paid subscription was found.</p>
-      <RefundSection />
+      <RefundSection carry={refundCarry} />
     </>}
     <button style={{ marginLeft: 10, minHeight: TAP_MIN }} onClick={() => navigate("more", "export")}>Export saved records</button>
   </section>;

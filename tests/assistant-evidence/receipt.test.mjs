@@ -16,7 +16,13 @@ test('real receipt renders trusted fixed links, honest cached dates, saved-only 
     await build({ entryPoints: [fileURLToPath(new URL('../../src/components/features/VeraSourceReceipt.jsx', import.meta.url))], bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', outfile: output, logLevel: 'silent' });
     const Receipt = createRequire(import.meta.url)(output).default;
     const render = evidence => renderToStaticMarkup(React.createElement(Receipt, { evidence }));
-    assert.match(render({ mode: 'saved_references', attempted: false, sources: [] }), /Saved references; no live source check/);
+    // No check made and no official page the question is about: no line at
+    // all (it used to sit under every reply, an export or a summary too).
+    assert.equal(render({ mode: 'saved_references', attempted: false, sources: [] }), '');
+    const saved = render({ mode: 'saved_references', attempted: false, sources: [{ sourceId: 'oh-cme-general', status: 'not_retrieved', fetchedAt: null }] });
+    assert.match(saved, /Saved references; no live source check/);
+    assert.match(saved, /https:\/\/codes.ohio.gov\/ohio-administrative-code\/rule-4731-10-02/);
+    assert.match(saved, /not retrieved/);
     const page = render({ attempted: true, sources: [{ sourceId: 'oh-cme-general', status: 'available', fetchedAt: '2026-09-19T20:00:00Z', delivery: 'cache', url: 'javascript:evil()', title: '<script>bad</script>' }] });
     assert.match(page, /retrieved 2026-09-19 20:00 UTC \(cached\)/);
     assert.match(page, /https:\/\/codes.ohio.gov\/ohio-administrative-code\/rule-4731-10-02/);

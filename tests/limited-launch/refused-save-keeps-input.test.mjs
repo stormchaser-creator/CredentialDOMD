@@ -141,7 +141,7 @@ test('a credential form whose save is refused stays open with what was typed', a
       addItem: rec.fn('addItem'), editItem: rec.fn('editItem'), setData: () => {}, toggleFavorite: () => {} },
     props: { title: 'Licenses', sectionKey: 'licenses', items: [], fields: [{ key: 'licenseNumber', label: 'License Number' }], autoOpen: true, onAutoOpenDone() {},
       onAdd: rec.fn('onAdd'), onEdit: rec.fn('onEdit') },
-    modules: { lifecycle: await import('../../src/utils/lifecycle.js') },
+    modules: { lifecycle: await import('../../src/utils/lifecycle.js'), formLayout: await import('../../src/utils/formLayout.js') },
   });
   const numberField = () => form.nodes().find(n => n.props?.label === 'License Number');
   const input = () => form.nodes(numberField()).find(n => n.type === 'input');

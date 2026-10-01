@@ -229,7 +229,7 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
         {!summary.attention.length && <p style={quiet}>Nothing expired or expiring in the next 90 days.</p>}
         {summary.attention.map(item => <div key={`${item.sectionKey}:${item.id}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
           {dot(item.color)}
-          <span style={{ fontSize: 14, color: T.text }}>{item.label}: {item.type ? `${item.type} ` : ""}{item.mainLine}<span style={{ color: T.textDim }}> {item.subLine}</span></span>
+          <span style={{ fontSize: 14, color: T.text }}>{item.label}: {item.headline}<span style={{ color: T.textDim }}> {item.subLine}</span></span>
         </div>)}
       </div>
       <div style={card} data-member-view-cme="">
@@ -254,7 +254,7 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
       {docs.map(doc => {
         const [key, id] = doc.linkedTo.split(":");
         const record = (snapshot.sections?.[key] || []).find(item => item.id === id);
-        const where = `${memberViewSection(key)?.label || key}${record ? `: ${recordCard(key, record, snapshot).mainLine}` : ""}`;
+        const where = `${memberViewSection(key)?.label || key}${record ? `: ${recordCard(key, record, snapshot).headline}` : ""}`;
         return fileRow(doc, where);
       })}
     </div>;

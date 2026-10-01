@@ -1,4 +1,5 @@
 import { captureLaunchInvitation } from "./utils/launchInvitation.js";
+import { captureAppDeepLink } from "./utils/supportDeepLink.js";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ClerkProvider, useUser } from "@clerk/clerk-react";
@@ -15,6 +16,9 @@ import { purgeHandoffStores, sweepHandoffPurges } from "./utils/invoiceHandoffSt
 // function -> public.client_errors). Installed before anything renders so a
 // crash inside Clerk or App init is still captured.
 captureLaunchInvitation();
+// An email link (#support/<ticket id>, #backups, #requests) is kept for this
+// tab before Clerk can rewrite the hash on the way through sign-in.
+captureAppDeepLink();
 installErrorReporting();
 // Sign out and Delete All My Data remove the invoice hand-off notes with the
 // account's other keys (utils/invoiceHandoffStore.js). Its IndexedDB half,

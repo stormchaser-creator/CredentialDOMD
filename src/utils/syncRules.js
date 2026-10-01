@@ -7,8 +7,11 @@
 // saved on the device, queued, and retried on every load for ever, while the
 // physician was told nothing and the record never reached another device.
 //
-// Pure, with no imports: plain node tests and the persistence harness read it
-// directly, and the forms can share the same lists.
+// Pure: plain node tests and the persistence harness read it directly, and
+// the forms can share the same lists. Its one import (setupStateShape.js) has
+// no imports of its own.
+
+import { normalizeSetupState } from "./setupStateShape.js";
 
 /**
  * Columns that are NOT NULL with no default in production, and the value a
@@ -153,3 +156,70 @@ export function describeWriteError(code) {
 
 /** How many times replay retries a permanently refused write per app version. */
 export const PERMANENT_RETRY_LIMIT = 3;
+
+/*
+ * The Setup board's state (settings.setupState) is one jsonb column, written
+ * whole. A save of it kept on this device for a membership answer (or the
+ * network) was laid over, and later sent over, whatever the account holds
+ * by then: a skip, a declaration or a snooze made on another device in the
+ * meantime was overwritten everywhere by an older copy. A kept save now
+ * carries the setupState it was made from (its base), and is applied as what
+ * it changed: each top-level field it changed, and each task or declaration
+ * it changed (added, changed or cleared), over the account's current copy.
+ * Everything else stays as the account has it.
+ */
+const SETUP_STATE_MAPS = new Set(["tasks", "declared"]);
+const plainObject = value => value !== null && typeof value === "object" && !Array.isArray(value);
+const sameJson = (left, right) => left === right || JSON.stringify(left) === JSON.stringify(right);
+
+/**
+ * `held` laid over `current` as what it changed from `base`. All three are
+ * setupState objects as stored (or null/undefined for none). Pure.
+ *
+ * The base is the copy as stored, which can predate a field (cvImportedAt,
+ * proCounted, progress t1/t2, v), while the board builds the held copy from
+ * the normalized shape, which has every field (null when unset). Both are
+ * read as that shape before they are compared, so a field only the shape
+ * added is not a change: compared raw, its null went over the value another
+ * device had saved since (a CV import's cvImportedAt, wiped everywhere).
+ */
+export function rebaseSetupState(current, base, held) {
+  const now = plainObject(current) ? current : {};
+  const kept = plainObject(held) ? normalizeSetupState(held) : {};
+  const was = plainObject(base) || plainObject(held) ? normalizeSetupState(base) : {};
+  const out = { ...now };
+  for (const key of new Set([...Object.keys(was), ...Object.keys(kept)])) {
+    if (sameJson(was[key], kept[key])) continue;
+    if (SETUP_STATE_MAPS.has(key) && (plainObject(was[key]) || plainObject(kept[key]))) {
+      const from = plainObject(was[key]) ? was[key] : {}, to = plainObject(kept[key]) ? kept[key] : {};
+      const map = { ...(plainObject(now[key]) ? now[key] : {}) };
+      for (const id of new Set([...Object.keys(from), ...Object.keys(to)])) {
+        if (sameJson(from[id], to[id])) continue;
+        if (Object.hasOwn(to, id)) map[id] = to[id];
+        else delete map[id];
+      }
+      out[key] = map;
+      continue;
+    }
+    if (Object.hasOwn(kept, key)) out[key] = kept[key];
+    else delete out[key];
+  }
+  return out;
+}
+
+/**
+ * Of a Setup board stamp (`held`, made from `base`), the part the next load
+ * cannot stamp again: the task that closed (lastTouched, lastDone). The board
+ * stamps that only when it sees a task close during the session (useSetupState),
+ * so a stamp lost before it reached the account is never made again. Returned
+ * as `base` with only those two fields changed, so laid over a newer copy
+ * (rebaseSetupState) it changes nothing else; null when the stamp did not
+ * change them. Started, the score and the Pro snapshot are left out: the next
+ * load stamps those again, and kept they would go over a newer copy. Pure.
+ */
+export function closedTaskStamp(base, held) {
+  if (!plainObject(held)) return null;
+  const was = normalizeSetupState(base), now = normalizeSetupState(held);
+  if (sameJson(was.lastTouched, now.lastTouched) && sameJson(was.lastDone, now.lastDone)) return null;
+  return { ...was, lastTouched: now.lastTouched, lastDone: now.lastDone };
+}

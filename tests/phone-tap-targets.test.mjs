@@ -104,8 +104,9 @@ test('ADMIN-001..004, 008: the Admin root carries the phone tap-target class, an
     assert.ok(floor(selector, 'min-height'), `${selector} has a 32 px min-height on a phone`);
   }
   for (const selector of ['.cdomd-admin button', '.cdomd-admin [role="button"]']) assert.ok(floor(selector, 'min-width'), `${selector} is 32 px wide at least`);
-  // AppContext's isDesktop is innerWidth >= 1024: the desk keeps its layout.
-  assert.match(await read('src/context/AppContext.jsx'), /window\.innerWidth >= 1024/);
+  // AppContext's isDesktop is a settled innerWidth >= 1024: the desk keeps its layout.
+  assert.match(await read('src/context/AppContext.jsx'), /watchDeskBreakpoint\(window,/);
+  assert.match(await read('src/utils/deskBreakpoint.js'), /export const DESK_MIN_WIDTH = 1024;/);
 });
 
 test('ADMIN-001, 003, 004: no Admin screen draws a bare browser button, and none caps a control under 32 px inline', async () => {

@@ -63,11 +63,12 @@ export const PROXY_CODES = {
   budget: "budget",
   rateLimited: "ai_rate_limited",
   accounting: "ai_accounting_unavailable",
+  accessUnavailable: "access_policy_unavailable",
 };
 
 /** True for a refusal that will clear on its own. Never a reason to disable shared AI. */
 export function isTransientProxyCode(code) {
-  return code === PROXY_CODES.accounting || code === PROXY_CODES.rateLimited;
+  return code === PROXY_CODES.accounting || code === PROXY_CODES.rateLimited || code === PROXY_CODES.accessUnavailable;
 }
 
 export const AI_MESSAGES = {
@@ -87,6 +88,8 @@ export const AI_MESSAGES = {
   // looking for a setting that is already correct.
   ai_accounting_unavailable: "AI could not be started just now, so nothing was sent. Try again in a moment.",
   ai_rate_limited: "That was a lot of requests at once. Wait a moment and try again.",
+  // The proxy's membership check could not answer before a paid call.
+  access_policy_unavailable: "Your membership could not be checked just now, so nothing was sent. Try again in a moment.",
 };
 
 const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
@@ -202,6 +205,12 @@ let statusFetchedThisLoad = false;
 let statusInflight = null;
 let statusRetryTimer = null;
 let statusRetries = 0;
+// Set while a transient refusal's retry is pending. Render-time gates
+// (aiAvailable, anthropicAvailable) re-fetch whenever this load is unchecked,
+// and a refused load stays unchecked, so without this every render during an
+// outage would ask the proxy again. They wait for the retry instead; a forced
+// fetch (Settings) still goes through.
+let statusBackingOff = false;
 
 /**
  * GET ai-proxy → { shared, used_today, limit, unlimited, anthropic_shared,
@@ -215,6 +224,7 @@ let statusRetries = 0;
 export async function fetchSharedAiStatus({ force = false } = {}) {
   if (statusInflight) return statusInflight;
   if (statusFetchedThisLoad && !force) return sharedAiStatus;
+  if (statusBackingOff && !force) return sharedAiStatus;
   statusInflight = (async () => {
     if (!PROXY_URL) {
       setSharedAiStatus({ shared: false, anthropicShared: false, reason: "not_configured", checkedAt: Date.now() });
@@ -237,8 +247,27 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
       scheduleStatusRetry(15000);
       return sharedAiStatus;
     }
+    // A refusal that clears on its own (the proxy's membership check or its
+    // accounting could not answer) is not an answer. Read the code before
+    // marking this load as checked: the status GET is the call that seeds
+    // every render-time gate, so marking it checked on a transient refusal
+    // left shared AI off until a reload, and the retry timer below (which
+    // only fires while the load is unchecked) did nothing. The proxy sends
+    // these at 429 (access_policy_unavailable since 2026-10-01); a 503 with
+    // the same code is survived the same way. Keep the last-known fields.
+    let failBody;
+    if (!res.ok) {
+      try { failBody = await res.json(); } catch { failBody = null; }
+      if (isTransientProxyCode(proxyCodeOf(failBody))) {
+        setSharedAiStatus({ checkedAt: Date.now() });
+        const wait = retryAfterSeconds(res, failBody);
+        statusBackingOff = scheduleStatusRetry(wait ? wait * 1000 : 15000);
+        return sharedAiStatus;
+      }
+    }
     statusFetchedThisLoad = true;
     statusRetries = 0;
+    statusBackingOff = false;
     if (res.ok) {
       let body = null;
       try { body = await res.json(); } catch { body = null; }
@@ -271,15 +300,9 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
       // key (persistent, and "not configured" is the right thing to show), or
       // the proxy's own accounting could not answer (transient, and switching
       // shared AI off for it strands the physician on a condition that has
-      // already passed). Only the first disables.
-      let code = null;
-      try { code = proxyCodeOf(await res.json()); } catch { code = null; }
-      if (isTransientProxyCode(code)) {
-        setSharedAiStatus({ checkedAt: Date.now() });
-        scheduleStatusRetry(15000);
-      } else {
-        setSharedAiStatus({ shared: false, anthropicShared: false, reason: "not_configured", checkedAt: Date.now() });
-      }
+      // already passed). The transient codes were handled above, before this
+      // load was marked checked; what reaches here disables.
+      setSharedAiStatus({ shared: false, anthropicShared: false, reason: "not_configured", checkedAt: Date.now() });
     } else {
       // Unknown server trouble (404 = function not deployed yet): keep whatever
       // we last knew rather than flipping features off on a hiccup.
@@ -292,14 +315,18 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
 
 // Waiting for Clerk to produce a session is a no-network check, so polling
 // is cheap; still back off so a signed-out tab is not busy for nothing.
+// Returns true when a retry is pending after the call.
 function scheduleStatusRetry(delay = 2500) {
-  if (statusRetryTimer || typeof window === "undefined") return;
+  if (statusRetryTimer) return true;
+  if (typeof window === "undefined") return false;
   const wait = Math.min(delay * Math.max(1, statusRetries), 15000);
   statusRetries += 1;
   statusRetryTimer = setTimeout(() => {
     statusRetryTimer = null;
+    statusBackingOff = false;
     if (!statusFetchedThisLoad) fetchSharedAiStatus();
   }, wait);
+  return true;
 }
 
 // ai-proxy lets an account use the shared keys once profiles.access_status is
@@ -333,6 +360,7 @@ export function noteMembershipStatus(accessStatus) {
 export function resetSharedAiStatus() {
   statusFetchedThisLoad = false;
   statusRetries = 0;
+  statusBackingOff = false;
   membershipActive = null;
   setSharedAiStatus({
     shared: false, used: 0, reason: null, anthropicShared: false, anthropicUsed: 0, unlimited: false,

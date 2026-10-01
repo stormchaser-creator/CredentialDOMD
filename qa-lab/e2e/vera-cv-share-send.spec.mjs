@@ -212,7 +212,7 @@ test('send a license: share sheet, Mail, Text, Copy and history; email with atta
     await p2.getByRole('button', { name: 'Select to send' }).click();
     for (const n of pickNames) await p2.getByText(n, { exact: true }).last().click();
     await p2.getByRole('button', { name: /^Send 3 documents as one packet$/ }).click();
-    const notYet = await p2.getByText(/3 file\(s\) haven't downloaded to this device yet/).waitFor({ timeout: 10000 }).then(() => true, () => false);
+    const notYet = await p2.getByText(/are still downloading to this device\. Send again in a moment\./).waitFor({ timeout: 10000 }).then(() => true, () => false);
     await shot(p2, 'vera-cv-share send clean browser not downloaded');
     qa.check('on a clean browser it says the files have not downloaded yet', notYet, (await p2.locator('body').innerText()).match(/[^\n]*(downloaded|packet)[^\n]*/g)?.join(' / '));
     qa.check('and nothing was shared', ((await deviceLog(p2)).shared || []).length === 0);

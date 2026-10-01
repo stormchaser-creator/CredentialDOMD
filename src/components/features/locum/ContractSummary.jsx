@@ -5,6 +5,7 @@ import { formatDate } from "../../../utils/helpers";
 import { docMime } from "../../../utils/inboxDocs";
 import { callDayStartHour, hourLabel, DEFAULT_CALL_DAY_START_HOUR } from "../../../utils/billing";
 import { coveragePeriodText } from "../../../utils/coverageBlocks";
+import { paidOf, balanceOf } from "../../../utils/invoiceArgs";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -33,12 +34,11 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = 
     const invoices = (data.invoices || [])
       .filter(i => i.contractId === cid)
       .sort((a, b) => String(b.periodStart || "").localeCompare(String(a.periodStart || "")));
-    const paidOf = (inv) => {
-      const led = (inv.payments || []).reduce((t, p) => t + (parseFloat(p.amount) || 0), 0);
-      return led > 0 ? led : (inv.paidAt ? (parseFloat(inv.totalAmount) || 0) : 0);
-    };
+    // The Invoices tab's own rules (utils/invoiceArgs.js): a written-off
+    // invoice owes nothing, so it never counts as outstanding here.
     const billed = invoices.reduce((t, i) => t + (parseFloat(i.totalAmount) || 0), 0);
     const collected = invoices.reduce((t, i) => t + paidOf(i), 0);
+    const owed = invoices.reduce((t, i) => t + balanceOf(i), 0);
 
     const work = (data.workLog || []).filter(w => w.contractId === cid);
     const workDays = new Set(work.map(w => w.callDay || w.date).filter(Boolean));
@@ -59,7 +59,7 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = 
       .filter(c => encIds.has(c.customFields?.["From RVU entry"]) || facilityMatches(c.facility, contract.facility))
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 
-    return { invoices, paidOf, billed, collected, workDays, minutes, duty, dutyEarned, encounters, encRvu, totalRvu, cases };
+    return { invoices, billed, collected, owed, workDays, minutes, duty, dutyEarned, encounters, encRvu, totalRvu, cases };
   }, [contract, data.invoices, data.workLog, data.dutyDays, data.encounters, data.caseLogs]);
 
   if (!contract || !s) return null;
@@ -74,7 +74,7 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = 
     <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, margin: "16px 0 6px" }}>{text}</div>
   );
   const hrs = s.minutes / 60;
-  const outstanding = s.billed - s.collected;
+  const outstanding = s.owed;
   const periods = contract.coveragePeriods?.length
     ? contract.coveragePeriods.map(p => coveragePeriodText(p, formatDate)).join(", ")
     : (contract.startDate ? `${formatDate(contract.startDate)}${contract.endDate ? " – " + formatDate(contract.endDate) : ""}` : "");
@@ -164,10 +164,11 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = 
         <>
           {heading(`Invoices (${s.invoices.length})`)}
           {s.invoices.map(inv => {
-            const paid = s.paidOf(inv);
-            const total = parseFloat(inv.totalAmount) || 0;
-            const status = paid >= total - 0.005 ? { t: "PAID", c: "#22c55e" }
-              : paid > 0.005 ? { t: `PARTIAL: ${money(total - paid)} due`, c: "#f97316" }
+            const paid = paidOf(inv);
+            const due = balanceOf(inv);
+            const status = inv.writeOffAt ? { t: "WRITTEN OFF", c: T.textMuted }
+              : due <= 0.005 ? { t: "PAID", c: "#22c55e" }
+              : paid > 0.005 ? { t: `PARTIAL: ${money(due)} due`, c: "#f97316" }
               : { t: "UNPAID", c: "#ef4444" };
             return (
               <div key={inv.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>

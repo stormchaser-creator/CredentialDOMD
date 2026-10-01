@@ -90,6 +90,28 @@ export function saveIdentityLockCode(code, uid = activeUid) {
   return true;
 }
 
+/**
+ * Switch this device's saved-password code without losing Protected Identity.
+ * A device that took its lock code from Protected Identity (an 8+ character
+ * code saved there first) holds that code only as `lockCode`; overwriting it
+ * would leave the SSN and date of birth on this device under a code nothing
+ * remembers. The identity code is kept beside the new one.
+ *
+ * An 8+ character `lockCode` set only for passwords is not kept: the member
+ * was just told it is the wrong code, and a new SSN would be saved under it.
+ * `identityHeld` says whether Protected Identity on this device holds an
+ * encrypted value (or might, while the device's copy is still unread). A
+ * separate `identityLockCode` is always kept.
+ */
+export function switchLockCode(code, { identityHeld = true, uid = activeUid } = {}) {
+  if (!uid || !code) return;
+  const cur = readSlot(uid);
+  const ownIdentityCode = typeof cur.identityLockCode === "string" && cur.identityLockCode.length >= IDENTITY_LOCK_MIN;
+  const keepId = ownIdentityCode || identityHeld ? getIdentityLockCode(uid) : null;
+  saveLockCode(code, uid);
+  if (keepId && keepId !== code) saveIdentityLockCode(keepId, uid);
+}
+
 const te = new TextEncoder(), td = new TextDecoder();
 const b64 = (u8) => btoa(String.fromCharCode(...u8));
 const unb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -139,4 +161,25 @@ export async function decryptSecret(value, code = getLockCode(), uid = activeUid
     }
     throw new Error("wrong-lock-code");
   }
+}
+
+/**
+ * The saved passwords a lock code is checked against: all of them up to
+ * SECRET_SAMPLE_MAX, otherwise that many spread evenly from the first to the
+ * last. Records are kept oldest first, so the first few alone can be a run of
+ * strays an older build saved under a wrong code, and stand for the whole
+ * list when they are not.
+ */
+export const SECRET_SAMPLE_MAX = 15;
+export function spreadSample(values, max = SECRET_SAMPLE_MAX) {
+  if (values.length <= max) return values.slice();
+  const out = [];
+  for (let i = 0; i < max; i++) out.push(values[Math.round((i * (values.length - 1)) / (max - 1))]);
+  return out;
+}
+
+/** How many of `values` (saved passwords) `code` opens. */
+export async function countOpens(code, values, uid = activeUid) {
+  const opened = await Promise.all(values.map(v => decryptSecret(v, code, uid).then(() => 1, () => 0)));
+  return opened.reduce((a, b) => a + b, 0);
 }

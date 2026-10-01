@@ -260,7 +260,8 @@ test('with production\'s client, a Clerk session lost while the answer is on its
   assert.equal(f.value.checking, false);
   assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true);
   assert.equal(f.reports.length, 1);
-  assert.match(f.reports[0][0], /^Membership check failed \(response:/);
+  // A session gone while the answer was read is reported as such (session:200).
+  assert.match(f.reports[0][0], /^Membership check failed \(session:200:/);
   assert.doesNotMatch(JSON.stringify(f.reports), /access_answer_not_accepted|synthetic-token|user_/);
 });
 

@@ -104,6 +104,14 @@ eq("a line with no colon does not throw", parseVCard("BEGIN:VCARD\nGARBAGE\nFN:A
     parseContactText(APPLE), parseVCard(APPLE));
   eq("and a card always wins over the loose read",
     parseContactText(APPLE).institution, "Memorial Hospital");
+
+  // A signature that labels its lines is still a signature, not a card.
+  eq("a labeled Email: line keeps the name, place and phone",
+    parseContactText("Jane Sample, MD\nExample Memorial Hospital\nEmail: jsample@example.org\nPhone: (555) 010-4567"),
+    { name: "Jane Sample, MD", email: "jsample@example.org", phone: "(555) 010-4567", institution: "Example Memorial Hospital" });
+  eq("a labeled Tel: line keeps the email too",
+    parseContactText("Jane Sample, MD\nExample Memorial Hospital\njsample@example.org\nTel: (555) 010-4567"),
+    { name: "Jane Sample, MD", email: "jsample@example.org", phone: "(555) 010-4567", institution: "Example Memorial Hospital" });
 }
 
 console.log(`${pass} passed, ${fail} failed`);

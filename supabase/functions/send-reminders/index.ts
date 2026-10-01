@@ -13,22 +13,26 @@
  * confirmation or whose date is not known yet (_shared/reminderRows.mjs),
  * and sends ONE plain-text digest through Resend. It re-sends
  * no more often than notify_freq_days (blank is 7, clamped to 1..60), counted
- * in whole UTC days, unless the set of items changed (fingerprint), and sends
- * nothing while the member's banner snooze (snoozed_until) is in the future
+ * in whole UTC days, unless the set of items changed (fingerprint). While the
+ * member's banner snooze (snoozed_until) is in the future it sends only an
+ * item neither the last email nor the snoozed banner told them about
  * (_shared/reminderCadence.mjs). Its own state is
  * profiles.reminder_email_fingerprint and reminder_emailed_at, stamped with
- * updated_at after each send, plus a notification_log row. It never reads or
- * writes alerts_fingerprint or last_notified: those are the in-app banner's.
+ * updated_at after each send, plus a notification_log row; a run that sends
+ * nothing only narrows the fingerprint's told items to those it still lists. It never writes
+ * alerts_fingerprint or last_notified: those are the in-app banner's, and
+ * alerts_fingerprint is only read, as the list the member snoozed over.
  *
  * Body (optional): { profile_id?: uuid, dry_run?: boolean }
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "./renewalLinks.json" with { type: "json" };
 import { remindable, reminderLabel, withCurrentCategoryNames } from "../_shared/reminderRows.mjs";
 import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
-import { reminderEmailDecision, reminderFingerprint } from "../_shared/reminderCadence.mjs";
+import { reminderEmailDecision, reminderFingerprint, reminderToldStill } from "../_shared/reminderCadence.mjs";
+import { readAllPages, groupsOf, readReminderGroup } from "../_shared/reminderReads.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") || "";
@@ -67,7 +71,9 @@ function firstName(name: string | null, email: string) {
   return raw && /^[a-z'-]+$/i.test(raw) ? raw[0].toUpperCase() + raw.slice(1).toLowerCase() : email.split("@")[0];
 }
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503, not the
+// runtime's bare 500 (see answerAuthUnavailable). Hook and admin callers only: no CORS.
+serve(answerAuthUnavailable({}, async (req) => {
   if (req.method !== "POST") return json(405, { error: "POST only" });
   const secretOk = HOOK && req.headers.get("x-hook-secret") === HOOK;
   let adminOk = false;
@@ -83,76 +89,97 @@ serve(async (req) => {
 
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-  const { data: profiles, error: pe } = await reminderRecipientsQuery(db, body.profile_id);
+  // Every recipient, page by page: one read stops at PostgREST's max_rows
+  // (1,000 on hosted Supabase), and the members past it were never reminded.
+  const { data: profiles, error: pe } = await readAllPages(() => reminderRecipientsQuery(db, body.profile_id).order("id"));
   if (pe) return json(500, { error: pe.message });
 
   const today = new Date().toISOString().slice(0, 10);
   const results: any[] = [];
+  const lo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const hiFor = (p: any) => new Date(Date.now() + reminderLeadDays(p.reminder_lead_days) * 86400000).toISOString().slice(0, 10);
 
-  for (const p of profiles || []) {
-    const lead = reminderLeadDays(p.reminder_lead_days);
-    const freq = notifyFreqDays(p.notify_freq_days);
-    const lo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-    const hi = new Date(Date.now() + lead * 86400000).toISOString().slice(0, 10);
+  // Each table is read once per group of members (_shared/reminderReads.mjs),
+  // not once per member: nine reads a member ran past the edge runtime's CPU
+  // limit at about 1,400 members, and the members after that got nothing.
+  for (const group of groupsOf(profiles || [])) {
+    const hiMax = group.map(hiFor).sort().at(-1)!;
+    const read = await readReminderGroup(db, group.map((p: any) => p.id), { tables: TABLES, today, lo, hi: hiMax });
 
-    const { data: acks } = await db.from("alert_acks").select("item_id, until").eq("user_id", p.id).gte("until", today);
-    const acked = new Set((acks || []).map((a: any) => a.item_id));
+    for (const p of group) {
+      const lead = reminderLeadDays(p.reminder_lead_days);
+      const freq = notifyFreqDays(p.notify_freq_days);
+      const hi = hiFor(p);
 
-    const items: { id: string; table: string; label: string; name: string; exp: string; days: number }[] = [];
-    for (const t of TABLES) {
-      // Column sets differ per table (no `state` on insurance etc.), so read
-      // every column and pick what exists; a select error must not skip a table.
-      const { data, error } = await db.from(t.table)
-        .select("*")
-        .eq("user_id", p.id)
-        .gte("expiration_date", lo)
-        .lte("expiration_date", hi);
-      if (error) { console.error("query failed", t.table, error.message); continue; }
-      let rows = (data || []) as any[];
-      // A record keeps the category name it was saved under; the app shows
-      // the category's name today, so the email reads it too. If this read
-      // fails, the saved names stand.
-      if (t.table === "custom_records" && rows.length) {
-        const { data: cats, error: catError } = await db.from("custom_categories").select("id, name").eq("user_id", p.id);
-        if (catError) console.error("query failed", "custom_categories", catError.message);
-        rows = withCurrentCategoryNames(rows, cats || []);
+      const acked = read.acked.get(p.id) || new Set();
+
+      const items: { id: string; table: string; label: string; name: string; exp: string; days: number }[] = [];
+      // A failed table read leaves that table's items out of this run's list;
+      // they are not gone, so a run that holds must not forget them as told.
+      let readFailed = false;
+      for (const t of TABLES) {
+        // Column sets differ per table (no `state` on insurance etc.), so read
+        // every column and pick what exists; a select error must not skip a table.
+        if (read.failed.has(t.table)) { readFailed = true; continue; }
+        // The group's read covers the widest lead time in the group; this
+        // member's own window ends at their lead time.
+        let rows = (read.rows.get(t.table)?.get(p.id) || []).filter((r: any) => r.expiration_date >= lo && r.expiration_date <= hi) as any[];
+        // A record keeps the category name it was saved under; the app shows
+        // the category's name today, so the email reads it too. If this read
+        // fails, the saved names stand.
+        if (t.table === "custom_records" && rows.length) {
+          rows = withCurrentCategoryNames(rows, read.categories.get(p.id) || []);
+        }
+        for (const r of rows) {
+          if (!r.expiration_date || acked.has(r.id)) continue;
+          // Historical, superseded, pending-confirmation and date-unknown
+          // records never trigger a reminder (ticket 2c819309).
+          if (!remindable(r, { table: t.table, today })) continue;
+          items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date, today), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
+        }
       }
-      for (const r of rows) {
-        if (!r.expiration_date || acked.has(r.id)) continue;
-        // Historical, superseded, pending-confirmation and date-unknown
-        // records never trigger a reminder (ticket 2c819309).
-        if (!remindable(r, { table: t.table, today })) continue;
-        items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date, today), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
-      }
-    }
-    if (!items.length) { results.push({ profile: p.id, sent: false, reason: "nothing due" }); continue; }
+      const fp = await reminderFingerprint(items);
+      // A run that sends nothing forgets the told items it no longer lists, so
+      // one that returns under the same snooze (an acknowledgement lapsed) is
+      // new to it. Only reminder_email_fingerprint, and without updated_at:
+      // the hash and the send stamp stay, and the app never reads the column.
+      // Not after a failed table read: the next full read would find that
+      // table's told items fresh and mail the same list again under a snooze.
+      const forget = async () => {
+        const told = dryRun || readFailed ? null : reminderToldStill(p.reminder_email_fingerprint, fp);
+        if (!told) return;
+        const { error } = await db.from("profiles").update({ reminder_email_fingerprint: told }).eq("id", p.id);
+        if (error) console.error("reminder told update failed", p.id, error.message);
+      };
+      if (!items.length) { await forget(); results.push({ profile: p.id, sent: false, reason: "nothing due" }); continue; }
 
-    const fp = await reminderFingerprint(items);
-    const decision = reminderEmailDecision(p, { fingerprint: fp, freqDays: freq });
-    if (!decision.send) { results.push({ profile: p.id, sent: false, reason: decision.reason }); continue; }
+      const decision = reminderEmailDecision(p, { fingerprint: fp, freqDays: freq });
+      if (!decision.send) { await forget(); results.push({ profile: p.id, sent: false, reason: decision.reason }); continue; }
 
-    items.sort((a, b) => a.days - b.days);
-    const expired = items.filter(i => i.days < 0);
-    const soon = items.filter(i => i.days >= 0 && i.days <= 30);
-    const later = items.filter(i => i.days > 30);
-    // A warning without the door to fix it is homework, not help: every
-    // license line names where to renew it.
-    const renewLine = (i: typeof items[0]) => {
-      if (i.isDea) return "\n      Renew: https://www.deadiversion.usdoj.gov/online_forms_apps.html";
-      if (!i.isLicense || !i.state) return "";
-      const r = (renewalLinks as Record<string, { portal?: string; board?: string; due?: string; guide?: string }>)[i.state];
-      if (!r?.portal) return "";
-      return `\n      Renew: ${r.portal}${r.guide ? `\n      Steps and fees: ${r.guide}` : ""}`;
-    };
-    const line = (i: typeof items[0]) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})${renewLine(i)}`;
-    const parts: string[] = [];
-    if (expired.length) parts.push(`EXPIRED\n${expired.map(line).join("\n")}`);
-    if (soon.length) parts.push(`Due within 30 days\n${soon.map(line).join("\n")}`);
-    if (later.length) parts.push(`Coming up (within ${lead} days)\n${later.map(line).join("\n")}`);
-    const headline = expired.length
-      ? `${expired.length} expired, ${soon.length + later.length} coming up`
-      : soon.length ? `${soon.length} due within 30 days` : `${later.length} coming up`;
-    const text = `${firstName(p.name, p.email)},
+      items.sort((a, b) => a.days - b.days);
+      const expired = items.filter(i => i.days < 0);
+      const soon = items.filter(i => i.days >= 0 && i.days <= 30);
+      const later = items.filter(i => i.days > 30);
+      // A warning without the door to fix it is homework, not help: every
+      // license line names where to renew it.
+      const renewLine = (i: typeof items[0]) => {
+        if (i.isDea) return "\n      Renew: https://www.deadiversion.usdoj.gov/online_forms_apps.html";
+        if (!i.isLicense || !i.state) return "";
+        const r = (renewalLinks as Record<string, { portal?: string; board?: string; due?: string; guide?: string }>)[i.state];
+        if (!r?.portal) return "";
+        return `\n      Renew: ${r.portal}${r.guide ? `\n      Steps and fees: ${r.guide}` : ""}`;
+      };
+      const line = (i: typeof items[0]) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})${renewLine(i)}`;
+      const parts: string[] = [];
+      if (expired.length) parts.push(`EXPIRED\n${expired.map(line).join("\n")}`);
+      if (soon.length) parts.push(`Due within 30 days\n${soon.map(line).join("\n")}`);
+      if (later.length) parts.push(`Coming up (within ${lead} days)\n${later.map(line).join("\n")}`);
+      const headline = expired.length
+        ? `${expired.length} expired, ${soon.length + later.length} coming up`
+        : soon.length ? `${soon.length} due within 30 days` : `${later.length} coming up`;
+      // A template literal keeps its indentation: the body lines stay at
+      // column 0 so the plain-text email is not indented.
+      const text = `${firstName(p.name, p.email)},
 
 Your credential check for ${fmt(today)}: ${headline}.
 
@@ -164,32 +191,33 @@ You get this because email reminders are on in Settings. Change the lead time or
 
 CredentialDOMD`;
 
-    if (dryRun) { results.push({ profile: p.id, sent: false, dry_run: true, count: items.length, headline, text }); continue; }
+      if (dryRun) { results.push({ profile: p.id, sent: false, dry_run: true, count: items.length, headline, text }); continue; }
 
-    // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
-    const r = await fetch(`${(Deno.env.get("RESEND_API_BASE") || "https://api.resend.com").replace(/\/+$/, "")}/emails`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: "CredentialDOMD <whit@credentialdomd.com>",
-        to: [p.email],
-        reply_to: "stormchaser@elryx.com",
-        subject: `Credential check: ${headline}`,
-        text,
-      }),
-    });
-    const rj = await r.json().catch(() => ({}));
-    if (!r.ok) { console.error("resend failed", p.id, r.status, rj); results.push({ profile: p.id, sent: false, error: rj }); continue; }
-    const now = new Date().toISOString();
-    // The server's own columns only; updated_at because this is a server-side
-    // edit of the row (the app's banner state is left alone).
-    const { error: stampError } = await db.from("profiles")
-      .update({ reminder_email_fingerprint: fp, reminder_emailed_at: now, updated_at: now })
-      .eq("id", p.id);
-    if (stampError) console.error("reminder stamp failed", p.id, stampError.message);
-    await db.from("notification_log").insert({ user_id: p.id, method: "email", alert_count: items.length, date: now });
-    results.push({ profile: p.id, sent: true, reason: decision.reason, count: items.length, headline, resend_id: rj.id || null, ...(stampError ? { stamp_error: stampError.message } : {}) });
+      // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
+      const r = await fetch(`${(Deno.env.get("RESEND_API_BASE") || "https://api.resend.com").replace(/\/+$/, "")}/emails`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: "CredentialDOMD <whit@credentialdomd.com>",
+          to: [p.email],
+          reply_to: "stormchaser@elryx.com",
+          subject: `Credential check: ${headline}`,
+          text,
+        }),
+      });
+      const rj = await r.json().catch(() => ({}));
+      if (!r.ok) { console.error("resend failed", p.id, r.status, rj); results.push({ profile: p.id, sent: false, error: rj }); continue; }
+      const now = new Date().toISOString();
+      // The server's own columns only; updated_at because this is a server-side
+      // edit of the row (the app's banner state is left alone).
+      const { error: stampError } = await db.from("profiles")
+        .update({ reminder_email_fingerprint: fp, reminder_emailed_at: now, updated_at: now })
+        .eq("id", p.id);
+      if (stampError) console.error("reminder stamp failed", p.id, stampError.message);
+      await db.from("notification_log").insert({ user_id: p.id, method: "email", alert_count: items.length, date: now });
+      results.push({ profile: p.id, sent: true, reason: decision.reason, count: items.length, headline, resend_id: rj.id || null, ...(stampError ? { stamp_error: stampError.message } : {}) });
+    }
   }
 
   return json(200, { ok: true, profiles: (profiles || []).length, results });
-});
+}));

@@ -25,7 +25,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { accessWriteDecision } from "../_shared/accessWrite.mjs";
 
 const CORS = {
@@ -66,7 +66,9 @@ function feedUrlFrom(input: unknown): URL | null {
   return clean;
 }
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503 with these
+// CORS headers, not the runtime's bare 500 (see answerAuthUnavailable).
+serve(answerAuthUnavailable(CORS, async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json(405, { error: "method" });
 
@@ -110,4 +112,4 @@ serve(async (req) => {
   if (text.length > MAX_BYTES) return json(502, { error: "too_large" });
   if (!/BEGIN:VCALENDAR/i.test(text)) return json(502, { error: "not_ics" });
   return json(200, { ics: text });
-});
+}));

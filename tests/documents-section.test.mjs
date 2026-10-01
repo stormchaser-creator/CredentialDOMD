@@ -386,3 +386,73 @@ test('Delete this file asks, then removes the stored file and its card', async (
   assert.deepEqual(rec.of('deleteItem').map(c => c.slice(1)), [['documents', 'doc-1']]);
   assert.ok(!ui.nodes().some(x => typeof x.type === 'function' && x.type.name === 'ScanReviewCard'), 'the card is gone');
 });
+
+// -- INTAKE-003: "Keep as plain document" on an emailed file that was not filed --
+// The inbox group holds an unlinked document by its inbox type, so a file the
+// member chose to keep plain used to stay under "From your inbox, not filed
+// yet" for good. It now leaves for Stored Documents, unlinked, and the keep is
+// still recorded as a correction (it arrived by email).
+async function keepEmailed(type) {
+  const rec = recorder();
+  const emailed = { id: 'doc-e', name: 'approval.pdf', type, mimeType: 'application/pdf', size: 2048, uploadedAt: '2026-09-01T10:00:00Z', data: 'data:application/pdf;base64,JVBERi0=', linkedTo: '', origin: 'email' };
+  const app = {
+    data: baseData({ documents: [emailed] }), theme: {}, userIdRef: { current: 'user_synthetic' },
+    addItem: rec.fn('addItem', true), deleteItem: rec.fn('deleteItem'), setData: rec.fn('setData'), updateSettings: rec.fn('updateSettings'), navigate: rec.fn('navigate'),
+    editItem: (key, item) => { rec.calls.push(['editItem', key, item]); app.data = { ...app.data, [key]: app.data[key].map(x => x.id === item.id ? item : x) }; return true; },
+  };
+  const scanner = { analyzePDF: async () => ({ documentType: 'license', confidence: 'high', extracted: { type: 'State Medical License', state: 'CO' } }), analyzeDocument: async () => ({}), analyzeDocText: async () => ({}), CV_DOC_TYPE: 'cv', OTHER_DOC_TYPE: 'other' };
+  const corrections = await import('../src/utils/intakeCorrections.js');
+  const ui = await mountComponent('src/components/features/DocumentsSection.jsx', {
+    app,
+    modules: {
+      inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, helpers, spreadsheetGuard: guard, phiGuard, customCategories,
+      aiClient: { useAiAvailable: () => true, describeAiStatus: () => 'AI is off.' },
+      storageQuota: { checkStorageQuota: () => ({ ok: true }) },
+      officeText: { isOfficeFile: () => false, UPLOAD_ACCEPT: '*', extractOfficeText: async () => '', mimeFromName: officeText.mimeFromName },
+      docPrefill: { isReadableDoc: () => true, contractFromScan: e => ({ entry: e }) },
+      documentScanner: scanner,
+      intakeCorrections: { ...corrections, recordCorrection: (_db, _user, row) => { rec.calls.push(['correction', row]); } },
+    },
+  });
+  assert.match(ui.pageText(), /From your inbox, not filed yet \(1\)/);
+  await ui.nodes().find(x => x.type === 'button' && ui.text(x) === 'File with AI').props.onClick();
+  ui.render();
+  const card = ui.nodes().find(x => typeof x.type === 'function' && x.type.name === 'ScanReviewCard');
+  assert.ok(card, 'File with AI opened the review card');
+  card.props.onDiscard();
+  ui.render();
+  return { ui, rec };
+}
+
+test('INTAKE-003: Keep as plain document moves an emailed docs@ file to Stored Documents, unlinked', async () => {
+  const { ui, rec } = await keepEmailed('email-inbox');
+  const edits = rec.calls.filter(c => c[0] === 'editItem');
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0][1], 'documents');
+  assert.equal(edits[0][2].type, 'application/pdf', 'its inbox type is replaced by its MIME type');
+  assert.equal(edits[0][2].linkedTo, '', 'and it stays unlinked');
+  assert.doesNotMatch(ui.pageText(), /From your inbox, not filed yet/);
+  assert.ok(!ui.nodes().some(x => typeof x.type === 'function' && x.type.name === 'ScanReviewCard'), 'the card is gone');
+  const kept = rec.calls.filter(c => c[0] === 'correction').map(c => c[1]);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].action, 'keep_as_document');
+  assert.equal(kept[0].before.section, 'inbox', 'the correction says where it was');
+});
+
+test('INTAKE-003: a CME certificate kept plain leaves the inbox group too', async () => {
+  const { ui, rec } = await keepEmailed('cme-certificate-inbox');
+  assert.equal(rec.calls.filter(c => c[0] === 'editItem').at(-1)[2].type, 'application/pdf');
+  assert.doesNotMatch(ui.pageText(), /From your inbox, not filed yet/);
+});
+
+test('INTAKE-003: Keep as plain document on an app upload writes nothing', async () => {
+  const rec = recorder();
+  const scanner = { analyzePDF: async () => ({ documentType: 'license', confidence: 'high', extracted: {} }), analyzeDocument: async () => ({}), analyzeDocText: async () => ({}), CV_DOC_TYPE: 'cv', OTHER_DOC_TYPE: 'other' };
+  let n = 0;
+  const ui = await smartScan(rec, { modules: { documentScanner: scanner, helpers: { ...helpers, generateId: () => `doc-${++n}` } } });
+  await ui.pick(ui.fileInputs().find(x => x.props.multiple), [new File(['%PDF-1.4 synthetic'], 'plain.pdf', { type: 'application/pdf' })]);
+  ui.nodes().find(x => typeof x.type === 'function' && x.type.name === 'ScanReviewCard').props.onDiscard();
+  ui.render();
+  assert.equal(rec.of('editItem').length, 0);
+  assert.ok(!ui.nodes().some(x => typeof x.type === 'function' && x.type.name === 'ScanReviewCard'), 'the card is gone');
+});

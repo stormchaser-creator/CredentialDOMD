@@ -14,8 +14,11 @@ import { isAlertable, isDateUnknown, lifecycleNote } from "../../utils/lifecycle
  * and its buttons wrap two by two, so at the default size on a 1280px laptop
  * a provisional or pending license still says so. The full record is one
  * click away in the row's detail view.
+ *
+ * `lead` is the member's reminder lead time, so Expires reads amber on the
+ * same window the Home tiles count as expiring.
  */
-export function licenseDeskColumns(T) {
+export function licenseDeskColumns(T, lead = 90) {
   return [
     { key: "type", label: "Type", minWidth: 100, wrap: true },
     { key: "state", label: "State", width: 64, priority: 4, outranksActions: true },
@@ -27,7 +30,7 @@ export function licenseDeskColumns(T) {
       // A historical, superseded, pending or undated record keeps its date
       // in grey: it raises no alert (src/utils/lifecycle.js).
       if (!i.expirationDate || !isAlertable(i)) return T.textDim;
-      const c = getStatusColor(i.expirationDate);
+      const c = getStatusColor(i.expirationDate, lead);
       return c === "red" ? T.danger : (c === "orange" || c === "amber") ? T.warning : T.success;
     } },
     { key: "lifecycleStatus", label: "Status", width: 104, priority: 3, outranksActions: true, wrap: true, value: i => lifecycleNote(i) || "Active", render: i => lifecycleNote(i) || "Active", color: i => (lifecycleNote(i) ? T.textMuted : T.text) },

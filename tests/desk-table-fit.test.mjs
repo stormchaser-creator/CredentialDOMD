@@ -35,10 +35,10 @@ const crud = await readFile(new URL('../src/components/features/CrudSection.jsx'
 const FONT_ZOOM = Function(`return (${/const FONT_ZOOM = (\{[^}]+\});/.exec(app)[1]})`)();
 const SIDE_NAV = Number(/\.cmd-content-area \{[^}]*margin-left: (\d+)px/.exec(css)[1]);
 const [, INNER_MAX, INNER_PAD] = /\.cmd-content-inner \{[^}]*max-width: (\d+)px;[^}]*padding: \d+px (\d+)px/.exec(css).map(Number);
-const [, RAIL_GAP, RAIL] = /gap: (\d+), alignItems: "flex-start" \}\}>\s*<nav style=\{\{ \.\.\.deskRailStyle\((\d+)\)/.exec(app).map(Number);
+const [, RAIL_GAP, RAIL] = /gap: (\d+), alignItems: "flex-start" \} : undefined\}>\s*\{isDesktop \? <nav style=\{\{ \.\.\.deskRailStyle\((\d+)\)/.exec(app).map(Number);
 const ACTIONS = Number(/actionsWidth=\{favoritable \? (\d+) : \d+\}/.exec(crud)[1]);
 const COMPACT = Number(/compactActionsWidth=\{(\d+)\}/.exec(crud)[1]);
-assert.match(app, /deskColumns=\{licenseDeskColumns\(T\)\}/, 'the Licenses page uses these columns');
+assert.match(app, /deskColumns=\{licenseDeskColumns\(T, reminderLeadDays\(data\.settings\.reminderLeadDays\)\)\}/, 'the Licenses page uses these columns, graded on the member\'s lead time');
 
 /** The Licenses table's own CSS pixels on a `screen`-wide desk at a text size (inside the zoom, less its 2px border). */
 function tableWidth(screen, size) {

@@ -95,7 +95,7 @@ const built = await build({
       b.onLoad({ filter: /.*/, namespace: "review" }, (a) => ({
         loader: "js",
         contents: a.path === "serve" ? "export const serve=fn=>{globalThis.__handler=fn;};"
-                                     : "export const clerkProfile=async()=>globalThis.__identity;",
+                                     : "export const clerkProfile=async()=>globalThis.__identity;export class ClerkAuthUnavailable extends Error {}",
       }));
     },
   }],

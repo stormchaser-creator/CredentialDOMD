@@ -81,8 +81,13 @@ export function createMemberViewHandler(deps, policy = MEMBER_VIEW_POLICY) {
   }
 
   async function administrator(req) {
-    let identity = null;
-    try { identity = await deps.authenticate(req); } catch { identity = null; }
+    // A throw is not a signed-out caller: clerkProfile throws only when Clerk's
+    // key set or the profiles read did not answer (ClerkAuthUnavailable), and
+    // nothing was decided about the token. It reaches the outer catch as 503
+    // support_view_unavailable, which the viewer tolerates for
+    // MEMBER_VIEW_MAX_FAILED_CHECKS polls. A 401 here closed an open view on
+    // the first hiccup. Only a null (no or bad token) is 401.
+    const identity = await deps.authenticate(req);
     if (!identity || !UUID.test(identity.profileId || '') || !SUBJECT.test(identity.clerkSubject || '')) fail(401, 'unauthorized');
     // The database checks membership again; this only saves it the trip.
     if (identity.isAdmin !== true) fail(403, 'admin_required');

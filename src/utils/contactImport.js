@@ -151,7 +151,12 @@ export function parseLooseContact(text) {
   return { name, email, phone, institution };
 }
 
-/** A contact out of whatever was pasted: a card if it is one, a guess if not. */
+/**
+ * A contact out of whatever was pasted: a card if it is one, a guess if not.
+ * Only text with a BEGIN:VCARD line is a card. A signature's "Email: x@y" or
+ * "Tel: ..." line reads as a vCard property, so the card parser returned that
+ * one field and dropped the name, place and other number.
+ */
 export function parseContactText(text) {
-  return parseVCard(text) || parseLooseContact(text);
+  return (/BEGIN:VCARD/i.test(String(text || "")) && parseVCard(text)) || parseLooseContact(text);
 }

@@ -24,6 +24,10 @@
  *          too many calls in the burst window; Retry-After rides with it
  *     429  { error: "ai_accounting_unavailable", provider, retry_after }
  *          the admission ledger could not answer, so nothing was sent
+ *     429  { error: "access_policy_unavailable", retry_after }   (both POST routes)
+ *          the membership check could not answer, so nothing was sent; on
+ *          every route (GET too) when the caller's identity could not be
+ *          checked (Clerk's key set or the profiles read did not answer)
  *     503  { error: "shared_key_not_configured" }
  *     else Gemini's own status + JSON body, verbatim
  *     The monthly dollar budget never blocks Gemini: it is cheap, and it is
@@ -87,7 +91,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { ClerkAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { accessWriteDecision } from "../_shared/accessWrite.mjs";
 import { utf8ByteLength, requestByteLength, readTextBounded, aiAdmissionVerdict, AI_CODES, anthropicWorstCaseFromTokens, unpricedOption, unboundedSource, countedInputTokens, countPayload, uncountableOption } from "./limits.ts";
 // Re-exported because scripts/send-throttle.test.mjs and
@@ -527,7 +531,16 @@ serve(async (req) => {
     return json(405, { error: "Method not allowed" });
   }
 
-  const user = await clerkProfile(req);
+  // An identity that could not be checked (Clerk's key set or the profiles read
+  // did not answer) is transient: 429 with a Retry-After, as the membership
+  // check that cannot answer goes out below. A 401 here is what the app reads
+  // as signed out, and it then keeps shared AI off on the device.
+  let user: Awaited<ReturnType<typeof clerkProfile>>;
+  try { user = await clerkProfile(req); }
+  catch (err) {
+    if (!(err instanceof ClerkAuthUnavailable)) throw err;
+    return json(429, { error: AI_CODES.accessUnavailable, retry_after: 5 }, isAnthropic ? anthropicCors(req) : corsHeaders, { "Retry-After": "5" });
+  }
   if (!user) return json(401, { error: "Not signed in" }, isAnthropic ? anthropicCors(req) : corsHeaders);
   const db = user.db;
 
@@ -535,6 +548,13 @@ serve(async (req) => {
   // this generic proxy has no trusted RVU-only operation route.
   if (req.method === "POST") {
     const access = await accessWriteDecision(db, user.profileId, user.clerkSubject, "credential");
+    // A membership check that could not answer (accessWriteDecision's 503) is
+    // transient, so it goes out as 429 with a Retry-After, as the accounting
+    // refusal does: a 503 from this proxy is what an installed bundle reads as
+    // "no shared key", and it then keeps shared AI off on that device.
+    if (!access.allowed && access.status === 503) {
+      return json(429, { error: AI_CODES.accessUnavailable, retry_after: 5 }, isAnthropic ? anthropicCors(req) : corsHeaders, { "Retry-After": "5" });
+    }
     if (!access.allowed) return json(access.status, { error: access.error }, isAnthropic ? anthropicCors(req) : corsHeaders);
   }
 

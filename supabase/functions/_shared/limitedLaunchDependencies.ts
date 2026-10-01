@@ -123,6 +123,10 @@ export function limitedLaunchDependencies() {
         }
         return data;
       },
+      // The request for one subscription, whatever its state: only whether there is one to tell about a cancellation (20261001041500).
+      refundBySubscription: (subscription: string, live: boolean) => checked(db().from('limited_refund_requests').select('id,state,subscription_canceled_at,invoice_id,charge_id').eq('subscription_id', subscription).eq('livemode', live).maybeSingle()),
+      // Stripe says the request's subscription is cancelled (limited_refund_subscription_canceled, 20261001041500).
+      refundCanceled: (subscription: string, live: boolean, paidInvoice: string | null, token: string | null, chargeReview: string | null) => checked(db().rpc('limited_refund_subscription_canceled', { p_subscription_id: subscription, p_livemode: live, p_paid_invoice_id: paidInvoice, p_token: token, p_charge_review: chargeReview })),
       // The refund sweep's list: charges of requests idle long enough (20260930072000).
       stalledRefunds: (live: boolean, idleSeconds: number, limit: number) => checked(db().rpc('limited_refund_stalled', { p_livemode: live, p_idle_seconds: idleSeconds, p_limit: limit })),
       claimRefund: (id: string, subject: string, live: boolean, payment: unknown) => checked(db().rpc('limited_refund_claim', { p_profile_id: id, p_clerk_subject: subject, p_livemode: live, p_payment: payment })),

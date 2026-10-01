@@ -13,7 +13,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 
 const SECRET_NAME = "gemini_shared_key";
 // Google issues more than one key shape: the classic "AIza..." and the
@@ -58,7 +58,9 @@ async function probeKey(key: string): Promise<{ ok: boolean; reason?: string }> 
   }
 }
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503 with these
+// CORS headers, not the runtime's bare 500 (see answerAuthUnavailable).
+serve(answerAuthUnavailable(corsHeaders, async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (!["GET", "POST", "DELETE"].includes(req.method)) return json(405, { error: "Method not allowed" });
 
@@ -99,4 +101,4 @@ serve(async (req) => {
   if (error) return json(500, { error: error.message });
 
   return json(200, { ok: true, configured: true, last4: value.slice(-4) });
-});
+}));

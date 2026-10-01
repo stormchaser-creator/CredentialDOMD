@@ -25,6 +25,7 @@ import { allDeductions, deductionsCsv } from "../../../utils/deductions";
 // A real uuid: every synced table keys rows by one, and the old
 // "ded-<ms>-<random>" id was refused (22P02) on every save and replay.
 import { generateId } from "../../../utils/helpers";
+import { localDay } from "../../../utils/helpers";
 import StatementImport from "./StatementImport";
 
 
@@ -57,19 +58,19 @@ const CATEGORIES = [
   "Other deductible expense",
 ];
 
-const BLANK_FORM = {
-  date: new Date().toISOString().slice(0, 10),
-  category: CATEGORIES[0],
-  description: "",
-  amount: "",
-  taxYear: new Date().getFullYear().toString(),
+// Built each time the form opens: today is the device's local day (the UTC
+// day was tomorrow every evening in the Americas), and a form opened after
+// midnight reads the new day, not the day the app was loaded.
+const blankForm = () => {
+  const date = localDay();
+  return { date, category: CATEGORIES[0], description: "", amount: "", taxYear: date.slice(0, 4), taxYearTyped: false };
 };
 
 export default function DeductionMemo() {
   const { data, addItem, deleteItem, theme: T, isDesktop } = useApp();
   const [showImport, setShowImport] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(BLANK_FORM);
+  const [form, setForm] = useState(blankForm);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
 
   // Auto-derived deductibles plus the stored lines, each keeping the source
@@ -97,7 +98,10 @@ export default function DeductionMemo() {
     // addItem = local + cloud; setData was local-only and entries never synced.
     // Refused (membership being re-checked): addItem has said why; the form
     // stays open with the line typed in it, to add again.
-    if (addItem("deductibles", { id: generateId(), ...form, description: form.description.trim(), amount: Math.round(amt * 100) / 100, taxYear, source: "manual" }) === false) {
+    // taxYearTyped is the form's own note (did the member type the year);
+    // it is not part of the row.
+    const { taxYearTyped: _typed, ...fields } = form;
+    if (addItem("deductibles", { id: generateId(), ...fields, description: form.description.trim(), amount: Math.round(amt * 100) / 100, taxYear, source: "manual" }) === false) {
       setFormMsg("Not saved yet. Your entry is still here.");
       return;
     }
@@ -105,7 +109,7 @@ export default function DeductionMemo() {
     setSavedMsg(`Added ${form.description.trim()}, $${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${taxYear}).`);
     setTimeout(() => setSavedMsg(""), 6000);
     if (taxYear !== yearFilter) setYearFilter(taxYear);
-    setForm(BLANK_FORM);
+    setForm(blankForm());
     setShowForm(false);
   };
 
@@ -204,7 +208,7 @@ export default function DeductionMemo() {
       {/* Action buttons */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => { if (!showForm) setForm(blankForm()); setShowForm(true); }}
           style={{
             flex: 1, padding: "10px", borderRadius: 10, border: "none",
             backgroundColor: T.accent, color: "#fff",
@@ -247,7 +251,7 @@ export default function DeductionMemo() {
           form={form}
           setForm={setForm}
           onSave={save}
-          onCancel={() => { setForm(BLANK_FORM); setShowForm(false); setFormMsg(""); }}
+          onCancel={() => { setForm(blankForm()); setShowForm(false); setFormMsg(""); }}
           msg={formMsg}
           T={T}
         />
@@ -330,7 +334,21 @@ export default function DeductionMemo() {
 }
 
 function DeductionForm({ form, setForm, onSave, onCancel, msg, T }) {
-  const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  // The tax year follows the date (a December receipt entered in January
+  // belongs to last year) until the member types a different year. Whether
+  // the member typed it is kept on the form, not read off the current date:
+  // a date input reports "" on the way to a new value (Backspace in a date
+  // segment, a clear button, the picker's Reset), and comparing against ""
+  // left the year stuck on the old one.
+  const update = (k) => (e) => {
+    const v = e.target.value;
+    if (k === "taxYear") {
+      setForm({ ...form, taxYear: v, taxYearTyped: v !== "" && v !== String(form.date || "").slice(0, 4) });
+      return;
+    }
+    const follows = k === "date" && /^\d{4}-/.test(v) && (!form.taxYear || !form.taxYearTyped);
+    setForm({ ...form, [k]: v, ...(follows ? { taxYear: v.slice(0, 4), taxYearTyped: false } : {}) });
+  };
   const inputStyle = {
     width: "100%", padding: "8px 10px",
     backgroundColor: T.input, border: `1px solid ${T.inputBorder || T.border}`,

@@ -61,7 +61,10 @@ export function validateSourceResponse(value, sourceId, now = Date.now()) {
 export async function loadVeraSources(history, snapshot, options = {}) {
   const sourceIds = sourceIdsForQuestion(history, snapshot);
   const enabled = options.enabled ?? VERA_SOURCE_RETRIEVAL_ENABLED;
-  if (!sourceIds.length || !enabled) return { mode: 'saved_references', sources: [], attempted: false };
+  // sourceIds: the official pages this question is about, kept so the receipt
+  // can offer them (not retrieved) when retrieval is off, and show nothing at
+  // all under a reply no source is about.
+  if (!sourceIds.length || !enabled) return { mode: 'saved_references', sources: [], attempted: false, sourceIds };
   const request = options.request || (async (sourceId, { signal, checkDeadline }) => {
     const session = globalThis.window?.Clerk?.session;
     const sessionId = session?.id;
@@ -129,6 +132,16 @@ export function validatedSourceCitations(citations, context, reply) {
 }
 
 export function sourceCheckReceipt(context, citations = [], reply = '') {
+  // No check was made: a receipt only when the question was about an official
+  // source, listing those pages as not retrieved. "Saved references; no live
+  // source check." used to sit under every reply, an export or a summary too.
+  if (!context?.attempted) {
+    const ids = (context?.sourceIds || []).filter(id => VERA_SOURCES[id]);
+    if (!ids.length) return null;
+    return { mode: 'saved_references', attempted: false,
+      sources: ids.map(id => ({ sourceId: id, title: VERA_SOURCES[id].title, url: VERA_SOURCES[id].url, status: 'not_retrieved', fetchedAt: null })),
+      citations: [] };
+  }
   return { mode: context.mode, attempted: context.attempted, sources: context.sources.map(({ sourceId, title, url, status, fetchedAt, delivery }) => ({ sourceId, title, url, status, fetchedAt, delivery })),
     citations: validatedSourceCitations(citations, context, reply) };
 }

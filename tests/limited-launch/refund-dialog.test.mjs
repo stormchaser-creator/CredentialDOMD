@@ -55,7 +55,7 @@ const exported = { exports: {} };
 new Function('require', 'module', 'exports', built.outputFiles[0].text)(name => name === 'react' ? new Proxy({}, { get: (_, n) => active.hooks[n] }) : require(name), exported, exported.exports);
 const { Refund } = exported.exports;
 
-function fixture({ paid = true, accessStatus = 'active' } = {}) {
+function fixture({ paid = true, accessStatus = 'active', carry } = {}) {
   active = runtime();
   const calls = [];
   const context = { user: { id: owner }, theme: THEME, isDesktop: false, navigate: (...args) => calls.push(['navigate', ...args]),
@@ -66,7 +66,7 @@ function fixture({ paid = true, accessStatus = 'active' } = {}) {
     refund: async input => { calls.push(['refund', input]); return refunded(); },
   } };
   globalThis.__refund = state;
-  state.render = () => { active.begin(); return Refund({ paid }); };
+  state.render = () => { active.begin(); return Refund({ paid, carry }); };
   state.html = () => { const tree = state.render(); return tree ? renderToStaticMarkup(tree) : ''; };
   return state;
 }
@@ -154,6 +154,33 @@ test('an unfinished refund says so and offers to finish it; a finished one reads
   assert.match(html, /The refund is on its way to the card you paid with\./);
 });
 
+test('the section the cancellation brings in starts from what the pressed one showed, before its own status read (QA BILL-005)', async () => {
+  // The membership card renders the section with `paid` while the membership
+  // is active and without it once the cancellation's membership answer lands:
+  // a new section. It used to start empty, so the card offered a purchase and
+  // said nothing about the refund until (or unless) its status read answered.
+  const carry = { current: null };
+  const f = fixture({ carry });
+  f.client.refund = async input => { f.calls.push(['refund', input]); throw Object.assign(Error('x'), { code: 'refund_pending', httpStatus: 503, phase: 'http' }); };
+  f.client.refundStatus = async () => { f.calls.push(['status']); return quote({ state: 'resume', subscriptionCanceled: true, supportTicket: true, periodEnd: undefined }); };
+  await button(f, 'Cancel and get a refund').props.onClick();
+  tick(f);
+  await button(f, 'Cancel membership and refund').props.onClick();
+  assert.match(f.html(), /We opened a support ticket for you, which you can read in Get help/);
+  const next = fixture({ paid: false, carry });
+  next.client.refundStatus = () => { next.calls.push(['status']); return new Promise(() => {}); };
+  next.render(); active.flush(); await settle();
+  assert.deepEqual(next.calls, [['status']], 'it still asks the record');
+  const html = next.html();
+  assert.match(html, /Your refund is not finished yet\. Your membership is cancelled\. We opened a support ticket for you/);
+  assert.match(html, /Your refund did not finish\. Nothing was refunded twice\./, 'the press\'s own alert stays');
+  assert.ok(button(next, REFUND_COPY.finish), 'Finish refund is offered');
+  const done = fixture({ paid: false, carry: { current: null } });
+  done.client.refundStatus = () => new Promise(() => {});
+  done.render(); active.flush(); await settle();
+  assert.equal(done.html(), '', 'a page with nothing carried shows nothing until the record answers');
+});
+
 test('a member whose membership ended sees a refund on record, and nothing when there is none', async () => {
   const none = fixture({ paid: false });
   assert.equal(none.html(), '');
@@ -191,9 +218,9 @@ test('the copy: no em or en dashes, and the terms beside the button are the offe
   }
   assert.ok(WELCOME_MONEY_BACK.startsWith(MEMBERSHIP_COPY.refundTerms), 'the unchanged guarantee');
   const card = fs.readFileSync(new URL('../../src/components/pages/LimitedLaunchMembership.jsx', import.meta.url), 'utf8');
-  assert.match(card, /<RefundSection paid \/>/, 'on the paid membership card in Profile & settings');
+  assert.match(card, /<RefundSection paid carry={refundCarry} \/>/, 'on the paid membership card in Profile & settings');
   const cancel = fs.readFileSync(new URL('../../src/components/pages/CancellationPage.jsx', import.meta.url), 'utf8');
-  assert.match(cancel, /<RefundSection paid \/>/, 'on More > Cancel Subscription');
+  assert.match(cancel, /<RefundSection paid carry={refundCarry} \/>/, 'on More > Cancel Subscription');
   assert.match(cancel, /onClick=\{manage\}>Manage paid subscription/, 'cancel at period end stays');
 });
 
@@ -228,7 +255,8 @@ test('an unfinished request whose cancellation did not happen never says the mem
   await button(f, 'Cancel membership and refund').props.onClick();
   let html = f.html();
   assert.doesNotMatch(html, /Your membership is cancelled/);
-  assert.match(html, /Your refund request did not finish, and nothing has been refunded yet\. We keep trying to finish it for you, which cancels your membership and returns your payment\. You can also press Finish refund to do it now\./);
+  assert.match(html, /Your refund request did not finish\. We keep trying to finish it for you, which cancels your membership and completes your refund\. You can also press Finish refund to do it now\./);
+  assert.doesNotMatch(html, /nothing has been refunded/i, 'the row may not hold a refund support made in the dashboard yet');
   f.client.refundQuote = async () => { f.calls.push(['quote']); return quote({ state: 'resume', subscriptionCanceled: false }); };
   await button(f, REFUND_COPY.finish).props.onClick();
   html = f.html();
@@ -350,4 +378,38 @@ test('client: reviewOnly is a boolean when present', async () => {
   assert.equal((await client.refundStatus()).reviewOnly, true);
   answer = refunded({ state: 'needs_support', refundedAt: null, reviewOnly: 'yes' });
   await assert.rejects(client.refundStatus(), /Membership information could not load/);
+});
+
+// Support refunded the payment in the Stripe dashboard before the
+// cancellation (20261001041500): limited_refund_confirm keeps that refund on
+// the unfinished request until the webhook, the sweep or a press records the
+// cancellation. Profile says the refund was issued, never that nothing was
+// refunded or that it will refund.
+test('an unfinished request whose payment was refunded already says the refund was issued, cancelled or not', async () => {
+  for (const refundStatus of ['pending', 'succeeded', 'requires_action']) {
+    const open = fixture({ paid: false });
+    open.client.refundStatus = async () => quote({ state: 'resume', subscriptionCanceled: false, periodEnd: undefined, refundStatus });
+    open.render(); active.flush(); await settle();
+    let html = open.html();
+    assert.ok(html.includes(REFUND_COPY.issuedNotCancelled), refundStatus);
+    assert.doesNotMatch(html, /nothing has been refunded|Your membership is cancelled/i, refundStatus);
+    // The dialog Finish refund opens: what was refunded, and that finishing ends the membership.
+    open.client.refundQuote = async () => quote({ state: 'resume', subscriptionCanceled: false, refundStatus });
+    await button(open, REFUND_COPY.finish).props.onClick();
+    html = open.html();
+    assert.match(html, /A refund of \$149\.00, your annual membership payment made on September \d{1,2}, 2026[^,]*, was issued to the card you paid with\./, refundStatus);
+    assert.doesNotMatch(html, /We will refund|turn off renewal instead/, 'no refund promised again, no keep offer for a refunded year');
+    assert.match(html, /Your membership ends now\./);
+  }
+  const cancelled = fixture({ paid: false });
+  cancelled.client.refundStatus = async () => quote({ state: 'resume', subscriptionCanceled: true, periodEnd: undefined, refundStatus: 'succeeded', supportTicket: true });
+  cancelled.render(); active.flush(); await settle();
+  assert.ok(cancelled.html().includes(REFUND_COPY.issuedCancelled));
+  assert.doesNotMatch(cancelled.html(), /we keep trying to return your payment|not finished yet/i);
+  // A refund that failed is not one that was issued: the usual line.
+  const failed = fixture({ paid: false });
+  failed.client.refundStatus = async () => quote({ state: 'resume', subscriptionCanceled: false, periodEnd: undefined, refundStatus: 'failed' });
+  failed.render(); active.flush(); await settle();
+  assert.ok(failed.html().includes(REFUND_COPY.notStarted));
+  for (const text of [REFUND_COPY.notStarted, REFUND_COPY.issuedNotCancelled, REFUND_COPY.issuedCancelled]) assert.doesNotMatch(text, /[—–-]/, 'no dashes or hyphens');
 });

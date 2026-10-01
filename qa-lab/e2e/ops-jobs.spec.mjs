@@ -454,7 +454,7 @@ test('deployed functions: each has a caller or is retired, and the uncalled ones
     const counts = () => ({ events: countWhere('user_events'), feedback: countWhere('feedback'), subs: countWhere('subscriptions'), beta: countWhere('beta_access') });
     const before = counts();
     const probes = [
-      ['submit-feedback', 'POST', { message: 'QA lab probe', rating: 5 }, [401]],
+      ['submit-feedback', 'POST', { message: 'QA lab probe', rating: 5 }, [401, 410]],
       ['track-event', 'POST', { event_type: 'user_qa_probe' }, [401]],
       ['create-checkout-session', 'POST', { offerId: 'core' }, [401, 403, 400, 409, 503]],
       ['customer-portal', 'POST', {}, [401, 403, 400, 409, 503]],

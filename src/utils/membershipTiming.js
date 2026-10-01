@@ -63,7 +63,8 @@ export function scheduledMembershipCopy(scheduled) {
     return "Renewal cancellation is scheduled. Your first annual payment may still be due; check its status and cancellation details in the billing portal.";
   }
   if (scheduled.status === "canceling") {
-    return `Your scheduled membership will cancel on ${membershipDate(scheduled.startsAt)}, before its first annual charge. Check cancellation details in the billing portal.`;
+    // A cancellation date before the first charge (cancelsAt) is the day it ends.
+    return `Your scheduled membership will cancel on ${membershipDate(scheduled.cancelsAt || scheduled.startsAt)}, before its first annual charge. Check cancellation details in the billing portal.`;
   }
   if (scheduled.status === "payment_pending") {
     return `Your scheduled paid start was ${membershipDate(scheduled.startsAt)}. Payment confirmation is pending. Paid access starts only after payment is confirmed; your saved records remain available to view and export.`;

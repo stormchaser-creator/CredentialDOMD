@@ -181,6 +181,9 @@ export default {
     });
     // Status passthrough only. PostgREST maps the RPC's SQLSTATE for us:
     // PT400 -> 400 (bad email), 23505 -> 409 (already listed), PT429 -> 429.
+    // waitlist_signup also answers through response.status: 403 when an
+    // address has asked for three guides in 24 hours, 208 when that state's
+    // guide was already sent to it in 24 hours (the waitlist answer is kept).
     return new Response(null, { status: r.status, headers: CORS });
   },
 };

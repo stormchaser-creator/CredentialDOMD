@@ -69,6 +69,9 @@ function MembershipForAccount({ accountId, onActivated }) {
   const request = useRef(0);
   const offerHeading = useRef(null);
   const messageLine = useRef(null);
+  // What the refund section showed, kept across the branch change a refund
+  // press causes (RefundSection's `carry`).
+  const refundCarry = useRef(null);
   useEffect(() => () => { request.current++; }, []);
   // Each reviewed offer (Review, Resume or Refresh) can open below the fold on
   // a phone: bring it into view and move focus to its heading.
@@ -218,6 +221,13 @@ function MembershipForAccount({ accountId, onActivated }) {
     : access?.pricePhase === "founding" ? MEMBERSHIP_COPY.bundleDuringFounding : "";
   const beta = access?.freeBeta?.state === "active";
   const scheduled = access?.scheduledMembership;
+  // No answer yet this session (the first check after a load is still on its
+  // way): the card waits for it. It used to offer a purchase ("Choose whether
+  // to purchase a membership. An eligible membership offer is not available")
+  // to a paid member until the answer landed (QA BILL-012, 2026-10-01). A
+  // failed or unreadable check keeps the card as it was.
+  const answering = limitedLaunch.enabled === true && !access && limitedLaunch.status === "loading"
+    && !limitedLaunch.reconnecting && !limitedLaunch.outdated;
   // Offers are judged on the last answer even when it is stale: a tap asks
   // for a fresh one before quoting (review), as Continue does (purchase).
   const reviewable = offerId => canReviewBillingOffer(shown, offerId);
@@ -255,13 +265,13 @@ function MembershipForAccount({ accountId, onActivated }) {
           {access.purchasedOfferId === "core" && !foundingPractice && !access.capabilities.practice.write && <p>{access.practiceTrial.state === "expired" ? "Your Practice trial has ended. " : ""}Saved Practice records remain available to read and export. <a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>Contact support about adding Practice</a>. {MEMBERSHIP_COPY.practiceSupportReview}</p>}
           <button style={button} onClick={manage}>Manage paid subscription</button>
           <p style={{ marginTop: 16 }}>Or cancel now and get your money back: {MEMBERSHIP_COPY.refundTerms}</p>
-          <RefundSection paid />
+          <RefundSection paid carry={refundCarry} />
         </div>
           : renewalPaymentFailed(access) ? <div>
             <p>{MEMBERSHIP_COPY.renewalPaymentFailed}</p>
             <button style={button} onClick={manage}>Update payment method</button>
             {/* A refund requested before the renewal failed is shown and finished here too. */}
-            <RefundSection />
+            <RefundSection carry={refundCarry} />
           </div>
           : returning || settling ? <div>
             <p role="status">{BILLING_RETURN_COPY.membershipPending}</p>
@@ -269,6 +279,7 @@ function MembershipForAccount({ accountId, onActivated }) {
             {returning && limitedLaunch.billingReturn.dismissed && limitedLaunch.billingReturn.phase === "delayed" && <button style={button} onClick={limitedLaunch.billingReturn.retry}>Check again</button>}
             {!returning && <button style={button} disabled={busy} onClick={limitedLaunch.refresh}>Check again</button>}
           </div>
+          : answering ? <p role="status">Checking your membership…</p>
           : <>
             {beta && <p>Your free beta is active until {membershipDate(access.freeBeta.endsAt)}. No card is required to keep this beta, and it will not charge automatically. {betaCanReview ? "You may choose a paid membership now with no charge before your original beta ends; its paid year starts at that original end date. Review the exact date and terms below. Keep using this account; your saved records stay in place." : "Your original beta end date has not changed. A paid offer is not available right now."}</p>}
             {!beta && invitation && access?.invitationActivationEnabled === true && <div style={{ marginBottom: 18 }}>
@@ -279,7 +290,7 @@ function MembershipForAccount({ accountId, onActivated }) {
               ? "Your account opens when payment completes. Review your membership offer below and confirm it before paying."
               : "Open your personal invitation link and sign in with its verified email address. Account approval and payment eligibility are checked securely."}</p>}
             {invitation && access?.invitationActivationEnabled !== true && !limitedLaunch.publicSignupEnabled && <p>Invitation activation is not open yet. Please check again later.</p>}
-            {access?.accessStatus !== "pending" && <RefundSection />}
+            {access?.accessStatus !== "pending" && <RefundSection carry={refundCarry} />}
             {payFirst ? <div>
               <p><strong>Complete your payment to open your account.</strong> Your account opens as soon as payment completes; nothing in it is available before then. Every membership has a 100% money-back guarantee on your most recent annual payment.</p>
               {access?.pricePhase === "founding" && <p>{MEMBERSHIP_COPY.credentialPrices} Viewing an offer does not reserve a founding place.</p>}

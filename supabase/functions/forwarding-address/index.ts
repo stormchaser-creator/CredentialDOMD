@@ -98,7 +98,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { authUnavailableResponse, ClerkAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import {
   AddressRow,
   confirmLink,
@@ -560,6 +560,8 @@ serve(async (req) => {
     if (action === "remove") return await handleRemove(caller.db, caller.profileId, (body as { id?: unknown }).id);
     return json(400, { error: 'action must be "add", "resend" or "remove".', code: "invalid_action" });
   } catch (e) {
+    // Identity that could not be checked: 503 with a Retry-After, not "Something went wrong".
+    if (e instanceof ClerkAuthUnavailable) return authUnavailableResponse(corsHeaders);
     console.error("forwarding-address:", (e as Error).message);
     // The two page routes answer with a page whatever went wrong, and with the
     // same page every other failure gets.

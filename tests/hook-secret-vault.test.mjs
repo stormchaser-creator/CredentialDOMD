@@ -26,6 +26,8 @@ const run = promisify(execFile);
 const read = rel => fs.readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
 const MIGRATION = read("supabase/migrations/20260925140000_hook_secret_vault.sql");
 const ROLLBACK = read("docs/rollback/20260925140000_hook_secret_vault.rollback.sql");
+const REMINDER_TIMEOUT = read("supabase/migrations/20261001080000_daily_reminders_timeout.sql");
+const REMINDER_TIMEOUT_ROLLBACK = read("docs/rollback/20261001080000_daily_reminders_timeout.rollback.sql");
 const AUDIT = read("scripts/sql/hook-secret-audit.sql");
 
 // A header built from a quoted value: 'x-hook-secret', '...' in SQL or
@@ -373,6 +375,32 @@ test("hook secret vault migration: the audit finds every copy, then none; caller
     const r = await pg.tryRun(`set role authenticated; select public.dispatch_guide_emails()`, { user: "app_user" });
     assert.equal(r.ok, false);
     assert.match(r.err, /permission denied for function dispatch_guide_emails/);
+  });
+
+  // QA OPS-001: with pg_net's 5 s default the run's only record was a timeout.
+  await t.test("20261001080000: the daily reminder call waits 120 s for its answer; applies twice; the rollback puts the default back", async () => {
+    const reminderCall = async () => {
+      await calls();
+      await pg.sql(`select public.dispatch_daily_reminders()`);
+      const [c] = await calls();
+      return { fn: c.url.replace(URL_BASE, ""), secret: c.secret === ROTATED, body: c.body, timeout: c.timeout };
+    };
+    const body = () => pg.sql(`select prosrc from pg_proc where oid = 'public.dispatch_daily_reminders()'::regprocedure`);
+    const vaultBody = await body();
+    assert.equal((await reminderCall()).timeout, 5000, "before: pg_net's default");
+    await pg.sql(REMINDER_TIMEOUT);
+    await pg.sql(REMINDER_TIMEOUT);
+    assert.deepEqual(await reminderCall(), { fn: "send-reminders", secret: true, body: {}, timeout: 120000 });
+    const acl = await pg.sql(`select coalesce(array_to_string(proacl, ','), '') from pg_proc where oid = 'public.dispatch_daily_reminders()'::regprocedure`);
+    assert.doesNotMatch(acl, /(^|,)(=X|anon=|authenticated=)/);
+    assert.match(acl, /service_role=X/);
+    assert.deepEqual(await audit(), [], "no secret written into the body");
+    assert.doesNotMatch(REMINDER_TIMEOUT + REMINDER_TIMEOUT_ROLLBACK, /^\s*(begin|commit)\s*;/im);
+    await pg.sql(REMINDER_TIMEOUT_ROLLBACK);
+    await pg.sql(REMINDER_TIMEOUT_ROLLBACK);
+    assert.deepEqual(await reminderCall(), { fn: "send-reminders", secret: true, body: {}, timeout: 5000 });
+    assert.equal(await body(), vaultBody, "the rollback restores the hook secret vault body exactly");
+    await pg.sql(REMINDER_TIMEOUT);
   });
 
   await t.test("the guarded rollback refuses by default, restores literal bodies the audit catches, and the migration undoes it", async () => {

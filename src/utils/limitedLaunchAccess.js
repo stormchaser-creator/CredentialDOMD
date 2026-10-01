@@ -115,6 +115,10 @@ export function validateAccessSnapshot(value) {
       || typeof scheduled.cancelAtPeriodEnd !== "boolean" || typeof scheduled.firstChargeCanceled !== "boolean"
       || (scheduled.firstChargeCanceled && !scheduled.cancelAtPeriodEnd)
       || (scheduled.status === "canceling") !== scheduled.cancelAtPeriodEnd
+      // A cancellation date before the first charge (20261001081000); older
+      // servers leave it out.
+      || (scheduled.cancelsAt != null && (!scheduled.firstChargeCanceled || !date(scheduled.cancelsAt)
+        || Date.parse(scheduled.cancelsAt) >= Date.parse(scheduled.startsAt)))
       || !(scheduled.offerId === "core" ? [9900, 14900, 19900] : [24500]).includes(scheduled.annualCents)) {
       throw new Error("Scheduled membership information could not be verified.");
     }
@@ -409,8 +413,9 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
     /**
      * What a write to `scope` may do now. "allow" is exactly allows(scope,
      * "write"). A refusal carries why: "read_only" (the server's answer, a
-     * trial or beta that ran out included, says no), "outdated" (this build
-     * cannot read the answer), "no_answer" (none this session yet),
+     * trial or beta that ran out included, says no; with none this session
+     * yet, the answer this device remembered says no), "outdated" (this
+     * build cannot read the answer), "no_answer" (none this session yet),
      * "not_connected" (no check can run), "suspended" (writes were stopped
      * outright, suspendWrites without checkFailed) or "grace_expired" (no
      * active answer for WRITE_GRACE_MS). "verify": the answer is old or the last check
@@ -423,13 +428,45 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
      * failed, timed out, or answered in a form this build cannot read) stays
      * "verify", which means: keep it on this device and queue it for replay.
      */
-    writeStatus(scope, expectedAccountId = accountId, { at = null, settled = false } = {}) {
+    writeStatus(scope, expectedAccountId = accountId, { at = null, settled = false, awaitAnswer = false } = {}) {
       if (!enabled) return ALLOW;
       if (!scopes.includes(scope)) return refuse("read_only");
       const moment = at?.now ?? now();
       const value = this.state(expectedAccountId, moment);
       if (value?.capabilities?.[scope]?.write === true) return ALLOW;
-      if (!value) return refuse(outdated ? "outdated" : recheck ? "no_answer" : "not_connected");
+      if (!value) {
+        // `awaitAnswer` (settingsStatus, mutationStatus, dataChangeStatus,
+        // the record writes in lib/supabase.js): the page load's first
+        // answer is not here yet, a check that will bring it can run, and
+        // the answer this device remembered does not already deny the scope.
+        // The member app opens from the loaded profile before that answer,
+        // and the Setup board stamps the profile at once: refusing that save
+        // alerted "Reconnecting" on a load where nobody typed anything, and
+        // a record added, edited, deleted or starred in that window was
+        // refused the same way. It is kept on this device instead, as an old
+        // answer's is, and decided by the answer when it comes. It
+        // authorizes nothing: it is sent only once an answer allows it.
+        // Settled after Clerk stopped reporting the write's account (a
+        // session that ended, which unmounts the access hook without a
+        // reset, another account signed in before the reset, a resume with
+        // Clerk not back yet) while this authority still holds it: no answer
+        // refused anything. "account_changed" only stops the send; the
+        // write's identity guard decides it, and a copy kept for that
+        // account stays for its next sign-in (lib/supabase.js
+        // authorizeOwner, settleHeldRound). Before the first answer only:
+        // one taken after it keeps its own handling.
+        if (settled && snapshot === null && expectedAccountId && accountId === expectedAccountId
+          && current() !== expectedAccountId) return refuse("account_changed");
+        const ours = accountId === expectedAccountId && current() === expectedAccountId;
+        if (awaitAnswer && snapshot === null && !outdated && !halted && recheck
+          && ours && remembered?.[scope] !== false) return pending("no_answer");
+        if (outdated) return refuse("outdated");
+        // The answer this device remembered already denies the scope (a
+        // membership that ended): refused as read-only, which is what the
+        // screens already show, never as a momentary "no answer yet".
+        if (ours && remembered?.[scope] === false) return refuse("read_only");
+        return refuse(recheck ? "no_answer" : "not_connected");
+      }
       if (value.needsRefresh !== true || value.entitled?.[scope] !== true) return refuse("read_only");
       if (halted) return refuse("suspended");
       const elapsed = Math.max(moment - receivedAt, (at?.wall ?? wallClock()) - receivedWall);
@@ -444,15 +481,22 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
     statusFor(scopeList, expectedAccountId = accountId, options = {}) {
       return combineWriteStatus([...new Set(scopeList || [])].map(scope => this.writeStatus(scope, expectedAccountId, options)));
     },
-    /** allowsMutation as a writeStatus. */
+    /**
+     * allowsMutation as a writeStatus. A change made before this page load's
+     * first answer waits for it, as a settings save does (awaitAnswer).
+     */
     mutationStatus(key, record, previous, expectedAccountId = accountId, options = {}) {
       if (!enabled) return ALLOW;
-      return this.statusFor(this.mutationScopes(key, record, previous), expectedAccountId, options);
+      return this.statusFor(this.mutationScopes(key, record, previous), expectedAccountId, { ...options, awaitAnswer: true });
     },
-    /** allowsSettingsChange as a writeStatus: preferences never need a membership. */
+    /**
+     * allowsSettingsChange as a writeStatus: preferences never need a
+     * membership. A save made before this page load's first answer waits for
+     * it ("verify", reason "no_answer"; writeStatus awaitAnswer).
+     */
     settingsStatus(updates, expectedAccountId = accountId, options = {}) {
       if (!enabled) return ALLOW;
-      return this.statusFor(settingsScopes(updates), expectedAccountId, options);
+      return this.statusFor(settingsScopes(updates), expectedAccountId, { ...options, awaitAnswer: true });
     },
     /**
      * Ask the server now, for writes waiting on an answer. Every write that
@@ -630,18 +674,25 @@ export function alertWriteRefused({ authority = accessAuthority, scope = null, s
  * answer it left, as the save's own round would (holdForAccess). Allowed,
  * true. Still unconfirmed because the check failed or timed out, true: the
  * save will be kept on this device and queued. Refused (read-only, the grace
- * ran out), false. Never alerts and never rejects.
+ * ran out), false. Before the page load's first answer, the check that
+ * brings it is waited for the same way; when it brings none, false. Never
+ * alerts and never rejects.
  */
 export async function settleWriteAccess(scope, authority = accessAuthority) {
   if (!authority?.enabled) return true;
   const needed = [...new Set([scope].flat().filter(Boolean))];
   if (!needed.length) return true;
   if (typeof authority.statusFor !== "function") return needed.every(name => authority.allows(name, "write"));
-  const now = authority.statusFor(needed);
+  // Before the page load's first answer too: the save it guards would wait
+  // for that answer (awaitAnswer), so this waits for it as well. Work that
+  // leaves the app never starts on no answer at all: when the check brings
+  // none, false, as before.
+  const now = authority.statusFor(needed, undefined, { awaitAnswer: true });
   if (now.status !== "verify") return now.status === "allow";
   let at = null;
   try { at = await authority.verify(); } catch { at = null; }
-  return authority.statusFor(needed, undefined, { at, settled: true }).status !== "refuse";
+  const settled = authority.statusFor(needed, undefined, { at, settled: true, awaitAnswer: true });
+  return settled.status !== "refuse" && settled.reason !== "no_answer";
 }
 
 /**
@@ -678,7 +729,7 @@ export const SENT_WORK = Object.freeze({ keepOnRefusal: true });
  */
 export function prepareWriteCheck(scope, authority = accessAuthority) {
   if (!authority?.enabled || typeof authority.statusFor !== "function" || typeof authority.verify !== "function") return false;
-  if (authority.statusFor([scope].flat()).status !== "verify") return false;
+  if (authority.statusFor([scope].flat(), undefined, { awaitAnswer: true }).status !== "verify") return false;
   void authority.verify();
   return true;
 }
@@ -696,7 +747,7 @@ export function prepareWriteCheck(scope, authority = accessAuthority) {
 //              will sync" notice), and that is reported;
 //   refused    (the server answered read-only, or the grace ran out) it is
 //              taken back, newest first, the member told once and each
-//              refusal reported. Except with `keep`: the change records work
+//              refusal reported (one nobody typed, `quiet`, neither). Except with `keep`: the change records work
 //              already done outside the app (an invoice that went out), which
 //              taking it back would not undo, only hide (its entries would
 //              show unbilled and could be billed again). It stays on this
@@ -704,7 +755,7 @@ export function prepareWriteCheck(scope, authority = accessAuthority) {
 //              (lib/supabase.js), which the page's notice says, and the
 //              refusal is reported.
 const heldRounds = new WeakMap();
-export function holdForAccess({ scopes: needed = scopes, accountId = null, section = null, undo = null, quiet = false, keep = false } = {}, authority = accessAuthority, { alert = message => globalThis.window?.alert?.(message) } = {}) {
+export function holdForAccess({ scopes: needed = scopes, accountId = null, section = null, undo = null, quiet = false, keep = false, awaitAnswer = false } = {}, authority = accessAuthority, { alert = message => globalThis.window?.alert?.(message) } = {}) {
   let round = heldRounds.get(authority);
   if (!round) {
     round = { entries: [] };
@@ -715,7 +766,7 @@ export function holdForAccess({ scopes: needed = scopes, accountId = null, secti
     };
     round.done = authority.verify().then(settle, () => settle(null));
   }
-  round.entries.push({ needed: [...new Set(needed)], accountId, section, undo, quiet: quiet === true, keep: keep === true });
+  round.entries.push({ needed: [...new Set(needed)], accountId, section, undo, quiet: quiet === true, keep: keep === true, awaitAnswer: awaitAnswer === true });
   return round.done;
 }
 
@@ -725,9 +776,20 @@ function settleHeldRound(entries, at, authority, alert) {
     // Signed out, or another account, meanwhile: its own writes stop on the
     // identity guards, and nothing is said to whoever is here now.
     if (entry.accountId && authority.serves?.(entry.accountId) === false) continue;
-    const result = authority.statusFor(entry.needed, entry.accountId || undefined, { at, settled: true });
-    if (result.status === "allow") continue;
-    if (result.status === "verify") { reportWriteAccess("write_queued_for_access", result.reason, entry.section); continue; }
+    // A settings save decided as one (settingsStatus): still no answer at all
+    // keeps it, for the answer that comes later.
+    const result = authority.statusFor(entry.needed, entry.accountId || undefined, { at, settled: true, awaitAnswer: entry.awaitAnswer });
+    // Settled after Clerk stopped reporting the account (writeStatus
+    // "account_changed"): the same, though the authority was not reset yet.
+    // Not an answer: nothing is taken back, said or reported, and the
+    // write's queued copy stays for that account.
+    if (result.status === "allow" || result.reason === "account_changed") continue;
+    if (result.status === "verify") {
+      // A stamp nobody typed, kept because the page load's first answer has
+      // not come (no connection yet): nothing was lost and nothing to report.
+      if (!(entry.quiet && result.reason === "no_answer")) reportWriteAccess("write_queued_for_access", result.reason, entry.section);
+      continue;
+    }
     refused.push({ entry, result });
   }
   if (!refused.length) return;
@@ -735,7 +797,10 @@ function settleHeldRound(entries, at, authority, alert) {
     if (entry.keep) continue;
     try { entry.undo?.(); } catch { /* one undo never stops the others */ }
   }
-  for (const { entry, result } of refused) reportWriteAccess("write_refused", result.reason, entry.section);
+  // A change nobody typed (a "seen" stamp, the Setup board's own stamps:
+  // AppContext updateSettings `quiet`) is neither reported nor alerted, as
+  // when it is refused at once: nobody made it, so nothing was refused.
+  for (const { entry, result } of refused) if (!entry.quiet) reportWriteAccess("write_refused", result.reason, entry.section);
   // Only what someone typed and was taken back is announced: a "seen" stamp
   // is not, and a kept record of work done is told by the notice instead.
   const said = refused.filter(({ entry }) => !entry.quiet && !entry.keep);
@@ -781,14 +846,15 @@ export function allowsDataChange(previous, next, authority = accessAuthority) {
  * exactly when allowsDataChange is true.
  */
 export function dataChangeStatus(previous, next, authority = accessAuthority) {
-  const needed = new Set();
-  let section = null;
-  const touch = (key, list) => { section ??= key; for (const scope of list) needed.add(scope); };
+  const needed = new Set(), sections = new Set();
+  let section = null, changedSettings = null;
+  const touch = (key, list) => { section ??= key; sections.add(key); for (const scope of list) needed.add(scope); };
   for (const key of new Set([...Object.keys(previous || {}), ...Object.keys(next || {})])) {
     if (sameValue(previous?.[key], next?.[key])) continue;
     if (key === "settings") {
       const changed = [...new Set([...Object.keys(previous?.settings || {}), ...Object.keys(next?.settings || {})])].filter(name => !sameValue(next?.settings?.[name], previous?.settings?.[name]));
-      touch(key, settingsScopes(Object.fromEntries(changed.map(name => [name, true]))));
+      changedSettings = Object.fromEntries(changed.map(name => [name, true]));
+      touch(key, settingsScopes(changedSettings));
       continue;
     }
     if (!Array.isArray(previous?.[key]) && !Array.isArray(next?.[key])) { touch(key, ["credential"]); continue; }
@@ -799,8 +865,15 @@ export function dataChangeStatus(previous, next, authority = accessAuthority) {
       touch(key, authority.mutationScopes(key, after.get(id) || before.get(id), before.get(id)));
     }
   }
-  const result = authority.enabled ? authority.statusFor([...needed]) : ALLOW;
-  return { ...result, scopes: [...needed], section };
+  // A change to the profile settings alone is decided as a settings save
+  // (settingsStatus). Every change waits for the page load's first answer
+  // (awaitAnswer): a record added, edited, deleted or starred before it is
+  // kept on this device and decided by it, as a settings save is.
+  const onlySettings = sections.size === 1 && changedSettings !== null;
+  const result = !authority.enabled ? ALLOW
+    : onlySettings && typeof authority.settingsStatus === "function" ? authority.settingsStatus(changedSettings)
+      : authority.statusFor([...needed], undefined, { awaitAnswer: true });
+  return { ...result, scopes: [...needed], section, awaitAnswer: true };
 }
 export function assertRecordWrite(key, record, previous) {
   if (!accessAuthority.allowsMutation(key, record, previous)) throw membershipWriteError();

@@ -40,6 +40,14 @@ import { routableSenders, joinAddresses, accountMailboxVerified, CONFIRM_FIRST_S
 // the desk table alike so the two can never label the same record differently.
 const cmeTitle = (item) => item.title || item.category || "CME Activity";
 const cmeOrigin = (item) => item.source || item.customFields?.["Imported from"];
+// An entry's topics as a list, the same reading as cmeTopics in
+// utils/compliance.js: a row Vera saved with topics as one string
+// ("Pain Management") made item.topics.map throw and the screen fail.
+const topicsOf = (item) => {
+  const t = item?.topics;
+  if (Array.isArray(t)) return t.filter(x => typeof x === "string");
+  return typeof t === "string" ? t.split(/[,;]/).map(x => x.trim()).filter(Boolean) : [];
+};
 // Opening a CME entry's certificate (openSourceDoc) when its file is not on
 // this device and cannot be fetched.
 const CERTIFICATE_MISSING = "The file for this certificate is missing from your account, so it cannot be opened. Upload it again from Documents.";
@@ -109,7 +117,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
   );
 
   const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setAttachedDocs([]); setReqError(null); setShowForm(true); }, []);
-  const openEdit = useCallback((item) => { setForm({ ...item, topics: item.topics || [] }); setEditItem(item); setAttachedDocs([]); setReqError(null); setShowForm(true); }, []);
+  const openEdit = useCallback((item) => { setForm({ ...item, topics: topicsOf(item) }); setEditItem(item); setAttachedDocs([]); setReqError(null); setShowForm(true); }, []);
   // Set when a deep link opened the form (an "add one" link, or an edit link
   // from Setup): closing it owes the member the trip back (closeForm).
   const arrivedByLink = useRef(false);
@@ -316,6 +324,9 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
   const openSourceDoc = useCallback(async (doc) => {
     if (!doc) return;
     setDocBusy(doc.id);
+    // A window opened after the download is outside the tap, and Safari (the
+    // home-screen app above all) blocks it with no word. Open it in the tap.
+    let win = null;
     try {
       let blob = null;
       if (doc.data) {
@@ -330,16 +341,18 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
         // AppContext reconcileDocumentFiles, or the download's own answer)
         // is said in words; the raw error of a failed download read "{}".
         if (doc.fileMissing) { window.alert(CERTIFICATE_MISSING); return; }
+        win = window.open("about:blank", "_blank");
         const got = await downloadDocumentBlob(doc.storagePath, { detail: true });
-        if (got?.missing) { window.alert(CERTIFICATE_MISSING); return; }
-        if (!got?.blob) { window.alert(CERTIFICATE_NOT_DOWNLOADED); return; }
+        if (got?.missing) { win?.close?.(); window.alert(CERTIFICATE_MISSING); return; }
+        if (!got?.blob) { win?.close?.(); window.alert(CERTIFICATE_NOT_DOWNLOADED); return; }
         blob = got.blob;
       }
       if (!blob) { window.alert("That file has not finished syncing to this device yet. Open Files once and try again."); return; }
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      if (win) win.location.href = url; else window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     } catch (e) {
+      win?.close?.();
       const why = readableError(e);
       window.alert(why ? `Could not open that document: ${why}` : "Could not open that document. Try again.");
     } finally { setDocBusy(null); }
@@ -809,11 +822,11 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
               { key: "provider", label: "Provider", width: "14%",
                 render: c => (c.provider ? <span title={c.provider}>{c.provider}</span> : "\u2014") },
               { key: "topics", label: "Topics", width: "17%",
-                value: c => ((c.topics || []).join(", ") || null),
+                value: c => (topicsOf(c).join(", ") || null),
                 // The card's chips as a comma list so the cell ellipsizes;
                 // topics a tracked state mandates keep the accent.
                 render: c => {
-                  const list = c.topics || [];
+                  const list = topicsOf(c);
                   if (!list.length) return "\u2014";
                   return (
                     <span title={list.join(", ")}>
@@ -900,9 +913,9 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                       </>
                     );
                   })()}
-                  {item.topics?.length > 0 && (
+                  {topicsOf(item).length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
-                      {item.topics.map(t => (
+                      {topicsOf(item).map(t => (
                         <span key={t} style={{
                           padding: "2px 8px", fontSize: 11, fontWeight: 600, borderRadius: 12,
                           backgroundColor: requiredTopics.includes(t) ? T.accentGlow : T.input,

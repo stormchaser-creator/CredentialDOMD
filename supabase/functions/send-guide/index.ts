@@ -22,7 +22,7 @@
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "../send-reminders/renewalLinks.json" with { type: "json" };
 import stateGuides from "./stateGuides.json" with { type: "json" };
 
@@ -210,7 +210,9 @@ function emailText(state: string, s: Guide) {
   return L.join("\n");
 }
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503, not the
+// runtime's bare 500 (see answerAuthUnavailable). Hook and admin callers only: no CORS.
+serve(answerAuthUnavailable({}, async (req) => {
   if (req.method !== "POST") return json(405, { error: "POST only" });
   const secretOk = HOOK && req.headers.get("x-hook-secret") === HOOK;
   let adminOk = false;
@@ -318,4 +320,4 @@ serve(async (req) => {
   }
 
   return json(200, { sent, failed, skipped, results });
-});
+}));

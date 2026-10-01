@@ -238,8 +238,9 @@ Watch these; each has a fixed code and no ids.
     request never moves to the renewal after that (neither the sweep nor a press refunds a second payment, and a
     dashboard refund of the renewal does not move it either: it is logged as `refund_without_request` and the row
     keeps the older refund; reconcile both by hand). A
-    subscription cancelled by hand first is not moved: the row keeps saying "not cancelled yet" and the ticket has
-    to be answered by hand. The sweep itself moves a request to a paid renewal before it cancels
+    subscription cancelled by hand first is not moved to the renewal, but its cancellation is recorded on the row
+    (`limited_refund_subscription_canceled`, docs/DEPLOY-refund-hand-cancel.md): the row and its ticket read
+    cancelled, and a person decides the refund. The sweep itself moves a request to a paid renewal before it cancels
     (`limited_refund_follow`), so this is only a request it could not move.
   Check the subscription shows cancelled afterwards either way. For a disputed charge, answer the dispute first; the
   ticket promises the member nothing (nor does it for `refund_payment_changed`, `subscription_mismatch` or

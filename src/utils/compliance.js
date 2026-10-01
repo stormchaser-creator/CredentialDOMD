@@ -57,6 +57,17 @@ import { daysUntilDate, parseDay } from "./dateDays.js";
 const MATE_TOPICS = ["Opioid Prescribing", "Substance Use Disorders"];
 export const MATE_HOURS = 8;
 
+/**
+ * A CME entry's topics as a list. Vera could store them as one string
+ * ("Pain Management"), and `(c.topics || []).some` threw on every launch,
+ * so a row already saved that way is read as its comma-separated tags.
+ */
+export function cmeTopics(c) {
+  const t = c?.topics;
+  if (Array.isArray(t)) return t.filter(x => typeof x === "string");
+  return typeof t === "string" ? t.split(/[,;]/).map(x => x.trim()).filter(Boolean) : [];
+}
+
 const MS_PER_DAY = 86400000;
 
 // Parse a date at LOCAL midnight. A bare "YYYY-MM-DD" otherwise parses as UTC
@@ -265,7 +276,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       pool = windowed;
       period = null;
     }
-    const tagged = pool.filter(c => (c.topics || []).includes(t.topic)
+    const tagged = pool.filter(c => cmeTopics(c).includes(t.topic)
       && (!t.acceptedCategories || t.acceptedCategories.includes(c.category)));
     const informational = t.informational === true;
     const earned = informational ? null : round2(tagged.reduce((s, c) => s + hours(c), 0));
@@ -318,7 +329,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   let mate = null;
   if (opts.hasDEA) {
     const mateHrs = round2((cmeEntries || [])
-      .filter(c => (c.topics || []).some(t => MATE_TOPICS.includes(t)))
+      .filter(c => cmeTopics(c).some(t => MATE_TOPICS.includes(t)))
       .reduce((s, c) => s + hours(c), 0));
     mate = { required: MATE_HOURS, earned: mateHrs, met: mateHrs >= MATE_HOURS };
   }

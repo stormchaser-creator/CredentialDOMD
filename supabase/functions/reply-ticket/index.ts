@@ -50,7 +50,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { authUnavailableResponse, ClerkAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { admitActiveAccount } from "../_shared/admission.ts";
 import { ATTACHMENT_BUCKET, parseAttachment, replyScreenshotPath , parseAttachments, replyScreenshotPathAt } from "../_shared/ticketAttachment.ts";
 
@@ -270,6 +270,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
+    // Identity that could not be checked is not a bad request: 503, plain words.
+    if (e instanceof ClerkAuthUnavailable) return authUnavailableResponse(corsHeaders);
     return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

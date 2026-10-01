@@ -5,7 +5,7 @@ import { useInputStyle } from "../shared/useInputStyle";
 import { TAP_MIN } from "../shared/actionButton.js";
 import {
   normalizeCategory, recordsIn, unsortedRecords, liveCategories, packRecord, moveRecord, updateRecord,
-  buildCategory, fieldKey, sanitizeText, categoryKey, findCategory, ROLE_KEYS, LIMITS, FIELD_TYPES,
+  buildCategory, fieldKey, sanitizeText, categoryKey, findCategory, identifierReason, ROLE_KEYS, LIMITS, FIELD_TYPES,
 } from "../../utils/customCategories";
 
 // One of the physician's own categories: the records Vera, the uploader or the
@@ -49,6 +49,9 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
   const liveFields = (category.fields || []).filter(f => !f.removedAt);
   const fields = [
     ...ROLE_FIELDS,
+    // A number field holds whatever was read or typed (0.25, or "12 mSv" from
+    // a scan) in jsonb. CrudSection draws it as a text box with a decimal
+    // keypad and holds only integer columns to whole numbers.
     ...liveFields.map(f => ({ key: f.key, label: f.label, type: f.type === "textarea" ? "textarea" : FIELD_TYPES.includes(f.type) ? f.type : "text" })),
     { key: "notes", label: "Notes", type: "textarea" },
   ];
@@ -196,6 +199,7 @@ export function NewCategoryPanel({ onCreated }) {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("");
   const [fieldText, setFieldText] = useState("");
+  const [description, setDescription] = useState("");
   const [msg, setMsg] = useState(null);
   const clash = name.trim() ? findCategory(data.customCategories, name) : null;
   const create = () => {
@@ -207,9 +211,13 @@ export function NewCategoryPanel({ onCreated }) {
       onCreated?.(clash.id);
       return;
     }
+    // What belongs here is a sentence about a kind of document, never one
+    // person's number: held to the same identifier gate as a record's values.
+    const describeWhy = identifierReason("Description", sanitizeText(description, LIMITS.description));
+    if (describeWhy) { setMsg(`A description cannot hold ${describeWhy}. Describe the kind of document instead.`); return; }
     let category;
     try {
-      category = buildCategory({ name, icon, fields: fieldText.split(/[,\n]/).map(x => x.trim()).filter(Boolean) },
+      category = buildCategory({ name, icon, description, fields: fieldText.split(/[,\n]/).map(x => x.trim()).filter(Boolean) },
         { id: crypto.randomUUID(), origin: "user", now: new Date().toISOString() });
     } catch (e) { setMsg(e.message); return; }
     if (addItem("customCategories", category) === false) { setMsg("Could not create it. Your records may be read-only right now."); return; }
@@ -227,6 +235,8 @@ export function NewCategoryPanel({ onCreated }) {
       <div style={{ fontSize: 12, color: T.textDim, marginBottom: 12 }}>{clash ? `You already have "${clash.name}"${clash.archivedAt ? ", hidden" : ""}. This will open it${clash.archivedAt ? " and show it again" : ""}.` : "Plural and reusable, so the next one of these goes in the same place."}</div>
       <span id="new-category-icon" style={label}>Icon (optional)</span>
       <input aria-labelledby="new-category-icon" value={icon} maxLength={LIMITS.icon} onChange={e => setIcon(e.target.value)} placeholder="One emoji" style={{ ...iS, width: 120, marginBottom: 12 }} />
+      <span id="new-category-description" style={label}>Description (optional)</span>
+      <input aria-labelledby="new-category-description" value={description} maxLength={LIMITS.description} onChange={e => setDescription(e.target.value)} placeholder="What belongs here, e.g. badges each hospital issues" style={{ ...iS, marginBottom: 12 }} />
       <span id="new-category-fields" style={label}>Fields (optional)</span>
       <textarea aria-labelledby="new-category-fields" value={fieldText} onChange={e => setFieldText(e.target.value)} rows={3} placeholder="Badge number, Facility, Access level" style={{ ...iS, marginBottom: 4 }} />
       <div style={{ fontSize: 12, color: T.textDim, marginBottom: 14 }}>Separate with commas. Every record already has a name, issuer, number, issued and expiry date.</div>

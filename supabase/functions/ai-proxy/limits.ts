@@ -138,6 +138,11 @@ export const AI_CODES = {
    * status note on aiAdmissionVerdict.
    */
   accounting: "ai_accounting_unavailable",
+  /**
+   * The membership check before a paid call could not answer, so nothing was
+   * sent. Transient; answered with 429, never 503, for the same reason.
+   */
+  accessUnavailable: "access_policy_unavailable",
   /** A pricing option the shared key's rate table cannot price. Persistent for this request. */
   unpricedOption: "option_not_allowed",
   /**

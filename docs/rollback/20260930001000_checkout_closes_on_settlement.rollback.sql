@@ -9,6 +9,18 @@
 -- migration closed stay 'complete', a state the restored code already reads
 -- (the next claim starts a fresh attempt, as after any closed Checkout); a
 -- paid attempt settled after the rollback stays 'open' again, as before.
+--
+-- Stops while 20261001081000 (billing_cancel_at) is applied: its
+-- settle_limited_billing_subscription_before_cancel_at is this migration's
+-- wrapper renamed, and calls settle_limited_billing_subscription_before_rejoin,
+-- which this rollback renames away. Run
+-- docs/rollback/20261001081000_billing_cancel_at.rollback.sql first.
+
+do $$ begin
+ if to_regprocedure('public.settle_limited_billing_subscription_before_cancel_at(jsonb,uuid,jsonb)') is not null then
+  raise exception 'checkout_closes_on_settlement rollback: roll back 20261001081000_billing_cancel_at first (docs/rollback/20261001081000_billing_cancel_at.rollback.sql)';
+ end if;
+end $$;
 
 do $$ begin
  if to_regprocedure('public.settle_limited_billing_subscription_before_rejoin(jsonb,uuid,jsonb)') is not null then

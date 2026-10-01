@@ -74,7 +74,8 @@ export function recordHeading(key, record, data) {
   }
   if (memberViewSection(key)) {
     const card = recordCard(key, record, { sections: data, member: { name } });
-    const title = plainDashes(card.type && card.mainLine !== card.type ? `${card.type}, ${card.mainLine}` : card.mainLine);
+    // The title with its type once ("State Medical License, CO").
+    const title = plainDashes(card.headline);
     return { title: title || sectionLabel(key), subtitle: plainDashes(card.subLine) };
   }
   return { title: plainDashes(describeItem(record, name, key)) || sectionLabel(key), subtitle: day(record.date) };

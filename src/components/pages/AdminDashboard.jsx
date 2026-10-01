@@ -3,7 +3,7 @@ import { edgeErrorMessage } from "../../utils/edgeError";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
-import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
+import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, readArchivedTicketCount, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
 import AdminOperationsReport from "./AdminOperationsReport";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
@@ -86,6 +86,11 @@ function AdminDashboardContent() {
   // reply, so a reply whose response was lost is not saved (and emailed to
   // the physician) twice. A different body, status or file gets a new one.
   const replyRequest = useRef(null);
+  // The same for + New ticket (create-ticket's client_request_id): a retry
+  // of the same subject, body, category and files after a lost response
+  // returns the ticket already filed instead of filing a second one, which
+  // the agent would treat as approved and work twice.
+  const createRequest = useRef(null);
   // Tickets whose Resolve & archive saved its reply but failed to archive: a
   // retry with an empty box only archives, while the ticket is still resolved.
   const archivePending = useRef(new Set());
@@ -142,15 +147,20 @@ function AdminDashboardContent() {
     const body = newBody.trim();
     const problem = adminTicketDraftProblem({ subject, body, category: newCategory });
     if (problem) { setTicketMsg(problem); return; }
+    const fingerprint = JSON.stringify([subject.slice(0, 180), body, newCategory, newAttachment.map(f => [f.name || "", f.data?.length || 0, f.data?.slice(-64) || ""])]);
+    if (createRequest.current?.fingerprint !== fingerprint) createRequest.current = { fingerprint, id: globalThis.crypto?.randomUUID?.() ?? null };
+    const requestId = createRequest.current.id;
     setCreating(true); setTicketMsg("");
     try {
       const res = await supabase.functions.invoke("create-ticket", {
         body: {
           subject: subject.slice(0, 180), body, category: newCategory, priority: "normal", context_page: "admin",
           ...attachmentsPayload(newAttachment),
+          ...(requestId ? { client_request_id: requestId } : {}),
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
+      createRequest.current = null;
       // Saved, but maybe not every file: then the form stays open, emptied,
       // saying how many to add as a reply, instead of closing as if all landed.
       const shortfall = ticketAttachmentShortfall(res.data);
@@ -314,6 +324,17 @@ function AdminDashboardContent() {
     return () => { cancelled = true; };
   }, [isAdmin, reloadKey, tab, rowLimits, showArchived]);
 
+  // "Archived (n)": counted on every Tickets read (reloadKey moves on each
+  // archive, unarchive and Resolve & archive), not taken from the archive
+  // list, which loads only while it is open.
+  const [archivedCount, setArchivedCount] = useState(null);
+  useEffect(() => {
+    if (!isAdmin || !supabase || tab !== "tickets") return;
+    let cancelled = false;
+    readArchivedTicketCount(supabase).then(count => { if (!cancelled) setArchivedCount(count); });
+    return () => { cancelled = true; };
+  }, [isAdmin, reloadKey, tab, showArchived]);
+
   // Counts for the tab labels: unread physician replies, new error reports,
   // people waiting on the waitlist and field proposals to review. Read on
   // mount and whenever a tab is opened, without loading any list, so a reply
@@ -363,7 +384,6 @@ function AdminDashboardContent() {
   const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); openTab(nextTab); };
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = archivedRows.filter(t => t.archived_at);
-  const archivedCount = coverage.archivedTickets?.count;
   // A failed count read is marked "(?)", never shown as a plain label that
   // reads the same as zero (readAdminAttention). No function yet: plain.
   const counts = attention && !attention.error ? attention : null;

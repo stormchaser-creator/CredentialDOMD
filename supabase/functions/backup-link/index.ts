@@ -20,7 +20,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
 import { storageSubjects } from "../_shared/clerkContinuity.ts";
 import { BACKUP_BUCKET, LINK_TTL_SECONDS } from "../build-backup/lib.ts";
@@ -39,7 +39,9 @@ const corsHeaders = {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503 with these
+// CORS headers, not the runtime's bare 500 (see answerAuthUnavailable).
+serve(answerAuthUnavailable(corsHeaders, async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "GET" && req.method !== "POST") return json(405, { error: "GET or POST only" });
 
@@ -104,4 +106,4 @@ serve(async (req) => {
     console.error("backup-link failed:", e instanceof Error ? e.message : String(e));
     return json(500, { error: "Could not read your backups. Try again." });
   }
-});
+}));

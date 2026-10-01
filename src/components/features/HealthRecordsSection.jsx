@@ -10,7 +10,8 @@ import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, StarIcon } from "../shared/Icons";
 import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, getHealthRecordResults, TB_RESULTS } from "../../constants/credentialTypes";
-import { generateId, getStatusColor, getStatusLabel, formatDate, describeItem, deleteConfirmText } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, formatDate, describeItem, deleteConfirmText, titleAfterType } from "../../utils/helpers";
+import { reminderLeadDays } from "../../utils/reminderPreferences";
 import { docMime } from "../../utils/inboxDocs";
 import DocAttach from "./DocAttach";
 import { SECTION_FIELDS } from "../../utils/sectionFields.js";
@@ -21,13 +22,31 @@ const HEALTH_SCAN_KEYS = Object.freeze([...SECTION_FIELDS.healthRecords, "doses"
 import { attachExistingDoc } from "../../utils/docPrefill";
 import FollowUpHistory from "../shared/FollowUpHistory";
 
+// A vaccine series by hand: a scan fills `doses`, and a member with AI off, or
+// a dose the scan missed, is entered or corrected here. Saved as typed, minus
+// rows left blank; a dose number is kept as a number, as a scan writes it.
+const DOSE_TEXT_KEYS = ["date", "manufacturer", "lotNumber", "facility"];
+function cleanDoses(doses) {
+  return (Array.isArray(doses) ? doses : []).flatMap((d) => {
+    if (!d || typeof d !== "object") return [];
+    const out = { ...d };
+    for (const k of DOSE_TEXT_KEYS) {
+      const v = typeof out[k] === "string" ? out[k].trim() : out[k];
+      if (v) out[k] = v; else delete out[k];
+    }
+    const n = parseInt(String(out.doseNumber ?? "").trim(), 10);
+    if (Number.isFinite(n) && n > 0) out.doseNumber = n; else delete out.doseNumber;
+    return DOSE_TEXT_KEYS.some((k) => out[k]) ? [out] : [];
+  });
+}
+
 // Two fields side by side. A plain 1fr track cannot shrink below a date
 // input's own minimum (about 189 px in Chrome), so on a phone the second date
 // ran off the dialog's right edge; minmax(0, 1fr) splits the width.
 const PAIR = "minmax(0, 1fr) minmax(0, 1fr)";
 
 function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone }) {
-  const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T, toggleFavorite } = useApp();
+  const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T, toggleFavorite, navigate } = useApp();
   const starButton = (item) => {
     const on = item?.favorite === true;
     return (
@@ -118,6 +137,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
     setReqError(null);
     const itemId = editItem ? editItem.id : generateId();
     const entry = { ...form, id: itemId };
+    if (Array.isArray(form.doses)) entry.doses = cleanDoses(form.doses);
     // Refused (membership being re-checked): the form stays open with what
     // was typed and attached, to save again; addItem has said why.
     if ((editItem ? editItemCtx("healthRecords", entry) : addItem("healthRecords", entry)) === false) return;
@@ -251,6 +271,37 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
         )}
         <Field label="Lot / Batch #"><input value={form.lotNumber || ""} onChange={e => setForm(f => ({ ...f, lotNumber: e.target.value }))} style={iS} /></Field>
         <Field label="Administrator / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Employee Health, Hospital Name" /></Field>
+        {(form.category === "Vaccination" || (Array.isArray(form.doses) && form.doses.length > 0)) && (() => {
+          const doses = Array.isArray(form.doses) ? form.doses : [];
+          const setDose = (i, key, value) => setForm(f => ({ ...f, doses: (Array.isArray(f.doses) ? f.doses : []).map((d, j) => (j === i ? { ...d, [key]: value } : d)) }));
+          const addDose = () => setForm(f => {
+            const list = Array.isArray(f.doses) ? f.doses : [];
+            const last = Math.max(list.length, ...list.map(d => parseInt(d?.doseNumber, 10)).filter(Number.isFinite));
+            return { ...f, doses: [...list, { doseNumber: last + 1, date: "", manufacturer: "", lotNumber: "", facility: "" }] };
+          });
+          const removeDose = (i) => setForm(f => ({ ...f, doses: (Array.isArray(f.doses) ? f.doses : []).filter((_, j) => j !== i) }));
+          const small = { fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 2, display: "block" };
+          return (
+            <div role="group" aria-labelledby="health-doses-heading" style={{ marginBottom: 12 }}>
+              <div id="health-doses-heading" style={{ fontSize: 13, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Doses</div>
+              {doses.map((dose, i) => (
+                <div key={i} style={{ padding: 10, borderRadius: 10, border: `1px solid ${T.border}`, marginBottom: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8 }}>
+                    <label><span style={small}>Dose number</span><input aria-label={`Dose ${i + 1} number`} inputMode="numeric" value={dose?.doseNumber ?? ""} onChange={e => setDose(i, "doseNumber", e.target.value)} style={iS} /></label>
+                    <label><span style={small}>Date given</span><input aria-label={`Dose ${i + 1} date`} type="date" value={dose?.date || ""} onChange={e => setDose(i, "date", e.target.value)} style={iS} /></label>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: PAIR, gap: 8, marginTop: 6 }}>
+                    <label><span style={small}>Manufacturer</span><input aria-label={`Dose ${i + 1} manufacturer`} value={dose?.manufacturer || ""} onChange={e => setDose(i, "manufacturer", e.target.value)} style={iS} /></label>
+                    <label><span style={small}>Lot</span><input aria-label={`Dose ${i + 1} lot`} value={dose?.lotNumber || ""} onChange={e => setDose(i, "lotNumber", e.target.value)} style={iS} /></label>
+                  </div>
+                  <label style={{ display: "block", marginTop: 6 }}><span style={small}>Given at</span><input aria-label={`Dose ${i + 1} facility`} value={dose?.facility || ""} onChange={e => setDose(i, "facility", e.target.value)} style={iS} /></label>
+                  <button type="button" onClick={() => removeDose(i)} style={{ marginTop: 6, padding: "6px 12px", minHeight: TAP_MIN, borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Remove dose {dose?.doseNumber || i + 1}</button>
+                </div>
+              ))}
+              <button type="button" onClick={addDose} style={{ padding: "6px 12px", minHeight: TAP_MIN, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Add a dose</button>
+            </div>
+          );
+        })()}
         <Field label="Notes"><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 50, resize: "vertical" }} /></Field>
         <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} allowedKeys={HEALTH_SCAN_KEYS} />
         {reqError && (
@@ -309,7 +360,22 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
                 <div style={{ marginTop: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Source documents (tap to view)</div>
                   {docs.map(doc => (
-                    !doc.data ? (
+                    doc.fileMissing && !doc.data ? (
+                      // Storage has no file behind this row (AppContext reconcileDocumentFiles
+                      // marked it and stops asking), so it is never "downloading". Said as the
+                      // Documents tab says it, where it can be uploaded again.
+                      <div key={doc.id} role="status" style={{
+                        display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%", padding: "10px 12px",
+                        borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input,
+                        fontSize: 13, fontWeight: 600, marginBottom: 8, boxSizing: "border-box",
+                      }}>
+                        <span style={{ color: T.danger, flex: "1 1 200px", overflowWrap: "anywhere" }}>{doc.name} is missing from your account. Upload it again in Documents.</span>
+                        <button onClick={() => { setViewItem(null); navigate("documents"); }} style={{
+                          padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                          color: T.text, fontSize: 16, fontWeight: 600, cursor: "pointer",
+                        }}>Open Documents</button>
+                      </div>
+                    ) : !doc.data ? (
                       <div key={doc.id} style={{
                         display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px",
                         borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input,
@@ -375,7 +441,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.map(item => {
-            const color = getStatusColor(item.expirationDate);
+            const color = getStatusColor(item.expirationDate, reminderLeadDays(data.settings.reminderLeadDays));
             const catColor = catColors[item.category] || T.accent;
             return (
               <div key={item.id} onClick={() => setViewItem(item)} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1, cursor: "pointer" }}>
@@ -388,10 +454,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
                           repeat of the type), the dim line the rest. */}
                       {(() => {
                         const cardTitle = describeItem(item, data.settings?.name, "healthRecords");
-                        let mainLine = cardTitle;
-                        if (item.type && cardTitle.toLowerCase().startsWith(String(item.type).toLowerCase())) {
-                          mainLine = cardTitle.slice(String(item.type).length).replace(/^\s*\u2014\s*/, "");
-                        }
+                        const mainLine = titleAfterType(cardTitle, item.type);
                         const said = (v) => v != null && (
                           cardTitle.toLowerCase().includes(String(v).toLowerCase())
                           || String(item.type || "").toLowerCase() === String(v).toLowerCase()

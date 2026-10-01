@@ -206,6 +206,43 @@ test("the peer heads-up addresses the colleague by last name", () => {
   assert.ok(h.emailBody.endsWith("With sincere gratitude,\nSynthetic Physician, DO"));
   assert.ok(peerHeadsUp({}, {}).emailBody.startsWith("Dear Dr. Colleague,"));
 });
+test("a degree after the name with no comma is not the last name (CRED-044)", () => {
+  for (const name of ["Jane Sample MD", "Jane Sample DO", "Jane Sample M.D.", "Jane Sample MD FACS", "Jane Sample PhD", "Jane Sample Jr.", "Jane Sample, MD"]) {
+    assert.ok(peerHeadsUp(settings, { name }).emailBody.startsWith("Dear Dr. Sample,\n\n"), name);
+  }
+  assert.ok(peerHeadsUp(settings, { name: "Sample" }).emailBody.startsWith("Dear Dr. Sample,"));
+  assert.ok(peerHeadsUp(settings, { name: "  " }).emailBody.startsWith("Dear Dr. Colleague,"));
+});
+
+test("a surname that spells a degree in mixed case stays the last name (CRED-044)", () => {
+  for (const [name, last] of [["Kevin Do", "Do"], ["Kevin Do, MD", "Do"], ["Anh Do MD", "Do"], ["Jane Pa", "Pa"], ["Mary Ms", "Ms"], ["Ana Rn", "Rn"], ["Lee Ii", "Ii"], ["Kevin Do DO", "Do"]]) {
+    assert.ok(peerHeadsUp(settings, { name }).emailBody.startsWith(`Dear Dr. ${last},\n\n`), name);
+  }
+});
+
+test("degree letters typed in lowercase, title case or with dots are not the last name (CRED-044)", () => {
+  for (const name of ["Jane Smith md", "Jane Smith Md", "Jane Smith m.d.", "Jane Smith Phd", "Jane Smith jr",
+    "Jane Smith M.S.", "Jane Smith R.N.", "Jane Smith rn", "Jane Smith do", "Jane Smith ph.d.", "jane Smith md facs",
+    "Jane Smith MD", "Jane Smith Sr.", "Jane Smith III"]) {
+    assert.ok(peerHeadsUp(settings, { name }).emailBody.startsWith("Dear Dr. Smith,\n\n"), name);
+  }
+  assert.ok(peerHeadsUp(settings, { name: "jane smith md" }).emailBody.startsWith("Dear Dr. smith,\n\n"));
+  for (const [name, last] of [["kevin do", "do"], ["KEVIN DO", "DO"], ["Kevin Do", "Do"], ["Jane Pa", "Pa"], ["Mary Ms", "Ms"], ["Lee Ii", "Ii"], ["kevin do md", "do"]]) {
+    assert.ok(peerHeadsUp(settings, { name }).emailBody.startsWith(`Dear Dr. ${last},\n\n`), name);
+  }
+});
+
+test("degree letters after an all caps or all lowercase first and last name are not the last name (CRED-044)", () => {
+  for (const [name, last] of [["JANE SMITH DO", "SMITH"], ["JANE SMITH PA", "SMITH"], ["JANE SMITH NP", "SMITH"],
+    ["JANE SMITH MS", "SMITH"], ["JANE SMITH RN", "SMITH"], ["JOHN SMITH II", "SMITH"], ["JANE SMITH MD DO", "SMITH"],
+    ["jane smith do", "smith"], ["jane smith pa", "smith"], ["ANH DO DO", "DO"], ["JANE SMITH MD", "SMITH"]]) {
+    assert.ok(peerHeadsUp(settings, { name }).emailBody.startsWith(`Dear Dr. ${last},\n\n`), name);
+  }
+  // Two words in one case keep the second as the surname; title case is always the surname.
+  for (const [name, last] of [["KEVIN DO", "DO"], ["kevin do", "do"], ["Jane Smith Do", "Do"], ["Mary Ann Do", "Do"]]) {
+    assert.ok(peerHeadsUp(settings, { name }).emailBody.startsWith(`Dear Dr. ${last},\n\n`), name);
+  }
+});
 
 // -- Plain-text CV --
 test("the plain-text CV uses the phone-safe rule and no em dash", () => {

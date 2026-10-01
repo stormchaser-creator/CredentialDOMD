@@ -277,7 +277,7 @@ test('the support view withholds what the app\'s identifier gate flags: in keys,
 
 // ─── Driven: open a file, heartbeat refusal, exit ─────────────────────────
 
-async function mountViewer({ client, onClose = () => {}, clock = { offset: 0 } }) {
+async function mountViewer({ client, onClose = () => {}, clock = { offset: 0 }, open = opened() }) {
   const intervals = [];
   // The viewer's own clock, so a test can move time forward inside it.
   class ViewerDate extends Date { static now() { return Date.now() + clock.offset; } }
@@ -286,7 +286,7 @@ async function mountViewer({ client, onClose = () => {}, clock = { offset: 0 } }
   const created = [];
   const mounted = await mountComponent('src/components/features/MemberViewer.jsx', {
     modules: { memberView, memberViewer, memberViewClient, adminViewBanner, helpers },
-    props: { opened: opened(), client, T: {}, onClose },
+    props: { opened: open, client, T: {}, onClose },
     globals: {
       setInterval: fn => { intervals.push(fn); return intervals.length; }, clearInterval() {},
       localStorage: storage, sessionStorage: storage, structuredClone, Date: ViewerDate,
@@ -370,6 +370,25 @@ test('the member ending access mid-visit closes the viewer at the next check', a
   await settle();
   assert.equal(closedWith, MEMBER_VIEW_MESSAGES.grant_ended);
   assert.deepEqual(calls, [['end', uuid(60)]]);
+});
+
+// Review of the record-title fix: the Documents tab still labelled a file
+// with the card's main line only, so a file on a State Medical License in CO
+// and one on a State Controlled Substance license in CO both read
+// "Licenses: CO". A file row has no type header, so its label carries the
+// one-line headline, as the Home rows do.
+test('the Documents tab names the record a file is filed to with its type', async () => {
+  const open = opened();
+  const lic = (n, type) => ({ id: uuid(n), type, state: 'CO', expirationDate: day(400) });
+  const file = (n, name, record) => ({ id: uuid(n), name, mimeType: 'application/pdf', sizeBytes: 1024, linkedTo: `licenses:${uuid(record)}`, uploadedAt: '2026-09-01T12:00:00Z' });
+  open.snapshot = { ...open.snapshot, sections: { ...open.snapshot.sections, licenses: [lic(70, 'State Medical License'), lic(71, 'State Controlled Substance')] },
+    documents: [file(72, 'scan-a.pdf', 70), file(73, 'scan-b.pdf', 71)] };
+  const v = await mountViewer({ client: { check: async () => ({}), openFile: async () => ({}), end: async () => {} }, open });
+  buttonNamed(v.nodes(), 'Documents').props.onClick();
+  const text = v.pageText();
+  assert.match(text, /Licenses: State Medical License, CO/);
+  assert.match(text, /Licenses: State Controlled Substance, CO/);
+  assert.doesNotMatch(text, /Licenses: CO|,\s*,/);
 });
 
 test('a refused file closes the viewer when access is over, and otherwise just says why', async () => {

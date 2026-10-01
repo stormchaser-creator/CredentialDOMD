@@ -18,6 +18,8 @@ import { CV_FILENAME_RE } from "../../utils/cvImport";
 import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { withCvImported } from "../../utils/setupTasks";
 import { commitSetupState } from "./setup/useSetupState";
+import { storedDataUrl } from "../../utils/storedBytes";
+import { downloadDocumentFile } from "../../lib/supabase";
 
 /**
  * Start from your CV.
@@ -109,6 +111,24 @@ function CvImportReview({ source = null, onSaved, onClose }) {
       setPhase("start");
     }
   }, [deg, apiKey]);
+
+  // A file already in Files: its bytes may still be in Storage only (after a
+  // reload they come back one document at a time), so they are fetched first.
+  const readStored = useCallback(async (d) => {
+    setPhase("reading");
+    setError("");
+    setWarning("");
+    setFileName(d.name || "");
+    const got = await storedDataUrl(d, { download: downloadDocumentFile });
+    if (!got.dataUrl) {
+      setError(got.missing
+        ? "That file is missing from your account, so it cannot be read. Upload it again."
+        : "That file could not be fetched from your account just now. Try again.");
+      setPhase("start");
+      return;
+    }
+    await read({ dataUrl: got.dataUrl, name: d.name, mime: d.type || "" });
+  }, [read]);
 
 
   const pickFile = useCallback(async (e) => {
@@ -357,7 +377,7 @@ function CvImportReview({ source = null, onSaved, onClose }) {
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {onFileCandidates.slice(0, 5).map((d) => (
                       <button key={d.id}
-                        onClick={() => read({ dataUrl: d.data, name: d.name, mime: d.type || "" })}
+                        onClick={() => readStored(d)}
                         style={{ ...secondaryBtn, textAlign: "left" }}>
                         {d.name}
                       </button>

@@ -28,10 +28,12 @@ import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { isArchived } from "../../utils/contractsForDate";
 import { deviceZone } from "../../utils/coverageBlocks";
-import { supabase, uploadDocumentFile } from "../../lib/supabase";
+import { supabase, uploadDocumentFile, downloadDocumentBlob } from "../../lib/supabase";
+import { resolveDocuments, missingReceiptMessage } from "../../utils/receiptFiles";
 import { relinkCorrection, keepCorrection, recordCorrection } from "../../utils/intakeCorrections";
 import { alertWriteRefused, scopesForWrite } from "../../utils/limitedLaunchAccess.js";
 import { documentMime } from "../../utils/syncRules.js";
+import { findStoredDuplicate } from "../../utils/storedDuplicate.js";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -175,18 +177,66 @@ function DocumentsSection() {
     });
   }, []);
 
+  // The selected files' bytes, fetched when they are ticked rather than in
+  // the tap, so the share keeps its user gesture (as ShareModal does).
+  // doc.data is stripped once a document has a storagePath and comes back
+  // only on an account load, so a bundle that read only doc.data said "try
+  // again in a moment" about files that never came (SHARE-004).
+  // id -> { path, file, reason }
+  const [fetched, setFetched] = useState(() => new Map());
+  const fetching = useRef(new Set());
+  useEffect(() => {
+    if (!selectMode) { if (fetched.size) setFetched(new Map()); return; }
+    const need = data.documents.filter(d => selectedIds.has(d.id) && !d.data && d.storagePath && !d.fileMissing
+      && !isIdentityLink(d.linkedTo) && !fetching.current.has(d.id) && fetched.get(d.id)?.path !== d.storagePath);
+    if (!need.length) return;
+    need.forEach(d => fetching.current.add(d.id));
+    resolveDocuments(need, { download: downloadDocumentBlob }).then(({ byId }) => {
+      need.forEach(d => fetching.current.delete(d.id));
+      setFetched(prev => {
+        const next = new Map(prev);
+        for (const d of need) {
+          const r = byId.get(d.id);
+          next.set(d.id, { path: d.storagePath, file: r?.file || null, reason: r?.file ? null : (r?.reason || "unavailable") });
+        }
+        return next;
+      });
+    });
+  }, [selectMode, selectedIds, data.documents, fetched]);
+
   // Bundle-send: one share sheet carrying ALL selected files, with a cover
-  // note listing the contents — instead of sharing documents one by one.
+  // note listing the contents, instead of sharing documents one by one.
   const sendBundle = useCallback(async () => {
     // A file linked to Protected Identity never goes out in a bundle.
     const docs = data.documents.filter(d => selectedIds.has(d.id) && !isIdentityLink(d.linkedTo));
     if (docs.length === 0) return;
-    const missing = docs.filter(d => !d.data);
-    if (missing.length > 0) {
-      setBundleMsg(`${missing.length} file(s) haven't downloaded to this device yet. Try again in a moment.`);
+    const fetchedFile = d => { const f = fetched.get(d.id); return f && f.path === d.storagePath ? f : null; };
+    const named = list => list.map(d => `"${d.name || "Untitled document"}"`).join(", ");
+    const notHere = docs.filter(d => !d.data && !fetchedFile(d)?.file);
+    // Storage has no file for these: they will never land, so say which.
+    const gone = notHere.filter(d => d.fileMissing);
+    if (gone.length) {
+      setBundleMsg(gone.length === 1
+        ? `${named(gone)} is missing from your account, so nothing was sent. Untick it to send the rest, or leave Select and upload it again.`
+        : `${gone.length} files are missing from your account (${named(gone)}), so nothing was sent. Untick them to send the rest, or leave Select and upload them again.`);
+      return;
+    }
+    const failed = notHere
+      .map(d => ({ d, reason: d.storagePath ? fetchedFile(d)?.reason : "never_uploaded" }))
+      .filter(x => x.reason);
+    if (failed.length) {
+      // Fetched again straight away (the effect above), so the next tap can
+      // carry them; a file never uploaded cannot be fetched at all.
+      setFetched(prev => { const next = new Map(prev); failed.forEach(x => next.delete(x.d.id)); return next; });
+      setBundleMsg(`${missingReceiptMessage(failed.map(x => ({ id: x.d.id, name: x.d.name || "Untitled document", reason: x.reason })), { one: "document", many: "documents" })} Nothing was sent. Send again in a moment, or untick ${failed.length === 1 ? "it" : "them"}.`);
+      return;
+    }
+    if (notHere.length) {
+      setBundleMsg(`${named(notHere)} ${notHere.length === 1 ? "is" : "are"} still downloading to this device. Send again in a moment.`);
       return;
     }
     const built = docs.map(doc => {
+      if (!doc.data) return fetchedFile(doc).file;
       try {
         const [head, b64] = doc.data.split(",");
         const mime = docMime(doc) || head.match(/data:(.*?)[;,]/)?.[1] || "application/octet-stream";
@@ -233,7 +283,7 @@ function DocumentsSection() {
     setBundleMsg(`Sent ${files.length} documents as one packet.${letterCopied ? " The formatted cover letter is on your clipboard if you want to paste it over the short intro." : ""}`);
     setSelectMode(false);
     setSelectedIds(new Set());
-  }, [data.documents, data.settings, selectedIds, addItem]);
+  }, [data.documents, data.settings, selectedIds, addItem, fetched]);
 
   const openCamera = useCallback(async () => {
     // On mobile, use native camera capture
@@ -343,7 +393,7 @@ function DocumentsSection() {
       const dup = (data.documents || []).find(d =>
         (d.data && d.data.length === dataUrl.length && d.data === dataUrl) ||
         (d.name === file.name && d.size === file.size)
-      );
+      ) || await findStoredDuplicate(data.documents, file, { download: downloadDocumentBlob });
       if (dup) {
         refuse(`"${file.name}" is already uploaded${dup.linkedTo ? " (and linked)" : ", find it below and use File with AI"}. Skipped duplicate.`);
         continue;
@@ -538,10 +588,15 @@ function DocumentsSection() {
   };
 
   // "Keep as plain document": the file stays in Documents, unfiled. For a
-  // document that came by email, that is a correction.
+  // document that came by email, that is a correction. An emailed file still
+  // waiting in "From your inbox, not filed yet" leaves that group for Stored
+  // Documents (its inbox type is what holds it there); documents.origin, which
+  // the server owns, still says it arrived by email.
   const handleDiscard = (docId) => {
     const item = scanQueue.find(i => i.docId === docId);
     const doc = data.documents.find(d => d.id === docId);
+    const leaving = doc && isInboxDoc(doc) ? leaveInbox(doc) : {};
+    if (leaving.type && editItem("documents", { ...doc, ...leaving }) === false) return;
     noteIntakeCorrection(keepCorrection(doc, {
       scanType: item?.result?.documentType || "",
       suggested: item?.result?.extracted?.suggestedCategory?.name || SECTION_META[item?.result?.documentType]?.section || "",

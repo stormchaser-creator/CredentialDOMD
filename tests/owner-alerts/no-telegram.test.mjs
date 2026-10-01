@@ -89,9 +89,10 @@ test('filing a ticket, a member reply and feedback: saved, and nothing sent to T
   assert.equal(reply.status, 200, JSON.stringify(reply.json));
   assert.equal(reply.inserts[0].table, 'support_messages');
   assert.equal(reply.inserts[0].row.is_admin_reply, false);
+  // submit-feedback is retired (QA OPS-013): it refuses and writes nothing.
   const feedback = await run('supabase/functions/submit-feedback/index.ts', { rating: 5, message: 'Synthetic feedback.', context_page: '/app' });
-  assert.equal(feedback.status, 200, JSON.stringify(feedback.json));
-  assert.equal(feedback.inserts[0].table, 'feedback');
+  assert.equal(feedback.status, 410, JSON.stringify(feedback.json));
+  assert.deepEqual(feedback.inserts, []);
   for (const r of [ticket, reply, feedback]) {
     assert.deepEqual(r.fetches, [], 'no network call at all');
     assert.ok(!r.logs.some(line => /telegram/i.test(line)), r.logs.join('\n'));

@@ -15,7 +15,7 @@ import { screenDocument } from "../../utils/phiGuard";
 import { dictationErrorText, DICTATION_START_FAILED } from "../../utils/dictationErrors";
 import { docMime, leaveInbox } from "../../utils/inboxDocs";
 import { useAnthropicAvailable } from "../../utils/aiClient";
-import { supabase } from "../../lib/supabase";
+import { supabase, downloadDocumentBlob } from "../../lib/supabase";
 import Modal from "../shared/Modal";
 import { TAP_MIN, dismissButtonStyle } from "../shared/actionButton";
 import EmailPacketModal from "./EmailPacketModal";
@@ -37,6 +37,13 @@ function openedTranscript(saved) {
   }
   return list;
 }
+
+// A packet file whose download has gone this long with no bytes arriving is
+// counted as a failure that Approve, coming back online or returning to the
+// app tries again. The clock restarts with every chunk, so a large scan on a
+// slow link (all of a packet's files share it) finishes however long it
+// takes; only a download that has stalled ends.
+const PACKET_DOWNLOAD_STALL_MS = 45000;
 
 // Keep words and reference selection IDs; never persist generated contact text.
 const slimForArchive = (msgs) =>
@@ -96,6 +103,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   const taRef = useRef(null);
   const failedMapRef = useRef(new Map()); // msgId -> {text, attachment} for every failed send
   const savedAttachRef = useRef(new Set()); // msgIds whose file already went to Files
+  // Cards whose Approve is still running ("msgId:idx"). The ref is the guard
+  // (a second tap lands before any re-render); the state disables the button.
+  const runningRef = useRef(new Set());
+  const [running, setRunning] = useState(() => new Set());
   // The most recent document stays available to follow-up turns — the AI can
   // only read what's attached to the CURRENT message, and answering questions
   // about a document from memory is how it invents things.
@@ -183,13 +194,16 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     return true;
   }, [msgs, onClearRequest]);
   const restoreArchive = useCallback((arc) => {
+    // Not while Vera is answering: the reply would land in the chat brought
+    // back, and the question it answers would be archived unanswered.
+    if (busy) return;
     // The chat on screen is never lost — it archives itself first.
     if (msgs.length) archiveCurrent();
     setMsgs(arc.msgs);
     setArchives(a => a.filter(x => x.id !== arc.id));
     setViewArchive(null);
     setShowArchives(false);
-  }, [msgs, archiveCurrent]);
+  }, [msgs, archiveCurrent, busy]);
 
   // Auto-grow the composer with its content (long pastes stay readable).
   // Cap against the VISUAL viewport so the iOS keyboard doesn't let the
@@ -225,8 +239,13 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     // attachment were kept in failedRef, so a long paste never has to be redone).
     // With no new attachment, the last document rides along invisibly so the
     // AI can re-read it when the user asks follow-up questions about it.
-    const explicitAtt = retryOf ? retryOf.attachment : attachment;
-    const att = explicitAtt || (lastAttachRef.current ? { ...lastAttachRef.current, implicit: true } : null);
+    // A retry of a follow-up keeps its file implicit: it still goes to the
+    // model, but is not a new document to save to Files on Approve (failedMapRef
+    // keeps `att`, so the earlier file used to come back as explicit and was
+    // saved a second time).
+    const retryAtt = retryOf?.attachment || null;
+    const explicitAtt = retryOf ? (retryAtt?.implicit ? null : retryAtt) : attachment;
+    const att = explicitAtt || (retryAtt?.implicit ? retryAtt : null) || (lastAttachRef.current ? { ...lastAttachRef.current, implicit: true } : null);
     const text = (retryOf ? retryOf.text : (textOverride ?? input)).trim();
     if (!text && !explicitAtt) return;
     if (explicitAtt && !retryOf) lastAttachRef.current = explicitAtt;
@@ -380,7 +399,138 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     return new File([arr], doc.name || "document", { type: docMime(doc) || "application/octet-stream" });
   };
 
-  const runAction = useCallback(async (msgId, idx) => {
+  // ── Packet files: fetched while the card waits, never in the tap ──
+  // The offline copy keeps no bytes for a document already in the cloud
+  // (storage.js drops doc.data once it has a storagePath), and a download
+  // inside the tap loses the gesture the share sheet needs. Approve used to
+  // share only the files already in memory while the cover note listed every
+  // one, and said so only after the share had gone.
+  // docId -> { file } | { missing: true } (gone from storage, final)
+  //        | { failed: true, retried? } (no token, a network blip, a timeout:
+  //          downloadDocumentBlob's "tried again later", so it is retried)
+  const [cloudFiles, setCloudFiles] = useState({});
+  const fetchingRef = useRef(new Map()); // docId -> AbortController
+  const retriedRef = useRef(new Set());
+  // Only the newest open packet card downloads on its own. An older card
+  // kept in the saved transcript downloads once Approve is tapped on it, so
+  // a visit to Vera no longer fetches every file of every card left open.
+  // The newest card is pinned when Vera opens and when a reply brings a new
+  // card, never worked out again after a share or a dismiss: otherwise the
+  // card before it would start downloading with nobody asking. A card seen
+  // for the first time takes the pin only when it sits below the pinned one:
+  // the stored transcript merged in after a failed read (onLargeStoreMerged)
+  // goes above this session's messages, and its open cards are older.
+  const [activePackets, setActivePackets] = useState(() => new Set());
+  const seenPacketsRef = useRef(new Set());
+  const newestPacketRef = useRef(null);
+  {
+    let arrived = null, arrivedAt = -1, pinnedAt = -1, at = 0;
+    for (const m of msgs) (m.actions || []).forEach((a, i) => {
+      const key = `${m.id}:${i}`;
+      const here = at++;
+      if (key === newestPacketRef.current) pinnedAt = here;
+      if (a.kind !== "send_packet" || seenPacketsRef.current.has(key)) return;
+      seenPacketsRef.current.add(key);
+      if (!a.done && !a.dismissed) { arrived = key; arrivedAt = here; }
+    });
+    if (arrived && arrivedAt > pinnedAt) newestPacketRef.current = arrived;
+  }
+  const newestPacket = newestPacketRef.current;
+  const packetActive = (key) => key === newestPacket || activePackets.has(key);
+  // "Getting files ready" and "Downloading again" after an Approve: said
+  // while those files are on their way, kept off the card's saved error
+  // (it would stay in red after the files arrived, and across a reload).
+  const [packetNotes, setPacketNotes] = useState({});
+  const packetState = (action, key) => {
+    const ids = action.docIds || [];
+    const ready = [], fetching = [], waiting = [], failed = [], missing = [], withheld = [];
+    for (const id of ids) {
+      const d = (data.documents || []).find(x => x?.id === id);
+      if (!d) { missing.push("a document not in Files"); continue; }
+      // On the device or not, a file linked to Protected Identity is never
+      // shared this way; the card says so rather than calling it missing.
+      if (isIdentityLink(d.linkedTo)) { withheld.push(d.name || "document"); continue; }
+      if (d.data) { ready.push({ doc: d }); continue; }
+      if (!d.storagePath) { missing.push(d.name || "document"); continue; }
+      const got = cloudFiles[id];
+      if (got?.file) ready.push({ doc: d, file: got.file });
+      else if (got?.missing) missing.push(d.name || "document");
+      else if (got?.failed) failed.push({ id, name: d.name || "document", retried: !!got.retried });
+      else if (fetchingRef.current.has(id) || packetActive(key)) fetching.push(d);
+      else waiting.push(d);
+    }
+    return { ready, fetching, waiting, failed, missing, withheld, total: ids.length };
+  };
+  // Failed downloads get another try: on Approve, when the phone comes back
+  // online, and when the app returns to the screen.
+  const retryCloudFiles = useCallback((ids, { fromApprove = false } = {}) => {
+    setCloudFiles(f => {
+      const drop = (ids || Object.keys(f)).filter(id => f[id]?.failed);
+      if (!drop.length) return f;
+      const next = { ...f };
+      for (const id of drop) delete next[id];
+      return next;
+    });
+    if (fromApprove) for (const id of ids || []) retriedRef.current.add(id);
+    else retriedRef.current.clear();
+  }, []);
+  useEffect(() => {
+    const again = () => { if (typeof document === "undefined" || document.visibilityState !== "hidden") retryCloudFiles(); };
+    window.addEventListener?.("online", again);
+    document.addEventListener?.("visibilitychange", again);
+    return () => {
+      window.removeEventListener?.("online", again);
+      document.removeEventListener?.("visibilitychange", again);
+    };
+  }, [retryCloudFiles]);
+  // Leaving Vera stops the downloads still running.
+  useEffect(() => () => {
+    for (const ctl of fetchingRef.current.values()) ctl.abort();
+    fetchingRef.current.clear();
+  }, []);
+  const wantedCloud = new Set();
+  for (const m of msgs) (m.actions || []).forEach((a, i) => {
+    if (a.kind !== "send_packet" || a.done || a.dismissed || !packetActive(`${m.id}:${i}`)) return;
+    for (const id of a.docIds || []) {
+      const d = (data.documents || []).find(x => x?.id === id);
+      if (d && !d.data && d.storagePath && !isIdentityLink(d.linkedTo) && !cloudFiles[id]) wantedCloud.add(id);
+    }
+  });
+  const wantedKey = [...wantedCloud].join(",");
+  useEffect(() => {
+    for (const id of wantedKey ? wantedKey.split(",") : []) {
+      const d = (data.documents || []).find(x => x?.id === id);
+      if (!d || fetchingRef.current.has(id)) continue;
+      const ctl = new AbortController();
+      fetchingRef.current.set(id, ctl);
+      // A download that stalls ends as a failure that can be retried, not a
+      // card that says "Getting files ready" for good. One that is still
+      // receiving bytes is left to finish.
+      let timer = setTimeout(() => ctl.abort(), PACKET_DOWNLOAD_STALL_MS);
+      const onProgress = () => {
+        if (ctl.signal.aborted) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => ctl.abort(), PACKET_DOWNLOAD_STALL_MS);
+      };
+      const aborted = new Promise(resolve => ctl.signal.addEventListener("abort", () => resolve({ failed: true }), { once: true }));
+      (async () => {
+        let entry = { failed: true };
+        try {
+          const got = await Promise.race([downloadDocumentBlob(d.storagePath, { signal: ctl.signal, detail: true, onProgress }), aborted]);
+          if (got?.blob) entry = { file: new File([got.blob], d.name || "document", { type: docMime(d) || got.blob.type || "application/octet-stream" }) };
+          else if (got?.missing) entry = { missing: true };
+        } catch { /* stays failed */ }
+        clearTimeout(timer);
+        if (fetchingRef.current.get(id) !== ctl) return; // Vera was left meanwhile
+        fetchingRef.current.delete(id);
+        if (entry.failed && retriedRef.current.has(id)) entry.retried = true;
+        retriedRef.current.delete(id);
+        setCloudFiles(f => ({ ...f, [id]: entry }));
+      })();
+    }
+  }, [wantedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const performAction = useCallback(async (msgId, idx) => {
     const msg = msgs.find(x => x.id === msgId);
     const action = msg?.actions?.[idx];
     if (!action || action.done) return;
@@ -536,8 +686,14 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         const category = action.category === "bug" ? "bug"
           : action.category === "idea" ? "feature_request" : "other";
         const subject = String(action.summary || body).trim().slice(0, 180);
+        // One key per card, kept on it, so Approve again after a reply that
+        // never arrived answers with the ticket already filed, not a second
+        // one (create-ticket dedupes on client_request_id).
+        const requestId = action.requestId || globalThis.crypto?.randomUUID?.() || null;
+        if (requestId && !action.requestId) markAction(msgId, idx, { requestId });
         const res = await supabase.functions.invoke("create-ticket", {
           body: {
+            ...(requestId ? { client_request_id: requestId } : {}),
             // create-ticket wants at least 3 characters of subject.
             subject: subject.length >= 3 ? subject : "Reported from the assistant",
             body: `${body}\n\nReported through the in-app assistant.`,
@@ -554,12 +710,36 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         logToCloud("feedback", `[${action.category || "idea"}] ${body}`, "filed for the developer");
         ticketId = res.data.id;
       } else if (action.kind === "send_packet") {
-        const docs = (action.docIds || [])
-          .map(id2 => (data.documents || []).find(d => d.id === id2))
+        const key = `${msgId}:${idx}`;
+        const packet = packetState(action, key);
+        const ready = packet.ready
           // Never a file linked to Protected Identity, whatever Vera proposed.
-          .filter(d => d && d.data && !isIdentityLink(d.linkedTo));
-        if (docs.length === 0) throw new Error("None of those documents are downloaded on this device yet. Open Files to let them sync, then approve again.");
-        const files = docs.map(dataUrlToFile);
+          .filter(r => r.doc && !isIdentityLink(r.doc.linkedTo));
+        // Said on the card while the files are on their way, not saved as
+        // its error.
+        const progress = (text) => Object.assign(new Error(text), { packetNote: key });
+        if (packet.waiting.length) {
+          // An older card: its files download now, and the next tap shares.
+          setActivePackets(a => new Set(a).add(key));
+          throw progress(`Getting ${packet.waiting.length} of ${packet.total} files ready. Approve again in a moment.`);
+        }
+        if (packet.fetching.length) throw progress(`Still getting ${packet.fetching.length} of ${packet.total} files ready. Approve again in a moment.`);
+        // A download that failed for a passing reason is tried again before
+        // the packet goes out short. Once it has failed on a retry, Approve
+        // shares the rest (the card has said which file stays behind).
+        const again = packet.failed.filter(f => !f.retried || ready.length === 0).map(f => f.id);
+        if (again.length) {
+          setActivePackets(a => new Set(a).add(key));
+          retryCloudFiles(again, { fromApprove: true });
+          throw progress(`Downloading ${again.length} of ${packet.total} files again. Approve again in a moment.`);
+        }
+        if (ready.length === 0) {
+          throw new Error(packet.withheld.length && !packet.missing.length
+            ? "Those documents are linked to Protected Identity, so they are never shared from this app."
+            : "None of those documents can be shared from this device. Open Files to check they are there, then approve again.");
+        }
+        const docs = ready.map(r => r.doc);
+        const files = ready.map(r => r.file || dataUrlToFile(r.doc));
         // LLM cover notes can be multi-line or semicolon-joined; iOS Mail
         // flattens the newlines of a share that carries files, so the blurb
         // is one sentence per line of the normalized note, and the formatted
@@ -600,8 +780,13 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           section: "documents", method: "share", recipient: action.summary || "",
           sentAt: new Date().toISOString(),
         });
-        if (docs.length < (action.docIds || []).length) {
-          setErr(`Sent ${docs.length} of ${(action.docIds || []).length}. The rest haven't downloaded to this device yet.`);
+        if (docs.length < packet.total) {
+          const notSent = [...packet.missing, ...packet.failed.map(f => f.name)];
+          setErr([
+            `Sent ${docs.length} of ${packet.total}.`,
+            notSent.length ? `Not sent: ${notSent.join(", ")}.` : "",
+            packet.withheld.length ? `Kept out on purpose (Protected Identity): ${packet.withheld.join(", ")}.` : "",
+          ].filter(Boolean).join(" "));
         }
       } else if (action.kind === "export_data") {
         const { rows, label } = buildExport(data, action);
@@ -635,9 +820,36 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       // error: null clears what a failed earlier attempt said.
       markAction(msgId, idx, { done: true, error: null, ...(note ? { note } : {}), ...(ticketId ? { ticketId } : {}) });
     } catch (e3) {
-      if (e3?.name !== "AbortError") markAction(msgId, idx, { error: e3.message });
+      if (e3?.packetNote) {
+        setPacketNotes(n => ({ ...n, [e3.packetNote]: e3.message }));
+        // What an earlier attempt said no longer applies.
+        if (action.error) markAction(msgId, idx, { error: null });
+      } else if (e3?.name !== "AbortError") {
+        setPacketNotes(n => {
+          const key = `${msgId}:${idx}`;
+          if (!(key in n)) return n;
+          const next = { ...n };
+          delete next[key];
+          return next;
+        });
+        markAction(msgId, idx, { error: e3.message });
+      }
     }
-  }, [msgs, addItem, editItem, data, logToCloud, markAction, userIdRef]);
+  }, [msgs, addItem, editItem, data, logToCloud, markAction, userIdRef, cloudFiles, activePackets, retryCloudFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // One run per card at a time: a second tap while the first is still
+  // waiting (a slow create-ticket, an open share sheet) used to run the whole
+  // action again and file a second ticket.
+  const runAction = useCallback(async (msgId, idx) => {
+    const key = `${msgId}:${idx}`;
+    if (runningRef.current.has(key)) return;
+    runningRef.current.add(key);
+    setRunning(new Set(runningRef.current));
+    try { await performAction(msgId, idx); } finally {
+      runningRef.current.delete(key);
+      setRunning(new Set(runningRef.current));
+    }
+  }, [performAction]);
 
   const dismissAction = useCallback((msgId, idx) => {
     setMsgs(m => m.map(msg => msg.id === msgId
@@ -811,6 +1023,59 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                     Missing from your file: {a.missing.join(" · ")}
                   </div>
                 )}
+                {a.kind === "send_packet" && !a.done && (() => {
+                  // Said before Approve: what the share sheet will carry.
+                  const p = packetState(a, `${m.id}:${i}`);
+                  const retryNow = p.failed.filter(f => !f.retried);
+                  const gaveUp = p.failed.filter(f => f.retried);
+                  return (<>
+                    {p.fetching.length > 0 && (
+                      <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
+                        Getting {p.fetching.length} file{p.fetching.length > 1 ? "s" : ""} ready…
+                      </div>
+                    )}
+                    {p.waiting.length > 0 && (
+                      <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
+                        {p.waiting.length} file{p.waiting.length > 1 ? "s" : ""} will download when you tap Approve.
+                      </div>
+                    )}
+                    {retryNow.length > 0 && (
+                      <div style={{ fontSize: 12, color: T.warning, marginTop: 4 }}>
+                        Could not download right now: {retryNow.map(f => f.name).join(", ")}. Tap Approve to try again.
+                      </div>
+                    )}
+                    {gaveUp.length > 0 && (
+                      <div style={{ fontSize: 12, color: T.warning, marginTop: 4 }}>
+                        Still could not download, so not shared: {gaveUp.map(f => f.name).join(", ")}. It will try again when you are back online or reopen the app.
+                      </div>
+                    )}
+                    {p.missing.length > 0 && (
+                      <div style={{ fontSize: 12, color: T.warning, marginTop: 4 }}>
+                        Not on this device, so not shared: {p.missing.join(", ")}.
+                      </div>
+                    )}
+                    {p.withheld.length > 0 && (
+                      <div style={{ fontSize: 12, color: T.warning, marginTop: 4 }}>
+                        Kept out on purpose because it is linked to Protected Identity: {p.withheld.join(", ")}.
+                      </div>
+                    )}
+                    {p.ready.length > 0 && p.ready.length < p.total && !p.fetching.length && !p.waiting.length && !retryNow.length && (
+                      <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
+                        The cover note still names all {p.total}.
+                      </div>
+                    )}
+                    {p.total > 0 && p.ready.length === 0 && !p.fetching.length && !p.waiting.length && !p.failed.length && (
+                      <div style={{ fontSize: 12, color: T.warning, marginTop: 4 }}>
+                        So nothing on this card can be shared from here.
+                      </div>
+                    )}
+                    {packetNotes[`${m.id}:${i}`] && (p.fetching.length > 0 || p.waiting.length > 0) && (
+                      <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
+                        {packetNotes[`${m.id}:${i}`]}
+                      </div>
+                    )}
+                  </>);
+                })()}
                 {!a.done && (() => {
                   // A built-in record's card says, before Approve, what the
                   // identifier gate will keep out (splitFields, as the write).
@@ -846,10 +1111,18 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                 )}
                 {!a.done && (
                   <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    {!a.invalid && <button onClick={() => runAction(m.id, i)} style={{
-                      flex: 1, minWidth: 100, padding: "9px", borderRadius: 9, border: "none",
-                      backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
-                    }}>Approve</button>}
+                    {!a.invalid && (() => {
+                      const inFlight = running.has(`${m.id}:${i}`);
+                      // A packet that cannot carry every file says how many it will.
+                      const p = a.kind === "send_packet" ? packetState(a, `${m.id}:${i}`) : null;
+                      const short = p && !p.fetching.length && !p.waiting.length && !p.failed.some(f => !f.retried) && p.ready.length && p.ready.length < p.total;
+                      const label = short ? `Share ${p.ready.length} of ${p.total}` : "Approve";
+                      return <button onClick={() => runAction(m.id, i)} disabled={inFlight} style={{
+                        flex: 1, minWidth: 100, padding: "9px", borderRadius: 9, border: "none",
+                        backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 800,
+                        cursor: inFlight ? "default" : "pointer", opacity: inFlight ? 0.5 : 1,
+                      }}>{inFlight ? "Working…" : label}</button>;
+                    })()}
                     {a.kind === "send_packet" && (
                       <button
                         title="Send these documents as email attachments from CredentialDOMD, replies come to you"
@@ -932,9 +1205,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
               </div>
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-              <button onClick={() => restoreArchive(arc)} style={{
+              <button onClick={() => restoreArchive(arc)} disabled={busy} style={{
                 padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: `1px solid ${T.accent}`,
-                backgroundColor: "transparent", color: T.accent, fontSize: 12, fontWeight: 800, cursor: "pointer",
+                backgroundColor: "transparent", color: T.accent, fontSize: 12, fontWeight: 800,
+                cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
               }}>Continue this chat</button>
               <button onClick={() => { if (window.confirm("Delete this archived chat for good?")) setArchives(a => a.filter(x => x.id !== arc.id)); }} style={{
                 padding: "7px 12px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: "none",
@@ -966,10 +1240,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
               ))}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => restoreArchive(viewArchive)} style={{
+              <button onClick={() => restoreArchive(viewArchive)} disabled={busy} style={{
                 flex: 1, padding: "12px", borderRadius: 12, border: "none",
                 background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
-                fontSize: 14, fontWeight: 800, cursor: "pointer",
+                fontSize: 14, fontWeight: 800, cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
               }}>Continue this chat</button>
               <button onClick={() => setViewArchive(null)} style={{
                 padding: "12px 16px", borderRadius: 12, border: `1px solid ${T.border}`,

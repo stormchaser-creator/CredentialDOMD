@@ -24,13 +24,14 @@ globalThis.__inviteTest = {
   // the real hold and assert zero writes/provider calls for every invitation.
   launchEmailReviewHold: () => null,
   serve: fn => { handler = fn; },
+  answerAuthUnavailable: (_headers, fn) => fn,
   clerkProfile: async () => scenario.signedOut ? null : ({ isAdmin: !scenario.nonAdmin, profileId: "admin", db }),
   Deno: { env: { get: () => "test-value" } },
   fetch: async () => { emails++; return new Response(JSON.stringify({ id: "email" }), { status: 200 }); },
 };
 let source = readFileSync(new URL("../supabase/functions/send-invite/index.ts", import.meta.url), "utf8");
 source = source.replace(/^import .*;\n/gm, "");
-source = "const { serve, clerkProfile, Deno, fetch, launchEmailReviewHold } = globalThis.__inviteTest;\n" + source;
+source = "const { serve, answerAuthUnavailable, clerkProfile, Deno, fetch, launchEmailReviewHold } = globalThis.__inviteTest;\n" + source;
 const js = transformSync(source, { loader: "ts", format: "esm" }).code;
 await import("data:text/javascript;base64," + Buffer.from(js).toString("base64"));
 async function check(config, body, status, sent) {

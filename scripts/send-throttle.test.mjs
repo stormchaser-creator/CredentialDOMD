@@ -50,7 +50,7 @@ const noop = () => {};
 const denoStub = { env: { get: () => "" } };
 
 const sendPacket = await loadEdgeFunction("../supabase/functions/send-packet-email/index.ts", {
-  serve: noop, Deno: denoStub, encodeBase64: noop, clerkProfile: noop,
+  serve: noop, Deno: denoStub, encodeBase64: noop, clerkProfile: noop, answerAuthUnavailable: (_headers, fn) => fn,
   isOwnStorageObject: noop, approveRequestBody: noop, longDate: noop, replySubject: noop,
 });
 // ai-proxy's bounds live in a sibling module. It is imported for real, not
@@ -178,7 +178,8 @@ ok("no refusal in send-packet-email answers 503", !/status: 503|json\(503/.test(
 // need a live Resend key to be meaningful.
 {
   const src = sendSource;
-  const body = src.slice(src.indexOf("serve(async"));
+  // The handler is wrapped (serve(answerAuthUnavailable(corsHeaders, async ...)); find it either way.
+  const body = src.slice(src.search(/serve\((?:answerAuthUnavailable\([^,]+, )?async/));
   const at = (needle) => {
     const i = body.indexOf(needle);
     return i === -1 ? Number.MAX_SAFE_INTEGER : i;

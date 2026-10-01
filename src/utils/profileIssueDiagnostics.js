@@ -19,6 +19,14 @@ const BROWSER_ERRORS = new Map([
   ['InvalidStateError', 'BROWSER_STATE'], ['QuotaExceededError', 'BROWSER_QUOTA'],
   ['TypeError', 'BROWSER_TYPE'], ['ReferenceError', 'BROWSER_REFERENCE'],
 ]);
+// Where an initialize-clerk-profile request stopped (limitedLaunchClient
+// phases), so a reference tells a timeout, a network failure, a cut-off
+// answer and a changed session apart. Only for the client's own
+// "membership_information_unavailable"; a server answer has its own code,
+// and an HTTP failure already shows its status (ID-INIT-UNAVAILABLE-H426).
+const CLIENT_PHASES = new Map([
+  ['session', 'SESSION'], ['token', 'TOKEN'], ['network', 'NETWORK'], ['response', 'BODY'], ['timeout', 'TIMEOUT'],
+]);
 const statusCode = value => Number.isInteger(value) && value >= 100 && value <= 599 ? value : null;
 
 export function profileSupportReference(error) {
@@ -26,7 +34,9 @@ export function profileSupportReference(error) {
   const code = CODES.get(error?.profileCauseCode) || BROWSER_ERRORS.get(error?.profileBrowserError)
     || CODES.get(error?.code) || 'UNKNOWN';
   const status = statusCode(error?.httpStatus);
-  return `ID-${stage}-${code}${status === null ? '' : `-H${status}`}`;
+  const phase = CLIENT_PHASES.get(error?.profileCausePhase);
+  const during = phase === 'TIMEOUT' ? CLIENT_PHASES.get(error?.profileCauseDuring) : null;
+  return `ID-${stage}-${code}${phase ? `-${phase}` : ''}${during ? `-${during}` : ''}${status === null ? '' : `-H${status}`}`;
 }
 
 /**
@@ -48,6 +58,9 @@ export function profileInitializationError(stage, cause, httpStatus = cause?.htt
   error.profileCauseCode = CODES.has(cause?.code) ? cause.code : null;
   error.profileBrowserError = BROWSER_ERRORS.has(cause?.name) ? cause.name : null;
   error.httpStatus = statusCode(httpStatus);
+  const clientFailure = cause?.code === 'membership_information_unavailable';
+  error.profileCausePhase = clientFailure && CLIENT_PHASES.has(cause?.phase) ? cause.phase : null;
+  error.profileCauseDuring = error.profileCausePhase === 'timeout' && CLIENT_PHASES.has(cause?.during) ? cause.during : null;
   error.recoveryConflict = cause?.code === 'continuity_recovery_conflict';
   return error;
 }

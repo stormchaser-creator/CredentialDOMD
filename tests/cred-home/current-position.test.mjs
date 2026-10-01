@@ -52,7 +52,7 @@ test('the detail view shows Current position only for a ticked job', async () =>
   const mount = async (item) => mountComponent('src/components/features/CrudSection.jsx', {
     app: { data: { settings: {}, documents: [], followUps: [] }, theme: {}, isDesktop: false, addItem() {}, editItem() {}, toggleFavorite() {} },
     props: { title: 'Work History', sectionKey: 'workHistory', items: [item], fields, autoViewId: item.id, onAutoViewDone() {} },
-    modules: { helpers: await import('../../src/utils/helpers.js'), lifecycle: await import('../../src/utils/lifecycle.js'), caseBilling: await import('../../src/utils/caseBilling.js') },
+    modules: { helpers: await import('../../src/utils/helpers.js'), lifecycle: await import('../../src/utils/lifecycle.js'), caseBilling: await import('../../src/utils/caseBilling.js'), formLayout: await import('../../src/utils/formLayout.js') },
   });
   const detail = m => m.nodes().filter(n => n.type?.name === 'Modal' && n.props.open).map(n => m.text(n)).join(' ');
   const past = await mount({ ...job('No'), id: 'w-past' });

@@ -26,7 +26,7 @@ test('follows the live phase rather than a hardcoded price', async () => {
 
 test('when checkout is paused or founding is full it says so in the words the site uses', async () => {
   const paused = await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, checkoutEnabled: false, availability: 'paused' }) });
-  assert.equal(paused.status, 'Paid checkout is paused. No payment will be taken; your account opens when payment completes.');
+  assert.equal(paused.status, 'Paid checkout is paused, so no payment is taken now. An account you create today opens when checkout reopens and your payment completes.');
   const full = await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, availability: 'temporarily_full' }) });
   assert.equal(full.status, 'Founding checkout is temporarily unavailable. Creating an account does not reserve a place.');
   // An inconsistent reply (paused but checkout enabled) is refused by the module, so nothing shows.

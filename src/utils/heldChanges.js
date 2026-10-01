@@ -8,6 +8,8 @@
 // Changes are taken back newest first, so an add followed by an edit of the
 // same record comes out whole.
 
+import { rebaseSetupState } from "./syncRules.js";
+
 const same = (left, right) => left === right || JSON.stringify(left) === JSON.stringify(right);
 
 /** What `next` changed in `before`: [{ kind, key, id?, name?, before, after, index? }]. */
@@ -86,6 +88,13 @@ export function revertChanges(current, changes) {
  * looking at since. Adds and edits already survive a load (the self-heal
  * keeps the newer copy here).
  *
+ * Kept settings saves are laid over the profile settings read back too. A
+ * kept Setup board save (setupState, one object written whole) is laid over
+ * as what it changed from the copy it was made from (its setupBase,
+ * syncRules rebaseSetupState), so a newer copy from another device keeps its
+ * skips and declarations. One kept without its base (an older build) is not
+ * laid over at all: the account's copy is the newer one there.
+ *
  * `ops`: the account's queue as stored. Returns { data, deleted }: `data` is
  * `merged` with those applied (itself when nothing was), `deleted` the ids
  * taken out, which the self-heal must not push back up either.
@@ -93,7 +102,19 @@ export function revertChanges(current, changes) {
 export function applyHeldQueue(merged, ops, keys) {
   const deleted = new Map(); // collection -> Set(id)
   const stars = new Map(); // collection -> Map(id -> favorite)
+  // Profile settings kept the same way (a save made before a page load's
+  // first answer, then a reload): the profile row read back does not have
+  // them yet, so they are laid over it, oldest first, as replay will send them.
+  let settings = null;
   for (const op of Array.isArray(ops) ? ops : []) {
+    if (op?.awaitingAccess === true && op.op === "settings" && op.payload && typeof op.payload === "object" && !Array.isArray(op.payload)) {
+      settings ??= { ...(merged?.settings || {}) };
+      for (const [name, value] of Object.entries(op.payload)) {
+        if (name !== "setupState") { settings[name] = value; continue; }
+        if (Object.hasOwn(op, "setupBase")) settings.setupState = rebaseSetupState(settings.setupState, op.setupBase, value);
+      }
+      continue;
+    }
     if (op?.awaitingAccess !== true || !Array.isArray(keys) || !keys.includes(op.collectionKey)) continue;
     const id = op.payload && typeof op.payload === "object" ? op.payload.id : op.payload;
     if (!id || typeof id !== "string") continue;
@@ -106,8 +127,9 @@ export function applyHeldQueue(merged, ops, keys) {
     }
   }
   const ids = new Set([...deleted.values()].flatMap(set => [...set]));
-  if (!deleted.size && !stars.size) return { data: merged, deleted: ids };
+  if (!deleted.size && !stars.size && !settings) return { data: merged, deleted: ids };
   const data = { ...merged };
+  if (settings) data.settings = settings;
   for (const key of new Set([...deleted.keys(), ...stars.keys()])) {
     if (!Array.isArray(data[key])) continue;
     const gone = deleted.get(key), starred = stars.get(key);

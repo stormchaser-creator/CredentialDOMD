@@ -12,3 +12,69 @@ export function supportDeepLink(hash) {
   const match = TICKET_LINK.exec(String(hash || ""));
   return match ? { ticketId: match[1].toLowerCase() } : null;
 }
+
+// Every hash an email links into the app: #support, #support/<ticket id>,
+// #backups, #requests. App.jsx (AppInner) opens the place each one names.
+export function isAppDeepLink(hash) {
+  return !!supportDeepLink(hash) || hash === "#backups" || hash === "#requests";
+}
+
+// A member who opens an email link while signed out (on an iPhone, Mail opens
+// Safari, which does not share the installed app's sign-in) meets Clerk's
+// <SignIn routing="hash">. Clerk rewrites the hash (#/factor-one) and, once
+// signed in, goes to /app/ with no hash, so the link would be lost before
+// AppInner mounts. main.jsx therefore keeps the link in this tab's
+// sessionStorage and gives Clerk a clean address; AppInner takes it back.
+const STASH_KEY = "credentialdomd.app_deep_link";
+const STASH_MAX_AGE_MS = 60 * 60 * 1000;
+
+function tabStorage() {
+  try { return globalThis.window?.sessionStorage; }
+  catch { return null; }
+}
+
+/** Call synchronously in main.jsx, before Clerk or the app mounts. */
+export function captureAppDeepLink({
+  location = globalThis.window?.location,
+  history = globalThis.window?.history,
+  storage = tabStorage(),
+  now = Date.now(),
+} = {}) {
+  const hash = location?.hash || "";
+  if (!isAppDeepLink(hash)) return null;
+  try {
+    if (!storage || !history?.replaceState) return null;
+    storage.setItem(STASH_KEY, JSON.stringify({ hash, at: now }));
+    history.replaceState(history.state, "", `${location.pathname}${location.search || ""}`);
+    return hash;
+  } catch {
+    // Without storage the hash stays in the address, as it did before: a
+    // signed-in visitor still lands on the place it names.
+    try { storage?.removeItem(STASH_KEY); } catch { /* storage unavailable */ }
+    return null;
+  }
+}
+
+/** The link this tab was opened on, once; "" when there is none. */
+export function takeAppDeepLink({
+  location = globalThis.window?.location,
+  history = globalThis.window?.history,
+  storage = tabStorage(),
+  now = Date.now(),
+} = {}) {
+  let stashed = "";
+  try {
+    const raw = storage?.getItem(STASH_KEY);
+    storage?.removeItem(STASH_KEY);
+    const saved = raw ? JSON.parse(raw) : null;
+    if (saved && isAppDeepLink(saved.hash) && Number.isFinite(saved.at)
+      && now - saved.at >= 0 && now - saved.at <= STASH_MAX_AGE_MS) stashed = saved.hash;
+  } catch { /* storage unavailable or a damaged entry: no stashed link */ }
+  const hash = location?.hash || "";
+  if (isAppDeepLink(hash)) {
+    try { history?.replaceState(history.state, "", `${location.pathname}${location.search || ""}`); }
+    catch { /* the address keeps its hash; the link still opens */ }
+    return hash;
+  }
+  return stashed;
+}

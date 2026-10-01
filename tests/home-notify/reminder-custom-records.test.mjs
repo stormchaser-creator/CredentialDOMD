@@ -83,8 +83,10 @@ test('a renamed category: the email names the record by the category\'s name tod
 test('send-reminders reads the member\'s categories and names custom records through them', () => {
   const loop = fn.slice(fn.indexOf('for (const t of TABLES)'), fn.indexOf('if (!items.length)'));
   assert.match(loop, /if \(t\.table === "custom_records" && rows\.length\) \{/);
-  assert.match(loop, /db\.from\("custom_categories"\)\.select\("id, name"\)\.eq\("user_id", p\.id\)/, 'the member\'s own categories, archived ones too');
-  assert.match(loop, /rows = withCurrentCategoryNames\(rows, cats \|\| \[\]\);/);
+  // The categories are read once for the group (_shared/reminderReads.mjs), by user_id.
+  const reads = readFileSync(`${root}supabase/functions/_shared/reminderReads.mjs`, 'utf8');
+  assert.match(reads, /db\.from\('custom_categories'\)\s*\.select\('id, user_id, name'\)\s*\.in\('user_id', withCustom\)/, 'the members\' own categories, archived ones too');
+  assert.match(loop, /rows = withCurrentCategoryNames\(rows, read\.categories\.get\(p\.id\) \|\| \[\]\);/);
   assert.match(loop, /for \(const r of rows\) \{/, 'the renamed rows are the ones labelled');
   assert.ok(loop.indexOf('withCurrentCategoryNames') < loop.indexOf('reminderLabel(r, t.label, p.name)'));
   assert.match(fn, /import \{ remindable, reminderLabel, withCurrentCategoryNames \} from "\.\.\/_shared\/reminderRows\.mjs";/);

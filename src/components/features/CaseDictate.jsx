@@ -19,7 +19,15 @@ function CaseDictate({ categories, onDraft }) {
   const recRef = useRef(null);
   const textRef = useRef("");
 
-  useEffect(() => () => { try { recRef.current?.stop(); } catch { /* stopped */ } }, []);
+  // Stop, and hear nothing more from this session: a result the browser hands
+  // over after stop() would bring a cleared transcript back.
+  const halt = () => {
+    const rec = recRef.current;
+    if (!rec) return;
+    rec.onresult = null; rec.onend = null; rec.onerror = null;
+    try { rec.stop(); } catch { /* stopped */ }
+  };
+  useEffect(() => () => halt(), []);
 
   const begin = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -33,8 +41,10 @@ function CaseDictate({ categories, onDraft }) {
         if (ev.results[i].isFinal) finals += ev.results[i][0].transcript;
         else interim += ev.results[i][0].transcript;
       }
-      textRef.current = finals;
-      setTranscript((finals + " " + interim).trim());
+      // Finals plus the phrase still being heard: Done stops recognition and
+      // reads this at once, before the last phrase would arrive as final.
+      textRef.current = (finals + " " + interim).trim();
+      setTranscript(textRef.current);
     };
     rec.onend = () => setListening(false);
     rec.onerror = (ev) => { setListening(false); const m = dictationErrorText(ev?.error); if (m) setErr(m); };
@@ -44,7 +54,7 @@ function CaseDictate({ categories, onDraft }) {
   };
 
   const finish = async () => {
-    try { recRef.current?.stop(); } catch { /* stopped */ }
+    halt();
     setListening(false);
     const words = (textRef.current || transcript || "").trim();
     if (!words) { setErr("Didn't catch anything. Try again."); return; }
@@ -64,23 +74,25 @@ function CaseDictate({ categories, onDraft }) {
 
   return (
     <div style={{ marginBottom: 10 }}>
-      {!listening && !busy && (
+      {!listening && !busy && !transcript && (
         <button onClick={begin} style={{
           width: "100%", padding: "12px", borderRadius: 12,
           border: `1px dashed ${T.accent}`, backgroundColor: "transparent",
           color: T.accent, fontSize: 14, fontWeight: 700, cursor: "pointer",
         }}>🎤 Dictate a case</button>
       )}
-      {listening && (
+      {/* The browser can end recognition on its own after a silence: what was
+          said stays, with Done still there to build it. */}
+      {(listening || (!!transcript && !busy)) && (
         <div style={{ backgroundColor: T.card, border: `1px solid #ef4444`, borderRadius: 12, padding: "12px 14px" }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#ef4444", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Listening…</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#ef4444", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{listening ? "Listening…" : "Stopped listening"}</div>
           <div style={{ fontSize: 14, color: T.text, minHeight: 20, lineHeight: 1.5 }}>{transcript || "Say the case: procedure, side, date, hospital, who with, any complication."}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button onClick={finish} style={{
               flex: 1, padding: "11px", borderRadius: 10, border: "none",
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer",
             }}>Done, build the case</button>
-            <button onClick={() => { try { recRef.current?.stop(); } catch { /* stopped */ } setListening(false); setTranscript(""); }} style={{
+            <button onClick={() => { halt(); setListening(false); setTranscript(""); }} style={{
               padding: "11px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
               backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer",
             }}>Cancel</button>

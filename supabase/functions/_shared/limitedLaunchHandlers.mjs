@@ -1,6 +1,6 @@
 import { LIMITED_LAUNCH, limitedOffer, assertLimitedPrice, validateLimitedConfig } from './limitedLaunchCatalog.mjs';
-import { verifiedLimitedPayment, deferredOpeningInvoice } from './limitedLaunchPurchase.mjs';
-import { limitedBillingTiming, assertDeferredSubscription, deferredCheckoutMessage } from './limitedBillingTiming.mjs';
+import { verifiedLimitedPayment, deferredOpeningInvoice, anchorResetInvoice, paidYearCovers } from './limitedLaunchPurchase.mjs';
+import { limitedBillingTiming, assertDeferredSubscription, deferredCheckoutMessage, deferredResumedAfterAnchor } from './limitedBillingTiming.mjs';
 import { BILLING_CATALOG } from './billingCatalog.mjs';
 import { createBillingHandlers } from './billingHandlers.mjs';
 import { expiredFoundingCheckoutProof } from './foundingCheckout.mjs';
@@ -31,6 +31,20 @@ export const REFUND_REVIEW_ONLY = Object.freeze(['charge_disputed', 'charge_mism
 // sweeps) AND was asked for this long ago, so taps during a short outage
 // never cut the background retries short.
 const SWEEP_IDLE_SECONDS = 600, SWEEP_LIMIT = 10, SWEEP_FINAL_ATTEMPTS = 12, SWEEP_FINAL_AGE_MS = 2 * 60 * 60 * 1000, SWEEP_BUDGET_MS = 45000;
+/**
+ * Whether a subscription has stopped renewing, and the cancellation date
+ * within its paid period, from the subscription Stripe returns. Stripe ends
+ * renewal with cancel_at_period_end, or with a cancellation date (cancel_at)
+ * while that flag stays false: a flexible-billing subscription's "cancel at
+ * period end" in the billing portal resolves to one, and a Dashboard
+ * cancellation on a chosen date sets one (BILL-005). A date within the paid
+ * period (`end`, epoch seconds) ends renewal there; a later one lets the
+ * period renew first, so it is not a cancellation of this renewal.
+ */
+export function renewalEnd(sub, end) {
+  const at = Number.isSafeInteger(sub?.cancel_at) && sub.cancel_at > 0 && Number.isSafeInteger(end) && sub.cancel_at <= end ? sub.cancel_at : null;
+  return { canceling: sub?.cancel_at_period_end === true || at !== null, cancelAt: at === null ? null : new Date(at * 1000).toISOString() };
+}
 // The hook secret pg_net callers present (x-hook-secret), compared in constant time.
 function sameSecret(presented, expected) {
   if (typeof presented !== 'string' || typeof expected !== 'string' || !expected) return false;
@@ -362,21 +376,57 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       const billingAnchor = assertDeferredSubscription(sub, q);
       const end = sub.current_period_end ?? sub.items.data[0].current_period_end;
       if (!Number.isSafeInteger(end) || end <= 0 || !/^evt_[A-Za-z0-9]+$/.test(event.id || '') || !Number.isSafeInteger(event.created)) refuse(503, 'invalid_subscription_state');
+      const ends = renewalEnd(sub, end);
       let proof = null;
       if (sub.status === 'active' && id(sub.latest_invoice)) {
         const invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
         // A deferred purchase's $0 opening invoice is paid but is no payment:
         // it settles as the scheduled membership, with no paid proof.
-        if (invoice.status === 'paid' && invoice.paid === true && !deferredOpeningInvoice({ account, subscription: sub, invoice, billingAnchor, livemode: live })) proof = verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote: q, livemode: live });
+        if (invoice.status === 'paid' && invoice.paid === true && !deferredOpeningInvoice({ account, subscription: sub, invoice, billingAnchor, livemode: live })) {
+          // The $0 or credit invoice a classic mode anchor reset leaves (a
+          // cancellation date set inside a paid year, or removed again) is
+          // no payment either, but the year paid before it still runs: the
+          // proof is that year's invoice, verified against the period now
+          // running. Settled without one, membership_active would be false
+          // and the member would lose the year they paid for. Its own
+          // invoice.paid asked for the welcome email and the trial; this
+          // never asks again (initial false).
+          if (anchorResetInvoice({ account, subscription: sub, invoice, livemode: live })) {
+            trace.phase = 'verify_paid_year';
+            const paid = await paidYearInvoice(stripe, sub);
+            if (!paid) throw Error('No paid year covers the period');
+            proof = Object.freeze({ ...verifiedLimitedPayment({ profile, account, subscription: sub, invoice: paid, offer, quote: q, livemode: live }), initial: false });
+          } else proof = verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote: q, livemode: live });
+        }
       }
+      // A deferred subscription that no longer cancels but whose period ends
+      // before the quote anchor (a cancellation date removed in classic
+      // billing mode, deferredScheduleMoved): Stripe renews at that period
+      // end, before the quoted first charge. It settles as not cancelling;
+      // support is told, since that charge will not verify as paid access.
+      // So does a paid-year cancellation date removed again
+      // (deferredResumedAfterAnchor) while the period the reset began is
+      // running: Stripe renews at its end, before the paid year's own end.
+      const resumed = billingAnchor !== null && deferredResumedAfterAnchor(sub, billingAnchor) && (sub.current_period_start ?? sub.items.data[0].current_period_start) === sub.billing_cycle_anchor;
+      if (billingAnchor !== null && sub.status === 'active' && !ends.canceling && (end < billingAnchor || resumed)) try { log({ ...failureLog('webhook', trace, 200, 'deferred_schedule_moved'), event: 'deferred_schedule_moved' }); } catch { /* A flag must never change the answer. */ }
       trace.phase = 'settle';
-      await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token, p_cancel_at_period_end: sub.cancel_at_period_end === true, p_billing_anchor: billingAnchor }, q.attempt_id, proof);
+      await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token, p_cancel_at_period_end: ends.canceling, p_cancel_at: ends.cancelAt, p_billing_anchor: billingAnchor }, q.attempt_id, proof);
       // Settled with the verified payment for the first paid period: the
       // purchase's welcome email may follow. A renewal, or a first payment
       // only observed at renewal, never asks.
       if (proof?.initial === true) welcome = sub.id;
     } finally { await deps.store.releaseReconcile(account.profile_id, live, lease.token); }
     return { state: 'settled', welcome };
+  }
+  // The paid annual invoice whose year covers the subscription's current
+  // period (paidYearCovers), newest first, or null when none does. A list
+  // that may hold more throws: settlement refuses (503) and the earlier
+  // settled row stays as it was; so does settling with none.
+  async function paidYearInvoice(stripe, sub) {
+    const listed = await stripe.invoices.list({ subscription: sub.id, status: 'paid', limit: 100, expand: ['data.lines.data.price'] });
+    if (!Array.isArray(listed?.data) || listed.has_more !== false) throw Error('Paid invoices unavailable');
+    const covering = listed.data.filter(found => paidYearCovers(sub, found)).sort((a, b) => b.lines.data[0].period.start - a.lines.data[0].period.start);
+    return covering[0] ?? null;
   }
   // The refund of a charge Stripe holds, read fresh: the charge refunded in
   // full and the refund that did it (the newest one not failed or canceled).
@@ -448,7 +498,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
           const invoice = id(found.charge.invoice) ? await stripe.invoices.retrieve(id(found.charge.invoice)) : null;
           const subId = id(invoice?.subscription) || id(invoice?.parent?.subscription_details?.subscription);
           const sub = subId ? await stripe.subscriptions.retrieve(subId) : null;
-          if (sub?.metadata?.app === config.app && sub.status !== 'canceled' && sub.cancel_at_period_end !== true) log({ ...failureLog('webhook', trace, 200, 'refunded_membership_renews'), event: 'refund_without_request' });
+          if (sub?.metadata?.app === config.app && sub.status !== 'canceled' && !renewalEnd(sub, sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end).canceling) log({ ...failureLog('webhook', trace, 200, 'refunded_membership_renews'), event: 'refund_without_request' });
         } catch { /* A flag must never change the answer. */ }
         return reply(200, { received: true });
       }
@@ -495,6 +545,21 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (sub.metadata?.app !== config.app) return reply(200, { received: true });
     if (sub.metadata.catalog_version === BILLING_CATALOG.version) return createBillingHandlers(deps, { ...BILLING_CATALOG, billingEnabled: true }).webhook(new Request(req.url, { method: 'POST', headers: req.headers, body: raw }));
     const settled = await settleSubscription(stripe, live, sub, event, trace);
+    // A cancelled subscription with a refund request that never recorded the
+    // cancellation (the owner cancelled it by hand in the dashboard): recorded
+    // now, on a duplicate delivery too, so the request, its ticket and the
+    // owner's notifier stop saying "not cancelled yet" (20261001041500).
+    if (sub.status === 'canceled') {
+      trace.phase = 'refund_request';
+      const request = await deps.store.refundBySubscription(sub.id, live);
+      if (request && request.subscription_canceled_at == null && ['requested', 'needs_support'].includes(request.state)) {
+        const seen = await cancellationSeen(stripe, live, sub, request, null, trace);
+        // A press or the sweep at work on a request a renewal replaced, or
+        // whose charge a person must look at: Stripe delivers the event again.
+        if (seen.answer === 'busy') refuse(503, 'refund_in_progress');
+        if (seen.answer === 'needs_support') try { log({ ...failureLog('webhook', trace, 200, seen.reason), event: 'refund_needs_support' }); } catch { /* A log must never change the answer. */ }
+      }
+    }
     if (settled.state === 'duplicate') return reply(200, { received: true });
     const welcomeSubscription = settled.welcome;
     // After the lease is released, so a slow mailbox never holds up the next
@@ -571,17 +636,103 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (found.status !== 'paid' || invoiceSub !== sub.id || !/^in_[A-Za-z0-9]+$/.test(found.id || '')) refuse(503, 'refund_unavailable');
     return found.id;
   }
+  // A credit on the customer balance, read fresh: a classic mode reset that
+  // credited the customer (anchorResetInvoice with a total below 0) leaves
+  // one, and a later $0 reset (the date removed again) leaves it there while
+  // becoming the latest invoice, so the latest invoice's total does not say
+  // whether it is spent; the balance does. Stripe spends it on the
+  // customer's next invoice, a later purchase included. Refunding the paid
+  // year in full on top of it returns more than was paid, and cancelling
+  // with prorate:false settles nothing on the balance, so a person decides
+  // instead of the guarantee refunding automatically. The reason is
+  // charge_mismatch (the charge is not what is owed back), which the ticket
+  // already gives review-only text, so no new code is needed in the
+  // database's lists (REFUND_REVIEW_ONLY). Only money still to go back is
+  // gated: a charge already refunded in full (support, in the dashboard) is
+  // never checked, so its membership is still cancelled. A deleted customer
+  // has no balance left to spend.
+  async function outstandingCredit(stripe, customerId, live) {
+    if (!/^cus_[A-Za-z0-9]+$/.test(customerId || '')) refuse(503, 'refund_unavailable');
+    const customer = await stripe.customers.retrieve(customerId);
+    if (customer?.id !== customerId) refuse(503, 'refund_unavailable');
+    if (customer.deleted === true) return;
+    if (customer.livemode !== live || !Number.isSafeInteger(customer.balance)) refuse(503, 'refund_unavailable');
+    if (customer.balance < 0) needsPerson('charge_mismatch');
+  }
   // The invoice of the most recent annual payment of a subscription: its
   // latest invoice when that is paid, else its last paid one (a renewal
-  // drafted, or still being collected, is not paid yet).
-  async function mostRecentPaidInvoiceId(stripe, sub) {
+  // drafted, or still being collected, is not paid yet). The $0 or credit
+  // invoice a classic mode anchor reset leaves (a Dashboard cancellation
+  // date set inside a paid year, or removed again) is paid but no payment:
+  // the most recent payment is still the paid year that covers the period
+  // now running (paidYearInvoice), as settlement reads it. `account`: the
+  // customer and mode the request recorded.
+  async function mostRecentPaidInvoiceId(stripe, sub, account) {
     const latest = id(sub.latest_invoice);
     if (!latest) return null;
     const invoice = await stripe.invoices.retrieve(latest);
     if (invoice?.id !== latest) refuse(503, 'refund_unavailable');
+    if (invoice.status === 'paid' && anchorResetInvoice({ account, subscription: sub, invoice, livemode: account.livemode })) {
+      const paid = await paidYearInvoice(stripe, sub);
+      if (!paid || !/^in_[A-Za-z0-9]+$/.test(paid.id || '')) refuse(503, 'refund_unavailable');
+      return paid.id;
+    }
     if (invoice.status === 'paid') return latest;
     if (!UNPAID_INVOICE.includes(invoice.status)) refuse(503, 'refund_unavailable');
     return lastPaidInvoiceId(stripe, sub);
+  }
+  // The most recent payment of a subscription that is cancelled now: its
+  // newest paid invoice that collected money (a $0 invoice Stripe closes a
+  // subscription with, or a scheduled purchase's opening one, is no payment).
+  // Null when it has none; unknown is a refusal (503), never a guess.
+  async function lastCollectedInvoiceId(stripe, sub) {
+    const listed = await stripe.invoices.list({ subscription: sub.id, status: 'paid', limit: 10 });
+    if (!Array.isArray(listed?.data)) refuse(503, 'refund_unavailable');
+    for (const found of listed.data) {
+      const invoiceSub = id(found.subscription) || id(found.parent?.subscription_details?.subscription);
+      if (found.status !== 'paid' || invoiceSub !== sub.id || !/^in_[A-Za-z0-9]+$/.test(found.id || '') || !Number.isSafeInteger(found.amount_paid)) refuse(503, 'refund_unavailable');
+      if (found.amount_paid > 0) return found.id;
+    }
+    if (listed.has_more === true) refuse(503, 'refund_unavailable');
+    return null;
+  }
+  // A request's subscription Stripe reports cancelled when the request never
+  // recorded that cancellation (the owner cancelled it by hand in the
+  // dashboard; or a cancellation whose answer was lost): recorded on the
+  // request with the subscription's most recent payment, so the refund stays
+  // owed only while that is still the payment the member confirmed
+  // (limited_refund_subscription_canceled, 20261001041500). `token`: the
+  // caller's lease on the request, or null for the webhook.
+  // While that payment is still the most recent one, its charge is read fresh
+  // too: one the owner refunded in part when cancelling (the dashboard's
+  // prorated refund) or the member disputed cannot be refunded in full as
+  // confirmed, so the request goes to a person with that reason (review-only
+  // text: part of the payment was refunded) instead of staying owed in full
+  // for the sweep. Answers the function's answer and the reason a person
+  // looks (null when none was given).
+  async function cancellationSeen(stripe, live, sub, request, token, trace) {
+    trace.phase = 'refund_cancellation';
+    const paid = await lastCollectedInvoiceId(stripe, sub);
+    let review = null;
+    if (paid != null && paid === request.invoice_id) {
+      trace.phase = 'verify_charge';
+      review = await chargeReview(stripe, request.charge_id, live);
+    }
+    trace.phase = 'record_cancellation';
+    const answer = await deps.store.refundCanceled(sub.id, live, paid, token, review);
+    return { answer, reason: answer === 'needs_support' ? review ?? 'refund_payment_changed' : null };
+  }
+  // What a person must settle first on a request's recorded charge, read
+  // fresh: a dispute, or part of it refunded already (charge_disputed,
+  // charge_partly_refunded, both review-only). Null when neither (a charge
+  // refunded in full is the refund itself, found and recorded as such).
+  async function chargeReview(stripe, chargeId, live) {
+    if (!/^(ch|py)_[A-Za-z0-9]+$/.test(chargeId || '')) refuse(503, 'refund_unavailable');
+    const charge = await stripe.charges.retrieve(chargeId);
+    if (charge?.id !== chargeId || charge.livemode !== live || !Number.isSafeInteger(charge.amount) || !Number.isSafeInteger(charge.amount_refunded)) refuse(503, 'refund_unavailable');
+    if (charge.disputed === true) return 'charge_disputed';
+    if (charge.amount_refunded > 0 && charge.amount_refunded !== charge.amount) return 'charge_partly_refunded';
+    return null;
   }
   // The latest annual payment of the member's live subscription, verified
   // exactly as settlement verifies a payment, and its charge. `orNone`: null
@@ -603,7 +754,18 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id });
     let invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
     let paidFor = sub, earlier = false;
-    if (invoice?.id === id(sub.latest_invoice) && UNPAID_INVOICE.includes(invoice.status)) {
+    // The $0 or credit invoice of a classic mode anchor reset (a Dashboard
+    // cancellation date inside the paid year, or one removed again) is no
+    // payment; the paid year that covers the period now running is, as
+    // settlement verifies it. Verified against the subscription as it is,
+    // so the period end quoted is the one access now runs to (the date, or
+    // the shortened period's renewal), the settled period end.
+    if (invoice?.id === id(sub.latest_invoice) && invoice.status === 'paid' && anchorResetInvoice({ account, subscription: sub, invoice, livemode: live })) {
+      trace.phase = 'verify_paid_year';
+      invoice = await paidYearInvoice(stripe, sub);
+      if (!invoice) refuse(409, 'no_refundable_payment');
+      trace.phase = 'verify_payment';
+    } else if (invoice?.id === id(sub.latest_invoice) && UNPAID_INVOICE.includes(invoice.status)) {
       const paidId = await lastPaidInvoiceId(stripe, sub);
       if (!paidId) refuse(409, 'no_refundable_payment');
       invoice = await stripe.invoices.retrieve(paidId, { expand: ['lines.data.price'] });
@@ -628,8 +790,12 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (charge.amount_refunded > 0 && charge.amount_refunded !== charge.amount) needsPerson('charge_partly_refunded');
     // Refunded in full already (support, in the dashboard): nothing is left
     // to refund. A request on record for it is finished as recorded.
+    const alreadyRefunded = charge.amount_refunded === charge.amount;
+    // A refund still to make goes to a person while the customer holds a
+    // credit (outstandingCredit), whatever the latest invoice is.
+    if (!alreadyRefunded) { trace.phase = 'verify_credit'; await outstandingCredit(stripe, account.stripe_customer_id, live); }
     return { subscriptionId: sub.id, invoiceId: invoice.id, chargeId, customerId: account.stripe_customer_id, offerId: q.offer_id, pricePhase: q.price_phase,
-      amountCents: proof.annualCents, paidAt: proof.paidAt, periodEnd: earlier ? null : proof.periodEnd, alreadyRefunded: charge.amount_refunded === charge.amount };
+      amountCents: proof.annualCents, paidAt: proof.paidAt, periodEnd: earlier ? null : proof.periodEnd, alreadyRefunded };
   }
   // Before a request not cancelled yet moves to a renewal (the sweep's
   // followRenewal, a press's claim): the payment it recorded, read fresh, must
@@ -726,6 +892,25 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     let sub;
     try { sub = await stripe.subscriptions.retrieve(request.subscription_id); } catch (e) { await retry('cancel_failed', e); }
     if (sub?.id !== request.subscription_id || id(sub.customer) !== request.customer_id) await retry('cancel_unconfirmed');
+    // A credit on the customer (outstandingCredit): a person, now, before
+    // anything more is cancelled or refunded, whether the subscription is
+    // running, reached a cancellation date (cancellationSeen) or was
+    // cancelled on record already. Only while money is still to go back: a
+    // refund support already made (`known`, or the charge refunded in full
+    // before the webhook could finish it) is never held up, so the
+    // membership it paid back for is still cancelled and never renews.
+    if (!known) {
+      trace.phase = 'verify_credit';
+      try {
+        const charge = await stripe.charges.retrieve(request.charge_id);
+        if (charge?.id !== request.charge_id || charge.livemode !== live || !Number.isSafeInteger(charge.amount) || !Number.isSafeInteger(charge.amount_refunded)) refuse(503, 'refund_unavailable');
+        if (charge.amount_refunded !== charge.amount) await outstandingCredit(stripe, request.customer_id, live);
+      } catch (e) {
+        if (e instanceof Refusal && e.message === 'refund_needs_support' && e.reason) return needsSupport(e.reason);
+        await retry('payment_unconfirmed', e instanceof Refusal ? undefined : e);
+      }
+      trace.phase = 'cancel_subscription';
+    }
     if (sub.status !== 'canceled') {
       // Not cancelled yet, so the payment must still be the subscription's
       // most recent paid one: after a paid renewal the recorded one is not
@@ -736,7 +921,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       // with it Stripe stops collecting that invoice.
       if (request.subscription_canceled_at == null && id(sub.latest_invoice) !== request.invoice_id) {
         let lastPaid = null;
-        try { lastPaid = await mostRecentPaidInvoiceId(stripe, sub); } catch (e) { await retry('payment_unconfirmed', e); }
+        try { lastPaid = await mostRecentPaidInvoiceId(stripe, sub, { livemode: live, stripe_customer_id: request.customer_id }); } catch (e) { await retry('payment_unconfirmed', e); }
         if (lastPaid !== request.invoice_id) {
           if (known) return needsSupport('refunded_payment_not_latest', known.id, known.status);
           // The sweep follows the renewal as the member's next press would
@@ -759,6 +944,21 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
         sub = await stripe.subscriptions.cancel(request.subscription_id, { prorate: false, invoice_now: false }, { idempotencyKey: `${config.app}:refund-cancel:${request.charge_id}:${attempt}` });
       } catch (e) { await retry('cancel_failed', e); }
       if (sub?.id !== request.subscription_id || sub.status !== 'canceled' || id(sub.customer) !== request.customer_id) await retry('cancel_unconfirmed');
+    } else if (request.subscription_canceled_at == null) {
+      // Cancelled at Stripe, but not by this request on record: by hand in
+      // the dashboard, or a cancellation whose answer was lost. The refund
+      // goes ahead only while the payment it recorded is still the
+      // subscription's most recent one; a renewal paid before the
+      // cancellation goes to a person (20261001041500).
+      let seen;
+      try { seen = await cancellationSeen(stripe, live, sub, request, token, trace); } catch (e) { await retry('payment_unconfirmed', e instanceof Refusal ? undefined : e); }
+      if (seen.answer === 'lease_lost') return 'lease_lost';
+      if (seen.answer === 'needs_support') {
+        try { log({ ...failureLog(name, trace, 200, seen.reason), event: 'refund_needs_support' }); } catch { /* A log must never change the answer. */ }
+        return 'needs_support';
+      }
+      if (seen.answer !== 'canceled' && seen.answer !== 'duplicate') await retry('cancel_unconfirmed');
+      trace.phase = 'cancel_subscription';
     }
     if (!await record('canceled')) return 'lease_lost';
     // 2. Access ends the way a deleted-subscription event ends it. A failure
@@ -787,7 +987,14 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
         try { found = await providerRefund(stripe, request.charge_id, live); } catch { /* Unknown: retry below. */ }
         if (found) { accepted = found.refund; whole = true; }
         else if (e?.type === 'StripeInvalidRequestError' || e?.type === 'StripeCardError') {
-          return needsSupport(typeof e?.code === 'string' && ERROR_CODE.test(e.code) ? e.code : 'refund_refused', null, null, e);
+          // Refused because part of the charge was refunded meanwhile (the
+          // owner's prorated refund in the dashboard, whose event came after
+          // the cancellation was recorded) or it is disputed: a person looks,
+          // with the review-only reason, so nobody is told the payment was
+          // not returned or that the full refund will be finished.
+          let review = null;
+          try { review = await chargeReview(stripe, request.charge_id, live); } catch { /* Unknown: Stripe's own reason below. */ }
+          return needsSupport(review ?? (typeof e?.code === 'string' && ERROR_CODE.test(e.code) ? e.code : 'refund_refused'), null, null, e);
         } else await retry('refund_failed', e);
       }
     }
@@ -862,7 +1069,10 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (data.action === 'quote') {
       return reply(200, { schemaVersion: 1, state: recorded ? 'resume' : 'available', paymentId: payment.invoiceId, amountCents: payment.amountCents, currency: 'usd',
         paidAt: payment.paidAt, offerId: payment.offerId, periodEnd: payment.periodEnd ?? null, subscriptionCanceled: recorded?.subscription_canceled_at != null,
-        supportTicket: typeof recorded?.support_ticket_id === 'string' });
+        supportTicket: typeof recorded?.support_ticket_id === 'string',
+        // A request whose payment support refunded already (limited_refund_confirm
+        // keeps it on the row until the cancellation is done): the app says so.
+        ...(recorded ? { refundStatus: recorded.refund_status ?? null } : {}) });
     }
     // Exactly the payment and amount the member confirmed.
     if (data.paymentId !== payment.invoiceId || data.amountCents !== payment.amountCents) refuse(409, 'refund_quote_changed');

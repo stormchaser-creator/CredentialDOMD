@@ -114,7 +114,12 @@ function Invoices({ onOpenContract }) {
       bump(d.contractId, d.date);
     }
     return [...byContract.entries()]
-      .map(([contractId, v]) => ({ contractId, facility: facilityOf(contractId), ...v }))
+      // An agreement deleted before the delete checked for unbilled work:
+      // say so, and open nothing (opening it landed on another agreement).
+      .map(([contractId, v]) => {
+        const gone = !contracts.some(c => c.id === contractId);
+        return { contractId, gone, facility: gone ? "Deleted agreement" : facilityOf(contractId), ...v };
+      })
       .sort((a, b) => (a.oldest || "").localeCompare(b.oldest || ""));
   }, [data.workLog, data.dutyDays, contracts]);
   const needsInvoicingCard = needsInvoicing.length > 0 && (
@@ -126,17 +131,17 @@ function Invoices({ onOpenContract }) {
         Needs invoicing
       </div>
       {needsInvoicing.map(n => (
-        <div key={n.contractId} role="button" tabIndex={0}
-          onClick={() => onOpenContract?.(n.contractId)}
-          onKeyDown={(e) => { if (e.key === "Enter") onOpenContract?.(n.contractId); }}
+        <div key={n.contractId} role={n.gone ? undefined : "button"} tabIndex={n.gone ? undefined : 0}
+          onClick={n.gone ? undefined : () => onOpenContract?.(n.contractId)}
+          onKeyDown={n.gone ? undefined : (e) => { if (e.key === "Enter") onOpenContract?.(n.contractId); }}
           style={{
             display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, padding: "4px 0", minHeight: isDesktop ? undefined : TAP_MIN,
-            cursor: onOpenContract ? "pointer" : undefined,
+            cursor: onOpenContract && !n.gone ? "pointer" : undefined,
           }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{n.facility}</div>
           <div style={{ fontSize: 12, color: T.textMuted, textAlign: "right", flexShrink: 0, display: "flex", alignItems: "baseline", gap: 4 }}>
             <span>{n.count} unbilled {n.count === 1 ? "entry" : "entries"}{n.oldest ? ` · since ${formatDate(n.oldest)}` : ""}</span>
-            {onOpenContract && <span style={{ color: T.warning, fontWeight: 700 }}>›</span>}
+            {onOpenContract && !n.gone && <span style={{ color: T.warning, fontWeight: 700 }}>›</span>}
           </div>
         </div>
       ))}
@@ -381,9 +386,24 @@ function Invoices({ onOpenContract }) {
     const myDays = new Set(mine.map(callDayOf));
     const shared = (data.workLog || []).some(x =>
       x.invoiceId && x.invoiceId !== inv.id && x.contractId === inv.contractId && myDays.has(callDayOf(x)));
+    // Payments live only on the invoice row, so the delete takes them with
+    // it: name each one, and what Tax Prep loses, before the member agrees.
+    const paid = paidOf(inv);
+    const ledger = (inv.payments || []).filter(p => (parseFloat(p.amount) || 0) > 0);
+    const paymentList = ledger.map(p => `${money(p.amount)}${p.date ? ` on ${formatDate(p.date)}` : ""}${p.note ? ` (${p.note})` : ""}`).join(", ");
+    const lost = [];
+    if (paid > 0.005) {
+      lost.push(ledger.length
+        ? `It has ${ledger.length === 1 ? "a recorded payment" : `${ledger.length} recorded payments`}: ${paymentList}. Deleting the invoice erases ${ledger.length === 1 ? "it" : "them"}, and Tax Prep income falls by ${money(paid)}.`
+        : `It is marked paid (${money(paid)}). Deleting the invoice erases that payment, and Tax Prep income falls by ${money(paid)}.`);
+    }
+    if (inv.writeOffAt) lost.push(`Its ${money(Math.max(0, (parseFloat(inv.totalAmount) || 0) - paid))} write off goes with it.`);
+    const lossNote = lost.length
+      ? ` ${lost.join(" ")} A rebuilt invoice starts with nothing paid or written off, so write ${(paid > 0.005 ? Math.max(1, ledger.length) : 0) + (inv.writeOffAt ? 1 : 0) > 1 ? "these" : "this"} down to record again.`
+      : "";
     const warn = shared
-      ? `Careful: another invoice also bills work on the same call day(s). Deleting just this one breaks the stipend math for those days. Delete BOTH invoices and regenerate one invoice instead. Delete anyway?`
-      : `Delete invoice ${inv.number}?${parts.length ? ` Its ${parts.join(" and ")} become${released === 1 ? "s" : ""} unbilled again.` : ""}`;
+      ? `Careful: another invoice also bills work on the same call day(s). Deleting just this one breaks the stipend math for those days. Delete BOTH invoices and regenerate one invoice instead.${lossNote} Delete anyway?`
+      : `Delete invoice ${inv.number}?${parts.length ? ` Its ${parts.join(" and ")} become${released === 1 ? "s" : ""} unbilled again.` : ""}${lossNote}`;
     if (!window.confirm(warn)) return;
     // The one-time orientation fee is billed once per contract
     // (orientationBilled). Deleting the invoice that carried it must let the

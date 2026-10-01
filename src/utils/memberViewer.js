@@ -9,7 +9,8 @@
 //
 // Pure: plain node tests import it (tests/member-view/viewer.test.mjs).
 import { MEMBER_VIEW_SECTIONS, MEMBER_VIEW_PROFILE_FIELDS, memberViewSection } from "../../supabase/functions/_shared/memberView.mjs";
-import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring, plainDashes } from "./helpers.js";
+import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring, plainDashes, titleAfterType, titleWithType } from "./helpers.js";
+import { reminderLeadDays } from "./reminderPreferences.js";
 import { LIFECYCLE_LABELS, LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote } from "./lifecycle.js";
 import { complianceFor, findStateLicense, trackedStates, resolvePendingLicense } from "./compliance.js";
 import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, rollingWindowLabel } from "./cmePresentation.js";
@@ -82,17 +83,15 @@ function plainTitle(sectionKey, item, snapshot) {
  */
 export function recordCard(sectionKey, item, snapshot) {
   const title = plainTitle(sectionKey, item, snapshot);
-  let mainLine = title;
-  if (item.type && title.toLowerCase().startsWith(String(item.type).toLowerCase())) {
-    mainLine = title.slice(String(item.type).length).replace(/^\s*\u{2014}\s*/u, "");
-  }
-  const said = value => value != null && (title.toLowerCase().includes(String(value).toLowerCase()) || String(item.type || "").toLowerCase() === String(value).toLowerCase());
+  const type = String(item.type || "").trim();
+  const mainLine = titleAfterType(title, type);
+  const said = value => value != null && (title.toLowerCase().includes(String(value).toLowerCase()) || type.toLowerCase() === String(value).toLowerCase().trim());
   const nonExpiring = isNonExpiring(item, sectionKey);
   const lifecycled = LIFECYCLE_SECTIONS.includes(sectionKey);
   const alertable = isAlertable(item);
   const note = lifecycled ? lifecycleNote(item) : null;
   const dated = item.expirationDate || null;
-  const color = !alertable ? "gray" : nonExpiring ? "green" : dated ? getStatusColor(dated) : "gray";
+  const color = !alertable ? "gray" : nonExpiring ? "green" : dated ? getStatusColor(dated, reminderLeadDays(snapshot?.member?.reminderLeadDays)) : "gray";
   const subLine = [
     ...[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber, item.number, item.agency]
       .filter(Boolean).filter(value => !said(value)),
@@ -105,8 +104,12 @@ export function recordCard(sectionKey, item, snapshot) {
   ].filter(Boolean).map(String).filter((value, index, all) => all.indexOf(value) === index).join(" \u{B7} ");
   return {
     id: item.id,
-    type: item.type ? String(item.type) : "",
+    type,
+    // Under the type header: the title after the type, or the whole title
+    // when that is all there is.
     mainLine: mainLine || title,
+    // On one line, with the type (the read-only page, Home rows).
+    headline: titleWithType(title, type),
     subLine,
     color,
     showDot: !!(dated || note),

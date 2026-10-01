@@ -48,7 +48,7 @@ test('a record form keeps the spreadsheet refusal on screen when the next file i
     props: { title: 'Licenses', sectionKey: 'licenses', items: [], fields: [{ key: 'licenseNumber', label: 'License Number' }], autoOpen: true, onAutoOpenDone() {} },
     // The lifecycle rules are data the form reads (which sections carry a
     // status), so the real module is passed rather than a no-op stub.
-    modules: { ...common(rec), lifecycle: await import('../src/utils/lifecycle.js'), docPrefill: { splitScanned: e => ({ placed: e, extras: {}, withheld: [] }) } },
+    modules: { ...common(rec), lifecycle: await import('../src/utils/lifecycle.js'), formLayout: await import('../src/utils/formLayout.js'), docPrefill: { splitScanned: e => ({ placed: e, extras: {}, withheld: [] }) } },
   });
   const upload = form.fileInputs().find(n => n.props.multiple);
   assert.ok(upload, 'the form has its multi-file upload');

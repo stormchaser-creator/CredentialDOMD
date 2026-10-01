@@ -6,6 +6,7 @@ import { Modal, Field } from "../../shared";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { TAP_MIN } from "../../shared/actionButton";
 import { generateId } from "../../../utils/helpers";
+import { identifierReason } from "../../../utils/identifierGate";
 import { pickableContracts, hiddenEndedCount, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
 
 /**
@@ -25,6 +26,12 @@ const fmtDay = (iso) => {
   if (!iso) return "";
   const d = new Date(iso);
   return isNaN(d) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+// A to-do syncs (task_notes.text) and becomes the billing note when it is
+// finished, so it never carries a patient identifier (RVULog's gate).
+const noteRefusal = (text) => {
+  const why = identifierReason("", text || "");
+  return why ? `Not saved: the note contains ${why}. To-do notes sync to your account and become the invoice's billing note, and CredentialDOMD doesn't keep patient identifiers. Remove it and save again.` : "";
 };
 const minutesBetween = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
 
@@ -58,6 +65,8 @@ function TaskNotes({ onBill }) {
   const capture = () => {
     const t = text.trim();
     if (!t) return;
+    const refused = noteRefusal(t);
+    if (refused) { window.alert(refused); return; }
     // Refused: the note stays in the box to save again.
     if (addItem("taskNotes", {
       id: generateId(),
@@ -212,7 +221,7 @@ function TaskNotes({ onBill }) {
               style={{ ...iS, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} />
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button
-                onClick={() => { const v = editText.trim(); if (v && editItem("taskNotes", { ...editTask, text: v }) === false) return; setEditTask(null); }}
+                onClick={() => { const v = editText.trim(); const refused = noteRefusal(v); if (refused) { window.alert(refused); return; } if (v && editItem("taskNotes", { ...editTask, text: v }) === false) return; setEditTask(null); }}
                 disabled={!editText.trim()}
                 style={{
                   flex: 1, padding: "13px", borderRadius: 12, border: "none",

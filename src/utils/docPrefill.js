@@ -49,7 +49,10 @@ const AGREEMENT_NAME_HINT = /agreement|contract|locum|confirmation|assignment|en
  * linked to the contract being edited, other agreement documents, files whose
  * name says contract, then every other readable unlinked file (newest first).
  * Files linked to a license, CME, etc. are not offered. `ready` is false while
- * the bytes have not reached this device yet.
+ * the bytes have not reached this device yet; `missing` is true when they never
+ * will, because Storage no longer has the file (doc.fileMissing, set by
+ * AppContext reconcileDocumentFiles, which then stops asking), so the picker
+ * says so instead of "downloading" forever.
  */
 export function agreementDocCandidates(documents, { contractId } = {}) {
   const own = contractId ? `locumContracts:${contractId}` : null;
@@ -59,7 +62,7 @@ export function agreementDocCandidates(documents, { contractId } = {}) {
     .map((d) => {
       const linkedAgreement = String(d.linkedTo || "").startsWith("locumContracts:");
       const rank = d.linkedTo && d.linkedTo === own ? 3 : linkedAgreement ? 2 : AGREEMENT_NAME_HINT.test(d.name || "") ? 1 : 0;
-      return { doc: d, rank, linkedAgreement, ready: !!d.data };
+      return { doc: d, rank, linkedAgreement, ready: !!d.data, missing: !!d.fileMissing && !d.data };
     })
     .sort((a, b) => b.rank - a.rank || String(b.doc.uploadedAt || "").localeCompare(String(a.doc.uploadedAt || "")));
 }

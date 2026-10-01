@@ -119,15 +119,40 @@ export function followUpEmail({ label: rawLabel, expirationDate, recipient = "",
   };
 }
 
+// A degree, board letters or a generational suffix written after a name with
+// no comma ("Jane Smith MD", the form a contact card's FN often has). A token
+// is compared with its dots removed and in any case, so "md", "Md", "m.d.",
+// "Phd", "jr" and "R.N." are all letters.
+const NAME_SUFFIX = /^(?:MD|DO|PHD|MBBS|MBA|MHA|MPH|MS|MSN|BSN|RN|NP|PA|PA-C|APRN|FNP|CRNA|DNP|DDS|DMD|DPM|JD|FACS|FAANS|FACOS|FACP|FAAFP|FACEP|FAAP|FACC|FRCSC?|FRCPC?|JR|SR|II|III|IV)$/;
+// These letters are also surnames ("Kevin Do", "Jane Pa", "Lee Ii"). Written
+// with no dot, they are letters when their case stands apart from the rest of
+// the name ("DO" after "Kevin Do", "rn" after "Ana Smith"), or when a name
+// typed all in one case would still keep a first and last name without them
+// ("JANE SMITH DO", "jane smith do"). Title case is always the surname, and so
+// is the second of two same case words ("KEVIN DO", "kevin do").
+const SURNAME_LETTERS = new Set(["DO", "PA", "MS", "RN", "NP", "II"]);
+
+function isNameSuffix(token, rest) {
+  const key = token.replace(/\./g, "").toUpperCase();
+  if (!NAME_SUFFIX.test(key)) return false;
+  if (!SURNAME_LETTERS.has(key) || token.includes(".")) return true;
+  const others = rest.join(" ");
+  if (token === key) return others !== others.toUpperCase() || rest.length >= 2;
+  if (token === token.toLowerCase()) return others !== others.toLowerCase() || rest.length >= 2;
+  return false;
+}
+
 /** Heads-up to a peer reference before a credentialing office calls. */
 export function peerHeadsUp(settings = {}, peer = {}) {
   const userName = settings?.name || "Dr. [Your Name]";
   const userFull = settings?.degreeType ? `${userName}, ${settings.degreeType}` : userName;
-  // "Jane Smith, MD" -> "Smith", "Smith" -> "Smith", "Jane Smith" -> "Smith"
+  // "Jane Smith, MD" -> "Smith", "Smith" -> "Smith", "Jane Smith" -> "Smith",
+  // "Jane Smith MD FACS" -> "Smith" (not "Dear Dr. FACS,")
   const lastName = (() => {
     if (!peer?.name) return "Colleague";
-    const parts = peer.name.split(",")[0].trim().split(/\s+/);
-    return parts[parts.length - 1];
+    const parts = peer.name.split(",")[0].trim().split(/\s+/).filter(Boolean);
+    while (parts.length > 1 && isNameSuffix(parts[parts.length - 1], parts.slice(0, -1))) parts.pop();
+    return parts[parts.length - 1] || "Colleague";
   })();
   return {
     emailSubject: `Upcoming Reference Request from ${userName}`,

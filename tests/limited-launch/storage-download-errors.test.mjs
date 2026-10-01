@@ -173,3 +173,22 @@ test('CRED-031: a token refresh that fails partway through a run of downloads fa
   });
   assert.deepEqual(storage.requests.map((r) => r.path), [paths[0], paths[2]], 'the download with no token was never sent');
 });
+
+// VERA-003 follow-up: Vera times out a packet download only when it stalls,
+// so the download says as its bytes arrive. The stream is read from the same
+// storage-js request, so what reads as missing or failed is unchanged.
+test('with onProgress, a download reports its bytes as they arrive and hands back the same file; missing and no-token answers are unchanged', async () => {
+  const storage = storageBehindPolicy();
+  await withRealClient(storage, async () => MEMBER_TOKEN, async (f) => {
+    const seen = [];
+    const got = await f.api.downloadDocumentBlob(PATH, { detail: true, onProgress: (n) => seen.push(n) });
+    assert.equal(await got.blob.text(), STORED_PDF);
+    assert.equal(seen[0], 0, 'Storage answering counts as progress');
+    assert.equal(seen[seen.length - 1], new TextEncoder().encode(STORED_PDF).byteLength, 'every byte is counted');
+    const gone = 'user_syntheticA/00000000-0000-4000-8000-0000000000c6';
+    assert.deepEqual(json(await f.api.downloadDocumentBlob(gone, { detail: true, onProgress: () => {} })), { missing: true });
+  });
+  await withRealClient(storageBehindPolicy(), async () => null, async (f) => {
+    assert.deepEqual(json(await f.api.downloadDocumentBlob(PATH, { detail: true, onProgress: () => {} })), { failed: true });
+  });
+});

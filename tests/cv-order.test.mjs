@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { fixture } from './limited-launch/persistence-fixture.mjs';
 import { loadScreens, mount, textOf, nodes } from './harness/component-harness.mjs';
 
+// As App.jsx declares it: the integer column (FIELD_TYPES.publications.sortOrder)
+// is what keeps the whole-number rule.
 const FIELDS = [{ key: 'name', label: 'Short Label' }, { key: 'sortOrder', label: 'Order on CV', type: 'number' }];
 const { CrudSection } = await loadScreens('export { default as CrudSection } from "./src/components/features/CrudSection.jsx";');
 const extraApp = { allTrackedStates: [], toggleFavorite() {}, navigate() {}, userIdRef: { current: 'profileA' }, isDesktop: false };

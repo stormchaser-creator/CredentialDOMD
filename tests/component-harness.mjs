@@ -75,7 +75,7 @@ export async function mountComponent(path, { modules = {}, app = {}, props = {},
   const ctx = vm.createContext({
     module, exports: module.exports,
     require: n => { assert.ok(n in provided, `${path} imports ${n}, which the harness does not provide`); return provided[n]; },
-    console, URL, Blob, File, Buffer, TextEncoder, TextDecoder, atob, btoa, fetch,
+    console, URL, Blob, File, Buffer, TextEncoder, TextDecoder, atob, btoa, fetch, AbortController,
     FileReader: FakeFileReader,
     navigator: { userAgent: 'Synthetic desktop', clipboard: { writeText: async () => {} } },
     document, window: { navigator: {}, matchMedia: () => ({ matches: false }), confirm: () => true },
@@ -116,5 +116,7 @@ export async function mountComponent(path, { modules = {}, app = {}, props = {},
   const fileInputs = () => nodes().filter(n => n.type === 'input' && n.props.type === 'file');
   /** Pick files on a file input the way the browser does, then let the handler finish. */
   const pick = async (input, files) => { input.props.onChange({ target: { files, value: 'C:\\fakepath' } }); await settle(); render(); };
-  return { render, nodes, text, pageText, fileInputs, pick, timers, setProps(p) { currentProps = { ...currentProps, ...p }; render(); } };
+  /** Leave the screen: every effect's cleanup runs, as React runs them on unmount. */
+  const unmount = () => { for (const h of hooks) if (h && typeof h === 'object' && 'deps' in h) h.cleanup?.(); };
+  return { render, nodes, text, pageText, fileInputs, pick, timers, unmount, setProps(p) { currentProps = { ...currentProps, ...p }; render(); } };
 }

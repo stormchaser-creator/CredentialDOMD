@@ -33,9 +33,18 @@ export const REFUND_COPY = Object.freeze({
   // ticket in the member's name (supportTicket, 20260930071000).
   unfinishedTicket: "Your refund is not finished yet. Your membership is cancelled. We opened a support ticket for you, which you can read in Get help, and we will finish your refund for you. You do not need to do anything. You can also press Finish refund to try again now.",
   // One that stopped before its cancellation: nothing is claimed about the
-  // membership (its Stripe cancellation may have gone through unanswered).
-  // The refund sweep (20260930072000) finishes it without the member.
-  notStarted: "Your refund request did not finish, and nothing has been refunded yet. We keep trying to finish it for you, which cancels your membership and returns your payment. You can also press Finish refund to do it now.",
+  // membership (its Stripe cancellation may have gone through unanswered),
+  // nor about the money: support may have refunded the payment in the
+  // dashboard, and until limited-stripe-webhook records that refund the row
+  // does not hold it (20261001041500). The refund sweep (20260930072000)
+  // finishes it without the member.
+  notStarted: "Your refund request did not finish. We keep trying to finish it for you, which cancels your membership and completes your refund. You can also press Finish refund to do it now.",
+  // An unfinished request whose payment was refunded already (support, in
+  // the Stripe dashboard): limited_refund_confirm keeps that refund on the
+  // row (refundStatus pending, succeeded or requires_action) until the
+  // webhook, the sweep or a press records the cancellation and finishes it.
+  issuedNotCancelled: "A refund of your payment was issued to the card you paid with. Your membership is not cancelled yet. We are finishing your request for you, which ends your membership. You can also press Finish refund to do it now.",
+  issuedCancelled: "A refund of your payment was issued to the card you paid with, and your membership is cancelled. We are finishing your request for you. You can also press Finish refund to finish it now.",
   // needs_support: the server opened a support ticket in the member's name
   // (supportTicket, 20260930071000); the owner finishes it from there.
   needsSupport: "Your membership was cancelled, but the refund could not be completed automatically. We opened a support ticket for you, which you can read in Get help, and we will finish your refund for you. You do not need to do anything. Your saved records stay available to view and export.",
@@ -61,6 +70,16 @@ export const REFUND_COPY = Object.freeze({
 /** The refund sentence for a quote: amount, date, what it is. */
 export function refundSentence(view) {
   return `We will refund ${membershipPrice(view.amountCents)}, your most recent annual membership payment, made on ${membershipDate(view.paidAt)}, in full to the card you paid with.`;
+}
+
+/** A refund Stripe accepted for an unfinished request (refundStatus): the money is on its way back. */
+export function refundIssued(view) {
+  return view?.state === "resume" && ["pending", "succeeded", "requires_action"].includes(view.refundStatus);
+}
+
+/** The refund sentence for a request whose payment was refunded already. */
+export function refundIssuedSentence(view) {
+  return `A refund of ${membershipPrice(view.amountCents)}, your annual membership payment made on ${membershipDate(view.paidAt)}, was issued to the card you paid with.`;
 }
 
 /** The confirm button: it names the amount. */

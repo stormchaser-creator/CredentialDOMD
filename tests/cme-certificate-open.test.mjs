@@ -23,7 +23,7 @@ async function storageError(status, body) {
 const MISSING = () => storageError(400, { statusCode: '404', error: 'not_found', message: 'Object not found' });
 const EXPIRED = () => storageError(400, { statusCode: '403', error: 'Unauthorized', message: 'jwt expired' });
 
-async function openCertificate({ doc = CERT, answer }) {
+async function openCertificate({ doc = CERT, answer, wait = true }) {
   const f = fixture();
   f.onRequest = async (op) => (op.method === 'download' ? answer() : { error: null });
   const alerts = [], opened = [];
@@ -38,19 +38,20 @@ async function openCertificate({ doc = CERT, answer }) {
       cmeTopics: await import('../src/constants/cmeTopics.js'),
       inboxDocs: await import('../src/utils/inboxDocs.js'),
     },
-    globals: { window: { navigator: {}, matchMedia: () => ({ matches: false }), confirm: () => true, alert: (m) => alerts.push(m), open: (url) => opened.push(url) } },
+    globals: { window: { navigator: {}, matchMedia: () => ({ matches: false }), confirm: () => true, alert: (m) => alerts.push(m), open: (url) => { const w = { url, closed: false, close() { w.closed = true; }, location: {} };
+      Object.defineProperty(w.location, 'href', { set(v) { w.url = v; }, get() { return w.url; } }); opened.push(w); return w; } } },
   });
   const button = ui.nodes().find((n) => n.type === 'button' && ui.text(n).includes(CERT.name));
   assert.ok(button, 'the phone card shows the certificate button');
   button.props.onClick({ stopPropagation() {} });
-  await settle();
+  if (wait) await settle();
   return { alerts, opened, downloads: f.requests.filter((r) => r.method === 'download') };
 }
 
 test('CRED-031: a certificate whose file is missing from Storage says so in words, never "{}"', async () => {
   const { alerts, opened, downloads } = await openCertificate({ answer: async () => ({ data: null, error: await MISSING() }) });
   assert.equal(downloads.length, 1);
-  assert.equal(opened.length, 0, 'nothing opens');
+  assert.ok(opened.every((w) => w.closed), 'nothing is left open');
   assert.equal(alerts.length, 1);
   assert.match(alerts[0], /missing from your account/);
   assert.match(alerts[0], /Upload it again from Documents/);
@@ -75,5 +76,29 @@ test('a certificate Storage has opens in a new tab, with no alert', async () => 
   const { alerts, opened } = await openCertificate({ answer: async () => ({ data: file, error: null }) });
   assert.deepEqual(alerts, []);
   assert.equal(opened.length, 1);
-  assert.match(opened[0], /^blob:/);
+  assert.match(opened[0].url, /^blob:/);
+  assert.equal(opened[0].closed, false);
+});
+
+// A window opened after the download's await is outside the tap, and Safari
+// (the home-screen app above all) blocks it with no word. The tab opens in the
+// tap and the file is put in it once downloaded.
+test('CRED-031: the certificate tab opens in the tap itself, before the download answers', async () => {
+  let release;
+  const file = new Blob(['%PDF-1.4 synthetic'], { type: 'application/pdf' });
+  const { alerts, opened } = await openCertificate({ wait: false, answer: () => new Promise((r) => { release = () => r({ data: file, error: null }); }) });
+  assert.equal(opened.length, 1, 'a window is open while the download is still running');
+  assert.equal(opened[0].url, 'about:blank');
+  await settle();
+  release();
+  await settle();
+  assert.deepEqual(alerts, []);
+  assert.equal(opened.length, 1, 'the same window, not a second one');
+  assert.match(opened[0].url, /^blob:/);
+});
+
+test('CRED-031: a failed download closes the tab it opened', async () => {
+  const { opened } = await openCertificate({ answer: async () => ({ data: null, error: await EXPIRED() }) });
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].closed, true);
 });

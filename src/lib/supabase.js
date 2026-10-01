@@ -11,7 +11,7 @@ import { createContinuityBinding, recoverContinuity, continuitySourceSubject, PR
 import { accountDataDeletedAt, honorAccountDataDeletion } from "../utils/dataDeletion.js";
 import { getLockCode, saveLockCode, configureSecretContinuity } from "../utils/secretBox.js";
 import { profileInitializationError } from "../utils/profileIssueDiagnostics.js";
-import { classifyWriteError, writeErrorCode, PERMANENT_RETRY_LIMIT, REQUIRED_COLUMN_DEFAULTS, withRequiredDefaults, documentMime, isUuid, INTEGER_COLUMNS, toIntegerOrNull } from "../utils/syncRules.js";
+import { classifyWriteError, writeErrorCode, PERMANENT_RETRY_LIMIT, REQUIRED_COLUMN_DEFAULTS, withRequiredDefaults, documentMime, isUuid, INTEGER_COLUMNS, toIntegerOrNull, rebaseSetupState, closedTaskStamp } from "../utils/syncRules.js";
 
 // The typeof guard is the same one src/constants/defaults.js carries, and for
 // the same reason: this module owns redactForExport, which the export paths and
@@ -67,6 +67,21 @@ function accountChangedError() {
   return error;
 }
 
+// The same Clerk session: the same object, or one with the same session id
+// for the same user. Clerk builds a new Session object for the same session
+// whenever it refreshes its client (the touch it sends each time the page
+// gets focus, as an iPhone resumes the app); that is not an account change.
+// A sign-out leaves none, and a new sign-in is another session id.
+// (limitedLaunchClient.js sameClerkSession is the same rule.)
+const clerkSessionUser = session => session?.user?.id ?? session?.userId ?? null;
+function sameClerkSession(saved, current) {
+  if (saved === current) return true;
+  if (!saved || !current) return false;
+  return typeof saved.id === "string" && saved.id !== "" && current.id === saved.id
+    && clerkSessionUser(saved) !== null && clerkSessionUser(current) === clerkSessionUser(saved);
+}
+const liveClerkSession = () => globalThis.window?.Clerk?.session || null;
+
 // Invalidate requests already in flight before an explicit local purge. Clerk
 // signout is asynchronous, so session identity alone cannot mark that boundary.
 const writeGenerations = new Map();
@@ -87,7 +102,7 @@ function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = tr
     if (!accountId || (writeGenerations.get(accountId) || 0) !== writeGeneration || (active && active !== accountId) || (activeId && active !== activeId)
       || (current && current !== accountId) || (clerkId && current !== clerkId)
       || ((session?.user?.id || session?.userId) && (session.user?.id || session.userId) !== accountId)
-      || (globalThis.window?.Clerk?.session || null) !== session) throw accountChangedError();
+      || !sameClerkSession(session, liveClerkSession())) throw accountChangedError();
   };
   guard();
   // The purge fence this tab's records were loaded under when the write
@@ -98,8 +113,10 @@ function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = tr
     accessToken: async () => {
       owner.check();
       if (!session) throw new Error("The signed-in session is unavailable.");
+      // The object Clerk holds now for this same session (checked above).
+      const live = liveClerkSession() || session;
       let token;
-      try { token = await session.getToken({ template: "supabase" }); }
+      try { token = await live.getToken({ template: "supabase" }); }
       catch (error) { owner.check(); throw error; }
       owner.check();
       if (!token) throw new Error("The signed-in session is unavailable.");
@@ -131,8 +148,10 @@ function recordContext(key, item, previous, existing = false, authUserId, { keep
   // them, so replay decides it on the same ones (replayScopes): a delete
   // queues only the id, and the record is no longer on this device to ask.
   owner.scopes = [...new Set(needed)];
+  // A write made before this page load's first membership answer waits for
+  // it (awaitAnswer), as a settings save does: kept, never refused for that.
   return authorizeOwner(owner, () => guardRecord(owner, key, item, before, existing),
-    options => accessAuthority.statusFor(owner.scopes, owner.accountId, options), { keepOnRefusal });
+    options => accessAuthority.statusFor(owner.scopes, owner.accountId, { ...options, awaitAnswer: true }), { keepOnRefusal });
 }
 
 // Writes made while the membership answer is being re-checked. The owner of a
@@ -160,10 +179,25 @@ function authorizeOwner(owner, strict, status, { keepOnRefusal = false } = {}) {
   if (now.status === "refuse") throw membershipWriteError(now.reason);
   owner.authorized = null;
   if (now.status === "allow") { owner.check = strict; owner.check(); return owner; }
+  // Waiting for the page load's first answer, not a re-check (writeAheadRecord).
+  owner.firstAnswer = now.reason === "no_answer";
   owner.check = owner.guard;
   owner.authorized = accessAuthority.verify().then(at => {
-    owner.guard();
+    // An answer's refusal is decided before the identity guard. A session
+    // object replaced for the same account fails the guard, yet the screen
+    // still takes a refused change back (settleHeldRound: the account is
+    // served), so its queued copy must go too (heldForAccess), never stay to
+    // be sent on a later load the member was told it was not kept for.
     const settled = status({ at, settled: true });
+    // Clerk no longer reports this account (writeStatus "account_changed":
+    // a session that ended, another account signed in): not the answer's
+    // refusal, so its copy stays for that account's next sign-in (R4.1).
+    if (settled.reason === "account_changed") { owner.guard(); throw accountChangedError(); }
+    if (settled.status === "refuse" && accessAuthority.serves?.(owner.accountId) !== false) {
+      if (keepOnRefusal === true) owner.accessRefused = settled.reason === "read_only";
+      else owner.refusedByAnswer = true;
+    }
+    owner.guard();
     if (settled.status === "refuse") {
       if (keepOnRefusal !== true) throw membershipWriteError(settled.reason);
       owner.awaitingAccess = true;
@@ -183,11 +217,40 @@ const AWAITING_ACCESS = Object.freeze({ awaitingAccess: true });
 // A kept record of work already done outside the app that the answer refused
 // (authorizeOwner keepOnRefusal): queued as replay marks a refused kept save.
 const KEPT_REFUSED = Object.freeze({ awaitingAccess: true, accessRefused: true });
-/** True when this write is to be queued rather than sent (see authorizeOwner). */
-async function heldForAccess(owner) {
+/**
+ * True when this write is to be queued rather than sent (see authorizeOwner).
+ * `ahead`: its copy written to the queue before the answer (writeAheadRecord),
+ * decided here as the write is: kept (marked refused, for a kept record of
+ * work already done that the answer refused) when the write is held, taken
+ * off the queue when it is sent or refused.
+ */
+async function heldForAccess(owner, ahead = null) {
   if (!owner.authorized) return false;
-  await owner.authorized;
-  return owner.awaitingAccess === true;
+  try { await owner.authorized; }
+  catch (error) {
+    // The account changed while it waited (a session that ended or was
+    // replaced): unless the answer refused it (authorizeOwner
+    // owner.refusedByAnswer: the screen took it back), its copy stays on that
+    // account's queue for its next load or answer, as when the change comes
+    // during the record's turn (insertItem); a kept record of work done keeps
+    // its refused mark. An explicit sign-out purged the queue already. Only a
+    // refusal takes the copy off.
+    if (ahead) {
+      if (error?.code === "membership_account_changed" && owner.refusedByAnswer !== true) {
+        ahead.kept = true;
+        if (owner.accessRefused === true) ahead.mark = { accessRefused: true };
+      }
+      settleWrittenAhead(owner, ahead);
+    }
+    throw error;
+  }
+  const held = owner.awaitingAccess === true;
+  if (ahead) {
+    ahead.kept = held;
+    if (held && owner.accessRefused === true) ahead.mark = { accessRefused: true };
+    settleWrittenAhead(owner, ahead);
+  }
+  return held;
 }
 /** What a write held by heldForAccess is queued with. */
 const heldMeta = owner => (owner.accessRefused === true ? KEPT_REFUSED : AWAITING_ACCESS);
@@ -882,6 +945,7 @@ function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
   // account, and the recorded deletion stamp would stop the next load from
   // purging it. Dropped instead.
   if (!localCopyCurrent(owner.accountId, owner.fence)) return;
+  let queueId = null;
   try {
     const cur = JSON.parse(localStorage.getItem(key) || "[]");
     let arr = Array.isArray(cur) ? cur : [];
@@ -901,10 +965,13 @@ function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
     }
     // The scopes the write was decided on (recordContext), for replay.
     const scopes = op !== "settings" && Array.isArray(owner.scopes) && owner.scopes.length ? { scopes: owner.scopes } : {};
-    arr.push({ op, collectionKey, payload, ts: Date.now(), queueId: crypto.randomUUID(), ...scopes, ...meta });
+    // An id the caller chose (writeAhead holds a lock named by it first).
+    queueId = typeof meta.queueId === "string" && meta.queueId ? meta.queueId : crypto.randomUUID();
+    arr.push({ op, collectionKey, payload, ts: Date.now(), queueId, ...scopes, ...meta });
     // Bound the queue so one permanently-failing op can't grow without limit.
     localStorage.setItem(key, JSON.stringify(arr.slice(-PENDING_OPS_CAP)));
   } catch (err) {
+    queueId = null;
     // Storage full (a queued document carries its file): the write could not
     // be kept for another try. Said, never silent.
     if ((err?.name === "QuotaExceededError" || err?.code === 22) && op !== "settings") {
@@ -918,6 +985,8 @@ function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
     }
   }
   notifySync(owner.accountId);
+  // Its id in the queue, or null when it was not kept.
+  return queueId;
 }
 
 // Queued writes that would put a record back: a delete or a tombstone of the
@@ -1251,10 +1320,17 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
   // reports them (the result's `refused`), and a later answer that allows
   // them again sends them and takes the mark off.
   const refusedNow = new Map(), allowedAgain = new Set();
+  // Saves another page of this browser wrote ahead and is still deciding on
+  // its own answer (writeAhead, writeAheadRecord): that page sends it (a
+  // settings save in its profile order), or takes it back.
+  const decidingElsewhere = await decidingInLivePages(ops, owner.accountId);
   for (const [index, op] of ops.entries()) {
     try { owner.guard(); } catch { break; }
     if (localFence(owner.accountId) !== fence) break;
     if (!queuedNow(op)) continue;
+    // A save this tab wrote ahead while it waits for the page load's first
+    // answer (saveSettings, writeAheadRecord): this tab sends it.
+    if (writtenAhead.has(op.queueId) || decidingElsewhere.has(op.queueId)) continue;
     // Queued before collections were checked (identityVault from the
     // 2026-09-18 live window): dropped from the queue without being sent.
     if (op.op !== "settings" && !isSyncedCollection(op.collectionKey)) { completed.add(op.queueId); continue; }
@@ -1275,6 +1351,9 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
     const writes = () => needed.every(scope => accessAuthority.allows(scope, "write", owner.accountId));
     const permitted = op.op === "settings" ? allowsSettingsChange(op.payload) : writes();
     if (!permitted) {
+      // The task a board stamp closed (lastingStamp), refused by the
+      // membership: dropped, never called refused, as the live stamp is.
+      if (op.op === "settings" && op.automatic === true && replayRefusal(op, needed, owner.accountId) === "read_only") { completed.add(op.queueId); continue; }
       if (op.awaitingAccess === true && op.accessRefused !== true && replayRefusal(op, needed, owner.accountId) === "read_only") {
         refusedNow.set(op.queueId, op.op === "settings" ? "settings" : op.collectionKey);
       }
@@ -1323,8 +1402,17 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
         // patches overwrite earlier ones in replay order, which is the same
         // last-wins the live path has.
         const row = settingsToProfileRow(payload || {});
+        // A kept Setup board save goes up as what it changed from the copy
+        // it was made from, over the account's copy as it is now (one jsonb
+        // column, written whole: sent as it was kept, it overwrote the skips
+        // and declarations made on another device since).
+        let read = null;
+        if (Object.hasOwn(op, "setupBase") && payload && Object.hasOwn(payload, "setupState")) {
+          read = await writeRequest(owner, () => owner.db.from("profiles").select("setup_state").eq("id", profileId).maybeSingle());
+          if (!read.error) row.setup_state = rebaseSetupState(read.data?.setup_state ?? null, op.setupBase, payload.setupState);
+        }
         row.updated_at = new Date().toISOString();
-        const first = await writeRequest(owner, () => owner.db.from("profiles").update(row).eq("id", profileId));
+        const first = read?.error ? read : await writeRequest(owner, () => owner.db.from("profiles").update(row).eq("id", profileId));
         error = first.error || null;
         // A duplicate email (profiles_email_unique_key, 20260903e) is the one
         // failure retrying cannot fix: another account holds that address and
@@ -1405,6 +1493,10 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
 // null when it may be, or the authority cannot say. `needed`: replayScopes.
 function replayRefusal(op, needed, accountId) {
   if (typeof accessAuthority.statusFor !== "function") return null;
+  // Only an answer from the server this session refuses a kept save. The one
+  // this device remembered (writeStatus "read_only" with none yet) is for
+  // the screens: a load's replay before the answer marks nothing refused.
+  if (typeof accessAuthority.state === "function" && !accessAuthority.state(accountId)) return null;
   const result = op.op === "settings" ? accessAuthority.settingsStatus(op.payload, accountId)
     : accessAuthority.statusFor(needed, accountId);
   return result?.status === "refuse" ? result.reason : null;
@@ -1460,7 +1552,47 @@ export function boundContinuitySource(userId) {
   return (userId && boundContinuitySources.get(userId)) || null;
 }
 
-export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
+// A load whose identity or profile read fails for a reason that can pass (the
+// answer was cut off, the network or Clerk's token was still waking, a
+// timeout, a server error) tries again after these pauses, with the session
+// Clerk holds then, before the load stops and asks for a reload. Only the
+// final failure reaches AppContext, which reports it once.
+export const PROFILE_LOAD_RETRY_DELAYS_MS = Object.freeze([1000, 3000]);
+const TRANSIENT_CLIENT_PHASES = new Set(["token", "network", "timeout", "response"]);
+const transientStatus = status => status === 408 || status === 429 || (Number.isInteger(status) && status >= 500 && status <= 599);
+// initialize-clerk-profile (limitedLaunchClient): never an answer the server
+// gave (identity_conflict, continuity_unavailable, unauthorized, a 4xx, an
+// update required), and never a changed session. A server status other than
+// 200 that is not itself transient is an answer even when its body was cut off
+// or stalled past the deadline (phase "response" or "timeout").
+function transientInitializationFailure(error) {
+  if (error?.code !== "membership_information_unavailable") return false;
+  if (Number.isInteger(error.httpStatus) && error.httpStatus !== 200 && !transientStatus(error.httpStatus)) return false;
+  return TRANSIENT_CLIENT_PHASES.has(error.phase) || (error.phase === "http" && transientStatus(error.httpStatus));
+}
+// The profile row read: no answer at all (status 0, a request that threw) or
+// a server error. A denial (401/403) or a missing row is an answer.
+const transientReadFailure = result => !!result?.error && (!result.status || transientStatus(result.status));
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function withLoadRetries(owner, delays, run, transient) {
+  for (let attempt = 0; ; attempt++) {
+    let outcome;
+    try { outcome = { value: await run() }; }
+    catch (error) { outcome = { error }; }
+    // A changed or signed-out account stops at once, never retried.
+    owner.check();
+    const failed = "error" in outcome ? outcome.error : outcome.value;
+    if (!transient(failed, "error" in outcome) || attempt >= delays.length) {
+      if ("error" in outcome) throw outcome.error;
+      return outcome.value;
+    }
+    await pause(delays[attempt]);
+    owner.check();
+  }
+}
+
+export async function ensureProfile(userId, { isCurrent = () => true, retryDelaysMs = PROFILE_LOAD_RETRY_DELAYS_MS } = {}) {
+  const delays = Array.isArray(retryDelaysMs) ? retryDelaysMs : PROFILE_LOAD_RETRY_DELAYS_MS;
   if (!supabase || !userId) return null;
   const owner = writeContext(userId);
   owner.check = () => { owner.guard(); if (!isCurrent()) throw accountChangedError(); };
@@ -1473,7 +1605,10 @@ export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
     try {
       // This endpoint authenticates the production JWT and resolves legacy
       // identity server-side before it may create an ordinary fresh profile.
-      const receipt = await createLimitedLaunchClient({ accountId: userId, enabled: true }).initializeProfile();
+      // Each try reads the session Clerk holds then (the client asks for it).
+      const client = createLimitedLaunchClient({ accountId: userId, enabled: true });
+      const receipt = await withLoadRetries(owner, delays, () => client.initializeProfile(),
+        (error, threw) => threw && transientInitializationFailure(error));
       owner.check();
       initializedProfileId = receipt.profileId;
       configureSecretContinuity(null);
@@ -1483,7 +1618,7 @@ export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
         stage = "binding";
         binding = createContinuityBinding(receipt, { subject: userId, issuer: PRODUCTION_CLERK_ISSUER,
           session, authenticatedAt, isCurrent: () => {
-            try { owner.check(); return globalThis.window?.Clerk?.session === session; } catch { return false; }
+            try { owner.check(); return sameClerkSession(session, liveClerkSession()); } catch { return false; }
           } });
         boundContinuitySources.set(userId, continuitySourceSubject(binding, userId));
       }
@@ -1526,7 +1661,7 @@ export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
   const lookup = () => writeRequest(owner, () => owner.db.from("profiles")
     .select("*").eq("auth_user_id", userId).maybeSingle());
   let existing;
-  try { existing = await lookup(); }
+  try { existing = await withLoadRetries(owner, delays, lookup, (result, threw) => !threw && transientReadFailure(result)); }
   catch (cause) {
     owner.check();
     if (initializedProfileId) throw profileInitializationError("profile", cause);
@@ -1703,7 +1838,275 @@ function settingsRequest(owner, build) {
   return writeRequest(owner, () => Promise.race([build(controller.signal), expired])).finally(() => clearTimeout(timer));
 }
 
-export async function saveSettings(userId, settings, authUserId) {
+// Settings saves made before the page load's first membership answer
+// (settingsStatus "verify", reason "no_answer"): queueId -> account. Each
+// member edit is written to the queue at once, marked awaitingAccess, so a
+// reload or a page left while it waits (the Setup board flushes on pagehide)
+// still has it, and the next answer sends it. While this page waits on that
+// answer itself, the queued copy is this page's: replay in every page of
+// this browser leaves it alone (the queue is in localStorage, which they
+// share, so the mark is on the copy itself: decidingUntil, and a Web Lock
+// named by its id that this page holds until it decides), and the notices
+// do not count it (writtenAheadCount), so a load does not flash "1 change is
+// saved on this device". The answer then decides it here: allowed, it is
+// sent in profile order and the copy leaves the queue; refused, the copy
+// leaves the queue; still none (no connection), the copy stays, counted, for
+// the answer that comes later (the replay on each answer, AppContext).
+//
+// The Setup board's own stamps (automatic) are never written ahead: one
+// kept past its answer was a whole setupState laid over, and later sent
+// over, a newer copy from another device, for a change nobody made. They
+// wait in memory, go up when the answer allows them, and are dropped when
+// none comes; the next load stamps them again. A stamp the network loses
+// (offline, a failed or timed-out send) is dropped the same way, never
+// queued (sendSettings). All but the task that closed (lastTouched,
+// lastDone): the board stamps that only as it sees the task close, never on
+// a load, so that part alone is written ahead or queued, as what it changed
+// (lastingStamp).
+const writtenAhead = new Map();
+// How long a written-ahead copy counts as being decided, at most: the
+// check's own backstop (12 s), the send's (SETTINGS_SEND_LIMIT_MS), and
+// saves of the same profile ahead of it. Past it (a page frozen or closed
+// without its lock manager to say so), any page's replay sends it.
+export const WRITE_AHEAD_DECIDING_MS = 60_000;
+// A copy this young counts as decided by a live page even before its lock is
+// seen by another page's query. Only a copy written after this page's code
+// ran: one already on the queue by then (flushed at pagehide by the page this
+// one reloaded) has no live page behind it unless its lock says so. Not
+// performance.timeOrigin: a reload's new page starts at the navigation, and
+// the old page's pagehide and unload (its flush) come after that, so its
+// copy always looked written while this page was open.
+// When the grace runs out with no lock behind the copy, the page that left it
+// out asks the lock manager again (graceRunsOut): the notice is told, and a
+// replay it skipped runs again (onWrittenAheadFreed).
+export const WRITE_AHEAD_LOCK_GRACE_MS = 2_000;
+const PAGE_OPENED_AT = Date.now();
+const inGrace = (op, now) => {
+  const ts = Number(op?.ts) || 0;
+  return ts >= PAGE_OPENED_AT && now - ts < WRITE_AHEAD_LOCK_GRACE_MS;
+};
+const freedListeners = new Set();
+/**
+ * Called with the account id when a save another page wrote ahead,
+ * which a replay here left to that page during its lock grace, turns out to
+ * have no live page behind it: the caller replays the queue again (AppContext).
+ */
+export function onWrittenAheadFreed(listener) {
+  freedListeners.add(listener);
+  return () => freedListeners.delete(listener);
+}
+const graceTimers = new Map(); // accountId -> { at, timer, replay }
+function graceRunsOut(accountId, ops, { replay = false } = {}) {
+  const ends = ops.map(op => (Number(op?.ts) || 0) + WRITE_AHEAD_LOCK_GRACE_MS);
+  if (!ends.length) return;
+  const at = Math.max(...ends);
+  const current = graceTimers.get(accountId);
+  if (current && current.at >= at) { current.replay ||= replay; return; }
+  if (current) clearTimeout(current.timer);
+  const entry = { at, replay: replay || current?.replay === true, timer: null };
+  entry.timer = setTimeout(() => {
+    if (graceTimers.get(accountId) === entry) graceTimers.delete(accountId);
+    // The notice reads the queue again (writtenAheadCount), now past the grace.
+    notifySync(accountId);
+    if (!entry.replay) return;
+    for (const listener of freedListeners) { try { listener(accountId); } catch { /* a listener must not stop the others */ } }
+  }, Math.max(0, at - Date.now()) + 50);
+  entry.timer?.unref?.();
+  graceTimers.set(accountId, entry);
+}
+const decidingLock = queueId => `credentialdomd:deciding:${queueId}`;
+const stillDeciding = (op, now = Date.now()) => typeof op?.decidingUntil === "number" && op.decidingUntil > now;
+const decidingLocks = () => {
+  const locks = globalThis.navigator?.locks;
+  return typeof locks?.query === "function" ? locks : null;
+};
+// Whether another page's marked copy has a live page deciding it, as the
+// lock manager last said (queueId -> boolean). writtenAheadCount is read
+// synchronously on every sync change, so it reads this and asks the lock
+// manager again in the background, and the notice is told when the answer
+// differs.
+const liveDeciding = new Map();
+let decidingQuery = null, askAgain = null;
+function refreshLiveDeciding(accountId, marked) {
+  const locks = decidingLocks();
+  if (!locks) return;
+  if (decidingQuery) { askAgain = [accountId, marked]; return; }
+  decidingQuery = (async () => {
+    let names;
+    try {
+      const state = await locks.query();
+      names = new Set([...(state?.held || []), ...(state?.pending || [])].map(lock => lock?.name));
+    } catch { return; }
+    const now = Date.now();
+    let changed = false;
+    const graced = [];
+    for (const op of marked) {
+      const locked = names.has(decidingLock(op.queueId));
+      const live = locked || inGrace(op, now);
+      if (!locked && live) graced.push(op);
+      if (liveDeciding.get(op.queueId) !== live) changed = true;
+      liveDeciding.set(op.queueId, live);
+    }
+    // Live only by the grace: asked again once it runs out.
+    graceRunsOut(accountId, graced);
+    if (changed) notifySync(accountId);
+  })().finally(() => {
+    decidingQuery = null;
+    const again = askAgain;
+    askAgain = null;
+    if (again) refreshLiveDeciding(...again);
+  });
+}
+// When the earliest mark runs out nothing else may change the queue, and
+// the notice would go on leaving that copy out until some later sync event.
+const markExpiry = new Map(); // accountId -> { at, timer }
+function noticeWhenMarksRunOut(accountId, at) {
+  const current = markExpiry.get(accountId);
+  if (current && current.at <= at && current.at > Date.now()) return;
+  if (current) clearTimeout(current.timer);
+  const timer = setTimeout(() => { markExpiry.delete(accountId); notifySync(accountId); }, Math.max(0, at - Date.now()) + 50);
+  timer?.unref?.();
+  markExpiry.set(accountId, { at, timer });
+}
+/** How many queued ops of this account are saves written ahead that a page of this browser is still deciding. */
+export function writtenAheadCount(accountId) {
+  const slot = pendingOpsSlot(accountId);
+  if (!slot) return 0;
+  let queued;
+  try { queued = JSON.parse(localStorage.getItem(slot) || "[]"); } catch { return 0; }
+  if (!Array.isArray(queued)) return 0;
+  const now = Date.now();
+  const locks = decidingLocks();
+  let count = 0, earliest = Infinity;
+  const marked = [];
+  for (const op of queued) {
+    if (writtenAhead.get(op?.queueId) === accountId) { count++; continue; }
+    if (!stillDeciding(op, now)) continue;
+    earliest = Math.min(earliest, op.decidingUntil);
+    marked.push(op);
+    // Without the Web Locks API the mark's deadline alone says so. With it,
+    // a copy whose page is gone (reloaded, closed) is nobody's to decide, so
+    // the notice counts it as kept. One the lock manager has not been asked
+    // about yet stays out of the notice until it answers, so another tab's
+    // copy does not flash on it.
+    if (!locks || inGrace(op, now) || liveDeciding.get(op.queueId) !== false) count++;
+  }
+  for (const id of [...liveDeciding.keys()]) if (!marked.some(op => op.queueId === id)) liveDeciding.delete(id);
+  if (marked.length) {
+    noticeWhenMarksRunOut(accountId, earliest);
+    refreshLiveDeciding(accountId, marked);
+  }
+  return count;
+}
+// The ops of `ops` another live page is still deciding. Without the Web Locks
+// API the mark's deadline alone says so; with it, a copy whose page is gone
+// (reloaded, closed) is no longer anybody's to decide.
+async function decidingInLivePages(ops, accountId) {
+  const now = Date.now();
+  const marked = ops.filter(op => stillDeciding(op, now) && !writtenAhead.has(op.queueId));
+  if (!marked.length) return new Set();
+  const locks = decidingLocks();
+  if (!locks) return new Set(marked.map(op => op.queueId));
+  let names;
+  try {
+    const state = await locks.query();
+    names = new Set([...(state?.held || []), ...(state?.pending || [])].map(lock => lock?.name));
+  } catch { return new Set(marked.map(op => op.queueId)); }
+  // Left to its page only by the grace: once that runs out with still no lock
+  // behind it, this replay runs again rather than wait for the next answer.
+  graceRunsOut(accountId, marked.filter(op => !names.has(decidingLock(op.queueId)) && inGrace(op, now)), { replay: true });
+  return new Set(marked.filter(op => names.has(decidingLock(op.queueId)) || inGrace(op, now)).map(op => op.queueId));
+}
+function writeAhead(owner, settings, meta) {
+  return writeAheadOp(owner, "settings", "settings", redactForExport(settings), meta);
+}
+// A record write (add, edit, star, delete, its tombstone) made before this
+// page load's first answer (authorizeOwner owner.firstAnswer) is written
+// ahead the same way, so a reload, or a page closed while it waits, keeps
+// it: the next load lays a kept delete or star over what it reads back
+// (utils/heldChanges.js applyHeldQueue), and its first answer sends it. The
+// write's own wait decides the copy (heldForAccess): kept, or taken off the
+// queue when it is sent or refused.
+// Not a document carrying its file: a second copy of a data URL in
+// localStorage could fill it (and say so) for a save that is about to be
+// sent anyway. Its device copy keeps it across a reload, and the next load
+// uploads it (reconcileDocumentFiles); a held one is queued as before.
+function writeAheadRecord(owner, op, collectionKey, payload) {
+  if (!owner.authorized || owner.firstAnswer !== true) return null;
+  if (collectionKey === "documents" && payload && typeof payload === "object" && payload.data) return null;
+  return writeAheadOp(owner, op, collectionKey, payload, {});
+}
+function writeAheadOp(owner, op, collectionKey, payload, meta) {
+  const queueId = crypto.randomUUID();
+  // Held until this page decides it (settleWrittenAhead); released by the
+  // browser if the page goes first.
+  let release = null;
+  const locks = globalThis.navigator?.locks;
+  if (typeof locks?.request === "function") {
+    const decided = new Promise(resolve => { release = resolve; });
+    try { Promise.resolve(locks.request(decidingLock(queueId), () => decided)).catch(() => {}); } catch { release = null; }
+  }
+  const kept = queuePendingOp(op, collectionKey, payload, owner,
+    { ...AWAITING_ACCESS, ...meta, queueId, decidingUntil: Date.now() + WRITE_AHEAD_DECIDING_MS });
+  if (!kept) { release?.(); return null; }
+  writtenAhead.set(queueId, owner.accountId);
+  notifySync(owner.accountId);
+  return { queueId, kept: false, release };
+}
+// The wait is over. Kept (no answer still): its mark comes off and it is
+// counted, and replayed, from now on. Otherwise its copy leaves the queue:
+// sent, refused, or a later save carries its fields.
+// `ahead.mark`: fields the kept copy takes on (accessRefused, heldForAccess).
+// Decided once: a later call does nothing.
+function settleWrittenAhead(owner, ahead) {
+  if (ahead.settled) return;
+  ahead.settled = true;
+  writtenAhead.delete(ahead.queueId);
+  const slot = pendingOpsSlot(owner.accountId);
+  try {
+    const queued = JSON.parse(localStorage.getItem(slot) || "[]");
+    if (Array.isArray(queued) && queued.some(op => op?.queueId === ahead.queueId)) {
+      const rest = ahead.kept
+        ? queued.map(op => { if (op?.queueId !== ahead.queueId) return op; const { decidingUntil: _decided, ...copy } = op; return { ...copy, ...(ahead.mark || {}) }; })
+        : queued.filter(op => op?.queueId !== ahead.queueId);
+      if (rest.length) localStorage.setItem(slot, JSON.stringify(rest));
+      else localStorage.removeItem(slot);
+    }
+  } catch { /* the queue stays as it was; replay decides the copy once its mark runs out */ }
+  ahead.release?.();
+  notifySync(owner.accountId);
+}
+
+// What a queued settings save carries besides its fields: the setupState it
+// was made from, when it changes setupState and the caller knew it
+// (`previous`), so replay and a load apply it as what it changed
+// (syncRules rebaseSetupState) rather than whole.
+function setupBaseMeta(settings, previous) {
+  if (!settings || !Object.hasOwn(settings, "setupState")) return {};
+  if (!previous || typeof previous !== "object" || !Object.hasOwn(previous, "setupState")) return {};
+  return { setupBase: previous.setupState ?? null };
+}
+
+// Of a board stamp, the part the next load cannot make again: the task that
+// closed (syncRules closedTaskStamp). Kept like a member's change, on the
+// queue as what it changed (setupBase), when the stamp itself is not; marked
+// automatic, so a membership that refuses it drops it without a word.
+function lastingStamp(settings, previous) {
+  if (!settings || !Object.hasOwn(settings, "setupState")) return null;
+  if (!previous || typeof previous !== "object" || !Object.hasOwn(previous, "setupState")) return null;
+  const setupState = closedTaskStamp(previous.setupState, settings.setupState);
+  return setupState ? { settings: { setupState }, meta: { setupBase: previous.setupState ?? null, automatic: true } } : null;
+}
+
+/**
+ * Save profile settings. `automatic`: nobody did this (the Setup board's own
+ * stamps); it is never kept on the queue, whether held for a membership
+ * answer or lost by the network, except for the task that closed
+ * (lastingStamp), which no later load stamps again.
+ * `previous`: the settings as they were before this change (setupState),
+ * for a kept copy's base.
+ */
+export async function saveSettings(userId, settings, authUserId, { automatic = false, previous = null } = {}) {
   const owner = writeContext(authUserId);
   authorizeOwner(owner, () => guardSettings(owner, settings), options => accessAuthority.settingsStatus(settings, owner.accountId, options));
   // The identity and the membership decision are taken now, when the change
@@ -1711,16 +2114,49 @@ export async function saveSettings(userId, settings, authUserId) {
   // too; only the sending waits its turn.
   const allowedNow = !owner.authorized;
   if (allowedNow) saveDeviceKeys(owner.accountId, settings);
-  return inProfileOrder(`${owner.accountId}\u0000${userId || ""}`, Object.keys(settings || {}), allowedNow,
-    () => sendSettings(owner, userId, settings, allowedNow));
+  const meta = setupBaseMeta(settings, previous);
+  const lasting = automatic === true ? lastingStamp(settings, previous) : null;
+  // A member's save made before the page load's first answer: on the queue
+  // now (writtenAhead). The board's own stamps wait in memory only, all but
+  // the task that closed, which is written ahead on its own.
+  const noAnswer = owner.authorized && accessAuthority.settingsStatus(settings, owner.accountId).reason === "no_answer";
+  const ahead = !noAnswer ? null
+    : automatic !== true ? writeAhead(owner, settings, meta)
+      : lasting ? writeAhead(owner, lasting.settings, lasting.meta) : null;
+  const run = inProfileOrder(`${owner.accountId}\u0000${userId || ""}`, Object.keys(settings || {}), allowedNow,
+    () => sendSettings(owner, userId, settings, allowedNow, { ahead, automatic: automatic === true, meta, lasting }));
+  // Its wait decides the copy (sendSettings: heldForAccess), before any
+  // PATCH goes out, so a save that reached the server is never left queued
+  // to be sent again. This only settles a copy whose wait never finished:
+  // an account change keeps it, unless the answer refused it.
+  if (ahead) run.then(() => settleWrittenAhead(owner, ahead), error => {
+    if (error?.code === "membership_account_changed" && owner.refusedByAnswer !== true) ahead.kept = true;
+    settleWrittenAhead(owner, ahead);
+  });
+  return run;
 }
 
-async function sendSettings(owner, userId, settings, deviceKeysSaved) {
-  if (owner.authorized && await heldForAccess(owner)) {
+async function sendSettings(owner, userId, settings, deviceKeysSaved, { ahead = null, automatic = false, meta = {}, lasting = null } = {}) {
+  // A board stamp that does not go up: only the task that closed is kept.
+  const keepLasting = (extra = {}) => {
+    if (lasting) queuePendingOp("settings", "settings", redactForExport(lasting.settings), owner, { ...extra, ...lasting.meta });
+    return null;
+  };
+  // A written-ahead copy is decided with the wait, as a record's is: kept
+  // when held, off the queue when allowed (before the PATCH: a send that
+  // fails re-queues it below) or refused.
+  if (owner.authorized && await heldForAccess(owner, ahead)) {
     // Kept on this device while membership could not be confirmed: its
     // device keys are saved here, and the rest is queued like an offline edit.
     saveDeviceKeys(owner.accountId, settings);
-    queuePendingOp("settings", "settings", redactForExport(settings), owner, AWAITING_ACCESS);
+    // Written ahead already: that copy is the queued one (a board stamp's
+    // is only the task that closed).
+    if (ahead) return null;
+    // The board's own stamp is not kept past its answer: the next load
+    // stamps it again from the account's copy, and a kept one would be laid
+    // over (and sent over) whatever the member changes meanwhile.
+    if (automatic) return keepLasting(AWAITING_ACCESS);
+    queuePendingOp("settings", "settings", redactForExport(settings), owner, { ...AWAITING_ACCESS, ...meta });
     return null;
   }
   if (!deviceKeysSaved) saveDeviceKeys(owner.accountId, settings);
@@ -1730,8 +2166,10 @@ async function sendSettings(owner, userId, settings, deviceKeysSaved) {
     // write; replay applies it once the session is back. Device-local material
     // is stripped through the one redaction, so a queued patch sitting on disk
     // holds no more than a cloud write would.
+    // The board's own stamp is not kept: the next load stamps it again.
+    if (automatic) return keepLasting();
     const clean = redactForExport(settings);
-    queuePendingOp("settings", "settings", clean, owner);
+    queuePendingOp("settings", "settings", clean, owner, meta);
     return null;
   }
   const row = settingsToProfileRow(settings);
@@ -1764,13 +2202,19 @@ async function sendSettings(owner, userId, settings, deviceKeysSaved) {
         return { ...(retry.data ? profileRowToSettings(retry.data) : {}), savedExcept: "email" };
       }
       console.warn("Failed to save settings:", retry.error.message);
+      if (automatic) return keepLasting();
       const clean = redactForExport(settings); delete clean.email;
-      queuePendingOp("settings", "settings", clean, owner);
+      queuePendingOp("settings", "settings", clean, owner, meta);
       return null;
     }
     console.warn("Failed to save settings:", error.message);
+    // A board stamp the network lost (a failed or timed-out PATCH) is not
+    // queued either: the Sign out warning counts the queue as changes the
+    // member made, and the next load stamps it again. The task that closed
+    // is the exception (lastingStamp).
+    if (automatic) return keepLasting();
     const clean = redactForExport(settings);
-    queuePendingOp("settings", "settings", clean, owner);
+    queuePendingOp("settings", "settings", clean, owner, meta);
     return null;
   }
   if (data && "email" in row && data.email !== row.email) {
@@ -1980,11 +2424,14 @@ export function listSharedInvoiceNumbersRpc() {
  * should use this. `signal` aborts the request (the certificate prefetch's
  * time budget). With { detail: true } it says why not, like
  * downloadDocumentFile: { blob } | { missing: true } | { failed: true }.
+ * `onProgress(bytesSoFar)` is called when Storage answers and as each chunk
+ * of the file arrives, so a caller can time out a download that has stalled
+ * rather than one that is slow (a large scan on a weak link).
  */
-export async function downloadDocumentBlob(storagePath, { signal, detail = false } = {}) {
+export async function downloadDocumentBlob(storagePath, { signal, detail = false, onProgress } = {}) {
   const answer = (value) => (detail ? value : value.blob || null);
   if (!supabase || !storagePath) return answer({ failed: true });
-  const { data, error } = await fetchDocumentFile(storagePath, signal);
+  const { data, error } = await fetchDocumentFile(storagePath, signal, onProgress);
   if (error || !data) return answer((await isMissingObject(error)) ? { missing: true } : { failed: true });
   return answer({ blob: data });
 }
@@ -2014,9 +2461,26 @@ function documentFiles() {
 
 // { data, error } like storage-js, never a throw: a download that could not
 // be sent is an error (so "failed"), whatever threw it.
-async function fetchDocumentFile(storagePath, signal) {
+async function fetchDocumentFile(storagePath, signal, onProgress) {
   try {
-    return await documentFiles().download(storagePath, {}, signal ? { signal } : undefined);
+    const request = documentFiles().download(storagePath, {}, signal ? { signal } : undefined);
+    if (typeof onProgress !== "function" || typeof request?.asStream !== "function") return await request;
+    // Read as a stream to see the bytes arrive. The error path is storage-js's
+    // own (the same request), so a missing object still reads as missing.
+    const { data: body, error } = await request.asStream();
+    if (error || !body) return { data: null, error };
+    onProgress(0);
+    const reader = body.getReader();
+    const parts = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      received += value?.byteLength || 0;
+      onProgress(received);
+    }
+    return { data: new Blob(parts), error: null };
   } catch (error) {
     return { data: null, error };
   }
@@ -2079,18 +2543,24 @@ export async function downloadDocumentFile(storagePath, { detail = false } = {})
 export async function insertItem(userId, collectionKey, item, { keepOnRefusal = false } = {}) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, item, undefined, false, undefined, { keepOnRefusal });
+  const ahead = writeAheadRecord(owner, "upsert", collectionKey, item);
   // The record's turn: a delete, edit or star of it waits for this add, and
   // this add waits for a replayed queued write of the same id in flight.
   const turn = takeRecordTurn(owner, collectionKey, item?.id);
   try {
     if (turn.ready) { await turn.ready; owner.check(); }
-    return await insertForOwner(userId, collectionKey, item, owner);
-  } finally { turn.done(); }
+    return await insertForOwner(userId, collectionKey, item, owner, ahead);
+  } finally {
+    turn.done();
+    // Stopped before its wait decided it (the account changed): replay does.
+    if (ahead && !ahead.settled) { ahead.kept = true; settleWrittenAhead(owner, ahead); }
+  }
 }
 
-async function insertForOwner(userId, collectionKey, item, owner) {
-  // Kept on this device while membership could not be confirmed: queued.
-  if (owner.authorized && await heldForAccess(owner)) { queuePendingOp("upsert", collectionKey, item, owner, heldMeta(owner)); return null; }
+async function insertForOwner(userId, collectionKey, item, owner, ahead = null) {
+  // Kept on this device while membership could not be confirmed: queued
+  // (written ahead already, before the page load's first answer).
+  if (owner.authorized && await heldForAccess(owner, ahead)) { if (!ahead) queuePendingOp("upsert", collectionKey, item, owner, heldMeta(owner)); return null; }
   // No cloud target yet (offline / local dev): queue so it isn't lost.
   if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return null; }
   const startedAt = Date.now();
@@ -2131,7 +2601,10 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, item, previous, true, authUserId, { keepOnRefusal });
   const retryOp = partial ? "patch" : "upsert";
-  if (owner.authorized && await heldForAccess(owner)) { queuePendingOp(retryOp, collectionKey, item, owner, heldMeta(owner)); return; }
+  const ahead = writeAheadRecord(owner, retryOp, collectionKey, item);
+  try {
+    if (owner.authorized && await heldForAccess(owner, ahead)) { if (!ahead) queuePendingOp(retryOp, collectionKey, item, owner, heldMeta(owner)); return; }
+  } finally { if (ahead && !ahead.settled) { ahead.kept = true; settleWrittenAhead(owner, ahead); } }
   if (!supabase || !userId) { queuePendingOp(retryOp, collectionKey, item, owner); return; }
   // The record's add may still be uploading (a document is read before it is
   // stored, so its card can be saved the moment the upload starts). Sent
@@ -2192,7 +2665,10 @@ export async function setFavorite(userId, collectionKey, item, favorite, authUse
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const payload = { id: item?.id, favorite: !!favorite };
   const owner = recordContext(collectionKey, { ...item, favorite: !!favorite }, item, true, authUserId);
-  if (owner.authorized && await heldForAccess(owner)) { queueFavorite(owner, collectionKey, payload, AWAITING_ACCESS); return; }
+  const ahead = writeAheadRecord(owner, "favorite", collectionKey, payload);
+  try {
+    if (owner.authorized && await heldForAccess(owner, ahead)) { if (!ahead) queueFavorite(owner, collectionKey, payload, AWAITING_ACCESS); return; }
+  } finally { if (ahead && !ahead.settled) { ahead.kept = true; settleWrittenAhead(owner, ahead); } }
   if (!supabase || !userId) { queueFavorite(owner, collectionKey, payload); return; }
   // The record's turn. Its add may still be in flight (a star sent first
   // matches no row), or replay may be sending a queued older copy of it: the
@@ -2216,11 +2692,6 @@ export async function setFavorite(userId, collectionKey, item, favorite, authUse
 export async function deleteItem(userId, collectionKey, itemId, previous) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, previous || { id: itemId }, previous, true);
-  const held = !!owner.authorized && await heldForAccess(owner);
-  // The add this delete undoes may still be uploading. Deleting first matched
-  // nothing, and the add then landed behind the tombstone.
-  await settleInsert(owner, collectionKey, itemId);
-  dropQueuedWrites(owner, collectionKey, itemId);
   // A document's file is where its row says it is. The path is NOT always
   // <this sign-in>/<id>: a continuity-migrated account's files sit under its
   // old sign-in id, and removing the computed path deleted nothing while the
@@ -2231,7 +2702,15 @@ export async function deleteItem(userId, collectionKey, itemId, previous) {
   // only the row).
   const before = previous || accessAuthority.previousRecord(collectionKey, itemId, owner.accountId);
   const payload = collectionKey === "documents" ? { id: itemId, storagePath: before?.storagePath || `${owner.accountId}/${itemId}` } : itemId;
-  if (held) { queuePendingOp("delete", collectionKey, payload, owner, AWAITING_ACCESS); return; }
+  const ahead = writeAheadRecord(owner, "delete", collectionKey, payload);
+  let held;
+  try { held = !!owner.authorized && await heldForAccess(owner, ahead); }
+  finally { if (ahead && !ahead.settled) { ahead.kept = true; settleWrittenAhead(owner, ahead); } }
+  // The add this delete undoes may still be uploading. Deleting first matched
+  // nothing, and the add then landed behind the tombstone.
+  await settleInsert(owner, collectionKey, itemId);
+  dropQueuedWrites(owner, collectionKey, itemId);
+  if (held) { if (!ahead) queuePendingOp("delete", collectionKey, payload, owner, AWAITING_ACCESS); return; }
   if (!supabase || !userId) { queuePendingOp("delete", collectionKey, payload, owner); return; }
   let fileError = null;
   if (collectionKey === "documents") {
@@ -2262,7 +2741,7 @@ export async function bulkSync(userId, collectionKey, items, authUserId) {
     options => accessAuthority.statusFor(items.flatMap((item, index) => [
       ...accessAuthority.mutationScopes(collectionKey, item, previous[index]),
       ...(collectionKey === "documents" && !previous[index] ? ["credential", "practice"] : []),
-    ]), owner.accountId, options));
+    ]), owner.accountId, { ...options, awaitAnswer: true }));
   // Kept on this device while membership could not be confirmed: none of
   // these rows went up (the caller counts them; the next load pushes them).
   if (owner.authorized && await heldForAccess(owner)) return items.length;
@@ -2311,10 +2790,13 @@ export async function recordTombstone(userId, collectionKey, itemId, previous) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, previous || { id: itemId }, previous, true);
   if (!itemId) return;
-  const held = !!owner.authorized && await heldForAccess(owner);
+  const ahead = writeAheadRecord(owner, "tombstone", collectionKey, itemId);
+  let held;
+  try { held = !!owner.authorized && await heldForAccess(owner, ahead); }
+  finally { if (ahead && !ahead.settled) { ahead.kept = true; settleWrittenAhead(owner, ahead); } }
   await settleInsert(owner, collectionKey, itemId);
   dropQueuedWrites(owner, collectionKey, itemId);
-  if (held) { queuePendingOp("tombstone", collectionKey, itemId, owner, AWAITING_ACCESS); return; }
+  if (held) { if (!ahead) queuePendingOp("tombstone", collectionKey, itemId, owner, AWAITING_ACCESS); return; }
   if (!supabase || !userId) { queuePendingOp("tombstone", collectionKey, itemId, owner); return; }
   const { error } = await writeRequest(owner, () => owner.db.from("deleted_items").upsert(
     { item_id: itemId, user_id: userId, collection: collectionKey },

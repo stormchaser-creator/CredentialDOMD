@@ -12,6 +12,9 @@ import { docAttachedLabel, fmtBytes, docBytes } from "../../utils/docLabel";
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
 
+// The Documents tab's per-file limit (DocumentsSection checkBeforeRead).
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
 /**
  * DocAttach — the ONE way to attach + scan documents from inside any
  * credential form. Upload or photograph a document; the AI reads it,
@@ -32,7 +35,7 @@ import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
  *  - setForm(fn): form state setter — extracted fields are merged in
  *  - attachedDocs / setAttachedDocs: pending files, saved+linked by the parent
  *  - analyzer / textAnalyzer: section-specific analyzers (default: classify)
- *  - existingDocs (optional): [{ doc, ready }] from Files the user may pick
+ *  - existingDocs (optional): [{ doc, ready, missing }] from Files the user may pick
  *    instead of uploading again; same analyzer, same fill, linked on save
  *  - allowedKeys (optional): the host table's columns. The default
  *    classifier can call a CME certificate a licence, or a drug screen a
@@ -125,6 +128,10 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
     const refused = [];
     const refuse = (text) => { refused.push(text); setIsError(true); setMsg(refused.join(" ")); };
     for (const file of Array.from(files)) {
+      // The Documents tab's 10 MB line, before the file is read. The
+      // documents bucket refuses anything over 15 MB, and a file it refuses
+      // was queued whole and reported as this device's storage being full.
+      if (file.size > MAX_FILE_SIZE) { refuse(`"${file.name}" exceeds the 10 MB size limit.`); continue; }
       // A spreadsheet with a patient-identifier column is never attached.
       const sheetRefusal = await spreadsheetGuard(file);
       if (sheetRefusal) { refuse(`"${file.name}" was not attached. ${sheetRefusal}`); continue; }
@@ -226,8 +233,10 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {existingDocs.map(({ doc, ready }) => {
-                  const sub = !ready
+                {existingDocs.map(({ doc, ready, missing }) => {
+                  const sub = missing
+                    ? "Missing from your account. Upload it again in Documents."
+                    : !ready
                     ? "Still downloading to this device"
                     : docAttachedLabel(doc, data)
                       || `${fmtBytes(docBytes(doc))}${doc.uploadedAt ? " · " + new Date(doc.uploadedAt).toLocaleDateString() : ""}`;
@@ -240,7 +249,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
                       <FileIcon />
                       <span style={{ minWidth: 0, flex: 1 }}>
                         <span style={{ display: "block", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
-                        <span style={{ display: "block", fontSize: 12, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</span>
+                        <span style={{ display: "block", fontSize: 12, color: missing ? T.danger : T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: missing ? "normal" : "nowrap" }}>{sub}</span>
                       </span>
                     </button>
                   );

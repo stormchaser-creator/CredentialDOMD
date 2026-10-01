@@ -53,6 +53,28 @@ export const FIELD_TYPES = {
   },
 };
 
+// The jsonb columns Vera may write, and the shape every screen reads them
+// as. FIELD_TYPES above lists the scalar columns; these are not in it, so a
+// string here used to pass straight through: cme.topics = "Pain Management"
+// was stored as a JSON string, and (c.topics || []).some(...) threw on every
+// launch for a DEA holder (VERA-004). "tags" is a list of words (a string is
+// split on commas); "list" is a list of objects, kept only when it is one.
+export const JSON_FIELDS = {
+  cme: { topics: "tags" },
+  screenings: { components: "list" },
+  locumContracts: { coveragePeriods: "list", callRateGrid: "list" },
+};
+
+function jsonValue(shape, value) {
+  if (shape === "tags") {
+    const raw = typeof value === "string" ? value.split(/[,;]/) : Array.isArray(value) ? value : null;
+    if (!raw) return undefined;
+    return raw.filter(t => typeof t === "string").map(t => t.trim()).filter(Boolean);
+  }
+  const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  return Array.isArray(value) && value.every(isObject) ? value : undefined;
+}
+
 // A date column takes "YYYY-MM-DD" that survives a round trip. A pattern
 // alone is not enough: JavaScript rolls "2026-02-30" into March, while
 // Postgres rejects it, and a rejected date rejects the whole record.
@@ -104,6 +126,8 @@ const isDateField = (section, key) => key === "date" || /Date$/.test(key) || (se
  * one). Money and counts may carry "$" and thousands commas.
  */
 export function fieldValueFits(section, key, value) {
+  const shape = JSON_FIELDS[section]?.[key];
+  if (shape) return jsonValue(shape, value);
   if (FIELD_TYPES[section]?.[key]) {
     const stored = columnValue(section, key, value);
     return stored == null ? undefined : stored;
@@ -148,7 +172,7 @@ export function splitFields(section, fields = {}, customFields = {}) {
     if (blocked(label(k), v)) continue;
     const fits = known.has(k) ? fieldValueFits(section, k, v) : undefined;
     if (fits !== undefined) clean[k] = fits;
-    else extra[label(k)] = String(v);
+    else extra[label(k)] = typeof v === "string" ? v : (JSON.stringify(v) ?? String(v));
   }
   return { clean, extra: Object.keys(extra).length ? extra : null, withheld };
 }

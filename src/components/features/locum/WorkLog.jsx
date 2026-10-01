@@ -14,7 +14,7 @@ import { TAP_MIN } from "../../shared/actionButton";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard, localDay, sentDay } from "../../../utils/helpers";
 import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
-import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint, shareUnansweredNotice, serverNoteRecordQuestion, pickFromNoteHint, noteTotalQuestion } from "../../../utils/invoiceRecord";
+import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint, shareUnansweredNotice, serverNoteRecordQuestion, pickFromNoteHint, noteTotalQuestion, markSentFromNote, noteTotalDiffers, itemsFromNote } from "../../../utils/invoiceRecord";
 import { handOffInvoice, watchUnanswered } from "../../../utils/invoiceHandoff";
 import { markInvoiceBusy } from "../../../utils/invoiceBusy";
 import { allocateInvoiceNumberRpc } from "../../../lib/supabase";
@@ -28,6 +28,7 @@ import InvoiceLinesTable from "../../shared/InvoiceLinesTable";
 import InvoiceMarkSent, { UnrecordedNotes } from "../../shared/InvoiceMarkSent";
 import useUnrecordedInvoices, { useUnloadWarning } from "../../shared/useUnrecordedInvoices";
 import { parseWorkDictation } from "../../../utils/workDictation";
+import { identifierReason } from "../../../utils/identifierGate";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import DeskTable from "../../shared/DeskTable";
 import DutyLog from "./DutyLog";
@@ -56,6 +57,13 @@ function outsideNote(c, r) {
 // these on each existing piece, so everything else a piece carries (its id,
 // invoice, star) stays its own.
 const ENTRY_EDIT_KEYS = ["contractId", "type", "date", "callDay", "startTime", "endTime", "durationMin", "billedMin", "description", "privateNote", "splitGroupId"];
+// The billing note syncs (work_log.description) and prints on the invoice,
+// so it never carries a patient identifier: the same gate RVULog applies.
+// Shown with alert: a notice banner renders under an open modal.
+const billingNoteRefusal = (text) => {
+  const why = identifierReason("", text || "");
+  return why ? `Not saved: the billing note contains ${why}. It prints on the invoice, and CredentialDOMD doesn't keep patient identifiers. Move it to the private note (kept on this device) and save again.` : "";
+};
 const pickEditKeys = (row) => Object.fromEntries(ENTRY_EDIT_KEYS.filter(k => k in row).map(k => [k, row[k]]));
 
 /**
@@ -378,8 +386,9 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         if (ev.results[i].isFinal) finals += ev.results[i][0].transcript;
         else interim += ev.results[i][0].transcript;
       }
-      dictTextRef.current = finals;
-      setDictTranscript((finals + " " + interim).trim());
+      // Finals plus the phrase still being heard: Done reads this at once.
+      dictTextRef.current = (finals + " " + interim).trim();
+      setDictTranscript(dictTextRef.current);
     };
     rec.onend = () => setDictating(false);
     rec.onerror = (ev) => { setDictating(false); const m = dictationErrorText(ev?.error); if (m) showNotice(m); };
@@ -389,7 +398,11 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   }, [showNotice]);
 
   const finishDictation = useCallback(async () => {
-    try { dictRecRef.current?.stop(); } catch { /* stopped */ }
+    // Hear nothing more from this session: a result handed over after stop()
+    // would bring the cleared transcript back.
+    const rec = dictRecRef.current;
+    if (rec) { rec.onresult = null; rec.onend = null; rec.onerror = null; }
+    try { rec?.stop(); } catch { /* stopped */ }
     setDictating(false);
     const words = (dictTextRef.current || dictTranscript || "").trim();
     if (!words) return;
@@ -410,14 +423,19 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       });
       setShowManual(true);
     } catch (err2) {
-      // Never lose the words — fall back to a prefilled note
-      setManual({ type: "Call", date: localDate(new Date()), exact: true, description: words });
+      // Never lose the words, and never put them where they sync: a spoken
+      // patient name would print on the invoice. They wait in the private
+      // note (this device only), and the reason shows inside the form (a
+      // notice banner renders under the open modal and clears itself).
+      setManual({
+        type: "Call", date: localDate(new Date()), exact: true, description: "", privateNote: words,
+        dictationNote: `${err2.message ? `${String(err2.message).replace(/\.?\s*$/, ".")} ` : ""}Your words are in the private note, kept on this device. Copy what belongs on the invoice into the billing note and fill in the rest.`,
+      });
       setShowManual(true);
-      showNotice(err2.message || "Couldn't structure that. Your words are in the billing note; fill in the rest.");
     }
     setDictBusy(false);
     setDictTranscript("");
-  }, [dictTranscript, data.settings.apiKey, showNotice]);
+  }, [dictTranscript, data.settings.apiKey]);
 
   const startTimer = useCallback((type) => {
     if (!contract) return;
@@ -529,6 +547,9 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     const start = new Date(timer.startedAt);
     const f = finalizeEntry(timer.type, timer.startedAt, end.toISOString(),
       Math.max(1, Math.round((end - start) / 60000)), c);
+    // Refused: the timer keeps running with its note, to fix and log again.
+    const noteRefused = billingNoteRefusal(timer.note);
+    if (noteRefused) { window.alert(noteRefused); return; }
     // A stray tap shouldn't turn seconds into a billed increment
     if ((end - start) < 120000 && !window.confirm(
       `Only ${Math.round((end - start) / 1000)} seconds on the clock, and logging bills ${f.billed} min. Log it? (Cancel keeps the timer running.)`
@@ -622,6 +643,8 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       return;
     }
     if (!manual.date) return;
+    const noteRefused = billingNoteRefusal(manual.description);
+    if (noteRefused) { window.alert(noteRefused); return; }
     // Before anything is written: does the schedule say he was here?
     if (!confirmed && !manual.placementOk) {
       const warn = checkPlacement(contracts, target, manual.date);
@@ -642,7 +665,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         if (!startIso) return;
         const end2 = endIso || new Date(new Date(startIso).getTime() + (target.stipendHours || 0) * 3600e3).toISOString();
         // Refused: the form stays open with the edit in it.
-        if (editItem("workLog", { ...orig, date: manual.date, startTime: startIso, endTime: end2, description: manual.description || orig.description }) === false) return;
+        if (editItem("workLog", { ...orig, date: manual.date, startTime: startIso, endTime: end2, description: manual.description || "" }) === false) return;
         keepPrivate();
         showNotice(`Coverage window updated: ${fmtTime(startIso)}–${fmtTime(end2)}.`);
       } else {
@@ -1039,10 +1062,12 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     }
     // Future-dated days (a coverage marker logged ahead) list but start
     // UNCHECKED — invoicing a day that hasn't happened should be deliberate.
-    const listed = from && Array.isArray(from.days) && from.days.length ? from.days : null;
-    const matched = !!listed && listed.every(k => days.some(d => d.key === k));
-    const selected = from ? (matched ? days.filter(d => listed.includes(d.key)) : []) : days.filter(d => d.key <= todayKey);
-    setInvoicePick({ days, selected: new Set(selected.map(d => d.key)), from, matched });
+    if (from) {
+      const { matched, keys } = itemsFromNote(from.days, days.map(d => d.key));
+      setInvoicePick({ days, selected: new Set(keys), from, matched });
+      return;
+    }
+    setInvoicePick({ days, selected: new Set(days.filter(d => d.key <= todayKey).map(d => d.key)), from: null, matched: false });
   }, [contract, unbilled, computeBilling, contractEntries, data.invoices, showNotice, todayKey]);
 
   // An entry inside another entry's span ("no separate charge") ships on the
@@ -1132,7 +1157,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     // Record it (a note of one that went out unrecorded): Mark as sent opens
     // with its number and date, to check against the copy that was sent.
     // Its total, when the note has one, is checked against these days' on Record.
-    setMarkSent(from?.number ? { number: from.number, day: sentDay(from.sentAt) || localDay(), from: unrecordedHint(from), at: from.sentAt || null, problem: null, tries: 0, noteNumber: from.number, noteTotal: Number(from.total) > 0 ? Number(from.total) : null } : null);
+    setMarkSent(from?.number ? markSentFromNote(from, localDay()) : null);
     // Send waits for a membership answer that is only old (confirmWriteAllowed):
     // asked now, while the invoice is read, so the tap finds it back.
     prepareWriteCheck("practice");
@@ -1269,10 +1294,8 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     const problem = markSentProblem({ number, day: markSent.day, invoices: data.invoices, today: localDay() });
     if (problem) { setMarkSent(f => (f ? { ...f, problem } : f)); return; }
     // Record it: the days checked must come to what that invoice went out for.
-    const sentTotal = markSent.noteTotal;
-    if (sentTotal && number.toLowerCase() === String(markSent.noteNumber || "").trim().toLowerCase()
-      && Math.abs(sentTotal - (Number(invoicePreview.total) || 0)) > 0.005
-      && !window.confirm(noteTotalQuestion(number, sentTotal, invoicePreview.total))) return;
+    if (noteTotalDiffers(markSent, number, invoicePreview.total)
+      && !window.confirm(noteTotalQuestion(number, markSent.noteTotal, invoicePreview.total))) return;
     markBilledAndLog(MARKED_SENT, { number, sentAt: markedSentAt(markSent) });
   }, [invoicePreview, markSent, data.invoices, markBilledAndLog]);
 
@@ -1660,7 +1683,9 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
               color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
               display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
             }}><PlusIcon /> Log past time</button>
-            {dictating ? (
+            {/* Recognition can end on its own after a silence: the words stay
+                with Done, rather than a fresh mic that would clear them. */}
+            {dictating || (dictTranscript && !dictBusy) ? (
               <div style={{ marginTop: 8, textAlign: "left" }}>
                 <div style={{
                   padding: "10px 12px", borderRadius: 12, backgroundColor: T.input,
@@ -1843,6 +1868,9 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         </>
         )}
 
+        {manual.dictationNote && (
+          <div role="alert" style={{ fontSize: 12.5, fontWeight: 600, color: T.warning, lineHeight: 1.45, marginBottom: 8 }}>{manual.dictationNote}</div>
+        )}
         <Field label="Billing note (optional)" hint="Shows on the invoice, line breaks kept"><textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45 }} placeholder="e.g. ED consult, head CT review" /></Field>
         <Field label="Private note (optional)" hint="Stays on THIS device: never uploaded, never on invoices">
           <input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed" }} placeholder="🔒 e.g. patient name / MRN reminder" />

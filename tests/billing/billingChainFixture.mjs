@@ -111,10 +111,12 @@ export async function billingChain({ port, label, idPrefix }) {
   const lastPaid = new Map();
   /**
    * One verified Stripe event, settled as limited-stripe-webhook does.
+   * `cancelAt`: the cancellation date sent as p_cancel_at, or a function of
+   * the period end that returns it; left out, no p_cancel_at is sent.
    * `sameInvoice`: the event carries the member's last paid invoice again, as
    * Stripe's subscription.updated does while the period is unchanged.
    */
-  const settle = async (n, c, { paid = true, status = 'active', subscription = `sub_${label.replace(/[^A-Za-z]/g, '')}${n}`, cancelAtPeriodEnd = false, sameInvoice = false } = {}) => {
+  const settle = async (n, c, { paid = true, status = 'active', subscription = `sub_${label.replace(/[^A-Za-z]/g, '')}${n}`, cancelAtPeriodEnd = false, cancelAt, sameInvoice = false } = {}) => {
     const event = `evt_${label.replace(/[^A-Za-z]/g, '')}${n}x${++events}`;
     const lease = await value(`claim_billing_reconcile('${pid(n)}',true,'${customer(n)}','${event}')`);
     const earlier = sameInvoice ? lastPaid.get(n) : null;
@@ -125,7 +127,9 @@ export async function billingChain({ port, label, idPrefix }) {
     const q = c.quote;
     const args = { p_profile_id: pid(n), p_livemode: true, p_customer_id: customer(n), p_subscription_id: subscription,
       p_offer_id: q.offer_id, p_status: status, p_period_end: periodEnd, p_event_id: event, p_event_created: 1000 + events,
-      p_reconcile_token: lease.token, p_cancel_at_period_end: cancelAtPeriodEnd, p_billing_anchor: null };
+      p_reconcile_token: lease.token, p_cancel_at_period_end: cancelAtPeriodEnd, p_billing_anchor: null,
+      // A webhook from 20261001081000 on also sends the cancellation date (or null).
+      ...(cancelAt !== undefined ? { p_cancel_at: typeof cancelAt === 'function' ? cancelAt(periodEnd) : cancelAt } : {}) };
     const proof = paid ? { profileId: pid(n), clerkSubject: subject(n), livemode: true, customerId: customer(n),
       subscriptionId: subscription, invoiceId, pricePhase: q.price_phase, annualCents: q.annual_cents,
       paidAt: new Date(paidAt).toISOString(), periodEnd, policyVersion: q.policy_version, initial: true } : null;

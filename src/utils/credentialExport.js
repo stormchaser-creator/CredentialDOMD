@@ -382,6 +382,10 @@ export function packetSummary(data) {
     lineItems: buildCredentialRows(data).length,
     documents: linked.length,
     onDevice: packetDocuments(data, { withBytes: true }).length,
+    // Linked, but Storage has no file for it (AppContext marks fileMissing and
+    // stops asking this session). It is not on its way, so it is named rather
+    // than counted as still coming back.
+    missing: linked.filter((d) => d.fileMissing && !docBase64(d)).map((d) => d.name || "Untitled document"),
   };
 }
 
@@ -405,10 +409,25 @@ export function packetSummaryLine({ lineItems = 0, documents = 0 } = {}) {
  * documents is true everywhere, and this is a fact about this device at this
  * moment. Null when the ZIP would carry everything the sentence claims.
  */
-export function packetPendingLine({ documents = 0, onDevice = 0 } = {}) {
-  const n = documents - onDevice;
+export function packetPendingLine({ documents = 0, onDevice = 0, missing = [] } = {}) {
+  const n = documents - onDevice - (missing?.length || 0);
   if (n <= 0) return null;
   return `${n} of them ${n === 1 ? "is" : "are"} still coming back from your account on this device. Download once ${n === 1 ? "it lands" : "they land"} and the file carries everything.`;
+}
+
+/**
+ * A linked file Storage does not have will never land, so waiting on it held
+ * the download for good under "still coming back". This names each one and
+ * says what clears it, in the words Documents uses on the same file. Null when
+ * nothing linked is missing.
+ */
+export function packetMissingLine({ missing = [] } = {}) {
+  const names = (missing || []).filter(Boolean);
+  if (!names.length) return null;
+  const list = names.map((n) => `"${n}"`).join(", ");
+  return names.length === 1
+    ? `${list} is missing from your account. Upload it again or delete it in Documents, then download the packet.`
+    : `${names.length} files are missing from your account: ${list}. Upload them again or delete them in Documents, then download the packet.`;
 }
 
 /**

@@ -28,8 +28,9 @@ import { isAlertable, isInactive } from "./lifecycle.js";
 import { emailRemindersOn, reminderLeadDays } from "./reminderPreferences.js";
 import { STATE_NAMES } from "../constants/states.js";
 import { CV_FILENAME_RE } from "./cvImport.js";
+import { normalizeSetupState, half } from "./setupStateShape.js";
 
-export const SETUP_STATE_VERSION = 1;
+export { SETUP_STATE_VERSION, EMPTY_SETUP_STATE, normalizeSetupState } from "./setupStateShape.js";
 const MS_PER_DAY = 86400000;
 
 /* ─── Type matching ───────────────────────────────────────────────
@@ -121,70 +122,10 @@ const isDegreeRecord = (e) => /doctor of (osteopathic )?medicine|\(md\)|\(do\)/i
 const isTrainingRecord = (e) => /residency|internship|fellowship/i.test(e?.type || "");
 const educationRecords = (ctx) => (ctx.data.education || []).filter(Boolean);
 
-/* ─── Stored state ─────────────────────────────────────────────── */
-
-export const EMPTY_SETUP_STATE = Object.freeze({
-  v: SETUP_STATE_VERSION,
-  startedAt: null,
-  tier1DoneAt: null,
-  tier2DoneAt: null,
-  lastTouched: null,
-  lastDone: null,
-  hiddenUntil: null,
-  proCounted: null,
-  betaCounted: null,
-  cvImportedAt: null,
-  declared: {},
-  tasks: {},
-});
-
-/** Anything on file (or nothing at all) read back as the full shape. */
-/** One half of the board as stored, or null. */
-function half(v) {
-  return v && typeof v === "object" && typeof v.done === "number" && typeof v.total === "number"
-    ? { done: v.done, total: v.total }
-    : null;
-}
-
-export function normalizeSetupState(raw) {
-  const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  const declared = r.declared && typeof r.declared === "object" && !Array.isArray(r.declared) ? r.declared : {};
-  const tasks = r.tasks && typeof r.tasks === "object" && !Array.isArray(r.tasks) ? r.tasks : {};
-  return {
-    v: SETUP_STATE_VERSION,
-    startedAt: r.startedAt || null,
-    tier1DoneAt: r.tier1DoneAt || null,
-    tier2DoneAt: r.tier2DoneAt || null,
-    lastTouched: r.lastTouched || null,
-    lastDone: r.lastDone || null,
-    hiddenUntil: r.hiddenUntil || null,
-    // How many Pro rows were in the denominator the last time the board was
-    // read, and whether the free beta was what put them there. Both are null
-    // until the first read, and a null never narrates: the fraction is only
-    // explained when it actually changes under someone.
-    proCounted: typeof r.proCounted === "number" ? r.proCounted : null,
-    betaCounted: typeof r.betaCounted === "boolean" ? r.betaCounted : null,
-    // The board's own score, stamped by the physician's device each time it
-    // moves. The board is derived from their records and nobody else can read
-    // those, so without this an admin can say a physician started and not how
-    // far they got. { done, total, at } or null before the first read.
-    progress: r.progress && typeof r.progress === "object"
-      && typeof r.progress.done === "number" && typeof r.progress.total === "number"
-      ? {
-        done: r.progress.done, total: r.progress.total, at: r.progress.at || null,
-        // Both halves, because the Setup page never shows the sum: it shows
-        // the first six until they are finished, then the packet's ten.
-        t1: half(r.progress.t1), t2: half(r.progress.t2),
-      }
-      : null,
-    // When a CV import first saved something. A positive fact, so it does
-    // not live in `declared`, which holds only declared negatives (noCv,
-    // noDea) and which the admin summary counts as "not applicable".
-    cvImportedAt: typeof r.cvImportedAt === "string" && r.cvImportedAt ? r.cvImportedAt : null,
-    declared: { ...declared },
-    tasks: { ...tasks },
-  };
-}
+/* ─── Stored state ───────────────────────────────────────────────
+ * The shape and its normalizer live in setupStateShape.js (pure, no imports),
+ * so syncRules can read a stored copy the same way the board does.
+ */
 
 /* ─── The task table ───────────────────────────────────────────────
  * Row order on the page is the order of this array. The Next card ranks by
@@ -369,8 +310,10 @@ export const TASK_DEFS = [
     why: "Nothing you enter here matters if nothing tells you before it lapses.",
     verb: "Turn on reminders",
     doneWhen: ({ s }) =>
-      // Email reminders read blank as on, as send-reminders mails them.
-      !!(emailRemindersOn(s.notifyEmail) || s.notifyBrowser || s.notifyText) && !!s.email && reminderLeadDays(s.reminderLeadDays) > 0,
+      // Email reminders read blank as on, as send-reminders mails them. Text
+      // Notifications does not count: no text is sent yet (Settings says so),
+      // and it defaults on, so a member who turned email off read Protected.
+      !!(emailRemindersOn(s.notifyEmail) || s.notifyBrowser) && !!s.email && reminderLeadDays(s.reminderLeadDays) > 0,
     evidenceWhen: null,
     cardLine: () => "Reminders are off. Everything you have entered is sitting here silently.",
     nextPhrase: () => "turning reminders on",

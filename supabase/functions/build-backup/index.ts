@@ -35,7 +35,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import JSZip from "https://esm.sh/jszip@3.10.1";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { storageSubjects } from "../_shared/clerkContinuity.ts";
 import {
   BACKUP_BUCKET,
@@ -392,7 +392,9 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
   return out;
 }
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503 with these
+// CORS headers, not the runtime's bare 500 (see answerAuthUnavailable).
+serve(answerAuthUnavailable(corsHeaders, async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
@@ -475,4 +477,4 @@ serve(async (req) => {
     cap: formatBytes(PART_CAP),
     results,
   });
-});
+}));

@@ -67,6 +67,8 @@ function handlerFor(state) {
     launchEmailReviewHold: () => null,
     Deno: { env: { get: () => 'synthetic' } },
     serve: fn => { handler = fn; },
+    // The 503 wrapper for a sign-in check that could not answer (clerkAuth.ts); a pass-through here.
+    answerAuthUnavailable: (_headers, fn) => fn,
     clerkProfile: async () => ({ isAdmin: true, profileId: 'synthetic-admin', db }),
     async fetch(url, init) { mail.push({ url, body: JSON.parse(init.body) }); return new Response(JSON.stringify({ id: 'synthetic-mail' }), { status: 200 }); },
   };

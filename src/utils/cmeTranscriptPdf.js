@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatDate } from "./helpers.js";
-import { complianceFor, findStateLicense, cycleBucket } from "./compliance";
+import { complianceFor, findStateLicense, cycleBucket, cmeTopics } from "./compliance";
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
 import { STATE_NAMES } from "../constants/states";
 import { boardComplianceFor, aoaNationalEntry } from "./boardCompliance";
@@ -601,7 +601,7 @@ export function buildTranscriptPdf(model, { today = new Date() } = {}) {
       c.provider || "",
       c.category || "",
       fmtHrs(c.hours),
-      (c.topics || []).join(", "),
+      cmeTopics(c).join(", "),
       r.certRefs.length ? r.certRefs.join(", ") : (c.certificateNumber ? `#${c.certificateNumber}` : ""),
     ];
   });

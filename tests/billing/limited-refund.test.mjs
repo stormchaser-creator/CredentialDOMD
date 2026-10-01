@@ -43,7 +43,10 @@ function fixture({ phase = 'earlybird', offerId = 'core', billingReason = 'subsc
   // creations that way.
   const refundKeys = new Map(), refundFaults = [];
   const subs = new Map([[sub.id, sub]]), invoices = new Map([[invoice.id, invoice]]), charges = new Map([[charge.id, charge]]);
+  // The Stripe customer: its balance is a credit Stripe spends on the next invoice when below 0.
+  const customer = { id: account.stripe_customer_id, object: 'customer', livemode: false, balance: 0 };
   const stripe = {
+    customers: { retrieve: async customerId => { calls.push(['customer', customerId]); return structuredClone(customerId === customer.id ? customer : null); } },
     subscriptions: {
       retrieve: async subId => structuredClone(subs.get(subId) ?? sub),
       cancel: async (...args) => { calls.push(['cancel', ...args]); const s = subs.get(args[0]); s.status = 'canceled'; s.canceled_at = Math.floor(now / 1000); return structuredClone(s); },
@@ -188,6 +191,31 @@ function fixture({ phase = 'earlybird', offerId = 'core', billingReason = 'subsc
       if (r.refund_status === status || r.state === 'requested') return 'duplicate';
       r.refund_status = status; return 'applied';
     },
+    // The row for one subscription (20261001041500): whether there is a cancellation to tell it about.
+    refundBySubscription: async (subscription) => { const r = ledger.find(x => x.subscription_id === subscription); return r ? { id: r.id, state: r.state, subscription_canceled_at: r.subscription_canceled_at, invoice_id: r.invoice_id, charge_id: r.charge_id } : null; },
+    // limited_refund_subscription_canceled (20261001041500): Stripe says the
+    // subscription is cancelled; the request records it, and its refund stays
+    // owed only while its payment is the most recent one.
+    refundCanceled: async (subscription, live, paid, token, chargeReview) => {
+      calls.push(['cancellation', subscription, paid, token, chargeReview]);
+      assert.ok(chargeReview == null || ['charge_disputed', 'charge_partly_refunded'].includes(chargeReview), 'only a charge reason');
+      const r = ledger.find(x => x.subscription_id === subscription);
+      if (!r) return 'not_found';
+      if (r.state === 'refunded' || r.subscription_canceled_at) return 'duplicate';
+      if (token != null && (r.state !== 'requested' || r.token !== token || !r.leased)) return 'lease_lost';
+      const latest = paid != null && paid === r.invoice_id, at = new Date(now).toISOString();
+      const review = latest ? chargeReview ?? null : null;
+      if (r.state === 'needs_support') {
+        if (latest && !REFUND_REVIEW_ONLY.includes(r.error_code) && !review) { Object.assign(r, { state: 'requested', subscription_canceled_at: at, leased: false }); ticket(r); return 'reopened'; }
+        Object.assign(r, { subscription_canceled_at: at, error_code: REFUND_REVIEW_ONLY.includes(r.error_code) ? r.error_code : latest ? review : r.refund_id ? 'refunded_payment_not_latest' : 'refund_payment_changed' });
+        return 'recorded';
+      }
+      if (r.leased && token == null) { if (!latest || review) return 'busy'; Object.assign(r, { subscription_canceled_at: at, error_code: null }); return 'canceled'; }
+      if (latest && !review) { Object.assign(r, { subscription_canceled_at: at, error_code: null }); return 'canceled'; }
+      Object.assign(r, { state: 'needs_support', subscription_canceled_at: at, error_code: review ?? (r.refund_id ? 'refunded_payment_not_latest' : 'refund_payment_changed'), leased: false });
+      ticket(r);
+      return 'needs_support';
+    },
     claimReconcile: async (...args) => { calls.push(['reconcile', ...args]); return { state: 'claimed', token: 'reconcileLease' }; },
     releaseReconcile: async () => calls.push(['release']),
     settleLimited: async (...args) => calls.push(['settle', ...args]),
@@ -197,7 +225,7 @@ function fixture({ phase = 'earlybird', offerId = 'core', billingReason = 'subsc
     authenticate: async () => ({ profileId: profile.id, clerkSubject: profile.auth_user_id }), verifyEvent: async () => null, store };
   const handlers = () => createLimitedLaunchHandlers(deps, config);
   const providerCalls = () => calls.filter(c => ['cancel', 'refund'].includes(c[0]));
-  return { calls, logs, deps, store, stripe, tickets, profile, account, sub, invoice, charge, refunds, refundFaults, subs, invoices, charges, billing, ledger, q, offer, price, periodStart, handlers, providerCalls,
+  return { calls, logs, deps, store, stripe, tickets, profile, account, customer, sub, invoice, charge, refunds, refundFaults, subs, invoices, charges, billing, ledger, q, offer, price, periodStart, handlers, providerCalls,
     release: () => { for (const r of ledger) r.leased = false; } };
 }
 const body = async response => ({ status: response.status, data: await response.json() });
@@ -1192,4 +1220,541 @@ test('support refunds the renewal of a request that could not follow it: the req
   assert.equal(k.ledger[0].state, 'needs_support');
   assert.equal(k.ledger[0].charge_id, 'ch_Older');
   assert.equal(k.sub.status, 'active');
+});
+
+// The owner cancels a member's subscription by hand in the Stripe dashboard
+// while the member's refund request is unfinished (20261001041500). The
+// webhook records the cancellation on the request; the refund stays owed only
+// while the request's payment is the most recent one (the member confirmed
+// cancelling and refunding exactly that), and goes to a person otherwise.
+function handCancel(f) { f.sub.status = 'canceled'; f.sub.canceled_at = Math.floor(now / 1000); f.billing.status = 'canceled'; }
+const deleted = f => hook(f, 'customer.subscription.deleted', { id: 'sub_A' });
+
+test('hand cancelled while a request is unfinished and still for the latest payment: recorded as cancelled, then refunded as confirmed, never cancelled twice', async () => {
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  assert.equal(f.ledger[0].error_code, 'cancel_failed');
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.ok(f.calls.some(c => c[0] === 'settle'), 'access ends as for any deleted subscription');
+  assert.deepEqual(f.calls.find(c => c[0] === 'cancellation'), ['cancellation', 'sub_A', 'in_Latest', null, null]);
+  assert.equal(f.ledger[0].state, 'requested', 'owed as the member confirmed');
+  assert.ok(f.ledger[0].subscription_canceled_at, 'the cancellation is on record');
+  assert.equal(f.ledger[0].error_code, null, 'as after a press whose cancellation went through');
+  assert.equal(f.refunds.length, 0, 'the webhook itself refunds nothing');
+  assert.equal(f.tickets.length, 0, 'nothing for a person to do yet');
+  const status = await body(await f.handlers().refund(post({ action: 'status' })));
+  assert.equal(status.data.state, 'resume');
+  assert.equal(status.data.subscriptionCanceled, true, 'Profile no longer says "not cancelled yet"');
+  // The sweep finishes it: no second cancellation, the payment confirmed is refunded.
+  const run = await body(await f.handlers().refundWithSweep(sweepReq()));
+  assert.deepEqual(run.data.outcomes, { refunded: 1 });
+  assert.equal(f.ledger[0].state, 'refunded');
+  assert.equal(f.refunds.length, 1);
+  assert.equal(f.refunds[0].charge, 'ch_Latest');
+  assert.equal(f.calls.filter(c => c[0] === 'cancel').length, 0, 'Stripe is never asked to cancel it again');
+  // A later delivery of the same event changes nothing.
+  f.store.claimReconcile = async () => ({ state: 'duplicate' });
+  assert.equal((await deleted(f)).status, 200);
+  assert.equal(f.calls.filter(c => c[0] === 'cancellation').length, 1);
+});
+
+test('hand cancelled after a renewal the request could not follow: the cancellation is recorded and a person decides; nothing is refunded automatically', async () => {
+  const f = fixture();
+  seedOlderRequest(f);
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  const [row] = f.ledger;
+  assert.equal(row.state, 'needs_support');
+  assert.equal(row.error_code, 'refund_payment_changed');
+  assert.ok(row.subscription_canceled_at);
+  assert.equal(f.tickets.length, 1, 'the member\'s ticket is opened');
+  assert.ok(f.logs.some(l => l.event === 'refund_needs_support' && l.route === 'webhook'));
+  const status = await body(await f.handlers().refund(post({ action: 'status' })));
+  assert.equal(status.data.state, 'needs_support');
+  assert.equal(status.data.subscriptionCanceled, true);
+  assert.equal(status.data.reviewOnly, true, 'nothing is promised');
+  // Neither a press nor the sweep refunds either payment.
+  assert.equal((await body(await f.handlers().refund(refundReq({ paymentId: 'in_Older' })))).data.state, 'needs_support');
+  assert.deepEqual((await body(await f.handlers().refundWithSweep(sweepReq()))).data.outcomes, {});
+  assert.equal(f.refunds.length, 0);
+  assert.equal(f.calls.filter(c => c[0] === 'cancel').length, 0);
+});
+
+test('hand cancelled while a person holds the request: the cancellation is recorded; review-only stays with the owner, and the owner\'s dashboard refund then records it as refunded', async () => {
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  Object.assign(f.ledger[0], { state: 'needs_support', error_code: 'charge_disputed' });
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.equal(f.ledger[0].state, 'needs_support', 'owner resolved');
+  assert.ok(f.ledger[0].subscription_canceled_at);
+  assert.equal(f.refunds.length, 0);
+  dashboardRefund(f);
+  assert.equal((await hook(f, 'charge.refunded', { id: 'ch_Latest' })).status, 200);
+  assert.equal(f.ledger[0].state, 'refunded', 'recorded at once: the cancellation is on record');
+  assert.equal(f.calls.filter(c => c[0] === 'cancel').length, 0);
+});
+
+test('hand cancelled after the sweep gave up before the cancellation: back to owed, the sweep refunds the payment the member confirmed', async () => {
+  const f = fixture();
+  f.stripe.subscriptions.cancel = async () => { throw stripeError('StripeAPIError', 'api_error'); };
+  assert.equal((await f.handlers().refund(refundReq())).status, 503);
+  f.ledger[0].requested_at = new Date(now - 3 * 3600 * 1000).toISOString();
+  await sweepUntilSettled(f);
+  assert.equal(f.ledger[0].state, 'needs_support');
+  assert.equal(f.ledger[0].error_code, 'cancel_failed');
+  assert.equal(f.tickets.length, 1);
+  // The owner cancels it by hand, as the ticket asks a person to finish it.
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.equal(f.ledger[0].state, 'requested', 'reopened: the refund is owed as confirmed');
+  assert.ok(f.ledger[0].subscription_canceled_at);
+  assert.equal(f.ledger[0].error_code, 'cancel_failed', 'kept: the ticket reads cancelled, refund not through yet');
+  const run = await body(await f.handlers().refundWithSweep(sweepReq()));
+  assert.deepEqual(run.data.outcomes, { refunded: 1 }, 'even on a final attempt: nothing is left to fail but the refund');
+  assert.equal(f.ledger[0].state, 'refunded');
+  assert.equal(f.refunds.length, 1);
+  assert.equal(f.tickets.length, 1, 'the same ticket');
+});
+
+test('a press or the sweep at work: the webhook records the cancellation and leaves it to them, or waits when a renewal replaced the payment', async () => {
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  f.ledger[0].leased = true;
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.equal(f.ledger[0].state, 'requested');
+  assert.ok(f.ledger[0].subscription_canceled_at, 'a fact, whoever holds the lease');
+  const g = fixture();
+  seedOlderRequest(g);
+  g.ledger[0].leased = true;
+  handCancel(g);
+  const busy = await deleted(g);
+  assert.equal(busy.status, 503, 'Stripe delivers the event again');
+  assert.equal(g.ledger[0].subscription_canceled_at, null);
+  assert.ok(g.calls.some(c => c[0] === 'settle'), 'settled before');
+  g.release();
+  g.store.claimReconcile = async () => ({ state: 'duplicate' });
+  assert.equal((await deleted(g)).status, 200, 'the next delivery records it');
+  assert.equal(g.ledger[0].state, 'needs_support');
+});
+
+test('the webhook missed the hand cancellation: the sweep and a press check the payment before refunding a subscription they never cancelled', async () => {
+  // Still the latest payment: refunded.
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  handCancel(f);
+  assert.deepEqual((await body(await f.handlers().refundWithSweep(sweepReq()))).data.outcomes, { refunded: 1 });
+  assert.deepEqual(f.calls.find(c => c[0] === 'cancellation').slice(0, 3), ['cancellation', 'sub_A', 'in_Latest']);
+  assert.equal(f.refunds.length, 1);
+  assert.equal(f.calls.filter(c => c[0] === 'cancel').length, 0);
+  // A renewal was paid before the hand cancellation: last year's payment is never refunded.
+  for (const via of ['sweep', 'press']) {
+    const g = fixture();
+    seedOlderRequest(g);
+    handCancel(g);
+    const r = via === 'sweep' ? await body(await g.handlers().refundWithSweep(sweepReq())) : await body(await g.handlers().refund(refundReq({ paymentId: 'in_Older' })));
+    if (via === 'sweep') assert.deepEqual(r.data.outcomes, { needs_support: 1 }, via);
+    else assert.equal(r.data.state, 'needs_support', via);
+    assert.equal(g.ledger[0].error_code, 'refund_payment_changed', via);
+    assert.ok(g.ledger[0].subscription_canceled_at, via);
+    assert.equal(g.refunds.length, 0, via);
+    assert.equal(g.charges.get('ch_Older').amount_refunded, 0, via);
+  }
+  // Stripe cannot say which payment is the latest: retried, nothing refunded.
+  const h = fixture();
+  await stoppedBeforeCancel(h);
+  handCancel(h);
+  h.stripe.invoices.list = async () => { throw stripeError('StripeAPIError', 'api_error'); };
+  assert.deepEqual((await body(await h.handlers().refundWithSweep(sweepReq()))).data.outcomes, { refund_pending: 1 });
+  assert.equal(h.refunds.length, 0);
+  assert.equal(h.ledger[0].subscription_canceled_at, null);
+  assert.equal((await deleted(h)).status, 503, 'the webhook asks Stripe to deliver it again');
+  assert.equal(h.ledger[0].subscription_canceled_at, null);
+});
+
+test('the most recent payment is the newest invoice that collected money: a $0 closing invoice is not a renewal', async () => {
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  handCancel(f);
+  f.invoices.set('in_Closing', { ...structuredClone(f.invoice), id: 'in_Closing', charge: null, amount_paid: 0, amount_due: 0, status_transitions: { paid_at: f.periodStart + 86400 * 20 } });
+  assert.equal((await deleted(f)).status, 200);
+  assert.equal(f.ledger[0].state, 'requested');
+  assert.ok(f.ledger[0].subscription_canceled_at);
+  // No subscription event for a request on another subscription, or none at all.
+  const g = fixture();
+  handCancel(g);
+  assert.equal((await deleted(g)).status, 200);
+  assert.equal(g.calls.some(c => c[0] === 'cancellation'), false, 'no request: nothing read or written');
+});
+
+test('a dashboard refund before the cancellation: the quote and status say the refund was issued, so Profile never says nothing was refunded', async () => {
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  // The webhook could not finish: Stripe would not cancel when the refund arrived.
+  f.stripe.subscriptions.cancel = async () => { throw stripeError('StripeAPIError', 'api_error'); };
+  dashboardRefund(f);
+  assert.equal((await hook(f, 'charge.refunded', { id: 'ch_Latest' })).status, 503);
+  assert.equal(f.ledger[0].state, 'requested');
+  assert.equal(f.ledger[0].refund_status, 'succeeded');
+  const status = await body(await f.handlers().refund(post({ action: 'status' })));
+  assert.equal(status.data.refundStatus, 'succeeded');
+  assert.equal(status.data.subscriptionCanceled, false);
+  const quote = await body(await f.handlers().refund(quoteReq()));
+  assert.equal(quote.data.state, 'resume');
+  assert.equal(quote.data.refundStatus, 'succeeded');
+  // The owner then cancels it by hand: recorded, and the refund on the row is the outcome.
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.ok(f.ledger[0].subscription_canceled_at);
+  assert.deepEqual((await body(await f.handlers().refundWithSweep(sweepReq()))).data.outcomes, { refunded: 1 });
+  assert.equal(f.ledger[0].refund_id, 're_Dashboard');
+  assert.equal(f.refunds.length, 1, 'recorded, not refunded again');
+});
+
+// The owner cancels by hand and picks the dashboard's prorated refund, or the
+// member disputed the charge (review fix, 2026-09-30): part of the payment
+// is back already, so the full refund the member confirmed cannot be made.
+// The request goes to a person with the review-only reason, whichever event
+// arrives first; never left owed in full for the sweep, and never "the
+// payment has not been returned".
+function proratedRefund(f, cents = 5000) {
+  f.refunds.push({ id: 're_Prorated', charge: 'ch_Latest', amount: cents, currency: 'usd', status: 'succeeded', created: 9 });
+  f.charge.amount_refunded = cents;
+}
+test('hand cancelled with a prorated refund: a person looks with "part of this payment has already been refunded"; the sweep never tries the full refund', async () => {
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  proratedRefund(f);
+  assert.equal((await hook(f, 'charge.refunded', { id: 'ch_Latest' })).status, 200);
+  assert.equal(f.ledger[0].state, 'requested', 'a partial refund is not the refund');
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.deepEqual(f.calls.find(c => c[0] === 'cancellation'), ['cancellation', 'sub_A', 'in_Latest', null, 'charge_partly_refunded']);
+  const [row] = f.ledger;
+  assert.equal(row.state, 'needs_support', 'not owed in full for the sweep');
+  assert.equal(row.error_code, 'charge_partly_refunded');
+  assert.ok(row.subscription_canceled_at);
+  assert.equal(f.tickets.length, 1);
+  assert.ok(f.logs.some(l => l.event === 'refund_needs_support' && l.route === 'webhook' && l.code === 'charge_partly_refunded'));
+  const status = await body(await f.handlers().refund(post({ action: 'status' })));
+  assert.equal(status.data.state, 'needs_support');
+  assert.equal(status.data.reviewOnly, true, 'Profile promises no refund it cannot finish');
+  assert.equal(status.data.subscriptionCanceled, true);
+  assert.deepEqual((await body(await f.handlers().refundWithSweep(sweepReq()))).data.outcomes, {});
+  assert.equal(f.calls.filter(c => c[0] === 'refund').length, 0, 'no full refund is attempted');
+  assert.equal(f.charge.amount_refunded, 5000);
+  // A dispute instead: the same, as charge_disputed.
+  const g = fixture();
+  await stoppedBeforeCancel(g);
+  g.charge.disputed = true;
+  handCancel(g);
+  assert.equal((await deleted(g)).status, 200);
+  assert.equal(g.ledger[0].state, 'needs_support');
+  assert.equal(g.ledger[0].error_code, 'charge_disputed');
+  assert.equal(g.calls.filter(c => c[0] === 'refund').length, 0);
+});
+
+test('hand cancelled first, the prorated refund\'s event after: the full refund Stripe refuses goes to a person as charge_partly_refunded, not as Stripe\'s code', async () => {
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.equal(f.ledger[0].state, 'requested', 'the charge was untouched when the cancellation arrived');
+  proratedRefund(f);
+  assert.equal((await hook(f, 'charge.refunded', { id: 'ch_Latest' })).status, 200);
+  assert.deepEqual((await body(await f.handlers().refundWithSweep(sweepReq()))).data.outcomes, { needs_support: 1 });
+  assert.equal(f.ledger[0].state, 'needs_support');
+  assert.equal(f.ledger[0].error_code, 'charge_partly_refunded', 'review-only: the ticket says part of it was refunded');
+  assert.equal(f.ledger[0].refund_id, null);
+  assert.equal(f.charge.amount_refunded, 5000, 'nothing more refunded');
+  const status = await body(await f.handlers().refund(post({ action: 'status' })));
+  assert.equal(status.data.reviewOnly, true);
+  // A refusal on an untouched charge still records Stripe's own reason.
+  const g = fixture();
+  await stoppedBeforeCancel(g);
+  g.refundFaults.push(stripeError('StripeInvalidRequestError', 'charge_expired_for_refund'));
+  handCancel(g);
+  assert.equal((await deleted(g)).status, 200);
+  await body(await g.handlers().refundWithSweep(sweepReq()));
+  assert.equal(g.ledger[0].error_code, 'charge_expired_for_refund');
+});
+
+test('a prorated refund when the owner cancels a request a person holds, or the sweep finds it first: a person keeps it with the review-only reason', async () => {
+  // The sweep gave up before the cancellation; the owner then cancels with a prorated refund.
+  const f = fixture();
+  f.stripe.subscriptions.cancel = async () => { throw stripeError('StripeAPIError', 'api_error'); };
+  assert.equal((await f.handlers().refund(refundReq())).status, 503);
+  f.ledger[0].requested_at = new Date(now - 3 * 3600 * 1000).toISOString();
+  await sweepUntilSettled(f);
+  assert.equal(f.ledger[0].error_code, 'cancel_failed');
+  proratedRefund(f);
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.equal(f.ledger[0].state, 'needs_support', 'not reopened as owed in full');
+  assert.equal(f.ledger[0].error_code, 'charge_partly_refunded');
+  assert.ok(f.ledger[0].subscription_canceled_at);
+  // The webhook missed it: the sweep reads the charge before refunding.
+  const g = fixture();
+  await stoppedBeforeCancel(g);
+  proratedRefund(g);
+  handCancel(g);
+  assert.deepEqual((await body(await g.handlers().refundWithSweep(sweepReq()))).data.outcomes, { needs_support: 1 });
+  assert.equal(g.ledger[0].error_code, 'charge_partly_refunded');
+  assert.equal(g.calls.filter(c => c[0] === 'refund').length, 0);
+  // A press or the sweep holding the lease: Stripe delivers the event again.
+  const h = fixture();
+  await stoppedBeforeCancel(h);
+  h.ledger[0].leased = true;
+  proratedRefund(h);
+  handCancel(h);
+  assert.equal((await deleted(h)).status, 503);
+  assert.equal(h.ledger[0].subscription_canceled_at, null);
+});
+
+test('a press or the sweep at work on a request an earlier attempt stopped: the webhook records the cancellation and clears the stale error, so no ticket reads it as unfinished', async () => {
+  const f = fixture();
+  await stoppedBeforeCancel(f);
+  assert.equal(f.ledger[0].error_code, 'cancel_failed');
+  f.ledger[0].leased = true;
+  handCancel(f);
+  assert.equal((await deleted(f)).status, 200);
+  assert.ok(f.ledger[0].subscription_canceled_at);
+  assert.equal(f.ledger[0].error_code, null, 'as limited_refund_record canceled clears it');
+});
+
+test('the hand-cancel function keeps the review-only list of the ticket and the app', () => {
+  const sql = fs.readFileSync(new URL('../../supabase/migrations/20261001041500_limited_refund_hand_cancel.sql', import.meta.url), 'utf8');
+  const lists = [...sql.matchAll(/error_code in \(([^)]*)\)/g)].map(m => [...m[1].matchAll(/'([a-z_]+)'/g)].map(x => x[1]).sort());
+  assert.equal(lists.length, 2, 'the function and the restated ticket trigger');
+  for (const list of lists) assert.deepEqual(list, [...REFUND_REVIEW_ONLY].sort());
+});
+
+// Review finding on c8bc64a0: a Dashboard cancellation date set inside the
+// paid year in Stripe's classic billing mode resets billing_cycle_anchor and
+// finalizes a paid $0 (or credit) subscription_update invoice, which becomes
+// latest_invoice. That invoice is no payment; the paid year still runs and is
+// what the guarantee refunds. The quote and press refused it as
+// no_refundable_payment, and a request recorded before the date was set
+// waited on refund_payment_changed until a person took it.
+// A credit reset puts its credit on the customer balance; a $0 one leaves the
+// balance as it was. `invoiceId`, `day`: a second reset after an earlier one.
+function classicReset(f, { credit = false, removed = false, invoiceId = 'in_Update', day = 5 } = {}) {
+  const reset = f.periodStart + day * 86400, cancelAt = f.periodStart + 200 * 86400;
+  Object.assign(f.sub, { billing_cycle_anchor: reset, cancel_at: removed ? null : cancelAt, cancel_at_period_end: false, current_period_start: reset, current_period_end: cancelAt, latest_invoice: invoiceId });
+  const amount = credit ? -2700 : 0;
+  f.customer.balance += amount;
+  f.invoices.set(invoiceId, { ...structuredClone(f.invoice), id: invoiceId, charge: null, billing_reason: 'subscription_update', amount_paid: 0, amount_due: 0, amount_remaining: 0, total: amount, subtotal: amount,
+    status_transitions: { paid_at: reset }, lines: { has_more: false, data: [{ price: f.price.id, quantity: 1, amount, period: { start: reset, end: cancelAt }, proration: true }] } });
+  f.billing.period_end = new Date(cancelAt * 1000).toISOString();
+  return cancelAt;
+}
+const resetShapes = [[false, false], [true, false], [false, true], [true, true]];
+// A $0 reset moves no money; a credit reset leaves a credit on the customer
+// that a full refund of the year would come on top of (a person decides).
+const zeroResetShapes = resetShapes.filter(([credit]) => !credit);
+const creditResetShapes = resetShapes.filter(([credit]) => credit);
+const resetLabel = (credit, removed) => `${credit ? 'credit' : '$0'} reset, date ${removed ? 'removed again' : 'set'}`;
+
+test('a classic mode $0 reset invoice as the latest one: the quote and the press refund the paid year it leaves running', async () => {
+  for (const [credit, removed] of zeroResetShapes) {
+    const label = resetLabel(credit, removed);
+    const f = fixture(); const cancelAt = classicReset(f, { credit, removed });
+    const q = await body(await f.handlers().refund(quoteReq()));
+    assert.equal(q.status, 200, label);
+    assert.equal(q.data.paymentId, 'in_Latest', `${label}: the paid year, never the reset invoice`);
+    assert.equal(q.data.amountCents, 14900, label);
+    assert.equal(q.data.paidAt, new Date(f.invoice.status_transitions.paid_at * 1000).toISOString(), label);
+    assert.equal(q.data.periodEnd, new Date(cancelAt * 1000).toISOString(), `${label}: the period end access runs to, the settled one`);
+    const r = await body(await f.handlers().refund(refundReq()));
+    assert.equal(r.status, 200, label);
+    assert.equal(r.data.state, 'refunded', label);
+    assert.equal(f.sub.status, 'canceled', `${label}: it no longer renews`);
+    assert.deepEqual(f.refunds.map(x => [x.charge, x.amount]), [['ch_Latest', 14900]], `${label}: the paid year's charge, in full, once`);
+  }
+});
+
+test('a request recorded before a classic mode $0 reset: the press resumes it and the sweep refunds the payment it recorded', async () => {
+  for (const [credit, removed] of zeroResetShapes) {
+    const label = resetLabel(credit, removed);
+    const f = fixture();
+    await stoppedBeforeCancel(f);
+    classicReset(f, { credit, removed });
+    // The sweep alone (the executor's own read of the most recent payment).
+    const run = await body(await f.handlers().refundWithSweep(sweepReq()));
+    assert.deepEqual(run.data.outcomes, { refunded: 1 }, label);
+    assert.equal(f.ledger[0].state, 'refunded', label);assert.equal(f.ledger[0].invoice_id, 'in_Latest', label);
+    assert.equal(f.sub.status, 'canceled', label);
+    assert.deepEqual(f.refunds.map(x => [x.charge, x.amount]), [['ch_Latest', 14900]], label);
+    assert.ok(!f.calls.some(c => c[0] === 'follow'), `${label}: nothing to follow, the payment is unchanged`);
+    // The member's press on the same request quotes it to resume.
+    const g = fixture();
+    await stoppedBeforeCancel(g);
+    classicReset(g, { credit, removed });
+    const q = await body(await g.handlers().refund(quoteReq()));
+    assert.equal(q.status, 200, label);
+    assert.equal(q.data.state, 'resume', label);assert.equal(q.data.paymentId, 'in_Latest', label);
+    assert.equal((await body(await g.handlers().refund(refundReq()))).data.state, 'refunded', label);
+  }
+});
+
+test('a classic mode credit reset: the year is not refunded automatically on top of the credit; a person decides, nothing is cancelled or refunded', async () => {
+  // The reset put 2700 on the customer balance. Refunding ch_Latest in full
+  // and cancelling with prorate:false would return the year and leave the
+  // credit for Stripe to spend on the customer's next invoice (53bb952e
+  // review: more than 100% back).
+  for (const [credit, removed] of creditResetShapes) {
+    const label = resetLabel(credit, removed);
+    const f = fixture(); classicReset(f, { credit, removed });
+    const q = await body(await f.handlers().refund(quoteReq()));
+    assert.equal(q.status, 409, label);assert.equal(q.data.error, 'refund_needs_support', label);
+    const r = await f.handlers().refund(refundReq());
+    assert.equal(r.status, 409, label);
+    assert.deepEqual(f.providerCalls(), [], `${label}: nothing cancelled or refunded`);
+    assert.equal(f.sub.status, 'active', label);
+    assert.deepEqual(f.refunds, [], label);
+  }
+});
+
+test('a request recorded before a classic mode credit reset: the sweep and the press send it to a person before anything is cancelled', async () => {
+  for (const [credit, removed] of creditResetShapes) {
+    const label = resetLabel(credit, removed);
+    const f = fixture();
+    await stoppedBeforeCancel(f);
+    classicReset(f, { credit, removed });
+    const before = f.providerCalls().length;
+    const run = await body(await f.handlers().refundWithSweep(sweepReq()));
+    assert.deepEqual(run.data.outcomes, { needs_support: 1 }, label);
+    assert.equal(f.ledger[0].state, 'needs_support', label);assert.equal(f.ledger[0].error_code, 'charge_mismatch', `${label}: review-only, so the ticket promises nothing`);
+    assert.equal(f.providerCalls().length, before, `${label}: nothing cancelled or refunded`);
+    assert.deepEqual(f.refunds, [], label);assert.equal(f.sub.status, 'active', label);
+    const g = fixture();
+    await stoppedBeforeCancel(g);
+    classicReset(g, { credit, removed });
+    const gBefore = g.providerCalls().length;
+    const pressed = await body(await g.handlers().refund(refundReq()));
+    assert.notEqual(pressed.data?.state, 'refunded', label);
+    assert.equal(g.ledger[0].state, 'needs_support', label);assert.equal(g.ledger[0].error_code, 'charge_mismatch', label);
+    assert.equal(g.providerCalls().length, gBefore, `${label}: the press cancels and refunds nothing either`);
+    assert.deepEqual(g.refunds, [], label);
+  }
+});
+
+test('a classic mode reset invoice with no paid year covering the period is still no payment to refund', async () => {
+  const f = fixture(); classicReset(f);
+  // The paid year ends before the shortened period does: it does not cover it.
+  f.invoices.get('in_Latest').lines.data[0].period.end = f.sub.current_period_end - 1;
+  const q = await body(await f.handlers().refund(quoteReq()));
+  assert.equal(q.status, 409);assert.equal(q.data.error, 'no_refundable_payment');
+  assert.deepEqual(f.providerCalls(), []);
+});
+
+test('a renewal paid in part from the credit a reset left: the charge is not the whole year, so a person decides and nothing is refunded automatically', async () => {
+  const f = fixture();
+  Object.assign(f.invoices.get('in_Latest'), { amount_paid: 12200, amount_due: 12200, total: 14900, starting_balance: -2700, ending_balance: 0 });
+  f.charges.get('ch_Latest').amount = 12200;
+  const q = await body(await f.handlers().refund(quoteReq()));
+  assert.equal(q.status, 409);assert.equal(q.data.error, 'refund_needs_support');
+  assert.equal((await f.handlers().refund(refundReq({ amountCents: 12200 }))).status, 409);
+  assert.deepEqual(f.providerCalls(), []);assert.equal(f.ledger.length, 0);
+});
+
+// Review findings on 1a6ebe35. (1) A full refund support made in the
+// dashboard after a credit reset was held for a person before the cancel, so
+// the membership refunded in full kept running and could renew. The credit
+// gates only money still to go back. (2) The guard read only the latest
+// invoice's total: a credit reset followed by a $0 one (the date removed
+// again) left the credit unspent while the latest total read 0, and a
+// subscription that reached its cancellation date skipped the guard. The
+// customer balance decides.
+test('a dashboard refund after a classic mode credit reset still cancels the membership it paid back: the webhook and the sweep', async () => {
+  for (const [credit, removed] of creditResetShapes) {
+    const label = resetLabel(credit, removed);
+    const f = fixture();
+    await stoppedBeforeCancel(f);
+    classicReset(f, { credit, removed });
+    dashboardRefund(f);
+    const r = await hook(f, 'charge.refunded', { id: 'ch_Latest' });
+    assert.equal(r.status, 200, label);
+    assert.equal(f.sub.status, 'canceled', `${label}: a membership refunded in full never keeps running or renews`);
+    assert.deepEqual(f.calls.filter(c => c[0] === 'cancel').at(-1)?.[2], { prorate: false, invoice_now: false }, label);
+    assert.equal(f.ledger[0].state, 'refunded', label);
+    assert.equal(f.ledger[0].refund_id, 're_Dashboard', label);
+    assert.ok(f.ledger[0].subscription_canceled_at, label);
+    assert.equal(f.calls.some(c => c[0] === 'refund'), false, `${label}: the dashboard refund is recorded, not made again`);
+    assert.equal(f.refunds.length, 1, label);
+    // The sweep reaching the request before the webhook could finish it.
+    const g = fixture();
+    await stoppedBeforeCancel(g);
+    classicReset(g, { credit, removed });
+    dashboardRefund(g);
+    const run = await body(await g.handlers().refundWithSweep(sweepReq()));
+    assert.deepEqual(run.data.outcomes, { refunded: 1 }, label);
+    assert.equal(g.sub.status, 'canceled', label);
+    assert.equal(g.ledger[0].refund_id, 're_Dashboard', label);
+    assert.equal(g.refunds.length, 1, `${label}: nothing refunded twice`);
+  }
+});
+
+test('a credit reset followed by a $0 reset: the credit is still on the customer, so the quote, the press and the sweep send the year to a person', async () => {
+  const twoResets = f => { classicReset(f, { credit: true }); classicReset(f, { credit: false, removed: true, invoiceId: 'in_Update2', day: 10 }); };
+  const f = fixture(); twoResets(f);
+  assert.equal(f.customer.balance, -2700);
+  assert.equal(f.invoices.get(f.sub.latest_invoice).total, 0, 'the latest invoice reads 0');
+  const q = await body(await f.handlers().refund(quoteReq()));
+  assert.equal(q.status, 409);assert.equal(q.data.error, 'refund_needs_support');
+  assert.equal((await f.handlers().refund(refundReq())).status, 409);
+  assert.deepEqual(f.providerCalls(), [], 'nothing cancelled or refunded');
+  assert.equal(f.sub.status, 'active');assert.deepEqual(f.refunds, []);
+  // A request recorded before both resets.
+  const g = fixture();
+  await stoppedBeforeCancel(g);
+  twoResets(g);
+  const before = g.providerCalls().length;
+  const run = await body(await g.handlers().refundWithSweep(sweepReq()));
+  assert.deepEqual(run.data.outcomes, { needs_support: 1 });
+  assert.equal(g.ledger[0].state, 'needs_support');assert.equal(g.ledger[0].error_code, 'charge_mismatch');
+  assert.equal(g.providerCalls().length, before, 'the sweep cancels and refunds nothing');
+  assert.deepEqual(g.refunds, []);
+  // The member's press on that request.
+  const h = fixture();
+  await stoppedBeforeCancel(h);
+  twoResets(h);
+  const hBefore = h.providerCalls().length;
+  const pressed = await body(await h.handlers().refund(refundReq()));
+  assert.notEqual(pressed.data?.state, 'refunded');
+  assert.equal(h.ledger[0].error_code, 'charge_mismatch');
+  assert.equal(h.providerCalls().length, hBefore);assert.deepEqual(h.refunds, []);
+});
+
+test('a credit reset whose subscription reached its cancellation date before the sweep: the year is not refunded on top of the credit', async () => {
+  for (const viaWebhook of [false, true]) {
+    const label = viaWebhook ? 'the deletion event recorded the cancellation first' : 'the sweep sees the cancellation';
+    const f = fixture();
+    await stoppedBeforeCancel(f);
+    classicReset(f, { credit: true });
+    // cancel_at reached: Stripe cancels it, the credit still unspent.
+    Object.assign(f.sub, { status: 'canceled', canceled_at: f.sub.cancel_at });
+    if (viaWebhook) {
+      assert.equal((await hook(f, 'customer.subscription.deleted', { id: 'sub_A' })).status, 200, label);
+      assert.ok(f.ledger[0].subscription_canceled_at, label);
+    }
+    const run = await body(await f.handlers().refundWithSweep(sweepReq()));
+    assert.deepEqual(run.data.outcomes, { needs_support: 1 }, label);
+    assert.equal(f.ledger[0].state, 'needs_support', label);assert.equal(f.ledger[0].error_code, 'charge_mismatch', label);
+    assert.deepEqual(f.refunds, [], `${label}: nothing refunded on top of the credit`);
+    assert.equal(f.calls.some(c => c[0] === 'refund'), false, label);
+  }
+});
+
+test('with no credit on the customer the refund reads the balance and goes ahead; a balance that cannot be read waits', async () => {
+  const f = fixture();
+  assert.equal((await body(await f.handlers().refund(refundReq()))).data.state, 'refunded');
+  assert.ok(f.calls.some(c => c[0] === 'customer' && c[1] === 'cus_A'), 'the balance is read');
+  const g = fixture();
+  g.stripe.customers.retrieve = async () => ({ id: 'cus_A', livemode: false });
+  const r = await g.handlers().refund(refundReq());
+  assert.equal(r.status, 503);
+  assert.deepEqual(g.providerCalls(), [], 'an unknown balance is never read as no credit');
 });

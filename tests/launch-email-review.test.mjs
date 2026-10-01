@@ -14,6 +14,8 @@ function loadHandler(name, scenario = {}) {
     launchEmailReviewHold,
     Deno: { env: { get: key => key === 'WELCOME_HOOK_SECRET' ? 'synthetic-hook' : 'true' }, serve: fn => { handler = fn; } },
     serve: fn => { handler = fn; },
+    // The 503 wrapper for a sign-in check that could not answer (clerkAuth.ts); a pass-through here.
+    answerAuthUnavailable: (_headers, fn) => fn,
     clerkProfile: async () => scenario.signedOut ? null : { isAdmin: !scenario.nonAdmin, profileId: 'synthetic-admin', db },
     createClient() { effects.client++; return db; },
     fetch() { effects.provider++; throw Error('No provider request is allowed'); },

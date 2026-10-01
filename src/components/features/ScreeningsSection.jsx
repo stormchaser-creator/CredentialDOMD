@@ -10,7 +10,8 @@ import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon, StarIcon } from "../shared/Icons";
 import { SCREENING_TYPES, SCREENING_RESULTS } from "../../constants/credentialTypes";
-import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, formatDate, deleteConfirmText } from "../../utils/helpers";
+import { reminderLeadDays } from "../../utils/reminderPreferences";
 import { docMime } from "../../utils/inboxDocs";
 import DocAttach from "./DocAttach";
 import { SECTION_FIELDS } from "../../utils/sectionFields.js";
@@ -28,7 +29,7 @@ const PAIR = "minmax(0, 1fr) minmax(0, 1fr)";
  * checklist of searches plus the usual expiration tracking.
  */
 function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, onAutoEditDone, onAutoEditClosed }) {
-  const { data, addItem, editItem: editCtx, deleteItem, theme: T, toggleFavorite } = useApp();
+  const { data, addItem, editItem: editCtx, deleteItem, theme: T, toggleFavorite, navigate } = useApp();
   const starButton = (item) => {
     const on = item?.favorite === true;
     return (
@@ -189,7 +190,22 @@ function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, on
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Source documents (tap to view)</div>
                 {docsFor(viewItem.id).map(doc => (
-                  !doc.data ? (
+                  doc.fileMissing && !doc.data ? (
+                    // Storage has no file behind this row (AppContext reconcileDocumentFiles
+                    // marked it and stops asking), so it is never "downloading". Said as the
+                    // Documents tab says it, where it can be uploaded again.
+                    <div key={doc.id} role="status" style={{
+                      display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%", padding: "10px 12px",
+                      borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input,
+                      fontSize: 13, fontWeight: 600, marginBottom: 8, boxSizing: "border-box",
+                    }}>
+                      <span style={{ color: T.danger, flex: "1 1 200px", overflowWrap: "anywhere" }}>{doc.name} is missing from your account. Upload it again in Documents.</span>
+                      <button onClick={() => { setViewItem(null); navigate("documents"); }} style={{
+                        padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                        color: T.text, fontSize: 16, fontWeight: 600, cursor: "pointer",
+                      }}>Open Documents</button>
+                    </div>
+                  ) : !doc.data ? (
                     <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input, color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
                       <span style={{ fontSize: 16 }}>{"⏳"}</span>
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} is downloading from the cloud; check back shortly</span>
@@ -314,7 +330,7 @@ function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, on
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
               }}>
                 <div style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
-                  {item.expirationDate && <StatusDot color={getStatusColor(item.expirationDate)} />}
+                  {item.expirationDate && <StatusDot color={getStatusColor(item.expirationDate, reminderLeadDays(data.settings.reminderLeadDays))} />}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>{item.type}</div>
                     <div style={{ fontSize: 15, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
@@ -337,7 +353,7 @@ function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, on
                   {starButton(item)}
                   <button aria-label="Share" onClick={(e) => { e.stopPropagation(); onShare?.(item, "screenings"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", ...cardActionSize }}><SendIcon /></button>
                   <button aria-label="Edit" onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", ...cardActionSize }}><EditIcon /></button>
-                  <button aria-label="Delete" onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this screening?")) deleteItem("screenings", item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", ...cardActionSize }}><TrashIcon /></button>
+                  <button aria-label="Delete" onClick={(e) => { e.stopPropagation(); const files = docsFor(item.id); if (window.confirm(deleteConfirmText("screening", files.length, { names: files.map(d => d.name || "file") }))) deleteItem("screenings", item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", ...cardActionSize }}><TrashIcon /></button>
                 </div>
               </div>
             );

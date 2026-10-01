@@ -40,6 +40,8 @@ function fixture(offerId = 'core', phase = 'founding') {
       profile: async () => profile, accountByCustomer: async () => account, quoteByAttempt: async () => q,
       claimReconcile: async () => ({ state: 'claimed', token: 'syntheticLease' }), releaseReconcile: async () => calls.push(['release']),
       settleLimited: async (...args) => calls.push(['settle', args[2]]),
+      // No refund request on record for a cancelled subscription (20261001041500).
+      refundBySubscription: async () => null,
     },
   };
   return { deps, calls, logs, sub, invoice, event };

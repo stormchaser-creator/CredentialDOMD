@@ -13,6 +13,7 @@ import { setActiveUserId, getActiveUserId, setStorageFullReporter, purgeAfterSes
 import { repairStoredIds } from "../utils/idRepair.js";
 import { accountDataDeletedAt, honorAccountDataDeletion, sameDeletionStamp } from "../utils/dataDeletion.js";
 import { recordLastIdentity } from "../utils/offlineSession";
+import { initialDesk, watchDeskBreakpoint } from "../utils/deskBreakpoint.js";
 import { noteMembershipStatus, resetSharedAiStatus } from "../utils/aiClient";
 import { configureSecretContinuity } from "../utils/secretBox.js";
 import { localFallbackReference, profileSupportReference } from "../utils/profileIssueDiagnostics.js";
@@ -51,6 +52,8 @@ import {
   setWriteRejectionReporter,
   onSyncChange,
   syncIssuesFor,
+  writtenAheadCount,
+  onWrittenAheadFreed,
 } from "../lib/supabase";
 
 const AppContext = createContext(null);
@@ -143,14 +146,17 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // One flag for the whole app: components branch on layout here instead of
   // each keeping its own resize listener. Below 1024 nothing branches and
   // the phone renders exactly as before. SSR-safe: no window means phone.
+  // A flip remounts what the two layouts place differently, so it follows
+  // only a settled, real width: one resize reading innerWidth 1 (a Chromium
+  // full-page capture) closed an open Add form (src/utils/deskBreakpoint.js).
   const [isDesktop, setIsDesktop] = useState(
-    () => typeof window !== "undefined" && window.innerWidth >= 1024
+    () => typeof window !== "undefined" && initialDesk(window)
   );
+  // The flag the first render showed; from then on only the watcher sets it.
+  const firstDeskRef = useRef(isDesktop);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = () => setIsDesktop(window.innerWidth >= 1024);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
+    return watchDeskBreakpoint(window, firstDeskRef.current, setIsDesktop);
   }, []);
 
   // ─── Auth: read from Clerk ────────────────────────────────
@@ -276,8 +282,13 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     if (!accountId) { setSyncState({ issues: [], pending: 0, awaitingAccess: 0, accessRefused: 0 }); return undefined; }
     const refresh = (changed) => {
       if (changed && changed !== accountId) return;
-      setSyncState({ issues: syncIssuesFor(accountId), pending: pendingOpCount(accountId), awaitingAccess: awaitingAccessOpCount(accountId),
-        accessRefused: accessRefusedOpCount(accountId) });
+      // A settings save made before the page load's first answer is on the
+      // queue at once, but this tab is still waiting on that answer to decide
+      // it (lib/supabase.js writtenAhead): not yet a change "saved on this
+      // device", so the notice does not count it until the wait is over.
+      const deciding = writtenAheadCount(accountId);
+      setSyncState({ issues: syncIssuesFor(accountId), pending: Math.max(0, pendingOpCount(accountId) - deciding),
+        awaitingAccess: Math.max(0, awaitingAccessOpCount(accountId) - deciding), accessRefused: accessRefusedOpCount(accountId) });
     };
     refresh();
     return onSyncChange(refresh);
@@ -302,7 +313,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     if (offlineMode || !user?.id || !accessAuthority.enabled) return undefined;
     const ownerId = user.id;
     let running = false;
-    return accessAuthority.onAnswer((accountId) => {
+    // Also run when a save another page of this browser wrote ahead turns
+    // out to have no live page behind it after a replay here left it to that
+    // page (lib/supabase.js onWrittenAheadFreed): the page this one reloaded
+    // flushed it at pagehide, and it would otherwise wait for the next answer.
+    const replayKept = (accountId) => {
       if (running || accountId !== ownerId) return;
       const waiting = awaitingAccessOpCount(ownerId);
       if (waiting === 0) return;
@@ -334,7 +349,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         } catch { /* the stamp, the ledger or the network: the next answer, or the next load, tries again */ }
         finally { running = false; }
       })();
-    });
+    };
+    const stopAnswers = accessAuthority.onAnswer(replayKept);
+    const stopFreed = onWrittenAheadFreed(replayKept);
+    return () => { stopAnswers?.(); stopFreed(); };
   }, [offlineMode, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Load data when user changes (sign in / sign out) ─────
@@ -1035,12 +1053,28 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // nowhere else yet. Offline, reconnecting first would sync them; online,
     // they are writes the cloud refused and a reload retries them. Say so
     // before the point of no return, on both paths.
+    // Every queued op is a change somebody made: the Setup board's own
+    // stamps are never kept on the queue (lib/supabase.js saveSettings). A
+    // member's edit still waiting on its first membership answer is counted
+    // too, since signing out now would discard it.
     const pending = pendingOpCount(ownerId);
     if (pending > 0 && typeof window !== "undefined" && !window.confirm(
       offlineMode
         ? `You have ${pending} change${pending === 1 ? "" : "s"} made offline that have not synced yet. Signing out now discards them permanently. Reconnect first to keep them. Sign out anyway?`
         : `You have ${pending} change${pending === 1 ? "" : "s"} that have not reached the cloud yet. Signing out now discards them permanently. Reload the app first to retry them. Sign out anyway?`
     )) return;
+    // A running Work timer is kept only on this device (WorkLog.jsx, under
+    // BASE_KEYS.timer), and the purge removes it with its start time, so the
+    // time it has run is lost unless Stop & Log saves it as an entry first.
+    let timer = null;
+    try { timer = lsGetJSON(BASE_KEYS.timer, ownerId); } catch { timer = null; }
+    if (timer && typeof timer === "object" && timer.startedAt && typeof window !== "undefined") {
+      const started = new Date(timer.startedAt);
+      const at = Number.isFinite(started.getTime()) ? ` started at ${started.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
+      if (!window.confirm(
+        `A Work timer${at} is still running on this device. Signing out stops it and its time is not recorded. Tap Stop & Log under Practice, Work first to save it as an entry. Sign out anyway?`
+      )) return;
+    }
     // Persist retirement before clearing anything. A failure leaves the user
     // signed in with their in-memory data and actionable explanation intact.
     try { retireContinuityRecovery(ownerId); }
@@ -1148,7 +1182,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // starts decides it (holdForAccess): its cloud write waits for that check
   // (lib/supabase.js) and goes up, or is queued "saved on this device, will
   // sync", or, when the server answers read-only, the change is taken back
-  // here. Only a real refusal returns false. `section` names the collection
+  // here. So is one made before this page load's first answer (the member
+  // app opens from the loaded profile before it): it waits for that answer,
+  // and is kept, counted by the notice, when none comes. Only a real refusal
+  // returns false. `section` names the collection
   // for the operator's report; `quiet`: nobody typed it (a "seen" stamp), so
   // taking it back is not announced. `keepOnRefusal`: the change records work
   // already done outside the app (an invoice that went out), so a refusal by
@@ -1193,7 +1230,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       const ownerId = user.id;
       const changes = changesBetween(before, next);
       holdForAccess({
-        scopes: access.scopes, accountId: ownerId, section: section || access.section, quiet, keep: keepOnRefusal === true,
+        scopes: access.scopes, accountId: ownerId, section: section || access.section, quiet, keep: keepOnRefusal === true, awaitAnswer: access.awaitAnswer === true,
         // Taken back only in this account's records, and only where nothing
         // has changed them since.
         undo: () => {
@@ -1330,10 +1367,15 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return guardedSetData(d => ({ ...d, [key]: updater(d[key]) }), { section: key, keepOnRefusal });
   }, [guardedSetData]);
 
-  const updateSettings = useCallback((updates) => {
+  // `automatic`: nobody did this (the Setup board's own stamps). Like a
+  // "seen" timestamp, it is never said: no alert, and a refusal is not
+  // reported either. A save made before the page load's first membership
+  // answer is not refused: it is kept on this device and decided by that
+  // answer (settingsStatus "verify"; guardedSetData, saveSettings).
+  const updateSettings = useCallback((updates, { automatic = false } = {}) => {
+    const quiet = automatic === true || !Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"));
     if (accessAuthority.enabled && accessAuthority.settingsStatus(updates).status === "refuse") {
-      // A "seen" timestamp nobody typed is neither said nor reported.
-      if (Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"))) {
+      if (!quiet) {
         // Refused only because membership is being re-checked: say so. A
         // read-only membership is shown on the page already; it is reported.
         if (accessVerifying(accessAuthority, "credential")) alertWriteRefused({ scope: "credential", section: "settings" });
@@ -1342,9 +1384,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       return false;
     }
     const previousEmail = dataRef.current?.settings?.email ?? "";
-    const quiet = !Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"));
+    // What a kept Setup board save was made from (lib/supabase.js setupBase):
+    // it goes up later as what it changed, not whole over a newer copy.
+    const previous = updates && Object.hasOwn(updates, "setupState") ? { setupState: dataRef.current?.settings?.setupState ?? null } : null;
     if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }), { section: "settings", quiet })) return false;
-    sbSaveSettings(userIdRef.current, updates, user?.id).then(result => {
+    sbSaveSettings(userIdRef.current, updates, user?.id, { automatic: automatic === true, previous }).then(result => {
       // An address another account holds is refused and everything else
       // saved (saveSettings). Put back the address the profile still holds,
       // unless something newer was typed meanwhile, and say why.
@@ -1482,10 +1526,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const target = (before[key] || []).find(item => item.id === id);
     const linkedDocs = key === "documents" ? [] : (before.documents || []).filter(doc => doc.linkedTo === `${key}:${id}`);
     // The same answer as any save: refused, allowed, or kept on this device
-    // while a check decides it (guardedSetData below holds it).
+    // while a check decides it (guardedSetData below holds it), the page
+    // load's first answer included (awaitAnswer).
     const access = accessAuthority.enabled
       ? accessAuthority.statusFor([...accessAuthority.mutationScopes(key, target || { id }, target),
-        ...linkedDocs.flatMap(doc => accessAuthority.mutationScopes("documents", doc, doc))])
+        ...linkedDocs.flatMap(doc => accessAuthority.mutationScopes("documents", doc, doc))], undefined, { awaitAnswer: true })
       : null;
     if (access?.status === "refuse") {
       alertWriteRefused({ scope: scopesForWrite(key, target || { id }, target), section: key }); return false;

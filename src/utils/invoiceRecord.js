@@ -175,17 +175,46 @@ export const serverNoteRecordQuestion = (number) =>
   `${number} is noted only on the server. If another device recorded it and has not synced yet, recording it here too makes a second ${number}. Record it here?`;
 
 /**
- * The day picker's line when Record it opened it: `matched` when the days the
+ * The picker's line when Record it opened it: `matched` when the items the
  * note billed are all still unbilled here and are checked; otherwise none is
- * checked and the physician picks them from the copy that was sent.
+ * checked and the physician picks them from the copy that was sent. `items`
+ * names them: "days" (Work log, Days & call) or "expenses".
  */
-export const pickFromNoteHint = (number, matched) => (matched
-  ? `The days ${number} billed are checked. Check them against the copy that was sent.`
-  : `This device does not know which days ${number} billed, or they have changed since. Check the days on the copy that was sent.`);
+export const pickFromNoteHint = (number, matched, items = "days") => (matched
+  ? `The ${items} ${number} billed are checked. Check them against the copy that was sent.`
+  : `This device does not know which ${items} ${number} billed, or they have changed since. Check the ${items} on the copy that was sent.`);
 
-/** Asked before Mark as sent records a note's number for days that come to another total. */
-export const noteTotalQuestion = (number, sentTotal, total) =>
-  `${number} went out for ${money(sentTotal)}, and the days checked here come to ${money(total)}. Record ${number} for these days anyway?`;
+/** Asked before Mark as sent records a note's number for items (`items`, as above) that come to another total. */
+export const noteTotalQuestion = (number, sentTotal, total, items = "days") =>
+  `${number} went out for ${money(sentTotal)}, and the ${items} checked here come to ${money(total)}. Record ${number} for these ${items} anyway?`;
+
+/**
+ * Record it filled in Mark as sent from `note`: the form, with the note's
+ * number and date, and what noteTotalDiffers checks on Record.
+ */
+export const markSentFromNote = (note, today) => ({
+  number: note.number, day: sentDay(note.sentAt) || today, from: unrecordedHint(note), at: note.sentAt || null,
+  problem: null, tries: 0, noteNumber: note.number, noteTotal: Number(note.total) > 0 ? Number(note.total) : null,
+});
+
+/**
+ * True when Mark as sent is recording the Record it note's own number for
+ * items that come to another total than the note went out for.
+ */
+export const noteTotalDiffers = (form, number, total) => !!(form?.noteTotal
+  && String(number ?? "").trim().toLowerCase() === String(form.noteNumber || "").trim().toLowerCase()
+  && Math.abs(form.noteTotal - (Number(total) || 0)) > 0.005);
+
+/**
+ * Which of `unbilled` (keys) a Record it note listed (`listed`): all of
+ * them still unbilled, or none (a server note lists none, and one deleted or
+ * changed since means the copy that was sent is the only guide).
+ */
+export function itemsFromNote(listed, unbilled) {
+  const keys = Array.isArray(listed) ? listed.filter(Boolean) : [];
+  const matched = keys.length > 0 && keys.every(k => unbilled.includes(k));
+  return { matched, keys: matched ? [...new Set(keys)] : [] };
+}
 
 /**
  * The preview's line when its file is with the share sheet and the sheet has

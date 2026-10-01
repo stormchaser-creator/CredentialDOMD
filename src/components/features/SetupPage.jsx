@@ -6,7 +6,7 @@ import { generateId, downscalePhoto } from "../../utils/helpers";
 import Modal from "../shared/Modal";
 import { deskRailStyle } from "../shared/deskSticky.js";
 import { isDea, currentDeaRecords, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
-import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine, packetPendingLine } from "../../utils/credentialExport";
+import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine, packetPendingLine, packetMissingLine } from "../../utils/credentialExport";
 import { FREE_BETA_LABEL } from "../../constants/beta";
 import { useSetupState } from "./setup/useSetupState";
 import NpiPanel from "./setup/NpiPanel";
@@ -20,6 +20,8 @@ import { emailRemindersOn, reminderLeadDays } from "../../utils/reminderPreferen
 import { emailProblem } from "../../utils/contactFormat";
 import CMEImport from "./CMEImport";
 import EmailPacketModal from "./EmailPacketModal";
+import { KeptPanel, KeptPanelSlot } from "../shared/KeptPanel";
+import { newKeptPanelHost } from "../shared/keptPanelHost.js";
 
 /**
  * Setup — the board.
@@ -98,11 +100,24 @@ function estimateLabel(task) {
 
 /* ─── Drawers ──────────────────────────────────────────────────── */
 
-function IdentityDrawer() {
+export function IdentityDrawer() {
   const { data, updateSettings, user, theme: T } = useApp();
   const iS = useInputStyle();
   const s = data.settings || {};
-  const [name, setName] = useState(s.name || user?.fullName || "");
+  // Only the saved name fills the field, as in RemindersDrawer. The sign-in
+  // name used to be pre-filled and looked saved, but it was written only on
+  // blur, so a member who picked a degree and a state without touching the
+  // field left no name on file and the task stayed open. It is offered as
+  // the placeholder and a one-tap button instead. null means "not editing":
+  // the field shows what is saved.
+  const [draft, setDraft] = useState(null);
+  const name = draft ?? s.name ?? "";
+  const signInName = String(user?.fullName || "").trim();
+  const commitName = (value) => {
+    const next = String(value ?? "").trim();
+    setDraft(null);
+    if (next !== (s.name || "")) updateSettings({ name: next });
+  };
 
   const chip = (label, active, onClick) => (
     <button key={label} aria-pressed={active} onClick={onClick} style={{
@@ -119,12 +134,18 @@ function IdentityDrawer() {
       <input
         id="setup-full-name"
         value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={() => { if (name.trim() !== (s.name || "")) updateSettings({ name: name.trim() }); }}
-        placeholder="First Last"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => { if (draft !== null) commitName(e.target.value); }}
+        placeholder={signInName || "First Last"}
         autoComplete="name"
         style={{ ...iS, marginTop: 4, marginBottom: 12 }}
       />
+      {!s.name && draft === null && signInName && (
+        <button type="button" onClick={() => commitName(signInName)} style={{
+          display: "block", border: "none", background: "transparent", position: "relative", padding: "2px 0 14px", margin: "-2px 0", color: T.accent,
+          fontSize: 16, fontWeight: 700, cursor: "pointer", textAlign: "left",
+        }}>Use {signInName}</button>
+      )}
       <label id="setup-degree-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Degree</label>
       <div role="group" aria-labelledby="setup-degree-label" style={{ display: "flex", gap: 8, margin: "4px 0 12px" }}>
         {chip("MD", s.degreeType === "MD", () => updateSettings({ degreeType: "MD" }))}
@@ -621,7 +642,7 @@ function LockedRow({ task, T, onUpgrade }) {
  * Download comes first because a complete packet routinely exceeds what
  * email carries (ten files, 25 MB), and the ZIP has no such ceiling.
  */
-function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, T }) {
+function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, onOpenDocuments, T }) {
   const btn = (primary) => ({
     flex: 1, minWidth: 150, padding: "12px 16px", borderRadius: 12,
     border: primary ? "none" : `1px solid ${T.border}`,
@@ -634,20 +655,34 @@ function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, T }
   // holds, so until the last file lands the download would be a partial packet
   // handed over silently. Send is unaffected: it goes by doc id and the bytes
   // are read server-side.
+  // A linked file Storage does not have is held too, but named, with the way
+  // to Documents, because it will never land on its own (SHARE-005).
   const pending = packetPendingLine(summary);
-  const holdDownload = busy || !!pending;
+  const missing = packetMissingLine(summary);
+  const holdDownload = busy || !!pending || !!missing;
   return (
     <div style={{
       backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 16,
       padding: "18px 20px", boxShadow: T.shadow1,
     }}>
       <div style={{ fontSize: 19, fontWeight: 800, color: T.text, marginBottom: 6 }}>Your packet is assembled.</div>
-      <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.55, marginBottom: pending ? 6 : 14, fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.55, marginBottom: pending || missing ? 6 : 14, fontVariantNumeric: "tabular-nums" }}>
         {packetSummaryLine(summary)}
       </div>
       {pending && (
-        <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 14, fontVariantNumeric: "tabular-nums" }}>
+        <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: missing ? 6 : 14, fontVariantNumeric: "tabular-nums" }}>
           {pending}
+        </div>
+      )}
+      {missing && (
+        <div role="status" style={{ fontSize: 12.5, color: T.danger, lineHeight: 1.5, marginBottom: 14 }}>
+          {missing}
+          {onOpenDocuments && (
+            <button onClick={onOpenDocuments} style={{
+              display: "block", marginTop: 2, padding: 0, minHeight: 32, border: "none", background: "transparent",
+              color: T.accent, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+            }}>Open Documents</button>
+          )}
         </div>
       )}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -799,6 +834,7 @@ export default function SetupPage({
   onAddLicenseByHand,
   onOpenRecord,
   onOpenSection,
+  onOpenDocuments,
   onUpgrade,
 }) {
   const { data, theme: T, isDesktop } = useApp();
@@ -815,6 +851,14 @@ export default function SetupPage({
   // page with initialTask already set, and the branch below must run on that
   // first render too, or the drawer comes back folded away (SETTINGS-018).
   const [seeded, setSeeded] = useState(null);
+  // Where the open task's drawer renders (src/components/shared/KeptPanel.jsx):
+  // the right pane at desk width, under its row on a phone. The drawer
+  // itself stays put in the tree, so crossing 1024px with it open keeps
+  // what the member typed in it (an NPI, a DEA number, a CV being read).
+  const [drawerHost] = useState(newKeptPanelHost);
+  // The layout the last render drew, so a crossing to phone width can keep
+  // the drawer on screen (below, where drawerTask is chosen).
+  const [drawnDesk, setDrawnDesk] = useState(isDesktop);
 
   const t1 = setup.counts.tier1;
   const t2 = setup.counts.tier2;
@@ -974,7 +1018,7 @@ export default function SetupPage({
       {open === task.id && (
         <div style={{ padding: "4px 0 16px" }}>
           <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>{task.why}</div>
-          {drawerFor(task)}
+          <KeptPanelSlot host={drawerHost} />
           {drawerFooter(task)}
         </div>
       )}
@@ -1072,8 +1116,9 @@ export default function SetupPage({
   // card (the sheet closes before it calls).
   const downloadPacket = async () => {
     if (zipBusy) return;
-    const pending = packetPendingLine(packetSummary(data));
-    if (pending) { setZipError(pending); return; }
+    const fresh = packetSummary(data);
+    const held = packetMissingLine(fresh) || packetPendingLine(fresh);
+    if (held) { setZipError(held); return; }
     setZipBusy(true);
     setZipError(null);
     try {
@@ -1094,16 +1139,21 @@ export default function SetupPage({
       error={zipError}
       onDownload={downloadPacket}
       onSend={() => setEmailOpen(true)}
+      onOpenDocuments={onOpenDocuments}
       T={T}
     />
   ) : null;
 
+  // Keyed, and so is the drawer below: the root's other children differ
+  // between the two layouts, and a key keeps each of these one element
+  // across a width change (the send sheet keeps its draft).
   const packetMailer = (
     <EmailPacketModal
+      key="packet-mailer"
       open={emailOpen}
       onClose={() => setEmailOpen(false)}
       initialDocIds={packetDocIds}
-      onDownloadPacket={packetSum && !packetPendingLine(packetSum) ? downloadPacket : undefined}
+      onDownloadPacket={packetSum && !packetPendingLine(packetSum) && !packetMissingLine(packetSum) ? downloadPacket : undefined}
     />
   );
 
@@ -1118,8 +1168,46 @@ export default function SetupPage({
     </button>
   );
 
+  // The task whose drawer is on screen: at desk width the open task, or the
+  // first row, in the right pane; on a phone the open task, when its row is
+  // drawn (not folded away with a finished Tier 1 or a folded packet).
+  const railRows = [...t1Rows, ...t2Rows];
+  const rowDrawn = (id) => (t1Rows.some((t) => t.id === id) && !(t1.complete && !unfoldedT1))
+    || (t2Rows.some((t) => t.id === id) && !packetCollapsed);
+  const drawerTask = isDesktop
+    ? (setup.byId[open] || railRows[0] || setup.tier1[0] || null)
+    : (open && rowDrawn(open) ? setup.byId[open] || null : null);
+  // At desk width the right pane shows the first row's drawer before any row
+  // is tapped, and a member can type straight into it. Touching it (focus, a
+  // press, a change or a dropped file, which reach here through the portal)
+  // makes it the open task, so a crossing to phone width keeps it under its
+  // row instead of dropping it with what was typed.
+  const claimShown = () => {
+    if (isDesktop && drawerTask && open !== drawerTask.id) setOpen(drawerTask.id);
+  };
+  // Crossing to phone width with a drawer open whose row a phone folds away
+  // (a finished Tier 1, a folded packet): unfold that section, so the drawer
+  // stays on the page with its state. Adjusted during render, like the deep
+  // link above, so the drawer is never unmounted for a frame.
+  if (drawnDesk !== isDesktop) {
+    setDrawnDesk(isDesktop);
+    if (!isDesktop && open && setup.byId[open] && !rowDrawn(open)) {
+      if (t1Rows.some((t) => t.id === open)) setUnfoldedT1(true);
+      else if (t2Rows.some((t) => t.id === open)) setPacketOpen(true);
+    }
+  }
+  const keptDrawer = (
+    <KeptPanel key="task-drawer" host={drawerHost}>
+      {drawerTask ? (
+        <div key={drawerTask.id} data-task-drawer={drawerTask.id}
+          onFocusCapture={claimShown} onPointerDownCapture={claimShown} onChangeCapture={claimShown} onDropCapture={claimShown}>
+          {drawerFor(drawerTask)}
+        </div>
+      ) : null}
+    </KeptPanel>
+  );
+
   if (isDesktop) {
-    const railRows = [...t1Rows, ...t2Rows];
     return (
       <div>
         {header}
@@ -1165,7 +1253,7 @@ export default function SetupPage({
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             {(() => {
-              const task = setup.byId[open] || railRows[0] || setup.tier1[0];
+              const task = drawerTask;
               if (!task) return null;
               return (
                 <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "18px 20px", boxShadow: T.shadow1 }}>
@@ -1174,13 +1262,14 @@ export default function SetupPage({
                   {task.tier === 2 && (
                     <div style={{ fontSize: 12.5, color: T.textDim, lineHeight: 1.5, marginBottom: 12 }}>{TIER2_COPY.proof}</div>
                   )}
-                  {drawerFor(task)}
+                  <KeptPanelSlot host={drawerHost} />
                   {drawerFooter(task)}
                 </div>
               );
             })()}
           </div>
         </div>
+        {keptDrawer}
         {packetMailer}
       </div>
     );
@@ -1206,6 +1295,7 @@ export default function SetupPage({
       </div>
       {bottomGroups}
       {footer}
+      {keptDrawer}
       {packetMailer}
     </div>
   );

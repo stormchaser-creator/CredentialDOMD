@@ -7,7 +7,7 @@ import Modal from "../../shared/Modal";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { generateId, formatDate, nextInvoiceNumber, deleteConfirmText, localDay, sentDay } from "../../../utils/helpers";
 import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
-import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, recordRefusedNotice, unrecordedHint, shareUnansweredNotice } from "../../../utils/invoiceRecord";
+import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, recordRefusedNotice, unrecordedHint, shareUnansweredNotice, serverNoteRecordQuestion, pickFromNoteHint, noteTotalQuestion, markSentFromNote, noteTotalDiffers, itemsFromNote } from "../../../utils/invoiceRecord";
 import { handOffInvoice, watchUnanswered } from "../../../utils/invoiceHandoff";
 import { markInvoiceBusy } from "../../../utils/invoiceBusy";
 import InvoiceMarkSent, { UnrecordedNotes } from "../../shared/InvoiceMarkSent";
@@ -27,6 +27,7 @@ import { docMime } from "../../../utils/inboxDocs";
 import { agencyOptions, agencyForDate, sameAgency, agencyKey } from "../../../utils/contractsForDate";
 import { localDate } from "../../../utils/billing";
 
+const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
 
 // Desktop fallback when the share sheet cannot take files.
 const downloadFiles = (files) => {
@@ -146,13 +147,24 @@ function Expenses() {
   useDeskAddShortcut(openNew);
 
   const stageFiles = async (files) => {
+    const picked = Array.from(files || []).filter(f => f.type.startsWith("image/") || f.type === "application/pdf");
+    // The Documents tab's 10 MB line, before the file is read. The documents
+    // bucket refuses anything over 15 MB, and a refused upload stays queued on
+    // this device with its whole data URL, so a large receipt never reached
+    // the cloud and nothing said so. The other picked receipts are still staged.
+    const refused = picked.filter(f => f.size > MAX_RECEIPT_SIZE).map(f => `"${f.name || "receipt"}" exceeds the 10 MB size limit.`);
+    const fits = picked.filter(f => f.size <= MAX_RECEIPT_SIZE);
     // The account's 2 GB line, counting receipts already staged on this
     // expense (each carries only its data URL, which the helper measures).
     const staged = pendingFiles.map((f) => ({ name: f.name, data: f.dataUrl }));
-    const quota = checkStorageQuota(data.documents, [...staged, ...Array.from(files)]);
-    if (!quota.ok) { showNotice(quota.message); return; }
-    for (const f of Array.from(files)) {
-      if (!f.type.startsWith("image/") && f.type !== "application/pdf") continue;
+    const quota = fits.length ? checkStorageQuota(data.documents, [...staged, ...fits]) : { ok: true, message: "" };
+    // One notice per tap: a second showNotice in the same tap replaced the
+    // first, so a receipt refused for size went unmentioned when the quota
+    // also refused the rest.
+    const said = [...refused, quota.message].filter(Boolean).join(" ");
+    if (said) showNotice(said);
+    if (!fits.length || !quota.ok) return;
+    for (const f of fits) {
       const dataUrl = await new Promise((res, rej) => {
         const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(f);
       });
@@ -234,17 +246,31 @@ function Expenses() {
   useEffect(() => () => markInvoiceBusy("expenses", false), []);
   const [invAgency, setInvAgency] = useState("");
   const [checked, setChecked] = useState({});
+  // Record it: the note the sheet was opened for ({ number, matched }), said
+  // at the top of the sheet (WorkLog's day picker line).
+  const [invFrom, setInvFrom] = useState(null);
   // Bill-to chips: the contract agencies plus any agency an unbilled expense
   // names, one per agency. Picking one checks every expense billed to that
   // agency under either spelling.
   const invAgencies = useMemo(() => agencyOptions(contracts, { extra: unbilled.map(e => e.agency) }), [contracts, unbilled]);
   // A blank bill-to still gathers the expenses that name no agency.
   const billsTo = (e, ag) => (agencyKey(ag) ? sameAgency(e.agency, ag) : !agencyKey(e.agency));
-  const openInvoice = () => {
+  // `from`: a note of an expense invoice that went out unrecorded (Record it,
+  // WorkLog's openInvoicePicker): Mark as sent opens with its number and date.
+  // Its expenses are checked only when the note lists them and every one is
+  // still unbilled; otherwise none is (a server note lists none, and one
+  // deleted or billed since means the copy that was sent is the only guide).
+  // The bill-to is the agency it went to, when the note says.
+  const openInvoice = (from = null) => {
     const first = unbilled[0]?.agency || "";
-    const ag = invAgencies.find(a => sameAgency(a, first)) || first || invAgencies[0] || "";
+    const noted = from && typeof from.billTo === "string" ? from.billTo : null;
+    const ag = noted !== null
+      ? invAgencies.find(a => sameAgency(a, noted)) || noted
+      : invAgencies.find(a => sameAgency(a, first)) || first || invAgencies[0] || "";
     setInvAgency(ag);
-    setChecked(Object.fromEntries(unbilled.map(e => [e.id, billsTo(e, ag)])));
+    const fromNote = from ? itemsFromNote(from.expenseIds, unbilled.map(e => e.id)) : null;
+    setChecked(Object.fromEntries(unbilled.map(e => [e.id, fromNote ? fromNote.keys.includes(e.id) : billsTo(e, ag)])));
+    setInvFrom(from?.number ? { number: from.number, matched: fromNote.matched } : null);
     setInvOpen(true);
     wentOutRef.current = null;
     recordedRef.current = null;
@@ -252,7 +278,10 @@ function Expenses() {
     // A send from an earlier sheet whose share sheet never answered holds
     // nothing here (its own finally is for its own sheet).
     setBusy(false);
-    setUnrecorded(null); setSendNote(null); setMarkSent(null);
+    setUnrecorded(null); setSendNote(null);
+    // Record it: Mark as sent opens with the note's number and date, to check
+    // against the copy that was sent; its total is checked on Record.
+    setMarkSent(from?.number ? markSentFromNote(from, localDay()) : null);
     // Send waits for a membership answer that is only old (confirmWriteAllowed):
     // asked now, while the expenses are picked, so the tap finds it back.
     prepareWriteCheck("practice");
@@ -357,6 +386,8 @@ function Expenses() {
         rememberUnrecorded({
           number: record.number, sentAt: record.sentAt, kind: "EXP", contractId: null, total: record.totalAmount,
           periodStart: record.periodStart || null, periodEnd: record.periodEnd || null,
+          // What it billed, for Record it (on this device only).
+          expenseIds: record.entryIds || [], billTo: invAgency,
         });
         window.alert(notRecordedMessage(record.number, "these expenses"));
       }
@@ -407,6 +438,9 @@ function Expenses() {
     const problem = markSentProblem({ number, day: markSent.day, invoices: data.invoices, today: localDay() });
     if (problem) { setMarkSent(f => (f ? { ...f, problem } : f)); return; }
     const inv = expenseInvoiceFor(sel, number);
+    // Record it: the expenses checked must come to what that invoice went out for.
+    if (noteTotalDiffers(markSent, number, inv.total)
+      && !window.confirm(noteTotalQuestion(number, markSent.noteTotal, inv.total, "expenses"))) return;
     if (recordExpenseInvoice(expenseRecord(inv, sel, expenseReceiptLines(inv.lines), markedSentAt(markSent), { method: MARKED_SENT }))) {
       showNotice(`${number} is on the Invoices tab as sent ${formatDate(markSent.day)}, and its expenses are billed.`);
     }
@@ -478,6 +512,9 @@ function Expenses() {
       handOffInvoice(account, {
         number, sentAt: new Date().toISOString(), kind: "EXP", contractId: null,
         total: inv.total, periodStart: inv.periodStart || null, periodEnd: inv.periodEnd || null,
+        // What it bills, for Record it (kept on this device; the server's
+        // stamp holds the number only).
+        expenseIds: sel.map(e => e.id), billTo: invAgency,
       });
       const stopWatch = watchUnanswered(() => {
         if (recordedRef.current || sheetRef.current !== opened) return;
@@ -550,10 +587,18 @@ function Expenses() {
 
       {/* An expense invoice that went out without a record and was left
           behind: said here until it is recorded or forgotten. */}
-      {!invOpen && UnrecordedNotes({ T, isDesktop, list: leftUnrecorded, what: "its expenses", onForget: forgetUnrecorded })}
+      {!invOpen && UnrecordedNotes({
+        T, isDesktop, list: leftUnrecorded, what: "its expenses", onForget: forgetUnrecorded,
+        // Record it (WorkLog's): the expense sheet, then Mark as sent filled
+        // in. Known only from the server: asked first, as the device that
+        // sent it may hold its record still on the way.
+        onRecord: unbilled.length > 0
+          ? (n) => { if (!n.fromServer || window.confirm(serverNoteRecordQuestion(n.number))) openInvoice(n); }
+          : null,
+      })}
 
       {unbilled.length > 0 && (
-        <button onClick={openInvoice} style={{
+        <button onClick={() => openInvoice()} style={{
           width: "100%", padding: "13px", borderRadius: 12, border: "none", marginBottom: 12,
           background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
           fontSize: 14.5, fontWeight: 800, cursor: "pointer",
@@ -732,6 +777,11 @@ function Expenses() {
       </Modal>
 
       <Modal open={invOpen} onClose={closeInvoiceSheet} title="Invoice expenses">
+        {invFrom && (
+          <div role="status" style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.45, marginBottom: 10 }}>
+            {pickFromNoteHint(invFrom.number, invFrom.matched, "expenses")}
+          </div>
+        )}
         <div id="expense-invoice-bill-to" style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Bill to</div>
         {invAgencies.length > 0 && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>

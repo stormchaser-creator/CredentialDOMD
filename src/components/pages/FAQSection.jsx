@@ -43,7 +43,12 @@ const FAQ_DATA = [
       },
       {
         q: "Can I cancel anytime?",
-        a: "Use Manage paid subscription to review and cancel renewal. If you chose a purchase during your historical free beta, use Manage scheduled membership before the first charge date to avoid that charge. If you never opted in, there is no charge and nothing to cancel. Your saved records remain available to read and export.",
+        a: "Use Manage paid subscription to review and cancel renewal. If you chose a purchase during your historical free beta, use Manage scheduled membership before the first charge date to avoid that charge. If you never opted in, there is no charge and nothing to cancel. Your saved records remain available to read and export. To end a paid membership now and get your payment back, use Cancel and get a refund (see Can I get my money back?).",
+      },
+      {
+        q: "Can I get my money back?",
+        // The guarantee exactly as the offer states it (MEMBERSHIP_COPY.refundTerms).
+        a: `${MEMBERSHIP_COPY.refundTerms} Open More > Profile & settings and use Cancel and get a refund under Your membership. You see the payment that will be refunded before you confirm. Your membership ends at once and does not renew. Nothing is deleted: your saved records stay available to view and export. You can also ask through Get help.`,
       },
       {
         q: "Do you store my documents securely?",

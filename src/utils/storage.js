@@ -508,10 +508,15 @@ async function saveTextNow(key, userId, payload, guard, how, seq, stopSnapshot, 
     const final = mergedSections && result.text !== json ? mergedSections : mine;
     storedText.set(key, { text: result.text ?? json, current: localWriteGuard(userId, { adopted: false }) });
     // The copy just written. From the records in memory (saveData): they are
-    // its base, unless it kept rows they lack (the merge). The stored copy
-    // itself, rewritten (readToken): the records in memory are still based on
-    // what they were, and the copy may hold more.
-    const base = fromStored ? (prior ? prior.base : final) : (final === mine ? mine : prior?.base ?? mine);
+    // its base, merged or not; when it kept rows they lack (the merge) it is
+    // divergent as well. Kept on the copy from before this save after a
+    // merge, a row added here in this save looked like one never saved here,
+    // so deleting it (or undoing an edit) changed nothing and the next merge
+    // put it back. Not the merged text either: a row only the other window
+    // shows would then read as deleted here. The stored copy itself,
+    // rewritten (readToken): the records in memory are still based on what
+    // they were, and the copy may hold more.
+    const base = fromStored ? (prior ? prior.base : final) : mine;
     const divergent = fromStored ? (prior ? prior.divergent || !sameDeviceOnlySections(final, prior.base) : false) : final !== mine;
     knownCopies.set(key, { stamp: result.stamp ?? null, base, divergent });
     if (releaseHeldDeviceOnlyChanges(userId, final)) setDeviceOnlyUnsaved(userId, null);

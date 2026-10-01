@@ -33,7 +33,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { fetchNppes } from "../_shared/nppes.ts";
 import {
   buildEnvelope, pubmedAuthorTerm, clean,
@@ -98,7 +98,9 @@ function splitName(full: string): { firstName: string; lastName: string } {
   return { firstName: tokens[0], lastName: tokens[tokens.length - 1] };
 }
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503 with these
+// CORS headers, not the runtime's bare 500 (see answerAuthUnavailable).
+serve(answerAuthUnavailable(corsHeaders, async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -282,4 +284,4 @@ serve(async (req) => {
     });
   }
   return json(envelope);
-});
+}));

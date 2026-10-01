@@ -513,7 +513,7 @@ function watchAnswers(f, over = {}) {
   const seen = { loads: [], stampReads: 0 };
   vm.runInNewContext(answerTrigger, {
     useEffect: fn => fn(), offlineMode: false, user: { id: ACCOUNT }, accessAuthority: f.authority, userIdRef: { current: PROFILE },
-    dataOwnerRef: { current: ACCOUNT }, getActiveUserId: () => ACCOUNT, listTombstones: f.api.listTombstones, replayPendingOps: f.api.replayPendingOps,
+    dataOwnerRef: { current: ACCOUNT }, getActiveUserId: () => ACCOUNT, listTombstones: f.api.listTombstones, replayPendingOps: f.api.replayPendingOps, onWrittenAheadFreed: f.api.onWrittenAheadFreed,
     awaitingAccessOpCount: () => f.queue().filter(op => op.awaitingAccess === true).length,
     accessRefusedOpCount: () => f.queue().filter(op => op.awaitingAccess === true && op.accessRefused === true).length,
     // The records in memory were loaded with no data deletion on record, and
@@ -544,6 +544,24 @@ test('a fresh answer replays the saves kept for want of one, without waiting for
   f.authority.accept(ACCOUNT, active());
   await settle();
   assert.equal(seen.stampReads, 1, 'the deletion stamp is read first, as on a load');
+  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table}`), ['upsert invoices']);
+  assert.deepEqual(f.queue(), []);
+  assert.deepEqual(seen.loads, []);
+});
+
+test('a kept save another page left behind is replayed when its lock grace runs out, not at the next answer', async () => {
+  // lib/supabase.js onWrittenAheadFreed: a replay here left a copy to the
+  // page that wrote it, which turned out to be gone (a reload's pagehide flush).
+  const f = fixture();
+  await keptSave(f);
+  f.authority.accept(ACCOUNT, active());
+  await settle();
+  let freed = null;
+  const seen = watchAnswers(f, { onWrittenAheadFreed: fn => { freed = fn; return () => {}; } });
+  assert.equal(typeof freed, 'function', 'the answer replay also listens for a freed copy');
+  assert.deepEqual(f.writes(), [], 'nothing sent before');
+  freed(ACCOUNT);
+  await settle();
   assert.deepEqual(f.writes().map(op => `${op.method} ${op.table}`), ['upsert invoices']);
   assert.deepEqual(f.queue(), []);
   assert.deepEqual(seen.loads, []);

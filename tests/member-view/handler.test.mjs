@@ -135,6 +135,34 @@ test('no sign-in is 401; a signed-in member who is not an admin is refused befor
   for (const g of [f, flagged]) { assert.equal(g.calls.start.length, 0); assert.equal(g.calls.rows.length, 0); }
 });
 
+test('an identity check that could not answer is 503 support_view_unavailable, not 401, and reads nothing', async () => {
+  // clerkProfile throws ClerkAuthUnavailable when Clerk's key set or the
+  // profiles read does not answer (35b28568). The viewer closes on
+  // 'unauthorized' at once but tolerates two failed checks on a 503, so a
+  // hiccup during the check poll must not read as signed out.
+  const f = setup();
+  const { session } = (await f.call(startBody())).body;
+  const checksBefore = f.calls.check.length;
+  class ClerkAuthUnavailable extends Error { constructor(stage) { super(`Identity could not be checked just now (${stage})`); this.name = 'ClerkAuthUnavailable'; } }
+  const handler = createMemberViewHandler({
+    enabled: () => true,
+    authenticate: async () => { throw new ClerkAuthUnavailable('key_set'); },
+    readFile: async () => { throw Error('must not read'); },
+    store: new Proxy({}, { get: () => async () => { throw Error('must not touch the store'); } }),
+  });
+  for (const body of [{ action: 'check', sessionId: session.id }, startBody()]) {
+    const r = await handler(new Request('https://fn.test/admin-member-view', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer admin', origin: ORIGIN }, body: JSON.stringify(body) }));
+    assert.equal(r.status, 503, body.action);
+    assert.deepEqual(await r.json(), { error: 'support_view_unavailable' });
+  }
+  assert.equal(f.calls.check.length, checksBefore);
+  // And the viewer's own lists agree: 503 support_view_unavailable is not a closing code.
+  const { MEMBER_VIEW_CLOSING, memberViewFailure } = await import('../../src/utils/memberViewClient.js');
+  assert.equal(MEMBER_VIEW_CLOSING.has('support_view_unavailable'), false);
+  assert.equal(memberViewFailure('support_view_unavailable').closes, false);
+  assert.equal(memberViewFailure('unauthorized').closes, true, 'which is why a 401 here closed the view at once');
+});
+
 test('no active grant: refused, and not one record is read', async () => {
   const f = setup({ grant: 'none' });
   const r = await f.call(startBody());

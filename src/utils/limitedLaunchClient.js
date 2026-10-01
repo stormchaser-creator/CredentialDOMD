@@ -167,6 +167,19 @@ function validateEnrollment(value) {
   return structuredClone(value);
 }
 
+// The same Clerk session: the same object, or (Clerk builds a new Session
+// object for the same session whenever its client is refreshed, for example
+// the touch it sends each time the page gets focus, as an iPhone resumes it)
+// one with the same session id for the same user. A sign-out leaves none; a
+// new sign-in or another account is another session id.
+const sessionUser = session => session?.user?.id ?? session?.userId ?? null;
+export function sameClerkSession(saved, current) {
+  if (!saved || !current) return false;
+  if (saved === current) return true;
+  return typeof saved.id === "string" && saved.id !== "" && current.id === saved.id
+    && sessionUser(saved) !== null && sessionUser(current) === sessionUser(saved);
+}
+
 /** A fresh Clerk token, pinned to one signed-in account and one session. */
 export function createLimitedLaunchClient({
   accountId, enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
@@ -177,20 +190,32 @@ export function createLimitedLaunchClient({
   async function request(endpoint, body = {}, tokenOptions) {
     if (!enabled || !accountId || !url || !anonKey) throw unavailable(undefined, undefined, "config");
     const session = getSession();
-    const sameSession = () => getSession() === session && session?.user?.id === accountId;
-    if (!sameSession()) throw unavailable(undefined, undefined, "session");
+    // Compared by session id and user, not by object: Clerk replaces the
+    // object for the same session (sameClerkSession), and a request that
+    // treated that as a lost session failed on every iPhone resume.
+    const sameSession = () => {
+      const current = getSession();
+      return sameClerkSession(session, current) && sessionUser(current) === accountId;
+    };
+    const changed = () => unavailable(undefined, undefined, "session");
+    if (!sameSession()) throw changed();
     const controller = new AbortController();
-    let timer, reader, response, stage = "token";
+    let timer, reader, response, stage = "token", timedOut = null;
     const cancelBody = () => {
       try { Promise.resolve(reader ? reader.cancel() : response?.body?.cancel()).catch(() => {}); }
       catch { /* Cleanup must not expose transport details or replace the request error. */ }
     };
     const deadline = new Promise((_, reject) => {
-      timer = setTimeout(() => { controller.abort(); cancelBody(); reject(unavailable(undefined, undefined, "timeout", stage)); }, timeoutMs);
+      timer = setTimeout(() => {
+        timedOut = stage;
+        controller.abort(); cancelBody(); reject(unavailable(undefined, undefined, "timeout", stage));
+      }, timeoutMs);
     });
     try {
-      const token = await Promise.race([tokenOptions ? session.getToken(tokenOptions) : session.getToken(), deadline]);
-      if (!sameSession()) throw unavailable(undefined, undefined, "session");
+      // The token comes from the session object Clerk holds now.
+      const live = getSession();
+      const token = await Promise.race([tokenOptions ? live.getToken(tokenOptions) : live.getToken(), deadline]);
+      if (!sameSession()) throw changed();
       if (!token || controller.signal.aborted) throw unavailable();
       stage = "network";
       response = await Promise.race([fetchImpl(`${url}/functions/v1/${endpoint}`, {
@@ -198,13 +223,15 @@ export function createLimitedLaunchClient({
         body: JSON.stringify(body), credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store", redirect: "error", signal: controller.signal,
       }), deadline]);
       stage = "response";
-      if (!sameSession() || controller.signal.aborted || !response.body
+      if (!sameSession()) throw changed();
+      if (controller.signal.aborted || !response.body
         || Number(response.headers.get("content-length")) > 65536) throw unavailable();
       reader = response.body.getReader();
       let size = 0; const chunks = [];
       while (true) {
         const next = await Promise.race([reader.read(), deadline]);
-        if (!sameSession() || controller.signal.aborted) throw unavailable();
+        if (!sameSession()) throw changed();
+        if (controller.signal.aborted) throw unavailable();
         if (next.done) break;
         size += next.value.byteLength;
         if (size > 65536) throw unavailable();
@@ -213,10 +240,17 @@ export function createLimitedLaunchClient({
       const bytes = new Uint8Array(size); let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
       const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      if (!sameSession() || controller.signal.aborted) throw unavailable();
+      if (!sameSession()) throw changed();
+      if (controller.signal.aborted) throw unavailable();
       if (!response.ok) throw unavailable(value?.error, response.status, "http");
       return value;
     } catch (error) {
+      // The deadline fired: a fetch or read that rejected as it was aborted
+      // (some browsers reject before the deadline's own rejection lands) is
+      // still a timeout, reported where it stopped.
+      if (timedOut && !(error instanceof LimitedLaunchClientError && error.phase === "timeout")) {
+        throw unavailable(undefined, response?.status, "timeout", timedOut);
+      }
       // A response that was not OK is an HTTP failure even when its body was unreadable.
       const phase = response && !response.ok ? "http" : stage;
       if (error instanceof LimitedLaunchClientError) {

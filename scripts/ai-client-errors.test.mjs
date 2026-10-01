@@ -74,7 +74,9 @@ async function load(status = SHARED_ON, fetchStub = null) {
   // module scope, so a stub installed afterwards is installed too late and the
   // case silently measures the previous case's response.
   if (fetchStub) globalThis.fetch = fetchStub;
-  const store = { "credentialdomd-ai-shared": JSON.stringify(status) };
+  // status === null is a device with nothing cached: a fresh install, or the
+  // first sign-in after a sign-out (resetSharedAiStatus removes the copy).
+  const store = status === null ? {} : { "credentialdomd-ai-shared": JSON.stringify(status) };
   globalThis.localStorage = {
     getItem: (k) => (k in store ? store[k] : null),
     setItem: (k, v) => { store[k] = String(v); },
@@ -257,6 +259,126 @@ async function geminiWith(status, body, headers) {
     note.indexOf("isTransientProxyCode") < note.indexOf("anthropicShared: false"));
   ok("the 503 branch that disables Opus is still there for a real missing key",
     /status === 503[\s\S]{0,120}anthropicShared: false/.test(note));
+}
+
+// ══ A membership check that could not answer (2026-10-01) ══════════════════
+// ai-proxy's POST routes ask accessWriteDecision first, and a check that could
+// not answer came back as 503 { error: "access_policy_unavailable" }. In the
+// release regression a gateway hiccup on that one read made the CME importer
+// say "AI is not switched on yet: the shared key is not configured" and kept
+// shared AI off on the device, so the next certificate scan never asked the AI
+// at all. The proxy now answers it 429 with a Retry-After; the client reads
+// the code as transient at either status.
+{
+  const m = await load();
+  eq("the access code matches the proxy's", m.PROXY_CODES.accessUnavailable, "access_policy_unavailable");
+  ok("a membership check that could not answer is transient", m.isTransientProxyCode("access_policy_unavailable"));
+  ok("its message says nothing was sent and to try again, not that a feature is off",
+    /nothing was sent/i.test(m.AI_MESSAGES.access_policy_unavailable) && /try again/i.test(m.AI_MESSAGES.access_policy_unavailable)
+    && !/not switched on|not enabled|not configured/i.test(m.AI_MESSAGES.access_policy_unavailable));
+}
+for (const status of [429, 503]) {
+  const { m, res } = await geminiWith(status, { error: "access_policy_unavailable", retry_after: 5 }, { "Retry-After": "5" });
+  eq(`gemini ${status} access check: the code reaches the caller`, res.proxyError, "access_policy_unavailable");
+  ok(`gemini ${status} access check: it is marked transient`, res.transient === true);
+  ok(`gemini ${status} access check: shared AI is LEFT ON`, m.aiAvailable({}) === true);
+  ok(`gemini ${status} access check: it never says the shared key is not configured`, !/not configured/i.test(res.message));
+}
+{
+  const m = await load();
+  for (const status of [429, 503]) {
+    eq(`opus ${status} access check: the transient message, not "Opus not enabled"`,
+      m.anthropicErrorMessage({ status, error: { error: "access_policy_unavailable" } }),
+      m.AI_MESSAGES.access_policy_unavailable);
+  }
+}
+{
+  // The proxy half, read from its source: the access gate's 503 goes out as 429.
+  const proxy = readFileSync(path.join(here, "../supabase/functions/ai-proxy/index.ts"), "utf8");
+  const limits = readFileSync(path.join(here, "../supabase/functions/ai-proxy/limits.ts"), "utf8");
+  const gate = proxy.slice(proxy.indexOf("await accessWriteDecision("), proxy.indexOf("// Access gate: beta users"));
+  ok("ai-proxy answers a membership check that could not answer with 429 and a Retry-After",
+    /access\.status === 503\)\s*\{\s*return json\(429, \{ error: AI_CODES\.accessUnavailable[^\n]*"Retry-After"/.test(gate));
+  ok("and it decides that before passing any other refusal through",
+    gate.indexOf("access.status === 503") > -1 && gate.indexOf("access.status === 503") < gate.indexOf("json(access.status"));
+  ok("the proxy spells the code as the client does", /accessUnavailable: "access_policy_unavailable"/.test(limits));
+}
+
+// ══ The status GET on a cold device when the membership check cannot answer ══
+// 35b28568 made ai-proxy answer every route, the status GET included, 429
+// { error: "access_policy_unavailable" } with Retry-After 5 when Clerk's key
+// set or the profiles read does not answer. fetchSharedAiStatus marked the
+// load as checked before it read the status, sent a 429 to the "unknown
+// trouble" branch, and scheduled no retry; on a device with nothing cached
+// every render-time gate then read shared AI as off until a reload. The
+// existing 503-transient branch had the same hole: its retry timer only fires
+// while the load is unchecked, and it had just been marked checked.
+for (const status of [429, 503]) {
+  const timers = [];
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
+  let answer = () => proxyResponse(status, { error: "access_policy_unavailable", retry_after: 5 }, { "Retry-After": "5" });
+  let calls = 0;
+  try {
+    const m = await load(null, async () => { calls++; return answer(); });
+    await m.fetchSharedAiStatus();
+    eq(`cold GET ${status} access check: one request`, calls, 1);
+    eq(`cold GET ${status} access check: a retry is scheduled at the proxy's Retry-After`, timers.map((t) => t.ms), [5000]);
+    ok(`cold GET ${status} access check: shared AI is not on yet`, m.aiAvailable({}) === false);
+    ok(`cold GET ${status} access check: it does not read as not configured or signed out`,
+      m.sharedAiStatus?.reason == null || !/not_configured|signed_out|pending/.test(String(m.sharedAiStatus?.reason)));
+    m.aiAvailable({}); m.anthropicAvailable({}); await m.fetchSharedAiStatus();
+    eq(`cold GET ${status} access check: renders while the retry waits do not ask again`, calls, 1);
+    answer = () => proxyResponse(200, {
+      shared: true, allowed: true, configured: true, used_today: 0, limit: 200,
+      anthropic_shared: true, anthropic_used_today: 0, anthropic_limit: 60,
+    });
+    timers.shift()?.fn();
+    await m.fetchSharedAiStatus();
+    eq(`cold GET ${status} access check: the retry asks again`, calls, 2);
+    ok(`cold GET ${status} access check: and the next 200 turns shared AI on`, m.aiAvailable({}) === true);
+    ok(`cold GET ${status} access check: Opus too`, m.anthropicAvailable({}) === true);
+    eq(`cold GET ${status} access check: nothing further is scheduled`, timers.length, 0);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+}
+{
+  // A forced fetch (Settings) is not held back by a pending retry.
+  const timers = [];
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
+  let calls = 0;
+  let answer = () => proxyResponse(429, { error: "access_policy_unavailable" }, { "Retry-After": "5" });
+  try {
+    const m = await load(null, async () => { calls++; return answer(); });
+    await m.fetchSharedAiStatus();
+    answer = () => proxyResponse(200, { shared: true, allowed: true, configured: true, limit: 200 });
+    await m.fetchSharedAiStatus({ force: true });
+    eq("a forced fetch during the wait still asks", calls, 2);
+    ok("and its answer turns shared AI on", m.aiAvailable({}) === true);
+    timers.shift()?.fn();
+    await m.fetchSharedAiStatus();
+    eq("the stale retry then finds the load checked and asks nothing", calls, 2);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+}
+{
+  // A real missing key on a cold device still switches off and is not retried.
+  const timers = [];
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
+  let calls = 0;
+  try {
+    const m = await load(null, async () => { calls++; return proxyResponse(503, { error: "shared_key_not_configured" }); });
+    await m.fetchSharedAiStatus();
+    ok("cold GET 503 missing key: shared AI is off", m.aiAvailable({}) === false);
+    eq("cold GET 503 missing key: no retry is scheduled", timers.length, 0);
+    eq("cold GET 503 missing key: and renders do not ask again", calls, 1);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
 }
 
 // ══ Retry-After parsing ════════════════════════════════════════════════════

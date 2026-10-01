@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 import { createAccessAuthority } from '../../src/utils/limitedLaunchAccess.js';
-import { BASE_KEYS, purgeForSignOut, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, deviceOnlyRecordCounts, SIGNOUT_INTENT_BASE } from '../../src/utils/storageScope.js';
+import { BASE_KEYS, lsGetJSON, purgeForSignOut, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, deviceOnlyRecordCounts, SIGNOUT_INTENT_BASE } from '../../src/utils/storageScope.js';
 import { DEVICE_ONLY_SECTIONS } from '../../src/utils/pausedApplicationRecords.js';
 const source = await readFile(new URL('../../src/context/AppContext.jsx', import.meta.url), 'utf8');
 const start = source.indexOf('  const handleSignOut = useCallback(');
@@ -15,7 +15,7 @@ function fixture({ failRetirement = false, cancel = false, accessAuthority, clea
   const context = { useCallback: fn => fn, user: { id: 'user_syntheticA' }, getActiveUserId: () => 'user_syntheticA',
     offlineMode: false, vaultCount: () => cancel ? 1 : 0, pendingOpCount: () => 0,
     window: { alert: message => calls.push(['alert', message]), confirm: confirm ? message => { calls.push(['confirm', message]); return confirm(message); } : () => false, location: { reload() { calls.push(['reload']); } } },
-    dataRef: { current: data }, DEVICE_ONLY_SECTIONS, deviceOnlyRecordCounts, offlineCopyUnread: () => unread, markDeliberateSignOut: id => { calls.push(['mark-signout', id]); markSignOut?.(id); },
+    dataRef: { current: data }, DEVICE_ONLY_SECTIONS, deviceOnlyRecordCounts, lsGetJSON, BASE_KEYS, offlineCopyUnread: () => unread, markDeliberateSignOut: id => { calls.push(['mark-signout', id]); markSignOut?.(id); },
     resetSharedAiStatus: () => calls.push(['ai-reset']), configureSecretContinuity: () => calls.push(['crypto-clear']),
     retireContinuityRecovery: id => { calls.push(['retire', id]); if (failRetirement) { const error = Error('Synthetic storage refusal'); error.code = 'continuity_retirement_unavailable'; throw error; } },
     invalidateAccountWrites: id => calls.push(['invalidate-writes', id]),
@@ -219,4 +219,47 @@ test('Sign out asks first when the offline copy holding Protected Identity could
   const read = fixture({ unread: false });
   await read.run();
   assert.ok(!read.calls.some(v => v[0] === 'confirm'), 'a copy that was read asks nothing extra');
+});
+
+// AUTH-005 / AUTH-006: a running Work timer exists only on this device
+// (WorkLog.jsx keeps { contractId, type, startedAt } under BASE_KEYS.timer)
+// and Sign out's purge removes it, so the time it has run was lost with no
+// warning while every other device-only thing the purge erases is named
+// first. Runs the real handleSignOut and the real purge over a synthetic
+// localStorage.
+const TIMER = { contractId: 'contract-synthetic-1', type: 'Call', startedAt: '2026-09-30T14:05:00.000Z' };
+test('Sign out names a running Work timer before the purge erases it; cancelling keeps it', async () => {
+  await withDevice({}, async store => {
+    const key = `${BASE_KEYS.timer}:user_syntheticA`;
+    store.set(key, JSON.stringify(TIMER));
+    const f = fixture({ data: EMPTY_FILE, confirm: () => false, clearLocalData: purgeForSignOut });
+    await f.run();
+    const asked = f.calls.find(v => v[0] === 'confirm');
+    assert.ok(asked, 'the running timer is named before anything is erased');
+    assert.match(asked[1], /Work timer started at .+ is still running/);
+    assert.match(asked[1], /Stop & Log under Practice, Work/);
+    assert.doesNotMatch(asked[1], /\u2014/, 'no em dash in member-facing copy');
+    assert.deepEqual(f.calls.map(v => v[0]), ['ai-reset', 'confirm'], 'cancelling retires nothing and purges nothing');
+    assert.deepEqual(JSON.parse(store.get(key)), TIMER, 'the timer and its start time are still on the device');
+  });
+});
+test('confirming Sign out with a running Work timer goes ahead and the purge removes it', async () => {
+  await withDevice({}, async store => {
+    const key = `${BASE_KEYS.timer}:user_syntheticA`;
+    store.set(key, JSON.stringify(TIMER));
+    const f = fixture({ data: EMPTY_FILE, confirm: () => true, clearLocalData: purgeForSignOut });
+    await f.run();
+    assert.equal(f.calls.filter(v => v[0] === 'confirm').length, 1);
+    assert.ok(f.calls.findIndex(v => v[0] === 'confirm') < f.calls.findIndex(v => v[0] === 'retire'), 'asked before the point of no return');
+    assert.equal(store.has(key), false);
+  });
+});
+test('no running Work timer (or another account\'s): Sign out does not mention one', async () => {
+  await withDevice({}, async store => {
+    store.set(`${BASE_KEYS.timer}:user_syntheticNeighbour`, JSON.stringify(TIMER));
+    const f = fixture({ data: EMPTY_FILE, confirm: () => true });
+    await f.run();
+    assert.equal(f.calls.some(v => v[0] === 'confirm'), false);
+    assert.ok(f.calls.some(v => v[0] === 'purge'));
+  });
 });

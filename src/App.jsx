@@ -63,7 +63,7 @@ import { IntakeNotesBanner } from "./components/features/IntakeNotes";
 import { useRequestProposals } from "./hooks/useRequestProposals";
 import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
-import { supportDeepLink } from "./utils/supportDeepLink.js";
+import { supportDeepLink, takeAppDeepLink } from "./utils/supportDeepLink.js";
 import { RequestPacketSummary, ApproveSendButton, ReviewButton, canSendOnOneTap, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
 import { actionButtonStyle, cardActionSize, TAP_MIN } from "./components/shared/actionButton";
 import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
@@ -93,7 +93,7 @@ import {
 import ConditionalCmeTopics from "./components/shared/ConditionalCmeTopics";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel } from "./utils/cmePresentation";
-import { complianceFor, standingScore, findStateLicense, windowNotes, splitByCycle, alertingStates, resolvePendingLicense } from "./utils/compliance";
+import { complianceFor, standingScore, findStateLicense, windowNotes, splitByCycle, alertingStates, resolvePendingLicense, cmeTopics } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
 import { credentialRecords, alertRecords, lapsingRecords } from "./utils/alertItems.js";
 import { daysUntilDate, localToday } from "./utils/dateDays.js";
@@ -304,8 +304,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // place a link to the archive is minted (build-backup emails no link).
   // The "we read your forwarded request" email links to /app/#requests:
   // open More > Requests, where the packet it describes is waiting.
+  // main.jsx keeps the link in sessionStorage before sign-in can drop it
+  // (utils/supportDeepLink.js captureAppDeepLink); take it back here.
   useEffect(() => {
-    const hash = window.location.hash;
+    const hash = takeAppDeepLink();
     const supportLink = supportDeepLink(hash);
     if (supportLink) {
       setSupportTab("tickets");
@@ -317,10 +319,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     } else if (hash === "#requests") {
       setTab("more");
       setSubPage("requests");
-    } else {
-      return;
     }
-    history.replaceState(null, "", window.location.pathname + window.location.search);
     // setTab / setSubPage are App's useState setters handed down as props: stable.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [shareItem, setShareItem] = useState(null);
@@ -1497,7 +1496,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                       <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: cat1Keys.includes(c.category) ? T.successDim : T.input, color: cat1Keys.includes(c.category) ? T.success : T.textMuted }}>
                         {c.category || "no category"}{cat1Keys.includes(c.category) ? " · counts as Cat 1" : ""}
                       </span>
-                      {(c.topics || []).filter(t => mandateTopics.includes(t)).map(t => (
+                      {cmeTopics(c).filter(t => mandateTopics.includes(t)).map(t => (
                         <span key={t} style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: T.accentDim, color: T.accent }}>{t}</span>
                       ))}
                     </div>
@@ -1747,6 +1746,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     // Credentials preview (Settings toggle, off by default): before the CME
     // cards on the phone, beside the board cards at desk width.
     const showCredsPreview = allCreds.length > 0 && data.settings.showDashboardCredentials === true;
+    const previewLead = reminderLeadDays(data.settings.reminderLeadDays);
     const credentialsPreviewInner = (
       <>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -1764,7 +1764,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             // keeps its date, and shows no countdown (src/utils/lifecycle.js).
             const nonExp = isNonExpiring(item, "licenses");
             const alertable = isAlertable(item);
-            const sc = !alertable ? "gray" : nonExp ? "green" : getStatusColor(item.expirationDate);
+            // Graded on the member's lead time, as the tiles and the ring are.
+            const sc = !alertable ? "gray" : nonExp ? "green" : getStatusColor(item.expirationDate, previewLead);
             const d = item.expirationDate && alertable ? daysUntil(item.expirationDate) : null;
             return (
               <div key={item.id} onClick={() => { setTab("credentials"); setSubPage("licenses"); setAutoEditTarget({ sec: "licenses", id: item.id, mode: "view" }); }} style={{
@@ -1781,7 +1782,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   <div style={{ fontSize: 13, color: T.textMuted, marginTop: 1 }}>
                     {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : nonExp ? "Does not expire" : null, lifecycleNote(item)].filter(Boolean).join(" \u00b7 ")}
                     {d !== null && Number.isFinite(d) && (
-                      <span style={{ fontWeight: 700, color: d <= 90 ? sc : T.textMuted }}>
+                      <span style={{ fontWeight: 700, color: d <= previewLead ? sc : T.textMuted }}>
                         {" \u00b7 "}
                         {d < 0 ? `expired ${Math.abs(d).toLocaleString()}d ago` : d === 0 ? "expires today" : `${d.toLocaleString()}d`}
                       </span>
@@ -2347,7 +2348,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 10 }}>Every state license number the federal registry lists, in one lookup.</div>
           <NpiPanel dense />
         </div>
-        <CrudSection title="Licenses" sectionKey="licenses" favoritable {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={licenseDeskColumns(T)} filterTabs={[
+        <CrudSection title="Licenses" sectionKey="licenses" favoritable {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={licenseDeskColumns(T, reminderLeadDays(data.settings.reminderLeadDays))} filterTabs={[
           { key: "medical", label: "Medical Licenses", match: i => /medical license|physician|osteopathic|training license/i.test(i.type || "") },
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
@@ -2426,14 +2427,21 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // Selecting a section is one click; Licenses is the default selection when
   // the tab itself is the destination. Pro-gated sections keep their lock in
   // the rail and their ProGate overlay in the pane.
+  //
+  // A selected section sits at the same place in the tree at both widths
+  // (wrapper div > second child), so crossing 1024px (an iPad turned, a
+  // window narrowed, the browser zoomed) changes the wrapper's style and the
+  // rail only. Returning the bare section on phone made a crossing unmount
+  // and remount it: an open Add form closed, the NPI panel and a category
+  // Rename lost what the member had typed (QA CRED-024, CRED-014).
   const renderCredentials = () => {
     const section = renderCredSection(subPage);
-    if (isDesktop) {
+    if (isDesktop || section) {
       const deskSub = subPage || "licenses";
       const activeRailId = deskSub.startsWith("findCme:") ? "findCme" : deskSub;
       return (
-        <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-            <nav style={{ ...deskRailStyle(240), display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={isDesktop ? { display: "flex", gap: 24, alignItems: "flex-start" } : undefined}>
+            {isDesktop ? <nav style={{ ...deskRailStyle(240), display: "flex", flexDirection: "column", gap: 14 }}>
             <button onClick={() => openSetup(null)} style={{
               display: "flex", alignItems: "center", gap: 8, width: "100%",
               padding: "8px 10px", borderRadius: 10, cursor: "pointer",
@@ -2476,12 +2484,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 </div>
               </div>
             ))}
-          </nav>
-          <div style={{ flex: 1, minWidth: 0 }}>{section || renderCredSection(deskSub)}</div>
+          </nav> : null}
+          <div style={isDesktop ? { flex: 1, minWidth: 0 } : undefined}>{section || renderCredSection(deskSub)}</div>
         </div>
       );
     }
-    if (section) return section;
     return (
       <div>
         <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>Credentials</h2>
@@ -2551,6 +2558,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <SetupPage
         initialTask={setupTask}
         onOpenCredentials={() => { setTab("credentials"); setSubPage(null); }}
+        onOpenDocuments={() => { setTab("documents"); setSubPage(null); }}
         onAddLicenseByHand={() => openAddIn("licenses", "licenses")}
         onOpenSection={openAddIn}
         onUpgrade={() => { setSubPage(null); setShowPricing(true); }}

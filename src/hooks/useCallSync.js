@@ -66,6 +66,7 @@ const MESSAGES = {
   invalid_token: "CallSync did not accept this link. In CallSync, open Dashboard, then Calendar Subscription, and copy the URL again.",
   upstream: "CallSync did not answer. Try again in a few minutes.",
   offline: "You're offline. CallSync will be checked when you reconnect.",
+  auth_unavailable: "Your sign-in could not be checked just now. Try again in a moment.",
 };
 
 async function fetchFeed(url) {
@@ -86,6 +87,9 @@ async function fetchFeed(url) {
   try { body = await res.json(); } catch { body = null; }
   if (res.ok && typeof body?.ics === "string") return body.ics;
   if (res.status === 401) throw new CallSyncError("signed_out", MESSAGES.signed_out);
+  // Our own server could not check the sign-in (Clerk's key set or the
+  // profiles read did not answer): not CallSync, and not signed out.
+  if (res.status === 503 && body?.code === "auth_unavailable") throw new CallSyncError("auth_unavailable", MESSAGES.auth_unavailable);
   if (res.status === 403) throw new CallSyncError("invalid_token", MESSAGES.invalid_token);
   if (res.status === 400) throw new CallSyncError("bad_url", MESSAGES.bad_url);
   if (res.status === 404) throw new CallSyncError("not_deployed", MESSAGES.not_deployed);

@@ -110,12 +110,17 @@ export function isTicked(v) {
 // Countdowns compare local calendar days (src/utils/dateDays.js): a bare
 // YYYY-MM-DD parsed as UTC midnight expired a license at 5 pm Pacific on its
 // last valid day.
+//
+// `lead` is the member's reminder lead time (reminderLeadDays(settings)), the
+// window the ring, the tiles and Action Required count as expiring. Callers
+// that grade a member's record pass it; left at 90, a lead of 30 showed a
+// license 60 days out as Expiring beside a tile that counted it Active.
 export function getStatusColor(expDate, lead = 90) {
   if (!expDate) return "gray";
   const days = daysUntilDate(expDate);
   if (days == null) return "gray";
   if (days < 0) return "red";
-  if (days <= 30) return "orange";
+  if (days <= Math.min(30, lead)) return "orange";
   if (days <= lead) return "amber";
   return "green";
 }
@@ -349,6 +354,46 @@ export function buildEmailSubject(item, section, settings) {
 export function getItemLabel(item, physicianName, sectionKey) {
   if (!item) return "Credential";
   return plainLabel(item, physicianName, sectionKey || item._sec) || "Credential";
+}
+
+/**
+ * A card's main line under its green type header: the canonical title
+ * (describeItem) with the leading type and the separator after it removed,
+ * so "State Medical License, CO" under STATE MEDICAL LICENSE reads "CO".
+ * describeItem joins with ", " (an older title used an em dash); both go.
+ * Empty when the title is only the type. A title that merely begins with
+ * the same letters ("DEA Registration" under DEA) stays whole.
+ */
+export function titleAfterType(title, type) {
+  const full = String(title || "");
+  // describeItem titles with the trimmed type; a stored "State Medical
+  // License " (trailing space) must strip the same way.
+  const lead = String(type || "").trim();
+  if (!lead || !full.toLowerCase().startsWith(lead.toLowerCase())) return full;
+  const rest = full.slice(lead.length);
+  if (!rest.trim()) return "";
+  const separated = rest.match(/^\s*(?:,|\u{2014}|\u{B7})\s*/u);
+  return separated ? rest.slice(separated[0].length) : full;
+}
+
+/**
+ * The one-line title of a card (the type, then the main line), for places
+ * that print both on one line: the read-only records page and the Member
+ * viewer's Home rows. A title that already leads with its type is whole
+ * ("Tail, Tailored Risk Insurance"; "State Medical License"). Otherwise the
+ * type goes in front, unless the title begins with the type as a whole word
+ * ("DEA Registration, CO" under DEA). Letters alone are not the type:
+ * "Tailored Risk Insurance" under Tail reads "Tail, Tailored Risk Insurance".
+ */
+export function titleWithType(title, type) {
+  const full = String(title || "").trim();
+  const lead = String(type || "").trim();
+  if (!lead) return full;
+  if (!full) return lead;
+  if (titleAfterType(full, lead) !== full) return full;
+  const next = full.slice(lead.length, lead.length + 1);
+  const wordLead = full.toLowerCase().startsWith(lead.toLowerCase()) && !/[\p{L}\p{N}]/u.test(next);
+  return wordLead ? full : `${lead}, ${full}`;
 }
 
 /** describeItem with its separators written as commas, for plain text and pickers. */

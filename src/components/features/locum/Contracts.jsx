@@ -101,6 +101,19 @@ function Contracts() {
   const activeItems = items.filter(i => !isArchived(i));
   const archivedItems = items.filter(isArchived);
   const shownItems = showArchived ? archivedItems : activeItems;
+  // Unbilled work and duty days are reached and invoiced through their
+  // agreement; deleting it would leave them where no screen can bill them,
+  // and Needs invoicing would keep naming them. Same "unbilled" rule as
+  // Invoices > Needs invoicing.
+  const unbilledRefusal = (item) => {
+    const entries = (data.workLog || []).filter(e => e.contractId === item.id && !e.invoiceId).length;
+    const days = (data.dutyDays || []).filter(d => d.contractId === item.id && !d.invoiceId && (d.workedDay || callPeriodsOf(d).length > 0)).length;
+    if (!entries && !days) return null;
+    const parts = [];
+    if (entries) parts.push(`${entries} unbilled work entr${entries === 1 ? "y" : "ies"}`);
+    if (days) parts.push(`${days} unbilled day${days === 1 ? "" : "s"}`);
+    return `${item.facility || "This agreement"} still has ${parts.join(" and ")}. Deleting the agreement would leave ${entries + days === 1 ? "it" : "them"} where no screen can invoice ${entries + days === 1 ? "it" : "them"}. Invoice or delete ${entries + days === 1 ? "it" : "them"} first, or tap Archive to put the agreement away and keep its work.`;
+  };
   const toggleArchived = useCallback((item) => {
     editCtx("locumContracts", {
       ...item,
@@ -505,7 +518,7 @@ function Contracts() {
                   <button onClick={() => toggleArchived(item)} style={{ padding: "6px 10px", minHeight: 32, borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                     {isArchived(item) ? "Unarchive" : "Archive"}
                   </button>
-                  <button aria-label="Delete agreement" onClick={() => { const files = linkedDocsFor(item.id); if (window.confirm(deleteConfirmText("agreement", linkedDocsFor(item.id).length, { extra: "Work log entries keep their data.", names: files.map(d => d.name || "file") }))) deleteItem("locumContracts", item.id); }} style={{ padding: "6px 8px", minWidth: 32, minHeight: 32, borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><TrashIcon /></button>
+                  <button aria-label="Delete agreement" onClick={() => { const held = unbilledRefusal(item); if (held) { window.alert(held); return; } const files = linkedDocsFor(item.id); if (window.confirm(deleteConfirmText("agreement", linkedDocsFor(item.id).length, { extra: "Work log entries keep their data.", names: files.map(d => d.name || "file") }))) deleteItem("locumContracts", item.id); }} style={{ padding: "6px 8px", minWidth: 32, minHeight: 32, borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><TrashIcon /></button>
                 </div>
               </div>
             </div>

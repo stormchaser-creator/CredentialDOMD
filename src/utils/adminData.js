@@ -59,6 +59,25 @@ export async function readAdminSource(client, key, requested) {
   }
 }
 
+/**
+ * How many tickets are archived, without loading any of them, for the
+ * Tickets tab's "Archived (n)" button. The archive list itself loads only
+ * while it is open, so its coverage count was missing on first view and went
+ * stale after an archive from the active list (QA ADMIN-007). Null when the
+ * read fails: the button then reads plain "Archived", never a wrong number.
+ */
+export async function readArchivedTicketCount(client) {
+  try {
+    const result = await client.from(ADMIN_SOURCES.archivedTickets.table)
+      .select('id', { count: 'exact', head: true })
+      .not('archived_at', 'is', null);
+    if (result?.error) return null;
+    return Number.isSafeInteger(result?.count) ? result.count : null;
+  } catch {
+    return null;
+  }
+}
+
 export function filterAdminTickets(rows, { query = '', status = 'all', priority = 'all', approval = 'all' } = {}) {
   const needle = query.trim().toLocaleLowerCase();
   return rows.filter(row => (!needle || [row.subject, row.user_email, row.category, row.body].some(value => String(value || '').toLocaleLowerCase().includes(needle)))

@@ -23,7 +23,7 @@
  * read here.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { launchEmailReviewHold } from "../_shared/launchEmailReview.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
@@ -64,7 +64,9 @@ Eric Whitney, DO
 CredentialDOMD`;
 }
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503 with these
+// CORS headers, not the runtime's bare 500 (see answerAuthUnavailable).
+serve(answerAuthUnavailable(corsHeaders, async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
@@ -184,4 +186,4 @@ serve(async (req) => {
   if (leadId) await db.from("early_access_leads").update({ status: "invited", invited_at: new Date().toISOString() }).eq("id", leadId);
 
   return json(200, { ok: true, id: row.id, resend_id: rj.id || null });
-});
+}));

@@ -30,7 +30,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { ATTACHMENT_BUCKET , attachmentPathsOf, isTicketAttachmentPath } from "../_shared/ticketAttachment.ts";
 
 const LINK_TTL_SECONDS = 3600;
@@ -49,7 +49,9 @@ const json = (status: number, body: unknown) =>
  */
 const forLog = (p: unknown) => String(p).replace(/[^\x20-\x7e]/g, "?").slice(0, 120);
 
-serve(async (req) => {
+// A Clerk key set or profiles read that does not answer is 503 with these
+// CORS headers, not the runtime's bare 500 (see answerAuthUnavailable).
+serve(answerAuthUnavailable(corsHeaders, async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
@@ -143,4 +145,4 @@ serve(async (req) => {
     console.error("ticket-attachment-url failed:", e instanceof Error ? e.message : String(e));
     return json(500, { error: "Could not load the attachment." });
   }
-});
+}));

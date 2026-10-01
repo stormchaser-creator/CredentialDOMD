@@ -15,8 +15,10 @@ import StatusDot from "../shared/StatusDot";
 import FollowUpHistory from "../shared/FollowUpHistory";
 import { membershipEnded } from "../../utils/alertItems.js";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon, StarIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate, namesOnlyThePhysician, clearsPersonName, PERSON_NAME_SECTIONS, isTicked, deleteConfirmText } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate, namesOnlyThePhysician, clearsPersonName, PERSON_NAME_SECTIONS, isTicked, deleteConfirmText, titleAfterType } from "../../utils/helpers";
+import { reminderLeadDays } from "../../utils/reminderPreferences";
 import { docMime } from "../../utils/inboxDocs";
+import { FIELD_TYPES as COLUMN_TYPES } from "../../utils/sectionFields.js";
 import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, withFormField } from "../../utils/lifecycle";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { splitScanned } from "../../utils/docPrefill";
@@ -24,13 +26,17 @@ import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { isContactPickerSupported, pickContact, parseVCard, parseContactText, CONTACT_EMAIL } from "../../utils/contactImport";
 import CPTCodePicker from "./CPTCodePicker";
-import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
+import { isEncrypted, hasLockCode, getLockCode, switchLockCode, encryptSecret, decryptSecret, countOpens, setSecretUser, spreadSample } from "../../utils/secretBox";
+import { SECTION as IDENTITY_SECTION, SECRET_FIELDS as IDENTITY_SECRET_FIELDS, isCiphertext } from "../../utils/protectedIdentity";
+import { offlineCopyUnread } from "../../utils/storageScope";
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
 
 // Every billed code, spelled out — number, what it entails, units, value.
 // Structured detail from the import wins; a hand-typed code string still
 // resolves through the description catalogs.
+// The Documents tab's per-file limit (DocumentsSection checkBeforeRead).
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
 
 // label/placeholder can vary by the record being edited (e.g. Certification
@@ -59,8 +65,10 @@ function choiceOptions(f, form) {
 }
 
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort, favoritable = false }) {
-  const { data, setData, addItem, theme: T , user, isDesktop, toggleFavorite } = useApp();
+  const { data, setData, addItem, theme: T , user, isDesktop, toggleFavorite, navigate } = useApp();
   const iS = useInputStyle();
+  // Whole numbers only where the database column is an integer.
+  const wholeOnly = (f) => f.type === "number" && COLUMN_TYPES?.[sectionKey]?.[f.key] === "integer";
   // One star control, shared by the desktop row, the phone card and the detail
   // view. stopPropagation matters: the whole card is a click target, so without
   // it every star tap would also open the record. On a phone it takes the
@@ -91,6 +99,14 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const [form, setForm] = useState({});
   const [attachedDocs, setAttachedDocs] = useState([]);
   const [scanningDoc, setScanningDoc] = useState(false);
+  // A save that encrypts a password is async (PBKDF2): the ref refuses a
+  // second tap meanwhile, which used to add the record twice.
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  // The lock code on this device did not open the account's saved passwords:
+  // the form asks for the right one before a new password is saved under it.
+  const [lockWrong, setLockWrong] = useState(false);
+  const [lockMsg, setLockMsg] = useState("");
   const [scanMsg, setScanMsg] = useState(null);
   const [scanIsError, setScanIsError] = useState(false);
   const [modalCameraOpen, setModalCameraOpen] = useState(false);
@@ -104,8 +120,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   // True while an edit form that a deep link opened is still on screen.
   const arrivedByLink = useRef(false);
 
-  const openAdd = useCallback(() => { setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
-  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
+  const openAdd = useCallback(() => { setLockWrong(false); setLockMsg(""); setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
+  const openEdit = useCallback((item) => { setLockWrong(false); setLockMsg(""); setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
   // Desk width: `n` opens the same Add form the header button opens.
   useDeskAddShortcut(openAdd);
 
@@ -221,6 +237,10 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     // file's "fields filled" cannot replace it.
     const refused = [];
     for (const file of Array.from(files)) {
+      // The Documents tab's 10 MB line, before the file is read. The
+      // documents bucket refuses anything over 15 MB, and a file it refuses
+      // was queued whole and reported as this device's storage being full.
+      if (file.size > MAX_FILE_SIZE) { refused.push(`"${file.name}" exceeds the 10 MB size limit.`); setScanIsError(true); setScanMsg(refused.join(" ")); continue; }
       // A spreadsheet with a patient-identifier column is never attached.
       const sheetRefusal = await spreadsheetGuard(file);
       if (sheetRefusal) { refused.push(`"${file.name}" was not attached. ${sheetRefusal}`); setScanIsError(true); setScanMsg(refused.join(" ")); continue; }
@@ -392,11 +412,22 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   // device-held lock code, revealed on demand in the detail view.
   const [showSecret, setShowSecret] = useState({});
   const [lockCodeDraft, setLockCodeDraft] = useState("");
-  const [lockMsg, setLockMsg] = useState("");
   const [revealed, setRevealed] = useState({});
   useEffect(() => { setSecretUser(user?.id || null); }, [user?.id]);
   const hasSecretFields = fields.some(f => f.type === "secret");
-  const needsLockCode = hasSecretFields && !hasLockCode() && fields.some(f => f.type === "secret" && form[f.key] && !isEncrypted(form[f.key]));
+  // Passwords this account already saved, from any device. The account's
+  // code is the one that opens most of them. Counted across the whole list
+  // (spreadSample), not its oldest few, which can be strays.
+  const savedSecrets = hasSecretFields
+    ? spreadSample([...new Set(items.flatMap(it => fields.filter(f => f.type === "secret").map(f => it?.[f.key])).filter(isEncrypted))])
+    : [];
+  // Switching the password code keeps an 8+ character one as Protected
+  // Identity's code only when Protected Identity on this device holds an
+  // encrypted value under it (or its copy is not read yet).
+  const switchCode = (code) => switchLockCode(code, {
+    identityHeld: offlineCopyUnread(user?.id) || (data?.[IDENTITY_SECTION] || []).some(r => r && IDENTITY_SECRET_FIELDS.some(k => isCiphertext(r[k]))),
+  });
+  const needsLockCode = hasSecretFields && (!hasLockCode() || lockWrong) && fields.some(f => f.type === "secret" && form[f.key] && !isEncrypted(form[f.key]));
   const revealSecret = async (f) => {
     const v = viewItem?.[f.key];
     if (!v) return;
@@ -404,10 +435,33 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     if (!hasLockCode() && !code) return;
     try {
       const plain = await decryptSecret(v, code || undefined);
-      if (code) saveLockCode(code);
+      if (code) switchCode(code);
       setRevealed(r => ({ ...r, [f.key]: plain }));
     } catch (e) {
-      window.alert(e.message === "wrong-lock-code" ? "That lock code did not open this password." : "Could not read this password on this device.");
+      if (e.message !== "wrong-lock-code") { window.alert("Could not read this password on this device."); return; }
+      // The code on this device may have been set here before the one this
+      // password was saved under was known. Ask for that one; when it opens
+      // the password, this device remembers it instead.
+      const other = window.prompt("That lock code did not open this password. Enter the lock code you set on the device where you saved it:");
+      if (!other) return;
+      try {
+        const plain = await decryptSecret(v, other);
+        // The device keeps the code that opens more of the saved passwords,
+        // so a stray password under either code does not decide which one
+        // the next new password is saved under. A tie goes to the code just
+        // typed: the member says it is the one from the other device.
+        const current = getLockCode();
+        let keep = false;
+        if (current) {
+          const sample = [v, ...savedSecrets.filter(x => x !== v)];
+          const [byCurrent, byOther] = await Promise.all([countOpens(current, sample), countOpens(other, sample)]);
+          keep = byCurrent > byOther;
+        }
+        if (!keep) switchCode(other);
+        setRevealed(r => ({ ...r, [f.key]: plain }));
+      } catch (e2) {
+        window.alert(e2.message === "wrong-lock-code" ? "That lock code did not open this password." : "Could not read this password on this device.");
+      }
     }
   };
   const [lightbox, setLightbox] = useState(null);
@@ -443,7 +497,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     // An ended membership is not renewed: its old renewal date is grey, not red.
     const alertable = isAlertable(item) && !(sectionKey === "memberships" && membershipEnded(item));
     const inactive = isInactive(item);
-    const color = !alertable ? "gray" : nonExpiring ? "green" : getStatusColor(item.expirationDate);
+    const color = !alertable ? "gray" : nonExpiring ? "green" : getStatusColor(item.expirationDate, reminderLeadDays(data.settings.reminderLeadDays));
     // A field required today (e.g. State on a license/DEA entry) can still be
     // blank on an older record saved before that rule existed: flag it the
     // same way an unreviewed NPI import gets flagged, instead of letting it
@@ -512,6 +566,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   }, []);
 
   const handleSave = useCallback(() => {
+    if (savingRef.current) return;
     // The whole point is knowing when things expire — expiring record
     // types can't be saved without their dates.
     const isRequired = (f) => typeof f.required === "function" ? f.required(form) : f.required;
@@ -524,9 +579,10 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       setRequiredError(`Required: ${missing.map(f => resolveFieldProp(f, "label", form)).join(", ")}.${dateMissing ? " Expiration dates are how the app warns you before anything lapses." : ""}`);
       return;
     }
-    // A "number" field here is a whole number (the CV order is an integer
-    // column): "1.5" was refused by the database with the whole record.
-    const notWhole = fields.filter(f => f.type === "number" && isShown(f, form) && String(form[f.key] ?? "").trim() !== "" && !Number.isInteger(Number(form[f.key])));
+    // A "number" field over an integer column is a whole number (the CV
+    // order): "1.5" was refused by the database with the whole record. A
+    // custom category's number ("Fee", 12.50) is packed text, not a column.
+    const notWhole = fields.filter(f => wholeOnly(f) && isShown(f, form) && String(form[f.key] ?? "").trim() !== "" && !Number.isInteger(Number(form[f.key])));
     if (notWhole.length > 0) {
       setRequiredError(`${notWhole.map(f => resolveFieldProp(f, "label", form)).join(", ")} must be a whole number.`);
       return;
@@ -552,21 +608,48 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     };
     const secretFields = fields.filter(f => f.type === "secret" && form[f.key] && !isEncrypted(form[f.key]));
     if (secretFields.length) {
-      if (!hasLockCode()) {
-        if (lockCodeDraft.trim().length < 4) { setLockMsg("Set a lock code of at least 4 characters to save a password. It stays on this device only."); return; }
-        saveLockCode(lockCodeDraft.trim());
-        setLockCodeDraft("");
+      const typed = !hasLockCode() || lockWrong;
+      const code = typed ? lockCodeDraft.trim() : getLockCode();
+      if (typed && code.length < 4) {
+        setLockMsg(savedSecrets.length
+          ? "Enter the lock code your saved passwords use. It is remembered on this device."
+          : "Set a lock code of at least 4 characters to save a password. It stays on this device only.");
+        return;
       }
-      // Encrypt, then persist; async because WebCrypto is.
+      // Check the code against the passwords this account already saved, then
+      // encrypt and persist; async because WebCrypto is. A code that opens
+      // fewer of them than it fails to open is not the account's code (at
+      // most a stray one), and a password saved under it would not open on
+      // the other devices, so nothing is saved under it.
+      savingRef.current = true;
+      setSaving(true);
       (async () => {
-        const enc = { ...form };
-        for (const f of secretFields) enc[f.key] = await encryptSecret(form[f.key]);
-        commit(enc);
+        try {
+          if (savedSecrets.length) {
+            const opens = await countOpens(code, savedSecrets);
+            if (opens * 2 < savedSecrets.length) {
+              setLockWrong(true);
+              setLockMsg(typed
+                ? "That lock code did not open your saved passwords. Enter the one you set on your other device."
+                : "The lock code on this device does not open your saved passwords. Enter the one you set on your other device.");
+              return;
+            }
+          }
+          if (typed) { switchCode(code); setLockCodeDraft(""); setLockWrong(false); setLockMsg(""); }
+          const enc = { ...form };
+          for (const f of secretFields) enc[f.key] = await encryptSecret(form[f.key], code);
+          commit(enc);
+        } catch {
+          setLockMsg("This password could not be encrypted in this browser. Nothing was saved.");
+        } finally {
+          savingRef.current = false;
+          setSaving(false);
+        }
       })();
       return;
     }
     commit(form);
-  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields, lockCodeDraft]);
+  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields, lockCodeDraft, lockWrong, savedSecrets, switchCode]);
 
   // Typing a date unticks "date not yet known" (lifecycle.withFormField).
   const setField = useCallback((key, value) => {
@@ -812,13 +895,23 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 </div>
                 {needsLockCode && (
                   <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, backgroundColor: T.accentDim, border: `1px solid ${T.accent}` }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>Set a lock code for saved passwords</div>
-                    <div style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 8px" }}>Passwords are encrypted with it before they sync. The code stays on this device; enter it once on any other device. Nobody, including us, can read them without it.</div>
-                    <input type="password" aria-label="Lock code" autoComplete="new-password" value={lockCodeDraft} onChange={e => { setLockCodeDraft(e.target.value); setLockMsg(""); }} placeholder="Lock code (4+ characters)" style={iS} />
+                    {savedSecrets.length > 0 ? (
+                      <>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>Enter your lock code for saved passwords</div>
+                        <div style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 8px" }}>Your saved passwords are locked with the code you set on another device. Enter that code once here and this device remembers it.</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>Set a lock code for saved passwords</div>
+                        <div style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 8px" }}>Passwords are encrypted with it before they sync. The code stays on this device; enter it once on any other device. Nobody, including us, can read them without it.</div>
+                      </>
+                    )}
+                    <input type="password" aria-label="Lock code" autoComplete={savedSecrets.length > 0 ? "current-password" : "new-password"} value={lockCodeDraft} onChange={e => { setLockCodeDraft(e.target.value); setLockMsg(""); }} placeholder="Lock code (4+ characters)" style={iS} />
                     {lockMsg && <div style={{ fontSize: 12, color: T.danger, marginTop: 4 }}>{lockMsg}</div>}
                   </div>
                 )}
                 {!needsLockCode && f.hint && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 4 }}>{f.hint}</div>}
+                {!needsLockCode && lockMsg && <div style={{ fontSize: 12, color: T.danger, marginTop: 4 }}>{lockMsg}</div>}
               </div>
             ) : f.type === "textarea" ? (
               <textarea
@@ -831,9 +924,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             ) : (
               <input
                 data-fkey={f.key}
-                type={f.type === "currency" ? "number" : f.type || "text"}
-                inputMode={f.type === "currency" ? "decimal" : f.type === "number" ? "numeric" : undefined}
-                step={f.type === "currency" ? "0.01" : f.type === "number" ? "1" : undefined}
+                type={f.type === "currency" || wholeOnly(f) ? "number" : f.type === "number" ? "text" : f.type || "text"}
+                inputMode={f.type === "currency" ? "decimal" : wholeOnly(f) ? "numeric" : f.type === "number" ? "decimal" : undefined}
+                step={f.type === "currency" ? "0.01" : wholeOnly(f) ? "1" : undefined}
                 min={f.type === "currency" ? "0" : undefined}
                 value={form[f.key] ?? ""}
                 onChange={e => setField(f.key, e.target.value)}
@@ -845,12 +938,14 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           </Field>
           );
           const shown = fields.filter(f => isShown(f, form));
-          if (!isDesktop) return shown.map(renderField);
           // Desk width: dates, state, cost, yes/no sit two across when they
           // are neighbors; everything else keeps the full measure. Same
-          // Field, same inputs, same validation as the phone column.
+          // Field, same inputs, same validation as the phone column. The
+          // pair wrapper is there at both widths (a plain block on phone),
+          // so crossing 1024px with the form open restyles it instead of
+          // remounting its inputs: focus and a half-typed date stay put.
           return formRows(shown).map(row => row.length === 1 ? renderField(row[0]) : (
-            <div key={`pair:${row[0].key}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 14, alignItems: "start" }}>
+            <div key={`pair:${row[0].key}`} style={isDesktop ? { display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 14, alignItems: "start" } : undefined}>
               {row.map(renderField)}
             </div>
           ));
@@ -902,7 +997,16 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           {/* Documents already linked to this record — tap to view */}
           {editItem && linkedDocs(editItem).length > 0 && (
             <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-              {linkedDocs(editItem).map(doc => (
+              {linkedDocs(editItem).map(doc => doc.fileMissing && !doc.data ? (
+                // Storage has no file behind this row (AppContext
+                // reconcileDocumentFiles marked it and stops asking), so it is
+                // never "syncing". Said as the record's view says it.
+                <div key={doc.id} role="status"
+                  style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 10px", borderRadius: 8, backgroundColor: T.card, border: `1px dashed ${T.border}` }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{doc.name}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: T.danger, marginLeft: "auto" }}>Missing from your account. Upload it again in Documents.</span>
+                </div>
+              ) : (
                 <div key={doc.id}
                   onClick={() => { if (!doc.data) return; if (docMime(doc).startsWith("image/")) setLightbox(doc); else openPdfDoc(doc); }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, backgroundColor: T.card, border: `1px solid ${T.border}`, cursor: doc.data ? "pointer" : "default" }}>
@@ -939,10 +1043,10 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`,
             backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer",
           }}>Cancel</button>
-          <button onClick={handleSave} disabled={scanningDoc} style={{
+          <button onClick={handleSave} disabled={scanningDoc || saving} style={{
             padding: "12px 18px", borderRadius: 10, border: "none",
-            backgroundColor: scanningDoc ? T.border : T.accent, color: scanningDoc ? T.textDim : "#fff", fontSize: 15, fontWeight: 600, cursor: scanningDoc ? "not-allowed" : "pointer",
-          }}>{scanningDoc ? "Scanning..." : editItem ? "Save" : "Add"}</button>
+            backgroundColor: scanningDoc || saving ? T.border : T.accent, color: scanningDoc || saving ? T.textDim : "#fff", fontSize: 15, fontWeight: 600, cursor: scanningDoc || saving ? "not-allowed" : "pointer",
+          }}>{scanningDoc ? "Scanning..." : saving ? "Saving..." : editItem ? "Save" : "Add"}</button>
         </div>
       </Modal>
 
@@ -1058,7 +1162,22 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Documents</div>
                 {linkedDocs(viewItem).map(doc => (
-                  !doc.data ? (
+                  doc.fileMissing && !doc.data ? (
+                    // Storage has no file behind this row (AppContext reconcileDocumentFiles
+                    // marked it and stops asking), so it is never "downloading". Said as the
+                    // Documents tab says it, where it can be uploaded again.
+                    <div key={doc.id} role="status" style={{
+                      display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%", padding: "10px 12px",
+                      borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input,
+                      fontSize: 13, fontWeight: 600, marginBottom: 8, boxSizing: "border-box",
+                    }}>
+                      <span style={{ color: T.danger, flex: "1 1 200px", overflowWrap: "anywhere" }}>{doc.name} is missing from your account. Upload it again in Documents.</span>
+                      <button onClick={() => { setViewItem(null); setRevealed({}); navigate("documents"); }} style={{
+                        padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                        color: T.text, fontSize: 16, fontWeight: 600, cursor: "pointer",
+                      }}>Open Documents</button>
+                    </div>
+                  ) : !doc.data ? (
                     <div key={doc.id} style={{
                       display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px",
                       borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input,
@@ -1233,10 +1352,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                         sub-line only what neither line already said. */}
                     {(() => {
                       const cardTitle = describeItem(item, data.settings.name, sectionKey) || "Untitled";
-                      let mainLine = cardTitle;
-                      if (item.type && cardTitle.toLowerCase().startsWith(String(item.type).toLowerCase())) {
-                        mainLine = cardTitle.slice(String(item.type).length).replace(/^\s*\u2014\s*/, "");
-                      }
+                      const mainLine = titleAfterType(cardTitle, item.type);
                       const said = (v) => v != null && (
                         cardTitle.toLowerCase().includes(String(v).toLowerCase())
                         || String(item.type || "").toLowerCase() === String(v).toLowerCase()

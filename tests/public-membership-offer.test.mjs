@@ -59,8 +59,9 @@ test('a verified pause retains the actual phase and price instead of hiding them
     assert.equal(dom.nodes.price[0].textContent, price);
     assert.ok(dom.nodes['hero-headline'][0].textContent.includes(`${price}/year`));
     assert.match(dom.statuses[0].textContent, /Paid checkout is paused/);
-    assert.match(dom.statuses[0].textContent, /No payment will be taken; your account opens when payment completes\./);
-    assert.equal(dom.actions[0].textContent, 'Create your account');
+    // PUBLIC-001: a paused account is held until checkout reopens, and the page says so.
+    assert.match(dom.statuses[0].textContent, /An account you create today opens when checkout reopens and your payment completes\./);
+    assert.equal(dom.actions[0].textContent, 'Create your account for later');
     if (phase === 'founding') assert.equal(dom.nodes['review-action'][0].textContent, 'See the $99 founding plan');
     else assert.doesNotMatch(JSON.stringify(dom.nodes), /\$99|first 100|founding/i);
   }

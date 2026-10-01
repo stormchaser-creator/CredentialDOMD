@@ -61,3 +61,29 @@ test('the search field is 16px, so iOS Safari does not zoom on focus', async () 
   const input = f.m.nodes().find(n => n.type === 'input');
   assert.ok(input.props.style.fontSize >= 16, `fontSize ${input.props.style.fontSize}`);
 });
+
+// Today's release added Cancel and get a refund and states the money-back
+// guarantee; Help & FAQ found neither ("No matching questions found"), and
+// its only cancel answer sent members to turn off renewal, which keeps the
+// payment. The answer quotes the guarantee exactly as the offer does.
+test('searching refund or money back finds the refund answer, which quotes the guarantee verbatim', async () => {
+  const f = await faq();
+  for (const term of ['refund', 'money back', 'money-back', 'guarantee']) {
+    f.search(term);
+    assert.ok(f.questions().some(x => x.q === 'Can I get my money back?'), term);
+  }
+  f.search('money back');
+  const item = f.questions().find(x => x.q === 'Can I get my money back?');
+  item.button.props.onClick(); f.m.render();
+  const page = f.m.text(f.m.render());
+  assert.ok(page.includes(membershipCopy.MEMBERSHIP_COPY.refundTerms), 'the guarantee text, unchanged');
+  assert.match(page, /More > Profile & settings and use Cancel and get a refund under Your membership/);
+});
+
+test('the cancel answer points at the refund path', async () => {
+  const f = await faq();
+  f.search('Can I cancel anytime');
+  const cancel = f.questions().find(x => x.q === 'Can I cancel anytime?');
+  cancel.button.props.onClick(); f.m.render();
+  assert.match(f.m.text(f.m.render()), /Cancel and get a refund/);
+});

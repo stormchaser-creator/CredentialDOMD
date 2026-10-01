@@ -7,7 +7,7 @@ import { Modal, Field } from "../../shared";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import { generateId, formatDate, copyToClipboard, localDay, sentDay } from "../../../utils/helpers";
 import { reserveInvoiceNumber, invoiceNumberUsed } from "../../../utils/invoiceNumber";
-import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint, shareUnansweredNotice } from "../../../utils/invoiceRecord";
+import { MARKED_SENT, markedSentAt, markSentProblem, shareClosedNotice, notRecordedMessage, closeUnrecordedQuestion, sendFailedNotice, recordRefusedNotice, unrecordedHint, shareUnansweredNotice, serverNoteRecordQuestion, pickFromNoteHint, noteTotalQuestion, markSentFromNote, noteTotalDiffers, itemsFromNote } from "../../../utils/invoiceRecord";
 import { allocateInvoiceNumberRpc } from "../../../lib/supabase";
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import { exportInvoice } from "../../../utils/invoiceExport";
@@ -38,7 +38,7 @@ function DutyLog({ contract, onBusyChange }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
   const [placement, setPlacement] = useState(null); // schedule warning awaiting confirmation
-  const [invoicePick, setInvoicePick] = useState(null); // { days, selected: Set }
+  const [invoicePick, setInvoicePick] = useState(null); // { days, selected: Set, from, matched }
   const [invoicePreview, setInvoicePreview] = useState(null);
   const [sent, setSent] = useState(false);
   // The number of the preview already recorded, read and set synchronously so
@@ -121,7 +121,12 @@ function DutyLog({ contract, onBusyChange }) {
     [unbilledDuties, contract]
   );
 
-  const openInvoicePicker = () => {
+  // `from`: a note of an invoice that went out unrecorded (Record it,
+  // WorkLog's openInvoicePicker): the preview opens Mark as sent with its
+  // number and date. Its days are checked only when the note lists them and
+  // every one is still unbilled here; otherwise none is, and the physician
+  // picks them from the copy that was sent.
+  const openInvoicePicker = (from = null) => {
     // Two rows can share a date — aggregate so a day is picked once
     const byDay = new Map();
     for (const d of unbilledDuties) {
@@ -135,6 +140,11 @@ function DutyLog({ contract, onBusyChange }) {
     if (!days.length) return;
     // Future-dated days list but start unchecked — invoicing a day that
     // hasn't happened should be deliberate.
+    if (from) {
+      const { matched, keys } = itemsFromNote(from.days, days.map(d => d.key));
+      setInvoicePick({ days, selected: new Set(keys), from, matched });
+      return;
+    }
     setInvoicePick({ days, selected: new Set(days.filter(d => d.key <= todayKey).map(d => d.key)) });
   };
 
@@ -144,7 +154,7 @@ function DutyLog({ contract, onBusyChange }) {
         .reduce((s, d) => s + dutyDayPay(contract, d).total, 0) * 100) / 100
     : 0;
 
-  const buildDutyInvoice = (sel) => {
+  const buildDutyInvoice = (sel, from = null) => {
     const chosen = unbilledDuties
       .filter(d => sel.has(d.date))
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -191,7 +201,10 @@ function DutyLog({ contract, onBusyChange }) {
     recordedRef.current = null;
     previewSeqRef.current += 1;
     setSending(null);
-    setUnrecorded(null); setSendNote(null); setMarkSent(null);
+    setUnrecorded(null); setSendNote(null);
+    // Record it: Mark as sent opens with the note's number and date, to check
+    // against the copy that was sent; its total is checked on Record.
+    setMarkSent(from?.number ? markSentFromNote(from, localDay()) : null);
     // Send waits for a membership answer that is only old (confirmWriteAllowed):
     // asked now, while the invoice is read, so the tap finds it back.
     prepareWriteCheck("practice");
@@ -204,6 +217,8 @@ function DutyLog({ contract, onBusyChange }) {
       number: num, numberPending: reserved.pending, textArgs, lines, total, terms,
       dutyIds: chosen.map(d => d.id),
       periodStart: dates[0], periodEnd: dates[dates.length - 1],
+      // The days it bills, kept with its note so Record it checks them.
+      days: [...new Set(dates)],
       text,
     });
   };
@@ -255,6 +270,7 @@ function DutyLog({ contract, onBusyChange }) {
         rememberUnrecorded({
           number, sentAt, kind: "INV", contractId: contract.id, total: invoicePreview.total,
           periodStart: invoicePreview.periodStart || null, periodEnd: invoicePreview.periodEnd || null,
+          days: invoicePreview.days || [],
         });
         window.alert(notRecordedMessage(number, "these days"));
       }
@@ -281,6 +297,9 @@ function DutyLog({ contract, onBusyChange }) {
     const number = String(markSent.number ?? "").trim();
     const problem = markSentProblem({ number, day: markSent.day, invoices: data.invoices, today: localDay() });
     if (problem) { setMarkSent(f => (f ? { ...f, problem } : f)); return; }
+    // Record it: the days checked must come to what that invoice went out for.
+    if (noteTotalDiffers(markSent, number, invoicePreview.total)
+      && !window.confirm(noteTotalQuestion(number, markSent.noteTotal, invoicePreview.total))) return;
     markDutyBilled(MARKED_SENT, { number, sentAt: markedSentAt(markSent) });
   };
 
@@ -332,6 +351,7 @@ function DutyLog({ contract, onBusyChange }) {
   const handOff = () => handOffInvoice(account, {
     number: invoicePreview.number, sentAt: new Date().toISOString(), kind: "INV", contractId: contract.id,
     total: invoicePreview.total, periodStart: invoicePreview.periodStart || null, periodEnd: invoicePreview.periodEnd || null,
+    days: invoicePreview.days || [],
   });
   const copyDutyInvoice = async () => {
     if (sent || sending || recordedRef.current || invoicePreview?.numberPending) return;
@@ -472,14 +492,22 @@ function DutyLog({ contract, onBusyChange }) {
 
       {/* An invoice from this agreement that went out without a record and
           was left behind: said here until it is recorded or forgotten. */}
-      {!invoicePreview && UnrecordedNotes({ T, isDesktop, list: leftUnrecorded, what: "its days", onForget: forgetUnrecorded })}
+      {!invoicePreview && UnrecordedNotes({
+        T, isDesktop, list: leftUnrecorded, what: "its days", onForget: forgetUnrecorded,
+        // Record it (WorkLog's): the day picker, then Mark as sent filled in.
+        // Known only from the server: asked first, as the device that sent it
+        // may hold its record still on the way.
+        onRecord: unbilledDuties.length > 0
+          ? (n) => { if (!n.fromServer || window.confirm(serverNoteRecordQuestion(n.number))) openInvoicePicker(n); }
+          : null,
+      })}
 
       {/* Invoice CTA — same pick-the-days flow as the time engine. Counts
           DAYS (two rows on one date are still one day) to match the picker. */}
       {unbilledDuties.length > 0 && (() => {
         const nDays = new Set(unbilledDuties.map(d => d.date)).size;
         return (
-          <button onClick={openInvoicePicker} style={{
+          <button onClick={() => openInvoicePicker()} style={{
             width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "14px 16px", borderRadius: 14, border: `2px solid ${T.accent}`,
             backgroundColor: T.card, cursor: "pointer", marginBottom: 14, boxShadow: T.shadow1,
@@ -573,6 +601,11 @@ function DutyLog({ contract, onBusyChange }) {
       <Modal open={!!invoicePick} onClose={() => setInvoicePick(null)} title="Which days go on this invoice?">
         {invoicePick && (
           <>
+            {invoicePick.from && (
+              <div role="status" style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.45, marginBottom: 10 }}>
+                {pickFromNoteHint(invoicePick.from.number, invoicePick.matched)}
+              </div>
+            )}
             <InvoiceDayPicker
               T={T}
               days={invoicePick.days}
@@ -580,7 +613,7 @@ function DutyLog({ contract, onBusyChange }) {
               onChange={(s2) => setInvoicePick(p => ({ ...p, selected: s2 }))}
             />
             <button
-              onClick={() => { const s2 = new Set(invoicePick.selected); setInvoicePick(null); buildDutyInvoice(s2); }}
+              onClick={() => { const s2 = new Set(invoicePick.selected); const from = invoicePick.from || null; setInvoicePick(null); buildDutyInvoice(s2, from); }}
               disabled={invoicePick.selected.size === 0}
               style={{
                 width: "100%", padding: "14px", borderRadius: 12, border: "none", marginTop: 4,

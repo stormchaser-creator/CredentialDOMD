@@ -84,7 +84,10 @@ export async function initializeProductionProfile(
   // identity.email is more than identity evidence: when this sign-in reopens
   // an account whose data was deleted, the database routes that address back
   // to the account (docs@ intake, email ticket replies; migration
-  // 20260930051700), stamped with updatedMs and checked against checkedAt. It
+  // 20260930051700), stamped with updatedMs and checked against checkedAt;
+  // and when the account routes no address at all (a legacy member's first
+  // binding sign-in, a sign-up while clerk-webhook is off), it routes this
+  // one with updatedMs as clerk-webhook would (migration 20261001061700). It
   // must stay the verified primary readProductionIdentity returned.
   const { data, error } = await db.rpc("initialize_clerk_profile", {
     p_target_subject: identity.subject, p_verified_primary_email: identity.email,

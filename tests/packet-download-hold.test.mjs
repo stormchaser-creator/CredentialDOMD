@@ -27,6 +27,7 @@ async function setupPage({ documents, onDevice }) {
         // The real sentence builders; the counts and the ZIP are synthetic.
         packetSummaryLine: credentialExport.packetSummaryLine,
         packetPendingLine: credentialExport.packetPendingLine,
+        packetMissingLine: credentialExport.packetMissingLine,
         packetSummary: () => summary,
         packetDocuments: () => [],
         generateCredentialZip: async () => { built.push(summary); return new Blob(['zip']); },

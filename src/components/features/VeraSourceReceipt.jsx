@@ -4,6 +4,9 @@ import { TAP_MIN, inlineLinkTap } from '../shared/actionButton';
 export default function VeraSourceReceipt({ evidence, isDesktop = false }) {
   if (!evidence) return null;
   const sources = Array.isArray(evidence.sources) ? evidence.sources.slice(0, 3).filter(s => veraSource(s?.sourceId)) : [];
+  // No check made and no official page to offer: nothing to say. Replies
+  // saved before receipts carried their pages have exactly this shape.
+  if (!evidence.attempted && !sources.length) return null;
   const fetched = sources.filter(s => s.status === 'available' && Number.isFinite(Date.parse(s.fetchedAt)));
   return <div style={{ fontSize: 12, marginTop: 8, opacity: 0.8 }}>
     <div>{fetched.length ? 'Official page excerpts retrieved; this is not a compliance determination.' : evidence.attempted ? 'Source check unavailable. Answer uses saved references.' : 'Saved references; no live source check.'}</div>

@@ -53,6 +53,83 @@ function getJwks() {
   return jwks;
 }
 
+/**
+ * The caller's identity could not be decided: Clerk's key set or the profiles
+ * read did not answer. Thrown, never returned as null, because null means "not
+ * signed in" and every caller answers it 401, which the app reads as a signed-out
+ * session (ai-proxy's 401 turns shared AI off on the device until the next page
+ * load). A key set that timed out under load was answered exactly that way for
+ * valid tokens (QA lab, 2026-10-01: "token failed verification ... request
+ * timed out" on billing-entitlements and ai-proxy). Every caller answers it
+ * 503 (ai-proxy 429), never 401: a serve handler that catches nothing is
+ * wrapped in answerAuthUnavailable, and a handler with an outer catch maps it
+ * there. An unwrapped escape is the runtime's bare 500 with no CORS headers,
+ * which a browser reports as a network failure.
+ */
+export class ClerkAuthUnavailable extends Error {
+  readonly code = "auth_unavailable";
+  constructor(reason: string) {
+    super(`Identity could not be checked just now (${reason})`);
+    this.name = "ClerkAuthUnavailable";
+  }
+}
+
+/** What a member reads when their identity could not be checked. Plain words, no stage name. */
+export const AUTH_UNAVAILABLE_MESSAGE = "Your sign-in could not be checked just now. Try again in a moment.";
+
+/**
+ * The answer to ClerkAuthUnavailable: 503 with a Retry-After, the code
+ * auth_unavailable, and the caller's own CORS headers. The headers are the
+ * point. A handler that let the error escape answered with the runtime's bare
+ * 500, which carries no Access-Control-Allow-Origin, so a browser on
+ * credentialdomd.com saw a network failure (CallSync said "You're offline"
+ * to a member who was online; supabase.functions.invoke callers said "Failed
+ * to send a request"). `error` is the sentence, because the app's error
+ * readers (edgeErrorMessage, unwrapInvoke) show body.error as written.
+ */
+export function authUnavailableResponse(headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify({ error: AUTH_UNAVAILABLE_MESSAGE, code: "auth_unavailable" }), {
+    status: 503,
+    headers: { ...headers, "Content-Type": "application/json", "Cache-Control": "no-store", "Retry-After": "5" },
+  });
+}
+
+/**
+ * Wrap a serve handler so a ClerkAuthUnavailable it does not catch answers
+ * authUnavailableResponse(headers) instead of the runtime's CORS-less 500.
+ * Anything else is rethrown untouched. A handler with its own outer catch
+ * must check `instanceof ClerkAuthUnavailable` there itself.
+ */
+export function answerAuthUnavailable(
+  headers: Record<string, string>,
+  handler: (req: Request) => Response | Promise<Response>,
+): (req: Request) => Promise<Response> {
+  return async (req: Request) => {
+    try {
+      return await handler(req);
+    } catch (err) {
+      if (err instanceof ClerkAuthUnavailable) return authUnavailableResponse(headers);
+      throw err;
+    }
+  };
+}
+
+/**
+ * True when jwtVerify failed because Clerk's key set could not be fetched, not
+ * because the token is bad: jose's timeout (ERR_JWKS_TIMEOUT), its generic error
+ * about the key set's own HTTP answer (not 200, not JSON), or the fetch itself
+ * failing (fetch rejects with a TypeError: DNS, a refused or reset connection).
+ * Every verdict on the token (expired, bad signature, wrong issuer, malformed,
+ * no matching key) carries its own ERR_J* code and stays a verification
+ * failure, as does anything else.
+ */
+export function keySetUnreachable(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === "ERR_JWKS_TIMEOUT") return true;
+  if (code === "ERR_JOSE_GENERIC") return /JSON Web Key Set HTTP response/.test(String((err as { message?: unknown })?.message ?? ""));
+  return code === undefined && err instanceof TypeError;
+}
+
 export interface ClerkProfile {
   profileId: string;      // profiles.id, what user_id/author_id columns store
   clerkSubject: string;  // verified JWT subject, pinned across later profile reads
@@ -125,6 +202,11 @@ export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
     sub = (payload.sub as string) || "";
     claimEmail = typeof payload.email === "string" ? payload.email : "";
   } catch (err) {
+    // Clerk's key set did not answer: nothing was decided about this token.
+    if (keySetUnreachable(err)) {
+      console.error(`clerkAuth: Clerk's key set for ${ISSUER} could not be read: ${err instanceof Error ? err.message : err}`);
+      throw new ClerkAuthUnavailable("key_set");
+    }
     // Distinct from the no-profile branch below on purpose. After a Clerk
     // cutover the dominant failure is a perfectly valid production token whose
     // sub has no profiles row yet, and the two used to be indistinguishable.
@@ -137,11 +219,16 @@ export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
-  const { data } = await db
+  const { data, error: profileError } = await db
     .from("profiles")
     .select("id, email")
     .eq("auth_user_id", sub)
     .maybeSingle();
+  // A read that failed is not a missing profile.
+  if (profileError) {
+    console.error(`clerkAuth: profiles read failed for verified sub ${sub}: ${profileError.message}`);
+    throw new ClerkAuthUnavailable("profile_read");
+  }
   if (!data) {
     console.error(`clerkAuth: verified sub ${sub} has no profiles row (issuer ${ISSUER}). After a Clerk cutover this means the re-link has not run for this user yet.`);
     return null;

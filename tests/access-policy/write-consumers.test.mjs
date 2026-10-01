@@ -37,7 +37,7 @@ async function harness(route,snapshot={enforcementEnabled:true,credential:false,
     b.onResolve({filter:/^npm:/},args=>({path:args.path,namespace:'mock'}));
     b.onLoad({filter:/.*/,namespace:'mock'},args=>{
       const p=args.path;
-      const code=p==='auth'?'export const clerkProfile=async()=>globalThis.identity;':
+      const code=p==='auth'?'export class ClerkAuthUnavailable extends Error {}export const clerkProfile=async()=>{if(globalThis.identity==="unavailable")throw new ClerkAuthUnavailable("key_set");return globalThis.identity;};export const authUnavailableResponse=h=>new Response(JSON.stringify({code:"auth_unavailable"}),{status:503,headers:h});export const answerAuthUnavailable=(h,fn)=>async req=>{try{return await fn(req);}catch(e){if(e instanceof ClerkAuthUnavailable)return authUnavailableResponse(h);throw e;}};':
         p.endsWith('/server.ts')?'export const serve=handler=>{globalThis.handler=handler;};':
         p.includes('supabase-js')?'export const createClient=()=>globalThis.db;':
         p.includes('svix')?'export class Webhook {}':
@@ -65,6 +65,17 @@ test('real AI GET status remains available without membership RPC',async()=>{
   const response=await context.handler(new Request('https://synthetic.invalid/ai-proxy'));
   // The only RPC is the display-only month spend read (OPS-005), never the membership one.
   assert.equal(response.status,200);assert.deepEqual(state.rpcs.map(r=>r.name),['ai_month_spend_usd']);assert.equal(state.fetches.length,0);
+});
+// An identity that could not be checked (Clerk's key set timed out; QA lab 2026-10-01) is
+// transient: 429 access_policy_unavailable with a Retry-After on GET and on both POST routes,
+// never the 401 the app reads as signed out (it then keeps shared AI off on the device).
+for(const [method,suffix] of [['GET',''],['POST',''],['POST','/v1/messages']])test('real AI handler answers an identity it could not check with 429, not 401: '+method+' '+suffix,async()=>{
+  const {context,state}=await harness('ai-proxy');
+  context.identity='unavailable';
+  const response=await context.handler(new Request('https://synthetic.invalid/ai-proxy'+suffix,method==='POST'?{method,body:'{}'}:{method}));
+  assert.equal(response.status,429);assert.equal(response.headers.get('Retry-After'),'5');
+  assert.equal((await response.json()).error,'access_policy_unavailable');
+  assert.equal(state.fetches.length,0);assert.equal(state.rpcs.length,0);assert.equal(state.writes.length,0);
 });
 test('real CallSync handler requires Practice before upstream',async()=>{
   const {context,state}=await harness('callsync-feed',{enforcementEnabled:true,credential:true,practice:false});

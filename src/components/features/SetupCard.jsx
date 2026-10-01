@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useSetupState } from "./setup/useSetupState";
 import { homeCardForm, ladderState, setupSurfaceCounts, tier1Regressed, CARD_FORM, LADDER } from "../../utils/setupTasks";
-import { reminderLeadDays } from "../../utils/reminderPreferences";
+import { reminderLeadDays, emailRemindersOn } from "../../utils/reminderPreferences";
 
 /**
  * The Home card. Five forms, and the physician only ever sees one of them.
@@ -55,7 +55,11 @@ export default function SetupCard({ onOpenSetup }) {
       }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 8 }}>Protected.</div>
         <div style={{ fontSize: 14, color: T.textMuted, lineHeight: 1.55, marginBottom: 8 }}>
-          Every license and DEA record you have entered carries a date, and a warning goes to {s.email || "your address on file"} {days} days before anything expires.
+          {/* Names only a channel that delivers: with Email reminders off,
+              send-reminders mails nothing, so the warning is the app's own. */}
+          Every license and DEA record you have entered carries a date, and {emailRemindersOn(s.notifyEmail)
+            ? `a warning goes to ${s.email || "your address on file"}`
+            : "this app warns you"} {days} days before anything expires.
         </div>
         <div style={{ fontSize: 14, color: T.textMuted, lineHeight: 1.55, marginBottom: 14 }}>
           What is left is packet material. It can wait.
