@@ -3,6 +3,7 @@ import useUnrecordedInvoices from "./useUnrecordedInvoices";
 import { shareInFlight } from "../../utils/invoiceHandoff";
 import { unansweredTitle, unansweredLine, repeatTitle, repeatLine, partialRepeatLine, REPEAT_OK } from "../../utils/invoiceRecord";
 import { TAP_MIN } from "./actionButton";
+import RevealOnShow from "./RevealOnShow";
 
 /**
  * Every invoice of the account that went to the share sheet (or went out)
@@ -43,10 +44,13 @@ export default function UnansweredInvoices({ onOpen }) {
           }}>{REPEAT_OK}</button>
         </div>
       ))}
-      {shown.map(n => {
+      {shown.map((n, i) => {
         const where = whereOf(n);
+        // The first comes into view with its button when it appears
+        // (RevealOnShow): Home can open scrolled, or the note can arrive
+        // after the page drew.
         return (
-          <div key={n.number} role="status" style={{
+          <RevealOnShow key={n.number} revealKey={i === 0 ? n.number : null} margins="page" role="status" style={{
             padding: "11px 13px", borderRadius: 12, marginBottom: 8, fontSize: 13, lineHeight: 1.45,
             backgroundColor: T.warningDim || T.card, border: `1px solid ${T.warning}`, color: T.text,
           }}>
@@ -56,7 +60,7 @@ export default function UnansweredInvoices({ onOpen }) {
               padding: "7px 14px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 9, border: "none",
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer",
             }}>Open {where}</button>
-          </div>
+          </RevealOnShow>
         );
       })}
     </div>

@@ -1,5 +1,6 @@
 import Field from "./Field";
 import { TAP_MIN } from "./actionButton";
+import RevealOnShow from "./RevealOnShow";
 import { recordRefusedNotice, unrecordedBanner, forgetUnrecordedQuestion, shareAskTitle, shareAskNotice, SHARE_ASK_YES, SHARE_ASK_NO, SHARE_ASK_CHECKING, otherAgreementNoteLine, repeatTitle, repeatLine, partialRepeatLine, REPEAT_OK } from "../../utils/invoiceRecord";
 
 /**
@@ -72,8 +73,10 @@ export default function InvoiceMarkSent({
   });
   return (
     <div style={{ marginTop: 12 }}>
+      {/* Scrolled into view with Yes and No when it appears: it sits at the
+          foot of the preview, below the fold of a phone (RevealOnShow). */}
       {ask && (
-        <div role="alert" style={{
+        <RevealOnShow revealKey={ask.number || "ask"} role="alert" data-share-ask="" style={{
           marginBottom: 10, padding: "11px 13px", borderRadius: 12, fontSize: 13, lineHeight: 1.45,
           backgroundColor: T.warningDim || T.card, border: `1px solid ${T.warning}`, color: T.text,
         }}>
@@ -88,7 +91,7 @@ export default function InvoiceMarkSent({
             width: "100%", minHeight: TAP_MIN, padding: "10px", borderRadius: 10, border: `1px solid ${T.border}`,
             backgroundColor: "transparent", color: T.text, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
           }}>{SHARE_ASK_NO}</button>
-        </div>
+        </RevealOnShow>
       )}
       {note && (
         <div role="status" style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.45, marginBottom: 8, textAlign: "center" }}>
@@ -152,6 +155,9 @@ export default function InvoiceMarkSent({
  */
 export function UnrecordedNotes({ T, isDesktop = false, list, what, onForget, onRecord = null, onConfirm = null, checking = null, repeats = [], onDismissRepeat = null, items = "days" }) {
   if (!list?.length && !repeats?.length) return null;
+  const firstAsking = onConfirm
+    ? (list || []).find(n => !n.overlap && n.handed && !n.refused && !n.fromServer)?.number || null
+    : null;
   return (
     <div style={{ marginBottom: 12 }}>
       {/* A note whose items another recorded invoice bills (useUnrecordedInvoices):
@@ -190,8 +196,10 @@ export function UnrecordedNotes({ T, isDesktop = false, list, what, onForget, on
         // Handed to the share sheet from this device and never answered: the
         // physician knows whether it went, so the banner asks.
         const asks = !!onConfirm && n.handed && !n.refused && !n.fromServer;
+        // The first that asks comes into view with its buttons (RevealOnShow);
+        // revealing more would scroll the first out again.
         return (
-        <div key={n.number} role="status" style={{
+        <RevealOnShow key={n.number} revealKey={asks && n.number === firstAsking ? n.number : null} margins="page" role="status" style={{
           padding: "11px 13px", borderRadius: 12, marginBottom: 8, fontSize: 13, lineHeight: 1.45,
           backgroundColor: T.warningDim || T.card, border: `1px solid ${T.warning}`, color: T.text,
         }}>
@@ -223,7 +231,7 @@ export function UnrecordedNotes({ T, isDesktop = false, list, what, onForget, on
             }}>Forget it</button>
           </div>
           )}
-        </div>
+        </RevealOnShow>
         );
       })}
     </div>

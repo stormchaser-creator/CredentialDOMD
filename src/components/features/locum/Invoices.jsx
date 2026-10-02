@@ -75,9 +75,13 @@ const periodLabel = (start, end) => {
     : `${mo(a)} ${a.getDate()}–${mo(b)} ${tail}`;
 };
 
+// One unit: on a phone it moves whole to the next line beside the number and
+// amount, never "OWED" on one line and "· 0D" on the next (iOS 26 pass,
+// 2026-10-02).
 function StandingBadge({ tone, style }) {
   return (
     <span style={{
+      display: "inline-block", whiteSpace: "nowrap",
       padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800,
       textTransform: "uppercase", letterSpacing: 0.5,
       backgroundColor: tone.bg, color: tone.color, ...style,
@@ -832,15 +836,17 @@ function Invoices({ onOpenContract, onOpenExpenses }) {
             }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: T.text }}>
-                    {inv.number}
+                  {/* A wrapping row: what does not fit moves to the next line
+                      whole and flush left, the badge included. */}
+                  <div style={{ fontSize: 14, fontWeight: 800, color: T.text, display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: 8, rowGap: 3 }}>
+                    <span>{inv.number}</span>
                     {/* Total invoiced rides next to the name — the loud number
                         on the right is what's still owed, the thing that
                         actually needs attention. */}
-                    <span style={{ marginLeft: 8, fontSize: 12.5, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
                       {money(inv.totalAmount)}
                     </span>
-                    <StandingBadge tone={tone} style={{ marginLeft: 8 }} />
+                    <StandingBadge tone={tone} />
                   </div>
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
                     {billNameOf(inv)}
