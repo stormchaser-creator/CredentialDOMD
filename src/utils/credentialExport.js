@@ -79,8 +79,17 @@ const licenceLabel = (l) => [l.type || "License", l.state].filter(Boolean).join(
 const privilegeLabel = (p) => p.hospital || p.facility || "Hospital Privilege";
 const policyLabel = (i) => i.carrier || i.company || i.provider || "Insurance Policy";
 
-export function buildCredentialRows(data) {
+/**
+ * One row per credential for the packet's summary spreadsheet. A record's
+ * Notes field is the physician's own memo ("portal login; fee on AmEx") and
+ * never goes out (helpers.js buildCredentialText says the same), so the
+ * packet's Notes column carries only facts derived from the record (CME
+ * hours and category, a job title, a reference's contact). privateNotes is
+ * true only for the account export the physician keeps for themselves.
+ */
+export function buildCredentialRows(data, { privateNotes = false } = {}) {
   const rows = [];
+  const memo = (v) => (privateNotes ? v || "" : "");
 
   for (const lic of data.licenses || []) {
     rows.push({
@@ -94,7 +103,7 @@ export function buildCredentialRows(data) {
       "Expiration Date": lic.expirationDate || "",
       ...lifecycleCells(lic, data.licenses, licenceLabel),
       State: lic.state || "",
-      Notes: lic.notes || "",
+      Notes: memo(lic.notes),
     });
   }
 
@@ -108,7 +117,7 @@ export function buildCredentialRows(data) {
       "Expiration Date": priv.expirationDate || "",
       ...lifecycleCells(priv, data.privileges, privilegeLabel),
       State: priv.state || "",
-      Notes: priv.notes || "",
+      Notes: memo(priv.notes),
     });
   }
 
@@ -122,7 +131,7 @@ export function buildCredentialRows(data) {
       "Expiration Date": ins.expirationDate || "",
       ...lifecycleCells(ins, data.insurance, policyLabel),
       State: ins.state || "",
-      Notes: ins.notes || "",
+      Notes: memo(ins.notes),
     });
   }
 
@@ -150,7 +159,7 @@ export function buildCredentialRows(data) {
       "Expiration Date": edu.endDate || edu.graduationDate || "",
       Status: edu.status || "Completed",
       State: edu.state || "",
-      Notes: edu.notes || "",
+      Notes: memo(edu.notes),
     });
   }
 
@@ -164,7 +173,7 @@ export function buildCredentialRows(data) {
       "Expiration Date": hr.expirationDate || "",
       Status: hr.status || "",
       State: "",
-      Notes: hr.notes || "",
+      Notes: memo(hr.notes),
     });
   }
 
@@ -209,7 +218,7 @@ export function buildCredentialRows(data) {
       "Expiration Date": td.expirationDate || "",
       Status: "",
       State: td.state || "",
-      Notes: td.notes || "",
+      Notes: memo(td.notes),
     });
   }
 
@@ -223,7 +232,7 @@ export function buildCredentialRows(data) {
       "Expiration Date": sc.expirationDate || "",
       Status: sc.result || "",
       State: "",
-      Notes: sc.notes || "",
+      Notes: memo(sc.notes),
     });
   }
 
@@ -237,7 +246,7 @@ export function buildCredentialRows(data) {
       "Expiration Date": "",
       Status: "",
       State: "",
-      Notes: ph.notes || "",
+      Notes: memo(ph.notes),
     });
   }
 
@@ -251,15 +260,15 @@ export function buildCredentialRows(data) {
       "Expiration Date": mal.resolutionDate || "",
       Status: mal.outcome || mal.status || "",
       State: mal.state || "",
-      Notes: mal.notes || "",
+      Notes: memo(mal.notes),
     });
   }
 
   return rows;
 }
 
-function buildSpreadsheet(data) {
-  const rows = buildCredentialRows(data);
+function buildSpreadsheet(data, opts = {}) {
+  const rows = buildCredentialRows(data, opts);
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(rows);
 
@@ -349,18 +358,17 @@ export const PACKET_SECTIONS = new Set(Object.keys(FOLDER_MAP));
  *
  * Being linked and being on this device are two different facts, and the
  * count of documents was reading the second one. saveData strips `data` from
- * every document that has a storagePath, and the app re-fetches the bytes one
- * file at a time after load, so on a second device, offline, or in the window
- * right after a sign-in a fully proved packet counted zero documents and the
- * ending said so out loud. `withBytes` is for the ZIP writer, which genuinely
- * can only write what it holds.
+ * every document that has a storagePath, and a load downloads no file (a
+ * screen asks for the files it shows), so on any device after a reload a
+ * fully proved packet counted zero documents and the ending said so out loud.
+ * The ZIP writer fetches from the account what this device does not hold
+ * (generateCredentialZip `download`).
  */
-export function packetDocuments(data, { withBytes = false } = {}) {
+export function packetDocuments(data) {
   const rank = new Map(PACKET_FOLDERS.map((f, i) => [f, i]));
   const rows = [];
   for (const doc of data?.documents || []) {
     if (!doc) continue;
-    if (withBytes && !docBase64(doc)) continue;
     const [section, id] = String(doc.linkedTo || "").split(":");
     if (!section || !id) continue;
     // The Send-it email preselects this list and the ZIP writes it, and both
@@ -381,10 +389,10 @@ export function packetSummary(data) {
   return {
     lineItems: buildCredentialRows(data).length,
     documents: linked.length,
-    onDevice: packetDocuments(data, { withBytes: true }).length,
-    // Linked, but Storage has no file for it (AppContext marks fileMissing and
-    // stops asking this session). It is not on its way, so it is named rather
-    // than counted as still coming back.
+    // Linked, but Storage has no file for it (utils/documentBytes.js marks
+    // fileMissing and stops asking this session). No download can carry it,
+    // so it is named, and the download waits until it is given again or
+    // deleted.
     missing: linked.filter((d) => d.fileMissing && !docBase64(d)).map((d) => d.name || "Untitled document"),
   };
 }
@@ -404,18 +412,6 @@ export function packetSummaryLine({ lineItems = 0, documents = 0 } = {}) {
 }
 
 /**
- * The second line, when some of the proof is still in Storage rather than on
- * this device. Kept out of the sentence above on purpose: the count of linked
- * documents is true everywhere, and this is a fact about this device at this
- * moment. Null when the ZIP would carry everything the sentence claims.
- */
-export function packetPendingLine({ documents = 0, onDevice = 0, missing = [] } = {}) {
-  const n = documents - onDevice - (missing?.length || 0);
-  if (n <= 0) return null;
-  return `${n} of them ${n === 1 ? "is" : "are"} still coming back from your account on this device. Download once ${n === 1 ? "it lands" : "they land"} and the file carries everything.`;
-}
-
-/**
  * A linked file Storage does not have will never land, so waiting on it held
  * the download for good under "still coming back". This names each one and
  * says what clears it, in the words Documents uses on the same file. Null when
@@ -430,6 +426,65 @@ export function packetMissingLine({ missing = [] } = {}) {
     : `${names.length} files are missing from your account: ${list}. Upload them again or delete them in Documents, then download the packet.`;
 }
 
+// A stored file the ZIP needs and this device does not hold, fetched from the
+// account: { bytes } or { reason }. A download whose bytes stop arriving for
+// `stallMs` ends as "timeout"; one still arriving goes on, however long a
+// large scan takes on a weak link.
+async function fetchStoredFile(doc, download, stallMs) {
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  let timer = null;
+  const arm = () => { clearTimeout(timer); timer = setTimeout(() => controller?.abort(), stallMs); };
+  const offline = () => typeof navigator !== "undefined" && navigator.onLine === false;
+  arm();
+  try {
+    const got = await download(doc.storagePath, { signal: controller?.signal, detail: true, onProgress: arm });
+    if (controller?.signal?.aborted) return { reason: offline() ? "offline" : "timeout" };
+    const blob = got?.blob || (got instanceof Blob ? got : null);
+    if (blob) return { bytes: new Uint8Array(await blob.arrayBuffer()) };
+    if (got?.missing) return { reason: "gone" };
+    return { reason: offline() ? "offline" : "unavailable" };
+  } catch {
+    return { reason: offline() ? "offline" : "unavailable" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const FETCH_REASON_TEXT = {
+  offline: "you are offline",
+  timeout: "the download stopped",
+  unavailable: "they could not be read from your account storage",
+  gone: "they are missing from your account",
+  never_uploaded: "they were never uploaded from the device that saved them",
+};
+
+/**
+ * Files the ZIP could not carry, said once, by name, and why: nothing is
+ * handed over in their place (a packet missing proof it claims must never go
+ * out silently).
+ */
+export function packetFetchLine(notFetched) {
+  const list = (notFetched || []).filter(Boolean);
+  if (!list.length) return null;
+  const names = list.map((f) => `"${f.name || "Untitled document"}"`).slice(0, 3).join(", ");
+  const more = list.length > 3 ? ` and ${list.length - 3} more` : "";
+  const why = [...new Set(list.map((f) => FETCH_REASON_TEXT[f.reason] || FETCH_REASON_TEXT.unavailable))].join(", and ");
+  const noun = list.length === 1 ? "1 document" : `${list.length} documents`;
+  const tail = list.every((f) => f.reason === "gone" || f.reason === "never_uploaded")
+    ? "Upload them again or delete them in Documents, then download again."
+    : "Nothing was downloaded. Try again in a moment.";
+  return `${noun} could not be fetched from your account (${names}${more}) because ${why}. ${tail}`;
+}
+
+/** Thrown by generateCredentialZip when a file it must carry could not be fetched. */
+export class PacketFilesError extends Error {
+  constructor(notFetched) {
+    super(packetFetchLine(notFetched));
+    this.name = "PacketFilesError";
+    this.notFetched = notFetched;
+  }
+}
+
 /**
  * Build the ZIP.
  *
@@ -439,12 +494,21 @@ export function packetMissingLine({ missing = [] } = {}) {
  * spreadsheet. No JSON backup: that carried every collection, finances,
  * travel IDs and Protected Identity included, to whoever received the packet.
  *
- * scope "account" (the export before cancelling): every document on this
- * device and the JSON backup, for the physician's own keeping. Protected
+ * scope "account" (the export before cancelling): every document of the
+ * account and the JSON backup, for the physician's own keeping. Protected
  * Identity stays out of it too; the full JSON backup under Data & Backup is
  * the one deliberate copy of those records.
+ *
+ * `download` (lib/supabase downloadDocumentBlob): a file this device does not
+ * hold is fetched from the account, one at a time, and let go once written.
+ * A load downloads no file any more, so without it the packet waited for good
+ * and the account export left out every stored file without a word. A file
+ * that cannot be fetched (offline, a stalled download) stops the build with a
+ * PacketFilesError naming it; nothing partial is handed over. A file Storage
+ * has no copy of (fileMissing) stops a packet too (Setup names it before the
+ * build); the account export carries what exists and leaves that one out.
  */
-export async function generateCredentialZip(data, { scope = "packet" } = {}) {
+export async function generateCredentialZip(data, { scope = "packet", download = null, stallMs = 30000 } = {}) {
   const account = scope === "account";
   const zip = new JSZip();
   const root = zip.folder("CredentialDOMD_Export");
@@ -470,10 +534,32 @@ export async function generateCredentialZip(data, { scope = "packet" } = {}) {
 
   const docs = account
     ? (data.documents || []).filter((doc) => !isIdentityLink(doc?.linkedTo))
-    : packetDocuments(data, { withBytes: true });
+    : packetDocuments(data);
+  const notFetched = [];
   for (const doc of docs) {
-    const base64 = docBase64(doc);
-    if (!base64) continue;
+    let content = docBase64(doc);
+    let options = { base64: true };
+    if (!content) {
+      // Not on this device: from the account, when it has a copy. One with no
+      // copy anywhere stops a packet (it would claim proof it lacks); the
+      // account export carries what exists.
+      if (!doc?.storagePath) {
+        if (!account) notFetched.push({ id: doc?.id, name: doc?.name, reason: "never_uploaded" });
+        continue;
+      }
+      if (account && doc.fileMissing) continue;
+      if (typeof download !== "function") {
+        notFetched.push({ id: doc.id, name: doc.name, reason: "unavailable" });
+        continue;
+      }
+      const got = await fetchStoredFile(doc, download, stallMs);
+      if (!got.bytes) {
+        if (!(account && got.reason === "gone")) notFetched.push({ id: doc.id, name: doc.name, reason: got.reason });
+        continue;
+      }
+      content = got.bytes;
+      options = {};
+    }
     const folder = categorizeDocument(doc, data);
     const mimeT = doc.type || doc.fileType;
     const ext = mimeT?.includes("pdf") ? ".pdf"
@@ -485,11 +571,13 @@ export async function generateCredentialZip(data, { scope = "packet" } = {}) {
     // the sort of detail a credentialing office reads as carelessness. When
     // the mime type is unrecognised the original name is left exactly as is.
     const filename = ext ? raw.replace(KNOWN_EXT, "") + ext : raw;
-    root.file(uniquePath(folder, filename), base64, { base64: true });
+    root.file(uniquePath(folder, filename), content, options);
   }
+  if (notFetched.length) throw new PacketFilesError(notFetched);
 
   // Add spreadsheet
-  const xlsxData = buildSpreadsheet(data);
+  // The physician's own memos go only into the account export they keep.
+  const xlsxData = buildSpreadsheet(data, { privateNotes: account });
   root.file("credentials_summary.xlsx", xlsxData);
 
   // The JSON backup rides only in the physician's own account export. It

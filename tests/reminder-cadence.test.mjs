@@ -593,7 +593,7 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     }));
     const { results: [result] } = await res.json();
     const lines = result.text.split('\n');
-    assert.equal(lines[0], 'Alex,');
+    assert.equal(lines[0], 'Hi Alex,', 'a salutation word, as the welcome email greets');
     assert.equal(lines[1], '');
     assert.equal(lines[2], 'Your credential check for Oct 1, 2026: 1 expired, 2 coming up.');
     assert.equal(lines[4], 'EXPIRED');

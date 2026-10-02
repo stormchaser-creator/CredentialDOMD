@@ -37,12 +37,23 @@ export default function SyncIssuesNotice() {
   // Why the offline copy is older than the screen (utils/storage.js
   // cacheStaleReason): out of space, an offline store that would not open,
   // or a stored copy this load could not read. Only the first is "full".
-  const stale = offlineCopyStale
+  // An offline store that would not open (iOS took it from an app left in
+  // the background) matters only while something is in no other copy: the
+  // app is offline, a change has not reached the account, or a Protected
+  // Identity or Answer Bank change waits. Online with everything in the
+  // account, the line said nothing he could act on (2026-10-02).
+  const atRisk = !!offlineMode || unsent > 0 || lines.length > 0 || deviceOnlyUnsaved === "held" || deviceOnlyUnsaved === "memory";
+  const stale = offlineCopyStale && (offlineCopyStale !== "unavailable" || atRisk)
     ? <p style={{ margin: lines.length || waiting || kept || refused ? "10px 0 0" : 0, fontSize: isDesktop ? 14 : 16, lineHeight: 1.5, color: T.textMuted }}>
         {offlineCopyStale === "unread"
           ? <>This device&rsquo;s offline storage could not be read, so Protected Identity and the Answer Bank, kept only on this device, may not all be shown and cannot be changed, and its offline copy of your records is not being updated. The app tries again on its own; reload the app to try again now.</>
           : offlineCopyStale === "unavailable"
-            ? <>This device&rsquo;s offline storage could not be opened, so its offline copy of your records could not be updated. What opens offline is older than what you see now.</>
+            // iOS takes the offline store away from an app left in the
+            // background, and WebKit lets a page open it again only after a
+            // reload (2026-10-02, the owner's iPhone): say so, and offer it.
+            ? <>This device&rsquo;s offline storage could not be opened, so its offline copy of your records could not be updated. Reload the app to open it again.{" "}
+                <button type="button" data-offline-reload="" onClick={() => { try { window.location.reload(); } catch { /* the next launch */ } }}
+                  style={{ ...actionButtonStyle(T, { primary: false, isDesktop }), marginTop: 8 }}>Reload</button></>
             : <>This device&rsquo;s storage is full, so its offline copy of your records could not be updated. What opens offline is older than what you see now.</>}
       </p>
     : null;
@@ -66,7 +77,7 @@ export default function SyncIssuesNotice() {
         background: T.card, color: T.textMuted, border: `1px solid ${T.border}`, borderRadius: 12, fontSize: isDesktop ? 14 : 16, lineHeight: 1.5 }}>
         {refusedLine}
         {keptLine}
-        {waiting > 0 && <>{waiting === 1 ? "1 change has" : `${waiting} changes have`} not reached your account yet. {waiting === 1 ? "It is" : "They are"} sent again each time the app opens.</>}
+        {waiting > 0 && <>{waiting === 1 ? "1 change has" : `${waiting} changes have`} not reached your account yet. {waiting === 1 ? "It is" : "They are"} sent again when the connection returns and each time the app opens.</>}
         {stale}
         {deviceOnly}
       </aside>
@@ -97,7 +108,7 @@ export default function SyncIssuesNotice() {
       {keptLine && <p data-sync-kept="" style={{ margin: "10px 0 0", fontSize: isDesktop ? 14 : 16, lineHeight: 1.5, color: T.textMuted }}>{keptLine}</p>}
       {waiting > 0 && (
         <p style={{ margin: "10px 0 0", fontSize: isDesktop ? 14 : 16, lineHeight: 1.5, color: T.textMuted }}>
-          {waiting === 1 ? "1 other change has" : `${waiting} other changes have`} not reached your account yet. {waiting === 1 ? "It is" : "They are"} sent again each time the app opens.
+          {waiting === 1 ? "1 other change has" : `${waiting} other changes have`} not reached your account yet. {waiting === 1 ? "It is" : "They are"} sent again when the connection returns and each time the app opens.
         </p>
       )}
       {stale}

@@ -162,6 +162,7 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
       <CrudSection
         title={`${category.icon} ${category.name}`}
         sectionKey="customRecords"
+        draftKey={`customRecords:${category.id}`}
         favoritable
         items={items}
         fields={fields}

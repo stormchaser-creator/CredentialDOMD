@@ -16,11 +16,17 @@ import { docMime } from "../../utils/inboxDocs";
 import DocAttach from "./DocAttach";
 import { SECTION_FIELDS } from "../../utils/sectionFields.js";
 import { attachExistingDoc } from "../../utils/docPrefill";
+import useDocumentBytes, { useDocumentFileStatus } from "../shared/useDocumentBytes";
+import useRecordFormDraft, { DRAFT_RESTORED_NOTE } from "../shared/useRecordFormDraft";
+import { fileWaitLine, statusWithoutStore } from "../../utils/documentBytes";
 
 // Two fields side by side. A plain 1fr track cannot shrink below a date
 // input's own minimum (about 189 px in Chrome), so on a phone the second date
 // ran off the dialog's right edge; minmax(0, 1fr) splits the width.
 const PAIR = "minmax(0, 1fr) minmax(0, 1fr)";
+
+// Rendered without the draft hook (a stand-in that returns nothing).
+const NO_DRAFT = Object.freeze({ clear: () => {} });
 
 /**
  * Screenings — background checks, exclusion/sanction searches, and the
@@ -74,15 +80,30 @@ function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, on
     window.open(URL.createObjectURL(new Blob([arr], { type: docMime(doc) || "application/pdf" })), "_blank");
   };
 
-  const openAdd = useCallback(() => { setForm({ components: [] }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, []);
-  const openEdit = useCallback((item) => { setForm({ ...item, components: item.components || [] }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
+  // "Restored what you were typing..." on a form opened from a draft (CRED-021).
+  const [draftNote, setDraftNote] = useState(null);
+  const openAdd = useCallback(() => { setForm({ components: [] }); setEditItem(null); setAttachedDocs([]); setDraftNote(null); setShowForm(true); }, []);
+  const openEdit = useCallback((item) => { setForm({ ...item, components: item.components || [] }); setEditItem(item); setAttachedDocs([]); setDraftNote(null); setShowForm(true); }, []);
   useDeskAddShortcut(openAdd);
+  // What is typed into the open form outlives iOS discarding the app, as on
+  // every other Credentials form (CRED-021). The searches (components) are
+  // records of their own, not plain text, so they are not kept.
+  const draft = useRecordFormDraft({
+    slot: "crud:screenings", open: showForm, editing: editItem, form, records: items,
+    plain: !autoEditId && !autoViewId,
+    restore: ({ editing, changed }) => {
+      if (editing) openEdit(editing); else openAdd();
+      setForm(f => ({ ...f, ...changed }));
+      setDraftNote(DRAFT_RESTORED_NOTE);
+    },
+  }) || NO_DRAFT;
   // A form opened by a link from somewhere else (setup) owes a trip back.
   const arrivedByLink = useRef(false);
   const closeForm = useCallback(() => {
-    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]);
+    draft.clear(editItem?.id);
+    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setDraftNote(null);
     if (arrivedByLink.current) { arrivedByLink.current = false; onAutoEditClosed?.(); }
-  }, [onAutoEditClosed]);
+  }, [onAutoEditClosed, draft, editItem?.id]);
 
   // Opened from Home, search, Favorites or Vera: a view link shows the
   // record's details, an edit link opens its form. The link is cleared even
@@ -135,6 +156,10 @@ function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, on
   const removeComp = (i) => setForm(f => ({ ...f, components: f.components.filter((_, j) => j !== i) }));
 
   const docsFor = (id) => (data.documents || []).filter(d => d.linkedTo === `screenings:${id}`);
+  // The files of the screening open, with their bytes while it is open.
+  useDocumentBytes([...(viewItem?.id ? docsFor(viewItem.id) : []), ...(editItem?.id ? docsFor(editItem.id) : [])]);
+  // Fetching, failed (tried again on its own) or offline, per file.
+  const fileStatus = useDocumentFileStatus() || statusWithoutStore;
   const statusColor = (s) => /review|flag/i.test(s || "") ? T.warning : /clear|complete|negative/i.test(s || "") ? (T.success || "#22c55e") : T.textDim;
 
   return (
@@ -208,7 +233,7 @@ function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, on
                   ) : !doc.data ? (
                     <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input, color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
                       <span style={{ fontSize: 16 }}>{"⏳"}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} is downloading from the cloud; check back shortly</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileWaitLine(doc.name, fileStatus(doc))}</span>
                     </div>
                   ) : docMime(doc).startsWith("image/") ? (
                     <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
@@ -254,6 +279,7 @@ function ScreeningsSection({ onShare, autoViewId, onAutoViewDone, autoEditId, on
 
       {/* Add / Edit */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Screening" : "Add Screening"}>
+        {draftNote && <div role="status" style={{ fontSize: 13, fontWeight: 600, color: T.success || "#22c55e", marginBottom: 10 }}>{draftNote}</div>}
         <Field label="Type">
           <select value={form.type || ""} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
             <option value="">Select type...</option>

@@ -54,3 +54,58 @@ export function plainDashes(text) {
     .replace(/[ \t]*\u{2014}[ \t]*(?=[,.;:!?)]|$)/gmu, "")
     .replace(/[ \t]*\u{2014}[ \t]*/gu, ", ");
 }
+
+/**
+ * Whether the last word of a name (after `sep`, a comma or a space) is the
+ * degree itself rather than part of the name. After a comma it always is.
+ * After a space it is when it is written exactly as the degree (dots aside:
+ * "md" with "md", "D.O." with "DO"), or when it is not shaped like an
+ * ordinary word, one capital then small letters ("PhD", "PA-C", "MBChB",
+ * "MD", "D.O."). "Do" with DO is shaped like a surname and differs in case,
+ * so it stays part of the name.
+ */
+function tailIsDegree(sep, word, degree) {
+  const bare = (s) => s.replace(/\./g, "");
+  return sep.startsWith(",") || bare(word) === bare(degree) || !/^[A-Z]?[a-z]+$/.test(word);
+}
+
+/**
+ * "Jordan Rivera, DO" from a name and a degree, without printing the degree
+ * twice when the name already ends with it ("Jordan Rivera, DO" or "Jordan
+ * Rivera DO" typed into the name field, as the license-name prompt invites).
+ * Dots and case are ignored when comparing, so "D.O." matches "DO". Whether
+ * the last word is the degree at all follows tailIsDegree, so a surname that
+ * spells a degree ("Ann Do" with DO) still gets its degree: "Ann Do, DO",
+ * while "Casey Example PhD" with PhD reads once. "" with no name.
+ */
+export function withDegree(name, degree) {
+  const n = String(name ?? "").replace(/\s+/g, " ").trim();
+  const d = String(degree ?? "").replace(/\s+/g, " ").trim();
+  if (!n) return "";
+  if (!d) return n;
+  const key = (s) => s.replace(/\./g, "").toLowerCase();
+  const m = n.match(/(,\s*|\s)([^\s,]+)$/);
+  return m && key(m[2]) === key(d) && tailIsDegree(m[1], m[2], d) ? n : `${n}, ${d}`;
+}
+
+/**
+ * A name a caller already joined to its degree, with a degree printed twice
+ * collapsed to one: "Jordan Rivera, DO, DO" or "Jordan Rivera DO, DO" (a
+ * name typed with its degree, then ", DO" appended by a send site that does
+ * not use withDegree) reads "Jordan Rivera, DO" / "Jordan Rivera DO". The
+ * word before the appended degree is split off the way withDegree reads a
+ * name (on spaces or commas). A comma-separated word is a degree as typed;
+ * a space-separated one counts on withDegree's rule (tailIsDegree), so a
+ * surname that happens to spell one ("Ann Do, DO") is left alone while
+ * "Casey Example PhD, PhD" and "Pat Sample PA-C, PA-C" read once. Dots and
+ * case are ignored when comparing ("D.O., DO").
+ */
+export function oneDegree(name) {
+  const n = String(name ?? "").replace(/\s+/g, " ").trim();
+  const m = n.match(/^(.*\S),\s*([A-Za-z][A-Za-z.-]{0,9})$/);
+  if (!m) return n;
+  const prev = m[1].match(/(,\s*|\s)([A-Za-z][A-Za-z.-]{0,9})$/);
+  if (!prev) return n;
+  const key = (s) => s.replace(/\./g, "").toLowerCase();
+  return key(prev[2]) === key(m[2]) && tailIsDegree(prev[1], prev[2], m[2]) ? m[1] : n;
+}

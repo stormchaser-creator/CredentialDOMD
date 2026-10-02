@@ -66,9 +66,11 @@ export function fakeWorld(opts = {}) {
         contract_id: IDS.contract, bill_to_label: null, total_amount: 12500.5, updated_at: "2026-09-21T00:00:00.000Z", last_emailed_at: null, last_emailed_to: null },
     ],
     expenses: [
-      { id: IDS.expAir, user_id: IDS.profile, invoice_id: IDS.invoice },
-      { id: IDS.expHotel, user_id: IDS.profile, invoice_id: IDS.invoice },
+      { id: IDS.expAir, user_id: IDS.profile, invoice_id: IDS.invoice, category: "Airfare", vendor: "Example Air" },
+      { id: IDS.expHotel, user_id: IDS.profile, invoice_id: IDS.invoice, category: "Lodging", vendor: "Example Inn" },
     ],
+    // Duty days and work entries ({ id, user_id, invoice_id }) a draft may list.
+    items: [],
     documents: [
       { id: IDS.docAir, user_id: IDS.profile, name: "airfare.pdf", mime_type: "application/pdf", type: "application/pdf",
         storage_path: `${SUBJECT}/${IDS.docAir}`, size_bytes: 20, linked_to: `travelExpenses:${IDS.expAir}` },
@@ -80,6 +82,8 @@ export function fakeWorld(opts = {}) {
       [`${SUBJECT}/${IDS.docHotel}`, new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])],
     ]),
     ledger: [],
+    // The number ledger's share stamps the function writes (number -> { at, contractId }).
+    shared: new Map(),
     mails: [],
     keys: [],
     reservations: 0,
@@ -125,6 +129,13 @@ export function fakeWorld(opts = {}) {
       profile: async (id) => { note("profile"); return id === IDS.profile ? { ...world.profile } : null; },
       invoice: async (profileId, id) => { note("invoice"); const r = world.invoices.find((x) => x.id === id && x.user_id === profileId); return r ? { ...r } : null; },
       expenses: async (profileId, invoiceId) => world.expenses.filter((e) => e.user_id === profileId && e.invoice_id === invoiceId).map((e) => ({ ...e })),
+      expensesByIds: async (profileId, ids) => { note("draftExpenses"); return world.expenses.filter((e) => e.user_id === profileId && ids.includes(e.id)).map((e) => ({ ...e })); },
+      billedItems: async (profileId, ids, kind) => (kind === "expenses" ? world.expenses : world.items)
+        .filter((r) => r.user_id === profileId && ids.includes(r.id) && r.invoice_id).map((r) => ({ id: r.id, invoice_id: r.invoice_id })),
+      invoicesNumbered: async (profileId, number) => {
+        note("numbered");
+        return world.invoices.filter((r) => r.user_id === profileId && String(r.number).toLowerCase() === String(number).toLowerCase()).map((r) => ({ id: r.id, number: r.number }));
+      },
       receiptDocuments: async (profileId, links) => world.documents.filter((d) => d.user_id === profileId && links.includes(d.linked_to)).map((d) => ({ ...d })),
       storageSubjects: async () => [SUBJECT],
       // Newest first by updated_at, later rows first on a tie (the fake clock
@@ -165,6 +176,10 @@ export function fakeWorld(opts = {}) {
         r.updated_at = at();
         if (extra.providerId !== undefined) r.provider_id = extra.providerId;
         if (extra.sentAt) r.sent_at = extra.sentAt;
+      },
+      markNumberShared: async (profileId, number, contractId, at) => {
+        assert(profileId === IDS.profile);
+        world.shared.set(number, { at, contractId });
       },
       stampInvoice: async (profileId, invoiceId, at, to) => {
         const r = world.invoices.find((x) => x.id === invoiceId && x.user_id === profileId);

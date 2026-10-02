@@ -95,13 +95,21 @@ export function revertChanges(current, changes) {
  * skips and declarations. One kept without its base (an older build) is not
  * laid over at all: the account's copy is the newer one there.
  *
- * `ops`: the account's queue as stored. Returns { data, deleted }: `data` is
- * `merged` with those applied (itself when nothing was), `deleted` the ids
- * taken out, which the self-heal must not push back up either.
+ * An edit queued as what it changed (lib/supabase.js editMeta: `changed`,
+ * held or failed alike) is laid over the row read back by those fields alone,
+ * and `edited` names it: the self-heal must not push this device's whole
+ * copy over the account's, which would put back every column another device
+ * changed since (review of 9484782c). Replay sends the edit as it is.
+ *
+ * `ops`: the account's queue as stored. Returns { data, deleted, edited }:
+ * `data` is `merged` with those applied (itself when nothing was), `deleted`
+ * the ids taken out, which the self-heal must not push back up either, and
+ * `edited` the `${collection}:${id}` of the edits laid over.
  */
 export function applyHeldQueue(merged, ops, keys) {
   const deleted = new Map(); // collection -> Set(id)
   const stars = new Map(); // collection -> Map(id -> favorite)
+  const edits = new Map(); // collection -> Map(id -> { field: value })
   // Profile settings kept the same way (a save made before a page load's
   // first answer, then a reload): the profile row read back does not have
   // them yet, so they are laid over it, oldest first, as replay will send them.
@@ -113,6 +121,14 @@ export function applyHeldQueue(merged, ops, keys) {
         if (name !== "setupState") { settings[name] = value; continue; }
         if (Object.hasOwn(op, "setupBase")) settings.setupState = rebaseSetupState(settings.setupState, op.setupBase, value);
       }
+      continue;
+    }
+    if (op?.op === "upsert" && Array.isArray(op.changed) && Array.isArray(keys) && keys.includes(op.collectionKey)
+      && op.payload && typeof op.payload === "object" && typeof op.payload.id === "string" && op.payload.id) {
+      if (!edits.has(op.collectionKey)) edits.set(op.collectionKey, new Map());
+      const fields = edits.get(op.collectionKey).get(op.payload.id) || {};
+      for (const name of op.changed) if (typeof name === "string" && Object.hasOwn(op.payload, name)) fields[name] = op.payload[name];
+      edits.get(op.collectionKey).set(op.payload.id, fields);
       continue;
     }
     if (op?.awaitingAccess !== true || !Array.isArray(keys) || !keys.includes(op.collectionKey)) continue;
@@ -127,15 +143,21 @@ export function applyHeldQueue(merged, ops, keys) {
     }
   }
   const ids = new Set([...deleted.values()].flatMap(set => [...set]));
-  if (!deleted.size && !stars.size && !settings) return { data: merged, deleted: ids };
+  const edited = new Set();
+  if (!deleted.size && !stars.size && !settings && !edits.size) return { data: merged, deleted: ids, edited };
   const data = { ...merged };
   if (settings) data.settings = settings;
-  for (const key of new Set([...deleted.keys(), ...stars.keys()])) {
+  for (const key of new Set([...deleted.keys(), ...stars.keys(), ...edits.keys()])) {
     if (!Array.isArray(data[key])) continue;
-    const gone = deleted.get(key), starred = stars.get(key);
+    const gone = deleted.get(key), starred = stars.get(key), changed = edits.get(key);
     data[key] = data[key]
       .filter(item => !gone?.has(item?.id))
-      .map(item => (starred?.has(item?.id) && (item.favorite === true) !== starred.get(item.id) ? { ...item, favorite: starred.get(item.id) } : item));
+      .map(item => {
+        let next = item;
+        if (changed?.has(item?.id)) { next = { ...next, ...changed.get(item.id) }; edited.add(`${key}:${item.id}`); }
+        if (starred?.has(item?.id) && (next.favorite === true) !== starred.get(item.id)) next = { ...next, favorite: starred.get(item.id) };
+        return next;
+      });
   }
-  return { data, deleted: ids };
+  return { data, deleted: ids, edited };
 }

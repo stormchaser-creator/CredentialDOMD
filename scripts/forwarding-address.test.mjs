@@ -269,16 +269,17 @@ ok("the failure page never says whether the token existed", !/not found|unknown|
 ok("neither page carries a token", !good.includes("token=") && !bad.includes("token="));
 ok("both pages are complete html", good.startsWith("<!doctype html>") && bad.startsWith("<!doctype html>"));
 ok("no em dash on either page", !good.includes("—") && !bad.includes("—"));
-// The panel exists now (More > Settings > Email in SettingsSection.jsx), so
+// The panel exists now (More > Profile & settings > Email in SettingsSection.jsx), so
 // both pages say where the address is managed: one to remove it, one to send
 // a fresh link. A page that names a screen nobody can open would be a promise,
 // not guidance, which is why these two assertions move together with the UI.
 ok("the confirmed page says where to remove the address",
-  /More\s*&gt;\s*Settings\s*&gt;\s*Email/.test(good));
+  /More\s*&gt;\s*Profile &amp; settings\s*&gt;\s*Email/.test(good));
 ok("the expired page says where to send a fresh link",
-  /More\s*&gt;\s*Settings\s*&gt;\s*Email/.test(bad));
-ok("neither page carries a raw unescaped angle bracket in that pointer",
-  !/More\s*>\s*Settings/.test(good) && !/More\s*>\s*Settings/.test(bad));
+  /More\s*&gt;\s*Profile &amp; settings\s*&gt;\s*Email/.test(bad));
+ok("neither page carries a raw unescaped angle bracket or ampersand in that pointer",
+  !/More\s*>\s*Settings/.test(good) && !/More\s*>\s*Settings/.test(bad) &&
+  !/More\s*>\s*Profile/.test(good) && !/More\s*>\s*Profile/.test(bad) && !/Profile & settings/.test(good + bad));
 ok("the failure page still says how long a link lives",
   bad.includes(`work once and last ${TOKEN_TTL_HOURS} hours`));
 ok("the failure page no longer promises a day", !bad.includes("24 hours"));

@@ -166,7 +166,7 @@ function app(U, { offlineMode = false, st = storage, sc = scope, localOnly = s =
     preservePausedApplicationRecords: paused.preservePausedApplicationRecords, pausedApplicationLinks: paused.pausedApplicationLinks, reconcileDocumentLinks,
     applyHeldQueue: held.applyHeldQueue, localChangesSince: rebase.localChangesSince, rebaseLocalChanges: rebase.rebaseLocalChanges,
     accessAuthority: { suspendWrites() {} },
-    setData: v => { const next = typeof v === 'function' ? v(states.at(-1)) : v; states.push(next); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {},
+    setData: v => { const next = typeof v === 'function' ? v(states.at(-1)) : v; states.push(next); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },
   };
   vm.runInNewContext(loadCode, ctx);

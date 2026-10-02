@@ -1,3 +1,4 @@
+import { sameClerkSession } from "./clerkSession.js";
 const ENV = import.meta.env || {};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -48,7 +49,7 @@ export function createInviteToJoinClient({
 } = {}) {
   async function request(body) {
     const session = getSession();
-    const current = () => isCurrent() && getSession() === session && session?.user?.id === accountId;
+    const current = () => isCurrent() && sameClerkSession(session, getSession()) && session?.user?.id === accountId;
     if (!accountId || !url || !anonKey || !current()) throw failure("session_changed");
     const controller = new AbortController();
     let timer;

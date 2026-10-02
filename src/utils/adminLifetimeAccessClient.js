@@ -1,3 +1,4 @@
+import { sameClerkSession } from "./clerkSession.js";
 const ENV = import.meta.env || {};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SUBJECT = /^user_[A-Za-z0-9]{1,120}$/;
@@ -54,8 +55,8 @@ export function createAdminLifetimeAccessClient({
   const reviews = new WeakMap();
   async function request(body, expectedSession) {
     const session = getSession();
-    const current = () => isCurrent() && getSession() === session && session?.user?.id === accountId;
-    if (!accountId || !url || !anonKey || !current() || (expectedSession && expectedSession !== session)) throw failure("session_changed");
+    const current = () => isCurrent() && sameClerkSession(session, getSession()) && session?.user?.id === accountId;
+    if (!accountId || !url || !anonKey || !current() || (expectedSession && !sameClerkSession(expectedSession, session))) throw failure("session_changed");
     const controller = new AbortController();
     let timer, reader, response;
     const cancel = () => { try { Promise.resolve(reader ? reader.cancel() : response?.body?.cancel()).catch(() => {}); } catch { /* No response details in logs. */ } };

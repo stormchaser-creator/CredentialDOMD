@@ -116,7 +116,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
 }
 </style>
 </head>
-<body>
+<body><!--email_off-->
 
 <nav>
   <div class="nav-inner">
@@ -165,7 +165,7 @@ ${doc.sections.map(section).join("\n\n")}
   </div>
 </footer>
 
-</body>
+<!--/email_off--></body>
 </html>
 `;
 

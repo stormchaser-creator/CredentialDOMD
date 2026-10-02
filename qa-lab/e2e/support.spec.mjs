@@ -17,7 +17,7 @@ test('support: ticket with a screenshot, owner replies in the app, member sees i
   let ticket;
 
   await qa.feature('SUPPORT-001', 'File a support ticket with a screenshot', async () => {
-    await openMore(page, 'Support');
+    await openMore(page, 'Get help');
     await page.getByRole('button', { name: 'New ticket' }).click();
     const form = page.locator('div').filter({ has: page.getByPlaceholder('Short summary (optional)') }).last();
     const selects = form.locator('select');
@@ -99,7 +99,7 @@ test('support: ticket with a screenshot, owner replies in the app, member sees i
   await qa.feature('SUPPORT-002', 'The member reads the reply in Your tickets and answers', async () => {
     await page.reload();
     await waitForMemberApp(page);
-    await openMore(page, 'Support');
+    await openMore(page, 'Get help');
     await page.getByRole('button', { name: 'Your tickets' }).click();
     await page.getByRole('button').filter({ hasText: subject }).first().click();
     const seen = await page.getByText(replyText).first().waitFor({ timeout: 30000 }).then(() => true, () => false);

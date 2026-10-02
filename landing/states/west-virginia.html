@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -450,7 +450,7 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div class="fact-item">
         <span class="fact-label">Processing Time</span>
-        <span class="fact-value">Most MD renewal applications are processed within three business days (2026 Renewal FAQ). DO processing time not published on pages loaded.</span>
+        <span class="fact-value">Most MD renewal applications are processed within three business days (2026 Renewal FAQ). The DO board does not publish a processing time.</span>
       </div>
       <div class="fact-item">
         <span class="fact-label">Renewal Due</span>
@@ -458,7 +458,7 @@ a:hover { color: var(--emerald-light); }
       </div>
             <div class="fact-item">
         <span class="fact-label">Late fee</span>
-        <span class="fact-value">No late fee as such for MDs: there is no late-renewal option. The license expires at 11:59 pm EDT June 30 and the physician must instead apply for reinstatement at $600 for an active status license. DO board: no late fee published on the pages loaded; failure to renew triggers automatic suspension under W. Va. Code 30-14-10, and reinstatement requires back fees plus a reinstatement fee set by board rule</span>
+        <span class="fact-value">No late fee as such for MDs: there is no late-renewal option. The license expires at 11:59 pm EDT June 30 and the physician must instead apply for reinstatement at $600 for an active status license. DO board: no late fee is published; failure to renew triggers automatic suspension under W. Va. Code 30-14-10, and reinstatement requires back fees plus a reinstatement fee set by board rule</span>
       </div>
     </div>
   </div>
@@ -497,7 +497,7 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Late fee</div>
-        <div style="color:var(--text-secondary);">No late fee as such for MDs: there is no late-renewal option. The license expires at 11:59 pm EDT June 30 and the physician must instead apply for reinstatement at $600 for an active status license. DO board: no late fee published on the pages loaded; failure to renew triggers automatic suspension under W. Va. Code 30-14-10, and reinstatement requires back fees plus a reinstatement fee set by board rule (amount not verified).</div>
+        <div style="color:var(--text-secondary);">No late fee as such for MDs: there is no late-renewal option. The license expires at 11:59 pm EDT June 30 and the physician must instead apply for reinstatement at $600 for an active status license. DO board: no late fee is published; failure to renew triggers automatic suspension under W. Va. Code 30-14-10, and reinstatement requires back fees plus a reinstatement fee set by board rule (amount not verified).</div>
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">If you miss the deadline</div>
@@ -505,7 +505,7 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Processing time</div>
-        <div style="color:var(--text-secondary);">Most MD renewal applications are processed within three business days (2026 Renewal FAQ). DO processing time not published on pages loaded.</div>
+        <div style="color:var(--text-secondary);">Most MD renewal applications are processed within three business days (2026 Renewal FAQ). The DO board does not publish a processing time.</div>
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">MD vs DO</div>
@@ -848,5 +848,5 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-</body>
+<!--/email_off--></body>
 </html>

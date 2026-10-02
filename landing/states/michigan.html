@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -655,7 +655,7 @@ a:hover { color: var(--emerald-light); }
   <ul style="list-style:none;padding:0;">
       <li style="margin-bottom:6px;"><a href="https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/medical/medical-doctor-licensing-guides-and-faqs/md-licensing-guide-and-faqs" target="_blank" rel="noopener">MD Licensing Guide and FAQs: renewal checklist, 3-year cycle, 90-day window, $314.00 renewal fee (conflicts with fee schedule), $248.10 CS renewal, relicensure $395.00 and lapsed-license pathways, CME attestation and audit, 4 USMLE attempt limit</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.michigan.gov/lara/-/media/Project/Websites/lara/bpl/Osteopathic-Medicine/Licensing-Info-and-Forms/DO-Licensing-Guide-FAQ-12626.pdf?rev=d0098c0f0662470ba66979c68ec33aa3&amp;hash=F52133126DFBDA88F7976F38393F2B0A" target="_blank" rel="noopener">DO Licensing Guide (rev 1/26/2026): renewal fee $314.40, 3-year cycle, 90-day window, relicensure $395.00, COMVEX pathways, DO CME breakdown (60 hrs Category 1)</a></li>
-      <li style="margin-bottom:6px;"><a href="https://www.michigan.gov/lara/bureau-list/bpl/health/additional-links/license-renewal-fees" target="_blank" rel="noopener">LARA License Renewal Fees schedule: Medical Doctor $314.40 / 3 years, Osteopathic Physician $314.40 / 3 years, expiration dates vary per license; quotes MCL 333.16201(2) 60-day grace language (loaded via legacy URL michigan.gov/lara/0,4601,7-154-89334_72600-365326--,00.html which serves this page)</a></li>
+      <li style="margin-bottom:6px;"><a href="https://www.michigan.gov/lara/bureau-list/bpl/health/additional-links/license-renewal-fees" target="_blank" rel="noopener">LARA License Renewal Fees schedule: Medical Doctor $314.40 / 3 years, Osteopathic Physician $314.40 / 3 years, expiration dates vary per license; quotes MCL 333.16201(2) 60-day grace language</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.legislature.mi.gov/Laws/MCL?objectName=MCL-333-16201" target="_blank" rel="noopener">MCL 333.16201: renewal notice by mail/email, 60-day late renewal with late renewal fee and continued practice allowed, null and void after 60 days, relicensure within 3 years, new-applicant status after 3 years</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/medical/medical-doctor-licensing-guides-and-faqs/md-licensing-guide-and-faqs" target="_blank" rel="noopener">CME requirement: LARA MD Licensing Guide</a></li>
   </ul>
@@ -849,5 +849,5 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-</body>
+<!--/email_off--></body>
 </html>

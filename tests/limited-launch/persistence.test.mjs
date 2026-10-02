@@ -490,11 +490,20 @@ test('no write path sends the server-owned invoice email stamp, and the rest of 
     for (const row of [].concat(w.value)) {
       assert.equal('last_emailed_at' in row, false, `${w.method} carries no last_emailed_at`);
       assert.equal('last_emailed_to' in row, false, `${w.method} carries no last_emailed_to`);
+      // An edit sends only what it changed (IOS-SYNC-3): this one changed
+      // nothing it may send, so it carries the id and its date alone.
+      if (w.method === 'update') { assert.deepEqual(Object.keys(row).sort(), ['id', 'updated_at']); continue; }
       // (A replayed row was parsed inside the module's realm: compare as JSON.)
       assert.equal(JSON.stringify(row.payments), JSON.stringify(invoice.payments), `${w.method} still carries the payment`);
       assert.equal(row.number, 'INV-1');
     }
   }
+  // An edit that does change the payments sends them, and still no stamp.
+  const paid = { ...invoice, payments: [...invoice.payments, { amount: 50, date: '2026-09-30' }], lastEmailedAt: null, lastEmailedTo: null };
+  await f.api.updateItem('profileA', 'invoices', paid, invoice, 'user_syntheticA');
+  const edit = f.requests.at(-1).value;
+  assert.equal(JSON.stringify(edit.payments), JSON.stringify(paid.payments));
+  assert.equal('last_emailed_at' in edit || 'last_emailed_to' in edit, false);
   assert.deepEqual(f.queue(), []);
   assert.equal(JSON.stringify(f.api.SERVER_OWNED_FIELDS.invoices), '["last_emailed_at","last_emailed_to"]');
   // Only the owning table: a same-named key elsewhere is not stripped.

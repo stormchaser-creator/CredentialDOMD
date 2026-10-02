@@ -353,7 +353,7 @@ test('owner: ticket agent approval and archive, each after a reload', {
   const m = await secondBrowser();
   const member = await lifetimeMember(m.page, { firstName: 'Tess', lastName: `Ticket ${letters()}` });
   const subject = `QA agent ticket ${stamp().slice(-9)}`;
-  await openMore(m.page, 'Support');
+  await openMore(m.page, 'Get help');
   await m.page.getByRole('button', { name: 'New ticket' }).click();
   await m.page.getByPlaceholder('Short summary (optional)').fill(subject);
   await m.page.getByPlaceholder(/As much detail as helps/).fill('QA lab journey: a ticket for the owner\'s agent and archive controls. No code change is wanted.');
@@ -428,7 +428,7 @@ test('member: a resolved ticket archived, then answered again', {
   test.setTimeout(8 * 60 * 1000);
   const member = await lifetimeMember(page, { firstName: 'Riley', lastName: `Resolved ${letters()}` });
   const subject = `QA archive ticket ${stamp().slice(-9)}`;
-  await openMore(page, 'Support');
+  await openMore(page, 'Get help');
   await page.getByRole('button', { name: 'New ticket' }).click();
   await page.getByPlaceholder('Short summary (optional)').fill(subject);
   await page.getByPlaceholder(/As much detail as helps/).fill('QA lab journey: please resolve this so I can archive it.');
@@ -452,7 +452,7 @@ test('member: a resolved ticket archived, then answered again', {
   await qa.feature('SUPPORT-005', 'Move to archive: the ticket leaves Your tickets for the Archived view; status and resolved_at unchanged', async () => {
     resolvedState = state();
     await page.reload(); await waitForMemberApp(page);
-    await openMore(page, 'Support');
+    await openMore(page, 'Get help');
     await page.getByRole('button', { name: 'Your tickets' }).click();
     await page.getByRole('button').filter({ hasText: subject }).first().click();
     await page.getByRole('button', { name: 'Move to archive' }).click();

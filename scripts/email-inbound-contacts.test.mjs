@@ -54,6 +54,12 @@ test("a positively authenticated card is added to peer references", async () => 
   assert.equal(refs[0].user_id, PROFILE);
   assert.equal(rows("intake_proposals").length, 0);
   assert.match(toPhysician()[0].text, /^Added Casey Example to your peer references\./);
+  // The app labels the screen Credentials > Peer References; "References"
+  // alone matched nothing he could see (link audit, 2026-10-01).
+  const text = toPhysician()[0].text;
+  assert.match(text, /Open Credentials > Peer References and set the relationship/);
+  assert.match(text, /\(Credentials > Peer References\)/);
+  assert.ok(!/\(References\)|Open References/.test(text), text);
 });
 
 test("a forward that only fails to fail writes nothing to peer references; the card waits in the app", async () => {

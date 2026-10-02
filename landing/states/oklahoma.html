@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -653,7 +653,7 @@ a:hover { color: var(--emerald-light); }
   <h2><span class="section-number">&#10003;</span> Where this comes from</h2>
   <p>From the board's own pages, August 2026. These are the primary sources we read:</p>
   <ul style="list-style:none;padding:0;">
-      <li style="margin-bottom:6px;"><a href="https://www.okmedicalboard.org/renew" target="_blank" rel="noopener">MD board renewal page: new licensing portal announcement, portal links (medicalboard.ok.gov), user guides, and the planned maintenance notice suspending renewal and bill-pay services (loaded 2026-08-19)</a></li>
+      <li style="margin-bottom:6px;"><a href="https://www.okmedicalboard.org/renew" target="_blank" rel="noopener">MD board renewal page: new licensing portal announcement, portal links (medicalboard.ok.gov), user guides, and the planned maintenance notice suspending renewal and bill-pay services (August 2026)</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.okmedicalboard.org/licensing_faq" target="_blank" rel="noopener">MD board licensing FAQ: renewal notices ~60 days out, late-if-postmarked-after-expiration, no waiver for missed notice, inactive &gt;60 days requires reinstatement, wallet cards mailed weekly, 60 Cat 1 CME per preceding 3 years, 6-8 week initial application processing</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.law.cornell.edu/regulations/oklahoma/OAC-435-10-7-10" target="_blank" rel="noopener">OAC 435:10-7-10 rule text: annual reregistration during month of initial licensure, no grace period, affirmative duty of licensee</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.law.cornell.edu/regulations/oklahoma/OAC-435-1-1-7" target="_blank" rel="noopener">OAC 435:1-1-7 fee rule: MD full license $500 application, $200 annual reregistration, $350 reactivation, $500 reinstatement; no separate MD late-fee line</a></li>
@@ -849,5 +849,5 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-</body>
+<!--/email_off--></body>
 </html>

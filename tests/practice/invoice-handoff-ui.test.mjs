@@ -163,10 +163,11 @@ test('a share sheet that never answers: Mark as sent still records, filled in wi
   tap(m, t => t === 'Sent it already? Mark as sent', 'Mark as sent');
   assert.equal(inputOf(m, 'Invoice number').props.value, number, 'the number that went to the share sheet');
 
-  // Back from Mail and the sheet still silent: said, and reported.
+  // Back from Mail and the sheet still silent: the preview asks (2026-10-01),
+  // and it is reported. Mark as sent still records it too.
   back.back();
   await wait(20);
-  assert.match(shown(m), new RegExp(`The share sheet has not said whether ${number} went out\\. If it did, tap Mark as sent below`));
+  assert.match(shown(m), new RegExp(`Did ${number} go out\\?`));
   assert.ok(reports.includes('invoice_share_unanswered'));
 
   tap(m, t => t === 'Record as sent', 'Record as sent');
@@ -234,19 +235,15 @@ test('a reload while the share sheet has the invoice: the new page says it went 
   const again = await reload(m, { srv });
   const text = shown(again);
   assert.match(text, new RegExp(`${number} is not recorded`));
-  assert.match(text, new RegExp(`${number} went to the share sheet Sep 10, 2026 for \\$[\\d,]+\\.\\d{2} and was never recorded, so its entries are still unbilled\\. If it went out, tap Record it`));
+  assert.match(text, new RegExp(`${number} went to the share sheet Sep 10, 2026 for \\$[\\d,]+\\.\\d{2} and was never recorded, so its entries are still unbilled\\. If it went out, tap Yes, it was sent`));
 
-  tap(again, t => t === 'Record it', 'Record it');
-  const pick = find(again.render(), n => n.props?.title === 'Which days go on this invoice?', 'day picker');
-  assert.equal(pick.props.open, true);
-  tap(again, t => /^Invoice 3 days/.test(t), 'the three days it billed, checked');
-  assert.equal(inputOf(again, 'Invoice number').props.value, number, 'Mark as sent opens filled in');
-  assert.equal(inputOf(again, 'Date sent').props.value, '2026-09-10');
-  assert.match(field(again.render(), 'Invoice number').props.hint, new RegExp(`Filled in from ${number}, which went to the share sheet Sep 10, 2026`));
-  tap(again, t => t === 'Record as sent', 'Record as sent');
+  // One tap: no picker, no preview, no new number (2026-10-01).
+  tap(again, t => t === 'Yes, it was sent', 'Yes, it was sent');
+  await settle(); // Yes first checks it is still unrecorded (invoiceRecordCheck.js)
+  assert.equal(find(again.render(), n => n.props?.title === 'Which days go on this invoice?', 'day picker').props.open, false);
   const [inv] = recorded(again);
   assert.equal(inv?.number, number);
-  assert.equal(inv.method, 'marked');
+  assert.equal(inv.method, 'share-confirmed');
   assert.equal(inv.sentAt, new Date('2026-09-10T12:00:00-05:00').toISOString(), 'when it went to the sheet');
   assert.equal(billed(again).length, 3);
   assert.doesNotMatch(shown(again), /is not recorded/);
@@ -267,7 +264,10 @@ test('the Mac sees what the iPhone handed to the share sheet (the server stamp),
   assert.ok(reports.includes('invoice_handoff_unrecorded'), 'the owner hears of it');
 });
 
-test('a cancelled share leaves no note anywhere: the device forgets it and the server stamp is cleared', async () => {
+// iOS answers a share with AbortError after Mail or Gmail has sent it too
+// (2026-10-01), so a cancel no longer erases the note: the preview asks, and
+// only "No, it did not go out" takes the note and the stamp back.
+test('a share answered with a cancel asks "Did it go out?"; No leaves no note anywhere and clears the server stamp', async () => {
   fresh();
   nav(async () => { const err = new Error('Share canceled'); err.name = 'AbortError'; throw err; });
   const srv = server();
@@ -275,9 +275,15 @@ test('a cancelled share leaves no note anywhere: the device forgets it and the s
   build(m);
   const number = numberOf(m);
   await sendPdf(m);
+  assert.deepEqual(stamps, [[number, true, 'c-s']], 'the stamp stays until he answers');
+  assert.match(shown(m), new RegExp(`Did ${number} go out\\?`));
+  assert.ok(reports.includes('invoice_share_aborted_after_handoff'));
+  tap(m, t => t === 'No, it did not go out', 'No');
+  await settle();
   assert.deepEqual(stamps, [[number, true, 'c-s'], [number, false, null]]);
-  assert.match(shown(m), /the share sheet closed without reporting a send/);
-  m.render(); // the preview stays open with the way to record one that did go
+  assert.deepEqual(recorded(m), []);
+  assert.doesNotMatch(shown(m), /go out\?/);
+  assert.equal(btn(m, t => t.startsWith('Send invoice'), 'Send').props.disabled, false, 'ready to send again');
   find(m.render(), n => n.props?.title === 'Invoice preview', 'preview').props.onClose();
   const again = await reload(m, { srv });
   assert.doesNotMatch(shown(again), /is not recorded/);

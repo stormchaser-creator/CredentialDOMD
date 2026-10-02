@@ -249,9 +249,9 @@ check("the email says what is inside, where to get it, and what is missing, with
     builtParts: built.length, archiveBytes: built.reduce((n, b) => n + b.buf.length, 0),
     skippedCount: 2,
   });
-  assert.ok(text.startsWith("Test,"), `greeting is wrong: ${text.slice(0, 20)}`);
+  assert.ok(text.startsWith("Hi Test,"), `greeting is wrong: ${text.slice(0, 20)}`);
   assert.ok(text.includes(BACKUP_PAGE_URL), "no link to the Data and Backup page");
-  assert.ok(text.includes("More > Data and Backup"), "no path to the page");
+  assert.ok(text.includes("More > Data & Backup"), "no path to the page");
   assert.ok(text.includes("15 minutes"), "does not say how long a download link lives");
   // The archive holds every scan the physician uploaded. The only URL the
   // email may carry is the app page; a signed storage link is the leak the

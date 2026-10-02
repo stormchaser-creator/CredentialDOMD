@@ -54,7 +54,7 @@ export default function ReadOnlyRecords({ scope }) {
         number: record.number, physician: data.settings.name || "Physician", npi: data.settings.npi, email: data.settings.email,
         facility: contract.facility, agency: contract.agency, location: contract.location, billTo: contract.billTo,
         periodStart: record.periodStart, periodEnd: record.periodEnd, terms: record.terms, lines: record.lines,
-        totalMin: record.totalMinutes, total, paid, balance: record.writeOffAt ? 0 : Math.max(0, total - paid), issuedDate: sentDay(record.sentAt) || undefined,
+        totalMin: record.totalMinutes, total, paid, balance: Math.max(0, total - paid), issuedDate: sentDay(record.sentAt) || undefined,
         // The call-day window its day blocks print: lines saved before the
         // day layout do not carry it, so it comes from the agreement, as on
         // every resend (invoiceDocumentArgs).

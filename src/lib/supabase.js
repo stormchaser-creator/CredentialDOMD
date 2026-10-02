@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 // written, which is what lets scripts/device-secrets.test.mjs import the real
 // redaction and the real hydration allowlist instead of a copy of them.
 import { STORAGE_KEY, LOCAL_ONLY_SETTINGS } from "../constants/defaults.js";
-import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId, adoptedLocalFence, localCopyCurrent, localFence } from "../utils/storageScope.js";
+import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId, adoptedLocalFence, localCopyCurrent, localFence, setItemMakingRoom } from "../utils/storageScope.js";
 import { foundingFromProfile } from "../utils/founding.js";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
 import { createContinuityBinding, recoverContinuity, continuitySourceSubject, PRODUCTION_CLERK_ISSUER } from "../utils/continuityRecovery.js";
@@ -969,7 +969,8 @@ function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
     queueId = typeof meta.queueId === "string" && meta.queueId ? meta.queueId : crypto.randomUUID();
     arr.push({ op, collectionKey, payload, ts: Date.now(), queueId, ...scopes, ...meta });
     // Bound the queue so one permanently-failing op can't grow without limit.
-    localStorage.setItem(key, JSON.stringify(arr.slice(-PENDING_OPS_CAP)));
+    // A full localStorage first gives up the dead development-era copies.
+    setItemMakingRoom(key, JSON.stringify(arr.slice(-PENDING_OPS_CAP)));
   } catch (err) {
     queueId = null;
     // Storage full (a queued document carries its file): the write could not
@@ -1050,6 +1051,72 @@ function dropSupersededWrites(owner, collectionKey, id, startedAt) {
     else localStorage.removeItem(slot);
   } catch { return; /* storage unavailable: replay drops them once a later write lands */ }
   notifySync(owner.accountId);
+}
+
+// ── An invoice another device recorded first (migration 20261002030000) ──
+// The server keeps one invoice per number (23505 on the invoice) and never
+// moves a billed row onto a different invoice while its own exists (23P01 on
+// the row). Both mean the account already holds the other device's record
+// of the same invoice, which stands (review of release/goal2, 2026-10-01):
+//  - this device's invoice is dropped, never queued or retried, whether the
+//    insert was live or replayed from the queue, and the account is read
+//    again;
+//  - what this device queued to bill rows onto it is taken out of the queue
+//    (a stipend marker made for it goes whole), so the rows keep the
+//    account's invoice and nothing is parked as "not saved";
+//  - a row's edit refused for its invoice id goes up without it (the rest of
+//    the edit is saved), or is dropped when the invoice id was all it changed.
+// When this device's invoice was kept (a new number, recorded for rows the
+// account already bills on another invoice), the account then holds an
+// invoice listing rows another invoice bills: Home and the Invoices tab say
+// so by both numbers, with the delete that settles it, on every device
+// (utils/invoiceRecord.js invoicesBilledTwice, BilledTwiceInvoices). The
+// sync never parks it: the duplicate is a fact about what went to the
+// agency, not a save to retry.
+const INVOICE_BILLED = new Set(["dutyDays", "workLog", "travelExpenses"]);
+const invoiceGuardRefused = (collectionKey, error) => INVOICE_BILLED.has(collectionKey) && writeErrorCode(error) === "23P01";
+const invoiceNumberTaken = (collectionKey, error) => collectionKey === "invoices" && writeErrorCode(error) === "23505";
+// A marker the time engine adds only to stamp a billed stipend day
+// (WorkLog markBilledAndLog): it means nothing without its invoice.
+const isStipendMarker = (collectionKey, item) => collectionKey === "workLog" && item?.type === "CallDay"
+  && !item.startTime && !(Number(item.durationMin) > 0);
+// The op without its invoice id: null when nothing is left to send.
+function withoutBilling(op) {
+  const payload = op.payload && typeof op.payload === "object" ? op.payload : null;
+  if (!payload) return op;
+  if (Array.isArray(op.changed)) {
+    const changed = op.changed.filter(k => k !== "invoiceId");
+    if (!changed.length) return null;
+    return { ...op, changed, payload: { ...payload, invoiceId: null } };
+  }
+  if (!op.changed && isStipendMarker(op.collectionKey, payload)) return null;
+  const { invoiceId: _dropped, ...rest } = payload;
+  return { ...op, payload: rest };
+}
+function invoiceRecordedElsewhere(owner, invoiceId) {
+  try { rejectionReporter?.("Cloud write rejected: invoices number_recorded_elsewhere"); } catch { /* reporting never blocks */ }
+  if (invoiceId) {
+    const slot = pendingOpsSlot(owner.accountId);
+    try {
+      const raw = slot ? localStorage.getItem(slot) : null;
+      const cur = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(cur)) {
+        let changed = false;
+        const kept = [];
+        for (const op of cur) {
+          if (!INVOICE_BILLED.has(op?.collectionKey) || !["upsert", "patch"].includes(op.op) || op.payload?.invoiceId !== invoiceId) { kept.push(op); continue; }
+          changed = true;
+          const next = op.op === "patch" ? (() => { const { invoiceId: _d, ...rest } = op.payload; return Object.keys(rest).some(k => k !== "id") ? { ...op, payload: rest } : null; })() : withoutBilling(op);
+          if (next) kept.push(next);
+        }
+        if (changed) {
+          if (kept.length) localStorage.setItem(slot, JSON.stringify(kept)); else localStorage.removeItem(slot);
+          notifySync(owner.accountId);
+        }
+      }
+    } catch { /* storage unavailable: replay drops them as the server refuses them */ }
+  }
+  try { invoiceNumberConflict?.(); } catch { /* the next load reads it */ }
 }
 
 // Writes of a record still in flight, by account, collection and id: adds,
@@ -1206,6 +1273,26 @@ async function sbPatchRow(userId, collectionKey, item, owner) {
   row.updated_at = new Date().toISOString();
   const { error } = await writeRequest(owner, () => owner.db.from(table).update(row).eq("id", item.id).eq("user_id", userId));
   return error || null;
+}
+
+// A queued edit (editMeta): an UPDATE of the columns it changed, its packed
+// columns merged per field over the server's copy now, dated now. A row that
+// does not exist (its add never landed, or it is being created by another
+// queued write) is created whole, as the upsert it used to be.
+async function sbEditRow(userId, collectionKey, item, owner, op) {
+  if (!item?.id) return null;
+  const row = clientRow(collectionKey, item, "update");
+  delete row.user_id;
+  delete row.created_at;
+  narrowRow(row, op);
+  const readError = await rebasePackedColumns(owner, userId, collectionKey, row, op, item.id);
+  if (readError) return readError;
+  row.updated_at = new Date().toISOString();
+  const { data, error } = await writeRequest(owner, () => owner.db.from(tableName(collectionKey))
+    .update(row).eq("id", item.id).eq("user_id", userId).select("id"));
+  if (error) return error;
+  if (Array.isArray(data) && data.length === 0) return sbUpsertRow(userId, collectionKey, item, owner, op.ts);
+  return null;
 }
 
 // An "upsert" queued by an older version for a partial document write (no
@@ -1382,7 +1469,22 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
       if (op.op === "patch" || isLegacyPartialDocument(op)) {
         error = await sbPatchRow(profileId, op.collectionKey, payload, owner);
       } else if (op.op === "upsert") {
-        error = await sbUpsertRow(profileId, op.collectionKey, payload, owner, op.ts);
+        const send = (o) => (Array.isArray(o.changed) ? sbEditRow(profileId, op.collectionKey, o.payload, owner, o) : sbUpsertRow(profileId, op.collectionKey, o.payload, owner, op.ts));
+        error = await send(current);
+        // A row's invoice id refused, the row billed on an invoice another
+        // device recorded first: the rest goes without it (or nothing).
+        if (error && invoiceGuardRefused(op.collectionKey, error)) {
+          const bare = withoutBilling(current);
+          error = bare ? await send(bare) : null;
+          try { invoiceNumberConflict?.(); } catch { /* the next load reads it */ }
+        }
+        // An invoice whose number another invoice of the account carries:
+        // recorded on another device, which stands. Dropped, as a live insert
+        // is, with what this device queued to bill rows onto it.
+        if (error && invoiceNumberTaken(op.collectionKey, error) && !Array.isArray(current.changed)) {
+          invoiceRecordedElsewhere(owner, recordIdOf(payload));
+          error = null;
+        }
       } else if (op.op === "favorite") {
         error = await sbFavoriteRow(profileId, op.collectionKey, payload, owner);
         // No row: kept only while a save of that record is still waiting in
@@ -1655,7 +1757,14 @@ export async function ensureProfile(userId, { isCurrent = () => true, retryDelay
       }
     } catch (cause) {
       owner.check();
-      throw profileInitializationError(stage, cause);
+      const error = profileInitializationError(stage, cause);
+      // Still no answer from initialize-clerk-profile after the retries (a
+      // weak signal at launch: every try timed out or never connected). No
+      // server said anything about this identity, so AppContext opens this
+      // account's own device copy, read-only, and asks again when the app
+      // comes back to the front or online (IPHONE weak network, 2026-10-01).
+      if (stage === "initialize" && transientInitializationFailure(cause)) error.transient = true;
+      throw error;
     }
   }
   const lookup = () => writeRequest(owner, () => owner.db.from("profiles")
@@ -2031,10 +2140,10 @@ function writeAhead(owner, settings, meta) {
 // localStorage could fill it (and say so) for a save that is about to be
 // sent anyway. Its device copy keeps it across a reload, and the next load
 // uploads it (reconcileDocumentFiles); a held one is queued as before.
-function writeAheadRecord(owner, op, collectionKey, payload) {
+function writeAheadRecord(owner, op, collectionKey, payload, meta = {}) {
   if (!owner.authorized || owner.firstAnswer !== true) return null;
   if (collectionKey === "documents" && payload && typeof payload === "object" && payload.data) return null;
-  return writeAheadOp(owner, op, collectionKey, payload, {});
+  return writeAheadOp(owner, op, collectionKey, payload, meta);
 }
 function writeAheadOp(owner, op, collectionKey, payload, meta) {
   const queueId = crypto.randomUUID();
@@ -2408,7 +2517,133 @@ export function allocateInvoiceNumberRpc(kind, day, atLeast) {
  */
 export function markInvoiceNumberSharedRpc(number, { shared = true, contractId = null, sharedAt = null } = {}) {
   if (!supabase) return null;
-  return supabase.rpc("mark_invoice_number_shared", { p_number: number, p_shared: shared, p_contract_id: contractId, p_shared_at: shared ? sharedAt || null : null });
+  return stampDb().rpc("mark_invoice_number_shared", { p_number: number, p_shared: shared, p_contract_id: contractId, p_shared_at: shared ? sharedAt || null : null });
+}
+
+// The stamp goes out as the file goes to the share sheet, and iOS can put the
+// page away for Mail or Gmail a moment later, or discard it there (the
+// owner's iPhone, 2026-10-02). Sent with keepalive, a request already on its
+// way finishes even if the page does not. Its own client, made on first use;
+// otherwise the shared one's settings.
+let stampClient = null;
+function stampDb() {
+  if (typeof fetch !== "function") return supabase;
+  stampClient ||= createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    accessToken: getClerkSupabaseToken,
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: (input, init = {}) => fetch(input, { ...init, keepalive: true }) },
+  });
+  return stampClient;
+}
+
+// A call day (YYYY-MM-DD), and the one `by` days from it.
+const CALL_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const dayShift = (day, by) => {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + by);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * What the server holds now, before a one-tap "Yes, it was sent" records an
+ * invoice (utils/invoiceRecordCheck.js): whether an invoice with `number`
+ * exists, and which of `ids` in `collectionKey` ("dutyDays", "workLog",
+ * "travelExpenses") are on an invoice already. Another device may have
+ * recorded it, and this device's copy is read only when the app loads.
+ * `profileId` narrows the read to the account (RLS does too). A promise of
+ * { data: { numberTaken, billedIds, billedOn }, error } (billedOn: row id to
+ * the number of the invoice that bills it), or null without a cloud client.
+ * An empty `number` checks the rows only.
+ *
+ * Read only with the member's token (memberDb). The shared client sends the
+ * anon key when Clerk cannot mint one (window.Clerk.session briefly null as
+ * the iPhone resumes from Mail, exactly when Yes is tapped), and these
+ * tables' policies are `to authenticated`: that read answered no rows and no
+ * error, which said "free" and let Yes record a second invoice under a number
+ * already recorded on another device. Without a token it is an error now,
+ * which the check answers "unknown" (asked first).
+ *
+ * `stipend` ({ contractId, days }, Work log only): also the billed work log
+ * rows of that contract filed under those call days, as `stipendRows`
+ * ({ id, invoiceId, number, contractId, type, callDay, date, startTime,
+ * endTime, billedMin }), so the screen can tell which days' stipends another
+ * invoice has charged (utils/stipendDays.js withStipendDays). A coverage day
+ * with nothing logged has no row of its own to ask about by id (review of
+ * release/goal2, 2026-10-02).
+ */
+export function readInvoiceRecordState(number, collectionKey, ids = [], profileId = null, stipend = null) {
+  if (!supabase) return null;
+  const db = memberDb();
+  const n = String(number ?? "").trim();
+  // ilike: the same number in any case (Mark as sent takes what is typed);
+  // its wildcards are matched as themselves.
+  const like = n.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const mine = (q) => (profileId ? q.eq("user_id", profileId) : q);
+  const list = [...new Set((ids || []).filter(Boolean).map(String))];
+  const days = collectionKey === "workLog" && stipend?.contractId
+    ? [...new Set((stipend.days || []).map(String).filter((d) => CALL_DAY.test(d)))].sort()
+    : [];
+  return Promise.all([
+    // No number: a check of the items only (the day picker, before a number).
+    n ? mine(db.from("invoices").select("id").ilike("number", like)).limit(1) : Promise.resolve({ data: [], error: null }),
+    list.length && collectionKey
+      ? mine(db.from(tableName(collectionKey)).select("id,invoice_id").in("id", list)).not("invoice_id", "is", null)
+      : Promise.resolve({ data: [], error: null }),
+    // The contract's billed rows on those call days: stamped with the day,
+    // or (a row from before the stamp) dated within a day of it, its call
+    // day worked out on the device.
+    days.length
+      ? mine(db.from(tableName("workLog")).select("id,invoice_id,contract_id,type,call_day,date,start_time,end_time,billed_min")
+        .eq("contract_id", String(stipend.contractId))).not("invoice_id", "is", null)
+        .or(`call_day.in.(${days.join(",")}),and(call_day.is.null,date.gte.${dayShift(days[0], -1)},date.lte.${dayShift(days[days.length - 1], 1)})`)
+      : Promise.resolve({ data: [], error: null }),
+  ]).then(async ([inv, rows, dayRows]) => {
+    const error = inv?.error || rows?.error || dayRows?.error || null;
+    if (error) return { data: null, error };
+    // Only rows it asked about that an invoice bills (the filters say so;
+    // checked here too, so a server that ignored one never marks a row
+    // billed that is not).
+    const asked = new Set(list);
+    const billed = (rows.data || []).filter((r) => r?.invoice_id && asked.has(String(r.id)));
+    const onDays = (dayRows.data || []).filter((r) => r?.invoice_id && String(r.contract_id) === String(stipend?.contractId));
+    // Which invoice bills each row, so the screen can name it ("already on
+    // INV-A"). A failed lookup still answers which rows are billed.
+    const invoiceIds = [...new Set([...billed, ...onDays].map((r) => r.invoice_id).filter(Boolean).map(String))];
+    let numbers = new Map();
+    if (invoiceIds.length) {
+      try {
+        const named = await mine(db.from("invoices").select("id,number").in("id", invoiceIds));
+        if (!named?.error) numbers = new Map((named.data || []).map((r) => [String(r.id), r.number]));
+      } catch { /* named as "another invoice" */ }
+    }
+    return {
+      data: {
+        numberTaken: (inv.data || []).length > 0,
+        billedIds: billed.map((r) => String(r.id)),
+        billedOn: Object.fromEntries(billed.map((r) => [String(r.id), numbers.get(String(r.invoice_id)) || null])),
+        ...(days.length ? {
+          stipendRows: onDays.map((r) => ({
+            id: String(r.id), invoiceId: String(r.invoice_id), number: numbers.get(String(r.invoice_id)) || null,
+            contractId: String(r.contract_id), type: r.type || null, callDay: r.call_day || null, date: r.date || null,
+            startTime: r.start_time || null, endTime: r.end_time || null, billedMin: r.billed_min ?? null,
+          })),
+        } : {}),
+      },
+      error: null,
+    };
+  }, (error) => ({ data: null, error }));
+}
+
+/**
+ * Whether the server holds an invoice numbered `number` now (any case), read
+ * with the member's token only (memberDb). A promise of { data: boolean,
+ * error }, or null without a cloud client. The stamp of a recorded invoice is
+ * cleared only once its record is there (utils/invoiceHandoff.js): until
+ * then the stamp is the only trace on the server that it went.
+ */
+export function readInvoiceNumberRecorded(number) {
+  const read = readInvoiceRecordState(number, null, [], null);
+  return read ? read.then((r) => (r.error ? { data: null, error: r.error } : { data: !!r.data?.numberTaken, error: null })) : null;
 }
 
 /** The account's numbers handed to the share sheet that no invoice carries yet: [{ number, shared_at, contract_id }]. */
@@ -2446,17 +2681,23 @@ export async function downloadDocumentBlob(storagePath, { signal, detail = false
 // upload it again or delete the entry. So a download without the member's
 // token is never sent: this token callback throws instead, and the helpers
 // say "failed" (tried again later). Made on the first download.
-let documentFilesClient = null;
-function documentFiles() {
-  documentFilesClient ||= createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+// The same client answers the reads whose empty answer would be taken as
+// "nothing there" (readInvoiceRecordState): a read the RLS policies would
+// answer with no rows for the anon key is never sent without the token.
+let memberClient = null;
+function memberDb() {
+  memberClient ||= createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     accessToken: async () => {
       const token = await getClerkSupabaseToken();
-      if (!token) throw new Error("No signed-in session to download this file with.");
+      if (!token) throw new Error("No signed-in session to read this with.");
       return token;
     },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
-  return documentFilesClient.storage.from("documents");
+  return memberClient;
+}
+function documentFiles() {
+  return memberDb().storage.from("documents");
 }
 
 // { data, error } like storage-js, never a throw: a download that could not
@@ -2540,6 +2781,11 @@ export async function downloadDocumentFile(storagePath, { detail = false } = {})
 // `keepOnRefusal`: the record of work already done outside the app (an
 // invoice that went out), kept and queued even when the check it waits for
 // refuses it (authorizeOwner).
+// What runs when an invoice insert finds its number on another invoice of the
+// account (main.jsx: read the account again, utils/serverBilling.js).
+let invoiceNumberConflict = null;
+export function setInvoiceNumberConflictHandler(fn) { invoiceNumberConflict = typeof fn === "function" ? fn : null; }
+
 export async function insertItem(userId, collectionKey, item, { keepOnRefusal = false } = {}) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, item, undefined, false, undefined, { keepOnRefusal });
@@ -2580,8 +2826,28 @@ async function insertForOwner(userId, collectionKey, item, owner, ahead = null) 
     row.mime_type = documentMime(item);
     row.size_bytes = item.size || null;
   }
-  const { error } = await writeRequest(owner, () => owner.db.from(table).insert(row));
+  let { error } = await writeRequest(owner, () => owner.db.from(table).insert(row));
   owner.check();
+  // Its own id already there: the record reached the cloud another way while
+  // this insert was on its way (a load's self-heal push or file reconcile,
+  // made while the app was in the background, landed first). Saved, not "it
+  // duplicates another record" (review of 9484782c). An invoice number
+  // another invoice carries is handled below.
+  if (error && writeErrorCode(error) === "23505" && item?.id) {
+    const found = await writeRequest(owner, () => owner.db.from(table).select("id").eq("id", item.id).eq("user_id", userId).maybeSingle());
+    owner.check();
+    const landed = Array.isArray(found?.data) ? found.data[0] : found?.data;
+    if (!found?.error && landed?.id === item.id) error = null;
+  }
+  // Its number is another invoice's on the account (the server keeps one
+  // invoice per number, migration 20261002030000): recorded on another
+  // device. Not queued and never retried; the account is read again, and the
+  // load leaves the cloud's invoice standing (AppContext). 2026-10-02.
+  if (error && invoiceNumberTaken(collectionKey, error)) {
+    noteWriteOutcome(owner, collectionKey, item.id, null);
+    invoiceRecordedElsewhere(owner, item?.id);
+    return null;
+  }
   const kind = noteWriteOutcome(owner, collectionKey, item.id, error);
   if (error) {
     console.warn(`Failed to insert ${collectionKey}:`, error.message);
@@ -2594,6 +2860,174 @@ async function insertForOwner(userId, collectionKey, item, owner, ahead = null) 
   return row.storage_path || null;
 }
 
+// An edit sends only the columns it changed from the record it started from
+// (IOS-SYNC-3, 2026-10-01). The whole record went up, so an iPhone app back
+// from days in memory that changed only a license's notes put back the name
+// the member had changed at the desk since, with no warning. A column this
+// edit left as it found it is the server's to keep. The whole record still
+// goes when there is nothing to compare with, or while a queued write of the
+// record that is the whole record (an add that never landed) waits. A queued
+// edit is itself a list of changed columns (editMeta): this edit carries
+// those columns too, so its landing can take the queued copy out
+// (dropSupersededWrites).
+//
+// The same holds once queued (review of 9484782c): a failed, held or offline
+// edit used to wait as the whole record and replay as an upsert of every
+// column, so the queue sent when the signal came back put the phone's old
+// expiration date and star over the desk's renewal. It now keeps the columns
+// it changed (`changed`, the record's own keys) and replays as an UPDATE of
+// those alone (sbEditRow), falling back to an upsert of the whole record only
+// when the row does not exist.
+//
+// A packed column (jsonb holding many fields: a custom record's field
+// values, a category's fields) is merged per field against the copy the edit
+// started from (`base`), over the server's copy as it is now: a change to one
+// field no longer sends the phone's stale copy of every other. Every table's
+// custom_fields is one (review of 5cb89c90): an archive of a locum contract
+// (customFields.archivedAt), a license's topic answers, a case log's
+// cptDetail each sent the phone's stale copy of the other keys whole.
+const sameColumnValue = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const PACKED_COLUMNS = Object.freeze({
+  customRecords: Object.freeze(["field_values", "field_labels", "custom_fields", "document_ids"]),
+  customCategories: Object.freeze(["fields", "aliases", "custom_fields"]),
+});
+const PACKED_EVERYWHERE = Object.freeze(["custom_fields"]);
+const packedColumns = collectionKey => PACKED_COLUMNS[collectionKey] || PACKED_EVERYWHERE;
+const EDIT_UNCOMPARED = new Set(["id", "user_id", "created_at", "updated_at"]);
+// What is queued for this record: null (nothing), "whole" (a write that is
+// the whole record, or a queue that cannot be read), or the columns queued
+// edits changed, with the base each packed column started from (the oldest).
+function queuedEdits(owner, collectionKey, id) {
+  const slot = pendingOpsSlot(owner.accountId);
+  if (!slot) return "whole";
+  let cur;
+  try { cur = JSON.parse(localStorage.getItem(slot) || "[]"); } catch { return "whole"; }
+  if (!Array.isArray(cur)) return "whole";
+  const mine = cur.filter(op => supersedes(op, collectionKey, id));
+  if (!mine.length) return null;
+  const changed = new Set(), base = {};
+  for (const op of mine) {
+    if (op.op === "patch") { for (const key of Object.keys(op.payload || {})) if (key !== "id") changed.add(key); continue; }
+    if (!Array.isArray(op.changed)) return "whole";
+    for (const key of op.changed) changed.add(key);
+    for (const [col, value] of Object.entries(op.base || {})) if (!Object.hasOwn(base, col)) base[col] = value;
+  }
+  return { changed, base };
+}
+/**
+ * An edit as what it changed: { changed: [the record's keys], base: {packed
+ * column: its value in the record the edit started from} }, or null when it
+ * must go whole (nothing to compare with, or the whole record queued).
+ */
+function editMeta(owner, collectionKey, item, previous) {
+  if (!item?.id || !previous || typeof previous !== "object" || previous.id !== item.id) return null;
+  const queued = queuedEdits(owner, collectionKey, item.id);
+  if (queued === "whole") return null;
+  const mine = clientRow(collectionKey, item, "update");
+  const before = clientRow(collectionKey, previous, "update");
+  const changed = new Set(queued?.changed || []);
+  for (const key of Object.keys(item)) {
+    const col = camelToSnake(key);
+    if (EDIT_UNCOMPARED.has(col) || !Object.hasOwn(mine, col)) continue;
+    if (!(Object.hasOwn(before, col) && sameColumnValue(mine[col], before[col]))) changed.add(key);
+  }
+  const base = { ...(queued?.base || {}) };
+  for (const col of packedColumns(collectionKey)) {
+    if (Object.hasOwn(base, col)) continue;
+    if ([...changed].some(key => camelToSnake(key) === col)) base[col] = Object.hasOwn(before, col) ? before[col] : null;
+  }
+  return { changed: [...changed], base };
+}
+// An edit's meta as a queued op carries it ({} for a whole record).
+const editMetaFields = meta => (meta ? { changed: meta.changed, base: meta.base } : {});
+// The row narrowed to the edit's changed columns (id kept).
+function narrowRow(row, meta) {
+  if (!meta || !Array.isArray(meta.changed)) return;
+  const cols = new Set(meta.changed.map(camelToSnake));
+  for (const col of Object.keys(row)) if (col !== "id" && !cols.has(col)) delete row[col];
+}
+const isPlainObject = v => !!v && typeof v === "object" && !Array.isArray(v);
+const keyedList = v => Array.isArray(v) && v.length > 0 && v.every(x => isPlainObject(x) && typeof x.key === "string");
+/**
+ * A packed column's value: the server's copy now, with what `mine` changed
+ * from `base` laid over it, field by field. An object is merged per key, a
+ * list of fields per field key, a list of plain values as a set. Anything
+ * else is `mine`.
+ */
+export function rebasePacked(server, base, mine) {
+  if (isPlainObject(mine) || (mine == null && isPlainObject(base))) {
+    const out = isPlainObject(server) ? { ...server } : {};
+    const was = isPlainObject(base) ? base : {}, now = isPlainObject(mine) ? mine : {};
+    for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {
+      if (sameColumnValue(now[key], was[key])) continue;
+      if (Object.hasOwn(now, key)) out[key] = now[key]; else delete out[key];
+    }
+    return out;
+  }
+  if (Array.isArray(mine)) {
+    const theirs = Array.isArray(server) ? server : [];
+    const was = Array.isArray(base) ? base : [];
+    if (keyedList(mine) || keyedList(was) || keyedList(theirs)) {
+      const byKey = list => new Map(list.filter(isPlainObject).map(x => [x.key, x]));
+      const wasBy = byKey(was), nowBy = byKey(mine);
+      const touched = new Set([...wasBy.keys(), ...nowBy.keys()].filter(key => !sameColumnValue(nowBy.get(key), wasBy.get(key))));
+      const out = [];
+      const seen = new Set();
+      for (const x of theirs) {
+        const key = isPlainObject(x) ? x.key : undefined;
+        if (key !== undefined) seen.add(key);
+        if (key === undefined || !touched.has(key)) { out.push(x); continue; }
+        if (nowBy.has(key)) out.push(nowBy.get(key));
+      }
+      for (const x of mine) if (isPlainObject(x) && touched.has(x.key) && !seen.has(x.key)) out.push(x);
+      return out;
+    }
+    const added = mine.filter(x => !was.some(y => sameColumnValue(x, y)));
+    const removed = was.filter(x => !mine.some(y => sameColumnValue(x, y)));
+    const out = theirs.filter(x => !removed.some(y => sameColumnValue(x, y)));
+    for (const x of added) if (!out.some(y => sameColumnValue(x, y))) out.push(x);
+    return out;
+  }
+  return mine;
+}
+// The packed columns of an edit's row, rebased on the server's copy now.
+// Returns the read's error; no row leaves `row` as it is (the update then
+// finds no row and the whole record goes).
+async function rebasePackedColumns(owner, userId, collectionKey, row, meta, id) {
+  const cols = packedColumns(collectionKey).filter(col => Object.hasOwn(row, col) && meta?.base && Object.hasOwn(meta.base, col));
+  if (!cols.length) return null;
+  const { data, error } = await writeRequest(owner, () => owner.db.from(tableName(collectionKey))
+    .select(cols.join(",")).eq("id", id).eq("user_id", userId).maybeSingle());
+  if (error) return error;
+  const server = Array.isArray(data) ? data[0] : data;
+  if (!server) return null;
+  for (const col of cols) row[col] = rebasePacked(server[col], meta.base[col], row[col]);
+  return null;
+}
+/**
+ * The queued edits as what they changed, for a load to lay over the rows it
+ * read back (AppContext self-heal): `${collectionKey}:${id}` -> the record's
+ * changed keys. Only edits queued as changed columns.
+ */
+export function queuedEditKeys(authUserId) {
+  const out = new Map();
+  const slot = pendingOpsSlot(authUserId);
+  if (!slot) return out;
+  try {
+    const cur = JSON.parse(localStorage.getItem(slot) || "[]");
+    for (const op of Array.isArray(cur) ? cur : []) {
+      if (op?.op !== "upsert" || !Array.isArray(op.changed)) continue;
+      const id = recordIdOf(op.payload);
+      if (!id) continue;
+      const key = `${op.collectionKey}:${id}`;
+      const keys = out.get(key) || new Set();
+      for (const k of op.changed) keys.add(k);
+      out.set(key, keys);
+    }
+  } catch { /* unreadable: nothing laid over */ }
+  return out;
+}
+
 // `partial`: `item` carries only some columns (the link sweep's { id,
 // linkedTo }). It is queued as a narrow "patch", never as an upsert, which
 // could not insert a row from a few columns and so failed for ever.
@@ -2601,11 +3035,13 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, item, previous, true, authUserId, { keepOnRefusal });
   const retryOp = partial ? "patch" : "upsert";
-  const ahead = writeAheadRecord(owner, retryOp, collectionKey, item);
+  // Queued, it keeps what it changed (editMeta), never the whole record.
+  const asQueued = () => (partial ? {} : editMetaFields(editMeta(owner, collectionKey, item, previous)));
+  const ahead = writeAheadRecord(owner, retryOp, collectionKey, item, asQueued());
   try {
-    if (owner.authorized && await heldForAccess(owner, ahead)) { if (!ahead) queuePendingOp(retryOp, collectionKey, item, owner, heldMeta(owner)); return; }
+    if (owner.authorized && await heldForAccess(owner, ahead)) { if (!ahead) queuePendingOp(retryOp, collectionKey, item, owner, { ...heldMeta(owner), ...asQueued() }); return; }
   } finally { if (ahead && !ahead.settled) { ahead.kept = true; settleWrittenAhead(owner, ahead); } }
-  if (!supabase || !userId) { queuePendingOp(retryOp, collectionKey, item, owner); return; }
+  if (!supabase || !userId) { queuePendingOp(retryOp, collectionKey, item, owner, asQueued()); return; }
   // The record's add may still be uploading (a document is read before it is
   // stored, so its card can be saved the moment the upload starts). Sent
   // first, the UPDATE matched no row, the whole document (file included) was
@@ -2621,15 +3057,35 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
     const row = clientRow(collectionKey, item, "update");
     delete row.user_id;
     delete row.created_at;
+    const meta = partial ? null : editMeta(owner, collectionKey, item, previous);
+    narrowRow(row, meta);
+    const rebaseError = await rebasePackedColumns(owner, userId, collectionKey, row, meta, item.id);
+    owner.check();
+    if (rebaseError) {
+      console.warn(`Failed to read ${collectionKey} before an edit:`, rebaseError.message);
+      queuePendingOp(retryOp, collectionKey, item, owner, { ...failureMeta(rebaseError), ...editMetaFields(meta) });
+      return;
+    }
     const startedAt = Date.now();
     row.updated_at = new Date(startedAt).toISOString();
-    const { data, error } = await writeRequest(owner, () => owner.db
+    let { data, error } = await writeRequest(owner, () => owner.db
       .from(table)
       .update(row)
       .eq("id", item.id)
       .eq("user_id", userId)
       .select("id"));
     owner.check();
+    // Its invoice id refused: the row is on an invoice another device
+    // recorded first, which stands. The rest of the edit goes without it;
+    // nothing goes when that was all it changed. The account is read again.
+    if (error && invoiceGuardRefused(collectionKey, error) && Object.hasOwn(row, "invoice_id")) {
+      const { invoice_id: _refused, ...rest } = row;
+      if (Object.keys(rest).some(col => col !== "id" && col !== "updated_at")) {
+        ({ data, error } = await writeRequest(owner, () => owner.db.from(table).update(rest).eq("id", item.id).eq("user_id", userId).select("id")));
+        owner.check();
+      } else { data = [{ id: item.id }]; error = null; }
+      try { invoiceNumberConflict?.(); } catch { /* the next load reads it */ }
+    }
     // No error and no row: the record's add never reached the cloud (its
     // insert is still queued). The edit used to report success here and be
     // lost; the queued add then replayed the old values. Queue the edit behind
@@ -2645,7 +3101,7 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
       // Replay as an upsert: if the row was never inserted (a failed add), the
       // update would no-op, so upsert recovers both cases. A partial write
       // replays as a patch.
-      queuePendingOp(retryOp, collectionKey, item, owner, failureMeta(error, kind));
+      queuePendingOp(retryOp, collectionKey, item, owner, { ...failureMeta(error, kind), ...(partial ? {} : editMetaFields(editMeta(owner, collectionKey, item, previous))) });
     } else if (!partial) {
       // The whole record landed: its earlier queued writes are stale.
       dropSupersededWrites(owner, collectionKey, item.id, startedAt);
@@ -2770,8 +3226,15 @@ export async function bulkSync(userId, collectionKey, items, authUserId) {
   console.warn(`Bulk sync ${collectionKey} failed (${error.message}) — retrying row-by-row`);
   let failed = 0;
   for (const row of rows) {
-    const { error: e2 } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
+    let { error: e2 } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
     owner.check();
+    // Its invoice id refused (billed on an invoice recorded elsewhere first):
+    // pushed without it, the account's invoice stands.
+    if (e2 && invoiceGuardRefused(collectionKey, e2) && Object.hasOwn(row, "invoice_id")) {
+      const { invoice_id: _refused, ...rest } = row;
+      ({ error: e2 } = await writeRequest(owner, () => owner.db.from(table).upsert(rest, { onConflict: "id" })));
+      owner.check();
+    }
     // The self-heal push is how a refused record comes back every load, so
     // a refusal here is reported and listed like one on the save itself.
     noteWriteOutcome(owner, collectionKey, row.id, e2 || null);

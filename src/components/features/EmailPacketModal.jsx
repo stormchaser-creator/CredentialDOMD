@@ -8,7 +8,8 @@ import Field from "../shared/Field";
 import { supabase } from "../../lib/supabase";
 import { docAttachedLabel, docBytes, fmtBytes } from "../../utils/docLabel";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
-import { scrubSsn } from "../../utils/outgoingText.js";
+import { scrubSsn, withDegree } from "../../utils/outgoingText.js";
+import { defaultPacketNote } from "../../utils/shareText";
 
 export const PACKET_FROM_ADDRESS = "docs@credentialdomd.com";
 // Fired on window after a successful send so the Requests inbox (and the
@@ -21,7 +22,6 @@ const MAX_FILES = 10;
 const MAX_BYTES = 25 * 1024 * 1024;
 const BASE64_FACTOR = 4 / 3;
 
-const DEFAULT_NOTE = "Please find the requested documents attached. Let me know if anything else is needed.";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const snakeToCamel = (s) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
@@ -61,7 +61,7 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
   const degree = (data.settings?.degreeType || "").trim();
   const accountEmail = (data.settings?.email || "").trim();
   const fromLabel = physicianName
-    ? `${physicianName}${degree ? `, ${degree}` : ""} via CredentialDOMD`
+    ? `${withDegree(physicianName, degree)} via CredentialDOMD`
     : "CredentialDOMD";
 
   // Every open starts from the caller's prefills, never from the last send.
@@ -69,14 +69,15 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
   // literal each render (initialDocIds={docs.map(...)}) cannot wipe what
   // the physician is typing mid-edit: the reset runs on open only.
   const prefillRef = useRef(null);
-  prefillRef.current = { request, initialDocIds, initialNote, initialSubject, initialTo, physicianName };
+  prefillRef.current = { request, initialDocIds, initialNote, initialSubject, initialTo, physicianName, settings: data.settings };
   useEffect(() => {
     if (!open) return;
     const p = prefillRef.current;
     setTo(p.initialTo || p.request?.from_addr || "");
     setCcSelf(true);
     setSubject(p.initialSubject || (p.request?.subject ? `Re: ${p.request.subject}` : `Credential documents from ${p.physicianName || "your physician"}`));
-    setText(p.initialNote || DEFAULT_NOTE);
+    // The default note greets and signs off (it was one bare sentence).
+    setText(p.initialNote || defaultPacketNote(p.settings));
     setSelected(new Set((p.initialDocIds || []).filter(Boolean)));
     setResult(null);
     setError(null);

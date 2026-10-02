@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, memo } from "react";
 import { TAP_MIN } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { generateCredentialZip, downloadBlob } from "../../utils/credentialExport";
-import { supabase } from "../../lib/supabase";
+import { supabase, downloadDocumentBlob } from "../../lib/supabase";
 import { membershipRenewalCopy, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 import RefundSection from "./RefundSection.jsx";
@@ -33,16 +33,20 @@ function CancellationPage() {
     return { daysLeft: remaining, deletionDate: deletion, cancelledAt: ca };
   }, [data.settings?.cancelledAt]);
 
+  // Every stored file goes in, fetched from the account where this device
+  // does not hold it (a load downloads no file any more, so the export left
+  // them all out without a word). One that cannot be fetched now stops the
+  // export, named, rather than handing over a copy that lacks it.
   const handleExport = async () => {
     setExporting(true);
     setError(null);
     try {
-      const blob = await generateCredentialZip(data, { scope: "account" });
+      const blob = await generateCredentialZip(data, { scope: "account", download: downloadDocumentBlob });
       const date = new Date().toISOString().split("T")[0];
       downloadBlob(blob, `CredentialDOMD_Export_${date}.zip`);
       setExported(true);
     } catch (err) {
-      setError("Export failed: " + (err.message || "Unknown error"));
+      setError(err?.name === "PacketFilesError" ? err.message : "Export failed: " + (err.message || "Unknown error"));
     } finally {
       setExporting(false);
     }

@@ -484,7 +484,7 @@ test('owner notifier: its own SQL and message, run against the lab, report a new
   const seen = path.join(stateDir, 'seen');
 
   await qa.feature('OPS-014', 'activity: a paid signup, a ticket from Support, a client error', async () => {
-    await openMore(page, 'Support');
+    await openMore(page, 'Get help');
     await page.getByRole('button', { name: 'New ticket' }).click();
     const form = page.locator('div').filter({ has: page.getByPlaceholder('Short summary (optional)') }).last();
     await form.locator('select').nth(0).selectOption({ index: 1 }).catch(() => {});

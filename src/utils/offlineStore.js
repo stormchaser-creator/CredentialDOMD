@@ -50,6 +50,27 @@ let dbPromise = null;
 let openDbHandle = null;           // the connection dbPromise resolved to
 let unavailableUntil = 0;
 
+// A connection WebKit took away is a different failure from an open that
+// never answers. When iOS reclaims the process serving IndexedDB while the
+// installed app is suspended, every connection gets a close event and every
+// open in the page fails at once with UnknownError ("Connection to Indexed
+// Database server lost") or InvalidStateError (WebKit bug 273827; the owner's
+// iPhone after three hours in the background, 2026-10-02 01:57). Such an open
+// costs nothing to try again, so the next call may, after LOST_RETRY_MS
+// rather than RETRY_AFTER_MS: a return to the app (AppContext's retry on
+// visibility and focus) reopens at once instead of 30 seconds later. What
+// failed is kept (offlineStoreState) for the storage report.
+const LOST_RETRY_MS = 2000;
+const LOST_ERRORS = new Set(["UnknownError", "InvalidStateError"]);
+const health = { lost: false, lastError: null };
+function noteFailure(error, fallbackName) {
+  const name = typeof error?.name === "string" && error.name ? error.name : fallbackName;
+  health.lastError = name || "Error";
+  if (LOST_ERRORS.has(name) || name === "close") health.lost = true;
+}
+/** Tests and reports: whether the last failure was a lost connection, and its error name. */
+export function offlineStoreState() { return { ...health }; }
+
 function factory() {
   if (factoryOverride !== undefined) return factoryOverride;
   try { return globalThis.indexedDB || null; } catch { return null; }
@@ -64,6 +85,7 @@ export function setOfflineTransactionTimeout(ms) {
 export function setOfflineStoreFactory(idb) {
   factoryOverride = idb;
   unavailableUntil = 0;
+  health.lost = false; health.lastError = null;
   const pending = dbPromise;
   dbPromise = null;
   openDbHandle = null;
@@ -88,13 +110,14 @@ function openDb() {
   const idb = factory();
   if (!idb || typeof idb.open !== "function") return Promise.resolve(null);
   if (Date.now() < unavailableUntil) return Promise.resolve(null);
+  let retryAfter = RETRY_AFTER_MS;
   const attempt = new Promise((resolve) => {
     let settled = false;
     const done = (db) => { if (!settled) { settled = true; resolve(db); } };
-    const timer = setTimeout(() => done(null), OPEN_TIMEOUT_MS);
+    const timer = setTimeout(() => { if (!settled) noteFailure(null, "OpenTimeout"); done(null); }, OPEN_TIMEOUT_MS);
     let req;
     try { req = idb.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION); }
-    catch { clearTimeout(timer); done(null); return; }
+    catch (error) { clearTimeout(timer); noteFailure(error, "OpenThrew"); if (LOST_ERRORS.has(error?.name)) retryAfter = LOST_RETRY_MS; done(null); return; }
     req.onupgradeneeded = () => {
       try {
         const db = req.result;
@@ -107,15 +130,25 @@ function openDb() {
       if (settled) { try { db.close(); } catch { /* closed */ } return; }
       // Another tab upgrading the database: let it, and reopen next call.
       db.onversionchange = () => { try { db.close(); } catch { /* closed */ } forget(db); };
-      db.onclose = () => forget(db);
+      // Closed by the browser (the IndexedDB process went away): the next
+      // call opens again (LOST_RETRY_MS).
+      db.onclose = () => { noteFailure(null, "close"); forget(db); };
+      health.lost = false;
       done(db);
     };
-    req.onerror = () => { clearTimeout(timer); done(null); };
+    req.onerror = () => {
+      clearTimeout(timer);
+      let error = null;
+      try { error = req.error; } catch { /* none */ }
+      noteFailure(error, "OpenError");
+      if (LOST_ERRORS.has(error?.name)) retryAfter = LOST_RETRY_MS;
+      done(null);
+    };
   });
   dbPromise = attempt;
   attempt.then((db) => {
     if (db) { if (dbPromise === attempt) openDbHandle = db; return; }
-    unavailableUntil = Date.now() + RETRY_AFTER_MS;
+    unavailableUntil = Date.now() + retryAfter;
     if (dbPromise === attempt) dbPromise = null;
   });
   return attempt;
@@ -155,13 +188,14 @@ function run(db, mode, body) {
       tx = db.transaction(OFFLINE_DB_STORE, mode);
       const req = body(tx.objectStore(OFFLINE_DB_STORE));
       if (req) req.onsuccess = () => { result = req.result; };
-    } catch (error) { reject(error); return; }
+    } catch (error) { noteFailure(error, "TransactionThrew"); reject(error); return; }
     tx.oncomplete = () => finish(resolve, result);
-    tx.onerror = () => finish(reject, tx.error || new Error("IndexedDB transaction failed"));
-    tx.onabort = () => finish(reject, tx.error || new Error("IndexedDB transaction aborted"));
+    tx.onerror = () => { noteFailure(tx.error, "TransactionError"); finish(reject, tx.error || new Error("IndexedDB transaction failed")); };
+    tx.onabort = () => { noteFailure(tx.error, "TransactionAbort"); finish(reject, tx.error || new Error("IndexedDB transaction aborted")); };
     timer = setTimeout(() => {
       if (settled) return;
       dropConnection(db);
+      noteFailure(null, "TransactionTimeout");
       unavailableUntil = Date.now() + RETRY_AFTER_MS;
       finish(reject, new OfflineStoreUnavailable());
     }, transactionTimeoutMs);

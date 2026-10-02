@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { transformSync } from "esbuild";
+import { reminderGreeting } from "../supabase/functions/_shared/reminderRows.mjs";
 let handler, scenario, writes, emails;
 const db = { from(table) {
   let op = "select", data;
@@ -23,6 +24,7 @@ globalThis.__inviteTest = {
   // hold. Production never receives this adapter; launch-email-review tests use
   // the real hold and assert zero writes/provider calls for every invitation.
   launchEmailReviewHold: () => null,
+  reminderGreeting,
   serve: fn => { handler = fn; },
   answerAuthUnavailable: (_headers, fn) => fn,
   clerkProfile: async () => scenario.signedOut ? null : ({ isAdmin: !scenario.nonAdmin, profileId: "admin", db }),
@@ -31,7 +33,7 @@ globalThis.__inviteTest = {
 };
 let source = readFileSync(new URL("../supabase/functions/send-invite/index.ts", import.meta.url), "utf8");
 source = source.replace(/^import .*;\n/gm, "");
-source = "const { serve, answerAuthUnavailable, clerkProfile, Deno, fetch, launchEmailReviewHold } = globalThis.__inviteTest;\n" + source;
+source = "const { serve, answerAuthUnavailable, clerkProfile, Deno, fetch, launchEmailReviewHold, reminderGreeting } = globalThis.__inviteTest;\n" + source;
 const js = transformSync(source, { loader: "ts", format: "esm" }).code;
 await import("data:text/javascript;base64," + Buffer.from(js).toString("base64"));
 async function check(config, body, status, sent) {

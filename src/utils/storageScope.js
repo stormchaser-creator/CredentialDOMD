@@ -18,7 +18,7 @@ import { clearSupportTextDrafts } from "./supportTextDrafts.js";
 import { DEVICE_ONLY_SECTIONS } from "./pausedApplicationRecords.js";
 import { changesBetween } from "./heldChanges.js";
 import { rebaseLocalChanges } from "./loadRebase.js";
-import { offlineRead, offlineWrite, offlineUpdate, offlineRemove, offlineStoreSupported, isQuotaError, OfflineStoreUnavailable } from "./offlineStore.js";
+import { offlineRead, offlineWrite, offlineUpdate, offlineRemove, offlineStoreSupported, isQuotaError, OfflineStoreUnavailable, offlineStoreState } from "./offlineStore.js";
 
 export const BASE_KEYS = {
   data: STORAGE_KEY,                       // the whole file (mirror of the cloud)
@@ -50,6 +50,10 @@ export const BASE_KEYS = {
   // period. They exist nowhere else, so a session that ends keeps them, as it
   // keeps the running timer; Sign out and Delete All My Data remove them.
   unrecordedInvoices: "credentialdomd-unrecorded-invoices",
+  // What was typed into a form not yet saved (utils/formDrafts.js): iOS may
+  // discard the app while he is in another one. Kept when a session merely
+  // ends, like the running timer; Sign out and Delete All My Data remove it.
+  formDrafts: "credentialdomd-form-drafts",
 };
 
 // The invoice hand-off notes (utils/invoiceHandoffStore.js purgeHandoffStores)
@@ -127,9 +131,129 @@ export function retireContinuityRecovery(userId) {
   retiredContinuitySubjects.add(userId);
   const key = `${CONTINUITY_RETIREMENT_BASE}:${userId}`;
   try {
-    if (localStorage.getItem(key) === null) localStorage.setItem(key, "retired");
+    if (localStorage.getItem(key) === null && !localSetWithRoom(key, "retired")) throw new Error();
     if (localStorage.getItem(key) === null) throw new Error();
   } catch { throw continuityRetirementFailure("continuity_retirement_unavailable"); }
+}
+
+// ─── localStorage is kept for small things ───────────────────
+// WebKit gives an origin 5 MiB of localStorage and counts a string at 2 bytes
+// a character as soon as it holds one character above U+00FF (an em dash, a
+// curly apostrophe), else at 1 (measured in Playwright's WebKit, 2026-10-02:
+// 5,242,816 ASCII characters fit, 2,621,376 wide ones). A busy account's
+// offline file holds em dashes, so its 1.9 million characters cost 3.8 MB, and
+// a copy of it in localStorage left too little for what has nowhere else to
+// go: the write queue, the running timer, invoice notes, Protected Identity
+// changes held aside, the purge fence. Those are what localStorage is for.
+// A large store goes there only while it is small itself and leaves
+// LOCAL_RESERVE_BYTES free (writeOfflineTextNow).
+export const LOCAL_QUOTA_BYTES = 5 * 1024 * 1024;
+export const LOCAL_RESERVE_BYTES = 1024 * 1024;
+export const LARGE_LOCAL_MAX_BYTES = 1024 * 1024;
+const WIDE = /[\u0100-\uffff]/;
+/** What `text` costs in localStorage on WebKit (bytes). */
+export function localCost(text) {
+  const s = typeof text === "string" ? text : String(text ?? "");
+  return s.length * (WIDE.test(s) ? 2 : 1);
+}
+/** Bytes localStorage holds now (keys and values), counted as WebKit counts them; `except` is left out. */
+export function localStorageUsed(except = null) {
+  let n = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k == null || k === except) continue;
+      n += localCost(k) + localCost(localStorage.getItem(k));
+    }
+  } catch { return LOCAL_QUOTA_BYTES; }
+  return n;
+}
+/** May a large store's `text` go into localStorage under `key` and still leave the reserve? */
+export function largeCopyFitsLocally(key, text) {
+  const cost = localCost(text) + localCost(key);
+  return cost <= LARGE_LOCAL_MAX_BYTES && localStorageUsed(key) + cost + LOCAL_RESERVE_BYTES <= LOCAL_QUOTA_BYTES;
+}
+
+// The development-era copies an identity recovery left behind
+// (continuityRecovery.js): it copies each of the old account's slots to the
+// new one and never removes the old, so every device that crossed the
+// 2026-09-20 cutover kept a second, dead copy of the whole file (on a
+// device checked 2026-10-02: about 1.6 million characters with wide ones,
+// 3.2 MB of WebKit's 5 MiB).
+// A slot the journal records as copied is never read again (recoverContinuity
+// skips it), so it goes: the file, the transcript, the archives and the write
+// queue (which can carry a document's bytes). Everything else of the old
+// account is small and stays. Returns how many were removed.
+const RELEASED_SOURCE_BASES = Object.freeze([BASE_KEYS.data, BASE_KEYS.chat, BASE_KEYS.archives, BASE_KEYS.pendingOps]);
+const CLERK_SUBJECT = /^user_[A-Za-z0-9]{1,120}$/;
+export function releaseRecoveredContinuitySources() {
+  const prefix = `${CONTINUITY_JOURNAL_BASE}:`;
+  const journals = [];
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) journals.push(k);
+    }
+  } catch { return 0; }
+  let removed = 0;
+  for (const k of journals) {
+    let journal = null;
+    try { journal = JSON.parse(localStorage.getItem(k)); } catch { continue; }
+    const subject = journal?.subject, source = journal?.sourceSubject;
+    if (journal?.schemaVersion !== 1 || !Array.isArray(journal.entries)) continue;
+    if (!CLERK_SUBJECT.test(subject || "") || !CLERK_SUBJECT.test(source || "") || subject === source) continue;
+    // The journal is filed under the account it recovered into.
+    if (!k.startsWith(`${prefix}${subject}:`) || source === activeUserId) continue;
+    for (const entry of journal.entries) {
+      if (entry?.state !== "copied" || !RELEASED_SOURCE_BASES.includes(entry.base)) continue;
+      const sourceKey = `${entry.base}:${source}`;
+      try { if (localStorage.getItem(sourceKey) !== null) { localStorage.removeItem(sourceKey); removed += 1; } } catch { /* the next launch */ }
+    }
+  }
+  return removed;
+}
+
+/**
+ * localStorage.setItem for the small things that have nowhere else to go: when
+ * localStorage is full, the dead development-era copies go first and the write
+ * is made once more. True when it was stored.
+ */
+export function localSetWithRoom(key, value) {
+  try { setItemMakingRoom(key, value); return true; } catch { return false; }
+}
+/** As localSetWithRoom, but throws what setItem throws (for callers that report a full device). */
+export function setItemMakingRoom(key, value) {
+  try { localStorage.setItem(key, value); }
+  catch (error) {
+    if (!isQuotaError(error) || releaseRecoveredContinuitySources() === 0) throw error;
+    localStorage.setItem(key, value);
+  }
+}
+
+/**
+ * What fills localStorage, for a storage report: bytes by key base (account
+ * ids and record ids taken out), largest first, and the total. Never a value.
+ */
+export function localStorageInventory(limit = 6) {
+  const byBase = new Map();
+  let total = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k == null) continue;
+      const bytes = localCost(k) + localCost(localStorage.getItem(k));
+      total += bytes;
+      const base = k.startsWith("credentialdomd-") ? k.replace(/:.*$/, "") : "other";
+      const owner = /:user_[A-Za-z0-9]+/.exec(k)?.[0]?.slice(1) || null;
+      const label = owner && owner !== activeUserId && base !== "other" ? `${base}:other-account` : base;
+      byBase.set(label, (byBase.get(label) || 0) + bytes);
+    }
+  } catch { return null; }
+  const round = (n) => Math.round(n / 10000) * 10000;
+  return {
+    used: round(total),
+    top: [...byBase.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([base, bytes]) => [base, round(bytes)]),
+  };
 }
 
 /** Check at every recovery await/commit, including asynchronous adapters. */
@@ -193,7 +317,7 @@ export function advanceLocalFence(userId) {
   const k = scopedKey(LOCAL_FENCE_KEY, userId);
   if (!k) return null;
   const value = `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 12)}`;
-  try { localStorage.setItem(k, value); return value; } catch { return null; }
+  return localSetWithRoom(k, value) ? value : null;
 }
 
 /** This tab's records for `userId` now belong to `fence` (default: the device's current value). */
@@ -235,7 +359,7 @@ export function lsSet(base, value, userId) {
   // purge on this device: refused (the vault, the Assistant transcript, the
   // timer and the rest go through here). See LOCAL_FENCE_KEY.
   if (FENCED_BASES.has(base) && !localCopyCurrent(userId === undefined ? activeUserId : userId)) return false;
-  try { localStorage.setItem(k, value); return true; } catch { return false; }
+  return localSetWithRoom(k, value);
 }
 export function lsSetJSON(base, value, userId) {
   return lsSet(base, JSON.stringify(value), userId);
@@ -359,7 +483,7 @@ function advanceOfflineGeneration() {
   // Random only: a timestamp would say when the device was last signed out of.
   const value = `${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
   try {
-    localStorage.setItem(OFFLINE_GENERATION_KEY, value);
+    if (!localSetWithRoom(OFFLINE_GENERATION_KEY, value)) return false;
     return localStorage.getItem(OFFLINE_GENERATION_KEY) === value;
   } catch { return false; }
 }
@@ -476,7 +600,7 @@ function markOfflineHome(userId) {
   try {
     if (localStorage.getItem(k) === null) {
       if (offlineWipeOwed(userId) && !markOfflineWipe(userId, lsGet(WIPE_SEEN_KEY, userId))) return false;
-      localStorage.setItem(k, "1");
+      if (!localSetWithRoom(k, "1")) return false;
     }
     return localStorage.getItem(k) !== null;
   } catch { return false; }
@@ -627,7 +751,7 @@ function writeHolds(userId, holds, released = readReleased(userId)) {
   if (!holds.length && !released.length) { lsRemove(DEVICE_ONLY_PENDING_BASE, userId); return true; }
   const value = JSON.stringify(released.length ? { holds, released: released.slice(-16) } : { holds });
   try {
-    localStorage.setItem(k, value);
+    if (!localSetWithRoom(k, value)) return false;
     return localStorage.getItem(k) === value;
   } catch { return false; }
 }
@@ -1037,10 +1161,11 @@ export function setStorageFullReporter(fn) { storageFullReporter = typeof fn ===
 export function storageRefusalKind(refused) {
   const list = Array.isArray(refused) ? refused : String(refused || "").split(",");
   if (list.some((r) => r.startsWith("indexeddb_quota"))) return "full";
-  if (list.includes("indexeddb_unsupported") && list.includes("localstorage_quota")) return "full";
+  const localFull = list.includes("localstorage_quota") || list.includes("localstorage_reserved");
+  if (list.includes("indexeddb_unsupported") && localFull) return "full";
   // IndexedDB opened and had room; localStorage had none, not even for the
   // record that IndexedDB holds a copy (putOffline). Full, not unavailable.
-  if (list.includes("indexeddb_unmarked") && list.includes("localstorage_quota")) return "full";
+  if (list.includes("indexeddb_unmarked") && localFull) return "full";
   if (list.includes("indexeddb_unread")) return "unread";
   return "unavailable";
 }
@@ -1050,7 +1175,13 @@ export function reportStorageRefusal({ store, reason, chars = 0 }) {
   if (storageReported.has(event) || !storageFullReporter) return false;
   storageReported.add(event);
   const approxBytes = Math.round((Math.max(0, Number(chars) || 0) * 2) / 100000) * 100000;
-  try { storageFullReporter(`Offline copy not saved: ${event}`, { event, store, reason, approxBytes }); }
+  // What fills localStorage (key bases and sizes, never a value or an account
+  // id) and how IndexedDB failed (an error name), so a report says which of
+  // its causes it was. The 2026-10-02 report could not.
+  let local = null, idb = null;
+  try { local = localStorageInventory(); } catch { /* none */ }
+  try { idb = offlineStoreState(); } catch { /* none */ }
+  try { storageFullReporter(`Offline copy not saved: ${event}`, { event, store, reason, approxBytes, local, idbError: idb?.lastError ?? null, idbLost: idb?.lost ?? null }); }
   catch { /* reporting never blocks */ }
   return true;
 }
@@ -1522,6 +1653,21 @@ async function writeOfflineTextNow(key, text, guard, seq, generation, how = {}) 
       if (theirs != null && theirs !== text) { const out = how.merge(theirs); if (typeof out === "string") final = out; }
     }
   }
+  // Into localStorage only while the copy is small and leaves the reserve for
+  // what has nowhere else to go (LOCAL_RESERVE_BYTES). The owner's 3.8 MB file
+  // went there whenever IndexedDB stopped answering, and the queue, the timer
+  // and the notes written after it found no room (2026-10-02). Refused, the
+  // save is made again when IndexedDB answers (storage.js retryOfflineSave),
+  // and Protected Identity and Answer Bank changes are held aside meanwhile.
+  // A browser with no IndexedDB at all has no other store: any size that
+  // leaves the reserve.
+  const fits = put === "indexeddb_unsupported"
+    ? localStorageUsed(key) + localCost(final) + localCost(key) + LOCAL_RESERVE_BYTES <= LOCAL_QUOTA_BYTES
+    : largeCopyFitsLocally(key, final);
+  if (!fits) {
+    refused.push("localstorage_reserved");
+    return { saved: false, stopped: false, refused, chars };
+  }
   try {
     putOwnLocalCopy(key, final);
     const prev = isDataKey(key) ? offlineWriteStamp(keyOwner(key)) : null;
@@ -1868,7 +2014,7 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
     // Sign out and a server wipe remove it with everything else.
     if (name === "accessAnswer" && keepVault && !retireRecovery) continue;
     if (keepLocal && name === "pendingOps") { markQueueKept(userId); continue; }
-    if (keepLocal && (name === "timer" || name === "unrecordedInvoices")) continue;
+    if (keepLocal && (name === "timer" || name === "unrecordedInvoices" || name === "formDrafts")) continue;
     // The invoice hand-off notes go with the unrecorded-invoice notes.
     if (name === "unrecordedInvoices" && purgeInvoiceHandoff) { try { purgeInvoiceHandoff(userId); } catch { /* the purge goes on */ } }
     if (keepLocal && name === "data") {
@@ -1889,6 +2035,14 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
   lsRemove(LOCAL_COPIES_BASE, userId);
   if (keptOwnCopy != null) noteOwnLocalCopy(scopedKey(BASE_KEYS.data, userId), keptOwnCopy);
   if (!keepLocal) lsRemove(DEVICE_ONLY_PENDING_BASE, userId);
+  // This tab's copies of what localStorage had no room for (the running
+  // timer, utils/runningTimerStore.js; open form drafts, utils/formDrafts.js)
+  // go too, unless the session merely ended.
+  if (!keepLocal) {
+    for (const base of [BASE_KEYS.timer, BASE_KEYS.formDrafts]) {
+      try { globalThis.sessionStorage?.removeItem(scopedKey(base, userId)); } catch { /* unavailable */ }
+    }
+  }
   // localStorage was full: the removals above made room for it.
   if (!advanced) advanceOfflineGeneration();
   // The IndexedDB copies. The purge is recorded before the first await

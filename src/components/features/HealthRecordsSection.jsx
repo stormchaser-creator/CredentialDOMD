@@ -21,6 +21,9 @@ import { SECTION_FIELDS } from "../../utils/sectionFields.js";
 const HEALTH_SCAN_KEYS = Object.freeze([...SECTION_FIELDS.healthRecords, "doses"]);
 import { attachExistingDoc } from "../../utils/docPrefill";
 import FollowUpHistory from "../shared/FollowUpHistory";
+import useDocumentBytes, { useDocumentFileStatus } from "../shared/useDocumentBytes";
+import useRecordFormDraft, { DRAFT_RESTORED_NOTE } from "../shared/useRecordFormDraft";
+import { fileWaitLine, statusWithoutStore } from "../../utils/documentBytes";
 
 // A vaccine series by hand: a scan fills `doses`, and a member with AI off, or
 // a dose the scan missed, is entered or corrected here. Saved as typed, minus
@@ -39,6 +42,9 @@ function cleanDoses(doses) {
     return DOSE_TEXT_KEYS.some((k) => out[k]) ? [out] : [];
   });
 }
+
+// Rendered without the draft hook (a stand-in that returns nothing).
+const NO_DRAFT = Object.freeze({ clear: () => {} });
 
 // Two fields side by side. A plain 1fr track cannot shrink below a date
 // input's own minimum (about 189 px in Chrome), so on a phone the second date
@@ -89,6 +95,10 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
     (item) => (data.documents || []).filter(d => d.linkedTo === `healthRecords:${item.id}`),
     [data.documents]
   );
+  // The files of the record open, with their bytes while it is open.
+  useDocumentBytes([...(viewItem?.id ? linkedDocs(viewItem) : []), ...(editItem?.id ? linkedDocs(editItem) : [])]);
+  // Fetching, failed (tried again on its own) or offline, per file.
+  const fileStatus = useDocumentFileStatus() || statusWithoutStore;
 
   // Data URLs don't open directly in iOS Safari — convert to a blob URL
   const openPdfDoc = useCallback((doc) => {
@@ -113,10 +123,25 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
     return c;
   }, [items]);
 
-  const openAdd = useCallback(() => { setForm({ category: filter !== "all" ? filter : "" }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, [filter]);
-  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
+  // "Restored what you were typing..." on a form opened from a draft (CRED-021).
+  const [draftNote, setDraftNote] = useState(null);
+  const openAdd = useCallback(() => { setForm({ category: filter !== "all" ? filter : "" }); setEditItem(null); setAttachedDocs([]); setDraftNote(null); setShowForm(true); }, [filter]);
+  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setDraftNote(null); setShowForm(true); }, []);
   useDeskAddShortcut(openAdd);
-  const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
+  // What is typed into the open form outlives iOS discarding the app (CRED-021).
+  const draft = useRecordFormDraft({
+    slot: "crud:healthRecords", open: showForm, editing: editItem, form, records: items,
+    plain: !autoEditId && !autoViewId,
+    restore: ({ editing, changed }) => {
+      if (editing) openEdit(editing); else openAdd();
+      setForm(f => ({ ...f, ...changed }));
+      setDraftNote(DRAFT_RESTORED_NOTE);
+    },
+  }) || NO_DRAFT;
+  const closeForm = useCallback(() => {
+    draft.clear(editItem?.id);
+    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setDraftNote(null);
+  }, [draft, editItem?.id]);
 
   const [reqError, setReqError] = useState(null);
 
@@ -222,6 +247,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
 
       {/* Add/Edit Modal */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Health Record" : "Add Health Record"}>
+        {draftNote && <div role="status" style={{ fontSize: 13, fontWeight: 600, color: T.success || "#22c55e", marginBottom: 10 }}>{draftNote}</div>}
         {editItem && <FollowUpHistory item={editItem} />}
         <Field label="Category *">
           <select required aria-required="true" value={form.category || ""} onChange={e => { setReqError(null); setForm(f => ({ ...f, category: e.target.value, type: "" })); }} style={{ ...iS, appearance: "auto" }}>
@@ -382,7 +408,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
                         color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8,
                       }}>
                         <span style={{ fontSize: 16 }}>{"⏳"}</span>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} is downloading from the cloud; check back shortly</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileWaitLine(doc.name, fileStatus(doc))}</span>
                       </div>
                     ) : docMime(doc).startsWith("image/") ? (
                       <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}

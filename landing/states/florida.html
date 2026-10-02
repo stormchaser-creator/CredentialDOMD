@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -662,7 +662,7 @@ a:hover { color: var(--emerald-light); }
       <li style="margin-bottom:6px;"><a href="https://flboardofmedicine.gov/medical-doctor-renewal/" target="_blank" rel="noopener">MD renewal page: biennial cycle, Group 1/Group 2 January 31 expirations, 90-day renewal window, delinquent and null-and-void language, CE Broker confirmation, $43.25 fingerprint retention, portal URL, all renewal fee tiers</a></li>
       <li style="margin-bottom:6px;"><a href="https://flboardofmedicine.gov/fees/" target="_blank" rel="noopener">MD fee schedule: on-time, after-expiration, and 120-day-delinquent fees for every status combination; fingerprint retention $43.25; dispensing registration $100</a></li>
       <li style="margin-bottom:6px;"><a href="https://floridasosteopathicmedicine.gov/renewals/osteopathic-physician-renewal/" target="_blank" rel="noopener">DO renewal page: March 31 even-year expiration, null-and-void date April 1 2028, full DO renewal fee tiers, midnight ET deadline, CE Broker attestation, two-to-six-month processing statement</a></li>
-      <li style="margin-bottom:6px;"><a href="https://floridasosteopathicmedicine.gov/fees/" target="_blank" rel="noopener">DO fees page; loaded but it covers initial licensure fees only, so DO renewal fees were taken from the DO renewal page instead</a></li>
+      <li style="margin-bottom:6px;"><a href="https://floridasosteopathicmedicine.gov/fees/" target="_blank" rel="noopener">DO fees page: initial licensure fees only (DO renewal fees are on the DO renewal page)</a></li>
       <li style="margin-bottom:6px;"><a href="https://flboardofmedicine.gov/medical-doctor-renewal/" target="_blank" rel="noopener">CME requirement: Fla. Admin. Code. Ann. r. 64B8-13.005</a></li>
   </ul>
   <p style="font-size:13px;color:var(--text-muted);">Boards change fees and rules; always confirm on the board page before you pay. Report anything out of date to support@credentialdomd.com.</p>
@@ -855,5 +855,5 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-</body>
+<!--/email_off--></body>
 </html>

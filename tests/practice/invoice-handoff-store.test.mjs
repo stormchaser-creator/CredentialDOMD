@@ -16,7 +16,7 @@ import { loadScreens } from '../harness/component-harness.mjs';
 // Synthetic accounts, numbers and amounts only.
 
 const S = await loadScreens([
-  'export {handOffInvoice, keepInvoiceNote, forgetInvoiceNote, invoiceNotes, refreshInvoiceNotes, watchUnanswered, _resetInvoiceHandoff, setInvoiceHandoffReporter, _setHandoffTimes} from "./src/utils/invoiceHandoff.js";',
+  'export {handOffInvoice, keepInvoiceNote, forgetInvoiceNote, invoiceNotes, refreshInvoiceNotes, watchUnanswered, shareInFlight, _resetInvoiceHandoff, setInvoiceHandoffReporter, _setHandoffTimes} from "./src/utils/invoiceHandoff.js";',
   'export {purgeForSignOut, purgeAfterSessionEnd, setInvoiceHandoffPurge, BASE_KEYS} from "./src/utils/storageScope.js";',
   'export {HANDOFF_DB_NAME, HANDOFF_STAMPS_BASE, HANDOFF_PURGE_BASE, handoffKey, purgeHandoffStores, sweepHandoffPurges} from "./src/utils/invoiceHandoffStore.js";',
 ].join(' '), { real: ['utils/storageScope'] });
@@ -150,6 +150,35 @@ test('a share sheet still open with the page never leaving the front is not an e
   stop2();
 });
 
+test('a page away in the full Mail app for longer than the wait is released and reported when the wait runs out', async () => {
+  // iOS runs the overdue wait the moment the page resumes, before the grace
+  // the return starts: the number was kept "with the share sheet" for good,
+  // and the "not recorded" report never fired (2026-10-01).
+  fresh();
+  const listeners = new Map();
+  const doc = { visibilityState: 'visible', addEventListener: (t, fn) => listeners.set(t, fn), removeEventListener: (t) => listeners.delete(t) };
+  S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-11', 1000), sentAt: '2026-09-30T16:00:00.000Z' });
+  assert.equal(S.shareInFlight('INV-20260930-11'), true);
+  let said = 0;
+  S.watchUnanswered(() => { said += 1; }, { number: 'INV-20260930-11', graceMs: 30, waitMs: 20, doc, win: null });
+  doc.visibilityState = 'hidden'; listeners.get('visibilitychange')?.();
+  await new Promise(r => setTimeout(r, 25));
+  doc.visibilityState = 'visible'; listeners.get('visibilitychange')?.();
+  await new Promise(r => setTimeout(r, 50));
+  assert.equal(said, 1, 'the preview asks once');
+  assert.equal(S.shareInFlight('INV-20260930-11'), false, 'no longer with the share sheet');
+  assert.deepEqual(reports.filter(e => e === 'invoice_share_unanswered'), ['invoice_share_unanswered'], 'reported');
+
+  // The page never left the front: the Mail sheet over the app keeps it.
+  S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-12', 2000), sentAt: '2026-09-30T16:05:00.000Z' });
+  const stop = S.watchUnanswered(() => { said += 1; }, { number: 'INV-20260930-12', graceMs: 30, waitMs: 20, doc, win: null });
+  await new Promise(r => setTimeout(r, 40));
+  assert.equal(said, 2);
+  assert.equal(S.shareInFlight('INV-20260930-12'), true, 'the Mail sheet over the app still has it');
+  assert.equal(reports.filter(e => e === 'invoice_share_unanswered').length, 1, 'not reported');
+  stop();
+});
+
 test('a note kept only in IndexedDB survives a page whose first open timed out: the next write keeps it, and the page learns of it', async () => {
   // A full localStorage, and the last page (sessionStorage gone with it) left
   // INV-01 in IndexedDB only. This page's first open never answers.
@@ -191,7 +220,8 @@ test('a stamp refused with 42501 (offline mode or a lapsed Clerk token sends the
     },
     listShared: () => Promise.resolve({ data: [], error: null }),
   };
-  const owedNow = () => { const k = [...dev.local.map.keys()].find(x => x.startsWith(S.HANDOFF_STAMPS_BASE)); return k ? dev.local.getItem(k) : ''; };
+  // The owed stamps are kept as { v, list } (the newest copy wins, 2026-10-02).
+  const owedNow = () => { const k = [...dev.local.map.keys()].find(x => x.startsWith(S.HANDOFF_STAMPS_BASE)); const raw = k ? dev.local.getItem(k) : null; const list = raw ? JSON.parse(raw).list : []; return list.length ? JSON.stringify(list) : ''; };
   S.handOffInvoice(ACCOUNT, note('INV-20260930-07', 1000));
   await settle();
   assert.match(owedNow(), /INV-20260930-07/, 'offline: owed');
@@ -319,9 +349,9 @@ test('a share stamp sent days late carries the hand-off time, and one older than
   assert.equal(calls.at(-1).sharedAt, sharedAt, 'the first try carries it');
   // An older stamp still owed from before the notes' limit.
   const owedKey = [...dev.local.map.keys()].find(k => k.startsWith(S.HANDOFF_STAMPS_BASE));
-  const owedList = JSON.parse(dev.local.getItem(owedKey));
-  owedList.unshift({ number: 'INV-20260801-01', shared: true, contractId: 'c-synthetic', at: new Date(Date.now() - 50 * 86400000).toISOString(), seq: '1-1' });
-  dev.local.setItem(owedKey, JSON.stringify(owedList));
+  const owedCopy = JSON.parse(dev.local.getItem(owedKey));
+  owedCopy.list.unshift({ number: 'INV-20260801-01', shared: true, contractId: 'c-synthetic', at: new Date(Date.now() - 50 * 86400000).toISOString(), seq: '1-1' });
+  dev.local.setItem(owedKey, JSON.stringify(owedCopy));
 
   // Opened online today, on a new page: sent again, dated when it was shared.
   online = true;
@@ -329,7 +359,7 @@ test('a share stamp sent days late carries the hand-off time, and one older than
   S._resetInvoiceHandoff();
   await S.refreshInvoiceNotes(ACCOUNT); await settle();
   assert.deepEqual(calls.map(c => [c.number, c.shared, c.sharedAt]), [['INV-20260930-02', true, sharedAt]], 'dated at the hand-off, and the 50-day-old stamp is not sent');
-  assert.equal(dev.local.getItem(owedKey), null, 'settled');
+  assert.deepEqual(JSON.parse(dev.local.getItem(owedKey)).list, [], 'settled');
 
   // A cancel carries no time.
   calls.length = 0;

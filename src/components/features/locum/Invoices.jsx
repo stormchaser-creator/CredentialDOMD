@@ -11,14 +11,19 @@ import InvoiceLinesTable from "../../shared/InvoiceLinesTable";
 import { invoicePlainText } from "../../../utils/invoiceLayout";
 import { copyInvoiceCover, shareInvoiceFiles } from "../../../utils/expenseInvoiceSend";
 import { resolveDocuments, missingReceiptMessage, billedReceiptDocs, attachedExpenseIds } from "../../../utils/receiptFiles";
+import { outgoingFileNames, renameFiles } from "../../../utils/docLabel";
 import { downloadDocumentBlob } from "../../../lib/supabase";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
-import { money, invoiceCoverNotice, INVOICE_COVER_ON_CLIPBOARD, expenseReceiptLines } from "../../../utils/invoiceCover";
+import { money, invoiceCoverNotice, invoiceFileName, INVOICE_COVER_ON_CLIPBOARD, expenseReceiptLines } from "../../../utils/invoiceCover";
 import { callPeriodsOf } from "../../../utils/dutyPay";
 import { paidOf, balanceOf, invoiceDocumentArgs } from "../../../utils/invoiceArgs";
 import { invoiceEmailedNotice, sentWhen } from "../../../utils/invoiceEmailSend";
 import InvoiceEmailModal from "./InvoiceEmailModal";
+import UnansweredInvoices from "../../shared/UnansweredInvoices";
+import BilledTwiceInvoices from "../../shared/BilledTwiceInvoices";
+import { deleteSharesCallDay } from "../../../utils/invoiceRecord";
+import { invoiceDeletedHere } from "../../shared/useUnrecordedInvoices";
 // The Work tab's own call-day rule: the saved stamp first, then the wall clock.
 import { callDayOf } from "../../../utils/billing";
 
@@ -85,8 +90,8 @@ function StandingBadge({ tone, style }) {
  * Mark paid when the money lands; unpaid invoices age visibly so nothing
  * slips. Deleting an invoice releases its work entries back to unbilled.
  */
-function Invoices({ onOpenContract }) {
-  const { data, editItem, deleteItem, updateSection, theme: T, isDesktop, limitedLaunch, practiceReadOnly } = useApp();
+function Invoices({ onOpenContract, onOpenExpenses }) {
+  const { data, editItem, deleteItem, updateSection, theme: T, isDesktop, limitedLaunch, practiceReadOnly, user } = useApp();
   const [viewInv, setViewInv] = useState(null);
   const [notice, setNotice] = useState(null);
   const contracts = data.locumContracts || [];
@@ -122,6 +127,11 @@ function Invoices({ onOpenContract }) {
       })
       .sort((a, b) => (a.oldest || "").localeCompare(b.oldest || ""));
   }, [data.workLog, data.dutyDays, contracts]);
+  // Invoices that went to the share sheet (or went out) and are not recorded,
+  // from any agreement or Expenses: the way to the screen that answers each.
+  const unansweredCard = (
+    <UnansweredInvoices onOpen={(n) => (n.kind === "EXP" ? onOpenExpenses?.() : onOpenContract?.(n.contractId || null))} />
+  );
   const needsInvoicingCard = needsInvoicing.length > 0 && (
     <div style={{
       backgroundColor: T.warningDim || T.card, border: `1px solid ${T.warning}55`, borderRadius: 14,
@@ -270,7 +280,11 @@ function Invoices({ onOpenContract }) {
     setResendReceipts({ files: [], missing: [], forId: inv.id });
     const docs = receiptDocsFor(inv);
     if (!docs.length) return;
-    const { files, missing } = await resolveDocuments(docs, { download: downloadDocumentBlob });
+    const { missing, byId } = await resolveDocuments(docs, { download: downloadDocumentBlob });
+    // Each receipt goes out named for what it is, not "image.jpg", as the
+    // Expenses share and the server email name them (outgoingFileNames).
+    const found = docs.filter(d => byId.get(d.id)?.file);
+    const files = renameFiles(found.map(d => byId.get(d.id).file), outgoingFileNames(found, data));
     setResendReceipts({ files, missing, attachedIds: attachedExpenseIds(docs, missing), forId: inv.id });
   };
   const resend = async (inv, format = "pdf") => {
@@ -341,6 +355,9 @@ function Invoices({ onOpenContract }) {
     if (how === "mailto-cover") {
       setNotice("This invoice is longer than Mail accepts from a link, so the composer opened with the cover letter. The full invoice is on your clipboard: paste it in below the letter.");
       setTimeout(() => setNotice(null), 12000);
+    } else if (how === "download-cover") {
+      setNotice(`This invoice is longer than Mail accepts from a link. It downloaded as ${invoiceFileName(args, "pdf")}, and the composer opened with a cover letter for it: attach the PDF before you send.`);
+      setTimeout(() => setNotice(null), 12000);
     }
   };
 
@@ -383,9 +400,11 @@ function Invoices({ onOpenContract }) {
     // Two invoices can share a call day (stipend billed on one, late-logged
     // work on the other). Deleting only one of them makes the stipend math
     // unrecoverable — the fix is always to delete both and regenerate.
-    const myDays = new Set(mine.map(callDayOf));
-    const shared = (data.workLog || []).some(x =>
-      x.invoiceId && x.invoiceId !== inv.id && x.contractId === inv.contractId && myDays.has(callDayOf(x)));
+    // Not so for the days a duplicate shares with the invoice it duplicates
+    // (invoiceRecord.invoicesBilledTwice): that invoice keeps them, so
+    // deleting this one is the fix the billed twice card names. Any other
+    // shared day still warns (deleteSharesCallDay).
+    const shared = deleteSharesCallDay(data, inv, callDayOf);
     // Payments live only on the invoice row, so the delete takes them with
     // it: name each one, and what Tax Prep loses, before the member agrees.
     const paid = paidOf(inv);
@@ -424,12 +443,16 @@ function Invoices({ onOpenContract }) {
     }
     for (const d of mineDuty) editItem("dutyDays", { ...d, invoiceId: null });
     for (const x of mineExp) editItem("travelExpenses", { ...x, invoiceId: null });
-    deleteItem("invoices", inv.id);
+    // Deleted: its share stamp goes from the server now, so no device says
+    // it "went to the share sheet and is not recorded" (an unstamp still
+    // waiting for this invoice to reach the server never would).
+    if (deleteItem("invoices", inv.id) !== false) invoiceDeletedHere(user?.id || "", inv.number);
   };
 
   if (invoices.length === 0) {
     return (
       <div>
+        {unansweredCard}
         {needsInvoicingCard}
         <EmptyState icon={"🧾"} title="No invoices yet"
           subtitle="Invoices you send from the Work tab land here, so you can track what's been sent and what's been paid." />
@@ -518,6 +541,10 @@ function Invoices({ onOpenContract }) {
         </div>
       ) : totalTile(false)}
 
+      {/* An invoice recorded for work another invoice bills (sync could not move
+          the work onto it): said, with the delete that settles it. */}
+      <BilledTwiceInvoices onDelete={removeInvoice} />
+      {unansweredCard}
       {needsInvoicingCard}
 
       <Modal open={showMonths} onClose={() => setShowMonths(false)} title="Billed by month">

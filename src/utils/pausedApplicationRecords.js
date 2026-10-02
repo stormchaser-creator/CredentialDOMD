@@ -42,13 +42,22 @@ export const DEVICE_ONLY_UNREAD_MESSAGE = "This device's offline storage could n
 /**
  * Said when a change to a device-only section is refused because the latest
  * save of the device's offline copy was taken by no store (storage.js
- * deviceOnlySaveBlocked: full, or its storage would not open).
+ * deviceOnlySaveBlocked): its storage is full.
  */
 export const DEVICE_ONLY_UNSAVED_MESSAGE = "This device could not save its offline copy just now, so Protected Identity and the Answer Bank cannot be changed: a change would not be saved anywhere. Try again in a moment. If it still fails, free some storage on this device or reload the app.";
 
+/**
+ * The same, when the offline storage would not open (iOS takes it from an app
+ * left in the background, and a reload opens it again, 2026-10-02): nothing
+ * to free, so storage space is not mentioned.
+ */
+export const DEVICE_ONLY_CLOSED_MESSAGE = "This device's offline storage could not be opened just now, so Protected Identity and the Answer Bank cannot be changed: a change would not be saved anywhere. Reload the app to open it again.";
+
 /** The message for a device-only change refused for `reason` (deviceOnlySaveBlocked). */
 export function deviceOnlyBlockedMessage(reason) {
-  return reason === "unread" ? DEVICE_ONLY_UNREAD_MESSAGE : DEVICE_ONLY_UNSAVED_MESSAGE;
+  if (reason === "unread") return DEVICE_ONLY_UNREAD_MESSAGE;
+  if (reason === "unavailable") return DEVICE_ONLY_CLOSED_MESSAGE;
+  return DEVICE_ONLY_UNSAVED_MESSAGE;
 }
 
 // Of the device-only sections, the ones holding personal identifiers. They

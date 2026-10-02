@@ -11,6 +11,8 @@ import { docMime } from "../../utils/inboxDocs";
 import { docAttachedLabel, fmtBytes, docBytes } from "../../utils/docLabel";
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
+import { storedDataUrl } from "../../utils/storedBytes";
+import { downloadDocumentFile } from "../../lib/supabase";
 
 // The Documents tab's per-file limit (DocumentsSection checkBeforeRead).
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -176,19 +178,36 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
   // Pick a document that is already in Files: same read, same fill, and an
   // unlinked stored file is linked to this record on save. One that is
   // already linked elsewhere (another agreement, a license) stays there.
+  // A stored file is fetched from the account when it is picked: a load no
+  // longer downloads every file, so waiting for "sync" kept every stored
+  // file disabled here for good (2026-10-02). Nothing here needs the tap's
+  // gesture: the file is only read into the form.
   const pickExisting = useCallback(async ({ doc }) => {
     setShowExisting(false);
-    if (!doc?.data) {
-      setIsError(true);
-      setMsg(`"${doc?.name || "That file"}" has not downloaded to this device yet. Give sync a moment and try again.`);
-      return;
+    if (!doc) return;
+    const name = doc.name || "That file";
+    let dataUrl = doc.data || null;
+    if (!dataUrl) {
+      setScanning(true);
+      setIsError(false);
+      setMsg(`Getting "${name}" from your account...`);
+      let got;
+      try { got = await storedDataUrl(doc, { download: downloadDocumentFile }); } finally { setScanning(false); }
+      if (!got?.dataUrl) {
+        setIsError(true);
+        setMsg(got?.missing
+          ? `"${name}" is missing from your account. Upload it again in Documents.`
+          : `"${name}" could not be fetched from your account. Check your connection and try again.`);
+        return;
+      }
+      dataUrl = got.dataUrl;
     }
     const mime = docMime(doc);
     setAttachedDocs((prev) => prev.some((d) => d.existingId === doc.id)
       ? prev
-      : [...prev, { name: doc.name, type: mime, size: docBytes(doc), data: doc.data, existingId: doc.id }]);
+      : [...prev, { name: doc.name, type: mime, size: docBytes(doc), data: dataUrl, existingId: doc.id }]);
     await readIntoForm(
-      { name: doc.name, type: mime, dataUrl: doc.data },
+      { name: doc.name, type: mime, dataUrl },
       doc.linkedTo ? " Read from Files; it stays linked where it is." : " Linked from Files, nothing uploaded again."
     );
   }, [setAttachedDocs, readIntoForm]);
@@ -237,7 +256,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
                   const sub = missing
                     ? "Missing from your account. Upload it again in Documents."
                     : !ready
-                    ? "Still downloading to this device"
+                    ? "Not uploaded from the device that saved it"
                     : docAttachedLabel(doc, data)
                       || `${fmtBytes(docBytes(doc))}${doc.uploadedAt ? " · " + new Date(doc.uploadedAt).toLocaleDateString() : ""}`;
                   return (

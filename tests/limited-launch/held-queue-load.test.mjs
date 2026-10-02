@@ -75,7 +75,7 @@ function load({ cloud, local, queue }) {
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [], reconcileDocumentLinks,
     applyHeldQueue: held.applyHeldQueue, localChangesSince, rebaseLocalChanges, localCopyCurrent: storageScope.localCopyCurrent,
     accessAuthority: { suspendWrites: () => record('suspendWrites') },
-    setData: value => { states.push(value); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {},
+    setData: value => { states.push(value); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },
   };
   vm.runInNewContext(loadCode, context);

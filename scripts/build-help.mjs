@@ -160,7 +160,7 @@ export function renderHelp(input, videoCatalog = null) {
   <link rel="stylesheet" href="/support-nav.css">
   <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
   <a class="skip" href="#main">Skip to help</a>
   <div class="wrap">
     <nav class="topnav" aria-label="Main navigation"><a class="brand" href="/">Credential<span>DOMD</span></a><div class="navlinks"><a href="/states/">License Guides</a><a href="/cme/">CME resources</a><a href="/locums">Practice &amp; Locums</a><details class="support-menu"><summary>Support</summary><div class="support-links"><a href="/help/" aria-current="page">Help &amp; videos</a><a href="/#faq">FAQ</a><a href="/security">Security &amp; data handling</a></div></details><a href="/app/">Open app</a></div></nav>
@@ -224,7 +224,7 @@ export function renderHelp(input, videoCatalog = null) {
       applyFilter(); openHash();
     })();
   </script>
-</body>
+<!--/email_off--></body>
 </html>
 `;
 }

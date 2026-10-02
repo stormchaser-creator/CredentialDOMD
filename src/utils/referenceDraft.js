@@ -32,6 +32,13 @@ export function resolveReferenceSelection(action, previous) {
   });
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// "2015-06" (the month a reference form stores) as "Jun 2015"; anything else as typed.
+const monthYear = (value) => {
+  const m = String(value || "").match(/^(\d{4})-(\d{2})$/);
+  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : value;
+};
+
 export function buildReferenceText(item = {}) {
   const name = line(item.name) || "Unnamed reference";
   const degree = line(item.degree);
@@ -42,7 +49,7 @@ export function buildReferenceText(item = {}) {
     ["Email", "email"], ["Phone", "phone"],
   ]) {
     const value = line(item[key]);
-    if (value) lines.push(`${label}: ${value}`);
+    if (value) lines.push(`${label}: ${key === "knownSince" ? monthYear(value) : value}`);
   }
   return lines.join("\n");
 }

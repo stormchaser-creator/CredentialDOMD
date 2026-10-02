@@ -1,3 +1,4 @@
+import { sameClerkSession } from "./clerkSession.js";
 // Build flag only selects the new customer API. Server automation/mail gates stay independent.
 export const SUPPORT_OPERATIONS_ENABLED = import.meta.env?.VITE_SUPPORT_OPERATIONS_ENABLED === "true";
 
@@ -45,13 +46,13 @@ export function createSupportOperationsClient({
     const session = getSession();
     if (!accountId || session?.user?.id !== accountId) throw sessionUnavailable();
     const token = await session.getToken();
-    if (!token || getSession() !== session || session.user?.id !== accountId) throw sessionUnavailable();
+    if (!token || !sameClerkSession(session, getSession()) || session.user?.id !== accountId) throw sessionUnavailable();
     const response = await fetchImpl(`${url}/functions/v1/support-operations`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, apikey: anonKey, "Content-Type": "application/json" },
       body: JSON.stringify(input), signal: AbortSignal.timeout(30000),
     });
     const data = await response.json().catch(() => null);
-    if (getSession() !== session || session.user?.id !== accountId) throw sessionUnavailable();
+    if (!sameClerkSession(session, getSession()) || session.user?.id !== accountId) throw sessionUnavailable();
     if (!response.ok || !data || data.error) {
       if (response.status === 401) throw sessionUnavailable();
       if (response.status === 404) throw new Error("This ticket is not available in your account.");

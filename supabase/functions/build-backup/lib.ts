@@ -1,4 +1,6 @@
 import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
+import { homeScreenHint } from "../_shared/homeScreenHint.ts";
+import { welcomeFirstName } from "../_shared/app/utils/welcomeEmail.js";
 /**
  * Pure helpers for the monthly backup: no Deno, no network, no JSZip.
  *
@@ -67,14 +69,14 @@ export const PART_CAP_BYTES = 48 * 1024 * 1024;
 
 /**
  * Signed links live 15 minutes. backup-link mints one for each Download tap on
- * the Data and Backup page; the monthly email carries none, so a read or
+ * the Data & Backup page; the monthly email carries none, so a read or
  * forwarded inbox never holds a way into the archive.
  */
 export const LINK_TTL_SECONDS = 15 * 60;
 
-/** Where the email sends people: the app's Data and Backup page. */
+/** Where the email sends people: the app's Data & Backup page (the More menu's own label). */
 export const BACKUP_PAGE_URL = "https://credentialdomd.com/app/#backups";
-export const BACKUP_PAGE_PATH = "More > Data and Backup";
+export const BACKUP_PAGE_PATH = "More > Data & Backup";
 
 export const BACKUP_BUCKET = "backups";
 export const DOCUMENTS_BUCKET = "documents";
@@ -122,25 +124,20 @@ export function periodFor(date: Date): string {
 }
 
 /**
- * "Dr. Rowan Testa, MD" to "Rowan"; falls back to the mailbox name.
- *
- * The version in send-reminders/index.ts strips "Dr" but leaves the dot behind,
- * so the first token is "." and every physician who writes their name with a
- * title gets greeted by their email mailbox instead. This one drops the
- * punctuation too and skips single-letter initials.
+ * "Dr. Rowan Testa, MD" to "Rowan", "José Álvarez" to "José"; null when the
+ * profile has no name a person would be greeted by (the email then opens
+ * "Hello,"). It used to strip accented letters ("Jos,") and fall back to the
+ * mailbox name.
  */
-export function firstName(name: string | null | undefined, email: string): string {
-  const cleaned = String(name || "")
-    .replace(/\b(dr|prof|mr|mrs|ms|md|do|mbbs|phd|dds|dmd)\b\.?/gi, " ")
-    .replace(/[^A-Za-z'\- ]+/g, " ")
-    .trim();
-  for (const token of cleaned.split(/\s+/)) {
-    if (token.length >= 2 && /^[a-z'-]+$/i.test(token)) {
-      return token[0].toUpperCase() + token.slice(1).toLowerCase();
-    }
-  }
-  return String(email || "").split("@")[0] || "Doctor";
+export function firstName(name: string | null | undefined, _email?: string): string | null {
+  // The welcome email's rule (app/utils/welcomeEmail.js): titles skipped,
+  // accented letters kept ("José", never "Jos"), and no name rather than a
+  // guess. The mailbox name is never used as a greeting.
+  return welcomeFirstName(name ?? null);
 }
+
+/** "Hi Jordan," or "Hello," when the profile has no usable first name. */
+export const greetingLine = (first: string | null | undefined) => (first ? `Hi ${first},` : "Hello,");
 
 export function escapeHtml(s: unknown): string {
   return String(s ?? "")
@@ -565,7 +562,7 @@ ${dataBlock}
 <p><strong>${escapeHtml(VAULT_NOTE)}</strong></p>
 <p>${escapeHtml(KEYS_NOTE)}</p>
 </div>
-<p>To keep a copy of the private vault, export it from the device that holds it: More, then Data and Backup, then Private notes, then Export.</p>
+<p>To keep a copy of the private vault, export it from the device that holds it: More, then Data &amp; Backup, then Private notes, then Export.</p>
 
 ${skippedBlock}
 
@@ -578,7 +575,7 @@ ${skippedBlock}
 </ul>
 
 <h2>Turning these off</h2>
-<p>Monthly backups are on for every account. To stop them, open the app, go to More, then Data and Backup, and turn Monthly backup off. You can still build one on demand from the same screen.</p>
+<p>Monthly backups are on for every account. To stop them, open the app, go to More, then Data &amp; Backup, and turn Monthly backup off. You can still build one on demand from the same screen.</p>
 
 <p class="sub">CredentialDOMD &middot; questions to stormchaser@elryx.com</p>
 </body>
@@ -589,7 +586,7 @@ ${skippedBlock}
 // ── The email ────────────────────────────────────────────────────────────────
 
 export interface EmailInfo {
-  greetingName: string;
+  greetingName: string | null;
   period: string;
   recordCount: number;
   sectionCount: number;
@@ -633,6 +630,7 @@ export function renderEmailText(info: EmailInfo): string {
     "Where to get it:",
     `  Open ${pageUrl}`,
     `  In the app that is ${BACKUP_PAGE_PATH}. Tap Download next to ${monthLabel(info.period)}.`,
+    `  ${homeScreenHint(BACKUP_PAGE_PATH)}`,
     `  ${size}`,
   ].join("\n");
 
@@ -645,7 +643,7 @@ export function renderEmailText(info: EmailInfo): string {
     ? `Your CredentialDOMD backup for ${monthLabel(info.period)} is ready, but ${formatCount(missing)} of its ${formatCount(missing + info.builtParts)} parts did not finish building. What is there is real and complete as far as it goes. Build a new backup from ${BACKUP_PAGE_PATH}, and write to us if it fails again.`
     : `Your complete CredentialDOMD backup for ${monthLabel(info.period)} is ready.`;
 
-  return `${info.greetingName},
+  return `${greetingLine(info.greetingName)}
 
 ${opening}
 

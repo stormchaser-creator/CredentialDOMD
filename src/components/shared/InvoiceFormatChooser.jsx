@@ -17,12 +17,20 @@ const FORMATS = [
  * the server sends it (send-invoice-email), so the letter keeps its line
  * breaks, which the share sheet does not. `emailNote` is the line under it,
  * e.g. when and to whom the invoice was last emailed.
+ *
+ * `checking`: a line saying what is being checked while the preview's items
+ * are asked about again (the page came back to the front): the formats wait
+ * for the answer, and the chooser can still be closed.
  */
-export default function InvoiceFormatChooser({ open, onClose, onPick, busy, onEmail, emailNote }) {
+export default function InvoiceFormatChooser({ open, onClose, onPick, busy: working, onEmail, emailNote, checking = null }) {
   const { theme: T } = useApp();
+  const busy = !!working || !!checking;
   return (
-    <Modal open={open} onClose={busy ? () => {} : onClose} title="Send invoice as…">
+    <Modal open={open} onClose={working ? () => {} : onClose} title="Send invoice as…">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {checking && (
+          <div role="status" style={{ fontSize: 12.5, fontWeight: 700, color: T.textMuted, textAlign: "center" }}>{checking}</div>
+        )}
         {onEmail && (
           <button disabled={busy} onClick={() => onEmail()} style={{
             display: "flex", alignItems: "center", gap: 12, textAlign: "left",

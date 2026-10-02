@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -450,7 +450,7 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div class="fact-item">
         <span class="fact-label">Processing Time</span>
-        <span class="fact-value">MBC does not publish a renewal processing time on the loaded pages (null for MD). OMBC: renewal takes approximately 15 working days from receipt of form and fee; OMBC tells DOs to submit at least 30 days before expiration</span>
+        <span class="fact-value">MD: the Medical Board of California does not publish a renewal processing time. OMBC: renewal takes approximately 15 working days from receipt of form and fee; OMBC tells DOs to submit at least 30 days before expiration</span>
       </div>
       <div class="fact-item">
         <span class="fact-label">Renewal Due</span>
@@ -489,7 +489,7 @@ a:hover { color: var(--emerald-light); }
   <div class="quick-facts" style="margin-top:8px;">
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">When it is due</div>
-        <div style="color:var(--text-secondary);">MD: license expires at 11:59 p.m. on the last day of the month in which the license was originally issued, every two years (not birth month). Initial MD licenses issued on or after January 1, 2024 get a 26-month first cycle, then revert to 24 months. DO: biennial cycle renewed through BreEZe; OMBC's loaded pages state the two-year period runs between the prior and current expiration dates but do not explicitly publish the anchor rule (issuance month vs other), so that detail is left unstated rather than guessed.</div>
+        <div style="color:var(--text-secondary);">MD: license expires at 11:59 p.m. on the last day of the month in which the license was originally issued, every two years (not birth month). Initial MD licenses issued on or after January 1, 2024 get a 26-month first cycle, then revert to 24 months. DO: biennial cycle renewed through BreEZe; OMBC states that the two year period runs between the prior and current expiration dates; it does not publish whether the date follows the month of issuance, so check your license record.</div>
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Fee</div>
@@ -505,7 +505,7 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Processing time</div>
-        <div style="color:var(--text-secondary);">MBC does not publish a renewal processing time on the loaded pages (null for MD). OMBC: renewal takes approximately 15 working days from receipt of form and fee; OMBC tells DOs to submit at least 30 days before expiration</div>
+        <div style="color:var(--text-secondary);">MD: the Medical Board of California does not publish a renewal processing time. OMBC: renewal takes approximately 15 working days from receipt of form and fee; OMBC tells DOs to submit at least 30 days before expiration</div>
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">MD vs DO</div>
@@ -848,5 +848,5 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-</body>
+<!--/email_off--></body>
 </html>

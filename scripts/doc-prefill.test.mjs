@@ -67,7 +67,9 @@ const files = [
 ];
 const cands = agreementDocCandidates(files, { contractId: "c1" });
 eq("candidate order", cands.map(c => c.doc.id), ["own", "agr", "hint", "cloud", "new", "old"]);
-eq("candidate ready flags", cands.map(c => c.ready), [true, true, true, false, true, true]);
+// A file in the account but not on this device is fetched when it is picked
+// (a load downloads no file), so it is ready too.
+eq("candidate ready flags", cands.map(c => c.ready), [true, true, true, true, true, true]);
 eq("candidate linkedAgreement", cands.filter(c => c.linkedAgreement).map(c => c.doc.id), ["own", "agr"]);
 eq("candidates without contract id", agreementDocCandidates(files).map(c => c.doc.id), ["agr", "own", "hint", "cloud", "new", "old"]);
 eq("candidates empty", agreementDocCandidates(undefined), []);

@@ -1,5 +1,5 @@
 import LimitedLaunchMembership from "./LimitedLaunchMembership.jsx";
-import { useState, useMemo, useEffect, memo } from "react";
+import { useState, useMemo, useEffect, useRef, memo } from "react";
 import { dismissButtonStyle } from "../shared/actionButton";
 import { formatPhone, emailProblem, websiteLabel } from "../../utils/contactFormat";
 import { useApp } from "../../context/AppContext";
@@ -74,6 +74,30 @@ function SettingsSection({ onUpgrade }) {
     setEmailDraft(null);
     if (next !== (s.email || "")) update("email", next);
   };
+  // A lead time or address typed and not yet left when the app goes behind
+  // another one is saved as the page is hidden. iOS blurs the field then,
+  // but sends no focusout, which React's onBlur listens for, so nothing was
+  // saved, and when iOS discarded the page the value was lost
+  // (IOS-SETTINGS-2: 60 typed, the server still held 45).
+  const commitDrafts = useRef(() => {});
+  useEffect(() => {
+    commitDrafts.current = () => {
+      if (leadDraft !== null) commitLead(leadDraft);
+      if (emailDraft !== null) commitEmail(emailDraft);
+    };
+  });
+  const editingDraft = leadDraft !== null || emailDraft !== null;
+  useEffect(() => {
+    if (!editingDraft || typeof document === "undefined") return undefined;
+    const onVisibility = () => { if (document.visibilityState === "hidden") commitDrafts.current(); };
+    const onPageHide = () => commitDrafts.current();
+    document.addEventListener?.("visibilitychange", onVisibility);
+    window.addEventListener?.("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener?.("visibilitychange", onVisibility);
+      window.removeEventListener?.("pagehide", onPageHide);
+    };
+  }, [editingDraft]);
   const [addingState, setAddingState] = useState("");
   // Stored as "MM-DD"; shown as "July 14" so the field reads like a date.
   const [bdayText, setBdayText] = useState(() => formatBirthday(data.settings.birthMonthDay));

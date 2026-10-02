@@ -6,7 +6,7 @@
  *   cme@credentialdomd.com   Certificate intake by email forwarding.
  *     Sender must match a mailbox the account has PROVED it can read: a
  *     CONFIRMED row in forwarding_addresses (the physician added the address in
- *     More > Settings > Email and opened the link sent to it), or
+ *     More > Profile & settings > Email and opened the link sent to it), or
  *     profiles.verified_email, which only the Clerk webhook writes. The typed
  *     profiles.email is not a match and no longer routes anything. Every
  *     PDF / image / office attachment is copied into the `documents` Storage
@@ -274,6 +274,8 @@ import { meterUsage } from "../_shared/aiPricing.ts";
 // The support+<ticket id>@ reply address and the quote cut, shared with the
 // email that sets it (send-ticket-reply) so the two cannot drift apart.
 import { ticketFromSupportAddress, replyTextWithoutQuote } from "../_shared/ticketReplyEmail.ts";
+import { homeScreenHint } from "../_shared/homeScreenHint.ts";
+import { withDegree } from "../_shared/app/utils/outgoingText.js";
 // The routing decision and the rules that hand a mailbox to an account are two
 // halves of one property: a mailbox routes mail only to the account that proved
 // it can read it. They live in one file so they cannot drift apart, and that
@@ -581,7 +583,8 @@ function cleanHeaderText(s: string | null | undefined, max = 80): string {
  * the display name contains a comma. Kept identical to send-packet-email.
  */
 function fromHeader(name: string, degree: string): string {
-  const display = name ? `${name}${degree ? `, ${degree}` : ""} via CredentialDOMD` : "CredentialDOMD";
+  // withDegree: a name typed as "Jordan Rivera, DO" is not "DO, DO".
+  const display = name ? `${withDegree(name, degree)} via CredentialDOMD` : "CredentialDOMD";
   return `"${display}" <${DOCS_ADDR}>`;
 }
 
@@ -1555,9 +1558,9 @@ async function handleCme(ledgerId: string, emailId: string, from: string, subjec
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "cme", email, from, FROM_CME, replySubject, replyHeaders,
-      `This address is not confirmed for a CredentialDOMD account. Add it in the app under More > Settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
+      `This address is not confirmed for a CredentialDOMD account. Add it in the app under More > Profile & settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
 
-Open the app: ${APP_URL} (More > Settings > Email)
+Open the app: ${APP_URL} (More > Profile & settings > Email)
 
 CredentialDOMD
 https://credentialdomd.com`);
@@ -1686,9 +1689,9 @@ async function handleContacts(ledgerId: string, emailId: string, from: string, s
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "contacts", email, from, FROM_CONTACTS, replySubject, replyHeaders,
-      `This address is not confirmed for a CredentialDOMD account, so the contact was not added. Add it in the app under More > Settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
+      `This address is not confirmed for a CredentialDOMD account, so the contact was not added. Add it in the app under More > Profile & settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
 
-Open the app: ${APP_URL} (More > Settings > Email)
+Open the app: ${APP_URL} (More > Profile & settings > Email)
 
 CredentialDOMD
 https://credentialdomd.com`);
@@ -1780,11 +1783,11 @@ https://credentialdomd.com`);
   if (added === 1) {
     text = `Added ${names[0]} to your peer references.
 
-Open References and set the relationship (colleague, chair, program director) and anything else the card did not carry. The relationship is the one field a credentialing office always asks for, and a contact card never has it.`;
+Open Credentials > Peer References and set the relationship (colleague, chair, program director) and anything else the card did not carry. The relationship is the one field a credentialing office always asks for, and a contact card never has it.`;
   } else if (added > 1) {
     text = `Added ${added} peer references: ${names.join(", ")}.
 
-Open References and set the relationship on each one. That is the field a credentialing office always asks for, and a contact card never carries it.`;
+Open Credentials > Peer References and set the relationship on each one. That is the field a credentialing office always asks for, and a contact card never carries it.`;
   } else if (existing.length) {
     text = alreadyNote;
   } else {
@@ -1796,7 +1799,7 @@ On an iPhone: Contacts, the person, Share Contact, then Mail, and send it to ${C
   if (skipped > 0) {
     text += `\n\n${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file) or count (10 per email).`;
   }
-  text += `\n\nOpen the app: ${APP_URL} (References)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
+  text += `\n\nOpen the app: ${APP_URL} (Credentials > Peer References)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
 
   const r = await sendEmail({ from: FROM_CONTACTS, to: [from], subject: replySubject, headers: replyHeaders, text });
   await finish(ledgerId, "done", `added ${added} reference${added === 1 ? "" : "s"}, already on file ${existing.length}, skipped ${skipped}${r.ok ? "" : `, confirmation failed ${r.status}`}`,
@@ -1866,7 +1869,7 @@ This email could not be verified as coming from you, so nothing was added automa
   }
   if (alreadyNote) text += `\n\n${alreadyNote}`;
   if (skipped > 0) text += `\n\n${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file) or count (10 per email).`;
-  text += `\n\nOpen the app: ${APP_URL}#requests\n\nCredentialDOMD\nhttps://credentialdomd.com`;
+  text += `\n\nOpen the app: ${APP_URL}#requests\n${homeScreenHint("More > Requests")}\n\nCredentialDOMD\nhttps://credentialdomd.com`;
   const r = await sendEmail({ from: FROM_CONTACTS, to: [from], subject: replySubject, headers: replyHeaders, text });
   await finish(ledgerId, "done", `not verified, staged ${staged} card${staged === 1 ? "" : "s"} for the app${notSaved ? `, ${notSaved} not saved` : ""}, skipped ${skipped}${r.ok ? "" : `, confirmation failed ${r.status}`}`,
     { profile_id: profile.id });
@@ -2350,7 +2353,7 @@ async function handleDocsRequest(ledgerId: string, emailId: string, from: string
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders,
-      `This address is not confirmed for a CredentialDOMD account. Add it in the app under More > Settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
+      `This address is not confirmed for a CredentialDOMD account. Add it in the app under More > Profile & settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
 
 Open the app: ${APP_URL}
 

@@ -65,7 +65,7 @@ const built = await build({ stdin: { contents: 'export {default as Membership} f
           : path === 'admin' ? 'export const isAdminUser = () => false; export const useAdminPreviewRefresh = () => {};'
       : path === 'client' ? 'export const createLimitedLaunchClient = ({accountId}) => {globalThis.__betaUI.clients.push(accountId); return globalThis.__betaUI.client;};'
         : path === 'access' ? 'export const LIMITED_LAUNCH_ACCESS_ENABLED = true; export const canReviewBillingOffer = (...args) => globalThis.__betaUI.canReview(...args); export const renewalPaymentFailed = (...args) => globalThis.__betaUI.renewal(...args); export const hasManageableSubscription = (...args) => globalThis.__betaUI.manageable(...args); export const accessAuthority = {state: id => id === globalThis.__betaUI.context.user.id ? globalThis.__betaUI.context.limitedLaunch.access : null}; export const membershipReadOnly = () => false; export const lastAnswer = () => null; export const OUTDATED_MESSAGE = "This version of the app is out of date. Reload to continue.";'
-          : 'export const supabase = null; export const generateCredentialZip = () => {throw Error("No export during test");}; export const downloadBlob = generateCredentialZip;' }));
+          : 'export const supabase = null; export const downloadDocumentBlob = async () => null; export const generateCredentialZip = () => {throw Error("No export during test");}; export const downloadBlob = generateCredentialZip;' }));
   } }],
 });
 function fixture() {

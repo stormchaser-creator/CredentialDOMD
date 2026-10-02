@@ -156,7 +156,8 @@ test('share subjects for the three DEA registrations all read by type and state'
     `Credential Verification: DEA Registration, ND - ${PHYSICIAN}`,
   ]);
   for (const s of subjects) assert.doesNotMatch(s, /\u{2014}/u, 'no em dash in outgoing text');
-  assert.equal(buildEmailSubject({ name: 'Jane Roe' }, 'peerReferences', SETTINGS), 'Professional reference: Jane Roe');
+  // Whose reference it is, so a credentialing office can file it.
+  assert.equal(buildEmailSubject({ name: 'Jane Roe' }, 'peerReferences', SETTINGS), 'Professional reference for Jordan A. Rivera, DO: Jane Roe');
 });
 
 test('alert and notification labels use the canonical label, never the physician name', () => {

@@ -1360,7 +1360,19 @@ function firstName(fromName: unknown): string {
 function signOff(physician: Physician | null | undefined): string {
   const name = pick(physician || {}, "name") || "";
   const degree = pick(physician || {}, "degree", "degree_type", "degreeType") || "";
-  return name ? `${name}${degree ? `, ${degree}` : ""}` : "";
+  if (!name) return "";
+  // A name typed with its degree ("Jordan Rivera, DO") is not signed twice.
+  const key = (s: string) => s.replace(/\./g, "").toLowerCase();
+  const tail = String(name).split(/[\s,]+/).filter(Boolean).pop() || "";
+  return degree && key(tail) !== key(String(degree)) ? `${name}, ${degree}` : name;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2026-01-31" as "Jan 31, 2026" (no imports: this file is shared as is). */
+function expiredDate(iso: string): string {
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return String(iso || "");
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
 }
 
 /**
@@ -1472,7 +1484,7 @@ export function noteForSelection(
  */
 function labelFor(entry: CatalogueEntry, today: string): string {
   const label = describeEntry(entry);
-  return entry && entry.expiration && entry.expiration < today ? `${label}, expired ${entry.expiration}` : label;
+  return entry && entry.expiration && entry.expiration < today ? `${label}, expired ${expiredDate(entry.expiration)}` : label;
 }
 
 /**
@@ -1605,7 +1617,9 @@ function readingConfidence(reading: Reading | null | undefined): string {
   return CONFIDENCES.has(c) ? c : "low";
 }
 
-const EXPIRED_LABEL_RE = /, expired \d{4}-\d{2}-\d{2}$/;
+// "expired Jan 31, 2026" since Oct 2026 (the cover note printed the raw
+// ISO date); proposals stored before that still carry "expired 2026-01-31".
+const EXPIRED_LABEL_RE = /, expired (?:\d{4}-\d{2}-\d{2}|[A-Z][a-z]{2} \d{1,2}, \d{4})$/;
 
 /**
  * May this proposal go out on ONE tap, unread? Only when a model read the

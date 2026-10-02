@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { transformSync } from 'esbuild';
+import { reminderGreeting } from '../../supabase/functions/_shared/reminderRows.mjs';
 
 const EMAIL = 'member@example.invalid';
 const PROFILE = '00000000-0000-4000-8000-000000000002';
@@ -65,6 +66,8 @@ function handlerFor(state) {
   const context = {
     Request, Response, Headers, URL, console,
     launchEmailReviewHold: () => null,
+    // The greeting send-invite imports from _shared/reminderRows.mjs.
+    reminderGreeting,
     Deno: { env: { get: () => 'synthetic' } },
     serve: fn => { handler = fn; },
     // The 503 wrapper for a sign-in check that could not answer (clerkAuth.ts); a pass-through here.

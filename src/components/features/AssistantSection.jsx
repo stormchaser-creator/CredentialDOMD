@@ -3,7 +3,8 @@ import { useApp } from "../../context/AppContext";
 import { searchRecords, findSection } from "./HomeSearch";
 import { useInputStyle } from "../shared/useInputStyle";
 import { generateId, copyToClipboard } from "../../utils/helpers";
-import { veraPacketShareText, veraCoverNote } from "../../utils/shareText";
+import { veraPacketShareText, veraCoverNote, fileShareText } from "../../utils/shareText";
+import { outgoingFileNames, renameFiles } from "../../utils/docLabel";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
 import { repairActions, buildCategory, packRecord, cleanRecordInput, recordFromFields, updateRecord } from "../../utils/customCategories";
 import { archivedReferenceActions, buildAssistantHistory, latestReferenceSelection, resolveReferenceSelection } from "../../utils/referenceDraft.js";
@@ -23,6 +24,7 @@ import { BASE_KEYS, largeGetJSON, largeSetJSON, mergeLargeList, onLargeStoreMerg
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
+import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
 
 // Transcript and archives live on-device under the signed-in user's own key
 // (storageScope), so another account on the same device never sees them.
@@ -64,7 +66,7 @@ const slimForArchive = (msgs) =>
  * credentialer. onClearRequest lets the app drop it on New chat.
  */
 function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest }) {
-  const { data, addItem, editItem, allTrackedStates, userIdRef, navigate, theme: T, isDesktop } = useApp();
+  const { data, addItem, editItem, deleteItem, allTrackedStates, userIdRef, navigate, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
   // The Opus badge says what answers: Claude only when "Vera answers with"
   // is Claude Opus AND Opus is reachable (own key, or the shared one), as
@@ -530,7 +532,9 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     }
   }, [wantedKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const performAction = useCallback(async (msgId, idx) => {
+  // `released`: called when the card no longer needs to look busy before the
+  // action returns (a packet handed to a share sheet that may never answer).
+  const performAction = useCallback(async (msgId, idx, { released = () => {} } = {}) => {
     const msg = msgs.find(x => x.id === msgId);
     const action = msg?.actions?.[idx];
     if (!action || action.done) return;
@@ -739,23 +743,46 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
             : "None of those documents can be shared from this device. Open Files to check they are there, then approve again.");
         }
         const docs = ready.map(r => r.doc);
-        const files = ready.map(r => r.file || dataUrlToFile(r.doc));
+        // Named for what they are, never a camera's "image.jpg" (docLabel.js).
+        const files = renameFiles(ready.map(r => r.file || dataUrlToFile(r.doc)), outgoingFileNames(docs, data));
         // LLM cover notes can be multi-line or semicolon-joined; iOS Mail
         // flattens the newlines of a share that carries files, so the blurb
         // is one sentence per line of the normalized note, and the formatted
         // note goes on the clipboard (src/utils/shareText.js).
-        const { title, note: packetNote, blurb } = veraPacketShareText(action.coverNote);
+        const { title, note: packetNote, blurb } = veraPacketShareText(action.coverNote, data.settings, files.length);
         try { await copyToClipboard(packetNote); } catch { /* clipboard unavailable */ }
-        let shared = false;
+        let shared = false, handedLog = null;
         if (navigator.canShare && navigator.canShare({ files })) {
-          try {
-            await navigator.share({ title, text: blurb, files });
-            shared = true;
-          } catch (shareErr) {
-            if (shareErr?.name === "AbortError") return; // user closed the sheet
-            // Desktop browsers often refuse file shares ("Permission denied")
-            // — fall through to the download path below.
-          }
+          // Recorded and done as the files go to the share sheet
+          // (utils/shareHandoff.js): on the iPhone app the sheet often never
+          // answers once Mail takes over, and the packet that went had no
+          // record while its card stayed on a disabled "Working…" for good.
+          // Taken back only when the sheet says it did not go.
+          const outcome = await shareAtHandoff({ title, text: blurb, files }, {
+            share: (p) => navigator.share(p),
+            onHanded: () => {
+              handedLog = generateId();
+              // The same row shape as the Files packet share: share_log has
+              // sent_at (not shared_at) and a NOT NULL section.
+              addItem("shareLog", {
+                id: handedLog, itemId: null, itemName: `Vera packet (${docs.length} files)`,
+                section: "documents", method: "share", recipient: action.summary || "",
+                sentAt: new Date().toISOString(),
+              });
+              markAction(msgId, idx, { done: true, error: null });
+              released();
+            },
+            onUndo: () => {
+              if (handedLog) deleteItem("shareLog", handedLog);
+              handedLog = null;
+              markAction(msgId, idx, { done: false });
+            },
+          });
+          if (outcome === "cancelled") return; // user closed the sheet
+          if (outcome === "busy") throw new Error(shareNotStartedMessage(outcome));
+          shared = outcome === "shared";
+          // Otherwise desktop browsers often refuse file shares ("Permission
+          // denied"): fall through to the download path below.
         }
         if (!shared) {
           const standalone = window.navigator.standalone === true
@@ -772,14 +799,14 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           }
           setErr(`This browser can't attach files to a share sheet, so the ${files.length} documents are downloading instead (allow multiple downloads if asked). The cover note is on your clipboard, ready to paste into your email.`);
         }
-        // The same row shape as the Files packet share: share_log has sent_at
-        // (not shared_at) and a NOT NULL section, so the old shape was
-        // refused whole and retried on every load.
-        addItem("shareLog", {
-          id: generateId(), itemId: null, itemName: `Vera packet (${docs.length} files)`,
-          section: "documents", method: "share", recipient: action.summary || "",
-          sentAt: new Date().toISOString(),
-        });
+        // A download (no share sheet) is recorded here; a share was at hand-off.
+        if (!handedLog) {
+          addItem("shareLog", {
+            id: generateId(), itemId: null, itemName: `Vera packet (${docs.length} files)`,
+            section: "documents", method: "share", recipient: action.summary || "",
+            sentAt: new Date().toISOString(),
+          });
+        }
         if (docs.length < packet.total) {
           const notSent = [...packet.missing, ...packet.failed.map(f => f.name)];
           setErr([
@@ -799,12 +826,18 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         // plain download as the desktop fallback — same split as packets.
         let shared = false;
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({ title: fname, files: [file] });
-            shared = true;
-          } catch (shareErr) {
-            if (shareErr?.name === "AbortError") return; // user closed the sheet
-          }
+          // Done, and the card free, as the file goes to the share sheet: on
+          // the iPhone app the sheet often never answers once Mail or Files
+          // takes over, and the card stayed on "Working…" (as the packet did).
+          const { title: shareTitle, text } = fileShareText({ what: `${label.toLowerCase()} export`, settings: data.settings });
+          const outcome = await shareAtHandoff({ title: shareTitle, text, files: [file] }, {
+            share: (p) => navigator.share(p),
+            onHanded: () => { markAction(msgId, idx, { done: true, error: null }); released(); },
+            onUndo: () => markAction(msgId, idx, { done: false }),
+          });
+          if (outcome === "cancelled") return; // user closed the sheet
+          if (outcome === "busy") throw new Error(shareNotStartedMessage(outcome));
+          shared = outcome === "shared";
         }
         if (!shared) {
           const url = URL.createObjectURL(file);
@@ -835,7 +868,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         markAction(msgId, idx, { error: e3.message });
       }
     }
-  }, [msgs, addItem, editItem, data, logToCloud, markAction, userIdRef, cloudFiles, activePackets, retryCloudFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [msgs, addItem, editItem, deleteItem, data, logToCloud, markAction, userIdRef, cloudFiles, activePackets, retryCloudFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // One run per card at a time: a second tap while the first is still
   // waiting (a slow create-ticket, an open share sheet) used to run the whole
@@ -845,10 +878,14 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     if (runningRef.current.has(key)) return;
     runningRef.current.add(key);
     setRunning(new Set(runningRef.current));
-    try { await performAction(msgId, idx); } finally {
+    let free = false;
+    const release = () => {
+      if (free) return;
+      free = true;
       runningRef.current.delete(key);
       setRunning(new Set(runningRef.current));
-    }
+    };
+    try { await performAction(msgId, idx, { released: release }); } finally { release(); }
   }, [performAction]);
 
   const dismissAction = useCallback((msgId, idx) => {
@@ -998,7 +1035,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
               </div>
             )}
             {(m.actions || []).map((a, i) => a.dismissed ? null : a.kind === "draft_references" ? (
-              <ReferenceDraftCard key={i} action={a} references={data.peerReferences || []} theme={T}
+              <ReferenceDraftCard key={i} action={a} references={data.peerReferences || []} settings={data.settings} theme={T}
                 onChange={patch => markAction(m.id, i, patch)} onDismiss={() => dismissAction(m.id, i)} />
             ) : (
               <div key={i} style={{

@@ -4,10 +4,13 @@
  * only answers its questions, so the rules are tested without any of this.
  *
  * Tables touched (service role):
- *   profiles, invoices, travel_expenses, documents      read
+ *   profiles, invoices, travel_expenses, documents      read (a draft: its expenses by id, and
+ *                                                       the account's invoices with its number)
  *   invoices.last_emailed_at / last_emailed_to          written alone after a confirmed send (server-owned:
  *                                                       trigger invoices_keep_last_emailed refuses user tokens)
  *   invoice_email_sends                                 the sent-once ledger (migration 20260925130000)
+ *   invoice_number_reservations.shared_at               stamped after a draft send that went or may have
+ *                                                       (migration 20260930230000)
  *   send_reservations via reserve_send()                the hourly cap shared with send-packet-email
  */
 
@@ -134,8 +137,34 @@ export function invoiceEmailDependencies() {
         .eq("user_id", profileId).not("last_emailed_at", "is", null)
         .order("last_emailed_at", { ascending: false }).limit(200), "emailed invoices read"),
 
+      // With what names a receipt that goes out (category and vendor).
       expenses: (profileId: string, invoiceId: string) => checked(db().from("travel_expenses")
-        .select("id, invoice_id").eq("user_id", profileId).eq("invoice_id", invoiceId), "expense read"),
+        .select("id, invoice_id, category, vendor").eq("user_id", profileId).eq("invoice_id", invoiceId), "expense read"),
+
+      // A draft's expenses (an invoice the app records once the send is
+      // confirmed): the ones it lists, with whichever invoice bills them now.
+      expensesByIds: (profileId: string, ids: string[]) => (ids.length
+        ? checked(db().from("travel_expenses").select("id, invoice_id, category, vendor").eq("user_id", profileId).in("id", ids), "draft expense read")
+        : Promise.resolve([])),
+
+      // The rows a draft lists (duty days, work entries, or expenses for an
+      // expense invoice) that an invoice bills now: [{ id, invoice_id }].
+      async billedItems(profileId: string, ids: string[], kind: string | null) {
+        if (!ids.length) return [];
+        const tables = kind === "expenses" ? ["travel_expenses"] : ["duty_days", "work_log"];
+        const found: Row[] = [];
+        for (const table of tables) {
+          const rows = await checked(db().from(table).select("id, invoice_id").eq("user_id", profileId).in("id", ids)
+            .not("invoice_id", "is", null), "draft item read");
+          for (const r of (rows as Row[] | null) || []) found.push(r);
+        }
+        return found;
+      },
+
+      // The account's invoices carrying `number` in any case (Mark as sent
+      // takes what is typed); its wildcards are matched as themselves.
+      invoicesNumbered: (profileId: string, number: string) => checked(db().from("invoices")
+        .select("id, number").eq("user_id", profileId).ilike("number", number.replace(/[\\%_]/g, (c) => `\\${c}`)).limit(20), "invoice number read"),
 
       receiptDocuments: (profileId: string, links: string[]) => checked(db().from("documents")
         .select("id, user_id, name, mime_type, type, storage_path, size_bytes, linked_to")
@@ -185,6 +214,14 @@ export function invoiceEmailDependencies() {
           ...(extra.sentAt ? { sent_at: extra.sentAt } : {}),
         })
         .eq("id", claim.id).eq("attempts", claim.attempts).eq("status", "sending"), "send ledger finish"),
+
+      // A draft that went out (or may have): its number stamped as shared on
+      // the account's number ledger (migration 20260930230000), as the app's
+      // share hand-off stamps it, so every device's list_shared_invoice_numbers
+      // asks whether it went until the invoice is recorded.
+      markNumberShared: (profileId: string, number: string, contractId: string | null, at: string) => checked(db()
+        .from("invoice_number_reservations")
+        .upsert({ user_id: profileId, number, shared_at: at, shared_contract_id: contractId }, { onConflict: "user_id,number" }), "number stamp"),
 
       // The two columns alone, updated_at untouched, never moved backwards.
       stampInvoice: (profileId: string, invoiceId: string, at: string, to: string) => checked(db().from("invoices")

@@ -35,6 +35,7 @@ import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, sha
 import { CME_INBOX_ADDRESS, docMime } from "../../utils/inboxDocs";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
 import { routableSenders, joinAddresses, accountMailboxVerified, CONFIRM_FIRST_SENTENCE } from "../../utils/forwardingAddresses";
+import useRecordFormDraft, { DRAFT_RESTORED_NOTE } from "../shared/useRecordFormDraft";
 
 // What one entry is called and where it came from, read by the phone card and
 // the desk table alike so the two can never label the same record differently.
@@ -67,6 +68,9 @@ const CYCLE_ORDER = { after: "0", in: "1", before: "2", undated: "3" };
 // Stable identity for DeskTable's groups memo; a fresh array each render
 // would rebuild the grouping on every keystroke.
 const IN_CYCLE_FIRST = [CYCLE_ORDER.in];
+
+// Rendered without the draft hook (a stand-in that returns nothing).
+const NO_DRAFT = Object.freeze({ clear: () => {} });
 
 function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoViewId, onAutoViewDone, autoEditId, onAutoEditDone }) {
   const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop, toggleFavorite } = useApp();
@@ -116,8 +120,10 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     [allTrackedStates, deg]
   );
 
-  const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setAttachedDocs([]); setReqError(null); setShowForm(true); }, []);
-  const openEdit = useCallback((item) => { setForm({ ...item, topics: topicsOf(item) }); setEditItem(item); setAttachedDocs([]); setReqError(null); setShowForm(true); }, []);
+  // "Restored what you were typing..." on a form opened from a draft (CRED-021).
+  const [draftNote, setDraftNote] = useState(null);
+  const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setAttachedDocs([]); setReqError(null); setDraftNote(null); setShowForm(true); }, []);
+  const openEdit = useCallback((item) => { setForm({ ...item, topics: topicsOf(item) }); setEditItem(item); setAttachedDocs([]); setReqError(null); setDraftNote(null); setShowForm(true); }, []);
   // Set when a deep link opened the form (an "add one" link, or an edit link
   // from Setup): closing it owes the member the trip back (closeForm).
   const arrivedByLink = useRef(false);
@@ -146,10 +152,23 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     openAdd();
     onAutoOpenDone?.();
   }, [autoOpen, openAdd, onAutoOpenDone]);
+  // What is typed into the open form outlives iOS discarding the app, as on
+  // every other Credentials form (CRED-021).
+  const liveCme = useMemo(() => (cmeItems || []).filter(x => x && !x.deleted), [cmeItems]);
+  const draft = useRecordFormDraft({
+    slot: "crud:cme", open: showForm, editing: editItem, form, records: liveCme,
+    plain: !autoOpen && !autoEditId && !autoViewId,
+    restore: ({ editing, changed }) => {
+      if (editing) openEdit(editing); else openAdd();
+      setForm(f => ({ ...f, ...changed }));
+      setDraftNote(DRAFT_RESTORED_NOTE);
+    },
+  }) || NO_DRAFT;
   const closeForm = useCallback(() => {
-    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setReqError(null);
+    draft.clear(editItem?.id);
+    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setReqError(null); setDraftNote(null);
     if (arrivedByLink.current) { arrivedByLink.current = false; onAutoEditClosed?.(); }
-  }, [onAutoEditClosed]);
+  }, [onAutoEditClosed, draft, editItem?.id]);
 
   const handleSave = useCallback(() => {
     if (!String(form.category || "").trim()) {
@@ -236,14 +255,24 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     try {
       // The message comes from what was actually sent: a photo this device
       // could not convert, or PDFs the share sheet could not carry, are only
-      // known once the transcript is built and shared.
-      const sent = await shareTranscriptPdf(model);
+      // known once the transcript is built. Said, and the picker closed and
+      // free, as the file goes to the share sheet: on the iPhone app the
+      // sheet often never answers once Mail takes over, and CME Credits sat
+      // on a disabled "Building PDF" until the app was reloaded (CRED-011).
+      const sent = await shareTranscriptPdf(model, {
+        onHanded: ({ model: going }) => {
+          const missing = certificatesNotIncludedMessage(going);
+          flash(`Transcript PDF is in the share sheet.${missing ? ` ${missing}` : ""}`);
+          setShowTranscript(false);
+          setTranscriptBusy(false);
+        },
+        onUndo: () => setNote(""),
+      });
       const missing = sent ? certificatesNotIncludedMessage(sent.model) : "";
       if (sent?.method === "download") flash(`${model.fileName} downloaded.${missing ? ` ${missing}` : ""}`);
-      else if (sent?.method === "share") flash(`Transcript PDF is in the share sheet.${missing ? ` ${missing}` : ""}`);
       if (sent) setShowTranscript(false);
     } catch (err) {
-      flash(`Couldn't build the transcript: ${err.message}`);
+      flash(err?.name === "ShareBusy" ? err.message : `Couldn't build the transcript: ${err.message}`);
     } finally {
       setTranscriptBusy(false);
     }
@@ -652,6 +681,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
 
       {/* Add/Edit Modal */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit CME" : "Add CME"}>
+        {draftNote && <div role="status" style={{ fontSize: 13, fontWeight: 600, color: T.success || "#22c55e", marginBottom: 10 }}>{draftNote}</div>}
         {/* CME has no separate detail view: its form is where the record is read. */}
         {editItem && <FollowUpHistory item={editItem} />}
         <Field label="Activity / Title"><input value={form.title || ""} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} style={iS} placeholder="e.g. Annual Pain Management Conference" /></Field>

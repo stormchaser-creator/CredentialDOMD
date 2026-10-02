@@ -30,7 +30,7 @@
  "CA": {
   "portal": "https://www.breeze.ca.gov/datamart/loginCADCA.do",
   "board": "Medical Board of California",
-  "due": "MD: license expires at 11:59 p.m. on the last day of the month in which the license was originally issued, every two years (not birth month). Initial MD licenses issued on or after January 1, 2024 get a 26-month first cycle, then revert to 24 months. DO: biennial cycle renewed through BreEZe; OMBC's loaded pages state the two-year period runs between the prior and current expiration dates but do not explicitly publish the anchor rule (issuance month vs other), so that detail is left unstated rather than guessed.",
+  "due": "MD: license expires at 11:59 p.m. on the last day of the month in which the license was originally issued, every two years (not birth month). Initial MD licenses issued on or after January 1, 2024 get a 26-month first cycle, then revert to 24 months. DO: biennial cycle renewed through BreEZe; OMBC states that the two year period runs between the prior and current expiration dates; it does not publish whether the date follows the month of issuance, so check your license record.",
   "fee": "MD active: $1,206 total ($1,151 base plus mandatory $25 Steven M. Thompson Physician Corps Loan Repayment fee plus $30 CURES fee). DO active: $455 (includes $25 per B&P Code 2436.5 and $30 CURES per B&P Code 208); DO inactive: $325 (includes the $25 fee, no CURES)",
   "guide": "https://credentialdomd.com/states/california"
  },
@@ -346,7 +346,7 @@
   "portal": "https://license.wi.gov/",
   "board": "Wisconsin Medical Examining Board (Department of Safety and Professional Services, DSPS)",
   "due": "October 31 of each odd-numbered year, for all physicians statewide (Wis. Stat. 440.08(2)). The board states this applies even if the initial license was issued in the months just before the date: a license issued shortly before October 31 of an odd year still must be renewed by that date. Next renewal deadline: October 31, 2027.",
-  "fee": "$120 (Medicine and Surgery, MD or DO, 2-year renewal). Same $120 applies to the Compact (IMLC-issued) MD and DO credentials and to Administrative Medicine and Surgery licenses. Per the DSPS Renewal Dates and Fees schedule (RDAF, rev. 08/07/2025); DSPS's August 8, 2025 news release confirms the physician fee rose to $120 effective for applications opening in August 2025.",
+  "fee": "$120 (Medicine and Surgery, MD or DO, 2-year renewal). Same $120 applies to the Compact (IMLC-issued) MD and DO credentials and to Administrative Medicine and Surgery licenses. Per the DSPS Credential Fees and Renewal Dates page; DSPS's August 8, 2025 news release confirms the physician fee rose to $120 effective for applications opening in August 2025.",
   "guide": "https://credentialdomd.com/states/wisconsin"
  },
  "WY": {

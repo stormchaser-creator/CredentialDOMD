@@ -75,25 +75,54 @@ eq("subject names the sender and the facility", subject, "Invoice INV-0012 from 
 eq("subject degrades without a facility", invoiceSubject({ number: "INV-0001", physician: "Rowan Testa, DO" }), "Invoice INV-0001 from Rowan Testa, DO");
 ok("subject has no em dash", !subject.includes(EM_DASH));
 
-// ── Share-sheet blurb ──
-const [blurbLead, ...blurbRest] = blurb.split("\n\n");
-eq("blurb leads with the subject line (iOS Mail may promote it)", blurbLead.trim(), subject + ".");
-ok("blurb body is one flowing paragraph", blurbRest.length === 1 && !blurbRest[0].includes("\n"));
-ok("blurb reads correctly with every line break stripped", /Medical Center\. The attached invoice/.test(blurb.replace(/\n/g, "")));
-ok("blurb doesn't repeat the invoice number/physician/facility the subject already gave", blurb.split("INV-0012").length === 2 && blurb.split("Cedar Ridge Regional Medical Center").length === 2);
+// ── Share-sheet blurb (owner's iPhone, Oct 2026: Gmail put it in one <div>
+// with raw CRLFs, so it read as one run-on paragraph that repeated the
+// subject and had no greeting) ──
+const paras = blurb.split("\n\n");
+const flat = blurb.replace(/\s*\n+\s*/g, " ");
+eq("blurb: greeting sentence, money, questions, sign-off", paras.length, 4);
+ok("blurb opens with a greeting, not the subject line", paras[0].startsWith("Hello, attached is invoice INV-0012 for physician services at Cedar Ridge Regional Medical Center (via Summit Staffing), covering Aug 1, 2026 through Aug 15, 2026."), paras[0]);
+ok("blurb never restates the subject", !blurb.includes(subject));
+ok("blurb names the invoice number once", blurb.split("INV-0012").length === 2);
+eq("partial blurb: what is owed first, then the total and what was paid", paras[1], "Balance due: $1,525.00 (invoice total $3,025.00, paid to date $1,500.00).");
+eq("blurb offers to answer questions", paras[2], "Please reach out with any questions.");
+// Gmail and iOS Mail collapse the breaks, so the NPI, email and phone ran
+// inline after the name and wrapped mid-address on a phone. The attached
+// invoice prints them (FROM block, questions line); the blurb signs with the
+// name alone.
+eq("blurb signs off with the name and degree alone", paras[3], "Thank you,\nRowan Testa, DO");
+ok("blurb carries no NPI, email or phone", !/NPI|@|555/.test(invoiceCoverBlurb({ ...partial, phone: "555-010-0100" })));
+eq("collapsed to one paragraph it still reads as a short email", flat,
+  "Hello, attached is invoice INV-0012 for physician services at Cedar Ridge Regional Medical Center (via Summit Staffing), covering Aug 1, 2026 through Aug 15, 2026. "
+  + "Balance due: $1,525.00 (invoice total $3,025.00, paid to date $1,500.00). Please reach out with any questions. "
+  + "Thank you, Rowan Testa, DO");
+ok("collapsed, the blurb is short enough to read at a glance", flat.length <= 310, String(flat.length));
+ok("every paragraph but the signature ends a sentence, so the collapse never glues two together", paras.slice(0, 3).every((p) => /[.)]$/.test(p)));
 ok("blurb has no em dash", !blurb.includes(EM_DASH));
 ok("blurb has no CR", !blurb.includes("\r"));
 ok("partial blurb never calls the full amount 'total due'", !blurb.includes("Total due"));
-ok("partial blurb states total, paid, balance", blurb.includes("Invoice total: $3,025.00. Paid to date: $1,500.00. Balance due: $1,525.00."));
-ok("unpaid blurb states total due", invoiceCoverBlurb(unpaid).includes("Total due: $3,025.00."));
+ok("unpaid blurb states total due", invoiceCoverBlurb(unpaid).includes("\n\nTotal due: $3,025.00.\n\n"));
 ok("settled blurb says paid in full", invoiceCoverBlurb(settled).includes("Invoice total: $3,025.00, paid in full."));
-ok("blurb signs with name, NPI, email", blurb.includes("Thank you, Rowan Testa, DO (NPI 1234567890, rowan@example.com)."));
-ok("blurb mentions the period", blurb.includes("covers Aug 1, 2026 through Aug 15, 2026"));
-ok("blurb says 'Below' when the invoice text follows in the same body", invoiceCoverBlurb(partial, { attached: false }).includes("The invoice below"));
+ok("blurb says 'below' when the invoice text follows in the same body", invoiceCoverBlurb(partial, { attached: false }).startsWith("Hello, below is invoice INV-0012"));
 {
   const bare = invoiceCoverBlurb({ number: "INV-0003", total: 200 });
   ok("bare blurb has no undefined/null", !/undefined|null/.test(bare), bare);
   ok("bare blurb states the total due", bare.includes("Total due: $200.00."));
+  ok("bare blurb signs off without a name", bare.endsWith("Please reach out with any questions.\n\nThank you."), bare);
+  ok("the no-name placeholder never signs a blurb", invoiceCoverBlurb({ number: "INV-0003", total: 200, physician: "Physician" }).endsWith("Thank you."));
+  ok("the no-name placeholder is not a sender in the subject", invoiceSubject({ number: "INV-0003", physician: "Physician" }) === "Invoice INV-0003");
+  ok("with no name the blurb signs with the email", invoiceCoverBlurb({ number: "INV-0003", total: 200, physician: "Physician", npi: "1234567890", email: "rowan@example.com" }).endsWith("Thank you,\nrowan@example.com"));
+  ok("a doubled degree signs once", invoiceCoverBlurb({ ...partial, physician: "Rowan Testa, DO, DO" }).endsWith("Thank you,\nRowan Testa, DO"));
+  eq("a doubled degree reads once in the subject", invoiceSubject({ number: "INV-0003", physician: "Rowan Testa, DO, DO", facility: "Cedar Ridge" }), "Invoice INV-0003 from Rowan Testa, DO for Cedar Ridge");
+  ok("a phone on the profile signs the cover letter", invoiceCoverEmail({ ...partial, phone: "555-010-0100" }).endsWith("rowan@example.com\n555-010-0100"));
+}
+
+// ── Written off after a partial payment: never PAID IN FULL ──
+{
+  const wo = invoicePayment({ total: 6400, paid: 1000, balance: 0 });
+  eq("a balance of 0 with paid < total is not settled", [wo.settled, wo.partial, wo.balance], [false, true, 5400]);
+  ok("its blurb never says paid in full", !/paid in full/i.test(invoiceCoverBlurb({ number: "X", total: 6400, paid: 1000, balance: 0 })));
+  eq("paid in full means the payments reached the total", invoicePayment({ total: 100, paid: 100, balance: 0 }).settled, true);
 }
 
 // ── Cover letter ──
@@ -101,14 +130,14 @@ ok("letter uses plain \\n (mailtoHref adds CRLF; clipboard pastes cleanly)", !le
 ok("letter has no em dash", !letter.includes(EM_DASH));
 eq("letter paragraphs", letter.split("\n\n").length, 5);
 ok("letter opens with a salutation", letter.startsWith("Hello,\n\n"));
-ok("letter puts the money on its own lines", letter.includes("\n\nInvoice total: $3,025.00\nPaid to date: $1,500.00\nBalance due: $1,525.00\n\n"));
-ok("unpaid letter shows a single total-due line", invoiceCoverEmail(unpaid).includes("\n\nTotal due: $3,025.00\n\n"));
-ok("settled letter says paid in full", invoiceCoverEmail(settled).includes("Invoice total: $3,025.00\nPaid in full. No balance is due."));
+ok("letter puts the money on its own lines, each a sentence", letter.includes("\n\nInvoice total: $3,025.00.\nPaid to date: $1,500.00.\nBalance due: $1,525.00.\n\n"));
+ok("unpaid letter shows a single total-due line", invoiceCoverEmail(unpaid).includes("\n\nTotal due: $3,025.00.\n\n"));
+ok("settled letter says paid in full", invoiceCoverEmail(settled).includes("Invoice total: $3,025.00.\nPaid in full. No balance is due."));
 ok("letter signs off on separate lines", letter.endsWith("Thank you,\nRowan Testa, DO\nNPI 1234567890\nrowan@example.com"));
 {
   const bare = invoiceCoverEmail({ number: "INV-0003", total: 200 });
   ok("bare letter has no undefined/null", !/undefined|null/.test(bare), bare);
-  ok("bare letter sign-off has no dangling blank lines", bare.endsWith("Thank you,"));
+  ok("bare letter signs off without a dangling comma", bare.endsWith("Please reach out with any questions.\n\nThank you."));
 }
 
 // ── mailto: CRLF, single encoding, no truncation for a normal letter ──
@@ -155,7 +184,8 @@ for (const inv of [partial, unpaid, settled, { number: "X" }]) {
 {
   const contract = { dayRate: 1875.4, callRateGrid: [{ hospital: "Cedar Ridge Regional Medical Center (CRRMC)", primary: 450, backup: 225 }] };
   const pay = dutyDayPay(contract, { date: "2026-08-03", workedDay: true, callPeriods: [{ hospital: "Cedar Ridge Regional Medical Center (CRRMC)", role: "primary" }] });
-  eq("day-rate call line label", pay.lines[1].label, "On call: Cedar Ridge Regional Medical Center (CRRMC) (primary)");
+  // The role before the hospital: "(CRRMC) (primary)" read as a typo.
+  eq("day-rate call line label", pay.lines[1].label, "On call (primary): Cedar Ridge Regional Medical Center (CRRMC)");
   ok("day-rate call line still keys as a call line (summarizeDuties/DutyLog use startsWith)", pay.lines[1].label.startsWith("On call"));
   for (const l of pay.lines) ok("no em dash in day-rate line labels", !l.label.includes(EM_DASH), l.label);
   eq("day-rate day total", pay.total, 2325.4);
@@ -177,14 +207,14 @@ for (const inv of [partial, unpaid, settled, { number: "X" }]) {
     ok("expense cover counts the receipts that ride along", t.includes("3 receipts are attached."), t);
     ok("expense cover has no em dash", !t.includes(EM_DASH));
   }
-  ok("expense blurb still leads with the subject", eBlurb.startsWith("Invoice EXP-0003 from Rowan Testa, DO for Summit Locums. \n\n"));
+  ok("expense blurb opens with a greeting naming the expense invoice", eBlurb.startsWith("Hello, attached is invoice EXP-0003 for reimbursable travel expenses incurred Aug 3, 2026 through Aug 9, 2026.\n\n"), eBlurb);
   eq("expense letter keeps five paragraphs", eLetter.split("\n\n").length, 5);
   ok("one receipt reads in the singular", invoiceCoverBlurb({ ...expense, receipts: 1 }).includes("The receipt is attached."));
   for (const receipts of [0, undefined, -2, "x"]) {
     ok(`no receipt claim when none ride along (${receipts})`, !/receipt/i.test(invoiceCoverEmail({ ...expense, receipts })) && !/receipt/i.test(invoiceCoverBlurb({ ...expense, receipts })));
   }
   ok("a work invoice never mentions receipts, even if a count leaks in", !/receipt/i.test(invoiceCoverBlurb({ ...partial, receipts: 2 })));
-  ok("work invoice wording is unchanged", blurb.includes("It itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out"));
+  ok("work invoice letter wording is unchanged", letter.includes("The invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out"));
   ok("expense 'below' letter never claims an attachment", !/attached/i.test(invoiceCoverEmail(expense, { attached: false })));
 }
 
@@ -192,8 +222,11 @@ for (const inv of [partial, unpaid, settled, { number: "X" }]) {
 {
   const text = ["INVOICE INV-0012", String.fromCodePoint(0x2500).repeat(40), "TOTAL DUE: $3,025.00"].join("\n");
   const body = invoiceTextOnlyShare(partial, text);
-  ok("text-only share opens with the letter", body.startsWith("Hello,\n\nBelow is invoice INV-0012"));
-  ok("text-only share carries the itemized invoice below the letter", body.endsWith(normalizeInvoiceText(text)));
+  ok("text-only share opens with a greeting that says the invoice follows", body.startsWith("Hello, below is invoice INV-0012 for physician services"));
+  ok("text-only share carries the itemized invoice under the greeting", body.includes(`.\n\n${normalizeInvoiceText(text)}\n\nPlease reach out with any questions.`));
+  // No file rides along, so nothing else carries the contact lines: the full signature stays.
+  ok("text-only share signs off last, with the full signature", body.endsWith("Thank you,\nRowan Testa, DO \u{b7} NPI 1234567890 \u{b7} rowan@example.com"));
+  ok("text-only share keeps the phone", invoiceTextOnlyShare({ ...partial, phone: "555-010-0100" }, text).endsWith("rowan@example.com \u{b7} 555-010-0100"));
   ok("text-only share never mentions the clipboard", !/clipboard/i.test(body));
   ok("text-only share never claims an attachment", !/attached/i.test(body));
   ok("text-only share normalizes the legacy wide rule", !BOX.test(body));

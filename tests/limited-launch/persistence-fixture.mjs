@@ -52,7 +52,9 @@ export function fixture({ enabled = true, practice = true, supabaseJs = null } =
     '../utils/syncRules.js': syncRules,
     // No data deletion purges anything here, so the purge fence never moves.
     '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null },
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
+      // The queue's write (storageScope makes room first in the app).
+      setItemMakingRoom: (key, value) => values.set(key, value) },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {},
     // Reached only from a sign-in receipt, which this continuity-disabled

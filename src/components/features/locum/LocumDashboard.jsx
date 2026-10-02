@@ -19,6 +19,7 @@ import Invoices from "./Invoices";
 import RVULog from "./RVULog";
 import { BASE_KEYS, lsSet } from "../../../utils/storageScope";
 import { MEMBERSHIP_COPY } from "../../../content/membershipCopy";
+import { loadRunningTimer } from "../../../utils/runningTimerStore.js";
 
 const SUBTABS = [
   { id: "work", label: "Work" },
@@ -30,13 +31,24 @@ const SUBTABS = [
   { id: "todo", label: "To do" },
 ];
 
-export default function LocumDashboard({ initialSub, focusId, onFocusConsumed }) {
+const LAST_SUB_KEY = "credentialdomd.last-practice-sub";
+const lastPracticeSub = () => {
+  try { const v = globalThis.sessionStorage?.getItem(LAST_SUB_KEY); return SUBTABS.some(t => t.id === v) ? v : null; } catch { return null; }
+};
+
+export default function LocumDashboard({ initialSub, focusId, openContract = null, onFocusConsumed }) {
   const { theme: T, plan, isDevMode, limitedLaunch, practiceReadOnly } = useApp();
   // Home search, a sync issue, Vera or a filed receipt ("Open Expenses") can
   // land here on a specific sub-view. App passes whatever sub-page the
   // navigation named; anything that is not one of these tabs opens Work.
   const start = SUBTABS.some(t => t.id === initialSub) ? initialSub : undefined;
-  const [sub, setSub] = useState(start || "work");
+  // Otherwise Work while a timer runs (iOS discarded the app during a call:
+  // the timer is the screen he needs), else the sub-view last on view in
+  // this tab, else Work.
+  const [sub, setSub] = useState(() => start || (loadRunningTimer() ? "work" : lastPracticeSub()) || "work");
+  useEffect(() => {
+    try { globalThis.sessionStorage?.setItem(LAST_SUB_KEY, sub); } catch { /* the next visit opens on Work */ }
+  }, [sub]);
   // Invoices' "Needs invoicing" opens Work on that one contract, even on a
   // day the schedule shows another (WorkLog's openContractId). Any other way
   // into a sub-view carries no contract, so Work opens on its own default.
@@ -44,12 +56,20 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
   // always was); a contract picked for today has its own slot
   // (BASE_KEYS.contractPick), which this never touches, so the next visit to
   // Work still opens on that pick.
-  const [openContractId, setOpenContractId] = useState(null);
+  // Home's "not recorded" card opens Work on the agreement an invoice went
+  // out from (`openContract`), the same way.
+  const [openContractId, setOpenContractId] = useState(openContract || null);
   const showSub = (id) => { setOpenContractId(null); setSub(id); };
+  const [openedSeed, setOpenedSeed] = useState(openContract || null);
+  if ((openContract || null) !== openedSeed) {
+    setOpenedSeed(openContract || null);
+    if (openContract) { setOpenContractId(openContract); setSub("work"); }
+  }
+  useEffect(() => { if (openContract) lsSet(BASE_KEYS.lastContract, openContract); }, [openContract]);
   // A later navigation to another sub-view, while Practice stays on screen.
   const [landedOn, setLandedOn] = useState(start);
   if (start !== landedOn) { setLandedOn(start); if (start) showSub(start); }
-  useEffect(() => { if (focusId) onFocusConsumed?.(); }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (focusId || openContract) onFocusConsumed?.(); }, [focusId, openContract]); // eslint-disable-line react-hooks/exhaustive-deps
   const [billDraft, setBillDraft] = useState(null);
 
   const isLocum = plan === "locum" || isDevMode;
@@ -103,7 +123,10 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
       {sub === "rvus" && <RVULog />}
       {sub === "schedule" && <Schedule />}
       {sub === "invoices" && (
-        <Invoices onOpenContract={(contractId) => { lsSet(BASE_KEYS.lastContract, contractId); setOpenContractId(contractId); setSub("work"); }} />
+        <Invoices
+          onOpenContract={(contractId) => { if (contractId) lsSet(BASE_KEYS.lastContract, contractId); setOpenContractId(contractId); setSub("work"); }}
+          onOpenExpenses={() => showSub("expenses")}
+        />
       )}
       {sub === "contracts" && <Contracts />}
       {sub === "expenses" && <Expenses />}

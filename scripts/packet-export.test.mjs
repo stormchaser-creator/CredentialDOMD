@@ -13,7 +13,7 @@
 // Run: node scripts/packet-export.test.mjs   (pure node, no runner)
 import {
   FOLDER_MAP, PACKET_FOLDERS, PACKET_SECTIONS, categorizeDocument,
-  packetDocuments, packetSummary, packetSummaryLine, packetPendingLine, generateCredentialZip,
+  packetDocuments, packetSummary, packetSummaryLine, packetFetchLine, generateCredentialZip,
 } from "../src/utils/credentialExport.js";
 
 let pass = 0, fail = 0;
@@ -138,25 +138,42 @@ const loose = {
   ],
 };
 eq("an unattached file is not counted as proof", packetSummary(loose).documents, 15);
-// The shape saveData writes: bytes stripped, storagePath kept, re-fetched one
-// file at a time after load. This is a normal document on a second device and
-// in the window after any sign-in, and counting it as absent made the ending
-// state something false about the physician's own file.
+// The shape saveData writes: bytes stripped, storagePath kept. A load fetches
+// no file any more (a screen asks for what it shows), so this is every stored
+// document after a reload, and counting it as absent made the ending state
+// something false about the physician's own file.
 const cached = { ...data, documents: [{ id: "n1", name: "x.pdf", type: "application/pdf", linkedTo: "licenses:l1", storagePath: "u/1" }] };
 const cachedSum = packetSummary(cached);
-eq("a document whose bytes are still in Storage is still linked", cachedSum.documents, 1);
-eq("but it is not on this device yet", cachedSum.onDevice, 0);
+eq("a document whose bytes are in Storage is still linked", cachedSum.documents, 1);
 eq("the sentence counts what is linked", packetSummaryLine(cachedSum),
   "15 line items. 1 document, linked to the record it proves.");
-eq("and the second line says where the rest of it is", packetPendingLine(cachedSum),
-  "1 of them is still coming back from your account on this device. Download once it lands and the file carries everything.");
-eq("two pending read as two", packetPendingLine({ documents: 3, onDevice: 1 }),
-  "2 of them are still coming back from your account on this device. Download once they land and the file carries everything.");
-eq("nothing pending says nothing", packetPendingLine(summary), null);
-eq("everything on device counts as everything", summary.onDevice, 15);
-ok("no em dash in the pending line", !packetPendingLine(cachedSum).includes("\u2014"));
-// The ZIP writer still only writes the bytes it holds.
-eq("the ZIP writer takes the bytes test", packetDocuments(cached, { withBytes: true }).length, 0);
+eq("nothing is missing from the account", cachedSum.missing, []);
+// The ZIP fetches it from the account (one at a time), and writes those bytes.
+{
+  const asked = [];
+  const download = async (path, o) => { asked.push([path, !!o?.detail, typeof o?.onProgress]); return { blob: new Blob([Buffer.from("%PDF-1.4 synthetic n1")], { type: "application/pdf" }) }; };
+  const JSZip = (await import("jszip")).default;
+  const fetchedZip = await JSZip.loadAsync(await (await generateCredentialZip(cached, { download })).arrayBuffer());
+  eq("the ZIP asked the account for the file it did not hold", asked, [["u/1", true, "function"]]);
+  const entry = Object.keys(fetchedZip.files).find((n) => n.endsWith("/x.pdf"));
+  ok("and wrote it into the packet", !!entry, Object.keys(fetchedZip.files).join(", "));
+  eq("byte for byte", entry ? await fetchedZip.file(entry).async("string") : null, "%PDF-1.4 synthetic n1");
+  // Offline, or a download that fails: no partial packet, and the file is named.
+  let refused = null;
+  try { await generateCredentialZip(cached, { download: async () => ({ failed: true }) }); } catch (e) { refused = e; }
+  eq("a file that cannot be fetched stops the build", refused?.name, "PacketFilesError");
+  eq("and is named, with what to do", refused?.message,
+    "1 document could not be fetched from your account (\"x.pdf\") because they could not be read from your account storage. Nothing was downloaded. Try again in a moment.");
+  ok("no em dash in the refusal", !String(refused?.message).includes("\u2014"));
+  // A linked file with no copy anywhere (never uploaded from the device that
+  // saved it) is named too, never left out of the packet without a word.
+  let never = null;
+  try { await generateCredentialZip({ ...data, documents: [{ id: "n2", name: "z.pdf", type: "application/pdf", linkedTo: "licenses:l1" }] }, { download: async () => ({ failed: true }) }); } catch (e) { never = e; }
+  eq("a linked file with no copy anywhere stops the packet", never?.notFetched?.map((f) => f.reason), ["never_uploaded"]);
+  eq("the account export carries what exists without it", (await generateCredentialZip({ ...data, documents: [{ id: "n2", name: "z.pdf", type: "application/pdf", linkedTo: "licenses:l1" }] }, { scope: "account", download: async () => ({ failed: true }) })).size > 0, true);
+  eq("missing from the account says so", packetFetchLine([{ name: "y.pdf", reason: "gone" }]),
+    "1 document could not be fetched from your account (\"y.pdf\") because they are missing from your account. Upload them again or delete them in Documents, then download again.");
+}
 
 // ── The ZIP itself ──
 const zip = await generateCredentialZip(loose);

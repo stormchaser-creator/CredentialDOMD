@@ -7,9 +7,11 @@ import * as sectionFields from '../src/utils/sectionFields.js';
 import * as customCategories from '../src/utils/customCategories.js';
 import * as referenceDraft from '../src/utils/referenceDraft.js';
 import * as shareText from '../src/utils/shareText.js';
+import * as docLabel from '../src/utils/docLabel.js';
 import * as paused from '../src/utils/pausedApplicationRecords.js';
 import * as guard from '../src/utils/spreadsheetGuard.js';
 import * as dictationErrors from '../src/utils/dictationErrors.js';
+import * as shareHandoff from '../src/utils/shareHandoff.js';
 import { mountComponent, settle } from './component-harness.mjs';
 
 export function recorder() {
@@ -35,12 +37,12 @@ export async function mountVera({ rec = recorder(), data = {}, props = {}, turn 
   const ui = await mountComponent('src/components/features/AssistantSection.jsx', {
     app: {
       data: baseData(data), theme: {}, userIdRef: { current: 'profile-synthetic' }, allTrackedStates: [],
-      addItem: rec.fn('addItem', true), editItem: rec.fn('editItem', true), navigate: rec.fn('navigate'),
+      addItem: rec.fn('addItem', true), editItem: rec.fn('editItem', true), deleteItem: rec.fn('deleteItem', true), navigate: rec.fn('navigate'),
       ...app,
     },
     props,
     modules: {
-      helpers, customCategories, shareText, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors,
+      helpers, customCategories, shareText, docLabel, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors, shareHandoff,
       referenceDraft,
       assistant: { assistantTurn: async (args) => { turns.push(args); return turn(args); }, buildSnapshot: () => ({}), splitFields: sectionFields.splitFields },
       // The transcript and archives are the IndexedDB-backed stores, read and

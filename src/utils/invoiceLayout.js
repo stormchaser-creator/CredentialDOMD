@@ -1,6 +1,6 @@
-import { formatDate } from "./helpers.js";
+import { formatDate, localDay } from "./helpers.js";
 import { plainDashes } from "./outgoingText.js";
-import { money, invoicePayment, TEXT_RULE } from "./invoiceCover.js";
+import { money, invoicePayment, invoicePeriodRange, invoicePeriodLabel, senderName, TEXT_RULE } from "./invoiceCover.js";
 import { DEFAULT_CALL_DAY_START_HOUR, hourLabel, apportion } from "./billing.js";
 
 /**
@@ -103,7 +103,12 @@ const clean = (s) => plainDashes(String(s ?? "").replace(/[\u{202f}\u{a0}]/gu, "
 // dash ("Call \u{2014} note"); today it writes "Call: note". A label stored
 // that way reads the way the same entry is labelled now. (A label already in
 // "Type: note" form only loses a dash typed into the note, like any text.)
-const cleanLabel = (s) => clean(String(s ?? "").replace(/^([^\u{2014}:\n]+?) \u{2014} /u, "$1: "));
+// A day-rate call line was labelled "On call: <hospital> (<role>)" until Oct
+// 2026; a hospital typed with its abbreviation then read "Example (EX)
+// (primary)". It prints the way dutyPay.js labels it now: "On call (primary):
+// <hospital>".
+const callLabel = (s) => String(s ?? "").replace(/^On call: (.+) \((primary|backup)\)$/u, "On call ($2): $1");
+const cleanLabel = (s) => clean(callLabel(String(s ?? "").replace(/^([^\u{2014}:\n]+?) \u{2014} /u, "$1: ")));
 
 const cents = (n) => Math.round(Number(n) * 100);
 const fromCents = (c) => c / 100;
@@ -543,9 +548,34 @@ export const exactMoney = (a) => `$${Number(a).toLocaleString("en-US", { minimum
 
 const cleanRow = (r) => ({
   ...r,
-  item: clean(r.item), time: clean(r.time), note: clean(r.note), hours: clean(r.hours),
+  item: clean(callLabel(r.item)), time: clean(r.time), note: clean(r.note), hours: clean(r.hours),
   detail: r.detail == null ? null : clean(r.detail), amountText: clean(r.amountText),
 });
+
+const flatAmount = (a) => money(a);
+
+/** The label of the row that makes a flat table foot to the cent. */
+export const ROUNDING_LABEL = "Rounding adjustment";
+
+/**
+ * Cents to add under the flat table so its Amount column foots to TOTAL DUE.
+ * Lines that carry a fraction of a cent ($65.625) print rounded one by one,
+ * so three of them read $65.63 each and summed to a cent more than the total
+ * (a billing office footing the column found a discrepancy). The total is
+ * not changed (rounding the lines would be a pricing change); the difference
+ * is shown as its own row. 0 when the lines already foot, or when the gap is
+ * more than their rounding can explain (then it is not rounding).
+ */
+export function roundingAdjustmentCents(inv = {}) {
+  const lines = (inv?.lines || []).filter((l) => l && l.amount != null && l.amount !== "" && Number.isFinite(Number(l.amount)));
+  const total = inv?.total ?? inv?.totalAmount;
+  if (total == null || total === "" || !Number.isFinite(Number(total))) return 0;
+  const fractional = lines.filter((l) => subCent(l.amount)).length;
+  if (!fractional) return 0;
+  const diff = cents(total) - lines.reduce((sum, l) => sum + cents(l.amount), 0);
+  return diff && Math.abs(diff) * 2 <= fractional ? diff : 0;
+}
+const roundingRow = (adj) => ["", ROUNDING_LABEL, "lines rounded to the cent", money(fromCents(adj))];
 
 /** The pre-day-block table, Date | Item | Details | Amount: the fallback. */
 export function flatInvoiceRows(lines = []) {
@@ -553,9 +583,31 @@ export function flatInvoiceRows(lines = []) {
     l.date ? formatDate(l.date) : "",
     cleanLabel(l.label),
     clean(l.detail),
-    l.amount == null ? clean(l.flag) : money(l.amount),
+    l.amount == null ? clean(l.flag) : flatAmount(l.amount),
   ]);
 }
+
+/**
+ * Which columns the day table needs, from what its rows carry:
+ *  "timed"  a row has a clock time, a note or hours: Item | Time | Hours | Amount;
+ *  "detail" most rows carry words (an expense's note and receipt status):
+ *           Item | Details | Amount;
+ *  "plain"  rows say no more than their item and amount, or only a few
+ *           carry words (a day-rate invoice with one day's note): Item |
+ *           Amount, the item taking the width and an odd row's words
+ *           printed under its item (plainItem).
+ * Every format (PDF, Word, Excel) prints the same set, so a column that is
+ * empty on every row (or nearly every row) is never printed.
+ */
+export function invoiceColumns(days = []) {
+  const rows = days.flatMap((d) => d.rows || []);
+  if (rows.some((r) => r.time || r.note || r.hours)) return "timed";
+  const worded = rows.filter((r) => r.detail != null && r.detail !== "").length;
+  return worded && worded * 2 >= rows.length ? "detail" : "plain";
+}
+
+/** A row's Item cell on a "plain" table: its words, when it has any, under the item. */
+export const plainItem = (r, joiner = "\n") => (r.detail ? `${r.item}${joiner}${r.detail}` : r.item);
 
 /**
  * What every format prints: { mode: "days", days } when the day blocks add
@@ -567,7 +619,9 @@ export function invoiceLayout(inv = {}) {
   try {
     return { mode: "days", days: invoiceDays(inv) };
   } catch (err) {
-    const flat = { mode: "flat", rows: flatInvoiceRows(inv?.lines || []), reason: String(err?.message || err) };
+    const adj = roundingAdjustmentCents(inv);
+    const rows = flatInvoiceRows(inv?.lines || []);
+    const flat = { mode: "flat", rows: adj ? [...rows, roundingRow(adj)] : rows, reason: String(err?.message || err) };
     // Day totals that miss the invoice total by rounding: say which line
     // carries the fraction of a cent, so the screen can tell the physician.
     const fraction = err?.code === "total" ? (inv?.lines || []).find((l) => subCent(l?.amount)) : null;
@@ -581,6 +635,7 @@ export function invoiceLayout(inv = {}) {
 export function invoiceItemsText(inv = {}) {
   const layout = invoiceLayout(inv);
   const out = [];
+  const SEP = " \u{b7} ";
   if (layout.mode === "flat") {
     for (const l of inv.lines || []) {
       if (l.amount == null) {
@@ -588,12 +643,14 @@ export function invoiceItemsText(inv = {}) {
         out.push(clean(`     ${cleanLabel(l.label)} ${l.detail}${l.flag ? ` (${l.flag})` : ""}`));
         continue;
       }
-      out.push(clean(`${l.date ? formatDate(l.date) + "  " : ""}${cleanLabel(l.label)}`));
-      out.push(clean(`   ${l.detail ? l.detail + " = " : ""}${money(l.amount)}`));
+      // The amount closes the item's own line; the detail goes under it.
+      out.push(clean(`${l.date ? formatDate(l.date) + "  " : ""}${cleanLabel(l.label)}${SEP}${flatAmount(l.amount)}`));
+      if (clean(l.detail)) out.push(clean(`   ${l.detail}`));
     }
+    const adj = roundingAdjustmentCents(inv);
+    if (adj) out.push(`${ROUNDING_LABEL}${SEP}${money(fromCents(adj))}`, "   lines rounded to the cent");
     return out;
   }
-  const SEP = " \u{b7} ";
   layout.days.forEach((day, i) => {
     if (i) out.push("");
     out.push(day.window ? `${day.title}${SEP}${day.window}` : day.title);
@@ -603,9 +660,11 @@ export function invoiceItemsText(inv = {}) {
         out.push(`     ${[r.item, ...words, r.amountText].filter(Boolean).join(SEP)}`);
         continue;
       }
-      out.push(r.item);
-      const said = words.join(SEP);
-      if (said || r.amountText) out.push(`   ${said}${said && r.amountText ? " = " : ""}${r.amountText}`);
+      // "Day worked · $3,200.00", then what the row says under it. An amount
+      // never follows a note with "=", which read as an equation.
+      out.push([r.item, r.amountText].filter(Boolean).join(SEP));
+      const said = words.filter(Boolean).join(SEP);
+      if (said) out.push(`   ${said}`);
     }
     out.push(`${day.totalLabel}: ${money(day.total)}`);
   });
@@ -613,17 +672,61 @@ export function invoiceItemsText(inv = {}) {
 }
 
 /**
+ * The itemized invoice as sentences, one line per day: the body of a share
+ * that carries no file. A mail app that collapses its line breaks (the Gmail
+ * app, iOS Mail) then shows a run of sentences instead of rule lines and
+ * table columns jammed together; with the breaks kept it reads one day per
+ * line. Falls back to "" when there are no lines (the caller then sends the
+ * text invoice it holds).
+ */
+export function invoiceSentenceText(inv = {}) {
+  if (!Array.isArray(inv?.lines) || !inv.lines.length) return "";
+  const layout = invoiceLayout(inv);
+  const out = [];
+  if (layout.mode === "flat") {
+    for (const l of sortInvoiceLines(inv.lines)) {
+      if (l.amount == null) continue;
+      out.push(`${l.date ? `${formatDate(l.date)}: ` : ""}${cleanLabel(l.label)}, ${flatAmount(l.amount)}.`);
+    }
+    const adj = roundingAdjustmentCents(inv);
+    if (adj) out.push(`${ROUNDING_LABEL} (lines rounded to the cent), ${money(fromCents(adj))}.`);
+  } else {
+    for (const day of layout.days) {
+      const charges = day.rows.filter((r) => r.level === 0 && r.amountText)
+        .map((r) => `${r.item}, ${r.amountText}`);
+      const total = charges.length > 1 ? ` Day total ${money(day.total)}.` : "";
+      out.push(`${day.title}: ${charges.join("; ")}.${total}`);
+    }
+  }
+  const pay = invoicePayment(inv);
+  out.push(pay.hasPayment
+    ? `Invoice total ${money(pay.total)}, paid ${money(pay.paid)}, ${pay.settled ? "paid in full" : `balance due ${money(pay.balance)}`}.`
+    : `Total due ${money(pay.total)}.`);
+  return clean(out.join("\n"));
+}
+
+/**
  * The whole plain-text invoice (the Copy button, the text-only share). One
  * builder for the time engine (WorkLog) and the day-rate engine (DutyLog).
- * args: { number, physician, npi, email, facility, agency, periodStart,
- * periodEnd, terms, lines, total, paid?, balance?, dayStartHour? }.
+ * args: { number, physician, npi, email, phone?, facility, agency, periodStart,
+ * periodEnd, terms, lines, total, paid?, balance?, dayStartHour?, kind? }.
  */
 export function invoicePlainText(args = {}, { generatedOn = new Date() } = {}) {
   const out = [`INVOICE ${args.number || ""}`, TEXT_RULE];
-  out.push(`From: ${args.physician || "Physician"}${args.npi ? " \u{b7} NPI " + args.npi : ""}`);
-  if (args.email) out.push(`Email: ${args.email}`);
-  out.push(`To: ${args.facility || ""}${args.agency ? " (via " + args.agency + ")" : ""}`);
-  if (args.periodStart) out.push(`Period: ${formatDate(args.periodStart)} \u{2013} ${formatDate(args.periodEnd || args.periodStart)}`);
+  // The sender as every document prints it (invoiceExport.js fromBlock): the
+  // name (a degree printed twice reads once), never the "Physician"
+  // placeholder; with no name the email is the sender, ahead of the NPI.
+  const name = senderName(args);
+  const email = String(args.email || "").trim();
+  const from = [name || email, args.npi ? `NPI ${args.npi}` : ""].filter(Boolean).join(" \u{b7} ");
+  if (from) out.push(`From: ${from}`);
+  if (name && email) out.push(`Email: ${email}`);
+  if (args.phone) out.push(`Phone: ${args.phone}`);
+  // A blank facility no longer prints "To:  (via ...)".
+  const to = args.facility ? `${args.facility}${args.agency ? ` (via ${args.agency})` : ""}` : args.agency || "";
+  if (to) out.push(`To: ${to}`);
+  // One date for a one-day invoice, the same range every document prints.
+  if (args.periodStart) out.push(`${args.kind === "expenses" ? invoicePeriodLabel(args) : "Period"}: ${invoicePeriodRange(args)}`);
   if (args.terms) out.push(`Terms: ${args.terms}`);
   out.push(TEXT_RULE);
   out.push(...invoiceItemsText(args));
@@ -634,6 +737,7 @@ export function invoicePlainText(args = {}, { generatedOn = new Date() } = {}) {
   } else {
     out.push(`TOTAL DUE: ${money(pay.total)}`);
   }
-  out.push("", `Generated by CredentialDOMD \u{b7} ${generatedOn.toLocaleDateString()}`);
+  // en-US like every other date on the invoice, whatever the phone's region.
+  out.push("", `Generated by CredentialDOMD \u{b7} ${formatDate(localDay(generatedOn))}`);
   return clean(out.join("\n"));
 }

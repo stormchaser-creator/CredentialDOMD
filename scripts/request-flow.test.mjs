@@ -13,6 +13,7 @@ import {
   topAuthenticationResults, authservId, authEvidence, authVerdicts, senderAuthFailure,
   MAX_APPROVE_SUBJECT, MAX_APPROVE_TEXT, MAX_REPLY_SUBJECT,
 } from "../supabase/functions/_shared/requestFlow.ts";
+const REQUESTS_HINT = "On an iPhone with CredentialDOMD on your home screen, open it from there and go to More > Requests. A link from Mail opens Safari, where you are not signed in.";
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -310,7 +311,8 @@ eq("the summary, four asks", sum2,
   + "- Logs 12-months: follows separately (the app exports it)\n"
   + "\n"
   + "Packet ready: 3 documents. Open the app and tap Approve and send.\n"
-  + "https://credentialdomd.com/app/#requests (opens your requests)");
+  + "https://credentialdomd.com/app/#requests (opens your requests)\n"
+  + REQUESTS_HINT);
 // Since 2026-09-28 a proposal that may not go on one tap sends the physician
 // to Review, with what to check, and never names Approve and send.
 const review2 = physicianSummaryText({ requesterName: "Tara Example", requesterAddr: "tara@ridgeway-group.example", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/",
@@ -363,7 +365,7 @@ ok("requester found, no items: still names the asker and the missing list",
   physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal1, items: [], docIds: [] }, appUrl: "u" }).startsWith("Got it. Tara sent a document request, but no list of documents could be read from it."));
 const unclearSummary = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: [...proposal2.items, { ask: "attestation form", kind: "unknown", status: "missing", docIds: [], labels: [] }] }, appUrl: "u" });
 ok("an ask the rules could not name is a question for the physician, not 'not on file'",
-  unclearSummary.includes("- attestation form: not recognised. What did they mean? Nothing about it is in the reply.") && unclearSummary.includes("- TB form: not on file. The reply says nothing about it unless you add it."));
+  unclearSummary.includes("- attestation form: not recognized. What did they mean? Nothing about it is in the reply.") && unclearSummary.includes("- TB form: not on file. The reply says nothing about it unless you add it."));
 ok("null proposal: the request is still announced and the fallback is the old path",
   physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: null, appUrl: "u" })
     .includes("The packet could not be prepared automatically; open the request to choose the documents."));
@@ -377,9 +379,11 @@ ok("nothing found: does not say 'Packet ready: 0 documents'", !nothing.includes(
 ok("nothing found: names the button that is on the card and on Home", nothing.includes("Nothing on file to attach yet. Open the app and tap Send reply.\n") && !nothing.includes("reply from the request"));
 // The link opens the requests list itself (#requests); "(Home, or More >
 // Requests)" described two routes and a physician on a phone followed neither.
-ok("the app link is always there, with the #requests fragment, and it is the last line",
-  [sum1, sum2, notFound, nothing].every((s) => s.endsWith("https://credentialdomd.com/app/#requests (opens your requests)") || s.includes("u#requests (opens your requests)")));
-ok("the summary ends on the link when the requester was found", sum1.endsWith("#requests (opens your requests)") && sum2.endsWith("#requests (opens your requests)"));
+// The link, then where it is in the app installed on an iPhone home screen
+// (a link from Mail opens Safari, signed out).
+ok("the app link is always there, with the #requests fragment, and it is the last link",
+  [sum1, sum2, notFound, nothing].every((s) => s.includes("https://credentialdomd.com/app/#requests (opens your requests)\n" + REQUESTS_HINT) || s.includes("u#requests (opens your requests)\n" + REQUESTS_HINT)));
+ok("the summary ends on the link and the home screen hint when the requester was found", sum1.endsWith("#requests (opens your requests)\n" + REQUESTS_HINT) && sum2.endsWith("#requests (opens your requests)\n" + REQUESTS_HINT));
 ok("the old two-route hint is gone", ![sum1, sum2, notFound, notFoundNoProposal, notFoundNoItems, nothing].some((s) => s.includes("(Home, or More > Requests)")));
 noEmDash("summary", sum2 + notFound + nothing);
 
@@ -484,7 +488,7 @@ ok("an array body is refused", approveRequestBody([RID]).ok === false);
   const emptyProposal = { v: 2, method: "rules", source: "rules", confidence: "keyword", items: [], docIds: [], missing: [], coverNote: "", unclear: true };
   const s = physicianSummaryText({ requesterName: "Jordan Sample", requesterAddr: "jordan@quillfeather.example", requesterFound: true, proposal: emptyProposal, appUrl: "https://app.example/", unclear });
   eq("unclear: says it is unclear, what it named, and where it is", s,
-    "Got it. It is not clear whether Jordan Sample's email about \"Your credentialing file\" asks you for anything, so it is saved under Requests for you to read. No acknowledgement was sent, and nothing goes to Jordan Sample unless you send it.\n\nIt mentions:\n- \"Your malpractice certificate is kept on file by our office.\"\n\nhttps://app.example/#requests (opens your requests)");
+    "Got it. It is not clear whether Jordan Sample's email about \"Your credentialing file\" asks you for anything, so it is saved under Requests for you to read. No acknowledgement was sent, and nothing goes to Jordan Sample unless you send it.\n\nIt mentions:\n- \"Your malpractice certificate is kept on file by our office.\"\n\nhttps://app.example/#requests (opens your requests)\n" + REQUESTS_HINT);
   ok("unclear: never 'sent a document request', never 'Nothing was asked'", !/sent a document request|Nothing was asked|Approve and send/.test(s));
   const nf = physicianSummaryText({ requesterName: null, requesterAddr: "", requesterFound: false, proposal: emptyProposal, appUrl: "u", unclear: { about: "", mentions: [] } });
   ok("unclear, requester not found: nobody is named and the address note follows", nf.startsWith("Got it. It is not clear whether the forwarded email asks you for anything") && nf.includes("Requester's email"), nf);

@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useCallback, useEffect, memo } from "react";
+import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
 import { useApp } from "../../context/AppContext";
 import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { pushModal, popModal } from "../../utils/deskKeys";
@@ -20,7 +21,7 @@ import Modal from "../shared/Modal";
 import { dismissButtonStyle } from "../shared/actionButton";
 import { CME_INBOX_ADDRESS, DOCS_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
 import { isReadableDoc, contractFromScan } from "../../utils/docPrefill";
-import { docAttachedLabel } from "../../utils/docLabel";
+import { docAttachedLabel, outgoingFileNames } from "../../utils/docLabel";
 import { SECTIONS } from "./HomeSearch";
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
 import { checkStorageQuota } from "../../utils/storageQuota";
@@ -29,6 +30,8 @@ import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { isArchived } from "../../utils/contractsForDate";
 import { deviceZone } from "../../utils/coverageBlocks";
 import { supabase, uploadDocumentFile, downloadDocumentBlob } from "../../lib/supabase";
+import useDocumentBytes, { useDocumentFileStatus, useCardsOnScreen } from "../shared/useDocumentBytes";
+import { fileWaitText, statusWithoutStore } from "../../utils/documentBytes";
 import { resolveDocuments, missingReceiptMessage } from "../../utils/receiptFiles";
 import { relinkCorrection, keepCorrection, recordCorrection } from "../../utils/intakeCorrections";
 import { alertWriteRefused, scopesForWrite } from "../../utils/limitedLaunchAccess.js";
@@ -137,8 +140,19 @@ function screenScan(file, result) {
   return { warning: screen ? phiWarningText(screen) : null };
 }
 
+// Rendered without the hooks below (a stand-in that returns nothing), every
+// card counts as shown and a stored file without bytes as on its way.
+const ALL_CARDS_SHOWN = Object.freeze({ ref: () => undefined, isShown: () => true });
+
 function DocumentsSection() {
   const { data, setData, addItem, canAddItem, confirmCanAddItem, editItem, updateSection, deleteItem: deleteItemCtx, updateSettings, theme: T, navigate, userIdRef, user } = useApp();
+  // The bytes of the files whose cards are on screen or near it, while this
+  // tab is open: a long list no longer downloads every file of the account
+  // as it opens (utils/documentBytes.js keeps a few that scrolled away).
+  const cards = useCardsOnScreen() || ALL_CARDS_SHOWN;
+  useDocumentBytes(data.documents.filter(d => cards.isShown(d.id)));
+  // Fetching, failed (tried again on its own) or offline, per file.
+  const fileStatus = useDocumentFileStatus() || statusWithoutStore;
   // A document that came by email and is filed, moved or kept plain here is
   // the physician correcting what email intake did with it; the next reading
   // of their mail learns from it (utils/intakeCorrections.js). Fire and
@@ -235,15 +249,20 @@ function DocumentsSection() {
       setBundleMsg(`${named(notHere)} ${notHere.length === 1 ? "is" : "are"} still downloading to this device. Send again in a moment.`);
       return;
     }
-    const built = docs.map(doc => {
-      if (!doc.data) return fetchedFile(doc).file;
+    // Every file goes out named for what it is (outgoingFileNames), and the
+    // letter lists those names: a camera's "image.jpg" twice told the
+    // credentialing office nothing.
+    const outNames = outgoingFileNames(docs, data);
+    const asOutgoing = (file, i) => (file && file.name !== outNames[i].name ? new File([file], outNames[i].name, { type: file.type }) : file);
+    const built = docs.map((doc, i) => {
+      if (!doc.data) return asOutgoing(fetchedFile(doc).file, i);
       try {
         const [head, b64] = doc.data.split(",");
         const mime = docMime(doc) || head.match(/data:(.*?)[;,]/)?.[1] || "application/octet-stream";
         const bin = atob(b64);
         const arr = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        return new File([arr], doc.name || "document", { type: mime });
+        return new File([arr], outNames[i].name, { type: mime });
       } catch { return null; }
     });
     const files = built.filter(Boolean);
@@ -252,7 +271,7 @@ function DocumentsSection() {
       return;
     }
     // The letter and blurb list only what actually rides in the share.
-    const sentDocs = docs.filter((_, i) => built[i]);
+    const sentDocs = docs.map((d, i) => ({ ...d, label: outNames[i].label })).filter((_, i) => built[i]);
 
     // iOS Mail promotes the first text line to the subject and strips
     // newlines from a share that carries files: share a flowing blurb, and
@@ -261,29 +280,40 @@ function DocumentsSection() {
     let letterCopied = false;
     try { letterCopied = await copyToClipboard(letter); } catch { /* clipboard unavailable */ }
 
-    if (navigator.share && navigator.canShare?.({ files })) {
-      try {
-        await navigator.share({ files, title, text: blurb });
-      } catch (err) {
-        if (err?.name === "AbortError") return;
-        setBundleMsg("Sharing failed. Try fewer or smaller files.");
-        return;
-      }
-    } else {
+    if (!(navigator.share && navigator.canShare?.({ files }))) {
       setBundleMsg("This browser can't attach files to a share. Use the app on your phone, or send documents individually.");
       return;
     }
-    addItem("shareLog", {
-      id: generateId(),
-      itemId: null,
-      itemName: `Packet (${files.length} documents)`,
-      section: "documents", method: "share", recipient: "",
-      sentAt: new Date().toISOString(),
+    // Recorded, said and out of Select as the files go to the share sheet
+    // (utils/shareHandoff.js): on the iPhone app the sheet often never
+    // answers once Mail takes over, or the page is discarded meanwhile, and
+    // the send used to leave no record, the screen in Select and Send on
+    // offer. Taken back only when the sheet says it did not go.
+    const logId = generateId();
+    const ticked = selectedIds;
+    const outcome = await shareAtHandoff({ files, title, text: blurb }, {
+      share: (payload) => navigator.share(payload),
+      onHanded: () => {
+        addItem("shareLog", {
+          id: logId,
+          itemId: null,
+          itemName: `Packet (${files.length} documents)`,
+          section: "documents", method: "share", recipient: "",
+          sentAt: new Date().toISOString(),
+        });
+        setBundleMsg(`Sent ${files.length} documents as one packet.${letterCopied ? " The formatted cover letter is on your clipboard if you want to paste it over the short intro." : ""}`);
+        setSelectMode(false);
+        setSelectedIds(new Set());
+      },
+      onUndo: () => {
+        deleteItemCtx("shareLog", logId);
+        setSelectMode(true);
+        setSelectedIds(ticked);
+      },
     });
-    setBundleMsg(`Sent ${files.length} documents as one packet.${letterCopied ? " The formatted cover letter is on your clipboard if you want to paste it over the short intro." : ""}`);
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  }, [data.documents, data.settings, selectedIds, addItem, fetched]);
+    if (outcome === "cancelled") setBundleMsg(null);
+    else if (outcome !== "shared") setBundleMsg(shareNotStartedMessage(outcome, "Sharing failed. Try fewer or smaller files."));
+  }, [data, selectedIds, addItem, deleteItemCtx, fetched]);
 
   const openCamera = useCallback(async () => {
     // On mobile, use native camera capture
@@ -690,7 +720,11 @@ function DocumentsSection() {
       setScanError(`"${file.name}" could not be read. Nothing was changed.`);
       return;
     }
-    const dup = others.find(d => (d.data && d.data === dataUrl) || (d.name === file.name && d.size === file.size));
+    // The stored copies too: since a load stopped downloading files, almost
+    // no other document holds its bytes here, and a scan stored under
+    // another name was stored twice (review of release/goal2, 2026-10-02).
+    const dup = others.find(d => (d.data && d.data === dataUrl) || (d.name === file.name && d.size === file.size))
+      || await findStoredDuplicate(others, file, { download: downloadDocumentBlob });
     if (dup) { setScanError(`"${file.name}" is already stored as another document. Pick the file that belongs to "${doc.name}".`); return; }
     if (isScannable(file, type) && aiOn) {
       const candidate = { ...doc, data: dataUrl, type, size: file.size };
@@ -800,7 +834,7 @@ function DocumentsSection() {
     const isSelected = selectedIds.has(doc.id);
     const mime = docMime(doc);
     return (
-      <div key={doc.id}
+      <div key={doc.id} ref={cards.ref(doc.id)}
         onClick={selectMode ? () => toggleSelected(doc.id) : undefined}
         style={{
           backgroundColor: T.card,
@@ -843,8 +877,8 @@ function DocumentsSection() {
             )}
           </div>
         ) : !doc.data && doc.storagePath && (
-          <div style={{ marginTop: 6, fontSize: 12, color: T.textDim }}>
-            {doc.linkedTo ? "Fetching the file from your account." : "Fetching the file from your account. File with AI appears when it is here."}
+          <div style={{ marginTop: 6, fontSize: 12, color: fileStatus(doc) === "loading" ? T.textDim : T.warning }}>
+            {fileWaitText(fileStatus(doc), { unlinked: !doc.linkedTo })}
           </div>
         )}
         {/* The picker links, moves and unlinks. A file on Protected Identity

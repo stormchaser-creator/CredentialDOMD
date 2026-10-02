@@ -66,11 +66,22 @@ test('SYNC-017: a full device storage is said, because the offline copy is older
 // wrong cause, and a copy the load could not read was never mentioned.
 test('SYNC-017: an offline store that would not open, or could not be read, is said as such, not as full storage', () => {
   const m = mount(SyncIssuesNotice, { data: {} });
+  // Online with everything in the account, a store that would not open puts
+  // nothing at risk, and is not said (2026-10-02).
   Object.assign(globalThis.__screen.app, { syncIssues: [], pendingWrites: 0, offlineMode: false, offlineCopyStale: 'unavailable', navigate() {} });
+  assert.doesNotMatch(m.html(), /offline storage could not be opened/);
+  // A change not in the account yet, or offline: said, with what to do.
+  Object.assign(globalThis.__screen.app, { pendingWrites: 1 });
   let html = m.html();
   assert.match(html, /offline storage could not be opened, so its offline copy of your records could not be updated/);
+  // What he can do about it: a reload opens it again (iOS 17.4+ loses the
+  // store for an app left in the background; the page cannot reopen it).
+  assert.match(html, /Reload the app to open it again\./);
+  assert.match(html, /data-offline-reload=""[^>]*>Reload</);
   assert.doesNotMatch(html, /storage is full/);
-  Object.assign(globalThis.__screen.app, { offlineCopyStale: 'unread' });
+  Object.assign(globalThis.__screen.app, { pendingWrites: 0, offlineMode: true });
+  assert.match(m.html(), /offline storage could not be opened/);
+  Object.assign(globalThis.__screen.app, { offlineMode: false, offlineCopyStale: 'unread' });
   html = m.html();
   assert.match(html, /offline storage could not be read, so Protected Identity and the Answer Bank, kept only on this device, may not all be shown/);
   assert.match(html, /The app tries again on its own; reload the app to try again now\./);
@@ -78,7 +89,7 @@ test('SYNC-017: an offline store that would not open, or could not be read, is s
   Object.assign(globalThis.__screen.app, { offlineCopyStale: 'full' });
   assert.match(m.html(), /storage is full, so its offline copy of your records could not be updated/);
   for (const reason of ['unavailable', 'unread', 'full']) {
-    Object.assign(globalThis.__screen.app, { offlineCopyStale: reason });
+    Object.assign(globalThis.__screen.app, { offlineCopyStale: reason, pendingWrites: 1 });
     assert.doesNotMatch(m.html(), /\u2014|—/, 'no em dashes in the copy');
   }
 });

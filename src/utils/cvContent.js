@@ -2,6 +2,7 @@
 import { formatDate, isCurrentJob } from "./helpers.js";
 import { isOnCv, lifecycleOf } from "./lifecycle.js";
 import { websiteLabel } from "./contactFormat.js";
+import { withDegree } from "./outgoingText.js";
 
 /**
  * The one place a CV's shape is decided. Preview, plain text, and PDF all
@@ -227,7 +228,8 @@ export function buildCvContent(data, template = "clinical") {
           const historical = lifecycleOf(p) === "historical";
           const active = !historical && (!p.expirationDate || new Date(p.expirationDate) >= new Date());
           const end = active ? "current" : p.expirationDate ? formatDate(p.expirationDate) : null;
-          const span = from ? (end ? `(${from} to ${end})` : `(${from})`) : "";
+          // The same range style as the experience rows ("August 1, 2019 – current").
+          const span = from ? (end ? `(${from} \u2013 ${end})` : `(${from})`) : "";
           const place = [p.city || p.customFields?.city, p.state].filter(Boolean).join(", ");
           const facility = p.facility || p.name || "";
           return {
@@ -325,7 +327,8 @@ export function buildCvContent(data, template = "clinical") {
           type: "section",
           title: "Professional References",
           items: data.peerReferences.map(r => ({
-            primary: `${r.name}${r.degree ? `, ${r.degree}` : ""}`,
+            // "Jordan Sample, MD" typed with the degree is not "MD, MD".
+            primary: withDegree(r.name, r.degree),
             secondary: [r.specialty, r.institution].filter(Boolean).join(" | "),
             detail: [r.email, r.phone].filter(Boolean).join(" | "),
             date: r.relationship || "",

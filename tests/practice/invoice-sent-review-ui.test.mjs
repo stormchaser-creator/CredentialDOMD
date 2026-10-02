@@ -26,7 +26,7 @@ import { loadScreens, mount, nodes, textOf, find, field, pinClock } from '../har
 
 createRequire(import.meta.url)('jspdf');
 const clock = pinClock(test, 'America/Chicago', '2026-09-10T09:00:00-05:00');
-const { WorkLog, DutyLog, Expenses, _resetHeldInvoiceNumbers, alertWriteRefused, writeRefusalMessage, buildExport, invoiceDocumentArgs } = await loadScreens([
+const { WorkLog, DutyLog, Expenses, _resetHeldInvoiceNumbers, alertWriteRefused, writeRefusalMessage, buildExport, invoiceDocumentArgs, _resetInvoiceHandoff } = await loadScreens([
   'export {default as WorkLog} from "./src/components/features/locum/WorkLog.jsx";',
   'export {default as DutyLog} from "./src/components/features/locum/DutyLog.jsx";',
   'export {default as Expenses} from "./src/components/features/locum/Expenses.jsx";',
@@ -34,7 +34,10 @@ const { WorkLog, DutyLog, Expenses, _resetHeldInvoiceNumbers, alertWriteRefused,
   'export {alertWriteRefused, writeRefusalMessage} from "./src/utils/limitedLaunchAccess.js";',
   'export {buildExport} from "./src/utils/exportData.js";',
   'export {invoiceDocumentArgs} from "./src/utils/invoiceArgs.js";',
+  'export {_resetInvoiceHandoff} from "./src/utils/invoiceHandoff.js";',
 ].join(' '));
+// Each test is a fresh device: no note of an earlier test's invoice.
+test.beforeEach(() => _resetInvoiceHandoff({ stores: true }));
 
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
 const btn = (m, pred, what) => find(m.render(), n => n.type === 'button' && pred(textOf(n)), what);
@@ -230,7 +233,14 @@ test('an invoice that went out unrecorded and was closed: the work log says so, 
   assert.ok(btn(m, t => t === 'Record it', 'Record it'), 'the work log offers to record it (utils/invoiceHandoff.js, 2026-09-30)');
 
   clock.setNow('2026-09-10T15:20:00-05:00');
-  openWorkPreview(m);
+  // Its day starts unchecked (it may be on INV-20260910-01); checked by
+  // hand, it is asked about first.
+  btn(m, t => /Invoice \d+ unbilled/.test(t), 'invoice CTA').props.onClick();
+  const picker = find(m.render(), n => Array.isArray(n.props?.days) && typeof n.props?.onChange === 'function', 'day picker');
+  assert.deepEqual(picker.props.days.map(d => d.note), ['1 item · may be on INV-20260910-01']);
+  picker.props.onChange(new Set(picker.props.days.map(d => d.key)));
+  btn(m, t => t.startsWith('Invoice 1 day'), 'build').props.onClick();
+  assert.match(m.dialogs.filter(d => d[0] === 'confirm').map(d => d[1]).join('\n'), /1 of the days checked may already be on INV-20260910-01, which is not recorded yet\. Bill it on this invoice too\?/);
   assert.ok(shownText(m).includes('INV-20260910-02'), 'the rebuilt preview has a new number');
   btn(m, t => t === 'Sent it already? Mark as sent', 'Mark as sent').props.onClick();
   assert.equal(input(m, 'Invoice number').props.value, 'INV-20260910-01', 'the number that went out');
@@ -288,6 +298,12 @@ test('expenses: a reload keeps an expense invoice that went out unrecorded, and 
   await settle();
   btn(again, t => t === 'Sent it already? Mark as sent', 'Mark as sent').props.onClick();
   assert.equal(input(again, 'Invoice number').props.value, 'EXP-20260910-01');
+  // Its expenses start unchecked (they may be on EXP-20260910-01): Record
+  // asks for them, and once they are checked it records.
+  tapRecord(again);
+  assert.deepEqual(recorded(again), []);
+  assert.match(shownText(again), /Check the expenses that invoice billed\./);
+  for (const b of nodes(again.render()).filter(n => n.type === 'input' && n.props?.type === 'checkbox')) b.props.onChange({ target: { checked: true } });
   tapRecord(again);
   const [inv] = recorded(again);
   assert.deepEqual([inv?.number, inv?.method, inv?.totalAmount, inv?.sentAt], ['EXP-20260910-01', 'marked', 450.9, new Date('2026-09-10T17:00:00-05:00').toISOString()]);

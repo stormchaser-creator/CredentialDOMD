@@ -20,6 +20,7 @@ import { repairStoredIds } from '../../src/utils/idRepair.js';
 import { generateId } from '../../src/utils/helpers.js';
 import { applyHeldQueue } from '../../src/utils/heldChanges.js';
 import { localChangesSince, rebaseLocalChanges } from '../../src/utils/loadRebase.js';
+import { storedFileOf } from '../../src/utils/documentBytes.js';
 
 const { BASE_KEYS, WIPE_SEEN_KEY, localFence, adoptLocalFence, localCopyCurrent } = storageScope;
 const OWNER = 'user_syntheticRace';
@@ -86,20 +87,26 @@ function reload({ memory = onScreen(), device = onScreen(), cloud = onScreen(), 
       if (when === 'tables') land();
       return read;
     },
-    readCachedData: (id) => { const raw = storage.getItem(`${BASE_KEYS.data}:${id}`); return raw ? JSON.parse(raw) : null; },
+    // As storage.js: a read that got through says so on its receipt.
+    readCachedData: (id, receipt) => { if (receipt) receipt.read = true; const raw = storage.getItem(`${BASE_KEYS.data}:${id}`); return raw ? JSON.parse(raw) : null; },
     // The offline copy's unread mark (utils/storageScope.js): this device copy always reads.
     markOfflineCopyRead: storageScope.markOfflineCopyRead, cachedRecordsRef: { current: null }, offlineCopyUnread: () => false, adoptOfflineCopyRead: () => false, deviceOnlyForLoad: () => null, offlineCopyUnchangedSinceKnown: () => false,
-    saveData: async (value, id) => { record('saveData', { value: plain(value) }); storage.setItem(`${BASE_KEYS.data}:${id}`, JSON.stringify(value)); return true; },
+    // As storage.js saveData: a stored file's bytes are never kept in the device copy.
+    saveData: async (value, id) => {
+      record('saveData', { value: plain(value) });
+      const kept = { ...value, documents: (value.documents || []).map(d => (d?.data && d.storagePath ? { ...d, data: undefined } : d)) };
+      storage.setItem(`${BASE_KEYS.data}:${id}`, JSON.stringify(kept)); return true;
+    },
     listTombstones: async () => { if (when === 'ledger') land(); return new Set(tombstones); },
     bulkSync: async (_p, key, items) => record('bulkSync', { key, ids: items.map(x => x.id) }),
     sbSaveSettings: async () => {}, sbUpdate: async (...args) => record('sbUpdate', { args }),
-    uploadDocumentFile: async (doc) => { record('upload', { id: doc.id }); return null; }, downloadDocumentFile: async () => null,
-    missingDocumentFiles: new Set(),
+    uploadDocumentFile: async (doc) => { record('upload', { id: doc.id }); return null; }, downloadDocumentFile: async (path) => { record('download', { path }); return null; },
+    missingDocumentFiles: new Set(), storedFileOf,
     withLocalOnlySettings: settings => settings, hasLegacyStorage: () => false, adoptLegacyStorage: () => null,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [], reconcileDocumentLinks,
     applyHeldQueue, localChangesSince, rebaseLocalChanges,
     accessAuthority: { suspendWrites: () => record('suspendWrites') },
-    setData: value => { states.push(value); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {},
+    setData: value => { states.push(value); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },
   };
   vm.runInNewContext(loadCode, context);
@@ -237,4 +244,42 @@ test('rebaseLocalChanges: settings typed meanwhile are laid over; a missing chan
   assert.deepEqual(out.settings, { name: 'B', theme: 'dark' });
   assert.equal(rebaseLocalChanges(read, localChangesSince(base, base)), read);
   assert.equal(rebaseLocalChanges(read, localChangesSince(null, now)), read);
+});
+
+// Link audit, 2026-10-01: the app back in front reads the account again
+// (AppContext resume refresh). The device copy never holds an uploaded file's
+// bytes (storage.js saveData drops them once a storagePath exists), so every
+// such read downloaded every stored file again, tens of MB over cellular each
+// time he came back from Mail. The files already on screen are kept.
+const FILE_PATH = `${OWNER}/${DOC}`, BYTES = 'data:application/pdf;base64,JVBERi0xLjQKc3ludGhldGlj';
+const storedDoc = (extra = {}) => ({ id: DOC, name: 'Synthetic certificate.pdf', type: 'application/pdf', size: 24, storagePath: FILE_PATH, updatedAt: EARLIER, ...extra });
+const withDoc = (doc) => ({ ...onScreen(), documents: [doc] });
+const ticks = async () => { for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
+
+test('resume read: a stored file already on screen keeps its bytes and is not downloaded again', async () => {
+  const f = reload({ memory: withDoc(storedDoc({ data: BYTES })), device: withDoc(storedDoc()), cloud: withDoc(storedDoc()) });
+  await f.loadDataForUser(OWNER, { quiet: true });
+  await ticks();
+  assert.equal(f.shown().documents[0].data, BYTES, 'the bytes on screen stay');
+  assert.deepEqual(f.named('download'), [], 'no download');
+});
+
+// A load downloads no stored file any more (2026-10-02: every file held as a
+// data URL took hundreds of MB on the owner's iPhone); a screen that shows
+// one asks for it (AppContext requestDocumentBytes). What these guard is that
+// old bytes are never put on a file they are not.
+test('resume read: a file given again on another device (same path, new size) is not given the old bytes, and the load downloads nothing', async () => {
+  const f = reload({ memory: withDoc(storedDoc({ data: BYTES })), device: withDoc(storedDoc()), cloud: withDoc(storedDoc({ size: 99, updatedAt: LATER })) });
+  await f.loadDataForUser(OWNER, { quiet: true });
+  await ticks();
+  assert.equal(f.states.at(-1).documents[0].data, undefined, 'the old bytes are not put on the new file');
+  assert.deepEqual(f.named('download').map(c => c.path), [], 'fetched when a screen shows it');
+});
+
+test('resume read: records on screen from before a purge never lend their bytes', async () => {
+  const f = reload({ memory: withDoc(storedDoc({ data: BYTES })), device: withDoc(storedDoc()), cloud: withDoc(storedDoc()), under: null });
+  await f.loadDataForUser(OWNER, { quiet: true });
+  await ticks();
+  assert.equal(f.states.at(-1).documents[0].data, undefined, 'not lent');
+  assert.deepEqual(f.named('download').map(c => c.path), [], 'fetched when a screen shows it, as on a first load');
 });

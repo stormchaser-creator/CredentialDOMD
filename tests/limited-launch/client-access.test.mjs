@@ -399,20 +399,26 @@ test('the share-sheet invoice sends ask first, and record the invoice before mar
   const work = await read('WorkLog.jsx'), duty = await read('DutyLog.jsx'), expenses = await read('Expenses.jsx');
   // The access check comes before anything goes out: only comments and a
   // silent return for an invoice already recorded (PRAC-002), still waiting
-  // for its number (PRAC-030), or with a Send or Copy already in progress may
+  // for its number (PRAC-030), with a Send or Copy already in progress, or
+  // with the last one not answered yet ("Did it go out?", 2026-10-01) may
   // precede it.
-  const guard = '(?:\\s*//.*\\n|\\s*if \\((?:sent \\|\\| )?(?:sending \\|\\| )?recordedRef\\.current[^\\n]*\\) return;[^\\n]*\\n)*';
+  // And (2026-10-02) the one question asked when the server could not say
+  // whether the items are still unbilled (checkAllows), inside the tap; or,
+  // while the check made as the page came back runs, its answer first
+  // (afterRecheck, review of release/goal2 2026-10-01), timed from the tap
+  // (2026-10-02: a copy refused after that wait says to tap again).
+  const guard = '(?:\\s*//.*\\n|\\s*if \\((?:sent \\|\\| )?(?:sending \\|\\| )?(?:asking \\|\\| )?recordedRef\\.current[^\\n]*\\) return;[^\\n]*\\n|\\s*if \\(!checkAllows\\(\\)\\) return;\\n|\\s*if \\(recheckRef\\.current\\?\\.seq === previewSeqRef\\.current \\? !\\(await afterRecheck\\(\\)\\) : !checkAllows\\(\\)\\) return;\\n|\\s*const tapAt = Date\\.now\\(\\);\\n|\\s*const waited = recheckRef\\.current\\?\\.seq === previewSeqRef\\.current;\\n|\\s*if \\(waited \\? !\\(await afterRecheck\\(\\)\\) : !checkAllows\\(\\)\\) return;\\n)*';
   // Awaited: an answer that is only old is settled before anything goes out
   // (QA3). While it is, Send, Copy and Mark as sent wait; once it is back,
   // nothing goes out if the invoice was recorded meanwhile or the preview closed.
   const check = 'if \\(!\\(await confirmWriteAllowed\\("practice"\\)\\)\\) return;';
-  const gate = (open) => new RegExp(`const whenWriteAllowed = ${open}\\n\\s*const opened = previewSeqRef\\.current;\\n\\s*setSending\\("checking"\\);\\n\\s*try \\{\\n\\s*${check}\\n\\s*if \\(recordedRef\\.current \\|\\| previewSeqRef\\.current !== opened\\) return;\\n\\s*setSending\\("out"\\);\\n\\s*await go\\(\\);`);
+  const gate = (open) => new RegExp(`const whenWriteAllowed = ${open}\\n\\s*const opened = previewSeqRef\\.current;\\n\\s*setSending\\("checking"\\);\\n\\s*try \\{\\n\\s*${check}\\n(?:\\s*//[^\\n]*\\n)*\\s*if \\(recordedRef\\.current \\|\\| previewSeqRef\\.current !== opened \\|\\| billedSeqRef\\.current === opened\\) return;\\n\\s*setSending\\("out"\\);\\n\\s*await go\\(\\);`);
   assert.match(work, gate('useCallback\\(async \\(go\\) => \\{'));
   assert.match(duty, gate('async \\(go\\) => \\{'));
   assert.match(work, new RegExp(`const sendInvoice = useCallback\\(async \\(format\\) => \\{\\n${guard}\\s*await whenWriteAllowed\\(async \\(\\) => \\{`));
   assert.match(duty, new RegExp(`const sendDutyInvoice = async \\(format\\) => \\{\\n${guard}\\s*await whenWriteAllowed\\(\\(\\) => sendDutyFile\\(format\\)\\);`));
   // Copy: the access check, then the copy, and only a copy that worked is marked billed (PRAC-002).
-  const copy = (start, mark) => new RegExp(`${start}\\n${guard}\\s*await whenWriteAllowed\\(async \\(\\) => \\{\\s*let ok = false;\\s*try \\{ ok = await copyToClipboard\\(invoicePreview\\.text\\); \\} catch \\{ ok = false; \\}\\s*if \\(!ok\\) \\{[^\\n]*return; \\}\\s*${mark}`);
+  const copy = (start, mark) => new RegExp(`${start}\\n${guard}\\s*await whenWriteAllowed\\(async \\(\\) => \\{\\s*let ok = false;\\s*try \\{ ok = await copyToClipboard\\(invoicePreview\\.text\\); \\} catch \\{ ok = false; \\}(?:\\s*//[^\\n]*\\n)*\\s*if \\(!ok\\) \\{[^\\n]*return; \\}\\s*${mark}`);
   assert.match(work, copy('const copyInvoice = useCallback\\(async \\(\\) => \\{', 'markBilledAndLog\\("clipboard"\\);'));
   assert.match(work, /onClick=\{copyInvoice\}/);
   assert.match(duty, copy('const copyDutyInvoice = async \\(\\) => \\{', 'markDutyBilled\\("copy"\\);'));
@@ -460,9 +466,14 @@ test('QA3 review: an invoice that went out records itself and everything it bill
   // under), and moved the expense sheet's saves out of its send into
   // recordExpenseInvoice, which the send, Record as sent and Mark as sent share.
   const cases = [
-    ['WorkLog.jsx', 'const markBilledAndLog = useCallback((method, { number: asNumber, sentAt: asSentAt, retry = false } = {}) => {', 4],
-    ['DutyLog.jsx', 'const markDutyBilled = (method, { number: asNumber, sentAt: asSentAt, retry = false } = {}) => {', 2],
-    ['Expenses.jsx', 'const recordExpenseInvoice = (record, { retry = false, outcome = null } = {}) => {', 2],
+    // 2026-10-01: each also records a note's invoice from the screen's
+    // reminder ("Yes, it was sent": `from`, `fromNote`), which bills the
+    // expenses in a branch of its own.
+    // Also 2026-10-01: an emailed invoice is recorded under the id its send
+    // carries (`id`, "Email it for me").
+    ['WorkLog.jsx', 'const markBilledAndLog = useCallback((method, { number: asNumber, sentAt: asSentAt, retry = false, from = null, id: asId = null } = {}) => {', 4],
+    ['DutyLog.jsx', 'const markDutyBilled = (method, { number: asNumber, sentAt: asSentAt, retry = false, from = null, id: asId = null } = {}) => {', 2],
+    ['Expenses.jsx', 'const recordExpenseInvoice = (record, { retry = false, outcome = null, fromNote = false } = {}) => {', 3],
   ];
   for (const [file, start, count] of cases) {
     const found = saves(body(await read(file), start));

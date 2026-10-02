@@ -1,3 +1,4 @@
+import { sameClerkSession } from "./clerkSession.js";
 // Member-granted support view (ticket d45e857c, phase 2), client side.
 //
 // Member: Settings > Support access reads and changes ONE thing, their own
@@ -66,7 +67,7 @@ export function createMemberViewClient({
 } = {}) {
   async function call(body, { binary = false } = {}) {
     const session = getSession();
-    const current = () => getSession() === session && (session?.user?.id || session?.userId) === accountId;
+    const current = () => sameClerkSession(session, getSession()) && (session?.user?.id || session?.userId) === accountId;
     if (!accountId || !url || !anonKey || !session || !current()) throw memberViewFailure("session_changed");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);

@@ -13,6 +13,8 @@ import * as credentialTypes from '../src/constants/credentialTypes.js';
 import * as inboxDocs from '../src/utils/inboxDocs.js';
 import * as contractsForDate from '../src/utils/contractsForDate.js';
 import * as syncRules from '../src/utils/syncRules.js';
+import * as documentBytes from '../src/utils/documentBytes.js';
+import * as storedDuplicate from '../src/utils/storedDuplicate.js';
 import { mountComponent, settle } from './component-harness.mjs';
 
 const CHART = { documentType: 'unknown', extracted: { notes: 'Patient name: Synthetic Person. MRN 000000. Chief complaint: headache.' } };
@@ -99,7 +101,7 @@ test('DOCS-001: a file the browser typed as "" is stored with the type its name 
 });
 
 // ── SYNC-013: a file missing from the account is said, and can be replaced ──
-async function listDocs(documents, { uploaded = 'user_synthetic/doc-m', uploadError = null, scan = null, quota = { ok: true }, globals = {}, confirm = undefined } = {}) {
+async function listDocs(documents, { uploaded = 'user_synthetic/doc-m', uploadError = null, scan = null, quota = { ok: true }, globals = {}, confirm = undefined, stored = {} } = {}) {
   const calls = [];
   let state = { settings: { apiKey: 'synthetic-key' }, documents, licenses: [], privileges: [], insurance: [], cme: [], healthRecords: [], education: [],
     locumContracts: [], travelExpenses: [], deductibles: [], customCategories: [], customRecords: [] };
@@ -111,12 +113,13 @@ async function listDocs(documents, { uploaded = 'user_synthetic/doc-m', uploadEr
       updateSection: (key, fn) => { calls.push(['updateSection', key]); state = { ...state, [key]: fn(state[key]) }; return true; },
       setData: (fn) => { calls.push(['setData']); state = typeof fn === 'function' ? fn(state) : fn; return true; } },
     modules: {
-      phiGuard, spreadsheetGuard: guard, customCategories, credentialTypes, inboxDocs, contractsForDate, syncRules,
+      phiGuard, spreadsheetGuard: guard, customCategories, credentialTypes, inboxDocs, contractsForDate, syncRules, documentBytes, storedDuplicate,
       aiClient: { useAiAvailable: () => true, describeAiStatus: () => '' },
       storageQuota: { checkStorageQuota: (docs, files) => { calls.push(['quota', docs.map((d) => d.id), files.length]); return quota; } }, officeText: { isOfficeFile: () => false, UPLOAD_ACCEPT: '*' },
       documentScanner: { CV_DOC_TYPE: 'cv', OTHER_DOC_TYPE: 'other',
         analyzePDF: async () => { calls.push(['read']); return scan; }, analyzeDocument: async () => { calls.push(['read']); return scan; } },
-      supabase: { supabase: {}, uploadDocumentFile: async (doc, auth, profile) => { calls.push(['upload', doc.id, auth, profile, !!doc.data]); if (uploadError) throw uploadError; return uploaded; } },
+      supabase: { supabase: {}, uploadDocumentFile: async (doc, auth, profile) => { calls.push(['upload', doc.id, auth, profile, !!doc.data]); if (uploadError) throw uploadError; return uploaded; },
+        downloadDocumentBlob: async (path) => { calls.push(['download', path]); return path in stored ? new Blob([stored[path]]) : null; } },
       limitedLaunchAccess: { alertWriteRefused: () => calls.push(['alertWriteRefused']), scopesForWrite: () => 'credential' },
     },
     globals,
@@ -207,6 +210,23 @@ test('SYNC-013: a file given again is held to the 2 GB line, the size limit and 
   const dup = await uploadAgain(new File(['%PDF-1.4 synthetic'], 'other.pdf', { type: 'application/pdf' }));
   assert.equal(dup.stored, false);
   assert.match(dup.page, /"other\.pdf" is already stored as another document\./);
+});
+
+// Review of release/goal2 (2026-10-02): the duplicate check of "Upload it
+// again" compared only bytes in memory, which stored documents no longer hold
+// (a load does not download them), so a scan already stored under another
+// name was stored a second time, and read again at a cost.
+test('SYNC-013: a file given again that is already stored under another name is caught from the stored copy', async () => {
+  const dup = await uploadAgain(new File(['%PDF-1.4 synthetic'], 'IMG_0412.pdf', { type: 'application/pdf' }),
+    { scan: LICENSE, stored: { 'user_synthetic/doc-o': '%PDF-1.4 synthetic' } });
+  assert.deepEqual(dup.calls.filter((c) => c[0] === 'download'), [['download', 'user_synthetic/doc-o']], 'the stored copy of the same size is compared');
+  assert.equal(dup.stored, false, 'not stored twice');
+  assert.equal(dup.names.includes('read'), false, 'and not read');
+  assert.match(dup.page, /"IMG_0412\.pdf" is already stored as another document\./);
+  // Must pass: other bytes of the same size are not a duplicate.
+  const other = await uploadAgain(new File(['%PDF-1.4 different'], 'IMG_0413.pdf', { type: 'application/pdf' }),
+    { scan: LICENSE, stored: { 'user_synthetic/doc-o': '%PDF-1.4 synthetic' } });
+  assert.equal(other.stored, true);
 });
 
 test('SYNC-013: a file given again that cannot be read says so and changes nothing', async () => {

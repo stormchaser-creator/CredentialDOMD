@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { CameraIcon } from "../../shared/Icons";
@@ -58,12 +58,38 @@ export function DateRow({ rec, onCaptured, onOpenRecord }) {
   // 2026-05-01), and saving each one stored the year 2 and unmounted the row
   // before the year was finished. Only a whole date with a plausible year is
   // saved, once, from a change, a blur or Enter.
+  //
+  // The save waits for the next task. A saved date dates the license, and
+  // DateFixList drops the row with this field in it: done inside the field's
+  // own input event, Safari's date field was removed while it was still
+  // handling the keystroke that finished the year, and the page crashed
+  // (SETTINGS-010; WebKit 26, a plain date input removed in its own input
+  // event crashes the same way, one removed a task later does not). Typed
+  // with no separators in the lab's WebKit, the field never left the month,
+  // so nothing was saved there at all.
   const [draft, setDraft] = useState(null);
+  const committed = useRef(null);
+  // The record's date changed (this save landed, or another device's, or the
+  // Licenses form's): the field shows the record again, and any date can be
+  // saved again. A row SetupPage keeps mounted after a save (the DEA drawer)
+  // otherwise showed the typed date for good, over a newer one, and typing
+  // that date back saved nothing (review of release/goal2, 2026-10-02).
+  // A date still being typed (not yet saved) is left as it is.
+  const recDate = rec.expirationDate || "";
+  useEffect(() => {
+    if (committed.current == null) return;
+    setDraft((d) => (d === committed.current ? null : d));
+    committed.current = null;
+  }, [recDate]);
   const commit = (value) => {
-    if (!isWholeDate(value) || value === (rec.expirationDate || "")) return false;
-    editItem("licenses", { ...rec, expirationDate: value });
-    onCaptured?.(rec);
-    setDraft(null);
+    if (!isWholeDate(value) || value === (rec.expirationDate || "") || value === committed.current) return false;
+    committed.current = value;
+    setDraft(value);
+    setTimeout(() => {
+      // Refused (a membership check): the date stays typed, to save again.
+      if (editItem("licenses", { ...rec, expirationDate: value }) === false) { committed.current = null; return; }
+      onCaptured?.(rec);
+    }, 0);
     return true;
   };
 

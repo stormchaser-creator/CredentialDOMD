@@ -5,10 +5,13 @@ import { loadScreens, mount, nodes, textOf, find, field, pinClock } from '../har
 
 // Record it on Days & call and Expenses, as on the Work log (ticket
 // "Invoicce", 2026-09-30): an invoice that went to the share sheet and was
-// never recorded says so on the screen it was built on, and Record it opens
-// the picker with what the note billed checked (when every item is still
-// unbilled) and Mark as sent filled in with its number, date and send time.
-// Driven through the real screens on synthetic data only.
+// never recorded says so on the screen it was built on. Since 2026-10-01 it
+// asks whether it went out: "Yes, it was sent" records it in one tap when
+// every item the note billed is still unbilled and they come to its total;
+// otherwise it opens the picker with what the note billed checked (when
+// every item is still unbilled) and Mark as sent filled in with its number,
+// date and send time, as Record it does for a note known only from the
+// server. Driven through the real screens on synthetic data only.
 
 createRequire(import.meta.url)('jspdf');
 pinClock(test, 'America/Chicago', '2026-09-10T12:00:00-05:00');
@@ -120,7 +123,7 @@ async function dutyPage(data, { srv, confirm } = {}) {
   return again;
 }
 
-test('Days & call: after a reload, Record it checks exactly the days the note billed and records it under its number, date and send time', async () => {
+test('Days & call: after a reload, Yes, it was sent records exactly the days the note billed under its number and send time, in one tap', async () => {
   const dev = fresh(); const srv = server();
   const { number } = await dutySent(srv);
   // iOS threw the app away while Mail was open: only IndexedDB is relied on.
@@ -128,22 +131,17 @@ test('Days & call: after a reload, Record it checks exactly the days the note bi
   // A day logged since, unbilled and in the past, is not one this invoice billed.
   const again = await dutyPage({ dutyDays: [...DAYS(), day('d0', '2026-09-04')] }, { srv });
   const text = shown(again);
-  assert.match(text, new RegExp(`${number} went to the share sheet Sep 10, 2026 for \\$6,000\\.00 and was never recorded, so its days are still unbilled\\. If it went out, tap Record it: its number and date are filled in`));
+  assert.match(text, new RegExp(`${number} is not recorded\\. Did it go out\\?`));
+  assert.match(text, new RegExp(`${number} went to the share sheet Sep 10, 2026 for \\$6,000\\.00 and was never recorded, so its days are still unbilled\\. If it went out, tap Yes, it was sent\\. If it did not, tap No\\.`));
   assert.doesNotMatch(text, /build its invoice/, 'no longer says to build it and tap Mark as sent');
 
-  tap(again, t => t === 'Record it', 'Record it');
-  assert.equal(modal(again, 'Which days go on this invoice?').props.open, true);
-  assert.deepEqual([...pickedDays(again).selected].sort(), ['2026-09-07', '2026-09-08', '2026-09-09'], 'its three days, not Sep 4');
-  assert.match(shown(again), new RegExp(`The days ${number} billed are checked\\. Check them against the copy that was sent\\.`));
-  tap(again, t => /^Invoice 3 days/.test(t), 'build');
-  await settle();
-  assert.equal(inputOf(again, 'Invoice number').props.value, number, 'Mark as sent opens filled in');
-  assert.equal(inputOf(again, 'Date sent').props.value, '2026-09-10');
-  assert.match(field(again.render(), 'Invoice number').props.hint, new RegExp(`Filled in from ${number}, which went to the share sheet Sep 10, 2026`));
-  tap(again, t => t === 'Record as sent', 'Record as sent');
+  tap(again, t => t === 'Yes, it was sent', 'Yes, it was sent');
+  await settle(); // Yes first checks it is still unrecorded (invoiceRecordCheck.js)
+  assert.equal(modal(again, 'Which days go on this invoice?').props.open, false, 'no picker: one tap');
+  assert.equal(modal(again, 'Invoice preview').props.open, false, 'no preview either');
   const [inv] = recorded(again);
   assert.equal(inv?.number, number);
-  assert.equal(inv.method, 'marked');
+  assert.equal(inv.method, 'share-confirmed');
   assert.equal(inv.sentAt, new Date('2026-09-10T12:00:00-05:00').toISOString(), 'when it went to the sheet');
   assert.equal(inv.totalAmount, 6000);
   assert.deepEqual(again.dialogs.filter(d => /went out for/.test(d[1])), [], 'the totals match: nothing asked');
@@ -154,13 +152,14 @@ test('Days & call: after a reload, Record it checks exactly the days the note bi
   assert.doesNotMatch(shown(again), /is not recorded/);
 });
 
-test('Days & call: a day of the note deleted since checks none, and another total is asked about before it records', async () => {
+test('Days & call: a day of the note deleted since: Yes opens the picker with none checked, and another total is asked about before it records', async () => {
   const dev = fresh(); const srv = server();
   const { number } = await dutySent(srv);
   dev.session.clear();
   const answers = [];
   const again = await dutyPage({ dutyDays: DAYS().filter(d => d.id !== 'd2') }, { srv, confirm: (q) => { answers.push(q); return !/went out for/.test(q); } });
-  tap(again, t => t === 'Record it', 'Record it');
+  tap(again, t => t === 'Yes, it was sent', 'Yes, it was sent');
+  assert.deepEqual(recorded(again), [], 'not recorded in one tap: its days changed');
   assert.equal(pickedDays(again).selected.size, 0, 'not the two days left of three');
   assert.match(shown(again), new RegExp(`This device does not know which days ${number} billed, or they have changed since\\. Check the days on the copy that was sent\\.`));
   assert.equal(btn(again, t => /^Invoice 0 days/.test(t), 'build').props.disabled, true);
@@ -246,26 +245,21 @@ async function expPage(travelExpenses, opts = {}) {
   return again;
 }
 
-test('Expenses: after a reload, Record it opens the sheet with the note\'s expenses and agency checked, and records it under its number and send time', async () => {
+test('Expenses: after a reload, Yes, it was sent records the note\'s expenses to its agency under its number and send time, in one tap', async () => {
   const dev = fresh(); const srv = server();
   const { number } = await expSent(srv);
   dev.session.clear(); dev.local.clear();
   const again = await expPage(X(), { srv });
-  assert.match(shown(again), new RegExp(`${number} went to the share sheet Sep 10, 2026 for \\$61\\.25 and was never recorded, so its expenses are still unbilled\\. If it went out, tap Record it`));
-  tap(again, t => t === 'Record it', 'Record it');
+  assert.match(shown(again), new RegExp(`${number} went to the share sheet Sep 10, 2026 for \\$61\\.25 and was never recorded, so its expenses are still unbilled\\. If it went out, tap Yes, it was sent`));
+  tap(again, t => t === 'Yes, it was sent', 'Yes, it was sent');
   await settle();
-  assert.equal(modal(again, 'Invoice expenses').props.open, true);
-  assert.deepEqual(checkedIds(again).map(t => t.split(' · ')[1]), ['Parking'], 'only the expense it billed');
-  assert.equal(find(again.render(), n => n.type === 'input' && n.props?.['aria-labelledby'] === 'expense-invoice-bill-to', 'bill to').props.value, 'Other Synthetic Agency');
-  assert.match(shown(again), new RegExp(`The expenses ${number} billed are checked\\. Check them against the copy that was sent\\.`));
-  assert.equal(inputOf(again, 'Invoice number').props.value, number, 'Mark as sent opens filled in');
-  assert.equal(inputOf(again, 'Date sent').props.value, '2026-09-10');
-  assert.match(field(again.render(), 'Invoice number').props.hint, new RegExp(`Filled in from ${number}, which went to the share sheet Sep 10, 2026`));
-  tap(again, t => t === 'Record as sent', 'Record as sent');
+  assert.equal(modal(again, 'Invoice expenses').props.open, false, 'no sheet: one tap');
   const [inv] = recorded(again);
   assert.equal(inv?.number, number);
-  assert.equal(inv.method, 'marked');
+  assert.equal(inv.method, 'share-confirmed');
   assert.equal(inv.billToLabel, 'Other Synthetic Agency');
+  assert.equal(inv.totalAmount, 61.25);
+  assert.ok(inv.lines.every(l => !/attached/i.test(l.detail || '')), 'no receipt is claimed attached');
   assert.deepEqual(inv.entryIds, ['x3']);
   assert.equal(inv.sentAt, new Date('2026-09-10T12:00:00-05:00').toISOString(), 'when it went to the sheet');
   assert.deepEqual(again.dialogs.filter(d => /went out for/.test(d[1])), []);
@@ -299,21 +293,19 @@ test('Expenses: a note known only from the server is asked about first, checks n
   assert.equal(answers.filter(q => /went out for/.test(q)).length, 0);
 });
 
-test('Expenses: an expense of the note billed since checks none, and a different total is asked about before it records', async () => {
+test('Expenses: the note\'s only expense billed since on another invoice: it repeats that invoice, offers no Yes or Record it, and OK lets it go (2026-10-02)', async () => {
   const dev = fresh(); const srv = server();
   const { number } = await expSent(srv);
   dev.session.clear();
-  const answers = [];
   const xs = X().map(e => (e.id === 'x3' ? { ...e, invoiceId: 'inv-other' } : e));
-  const again = await expPage(xs, { srv, confirm: (q) => { answers.push(q); return !/went out for/.test(q); } });
-  tap(again, t => t === 'Record it', 'Record it');
+  const again = await expPage(xs, { srv });
+  assert.match(shown(again), new RegExp(`${number} repeats another invoice: the same expenses are on another invoice, which is recorded\\. ${number} is not recorded again\\.`));
+  assert.ok(!nodes(again.render()).some(n => n?.type === 'button' && ['Yes, it was sent', 'Record it'].includes(textOf(n))), 'nothing to record');
+  tap(again, t => t === 'OK', 'OK');
   await settle();
-  assert.deepEqual(checkedIds(again), []);
-  const box = find(nodes(again.render()).find(n => typeof n === 'object' && n.type === 'label' && textOf(n).includes('Synthetic Inn')), c => c.type === 'input', 'Synthetic Inn');
-  box.props.onChange({ target: { checked: true } });
-  tap(again, t => t === 'Record as sent', 'Record as sent');
-  assert.match(answers.at(-1), new RegExp(`${number} went out for \\$61\\.25, and the expenses checked here come to \\$412\\.40\\. Record ${number} for these expenses anyway\\?`));
-  assert.deepEqual(recorded(again), [], 'declined: nothing recorded');
+  assert.doesNotMatch(shown(again), new RegExp(number));
+  assert.deepEqual(recorded(again), []);
+  assert.equal(again.dialogs.length, 0, 'no question');
 });
 
 test('Expenses: the Invoice button still opens the usual sheet (the first agency checked, no note line, Mark as sent closed)', async () => {

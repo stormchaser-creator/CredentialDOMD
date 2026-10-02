@@ -1,6 +1,7 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
-import { summarizeByYear, buildCaseLogCsv, buildCaseLogPdf, shareCaseLogFile, academicYearOf, pgyLabelOf, yearLabel, careerSpanLabel, academicYearSpanLabel, filterLastMonths, caseWRVU } from "../../utils/caseLogReport";
+import { withDegree } from "../../utils/outgoingText";
+import { summarizeByYear, buildCaseLogCsv, buildCaseLogPdf, shareCaseLogFile, caseLogCsvName, academicYearOf, pgyLabelOf, yearLabel, careerSpanLabel, academicYearSpanLabel, filterLastMonths, caseWRVU } from "../../utils/caseLogReport";
 
 /**
  * The career ledger above the case list. The medicine year runs
@@ -27,7 +28,7 @@ function CaseLogSummary({ cases, year, onYear }) {
           ...last12Cases.reduce((s, c) => ({ cases: s.cases + 1, wRVU: s.wRVU + caseWRVU(c) }), { cases: 0, wRVU: 0 }) }
       : { label: pgyLabelOf(year, startYear), detail: academicYearSpanLabel(year),
           ...(years.find(y => y.year === year) || { cases: 0, wRVU: 0 }) };
-  const physician = data.settings.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
+  const physician = data.settings.name ? withDegree(data.settings.name, data.settings.degreeType) : "Physician";
 
   const report = async (kind) => {
     if (selected.length === 0) { flash("No cases in that range."); return; }
@@ -35,12 +36,12 @@ function CaseLogSummary({ cases, year, onYear }) {
       const rangeLabel = isAll ? null : isLast12 ? "Last 12 Months" : yearLabel(year, startYear);
       if (kind === "pdf") {
         const file = buildCaseLogPdf(selected, { physician, year: rangeLabel, startYear });
-        const r = await shareCaseLogFile(file);
+        const r = await shareCaseLogFile(file, { what: `case log${rangeLabel ? `, ${rangeLabel}` : ""}`, settings: data.settings });
         if (r) flash(r === "download" ? "PDF downloaded." : "PDF in the share sheet.");
       } else {
         const csv = buildCaseLogCsv(selected);
-        const file = new File([csv], `Case Log - ${physician}${rangeLabel ? " " + rangeLabel : ""}.csv`, { type: "text/csv" });
-        const r = await shareCaseLogFile(file);
+        const file = new File([csv], caseLogCsvName(physician, rangeLabel), { type: "text/csv;charset=utf-8" });
+        const r = await shareCaseLogFile(file, { what: `case log${rangeLabel ? `, ${rangeLabel}` : ""} (spreadsheet)`, settings: data.settings });
         if (r) flash(r === "download" ? "CSV downloaded." : "CSV in the share sheet.");
       }
     } catch (err) {

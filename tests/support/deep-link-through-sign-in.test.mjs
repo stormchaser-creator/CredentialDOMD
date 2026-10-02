@@ -83,11 +83,13 @@ test('without storage the hash stays in the address, as before', () => {
   assert.equal(t.location.hash, '', 'AppInner clears the address once it opens the link');
 });
 
-test('main.jsx keeps the link before Clerk mounts and AppInner takes it back', () => {
+test('main.jsx keeps the link before Clerk mounts and App takes it back', () => {
   const main = readFileSync(new URL('../../src/main.jsx', import.meta.url), 'utf8');
   const app = readFileSync(new URL('../../src/App.jsx', import.meta.url), 'utf8');
   const captureAt = main.indexOf('captureAppDeepLink();');
   assert.ok(captureAt > 0 && captureAt < main.indexOf('<ClerkProvider'), 'captured at module load, before ClerkProvider renders');
-  assert.match(app, /const hash = takeAppDeepLink\(\);\n\s+const supportLink = supportDeepLink\(hash\);/);
+  // Taken back in App, which outlives AppInner mounting again (tests/iphone/deep-link-held.test.mjs).
+  assert.match(app, /const openedOnLink = \(\) => \(pageDeepLink \?\?= takeAppDeepLink\(\)\);/);
+  assert.match(app, /const \[deepLink, setDeepLink\] = useState\(openedOnLink\);/);
   assert.doesNotMatch(app, /const hash = window\.location\.hash;\n\s+const supportLink/);
 });

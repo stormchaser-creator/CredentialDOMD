@@ -19,7 +19,7 @@ const STUBS = {
   // useNotifications and AppProvider are for App.jsx; a test that renders the
   // app shell sets globalThis.__screen.notifications to change the answer.
   'context/AppContext': 'export const useApp = () => globalThis.__screen.app; export const useNotifications = () => globalThis.__screen.notifications ?? { browserPermission: "default", requestPermission: async () => "default", checkAndNotify() {} }; export const AppProvider = ({ children }) => children;',
-  'utils/storageScope': 'export const BASE_KEYS = { timer: "timer", lastContract: "lastContract", contractPick: "contractPick", unrecordedInvoices: "unrecordedInvoices" }; const m = () => globalThis.__screen.storage; const full = () => globalThis.__screen.storageFull === true; export const lsGet = (k) => m()[k] ?? null; export const lsSet = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsGetJSON = (k) => m()[k] ?? null; export const lsSetJSON = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsRemove = (k) => { delete m()[k]; }; export const offlineCopyUnread = () => globalThis.__screen?.offlineCopyUnread === true;',
+  'utils/storageScope': 'export const BASE_KEYS = { timer: "timer", lastContract: "lastContract", contractPick: "contractPick", unrecordedInvoices: "unrecordedInvoices", formDrafts: "formDrafts" }; const m = () => globalThis.__screen.storage; const full = () => globalThis.__screen.storageFull === true; export const lsGet = (k) => m()[k] ?? null; export const lsSet = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsGetJSON = (k) => m()[k] ?? null; export const lsSetJSON = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsRemove = (k) => { delete m()[k]; }; export const offlineCopyUnread = () => globalThis.__screen?.offlineCopyUnread === true; export const scopedKey = (k) => "user_synthetic:" + k; export const getActiveUserId = () => "user_synthetic"; export const localCopyCurrent = () => true;',
   'utils/privateVault': 'const v = () => globalThis.__screen.vault; export const getPrivate = (s, id) => v()[s + ":" + id] || ""; export const setPrivate = (s, id, t) => { v()[s + ":" + id] = t; }; export const removePrivate = (s, id) => { delete v()[s + ":" + id]; }; export const looksLikePHI = () => null;',
   // A stored file comes back as null (not reachable) unless a test sets
   // globalThis.__screen.download to hand one back.
@@ -27,7 +27,13 @@ const STUBS = {
   // sets globalThis.__screen.allocate to answer allocate_invoice_number.
   // The share stamps (mark_invoice_number_shared, list_shared_invoice_numbers)
   // go nowhere unless a test sets globalThis.__screen.markShared / listShared.
-  'lib/supabase': 'export const supabase = {}; export const downloadDocumentBlob = async (p) => (globalThis.__screen?.download ? globalThis.__screen.download(p) : null); export const downloadDocumentFile = async (p, o) => (globalThis.__screen?.downloadFile ? globalThis.__screen.downloadFile(p, o) : (o?.detail ? { failed: true } : null)); export const allocateInvoiceNumberRpc = (...a) => (globalThis.__screen?.allocate ? globalThis.__screen.allocate(...a) : null); export const markInvoiceNumberSharedRpc = (...a) => (globalThis.__screen?.markShared ? globalThis.__screen.markShared(...a) : null); export const listSharedInvoiceNumbersRpc = () => (globalThis.__screen?.listShared ? globalThis.__screen.listShared() : null); export const uploadDocumentFile = async () => globalThis.__screen?.uploadDocumentFile?.() ?? null; export default {};',
+  // The check before a one-tap Yes (readInvoiceRecordState) has no server
+  // unless a test sets globalThis.__screen.recordState, nor the check that a
+  // recorded invoice is on the server before its stamp is cleared
+  // (readInvoiceNumberRecorded) unless it sets globalThis.__screen.numberRecorded.
+  // Edge functions (supabase.functions.invoke) answer only when a test sets
+  // globalThis.__screen.invoke; otherwise the call fails as a lost network does.
+  'lib/supabase': 'export const supabase = { functions: { invoke: (n, o) => (globalThis.__screen?.invoke ? globalThis.__screen.invoke(n, o) : Promise.reject(new TypeError("Load failed"))) } }; export const downloadDocumentBlob = async (p) => (globalThis.__screen?.download ? globalThis.__screen.download(p) : null); export const downloadDocumentFile = async (p, o) => (globalThis.__screen?.downloadFile ? globalThis.__screen.downloadFile(p, o) : (o?.detail ? { failed: true } : null)); export const allocateInvoiceNumberRpc = (...a) => (globalThis.__screen?.allocate ? globalThis.__screen.allocate(...a) : null); export const markInvoiceNumberSharedRpc = (...a) => (globalThis.__screen?.markShared ? globalThis.__screen.markShared(...a) : null); export const listSharedInvoiceNumbersRpc = () => (globalThis.__screen?.listShared ? globalThis.__screen.listShared() : null); export const readInvoiceRecordState = (...a) => (globalThis.__screen?.recordState ? globalThis.__screen.recordState(...a) : null); export const readInvoiceNumberRecorded = (...a) => (globalThis.__screen?.numberRecorded ? globalThis.__screen.numberRecorded(...a) : null); export const uploadDocumentFile = async () => globalThis.__screen?.uploadDocumentFile?.() ?? null; export default {};',
   'hooks/useDeskKeys': 'export const useDeskAddShortcut = () => {}; export const useDeskKeyboard = () => {};',
 };
 // Sign-in (Clerk) for screens that read the signed-in user, such as Settings.
@@ -117,6 +123,21 @@ export function mount(Component, { data: seed = {}, confirm = () => true, storag
   globalThis.__screen = { app, storage: { ...storage }, vault: {} };
   const render = () => { current = h; h.begin(); const tree = Component(props); h.flush(); return tree; };
   return { render, calls, dialogs, data, storage: globalThis.__screen.storage, html: () => renderToStaticMarkup(render()) };
+}
+
+/**
+ * A second component on the same account as the last mount (a modal a
+ * screen renders as its own element, which this harness does not expand):
+ * its own hooks, and `props()` read fresh from the screen on every render.
+ */
+export function child(Component, props) {
+  const h = runtime();
+  const render = () => {
+    // Read first: reading them renders the screen, on its own hooks.
+    const p = typeof props === 'function' ? props() : props;
+    current = h; h.begin(); const tree = Component(p); h.flush(); return tree;
+  };
+  return { render };
 }
 
 /**

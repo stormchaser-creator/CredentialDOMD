@@ -484,19 +484,19 @@ if (isMain) {
   // January, and the credentialer wrote back.
   {
     const labelsFor = (body) => buildProposal({ subject: "docs", fromName: "Sam", fromAddr: "s@x.example", body }, CATALOGUE, PHYSICIAN, NOW).items.map((i) => i.labels);
-    eq("the expired ND DEA is labelled expired, with the date", labelsFor("- Copy of your ND DEA"), [["DEA Registration, ND, expired 2026-01-31"]]);
-    eq("the expired PPD is labelled expired", labelsFor("- PPD"), [["PPD (Tuberculin Skin Test), Negative, expired 2026-06-01"]]);
-    eq("the expired ND licence is labelled expired", labelsFor("- North Dakota license"), [["State Medical License (DO), ND, expired 2025-12-31"]]);
+    eq("the expired ND DEA is labelled expired, with the date", labelsFor("- Copy of your ND DEA"), [["DEA Registration, ND, expired Jan 31, 2026"]]);
+    eq("the expired PPD is labelled expired", labelsFor("- PPD"), [["PPD (Tuberculin Skin Test), Negative, expired Jun 1, 2026"]]);
+    eq("the expired ND licence is labelled expired", labelsFor("- North Dakota license"), [["State Medical License (DO), ND, expired Dec 31, 2025"]]);
     eq("a live document carries no date", labelsFor("- DEA\n- CA license"), [["DEA Registration, CA"], ["State Medical License (DO), CA"]]);
     eq("a record with no expiration carries no date", labelsFor("- Board certificate"), [["Board Certification (AOA)"]]);
     eq("the date is judged against `now`: the ND DEA was live in 2025", buildProposal({ subject: "docs", fromName: "Sam", fromAddr: "s@x.example", body: "- Copy of your ND DEA" }, CATALOGUE, PHYSICIAN, "2025-12-01").items[0].labels, ["DEA Registration, ND"]);
     const p = buildProposal({ subject: "docs", fromName: "Sam", fromAddr: "s@x.example", body: "- Copy of your ND DEA\n- PPD" }, CATALOGUE, PHYSICIAN, NOW);
-    ok("the cover note carries the expiry beside each attached document", p.coverNote.includes("Attached are the documents you asked for:\n- DEA Registration, ND, expired 2026-01-31\n- PPD (Tuberculin Skin Test), Negative, expired 2026-06-01"));
+    ok("the cover note carries the expiry beside each attached document", p.coverNote.includes("Attached are the documents you asked for:\n- DEA Registration, ND, expired Jan 31, 2026\n- PPD (Tuberculin Skin Test), Negative, expired Jun 1, 2026"));
     eq("a trimmed note keeps the expiry too", noteForSelection(p, ["doc-dea-nd"], PHYSICIAN, "Sam"),
-      "Hello Sam,\n\nAttached are the documents you asked for:\n- DEA Registration, ND, expired 2026-01-31\n\nNot enclosed this time:\n- PPD\n\nRegards,\nRowan Testa, DO");
+      "Hello Sam,\n\nAttached are the documents you asked for:\n- DEA Registration, ND, expired Jan 31, 2026\n\nNot enclosed this time:\n- PPD\n\nRegards,\nRowan Testa, DO");
     ok("all state licences: only the lapsed one is dated", (() => {
       const l = labelsFor("- all state licenses")[0];
-      return l[0] === "State Medical License (DO), CA" && l[1] === "State Medical License (DO), CO" && l[2] === "State Medical License (DO), ND, expired 2025-12-31";
+      return l[0] === "State Medical License (DO), CA" && l[1] === "State Medical License (DO), CO" && l[2] === "State Medical License (DO), ND, expired Dec 31, 2025";
     })());
   }
   eq("MMR returns the series", ids("MMR"), ["doc-mmr2", "doc-mmr1", "doc-measles"]);
@@ -938,6 +938,9 @@ if (isMain) {
     ok("and a proposal that only claims to be a model's, with no item confidence, is not one tap",
       !oneTapReady({ ...keyword, source: "model", confidence: "high" }));
     const lapsed = oneTapReady({ source: "model", confidence: "high", items: [{ ask: "DEA", kind: "dea", status: "found", docIds: ["d"], labels: ["DEA Registration, ND, expired 2026-01-31"], confidence: "high" }] });
+    // The label now reads "expired Jan 31, 2026"; an expired copy still never rides on one tap.
+    const lapsedNow = oneTapReady({ source: "model", confidence: "high", items: [{ ask: "DEA", kind: "dea", status: "found", docIds: ["d"], labels: ["DEA Registration, ND, expired Jan 31, 2026"], confidence: "high" }] });
+    eq("an expired copy labelled with a written date is not one-tap ready either", lapsedNow, lapsed);
     ok("an ask answered only by an expired document is not one tap", !lapsed);
     ok("a reading with no asks is not one tap", !oneTapReady(buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [] })));
     eq("duplicate and empty quotes collapse", buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [{ quote: "BLS", kind: "bls" }, { quote: "bls", kind: "bls" }, { quote: "  ", kind: "bls" }, null] }).items.length, 1);

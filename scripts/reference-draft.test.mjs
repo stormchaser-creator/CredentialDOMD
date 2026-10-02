@@ -35,7 +35,7 @@ assert.equal(buildCredentialText(refs[0], "peerReferences", settings), buildRefe
 assert.equal(buildCredentialBlurb(refs[0], "peerReferences", settings, false, ""), referenceSentences(refs[0]));
 assert.ok(!buildCredentialBlurb(refs[0], "peerReferences", settings, false, "").includes("; "));
 assert.ok(buildCredentialBlurb(refs[0], "peerReferences", settings, true, "Hello").includes("Hello Alice"));
-assert.equal(buildEmailSubject(refs[0], "peerReferences", settings), "Professional reference: Alice Example");
+assert.equal(buildEmailSubject(refs[0], "peerReferences", settings), "Professional reference for Synthetic Physician, DO: Alice Example");
 const mail = new URL(mailtoHref("", "Professional references", draft.text));
 assert.equal(mail.searchParams.get("body").replace(/\r\n/g, "\n"), draft.text);
 assert.ok(buildCredentialText({ type: "Medical License", licenseNumber: "SYN-123", state: "CA" }, "licenses", settings).includes("License #: SYN-123"));

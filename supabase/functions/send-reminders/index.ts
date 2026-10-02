@@ -29,7 +29,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "./renewalLinks.json" with { type: "json" };
-import { remindable, reminderLabel, withCurrentCategoryNames } from "../_shared/reminderRows.mjs";
+import { remindable, reminderLabel, withCurrentCategoryNames, reminderGreeting, reminderHeadline } from "../_shared/reminderRows.mjs";
 import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
 import { reminderEmailDecision, reminderFingerprint, reminderToldStill } from "../_shared/reminderCadence.mjs";
 import { readAllPages, groupsOf, readReminderGroup } from "../_shared/reminderReads.mjs";
@@ -65,11 +65,6 @@ const json = (status: number, body: unknown) =>
 // member's local date across the US.
 const dayDiff = (iso: string, today: string) => Math.round((Date.parse(iso + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86400000);
 const fmt = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-
-function firstName(name: string | null, email: string) {
-  const raw = (name || "").replace(/\b(dr\.?|md|do|mbbs|phd)\b/gi, "").trim().split(/\s+/)[0];
-  return raw && /^[a-z'-]+$/i.test(raw) ? raw[0].toUpperCase() + raw.slice(1).toLowerCase() : email.split("@")[0];
-}
 
 // A Clerk key set or profiles read that does not answer is 503, not the
 // runtime's bare 500 (see answerAuthUnavailable). Hook and admin callers only: no CORS.
@@ -174,12 +169,10 @@ serve(answerAuthUnavailable({}, async (req) => {
       if (expired.length) parts.push(`EXPIRED\n${expired.map(line).join("\n")}`);
       if (soon.length) parts.push(`Due within 30 days\n${soon.map(line).join("\n")}`);
       if (later.length) parts.push(`Coming up (within ${lead} days)\n${later.map(line).join("\n")}`);
-      const headline = expired.length
-        ? `${expired.length} expired, ${soon.length + later.length} coming up`
-        : soon.length ? `${soon.length} due within 30 days` : `${later.length} coming up`;
+      const headline = reminderHeadline({ expired: expired.length, soon: soon.length, later: later.length });
       // A template literal keeps its indentation: the body lines stay at
       // column 0 so the plain-text email is not indented.
-      const text = `${firstName(p.name, p.email)},
+      const text = `${reminderGreeting(p.name)}
 
 Your credential check for ${fmt(today)}: ${headline}.
 
@@ -187,7 +180,7 @@ ${parts.join("\n\n")}
 
 Open the app to renew, upload the new document, or snooze an item: ${APP_URL}
 
-You get this because email reminders are on in Settings. Change the lead time or turn it off there.
+You get this because email reminders are on in More > Profile & settings. Change the lead time or turn it off there.
 
 CredentialDOMD`;
 

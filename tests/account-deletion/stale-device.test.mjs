@@ -283,7 +283,7 @@ function app({ profile, cloud = { licenses: [], documents: [] }, inMemory = null
     localChangesSince, rebaseLocalChanges, localCopyCurrent: storageScope.localCopyCurrent,
     accessAuthority: { suspendWrites: () => record('suspendWrites') },
     setData: value => { states.push(value); record('setData'); }, setLoaded: value => record('setLoaded', { value }),
-    setLoadedFrom: value => record('setLoadedFrom', { value }), setProfileOwner() {}, setProfileIssue: value => record('setProfileIssue', { value }),
+    setLoadedFrom: value => record('setLoadedFrom', { value }), setProfileOwner() {}, setProfileIssue: value => record('setProfileIssue', { value }), setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },
   };
   vm.runInNewContext(loadCode, context);
@@ -613,7 +613,7 @@ function deletionCallbacks({ offline = false, active = ownerA } = {}) {
     cacheWriteGeneration: { current: 0 }, dataRef: { current: null }, setData: value => calls.push(['setData', value]), clearTimeout() {},
     createDataDeletionContext() {}, accessAuthority: { suspendWrites: () => calls.push(['suspendWrites']) },
     lsGet: storageScope.lsGet, WIPE_SEEN_KEY, localFence, adoptLocalFence, DEFAULT_DATA: { licenses: [] },
-    setProfileOwner: value => calls.push(['setProfileOwner', value]), setProfileIssue: value => calls.push(['setProfileIssue', value]),
+    setProfileOwner: value => calls.push(['setProfileOwner', value]), setProfileIssue: value => calls.push(['setProfileIssue', value]), setIdentityWaiting() {},
     setLoadedFrom: value => calls.push(['setLoadedFrom', value]), DELETION_SUPPORT_REFERENCE,
     reportError: message => calls.push(['reportError', message]),
   };
@@ -764,4 +764,23 @@ test('the fence: a replay stops at the first queued write once another tab purge
   f.write = async (url) => { sent.push(url); if (sent.length === 1) advanceLocalFence(ownerA); return new Response(null, { status: 201 }); };
   await f.api.replayPendingOps(profileA, ownerA);
   assert.equal(sent.length, 1, 'the two writes queued before the purge are not sent');
+});
+
+test('loadDataForUser: an invoice this device holds under a number the cloud\'s invoices carry (recorded on another device, 2026-10-02) is dropped, not pushed again', async () => {
+  staleDevice();
+  const cached = JSON.parse(storage.getItem(`${BASE_KEYS.data}:${ownerA}`));
+  storage.setItem(`${BASE_KEYS.data}:${ownerA}`, JSON.stringify({ ...cached, invoices: [
+    { id: 'inv-phone', number: 'inv-20260910-01 ' },
+    { id: 'inv-phone-2', number: 'INV-20260910-04' },
+  ] }));
+  storage.removeItem(`${BASE_KEYS.pendingOps}:${ownerA}`);
+  const f = app({ profile: { id: profileA, auth_user_id: ownerA, deleted_at: null, data_deleted_at: null },
+    cloud: { licenses: [], documents: [], invoices: [{ id: 'inv-mac', number: 'INV-20260910-01' }] } });
+  f.context.COLLECTION_KEYS = ['licenses', 'documents', 'invoices'];
+  f.context.DEFAULT_DATA = { ...f.context.DEFAULT_DATA, invoices: [] };
+  await f.loadDataForUser(ownerA);
+  const pushed = JSON.parse(JSON.stringify(f.named('bulkSync').filter(c => c.key === 'invoices').flatMap(c => c.ids)));
+  assert.deepEqual(pushed, ['inv-phone-2'], 'only the invoice whose number is free goes up');
+  const shown = JSON.parse(JSON.stringify(f.states.at(-1).invoices.map(i => i.id).sort()));
+  assert.deepEqual(shown, ['inv-mac', 'inv-phone-2'], 'the cloud\'s -01 stands, the phone\'s copy of the number is gone');
 });

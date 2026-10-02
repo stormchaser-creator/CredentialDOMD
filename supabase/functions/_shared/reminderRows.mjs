@@ -14,6 +14,7 @@
 // Plain JavaScript so the Deno function and the node tests share one copy.
 
 import { categoryLabelFor } from "./app/utils/customCategories.js";
+import { welcomeFirstName } from "./app/utils/welcomeEmail.js";
 
 const LIFECYCLES = new Set(["active", "provisional", "pending_confirmation", "superseded", "historical"]);
 
@@ -70,7 +71,10 @@ export function reminderLabel(row, fallback, physicianName) {
   // "Fluoroscopy permit \u{B7} Permits", or as the category alone when unnamed.
   const own = str(row?.name);
   const kind = str(row?.type) || str(row?.category_name);
-  const raw = own || str(row?.organization) || str(row?.category_name);
+  // Privileges and insurance keep the hospital in facility and the carrier in
+  // provider, with the display name optional: without them two hospitals'
+  // privileges read the same line, "Surgical Privileges \u{B7} ND".
+  const raw = own || str(row?.organization) || str(row?.facility) || str(row?.provider) || str(row?.category_name);
   const name = raw && !isPersonName(raw, physicianName) ? raw : null;
   const role = !own && name ? str(row?.role) || null : null;
   const bits = [name, role, kind && kind !== name ? kind : null, row?.state].filter(Boolean);
@@ -94,4 +98,22 @@ export function withCurrentCategoryNames(rows, categories) {
     const current = categoryLabelFor(data, { categoryId: row?.category_id, categoryName: row?.category_name });
     return current && current !== row?.category_name ? { ...row, category_name: current } : row;
   });
+}
+
+/**
+ * The digest's first line: "Hi Jordan," from the profile name the way the
+ * welcome email reads it (titles skipped, accented letters kept), or
+ * "Hello," when there is no usable first name. Never the mailbox name: a
+ * profile named "Dr. Jordan Rivera" was greeted "jrivera,".
+ */
+export function reminderGreeting(name) {
+  const first = welcomeFirstName(name ?? null);
+  return first ? `Hi ${first},` : "Hello,";
+}
+
+/** The subject and first line's summary: no "0 coming up" clause. */
+export function reminderHeadline({ expired = 0, soon = 0, later = 0 } = {}) {
+  const upcoming = soon + later;
+  if (expired) return `${expired} expired${upcoming ? `, ${upcoming} coming up` : ""}`;
+  return soon ? `${soon} due within 30 days` : `${later} coming up`;
 }

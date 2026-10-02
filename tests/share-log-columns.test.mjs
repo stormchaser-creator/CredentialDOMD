@@ -33,7 +33,8 @@ function keysOf(body) {
 
 function literalRows(src) {
   const rows = [];
-  for (const m of src.matchAll(/addItem\("shareLog", \{([\s\S]*?)\}\);/g)) {
+  // Vera's packet row is built by packetLog() so it can be written at hand-off.
+  for (const m of src.matchAll(/(?:addItem\("shareLog", \{|const packetLog = \(\) => \(\{)([^;]*?)\}\)?;/g)) {
     if (m[1].trim().startsWith('...')) continue; // logShare spreads a caller's entry
     rows.push(new Set(keysOf(m[1])));
   }

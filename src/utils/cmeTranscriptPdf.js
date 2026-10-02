@@ -7,6 +7,8 @@ import { STATE_NAMES } from "../constants/states";
 import { boardComplianceFor, aoaNationalEntry } from "./boardCompliance";
 import { cat1BucketLabel } from "../constants/creditEquivalence";
 import { resolveDocument } from "./receiptFiles.js";
+import { shareAtHandoff, shareNotStartedMessage } from "./shareHandoff.js";
+import { fileShareText } from "./shareText.js";
 
 /**
  * Board-ready CME transcript PDF.
@@ -289,6 +291,15 @@ export function certificateSummary(model) {
   };
 }
 
+// "CME Transcript, Colorado, Ana Li DO.pdf": the Gmail app takes the file's
+// name as the subject ("CME-Transcript-CO-2026-10-01" said nothing of whose).
+function transcriptFileName(scope, physician = {}) {
+  // eslint-disable-next-line no-control-regex
+  const safe = (s) => String(s || "").replace(/[\\/:*?"<>|,\u{0}-\u{1f}]/gu, " ").replace(/\s+/g, " ").trim();
+  const who = safe([physician.name, physician.degree].filter(Boolean).join(" "));
+  return `${["CME Transcript", safe(scope), who].filter(Boolean).join(", ")}.pdf`;
+}
+
 function physicianBlock(data) {
   const s = data.settings || {};
   return { name: s.name || "", degree: s.degreeType || "", npi: s.npi || "" };
@@ -342,7 +353,7 @@ export function stateTranscriptModel(data, state, { certFiles = null } = {}) {
     rows,
     certs,
     source,
-    fileName: `CME-Transcript-${state}-${isoToday()}.pdf`,
+    fileName: transcriptFileName(stateName, physicianBlock(data)),
     footnotes: [
       comp.degreeUnknown ? "Degree not set in Settings. MD board rules were applied." : "",
       // Surface a board/MOC exemption when a Board Certification record is on
@@ -417,7 +428,7 @@ export function boardTranscriptModel(data, board, { certFiles = null } = {}) {
       }] : []),
     ],
     source,
-    fileName: `CME-Transcript-${String(board.code || board.name).replace(/[^A-Za-z0-9-]+/g, "")}-${isoToday()}.pdf`,
+    fileName: transcriptFileName(board.name || board.code, physicianBlock(data)),
     footnotes: [
       board.countRule ? `Earned total counts ${board.countRule} activities only; other rows are listed for completeness.` : "",
       plain(board.notes),
@@ -783,8 +794,16 @@ const downloadFile = (file) => {
  * Returns null when the physician cancelled the share sheet, otherwise
  * { method: "share" | "download", model }: model is what was actually sent
  * (images converted, pdfDelivery set), for certificatesNotIncludedMessage.
+ *
+ * On the iPhone app the share sheet often never answers once Mail takes
+ * over, so this may never return for a share: `onHanded({ method, model })`
+ * runs as the file goes to the sheet, which is where a caller records the
+ * send, says what went and clears its busy state; `onUndo(outcome)` runs
+ * when the sheet says it did not go; `onUnanswered` once the page is back
+ * in front with the sheet still silent (utils/shareHandoff.js). A share
+ * refused because another is still open throws an error named ShareBusy.
  */
-export async function shareTranscriptPdf(model) {
+export async function shareTranscriptPdf(model, { onHanded, onUndo, onUnanswered } = {}) {
   const certFiles = pdfCertificateFiles(model);
   const nav = typeof navigator !== "undefined" ? navigator : null;
   const probe = new File([new Uint8Array([37, 80, 68, 70])], model.fileName, { type: "application/pdf" });
@@ -796,12 +815,19 @@ export async function shareTranscriptPdf(model) {
   const pdfOf = (m) => new File([buildTranscriptPdf(m).output("blob")], model.fileName, { type: "application/pdf" });
   const file = pdfOf(prepared);
   if (shareOne) {
-    try {
-      await nav.share({ title: file.name, files: pdfDelivery === "share" ? [file, ...certFiles] : [file] });
-      return { method: "share", model: prepared };
-    } catch (err) {
-      if (err?.name === "AbortError") return null;
-    }
+    const p = prepared.physician || {};
+    const { title, text } = fileShareText({
+      what: `CME transcript${prepared.subtitle ? ` for the ${prepared.subtitle}` : ""}`,
+      settings: { name: p.name, degreeType: p.degree, npi: p.npi },
+    });
+    const outcome = await shareAtHandoff({ title, text, files: pdfDelivery === "share" ? [file, ...certFiles] : [file] }, {
+      share: (p) => nav.share(p),
+      onHanded: () => onHanded?.({ method: "share", model: prepared }),
+      onUndo, onUnanswered,
+    });
+    if (outcome === "shared") return { method: "share", model: prepared };
+    if (outcome === "cancelled") return null;
+    if (outcome === "busy") throw Object.assign(new Error(shareNotStartedMessage("busy")), { name: "ShareBusy" });
   }
   // Downloading. After a failed share the index was written for the share,
   // so it is rewritten for what this download can actually carry.

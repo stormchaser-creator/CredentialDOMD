@@ -14,23 +14,30 @@ const headsUpButton = (backgroundColor, color) => ({
   backgroundColor, color, fontSize: 12, fontWeight: 600, cursor: "pointer",
 });
 
+const NEEDS_NAME = "Add your name in More > Profile & settings first, so the heads-up says who it is from.";
+
 function PeerNotify({ peer }) {
   const { data, theme: T } = useApp();
   const [show, setShow] = useState(null); // "email" | "text" | null
   const [cutNote, setCutNote] = useState("");
 
-  // The wording lives in shareText.peerHeadsUp (pure, unit-tested).
-  const { emailSubject, emailBody, textBody } = peerHeadsUp(data.settings, peer);
+  // The wording lives in shareText.peerHeadsUp (pure, unit-tested). With no
+  // name on the profile there is no draft: it used to go out signed
+  // "Dr. [Your Name]".
+  const draft = peerHeadsUp(data.settings, peer);
+  const { emailSubject = "", emailBody = "", textBody = "" } = draft || {};
 
   const handleEmail = useCallback(() => {
+    if (!draft) { setCutNote(NEEDS_NAME); return; }
     if (peer.email) {
       window.open(mailtoHref(peer.email, emailSubject, emailBody));
     } else {
       setShow("email");
     }
-  }, [peer.email, emailSubject, emailBody]);
+  }, [draft, peer.email, emailSubject, emailBody]);
 
   const handleText = useCallback(() => {
+    if (!draft) { setCutNote(NEEDS_NAME); return; }
     if (peer.phone) {
       const cleaned = peer.phone.replace(/\D/g, "");
       const { truncated, copied } = composeText(cleaned, textBody, { copyFullOnCut: true });
@@ -38,7 +45,7 @@ function PeerNotify({ peer }) {
     } else {
       setShow("text");
     }
-  }, [peer.phone, textBody]);
+  }, [draft, peer.phone, textBody]);
 
   const handleCopy = useCallback((text) => {
     navigator.clipboard?.writeText(text);

@@ -128,7 +128,7 @@ function app(U, { offlineMode = false } = {}) {
     preservePausedApplicationRecords: paused.preservePausedApplicationRecords, pausedApplicationLinks: paused.pausedApplicationLinks, reconcileDocumentLinks,
     applyHeldQueue: held.applyHeldQueue, localChangesSince: rebase.localChangesSince, rebaseLocalChanges: rebase.rebaseLocalChanges,
     accessAuthority: { suspendWrites() {} },
-    setData: v => { states.push(typeof v === 'function' ? v(states.at(-1)) : v); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {},
+    setData: v => { states.push(typeof v === 'function' ? v(states.at(-1)) : v); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },
   };
   vm.runInNewContext(loadCode, ctx);

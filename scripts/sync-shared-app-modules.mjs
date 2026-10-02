@@ -56,6 +56,9 @@ export const ROOTS = Object.freeze([
   // limited-stripe-webhook sends the welcome email Admin > Emails previews,
   // and presents the fingerprint of that same content to the database.
   "utils/welcomeEmail.js",
+  // send-invoice-email names the receipts it attaches the way the app's
+  // share sheet names them (outgoingFileNames).
+  "utils/docLabel.js",
 ]);
 
 export const banner = (rel) =>

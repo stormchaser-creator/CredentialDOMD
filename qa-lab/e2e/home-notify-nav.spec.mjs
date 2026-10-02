@@ -487,7 +487,7 @@ test('hand-offs, reminder and guide emails, More, email links', {
     const text = await bodyText(page);
     qa.check('Requests carries a badge for the open request', /Requests 1 ›/.test(text), text.match(/Requests[^A-Z]{0,12}/)?.[0]);
     await qa.shot('more as member');
-    const rowsExpected = ['Vera', 'Profile & settings', 'Setup', 'Requests', 'Generate CV', 'CPT Lookup', 'Finance', 'Data & Backup', 'Support', 'Help & FAQ', 'Privacy', 'Terms', 'Data Rights', 'Sign Out'];
+    const rowsExpected = ['Vera', 'Profile & settings', 'Setup', 'Requests', 'Generate CV', 'CPT Lookup', 'Finance', 'Data & Backup', 'Get help', 'Help & FAQ', 'Privacy', 'Terms', 'Data Rights', 'Sign Out'];
     const missing = rowsExpected.filter((r) => !text.includes(r));
     qa.check('every row the checklist names is there', missing.length === 0, missing.join(', ') || 'all present');
     qa.check('Setup shows its progress (X of Y)', /Setup Get everything on file \d+ of \d+/.test(text), (text.match(/Setup Get everything on file[^›]*/) || [])[0]);

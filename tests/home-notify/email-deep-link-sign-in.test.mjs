@@ -56,11 +56,12 @@ test('only the app\'s own links are kept, and not for long', () => {
   assert.equal(takeAppDeepLink({ ...address(''), storage: { getItem() { throw new Error('blocked'); }, removeItem() {} }, now }), '', 'blocked storage is no link');
 });
 
-test('main.jsx keeps the link before anything renders, and AppInner takes it back', () => {
+test('main.jsx keeps the link before anything renders, and App takes it back', () => {
   const main = readFileSync(new URL('../../src/main.jsx', import.meta.url), 'utf8');
   const stash = main.indexOf('captureAppDeepLink();');
   assert.ok(stash > 0, 'main.jsx keeps the link');
   assert.ok(stash < main.indexOf('createRoot('), 'before the first render, so Clerk has not rewritten the hash');
   const app = readFileSync(new URL('../../src/App.jsx', import.meta.url), 'utf8');
-  assert.match(app, /const hash = takeAppDeepLink\(\);\n\s+const supportLink = supportDeepLink\(hash\);/);
+  // Taken back in App, which outlives AppInner mounting again (tests/iphone/deep-link-held.test.mjs).
+  assert.match(app, /const openedOnLink = \(\) => \(pageDeepLink \?\?= takeAppDeepLink\(\)\);/);
 });

@@ -2,7 +2,7 @@
 // (Vite resolves either way; node's ESM loader needs the ".js").
 import { CERTIFICATION_TYPE, isInherentlyNonExpiringLicense } from "../constants/credentialTypes.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
-import { scrubSsn, plainDashes } from "./outgoingText.js";
+import { scrubSsn, plainDashes, withDegree } from "./outgoingText.js";
 import { LIFECYCLE_SECTIONS, lifecycleNote } from "./lifecycle.js";
 import { daysUntilDate } from "./dateDays.js";
 
@@ -180,7 +180,7 @@ export function daysUntil(dateStr) {
 // functions share it) and is re-exported here for the existing importers.
 export { plainDashes };
 
-function getSectionFacts(item, section) {
+export function getSectionFacts(item, section) {
   const facts = [];
   // formatDate() of a missing date is an on-screen dash placeholder; a fact
   // with no value is left out instead of being sent as "Issued: <dash>".
@@ -263,17 +263,40 @@ function getSectionFacts(item, section) {
   return facts;
 }
 
-export function buildCredentialText(item, section, settings) {
+/**
+ * The degree as a credentialing office reads it: MD and DO spelled out, any
+ * other stored degree as written, nothing when none is on the profile (it
+ * used to print "Doctor of Medicine" for a blank degree, wrong for a DO who
+ * had not picked one yet).
+ */
+export function degreeLongForm(deg) {
+  const d = String(deg || "").trim();
+  if (/^m\.?d\.?$/i.test(d)) return "Doctor of Medicine";
+  if (/^d\.?o\.?$/i.test(d)) return "Doctor of Osteopathic Medicine";
+  return d;
+}
+
+/** True when every part of a record's label is already one of its facts' values. */
+export function labelRepeatsFacts(label, facts) {
+  const values = new Set((facts || []).map(([, v]) => String(v).trim().toLowerCase()));
+  const parts = String(label || "").split(/,\s*/).map((p) => p.trim().toLowerCase()).filter(Boolean);
+  return parts.length > 0 && parts.every((p) => values.has(p));
+}
+
+/** "Oct 1, 2026": the date outgoing text is stamped with, en-US on every phone. */
+export const sentStamp = (date = new Date()) => formatDate(localDay(date));
+
+export function buildCredentialText(item, section, settings, { footer = true } = {}) {
   if (section === "peerReferences") return buildReferenceText(item);
   const lines = [];
-  const name = settings.name || "Dr.";
   const deg = settings.degreeType || "";
   // ASCII, not a box-drawing glyph: Mail renders "\u2500" in a wide symbol font
   // that wraps onto its own line on an iPhone (see invoiceCover.js TEXT_RULE).
   const div = "-".repeat(30);
 
   lines.push("CREDENTIAL VERIFICATION", div);
-  lines.push("Physician: " + name + (deg ? ", " + deg : ""));
+  // No name on the profile: no "Physician: Dr." line.
+  if (settings.name) lines.push("Physician: " + withDegree(settings.name, deg));
   if (settings.npi) lines.push("NPI: " + settings.npi);
   if (settings.specialties?.length) {
     const names = settings.specialties.map(id => {
@@ -282,10 +305,16 @@ export function buildCredentialText(item, section, settings) {
     });
     lines.push("Specialty: " + names.join(", "));
   }
-  lines.push("Degree: " + (deg === "DO" ? "Doctor of Osteopathic Medicine" : "Doctor of Medicine"));
-  lines.push(div, plainDashes(describeItem(item, settings.name, section)), "");
+  if (degreeLongForm(deg)) lines.push("Degree: " + degreeLongForm(deg));
+  // The record's heading ("State Medical License, CO") only when the facts
+  // below do not already say all of it ("Type: State Medical License",
+  // "State: CO" right under it read as the same line twice).
+  const facts = getSectionFacts(item, section);
+  const label = plainDashes(describeItem(item, settings.name, section));
+  lines.push(div);
+  if (!labelRepeatsFacts(label, facts)) lines.push(label, "");
 
-  for (const [k, v] of getSectionFacts(item, section)) lines.push(k + ": " + v);
+  for (const [k, v] of facts) lines.push(k + ": " + v);
 
   if (item.components?.length) {
     lines.push("", "Searches Performed:");
@@ -297,7 +326,8 @@ export function buildCredentialText(item, section, settings) {
   // item.notes is the physician's own memo ("board portal login, fee paid on
   // AmEx", a staff-office phone tree, case details) and never goes out. The
   // Send sheet's Note field is where a per-send message belongs.
-  lines.push("", div, "Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString());
+  // footer: false when the letter around this text signs off and stamps it.
+  if (footer) lines.push("", div, "Sent via CredentialDOMD \u00b7 " + sentStamp());
   return lines.join("\n");
 }
 
@@ -326,7 +356,7 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
         return parts[parts.length - 1];
       }).join(", ")
     : "";
-  const physician = (settings.name || "Dr.") + (deg ? ", " + deg : "")
+  const physician = (settings.name ? withDegree(settings.name, deg) : "the physician")
     + (settings.npi ? " (NPI " + settings.npi + ")" : "")
     + (specialties ? ", " + specialties : "");
   const facts = getSectionFacts(item, section)
@@ -335,7 +365,7 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
   return "Credential verification from " + physician + ". " + facts
     + (note ? " " + note.trim().replace(/\s+/g, " ") : "")
     + (hasDocs ? " Supporting documentation is attached." : "")
-    + " Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString() + ".";
+    + " Sent via CredentialDOMD \u00b7 " + sentStamp() + ".";
 }
 
 // The subject a credentialing office sees. It carries the record's canonical
@@ -343,7 +373,11 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
 // physician's own name there, so three DEA shares went out headed with the
 // physician's name, the physician's name again, and "DEA ND".
 export function buildEmailSubject(item, section, settings) {
-  if (section === "peerReferences") return `Professional reference: ${item.name || "Reference"}`;
+  if (section === "peerReferences") {
+    // Whose reference it is: a credentialing office files it under the applicant.
+    const who = settings?.name ? withDegree(settings.name, settings.degreeType) : "";
+    return `Professional reference${who ? ` for ${who}` : ""}: ${item.name || "Reference"}`;
+  }
   const label = plainLabel(item, settings?.name, section) || "Credential";
   const physician = settings?.name || "Physician";
   return `Credential Verification: ${label} - ${physician}`;

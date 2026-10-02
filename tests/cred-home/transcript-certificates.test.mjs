@@ -286,7 +286,8 @@ test('the picker lets a tap build with what has arrived, and Home fetches only i
   assert.doesNotMatch(app, /certificateDocsToFetch/);
   assert.match(app, /window\.addEventListener\("online", again\)/);
   assert.match(app, /certificatesNotIncludedMessage\(sent\.model\)/);
-  assert.match(app, /method: sent\.method/);
+  // Logged as "share" at hand-off (tests/iphone/share-handoff-transcript.test.mjs); a download is never logged.
+  assert.match(app, /section: "cme", method: "share"/);
   assert.match(read('src/lib/supabase.js'), /download\(storagePath, \{\}, signal \? \{ signal \} : undefined\)/);
 });
 

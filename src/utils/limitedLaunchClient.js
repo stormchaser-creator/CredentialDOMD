@@ -2,6 +2,7 @@ import { LIMITED_LAUNCH_ACCESS_ENABLED, validateAccessSnapshot } from "./limited
 import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from "../../supabase/functions/_shared/accessPolicy.mjs";
 import { isLaunchInvitationToken } from "./launchInvitation.js";
 import { isPinnedBetaChargeDate } from "./membershipTiming.js";
+import { sameClerkSession, sessionUser } from "./clerkSession.js";
 
 const ENV = import.meta.env || {};
 const SAFE_ERROR_CODES = new Set([
@@ -167,18 +168,8 @@ function validateEnrollment(value) {
   return structuredClone(value);
 }
 
-// The same Clerk session: the same object, or (Clerk builds a new Session
-// object for the same session whenever its client is refreshed, for example
-// the touch it sends each time the page gets focus, as an iPhone resumes it)
-// one with the same session id for the same user. A sign-out leaves none; a
-// new sign-in or another account is another session id.
-const sessionUser = session => session?.user?.id ?? session?.userId ?? null;
-export function sameClerkSession(saved, current) {
-  if (!saved || !current) return false;
-  if (saved === current) return true;
-  return typeof saved.id === "string" && saved.id !== "" && current.id === saved.id
-    && sessionUser(saved) !== null && sessionUser(current) === sessionUser(saved);
-}
+// The same Clerk session (utils/clerkSession.js), re-exported for its callers.
+export { sameClerkSession };
 
 /** A fresh Clerk token, pinned to one signed-in account and one session. */
 export function createLimitedLaunchClient({

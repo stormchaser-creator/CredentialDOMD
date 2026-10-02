@@ -16,7 +16,9 @@ pinClock(test, 'America/Chicago', '2026-09-10T12:00:00-05:00');
 // The reset comes from the same bundle as the screens: the numbers this
 // "device" spent live in that copy of invoiceNumber.js, and each test is a
 // fresh device.
-const { WorkLog, Expenses, DutyLog, _resetHeldInvoiceNumbers } = await loadScreens('export {default as WorkLog} from "./src/components/features/locum/WorkLog.jsx"; export {default as Expenses} from "./src/components/features/locum/Expenses.jsx"; export {default as DutyLog} from "./src/components/features/locum/DutyLog.jsx"; export {_resetHeldInvoiceNumbers} from "./src/utils/invoiceNumber.js";');
+const { WorkLog, Expenses, DutyLog, _resetHeldInvoiceNumbers, _resetInvoiceHandoff } = await loadScreens('export {default as WorkLog} from "./src/components/features/locum/WorkLog.jsx"; export {default as Expenses} from "./src/components/features/locum/Expenses.jsx"; export {default as DutyLog} from "./src/components/features/locum/DutyLog.jsx"; export {_resetHeldInvoiceNumbers} from "./src/utils/invoiceNumber.js"; export {_resetInvoiceHandoff} from "./src/utils/invoiceHandoff.js";');
+// Each test is a fresh device: no note of an earlier test's invoice.
+test.beforeEach(() => _resetInvoiceHandoff({ stores: true }));
 
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
 const btn = (m, pred, what) => find(m.render(), n => n.type === 'button' && pred(textOf(n)), what);
@@ -57,16 +59,18 @@ test('work log: a shared invoice whose record is refused retires its number; the
   assert.match(m.dialogs.find(d => d[0] === 'alert')?.[1] || '', /INV-20260910-01 went out but is not on the Invoices tab yet/);
 
   // Close the preview; another day is logged; build a different invoice.
+  // The day that went out on INV-20260910-01 (not recorded) starts
+  // unchecked, so the next invoice bills the new day only.
   preview(m).props.onClose();
   m.data.workLog.push(entry('w2', '2026-09-08'));
   btn(m, t => /Invoice \d+ unbilled/.test(t), 'invoice CTA').props.onClick();
-  btn(m, t => t.startsWith('Invoice 2 days'), 'build').props.onClick();
+  btn(m, t => t.startsWith('Invoice 1 day'), 'build').props.onClick();
   await settle();
   await btn(m, t => t === 'Copy', 'Copy').props.onClick();
   await settle();
   const [second] = recorded(m);
   assert.ok(second, 'the second invoice is recorded');
-  assert.equal(second.entryIds.length, 2);
+  assert.deepEqual(second.entryIds, ['w2']);
   assert.equal(second.number, 'INV-20260910-02', 'never the number that already went out on other lines');
   assert.match(second.text, /INV-20260910-02/);
 });
@@ -91,12 +95,12 @@ test('work log, no server function yet: a refused record retires the device numb
   preview(m).props.onClose();
   m.data.workLog.push(entry('w2', '2026-09-08'));
   btn(m, t => /Invoice \d+ unbilled/.test(t), 'invoice CTA').props.onClick();
-  btn(m, t => t.startsWith('Invoice 2 days'), 'build').props.onClick();
+  btn(m, t => t.startsWith('Invoice 1 day'), 'build').props.onClick();
   await settle();
   await btn(m, t => t === 'Copy', 'Copy').props.onClick();
   await settle();
   const [second] = recorded(m);
-  assert.deepEqual([second?.number, second?.entryIds.length], ['INV-20260910-02', 2], 'never the number that already went out');
+  assert.deepEqual([second?.number, second?.entryIds.length], ['INV-20260910-02', 1], 'never the number that already went out');
   delete globalThis.__screen.allocate;
 });
 
@@ -128,13 +132,14 @@ test('days & call: a refused record after the copy retires the number for the ne
 
   preview(m).props.onClose();
   m.data.dutyDays.push({ id: 'd2', contractId: 'c-day', date: '2026-09-09', workedDay: true, callPeriods: [], invoiceId: null });
+  // The day on INV-20260910-01 (not recorded) starts unchecked.
   btn(m, t => /Invoice 2 unbilled days/.test(t), 'invoice CTA').props.onClick();
-  btn(m, t => t.startsWith('Invoice 2 days'), 'build').props.onClick();
+  btn(m, t => t.startsWith('Invoice 1 day'), 'build').props.onClick();
   await settle();
   await btn(m, t => t.startsWith('Copy text'), 'Copy').props.onClick();
   await settle();
   const [second] = recorded(m);
-  assert.deepEqual([second?.number, second?.totalAmount], ['INV-20260910-02', 4000]);
+  assert.deepEqual([second?.number, second?.totalAmount, second?.entryIds], ['INV-20260910-02', 2000, ['d2']]);
 });
 
 const EXPENSES = [
@@ -161,8 +166,9 @@ test('expenses: a refused record retires the number; reopening builds the next i
   await settle();
   await btn(m, t => t.includes('Create & send'), 'send').props.onClick();
   await settle();
+  // The expenses on EXP-20260910-01 (not recorded) start unchecked.
   const [second] = recorded(m);
-  assert.deepEqual([second?.number, second?.entryIds.length], ['EXP-20260910-02', 3]);
+  assert.deepEqual([second?.number, second?.entryIds], ['EXP-20260910-02', ['x3']]);
 });
 
 test('expenses: in the still-open sheet, a resend of the same expenses keeps the number; other expenses under it are refused', async () => {

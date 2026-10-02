@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -450,7 +450,7 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div class="fact-item">
         <span class="fact-label">Processing Time</span>
-        <span class="fact-value">No fixed published timeline. Board renewal notice (loaded 2026-08-19): "the issuance of the renewed license is taking longer than expected" due to volume and required review of criminal background checks and disciplinary history; timely filers keep working under "Renewal pending / Authorized to work" status.</span>
+        <span class="fact-value">No fixed published timeline. Board renewal notice (August 2026): "the issuance of the renewed license is taking longer than expected" due to volume and required review of criminal background checks and disciplinary history; timely filers keep working under "Renewal pending / Authorized to work" status.</span>
       </div>
       <div class="fact-item">
         <span class="fact-label">Renewal Due</span>
@@ -505,7 +505,7 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Processing time</div>
-        <div style="color:var(--text-secondary);">No fixed published timeline. Board renewal notice (loaded 2026-08-19): &quot;the issuance of the renewed license is taking longer than expected&quot; due to volume and required review of criminal background checks and disciplinary history; timely filers keep working under &quot;Renewal pending / Authorized to work&quot; status.</div>
+        <div style="color:var(--text-secondary);">No fixed published timeline. Board renewal notice (August 2026): &quot;the issuance of the renewed license is taking longer than expected&quot; due to volume and required review of criminal background checks and disciplinary history; timely filers keep working under &quot;Renewal pending / Authorized to work&quot; status.</div>
       </div>
   </div>
 </section>
@@ -844,5 +844,5 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-</body>
+<!--/email_off--></body>
 </html>

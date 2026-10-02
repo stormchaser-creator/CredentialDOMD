@@ -6,8 +6,9 @@
  *
  * Owner approved 2026-09-25 (tickets e8cc2a02, 821d2f76): iOS Mail and the
  * share sheet flatten line breaks, so an invoice sent from the phone arrived
- * as one run-on paragraph. Mail this function sends is text/plain with real
- * line breaks.
+ * as one run-on paragraph. Mail this function sends is multipart: text/plain
+ * with real line breaks and an HTML part built from the same letter by the
+ * same shared code (app/utils/invoiceEmail.js invoiceEmailHtml).
  *
  * Two actions, both POST with a Clerk JWT (deployed with --no-verify-jwt; the
  * token is verified in _shared/clerkAuth.ts):
@@ -35,6 +36,19 @@
  *     unconfirmed (unknown, or still sending), a new send is refused (409
  *     recent_attempt_unconfirmed) unless `confirmResend` is true: the
  *     physician was shown that attempt and chose to send again anyway.
+ *
+ * Not recorded yet (2026-10-01, "Email it for me" on Work log, Days & call
+ * and Expenses): both actions also take `draft` ({ number, kind, entryIds,
+ * contractId, billToLabel }) for an invoice the app records only once this
+ * function confirms the send, under `invoiceId` (the id the app will record
+ * it with). While no invoice row has that id the draft stands in for it:
+ * its receipts are those of the listed expenses no other invoice bills, and
+ * a number already on one of the account's invoices is refused (409
+ * invoice_number_recorded), since sending it would bill the agency twice.
+ * Once the row exists the draft is ignored and the row is used, so a retried
+ * Send after the app recorded the invoice is answered from the ledger like
+ * any other. The app keys the request id to the invoice number, so a retry
+ * on a weak network is a replay, never a second email.
  *
  * Mail: from "<Name>, <Degree> via CredentialDOMD" <docs@credentialdomd.com>,
  * reply_to and cc the physician's own mailbox (profiles.verified_email when
@@ -78,6 +92,15 @@
  * src/lib/supabase.js) and the database keeps them on any user-token write
  * (trigger invoices_keep_last_emailed), so a stale device cannot erase or
  * roll them back, and the address pre-filled from them is the server's.
+ * A draft has no row to stamp: the row the app records is stamped from this
+ * ledger as it is inserted (trigger invoices_stamp_from_email_ledger,
+ * migration 20261002040000). A draft that went out, or may have, gets its
+ * number stamped as shared on the number ledger instead (draftWent), so
+ * every device asks whether it went until it is recorded.
+ *
+ * Receipts are attached under the names the app's share sheet gives them
+ * (docLabel.js outgoingFileNames): what each is and whose, never a camera's
+ * "image.jpg".
  */
 
 import { accessWriteDecision } from "./accessWrite.mjs";
@@ -87,6 +110,7 @@ import {
   receiptClaimProblem, safeAttachmentName, invoicePdfName, base64Length, normalizeAddress,
 } from "./app/utils/invoiceEmail.js";
 import { billedReceiptDocs } from "./app/utils/receiptFiles.js";
+import { outgoingFileNames } from "./app/utils/docLabel.js";
 import { agencyKey } from "./app/utils/contractsForDate.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,6 +126,14 @@ export const DELIVER_DEADLINE_MS = 90 * 1000;
 // (invoiceEmailDependencies.ts) plus the ledger writes, with room to spare.
 export const SENDING_STALE_MS = 5 * 60 * 1000;
 const PREVIEW_FIELDS = ["from", "to", "cc", "replyTo", "subject", "text", "attachments"];
+const DRAFT_FIELDS = ["number", "kind", "entryIds", "contractId", "billToLabel"];
+// The numbers the app prints (INV-20261001-3, EXP-20261001-4-ABC) and any a
+// physician types into Mark as sent: letters, digits and a few separators.
+const DRAFT_NUMBER = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/;
+const DRAFT_MAX_ITEMS = 1000;
+// A number the app issues, as mark_invoice_number_shared takes it
+// (migration 20260930230000): INV-/EXP-, the day, a suffix, an offline tag.
+const ISSUED_NUMBER = /^(INV|EXP)-[0-9]{8}-[0-9]{1,4}(-[A-Z0-9]{3})?$/;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -140,6 +172,37 @@ const isPlainObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 function onlyFields(input, allowed) {
   if (!isPlainObject(input) || Object.keys(input).some((k) => !allowed.includes(k))) refuse(400, "invalid_request", "Bad request.");
 }
+
+/**
+ * The invoice a `draft` describes, shaped like the row store.invoice reads,
+ * for an invoice the app has not recorded yet (it records it once the send
+ * is confirmed). Refuses anything that is not exactly a draft.
+ */
+export function draftInvoice(profileId, invoiceId, draft) {
+  onlyFields(draft, DRAFT_FIELDS);
+  const number = typeof draft.number === "string" ? draft.number.trim() : "";
+  if (!DRAFT_NUMBER.test(number)) refuse(400, "invalid_request", "Bad request.");
+  if (draft.kind !== undefined && draft.kind !== null && draft.kind !== "expenses") refuse(400, "invalid_request", "Bad request.");
+  const ids = draft.entryIds ?? [];
+  if (!Array.isArray(ids) || ids.length > DRAFT_MAX_ITEMS || ids.some((id) => typeof id !== "string" || !id || id.length > 64)
+    || new Set(ids).size !== ids.length) refuse(400, "invalid_request", "Bad request.");
+  const contractId = draft.contractId ?? null;
+  // Compared with other rows' contract_id only (the suggested recipient), never queried by.
+  if (contractId !== null && (typeof contractId !== "string" || !contractId || contractId.length > 64)) refuse(400, "invalid_request", "Bad request.");
+  const label = draft.billToLabel ?? null;
+  if (label !== null && (typeof label !== "string" || label.length > 200)) refuse(400, "invalid_request", "Bad request.");
+  return {
+    id: invoiceId, user_id: profileId, number, kind: draft.kind === "expenses" ? "expenses" : null,
+    entry_ids: ids, contract_id: contractId, bill_to_label: label,
+    last_emailed_at: null, last_emailed_to: null, draft: true,
+  };
+}
+
+const NUMBER_RECORDED = (number) => `${number} is already on your Invoices tab, so it was not emailed. Nothing was sent. Reload the app, then email it from the Invoices tab if it still needs to go.`;
+// 2026-10-02: a page whose copy predated another device's record of INV-A
+// built INV-C for the same days. A draft whose items another invoice already
+// bills is never mailed, whatever its number.
+const ITEMS_BILLED = (number) => `Some of what ${number} bills is already on another invoice (recorded on another device), so it was not emailed. Nothing was sent.`;
 
 /** Base64 of bytes, chunked; btoa exists in Deno and node. */
 export function toBase64(bytes) {
@@ -236,7 +299,12 @@ export function createInvoiceEmailHandler(deps) {
    */
   async function billedReceipts(profileId, profile, invoice) {
     if (invoice.kind !== "expenses") return [];
-    const expenses = (await deps.store.expenses(profileId, invoice.id)) || [];
+    // A draft's expenses are the ones it lists that no other invoice bills
+    // yet (the app stamps them with this invoice only once it is recorded).
+    const expenses = invoice.draft
+      ? ((await deps.store.expensesByIds(profileId, invoice.entry_ids)) || [])
+        .filter((e) => e && (e.invoice_id == null || e.invoice_id === invoice.id)).map((e) => ({ ...e, invoice_id: invoice.id }))
+      : (await deps.store.expenses(profileId, invoice.id)) || [];
     if (!expenses.length) return [];
     const docs = (await deps.store.receiptDocuments(profileId, expenses.map((e) => `travelExpenses:${e.id}`))) || [];
     const subjects = await deps.store.storageSubjects(profileId);
@@ -245,19 +313,37 @@ export function createInvoiceEmailHandler(deps) {
       expenses.map((e) => ({ id: e.id, invoiceId: e.invoice_id })),
       docs.filter((d) => d && d.user_id === profileId).map((d) => ({ id: d.id, linkedTo: d.linked_to, name: d.name, row: d })),
     );
-    return billed
+    const sorted = billed
       .map((d) => {
         const path = d.row.storage_path || (profile.auth_user_id ? `${profile.auth_user_id}/${d.id}` : "");
         return {
-          id: d.id, linkedTo: d.linkedTo, name: safeAttachmentName(d.name, "receipt"), row: d.row,
+          id: d.id, linkedTo: d.linkedTo, name: safeAttachmentName(d.name, "receipt"), stored: d.name, row: d.row,
           path, own: isOwnStorageObjectForSubjects(subjects, path), uploaded: !!d.row.storage_path,
         };
       })
       .sort((a, b) => a.linkedTo.localeCompare(b.linkedTo) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    // Named for what they are, as the share sheet names them (docLabel.js
+    // outgoingFileNames): a camera's "image.jpg" goes out as "Lodging,
+    // Synthetic Inn, <physician>.jpg", a name the physician gave is kept.
+    // The preview takes these names from the check, so the two still match.
+    const names = outgoingFileNames(
+      sorted.map((r) => ({ name: r.stored, linkedTo: r.linkedTo, type: r.row.mime_type || r.row.type || "" })),
+      {
+        settings: { name: profile.name || "", degreeType: profile.degree_type || "" },
+        travelExpenses: expenses.map((e) => ({ id: e.id, category: e.category, vendor: e.vendor })),
+      },
+    );
+    return sorted.map(({ stored: _stored, ...r }, i) => ({ ...r, name: safeAttachmentName(names[i]?.name || r.name, "receipt") }));
   }
 
   const lastSendOf = async (profileId, invoice) => {
     const row = await deps.store.lastSend(profileId, invoice.id);
+    // Emailed before it was recorded (a draft): the row came after the send,
+    // with no stamp. Stamped now, so the Invoices tab and the suggested
+    // recipient of the next invoice know it too.
+    if (row?.sent_at && !invoice.draft && (!invoice.last_emailed_at || String(invoice.last_emailed_at) < String(row.sent_at))) {
+      await stamp(profileId, invoice.id, row.sent_at, row.recipient);
+    }
     if (row?.sent_at) return { at: row.sent_at, to: row.recipient };
     return invoice.last_emailed_at ? { at: invoice.last_emailed_at, to: invoice.last_emailed_to || "" } : null;
   };
@@ -287,13 +373,27 @@ export function createInvoiceEmailHandler(deps) {
     try { await deps.store.stampInvoice(profileId, invoiceId, at, to); } catch (e) { log(`invoice stamp failed for ${invoiceId}: ${e?.message || e}`); }
   };
 
+  // A draft that went out, or may have (review of release/goal2,
+  // 2026-10-01): until the phone records it, the only trace was a note on
+  // that phone. A lost answer and a page iOS threw away left the Mac with
+  // the days unbilled and nothing asking, and a second invoice a tap away.
+  // Its number is stamped as shared now, as the app's share hand-off stamps
+  // it, so every device asks "Did it go out?" and holds the days it may
+  // bill; the app clears the stamp once the invoice is recorded, and the
+  // list leaves out a number an invoice carries. Only the numbers the app
+  // issues (mark_invoice_number_shared's rule); a failed stamp is logged.
+  async function draftWent(profileId, invoice, at) {
+    if (typeof deps.store.markNumberShared !== "function" || !ISSUED_NUMBER.test(invoice.number)) return;
+    try { await deps.store.markNumberShared(profileId, invoice.number, invoice.contract_id || null, at); } catch (e) { log(`invoice number stamp failed for ${invoice.number}: ${e?.message || e}`); }
+  }
+
   /** The answer for a requestId the ledger already holds. null = a failed attempt this call may retry. */
   async function answerExisting(existing, profileId, invoice) {
     if (existing.invoice_id !== invoice.id) {
       return json(409, { code: "request_reused", error: "That send was for a different invoice. Close this screen and open the email again." });
     }
     if (existing.status === "sent") {
-      await stamp(profileId, invoice.id, existing.sent_at, existing.recipient);
+      if (!invoice.draft) await stamp(profileId, invoice.id, existing.sent_at, existing.recipient);
       return json(200, { ok: true, replay: true, emailId: existing.provider_id || null, sentAt: existing.sent_at, to: existing.recipient, cc: existing.cc || "" });
     }
     if (existing.status === "sending" && isStaleSending(existing, nowMs())) {
@@ -312,8 +412,28 @@ export function createInvoiceEmailHandler(deps) {
     return null;
   }
 
+  // Another invoice of the account already carries the draft's number (any
+  // case, as Mark as sent takes what is typed).
+  const numberTaken = async (profileId, invoice) => {
+    const rows = (await deps.store.invoicesNumbered(profileId, invoice.number)) || [];
+    const n = invoice.number.trim().toLowerCase();
+    return rows.some((r) => r && r.id !== invoice.id && String(r.number ?? "").trim().toLowerCase() === n);
+  };
+
+  // A draft's items (duty days, work entries or expenses, by id) that another
+  // invoice bills now. Deployments without the read skip it.
+  const itemsBilled = async (profileId, invoice) => {
+    if (!invoice.draft || typeof deps.store.billedItems !== "function") return false;
+    const ids = Array.isArray(invoice.entry_ids) ? invoice.entry_ids : [];
+    if (!ids.length) return false;
+    const rows = (await deps.store.billedItems(profileId, ids, invoice.kind)) || [];
+    return rows.some((r) => r && r.invoice_id && r.invoice_id !== invoice.id);
+  };
+
   async function check(who, input, profile, sender, invoice) {
-    onlyFields(input, ["action", "invoiceId", "pdfBytes"]);
+    onlyFields(input, ["action", "invoiceId", "pdfBytes", "draft"]);
+    if (invoice.draft && await numberTaken(who.profileId, invoice)) refuse(409, "invoice_number_recorded", NUMBER_RECORDED(invoice.number));
+    if (await itemsBilled(who.profileId, invoice)) refuse(409, "invoice_items_billed", ITEMS_BILLED(invoice.number));
     const pdfBytes = Number(input.pdfBytes);
     if (!Number.isSafeInteger(pdfBytes) || pdfBytes <= 0 || pdfBytes > CAPS.maxPdfBytes) {
       refuse(400, "pdf_invalid", "The invoice PDF could not be prepared. Try again.");
@@ -348,7 +468,7 @@ export function createInvoiceEmailHandler(deps) {
   }
 
   async function send(who, input, profile, sender, invoice) {
-    onlyFields(input, ["action", "invoiceId", "requestId", "to", "subject", "letter", "receiptIds", "pdf", "preview", "confirmResend"]);
+    onlyFields(input, ["action", "invoiceId", "requestId", "to", "subject", "letter", "receiptIds", "pdf", "preview", "confirmResend", "draft"]);
     const requestId = String(input.requestId ?? "").toLowerCase();
     if (!UUID.test(requestId)) refuse(400, "invalid_request", "Bad request.");
     if (input.confirmResend !== undefined && typeof input.confirmResend !== "boolean") refuse(400, "invalid_request", "Bad request.");
@@ -370,6 +490,11 @@ export function createInvoiceEmailHandler(deps) {
       const answered = await answerExisting(existing, who.profileId, invoice);
       if (answered) return answered;
     }
+    // Not recorded yet, and its number is on another invoice of the account
+    // now (recorded on another device since the preview): sending it would
+    // bill the agency twice under one number. Nor when its items are.
+    if (invoice.draft && await numberTaken(who.profileId, invoice)) refuse(409, "invoice_number_recorded", NUMBER_RECORDED(invoice.number));
+    if (await itemsBilled(who.profileId, invoice)) refuse(409, "invoice_items_billed", ITEMS_BILLED(invoice.number));
 
     const pdf = fromBase64(input.pdf.base64);
     if (!pdf || !isPdf(pdf)) refuse(400, "pdf_invalid", "The invoice PDF could not be read. Close this screen and try again.");
@@ -395,7 +520,11 @@ export function createInvoiceEmailHandler(deps) {
     const claimProblem = receiptClaimProblem(email.text, receipts.length);
     if (claimProblem) refuse(400, "receipt_claim_mismatch", claimProblem);
     // What goes out must be exactly what the physician looked at.
-    for (const field of PREVIEW_FIELDS) {
+    // The HTML part is compared too once the app sends it; an app that
+    // predates it (open during a deploy) still sends, and its HTML is built
+    // from the same letter the text comparison just matched.
+    const previewFields = "html" in input.preview ? [...PREVIEW_FIELDS, "html"] : PREVIEW_FIELDS;
+    for (const field of previewFields) {
       if (JSON.stringify(email[field] ?? "") !== JSON.stringify(input.preview[field] ?? "")) {
         refuse(409, "preview_stale", "Something changed since this preview (your name or email, a receipt, or the invoice). Review the updated email, then send.", { field });
       }
@@ -483,6 +612,7 @@ export function createInvoiceEmailHandler(deps) {
         reply_to: [email.replyTo],
         subject: email.subject,
         text: email.text,
+        html: email.html,
         attachments,
       };
       if (email.cc) payload.cc = [email.cc];
@@ -502,7 +632,10 @@ export function createInvoiceEmailHandler(deps) {
       if (outcome?.state === "sent") {
         const sentAt = new Date(nowMs()).toISOString();
         await finish("sent", { providerId: outcome.providerId || null, sentAt });
-        await stamp(who.profileId, invoice.id, sentAt, email.to);
+        // A draft has no row to stamp yet; its row is stamped from the ledger
+        // as it arrives (migration 20261002040000).
+        if (!invoice.draft) await stamp(who.profileId, invoice.id, sentAt, email.to);
+        else await draftWent(who.profileId, invoice, sentAt);
         return json(200, {
           ok: true, replay: false, emailId: outcome.providerId || null, sentAt,
           to: email.to, cc: email.cc, sent: { ...email },
@@ -513,12 +646,14 @@ export function createInvoiceEmailHandler(deps) {
         return json(502, { code: "send_failed", error: "The email was not sent. Nothing went out. Try again in a minute." });
       }
       await finish("unknown");
+      if (invoice.draft) await draftWent(who.profileId, invoice, new Date(nowMs()).toISOString());
       return json(502, { code: "send_unconfirmed", error: `The send could not be confirmed. Check your copy${email.cc ? ` at ${email.cc}` : ""} before sending again.` });
     } catch (e) {
       log(`send-invoice-email deliver failed: ${e?.message || e}`);
       // Before the POST nothing can have gone out, so the same Send may try
       // again. After it, the email may exist, so it may not.
       await finish(attempted ? "unknown" : "failed");
+      if (attempted && invoice.draft) await draftWent(who.profileId, invoice, new Date(nowMs()).toISOString());
       return attempted
         ? json(502, { code: "send_unconfirmed", error: `The send could not be confirmed. Check your copy${email.cc ? ` at ${email.cc}` : ""} before sending again.` })
         : json(503, { code: "unavailable", error: "Could not send the invoice. Nothing went out. Try again." });
@@ -546,7 +681,11 @@ export function createInvoiceEmailHandler(deps) {
       const sender = invoiceEmailSender({ name: profile.name, degree: profile.degree_type, email: profile.email, verifiedEmail: profile.verified_email });
       if (!sender.ok) return json(400, { code: "sender_email_missing", error: sender.problem });
 
-      const invoice = await deps.store.invoice(who.profileId, input.invoiceId.toLowerCase());
+      const invoiceId = input.invoiceId.toLowerCase();
+      // A draft stands in only while no row has its id: once the app recorded
+      // it, the row is the invoice (and the ledger answers a retried Send).
+      let invoice = await deps.store.invoice(who.profileId, invoiceId);
+      if (!invoice && input.draft !== undefined) invoice = draftInvoice(who.profileId, invoiceId, input.draft);
       if (!invoice || invoice.user_id !== who.profileId) {
         return json(404, { code: "invoice_not_found", error: "This invoice has not reached your account yet. Check your connection, wait a moment and try again." });
       }

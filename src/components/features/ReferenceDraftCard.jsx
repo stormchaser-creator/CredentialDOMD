@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { buildReferenceDraft } from "../../utils/referenceDraft.js";
 import { copyToClipboard, mailtoHref } from "../../utils/helpers.js";
+import { referencesSubject, referencesLetter } from "../../utils/shareText.js";
 
-export default function ReferenceDraftCard({ action, references, theme: T, onChange, onDismiss }) {
+export default function ReferenceDraftCard({ action, references, settings = {}, theme: T, onChange, onDismiss }) {
   const [notice, setNotice] = useState("");
   const draft = buildReferenceDraft(references, action);
   const selectedIds = new Set(draft.referenceIds);
@@ -36,7 +37,7 @@ export default function ReferenceDraftCard({ action, references, theme: T, onCha
         try { const copied = await copyToClipboard(draft.text); setNotice(copied ? "Copied." : "Copy failed. Select and copy the draft text above."); }
         catch { setNotice("Copy failed. Select and copy the draft text above."); }
       }}>Copy draft</button>
-      {!blocked && <a style={{ ...button, textDecoration: "none" }} href={mailtoHref("", "Professional references", draft.text)}>Open in email</a>}
+      {!blocked && <a style={{ ...button, textDecoration: "none" }} href={mailtoHref("", referencesSubject(settings, draft.selected.length), referencesLetter(settings, draft.selected))}>Open in email</a>}
       <button style={button} onClick={onDismiss}>Dismiss</button>
     </div>
     <p style={{ fontSize: 12, color: T.textMuted, margin: "8px 0 0" }}>Review the details, then send from your email app. Nothing has been sent.</p>

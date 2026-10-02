@@ -187,10 +187,14 @@ test('fallback: without IndexedDB a file that fits is kept in localStorage; one 
   assert.equal(reports.length, 1, 'the refusal reached client_errors');
   const [{ message, extra }] = reports;
   assert.equal(message, 'Offline copy not saved: storage_unavailable');
-  assert.deepEqual(Object.keys(extra).sort(), ['approxBytes', 'event', 'reason', 'store']);
+  // What fills localStorage (bases and sizes) and how IndexedDB failed travel
+  // with it since 2026-10-02 (the owner's report could not say which).
+  assert.deepEqual(Object.keys(extra).sort(), ['approxBytes', 'event', 'idbError', 'idbLost', 'local', 'reason', 'store']);
   assert.equal(extra.event, 'storage_unavailable');
   assert.equal(extra.store, 'cache');
-  assert.equal(extra.reason, 'indexeddb_unavailable,localstorage_quota');
+  // A file this size is never put into localStorage: it would leave no room
+  // for the write queue, the timer and the notes (localstorage_reserved).
+  assert.equal(extra.reason, 'indexeddb_unavailable,localstorage_reserved');
   assert.ok(extra.approxBytes > 5_000_000 && extra.approxBytes % 100000 === 0, 'approximate size only');
   assert.ok(!JSON.stringify(reports).includes('Synthetic'), 'no contents');
 
@@ -204,7 +208,8 @@ test('both stores full: the notice shows and the report names both refusals', as
   assert.equal(await storage.saveData(BIG, A), false);
   assert.equal(storage.isCacheFull(), true);
   assert.equal(reports.length, 1);
-  assert.equal(reports[0].extra.reason, 'indexeddb_quota,localstorage_quota');
+  // IndexedDB out of space; the file is far over the localStorage budget, so it is not tried there.
+  assert.equal(reports[0].extra.reason, 'indexeddb_quota,localstorage_reserved');
 });
 
 test('the notice shows only when the offline copy really is stale', async () => {

@@ -6,6 +6,7 @@ import { docMime } from "../../../utils/inboxDocs";
 import { callDayStartHour, hourLabel, DEFAULT_CALL_DAY_START_HOUR } from "../../../utils/billing";
 import { coveragePeriodText } from "../../../utils/coverageBlocks";
 import { paidOf, balanceOf } from "../../../utils/invoiceArgs";
+import useDocumentBytes from "../../shared/useDocumentBytes";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -26,6 +27,8 @@ const facilityMatches = (a, b) => {
  */
 function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = null, openError = null }) {
   const { data, theme: T } = useApp();
+  // The agreement's files, with their bytes while it is open.
+  useDocumentBytes(docs);
 
   const s = useMemo(() => {
     if (!contract) return null;

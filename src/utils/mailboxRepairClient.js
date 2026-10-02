@@ -1,3 +1,4 @@
+import { sameClerkSession } from "./clerkSession.js";
 const ENV = import.meta.env || {};
 const OUTCOME = /^[a-z_]{1,40}$/;
 const SKIPS = ["noAccount", "closed", "continuity", "banned", "locked", "unverified", "unusable"];
@@ -39,7 +40,7 @@ export function createMailboxRepairClient({
 } = {}) {
   async function request(body) {
     const session = getSession();
-    const current = () => isCurrent() && getSession() === session && session?.user?.id === accountId;
+    const current = () => isCurrent() && sameClerkSession(session, getSession()) && session?.user?.id === accountId;
     if (!accountId || !url || !anonKey || !current()) throw failure("session_changed");
     const controller = new AbortController();
     let timer;

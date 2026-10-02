@@ -62,7 +62,7 @@ function CVGenerator() {
   const handlePdfCV = async () => {
     if (!hasData) { flash(emptyNote()); return; }
     try {
-      const result = await shareCvPdf(cvContent, { name: s.name || "Physician", degree: s.degreeType || "" });
+      const result = await shareCvPdf(cvContent, { name: s.name || "Physician", degree: s.degreeType || "", settings: s });
       if (result === "download") flash("PDF downloaded.");
       else if (result === "share") flash("PDF ready in the share sheet.");
     } catch (err) {

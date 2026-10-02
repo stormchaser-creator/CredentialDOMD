@@ -6,6 +6,8 @@ import EmptyState from "../shared/EmptyState";
 import { FileIcon } from "../shared/Icons";
 import { docMime } from "../../utils/inboxDocs";
 import { docBytes, fmtBytes } from "../../utils/docLabel";
+import useDocumentBytes, { useDocumentFileStatus } from "../shared/useDocumentBytes";
+import { fileWaitTag, statusWithoutStore } from "../../utils/documentBytes";
 import { noteForSelection, noteWithNotOnFile } from "../../utils/requestPacket";
 import { dismissCorrection, coverNoteCorrection, recordCorrection } from "../../utils/intakeCorrections";
 import { planAccept, planDismiss, planUndo, withItem, recordAnswerCorrection } from "../../utils/intakeProposals";
@@ -279,6 +281,11 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
   }, [rows, notes.length]);
   const visible = viewRows.filter((r) => r.status === tab);
   const open = openId ? viewRows.find((r) => r.id === openId) : null;
+  // The open request's attachments, with their bytes while it is open: an
+  // emailed file lives in the account and only a screen that shows it asks
+  // for it (utils/documentBytes.js); it read "syncing" for good otherwise.
+  useDocumentBytes(open ? attachmentsFor(open, data.documents) : NO_DOCS);
+  const fileStatus = useDocumentFileStatus() || statusWithoutStore;
 
   // The open request's packet as the physician has it right now: the
   // proposal's documents and cover note until edited, then the edits.
@@ -603,7 +610,7 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
                 }}>
                   <FileIcon />
                   <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
-                  <span style={{ color: T.textDim, fontSize: 12, flexShrink: 0 }}>{d.data ? fmtBytes(docBytes(d)) : "syncing"}</span>
+                  <span style={{ color: T.textDim, fontSize: 12, flexShrink: 0 }}>{d.data ? fmtBytes(docBytes(d)) : fileWaitTag(fileStatus(d))}</span>
                 </div>
               ))}
               <div style={{ fontSize: 12, color: T.textDim }}>Also saved under Files, not linked to a record yet.</div>

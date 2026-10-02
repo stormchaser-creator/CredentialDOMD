@@ -355,7 +355,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -664,7 +664,7 @@ a:hover { color: var(--emerald-light); }
   <p>Double-checked against a second official source, August 2026. These are the primary sources we read:</p>
   <ul style="list-style:none;padding:0;">
       <li style="margin-bottom:6px;"><a href="https://www.commerce.alaska.gov/web/portals/5/pub/med0077.pdf" target="_blank" rel="noopener">Medical License Renewal Application form 08-0077 (Rev. 07/31/2025), covering January 1, 2025 to December 31, 2026: fee table ($350/$175 active, $200/$100 inactive, $150 retired), no-grace-period statement, 4-6 week processing, MY LICENSE portal, CME attestation, PDMP sections, late renewal (60 days to 1 year) and reinstatement rules, and full text of 12 AAC 40.025, 40.031, 40.033, 40.200-40.240</a></li>
-      <li style="margin-bottom:6px;"><a href="https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard/FrequentlyAskedQuestions.aspx" target="_blank" rel="noopener">Board FAQ page (loaded in browser): two-year cycle expiring December 31 of even years, renewal notice timing per AS 08.01.050, active/inactive/retired status rules, reinstatement tiers including the 5-year expiration cutoff, prorated second-year fee rule, CME and opioid education, PDMP, SSN requirement, staff contacts</a></li>
+      <li style="margin-bottom:6px;"><a href="https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard/FrequentlyAskedQuestions.aspx" target="_blank" rel="noopener">Board FAQ page: two-year cycle expiring December 31 of even years, renewal notice timing per AS 08.01.050, active/inactive/retired status rules, reinstatement tiers including the 5-year expiration cutoff, prorated second-year fee rule, CME and opioid education, PDMP, SSN requirement, staff contacts</a></li>
       <li style="margin-bottom:6px;"><a href="https://professionallicense.alaska.gov/MYLICENSE" target="_blank" rel="noopener">MY LICENSE self-service renewal portal; verified in browser that it resolves through myAlaska sign-in (my.alaska.gov) to the division's online licensing system</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.commerce.alaska.gov/web/portals/5/pub/med0077.pdf" target="_blank" rel="noopener">CME requirement: Alaska Admin. Code tit. 12, § 40.200</a></li>
   </ul>
@@ -858,5 +858,5 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-</body>
+<!--/email_off--></body>
 </html>

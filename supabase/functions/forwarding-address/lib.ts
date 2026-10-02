@@ -373,7 +373,7 @@ function page(title: string, body: string): string {
   h1 { margin:0 0 14px; font-size:20px; color:#111; }
   p { margin:0 0 12px; }
   .lead { font-size:16px; }
-  .addr { font-weight:600; word-break:break-all; }
+  .addr { font-weight:600; overflow-wrap:anywhere; }
   form { margin:20px 0 4px; }
   button { font:inherit; font-weight:600; color:#fff; background:#1d4ed8; border:0; border-radius:8px;
            padding:12px 20px; cursor:pointer; }
@@ -433,7 +433,7 @@ export type PageResult = { ok: true; address: string; accountEmail: string } | {
  * and one already used all render the SAME page: the person holding the link
  * learns nothing about which it was.
  *
- * Both pages name where the address is managed. More > Settings > Email is a
+ * Both pages name where the address is managed. More > Profile & settings > Email is a
  * real panel (src/components/pages/SettingsSection.jsx), so the pointers are
  * guidance and not a promise: one to remove a confirmed address, one to send a
  * fresh link after this one expired. Neither page is a place to act, and
@@ -444,9 +444,9 @@ export function resultPage(r: PageResult): string {
   const body = r.ok
     ? `<p class="lead"><span class="addr">${escapeHtml(r.address)}</span> is confirmed for <span class="addr">${escapeHtml(r.accountEmail)}</span>.</p>
       <p>Credentialing email forwarded from that address to docs@credentialdomd.com now reaches this account, and CME certificates forwarded to cme@credentialdomd.com are filed there too.</p>
-      <p>You can remove it any time in the app under More &gt; Settings &gt; Email.</p>`
+      <p>You can remove it any time in the app under More &gt; Profile &amp; settings &gt; Email.</p>`
     : `<p class="lead">This confirmation link has expired or has already been used.</p>
-      <p>Confirmation links work once and last ${TOKEN_TTL_HOURS} hours. To try again, open CredentialDOMD, go to More &gt; Settings &gt; Email, and send the link again.</p>`;
+      <p>Confirmation links work once and last ${TOKEN_TTL_HOURS} hours. To try again, open CredentialDOMD, go to More &gt; Profile &amp; settings &gt; Email, and send the link again.</p>`;
   return page(title, body);
 }
 

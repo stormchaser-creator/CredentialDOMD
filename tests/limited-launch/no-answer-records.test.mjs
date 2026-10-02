@@ -49,7 +49,10 @@ const KINDS = {
     act: f => f.app.editItem('cme', course({ name: 'Synthetic Stroke Update 2026' })),
     shown: f => find(f, 'cme', CME)?.name === 'Synthetic Stroke Update 2026',
     original: f => find(f, 'cme', CME)?.name === 'Synthetic Stroke Update',
-    live: ['cme.update'], replay: ['cme.upsert'], ops: ['upsert'],
+    // Replayed as an UPDATE of what it changed, never the whole record
+    // (review of 9484782c: a whole-row upsert put the phone's stale columns
+    // over the desk's changes).
+    live: ['cme.update'], replay: ['cme.update'], ops: ['upsert'],
   },
   delete: {
     records: () => ({ cme: [course()] }),
@@ -249,7 +252,8 @@ test('an invoice recorded before the first answer is kept when no answer comes, 
   assert.equal(f.api.writtenAheadCount(ACCOUNT), 0);
   f.authority.accept(ACCOUNT, active());
   await replayOnAnswer(f);
-  assert.deepEqual(sent(f), ['invoices.upsert', 'work_log.upsert']);
+  // The entry's billing is an edit: it goes up as what it changed.
+  assert.deepEqual(sent(f), ['invoices.upsert', 'work_log.update']);
   assert.deepEqual(f.queue(), []);
 
   const storage = new Map();
@@ -260,7 +264,7 @@ test('an invoice recorded before the first answer is kept when no answer comes, 
   expire(storage);
   next.authority.accept(ACCOUNT, active());
   await replayOnAnswer(next);
-  assert.deepEqual(sent(next), ['invoices.upsert', 'work_log.upsert'], 'the reloaded page sends it on its answer');
+  assert.deepEqual(sent(next), ['invoices.upsert', 'work_log.update'], 'the reloaded page sends it on its answer');
   assert.deepEqual(next.queue(), []);
 });
 

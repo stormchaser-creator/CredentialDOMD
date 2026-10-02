@@ -25,7 +25,25 @@ import { allDeductions, deductionsCsv } from "../../../utils/deductions";
 // A real uuid: every synced table keys rows by one, and the old
 // "ded-<ms>-<random>" id was refused (22P02) on every save and replay.
 import { generateId } from "../../../utils/helpers";
-import { localDay } from "../../../utils/helpers";
+import { localDay, formatDate } from "../../../utils/helpers";
+import { withDegree } from "../../../utils/outgoingText";
+
+// Every amount grouped the same way ("$2,499.00"; lines read "$2499.00").
+const usd = (n) => `$${(parseFloat(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Print: the memo alone, dark text on white, no app chrome or controls.
+// It printed the live screen: the tab bar, the buttons, the delete marks,
+// a savings estimate and light theme text meant for a dark background.
+const PRINT_CSS = `
+[data-print-only] { display: none; }
+@media print {
+  body * { visibility: hidden !important; }
+  .cmd-deduction-memo, .cmd-deduction-memo * { visibility: visible !important; color: #111 !important; background: transparent !important; box-shadow: none !important; }
+  .cmd-deduction-memo { position: absolute; left: 0; top: 0; width: 100%; }
+  .cmd-deduction-memo [data-print-hide] { display: none !important; }
+  .cmd-deduction-memo [data-print-only] { display: block !important; }
+  .cmd-deduction-memo * { border-color: #ccc !important; }
+}`;
 import StatementImport from "./StatementImport";
 
 
@@ -135,9 +153,17 @@ export default function DeductionMemo() {
 
   const taxYears = [...new Set([yearFilter, ...(data.deductibles || []).map((d) => d.taxYear)])].sort().reverse();
 
+  const who = data.settings?.name ? withDegree(data.settings.name, data.settings.degreeType) : "";
   return (
-    <div>
-      <div style={{
+    <div className="cmd-deduction-memo">
+      <style>{PRINT_CSS}</style>
+      <div data-print-only="" style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 18, fontWeight: 800 }}>1099 Deduction Memo, Tax Year {yearFilter}</div>
+        <div style={{ fontSize: 12 }}>
+          {[who, data.settings?.npi ? `NPI ${data.settings.npi}` : "", `Printed ${formatDate(localDay())}`].filter(Boolean).join(" \u00b7 ")}
+        </div>
+      </div>
+      <div data-print-hide="" style={{
         display: "flex", justifyContent: "space-between", flexWrap: "wrap",
         alignItems: "flex-start", marginBottom: 12, gap: 8,
       }}>
@@ -178,11 +204,13 @@ export default function DeductionMemo() {
           Tax year {yearFilter} total
         </div>
         <div style={{ fontSize: 28, fontWeight: 800, color: T.accent }}>
-          ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {usd(total)}
         </div>
         <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
-          {all.length} line item{all.length === 1 ? "" : "s"} ·{" "}
-          At a 32% effective rate (federal + state + SE), this saves ~${(total * 0.32).toFixed(0)}.
+          {all.length} line item{all.length === 1 ? "" : "s"}
+          <span data-print-hide="">
+            {" "}· At a 32% effective rate (federal + state + SE), this saves ~${(total * 0.32).toFixed(0)}.
+          </span>
         </div>
       </div>
 
@@ -199,14 +227,14 @@ export default function DeductionMemo() {
               fontSize: 13,
             }}>
               <span style={{ color: T.text }}>{deductionCategoryLabel(cat)}</span>
-              <span style={{ color: T.text, fontWeight: 600 }}>${amt.toFixed(2)}</span>
+              <span style={{ color: T.text, fontWeight: 600 }}>{usd(amt)}</span>
             </div>
           ))}
         </div>
       )}
 
       {/* Action buttons */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <div data-print-hide="" style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button
           onClick={() => { if (!showForm) setForm(blankForm()); setShowForm(true); }}
           style={{
@@ -247,14 +275,16 @@ export default function DeductionMemo() {
 
       {/* Form */}
       {showForm && (
-        <DeductionForm
-          form={form}
-          setForm={setForm}
-          onSave={save}
-          onCancel={() => { setForm(blankForm()); setShowForm(false); setFormMsg(""); }}
-          msg={formMsg}
-          T={T}
-        />
+        <div data-print-hide="">
+          <DeductionForm
+            form={form}
+            setForm={setForm}
+            onSave={save}
+            onCancel={() => { setForm(blankForm()); setShowForm(false); setFormMsg(""); }}
+            msg={formMsg}
+            T={T}
+          />
+        </div>
       )}
       {savedMsg && (
         <div style={{ fontSize: 12.5, fontWeight: 600, color: T.success || "#10b981", margin: "0 0 8px" }}>{savedMsg}</div>
@@ -287,7 +317,7 @@ export default function DeductionMemo() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{i.description}</div>
                 <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
-                  {deductionCategoryLabel(i.category)} · {i.date}
+                  {deductionCategoryLabel(i.category)} · {i.date ? formatDate(i.date) : "Undated"}
                   {i.source && i.source !== "manual" && (
                     <span style={{
                       marginLeft: 6, fontSize: 10, padding: "1px 6px",
@@ -298,10 +328,11 @@ export default function DeductionMemo() {
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
-                  ${parseFloat(i.amount).toFixed(2)}
+                  {usd(i.amount)}
                 </span>
                 {i.source !== "auto" && i.id && (
                   <button
+                    data-print-hide=""
                     aria-label={`Remove ${i.description || "deduction"}`}
                     onClick={() => removeManual(i.id)}
                     style={{

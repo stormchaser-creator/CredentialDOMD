@@ -7,6 +7,7 @@ import { supabase } from "../../lib/supabase";
 import { ScreenshotAttach } from "../shared";
 import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
 import { scrubSsn } from "../../utils/outgoingText.js";
+import { sameClerkSession } from "../../utils/clerkSession.js";
 import TicketAttachments from "../shared/TicketAttachments";
 import { createSupportTextDrafts, supportReceiptConfirmed, supportRequestHash, supportSubmissionError } from "../../utils/supportTextDrafts";
 import { SUPPORT_OPERATIONS_ENABLED, createSupportOperationsClient, supportActorLabel, supportMessageFromTeam, ticketOpenedBySupport } from "../../utils/supportOperationsClient";
@@ -350,7 +351,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
     const session = window.Clerk?.session;
     if (!SUPPORT_OPERATIONS_ENABLED && (!session || window.Clerk?.user?.id !== user?.id)) { setReplyMsg("Sign in to this account before sending. Your text has not been sent."); return; }
     const requestId = threadRequest.current;
-    const current = () => requestId === threadRequest.current && (SUPPORT_OPERATIONS_ENABLED || (window.Clerk?.session === session && window.Clerk?.user?.id === user?.id));
+    const current = () => requestId === threadRequest.current && (SUPPORT_OPERATIONS_ENABLED || (sameClerkSession(session, window.Clerk?.session) && window.Clerk?.user?.id === user?.id));
     const request = SUPPORT_OPERATIONS_ENABLED ? null
       : requestKey(replyRequest, [openTicket.id, scrubSsn(text), filesFingerprint(replyAttachment)], drafts.read(openTicket.id)?.request);
     const savedRevision = saveReplyDraft(reply, draftRequest(request));
@@ -508,7 +509,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new", i
     const savedRevision = saveCreateDraft({ request: draftRequest(request) });
     setSubmitting(true); setError("");
     const requestId = ++actionRequest.current;
-    const current = () => requestId === actionRequest.current && (SUPPORT_OPERATIONS_ENABLED || (window.Clerk?.session === session && window.Clerk?.user?.id === user?.id));
+    const current = () => requestId === actionRequest.current && (SUPPORT_OPERATIONS_ENABLED || (sameClerkSession(session, window.Clerk?.session) && window.Clerk?.user?.id === user?.id));
     try {
       let shortfall = "";
       // A ticket is stored in the cloud and read by people, so an SSN-shaped

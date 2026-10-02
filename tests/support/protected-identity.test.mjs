@@ -275,12 +275,13 @@ test('the mail, text-message, clipboard and share paths scrub, and the error rep
   for (const [part, text] of Object.entries(bundle)) {
     assert.doesNotMatch(text, /123-45-6789|\u{2014}/u, part);
   }
-  assert.match(bundle.letter, /1\. W-9 \[SSN removed\]\.pdf/);
-  assert.match(bundle.blurb, /W-9 \[SSN removed\]\.pdf/);
+  // The letter lists what each file is, without its extension.
+  assert.match(bundle.letter, /1\. W-9 \[SSN removed\]\n/);
+  assert.match(bundle.blurb, /1\. W-9 \[SSN removed\]\./);
   assert.match(bundle.letter, /\(NPI 1234567890\)/, 'the NPI (ten digits) is kept');
   const [assistant, documents] = await Promise.all(['src/components/features/AssistantSection.jsx', 'src/components/features/DocumentsSection.jsx'].map(read));
   const packet = assistant.slice(assistant.indexOf('action.kind === "send_packet"'), assistant.indexOf('action.kind === "export_data"'));
-  assert.match(packet, /const \{ title, note: packetNote, blurb \} = veraPacketShareText\(action\.coverNote\);/);
+  assert.match(packet, /const \{ title, note: packetNote, blurb \} = veraPacketShareText\(action\.coverNote, data\.settings, files\.length\);/);
   assert.match(packet, /\.filter\(r => r\.doc && !isIdentityLink\(r\.doc\.linkedTo\)\)/, 'no file linked to Protected Identity goes out in a Vera packet');
   // And the card's own count keeps it out first, on the device or not
   // (tests/vera-packet-retry.test.mjs drives it).
@@ -289,12 +290,12 @@ test('the mail, text-message, clipboard and share paths scrub, and the error rep
   assert.ok(state.indexOf('isIdentityLink(d.linkedTo)') < state.indexOf('if (d.data) { ready.push'), 'withheld before a file on the device counts as ready');
   assert.doesNotMatch(packet, /navigator\.clipboard\.writeText/, 'the clipboard is written through copyToClipboard, which scrubs');
   assert.equal((packet.match(/await copyToClipboard\(packetNote\)/g) || []).length, 2, 'share path and download fallback');
-  assert.match(packet, /navigator\.share\(\{ title, text: blurb, files \}\)/);
+  assert.match(packet, /shareAtHandoff\(\{ title, text: blurb, files \}/);
   const sendBundle = documents.slice(documents.indexOf('const sendBundle = useCallback('), documents.indexOf('const openCamera = useCallback('));
   assert.match(sendBundle, /const \{ title, letter, blurb \} = bundleShareText\(data\.settings, sentDocs\);/);
   assert.doesNotMatch(sendBundle, /navigator\.clipboard\.writeText/);
   assert.match(sendBundle, /await copyToClipboard\(letter\)/);
-  assert.match(sendBundle, /navigator\.share\(\{ files, title, text: blurb \}\)/);
+  assert.match(sendBundle, /shareAtHandoff\(\{ files, title, text: blurb \}/);
 
   const source = await read('src/lib/errorReport.js');
   const reports = [];

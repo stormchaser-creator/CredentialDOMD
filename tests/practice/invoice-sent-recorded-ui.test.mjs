@@ -89,7 +89,7 @@ test('work log: closing a preview whose invoice went out unrecorded asks first, 
   assert.deepEqual(recorded(m).map(i => i.number), ['INV-20260910-01']);
 });
 
-test('work log: the share sheet closes without reporting a send; nothing is recorded, the preview says so, and Mark as sent records it', async () => {
+test('work log: the share sheet closes without reporting a send; nothing is recorded yet, the preview asks whether it went, and Mark as sent still records it', async () => {
   clock.setNow('2026-09-10T12:00:00-05:00');
   shares.length = 0;
   setNavigator({ share: async () => { throw abort(); } });
@@ -97,7 +97,8 @@ test('work log: the share sheet closes without reporting a send; nothing is reco
   await sendPdf(m);
   assert.deepEqual(recorded(m), [], 'a cancel records nothing');
   assert.equal(m.calls.filter(c => c[0] === 'edit' && c[1] === 'workLog').length, 0);
-  assert.match(shownText(m), /Nothing was recorded: the share sheet closed without reporting a send\. If INV-20260910-01 did go out, tap Mark as sent below\./);
+  // iOS answers a cancel after a completed share too (2026-10-01): asked.
+  assert.match(shownText(m), /Did INV-20260910-01 go out\?The share sheet did not say whether INV-20260910-01 was sent\./);
 
   // It did go out (the sheet reported a cancel after Mail sent it).
   btn(m, t => t === 'Sent it already? Mark as sent', 'Mark as sent').props.onClick();
@@ -242,7 +243,7 @@ test('days & call: after a share sheet closes without a send, Mark as sent recor
   const m = dutyPreview();
   await sendPdf(m);
   assert.deepEqual(recorded(m), []);
-  assert.match(shownText(m), /Nothing was recorded: the share sheet closed without reporting a send/);
+  assert.match(shownText(m), /Did INV-20260910-01 go out\?/);
   btn(m, t => t === 'Sent it already? Mark as sent', 'Mark as sent').props.onClick();
   typeInto(m, 'Date sent', '2026-09-09');
   btn(m, t => t === 'Record as sent', 'Record as sent').props.onClick();
@@ -285,7 +286,7 @@ test('expenses: after a share sheet closes without a send, Mark as sent records 
   await btn(m, t => t.includes('Create & send'), 'send').props.onClick();
   await settle();
   assert.deepEqual(recorded(m), []);
-  assert.match(shownText(m), /Nothing was recorded: the share sheet closed without reporting a send\. If EXP-20260910-01 did go out/);
+  assert.match(shownText(m), /Did EXP-20260910-01 go out\?/);
   btn(m, t => t === 'Sent it already? Mark as sent', 'Mark as sent').props.onClick();
   typeInto(m, 'Invoice number', 'EXP-20260908-01');
   typeInto(m, 'Date sent', '2026-09-08');

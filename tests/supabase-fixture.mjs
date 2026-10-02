@@ -27,15 +27,20 @@ export function fixture() {
   const clerk = { user: { id: actor }, session: { user: { id: actor }, getToken: async () => 'synthetic-token' } };
   const authority = createAccessAuthority({ enabled: true, currentAccount: () => actor, now: () => 0 });
   authority.reset(actor); authority.accept(actor, snapshot());
-  const f = { requests, values, warnings, onRequest: async () => ({ data: null, error: null }) };
+  // `clerk.session = null`: Clerk could not mint a token (a resume from Mail).
+  const f = { requests, values, warnings, clerk, onRequest: async () => ({ data: null, error: null }) };
   const dispatch = async operation => { requests.push(operation); return f.onRequest(operation); };
+  // Every client the module makes, with its settings (a test reads the
+  // keepalive fetch the share stamp's own client uses).
+  f.clients = [];
   function createClient(_url, _key, config) {
-    const execute = async operation => { await config.accessToken?.(); return dispatch(operation); };
-    return { from(table) {
+    f.clients.push(config);
+    const execute = async operation => { await config.accessToken?.(); return dispatch({ ...operation, client: f.clients.indexOf(config) }); };
+    return { rpc: (name, args) => ({ then: (resolve, reject) => execute({ method: 'rpc', name, args, filters: [] }).then(resolve, reject) }), from(table) {
       const operation = { table, filters: [] };
       const q = { then: (resolve, reject) => execute(operation).then(resolve, reject) };
       for (const method of ['insert', 'update', 'upsert', 'delete', 'select']) q[method] = value => { if (!operation.method) { operation.method = method; operation.value = value; } return q; };
-      for (const method of ['eq', 'order', 'range']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
+      for (const method of ['eq', 'order', 'range', 'ilike', 'in', 'not', 'limit', 'or', 'gte', 'lte']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
       q.maybeSingle = q.single = () => q;
       return q;
     }, storage: { from: bucket => ({ upload: (path, blob) => execute({ method: 'upload', bucket, path, blob }), remove: paths => execute({ method: 'remove', bucket, paths }) }) } };
@@ -45,7 +50,9 @@ export function fixture() {
     '../utils/syncRules.js': syncRules,
     // No data deletion purges anything here, so the purge fence never moves.
     '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null },
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
+      // The queue's write (storageScope makes room first in the app).
+      setItemMakingRoom: (key, value) => values.set(key, value) },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {},
     // Reached only from a sign-in receipt, which this continuity-disabled
@@ -59,7 +66,9 @@ export function fixture() {
   };
   const module = { exports: {} };
   const context = vm.createContext({ module, exports: module.exports, require: name => { if (!imports[name]) throw Error(`Unexpected import ${name}`); return imports[name]; },
-    window: { Clerk: clerk }, fetch: dispatch, localStorage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) },
+    // fetch: what the module's own fetch calls send; the options of each are
+    // kept too (f.fetchOptions), as the request records only the first argument.
+    window: { Clerk: clerk }, fetch: (input, init) => { (f.fetchOptions ||= []).push(init ?? null); return dispatch(input); }, localStorage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) },
     console: { warn: (...a) => warnings.push(a.join(' ')), error() {} }, Blob, atob, crypto, Date, setTimeout, clearTimeout,
   });
   vm.runInContext(code, context);

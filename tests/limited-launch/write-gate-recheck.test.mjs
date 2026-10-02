@@ -70,7 +70,9 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
   const imports = {
     '@supabase/supabase-js': { createClient }, '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS }, '../utils/syncRules.js': syncRules,
     '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => ACCOUNT,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null },
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
+      // The queue's write (storageScope makes room first in the app).
+      setItemMakingRoom: (key, value) => values.set(key, value) },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': {}, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},
@@ -663,8 +665,10 @@ test('a live edit made while replay is sending an older queued copy of the same 
     records: { invoices: [invoice()] },
     onRequest: async op => {
       if (op.table === 'deleted_items' && op.method === 'select') return { data: [], error: null };
-      // The replayed copy is slow (a document's file uploads first).
-      if (op.table === 'invoices' && op.method === 'upsert') await gate;
+      // The replayed copy is slow (a document's file uploads first). It is an
+      // UPDATE of what it changed now, as the live edit is (review of
+      // 9484782c), so it is told by its value.
+      if (op.table === 'invoices' && op.value?.paid_at === '2026-09-29T12:00:00.000Z') await gate;
       if (op.table === 'invoices') landed.push(`${op.method} ${op.value?.paid_at}`);
       if (op.method === 'update' && op.returning) return { data: [{ id: op.filters.find(([m, c]) => m === 'eq' && c === 'id')?.[2] }], error: null };
       return { error: null };
@@ -686,7 +690,7 @@ test('a live edit made while replay is sending an older queued copy of the same 
   release();
   await replay;
   await settle();
-  assert.deepEqual(landed, ['upsert 2026-09-29T12:00:00.000Z', 'update 2026-09-29T13:00:00.000Z'], 'the newer copy lands last');
+  assert.deepEqual(landed, ['update 2026-09-29T12:00:00.000Z', 'update 2026-09-29T13:00:00.000Z'], 'the newer copy lands last');
   assert.deepEqual(f.queue(), []);
 });
 
@@ -844,7 +848,8 @@ test('QA3 review: a Credential-only member\'s document saves kept during a faile
   f.authority.accept(ACCOUNT, credentialOnly());
   await settle();
   const sent = f.writes().map(op => `${op.method} ${op.table || op.bucket}`);
-  for (const write of ['upsert documents', 'remove documents', 'delete documents', 'upsert deleted_items']) assert.ok(sent.includes(write), `${write}: ${sent.join(', ')}`);
+  // The rename goes up as what it changed (review of 9484782c).
+  for (const write of ['update documents', 'remove documents', 'delete documents', 'upsert deleted_items']) assert.ok(sent.includes(write), `${write}: ${sent.join(', ')}`);
   assert.deepEqual(f.queue(), [], 'nothing is stranded in the queue');
   assert.equal(f.reports.some(r => r.extra.event === 'write_refused'), false, 'a paying member is not reported refused');
   assert.deepEqual(f.alerts, []);
@@ -930,7 +935,7 @@ test('QA3 review: an invoice that already went out keeps its record, and its ent
   const seen = watchAnswers(f);
   f.authority.accept(ACCOUNT, active());
   await settle();
-  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table} ${op.value.id}`).sort(), ['upsert invoices inv-synthetic-1', 'upsert work_log work-synthetic-1']);
+  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table} ${op.value.id}`).sort(), ['update work_log work-synthetic-1', 'upsert invoices inv-synthetic-1']);
   assert.deepEqual(f.queue(), []);
   assert.deepEqual(seen.loads, []);
   // Anything else kept under that check is still taken back.
@@ -977,7 +982,9 @@ test('QA3 review: a star that lands while replay is under way is not undone by t
   await replay;
   const after = f.writes().slice(star + 1).filter(op => op.table === 'cme' && op.value?.id === 'cme-x');
   assert.equal(after.length, 1, 'the queued edit still goes up');
-  assert.equal(after[0].value.favorite, true, 'carrying the star, not the value from before it');
+  // Sent as what it changed (review of 9484782c): the title, and never the
+  // star from before it.
+  assert.ok(!('favorite' in after[0].value) || after[0].value.favorite === true, 'never the value from before the star');
   assert.equal(after[0].value.title, 'Synthetic X renamed');
   assert.deepEqual(f.queue(), []);
 });
@@ -1005,7 +1012,8 @@ test('QA3 review: replay that reaches a record while a star of it is in flight w
   releaseStar();
   await replay;
   const sent = f.writes().filter(op => op.table === 'cme');
-  assert.deepEqual(sent.map(op => op.method), ['update', 'upsert']);
-  assert.equal(sent[1].value.favorite, true);
+  assert.deepEqual(sent.map(op => op.method), ['update', 'update']);
+  assert.ok(!('favorite' in sent[1].value) || sent[1].value.favorite === true, 'never the value from before the star');
+  assert.equal(sent[1].value.title, 'Synthetic X renamed');
   assert.deepEqual(f.queue(), []);
 });

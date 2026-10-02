@@ -279,10 +279,10 @@ for (const width of [375, 390]) {
 
       await qa.feature('SUPPORT-001', 'Support on a phone: the bottom sheet fits and closes', async () => {
         await backButton(page).tap();
-        await phoneMore(page, 'Support');
+        await phoneMore(page, 'Get help');
         const tabNew = page.getByRole('button', { name: 'New ticket', exact: true });
         const opened = await tabNew.waitFor({ timeout: 10000 }).then(() => true, () => false);
-        qa.check('More > Support opens the support sheet', opened);
+        qa.check('More > Get help opens the support sheet', opened);
         if (!opened) return;
         await tabNew.tap();
         await sleep(600);

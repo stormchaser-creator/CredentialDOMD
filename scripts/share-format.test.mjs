@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { localToday } from "../src/utils/dateDays.js";
 import {
-  credentialLetter, credentialSharePayload, bundleShareText, veraPacketShareText, veraCoverNote, referencesShareTitle,
+  credentialLetter, credentialShareText, credentialSharePayload, bundleShareText, veraPacketShareText, veraCoverNote, referencesShareTitle,
   followUpEmail, peerHeadsUp, cvPlainText, smsBody, smsCutNotice, SMS_BODY_MAX,
   alertTextBody, alertCutNotice, ALERT_TEXT_TAIL,
 } from "../src/utils/shareText.js";
@@ -135,17 +135,39 @@ test("a credential letter only claims attachments when they really travel with i
   assert.doesNotMatch(plain, /attached/i);
   assert.match(credentialLetter(license, "licenses", settings, { attached: true }), /with supporting documentation attached\./);
   assert.match(credentialLetter(license, "licenses", settings, { note: "  Per your request.  " }), /\n\nPer your request\.\n\n/);
-  assert.equal(credentialLetter(reference, "peerReferences", settings, { note: "Hello" }),
-    `Hello\n\n${buildCredentialText(reference, "peerReferences", settings)}`);
+  // A note that greets is the greeting; every letter signs off with the
+  // physician and is stamped once.
+  const ref = credentialLetter(reference, "peerReferences", settings, { note: "Hello" });
+  assert.ok(ref.startsWith(`Hello\n\n${buildCredentialText(reference, "peerReferences", settings)}\n\nThank you,\nSynthetic Physician, DO\nNPI 9999999999\n\nSent via CredentialDOMD \u{b7} `), ref);
+  const greeted = credentialLetter(license, "licenses", settings, { note: "Hi Kim, here is my DEA." });
+  assert.ok(greeted.startsWith("Hi Kim, here is my DEA.\n\nCREDENTIAL VERIFICATION"), "no second greeting over the note's own");
+  assert.match(plain, /\n\nThank you,\nSynthetic Physician, DO\nNPI 9999999999\n\nSent via CredentialDOMD \u{b7} \w{3} \d{1,2}, \d{4}$/u, "a sign-off, then one en-US stamp");
+  assert.equal((plain.match(/Sent via CredentialDOMD/g) || []).length, 1);
+  const server = credentialLetter(license, "licenses", settings, { attached: true, serverSent: true });
+  assert.ok(server.endsWith("Thank you,\nSynthetic Physician, DO\nNPI 9999999999"), "the server adds its own footer: no Sent via line");
+  const unnamed = credentialLetter(license, "licenses", {}, {});
+  assert.doesNotMatch(unnamed, /Physician: Dr\.|Degree: Doctor of Medicine/, "no placeholder name, no guessed degree");
+  assert.match(credentialLetter(license, "licenses", { name: "Jordan Rivera, DO", degreeType: "DO" }), /Physician: Jordan Rivera, DO\n/);
 });
-test("a share with files carries the blurb; a share with no file carries the multi-line letter", () => {
+test("a share with files carries the blurb; a share with no file carries a short email in sentences", () => {
   const letter = credentialLetter(license, "licenses", settings);
   const blurb = buildCredentialBlurb(license, "licenses", settings, true, "");
   const withFile = credentialSharePayload({ files: ["file"], subject: "S", blurb, letter });
   assert.deepEqual(withFile, { files: ["file"], title: "S", text: blurb });
-  const textOnly = credentialSharePayload({ files: [], subject: "S", blurb, letter });
-  assert.deepEqual(textOnly, { title: "S", text: letter });
-  assert.ok(textOnly.text.includes("\n"), "text-only shares keep their line breaks");
+  const text = credentialShareText(license, "licenses", settings);
+  const textOnly = credentialSharePayload({ files: [], subject: "S", blurb, letter, text });
+  assert.deepEqual(textOnly, { title: "S", text });
+  // The Gmail app collapses the breaks into one <div>: no rule lines, no
+  // label columns, and every paragraph ends a sentence.
+  assert.doesNotMatch(text, /-{5,}|CREDENTIAL VERIFICATION/);
+  const paras = text.split("\n\n");
+  assert.ok(paras[0].startsWith("Hello, here is the credential verification for Synthetic Physician, DO (NPI 9999999999): Medical License, CA."), paras[0]);
+  assert.ok(paras.slice(0, -1).every((p) => /[.!?)]$/.test(p)), text);
+  assert.equal(paras.at(-1), "Thank you,\nSynthetic Physician, DO \u{b7} NPI 9999999999");
+  const flat = text.replace(/\s*\n+\s*/g, " ");
+  assert.match(flat, /Please reach out with any questions\. Thank you, Synthetic Physician, DO/);
+  const greeted = credentialShareText(license, "licenses", settings, { note: "Hi Kim, here it is" });
+  assert.ok(greeted.startsWith("Hi Kim, here it is.\n\nHere is the credential verification"), greeted);
 });
 test("the credential blurb speaks to the recipient only", () => {
   for (const hasDocs of [true, false]) {
@@ -160,7 +182,10 @@ test("search components are listed without an em dash", () => {
 });
 test("the credential summary line and missing dates carry no dash placeholder", () => {
   const text = buildCredentialText(license, "licenses", settings);
-  assert.ok(text.split("\n").includes("Medical License, CA"), text);
+  // "Medical License, CA" is said by the Type and State lines under it, so it
+  // is not printed above them as well.
+  assert.ok(!text.split("\n").includes("Medical License, CA"), text);
+  assert.ok(text.includes("Type: Medical License") && text.includes("State: CA"), text);
   assert.doesNotMatch(text, /Issued:/, "a missing issue date is left out, not sent as a dash");
   assert.match(text, /Expires: May 1, 2027/);
   assert.doesNotMatch(buildCredentialBlurb(license, "licenses", settings, false, ""), /Issued/);
@@ -170,15 +195,26 @@ test("the credential summary line and missing dates carry no dash placeholder", 
 test("the packet blurb lists the files and never mentions the clipboard", () => {
   const { title, letter, blurb } = bundleShareText(settings, docs, new Date("2026-09-25T12:00:00"));
   assert.equal(title, "Credential packet: Synthetic Physician, DO (2 documents)");
-  assert.equal(blurb, "Credential packet for Synthetic Physician, DO (NPI 9999999999), 2 documents attached: 1. CA license.pdf. 2. DEA certificate. Sent via CredentialDOMD.");
-  assert.match(letter, /\n  1\. CA license\.pdf\n  2\. DEA certificate\n/);
-  assert.equal(bundleShareText({}, [{ name: "One" }]).title, "Credential packet: Physician (1 document)");
+  assert.equal(blurb, "Hello, attached is the credential packet for Synthetic Physician, DO (NPI 9999999999), 2 documents: 1. CA license. 2. DEA certificate.\n\nPlease reach out with any questions.\n\nThank you,\nSynthetic Physician, DO \u{b7} NPI 9999999999");
+  assert.match(letter, /\n  1\. CA license\n  2\. DEA certificate\n/);
+  assert.match(letter, /\nSent via CredentialDOMD \u{b7} Sep 25, 2026$/u);
+  // With no name the title named "Physician" while the body said "the physician".
+  assert.equal(bundleShareText({}, [{ name: "One" }]).title, "Credential packet (1 document)");
+  assert.match(bundleShareText({}, [{ name: "One" }]).blurb, /credential packet for the physician, 1 document/);
+});
+test("the packet blurb keeps each file-derived name's own case", () => {
+  const { blurb } = bundleShareText(settings, [{ label: "DEA Registration" }, { name: "cv.pdf" }, { name: "eCFMG certificate.pdf" }, { name: "board_cert.pdf" }, { label: "Board letter." }]);
+  assert.match(blurb, /5 documents: 1\. DEA Registration\. 2\. cv\. 3\. eCFMG certificate\. 4\. board_cert\. 5\. Board letter\.\n/);
 });
 test("the Vera packet note and blurb read as lines and sentences", () => {
-  const { title, note, blurb } = veraPacketShareText("License attached; DEA attached; please confirm receipt");
-  assert.equal(title, "Credential packet");
+  const { title, note, blurb } = veraPacketShareText("License attached; DEA attached; please confirm receipt", settings, 2);
+  assert.equal(title, "Credential packet: Synthetic Physician, DO (2 documents)");
   assert.equal(note, "License attached\nDEA attached\nplease confirm receipt\n\nSent from CredentialDOMD");
-  assert.equal(blurb, "Credential packet: License attached. DEA attached. please confirm receipt. Sent from CredentialDOMD.");
+  assert.equal(blurb, "Hello, here is the credential packet for Synthetic Physician, DO.\n\nLicense attached. DEA attached. Please confirm receipt.\n\nPlease reach out with any questions.\n\nThank you,\nSynthetic Physician, DO \u{b7} NPI 9999999999");
+  // An LLM note with its own greeting, list and sign-off: no ",." and no inline signature.
+  const letterish = veraPacketShareText("Hello Ms. Rivera,\nAttached:\n- DEA registration\n- CO license\nBest,\nDr. Li", settings, 2).blurb;
+  assert.doesNotMatch(letterish, /,\.|:\.|Best|Dr\. Li|Ms\. Rivera/);
+  assert.match(letterish, /\n\nAttached\. DEA registration\. CO license\.\n\n/);
   assert.equal(veraPacketShareText("").note, "Credential documents enclosed.\n\nSent from CredentialDOMD");
 });
 
@@ -195,16 +231,26 @@ test("a follow-up email puts an address in To: and never greets it", () => {
   assert.doesNotMatch(byAddress.body, /example\.test/);
   const byName = followUpEmail({ label: "CA Medical License", expirationDate: "2027-05-01", recipient: "Dana", note: "Called on Monday." });
   assert.equal(byName.to, "");
-  assert.equal(byName.body, "Hi Dana,\n\nFollowing up on CA Medical License, which expires May 1, 2027.\n\nCalled on Monday.");
-  assert.equal(followUpEmail({ label: "Privileges" }).body, "Hello,\n\nFollowing up on Privileges.");
+  assert.equal(byName.body, "Hi Dana,\n\nFollowing up on CA Medical License, which expires May 1, 2027.\n\nCalled on Monday.\n\nThank you.");
+  assert.equal(followUpEmail({ label: "Privileges" }).body, "Hello,\n\nFollowing up on Privileges.\n\nThank you.");
+  // Signed with the physician's name and contact when the profile has them.
+  assert.ok(followUpEmail({ label: "Privileges", settings: { ...settings, email: "doc@example.test" } }).body
+    .endsWith("Thank you,\nSynthetic Physician, DO\nNPI 9999999999\ndoc@example.test"));
   assert.equal(followUpEmail({ label: `Medical License ${EM_DASH} CA` }).subject, "Following up: Medical License, CA");
 });
 test("the peer heads-up addresses the colleague by last name", () => {
   const h = peerHeadsUp(settings, { name: "Jane Smith, MD" });
-  assert.equal(h.emailSubject, "Upcoming Reference Request from Synthetic Physician");
+  assert.equal(h.emailSubject, "Upcoming Reference Request from Synthetic Physician, DO");
   assert.ok(h.emailBody.startsWith("Dear Dr. Smith,\n\n"));
   assert.ok(h.emailBody.endsWith("With sincere gratitude,\nSynthetic Physician, DO"));
-  assert.ok(peerHeadsUp({}, {}).emailBody.startsWith("Dear Dr. Colleague,"));
+  assert.ok(peerHeadsUp(settings, {}).emailBody.startsWith("Dear Colleague,"));
+  // No name on the profile: no draft signed "Dr. [Your Name]".
+  assert.equal(peerHeadsUp({}, { name: "Jane Smith, MD" }), null);
+  // A nurse, PA or NP is greeted by name, not "Dr.".
+  for (const peer of [{ name: "Pat Exemplar, RN", degree: "RN" }, { name: "Pat Exemplar", degree: "PA-C" }, { name: "Pat Exemplar NP" }, { name: "Jane Smith R.N." }, { name: "JANE SMITH PA" }]) {
+    const body = peerHeadsUp(settings, peer).emailBody;
+    assert.ok(/^Dear (Pat Exemplar|Jane Smith|JANE SMITH),\n\n/.test(body), `${peer.name}: ${body.slice(0, 30)}`);
+  }
 });
 test("a degree after the name with no comma is not the last name (CRED-044)", () => {
   for (const name of ["Jane Sample MD", "Jane Sample DO", "Jane Sample M.D.", "Jane Sample MD FACS", "Jane Sample PhD", "Jane Sample Jr.", "Jane Sample, MD"]) {
@@ -222,7 +268,7 @@ test("a surname that spells a degree in mixed case stays the last name (CRED-044
 
 test("degree letters typed in lowercase, title case or with dots are not the last name (CRED-044)", () => {
   for (const name of ["Jane Smith md", "Jane Smith Md", "Jane Smith m.d.", "Jane Smith Phd", "Jane Smith jr",
-    "Jane Smith M.S.", "Jane Smith R.N.", "Jane Smith rn", "Jane Smith do", "Jane Smith ph.d.", "jane Smith md facs",
+    "Jane Smith M.S.", "Jane Smith do", "Jane Smith ph.d.", "jane Smith md facs",
     "Jane Smith MD", "Jane Smith Sr.", "Jane Smith III"]) {
     assert.ok(peerHeadsUp(settings, { name }).emailBody.startsWith("Dear Dr. Smith,\n\n"), name);
   }
@@ -233,9 +279,9 @@ test("degree letters typed in lowercase, title case or with dots are not the las
 });
 
 test("degree letters after an all caps or all lowercase first and last name are not the last name (CRED-044)", () => {
-  for (const [name, last] of [["JANE SMITH DO", "SMITH"], ["JANE SMITH PA", "SMITH"], ["JANE SMITH NP", "SMITH"],
-    ["JANE SMITH MS", "SMITH"], ["JANE SMITH RN", "SMITH"], ["JOHN SMITH II", "SMITH"], ["JANE SMITH MD DO", "SMITH"],
-    ["jane smith do", "smith"], ["jane smith pa", "smith"], ["ANH DO DO", "DO"], ["JANE SMITH MD", "SMITH"]]) {
+  for (const [name, last] of [["JANE SMITH DO", "SMITH"],
+    ["JANE SMITH MS", "SMITH"], ["JOHN SMITH II", "SMITH"], ["JANE SMITH MD DO", "SMITH"],
+    ["jane smith do", "smith"], ["ANH DO DO", "DO"], ["JANE SMITH MD", "SMITH"]]) {
     assert.ok(peerHeadsUp(settings, { name }).emailBody.startsWith(`Dear Dr. ${last},\n\n`), name);
   }
   // Two words in one case keep the second as the surname; title case is always the surname.
@@ -276,8 +322,8 @@ test("the alert message lists items without an em dash", () => {
 // -- Invoice text-only share and the sender notice --
 test("an invoice shared with no file carries the letter and the itemized invoice", () => {
   const body = invoiceTextOnlyShare(invoice, invoiceText);
-  assert.ok(body.startsWith("Hello,\n\nBelow is invoice INV-0012"));
-  assert.ok(body.endsWith(invoiceText));
+  assert.ok(body.startsWith("Hello, below is invoice INV-0012"));
+  assert.ok(body.includes(`\n\n${invoiceText}\n\nPlease reach out with any questions.\n\nThank you`), "the invoice, then the sign-off last");
   assert.doesNotMatch(body, /clipboard/i);
   assert.doesNotMatch(body, /attached/i);
 });
@@ -470,7 +516,7 @@ test("Vera's packet note, blurb and Reply-by-email seed carry no em dash", () =>
   const { note, blurb } = veraPacketShareText(raw);
   for (const text of [note, blurb, veraCoverNote(raw)]) assert.ok(!text.includes(EM_DASH), text);
   assert.equal(veraCoverNote(raw), "Enclosed: DEA and CA license, both current.\nBoard certificate attached\nPlease confirm receipt");
-  assert.equal(blurb, "Credential packet: Enclosed: DEA and CA license, both current. Board certificate attached. Please confirm receipt. Sent from CredentialDOMD.");
+  assert.equal(blurb, "Hello, here is the credential packet.\n\nEnclosed: DEA and CA license, both current. Board certificate attached. Please confirm receipt.\n\nPlease reach out with any questions.\n\nThank you.");
   const src = readFileSync(`${root}src/components/features/AssistantSection.jsx`, "utf8");
   assert.match(src, /note: veraCoverNote\(a\.coverNote\)/, "Reply by email seeds the cleaned note");
 });
@@ -638,7 +684,7 @@ test("a PDF send that falls back to a download reports the cover letter on the c
     setNav(true);
     const how = await shareInvoicePdf(invoice, "Invoice INV-0012", "");
     assert.equal(how, "download+cover");
-    assert.deepEqual(clicks, ["INV-0012.pdf"]);
+    assert.deepEqual(clicks, ["Invoice INV-0012 from Synthetic Physician, DO.pdf"]);
     assert.match(invoiceCoverNotice(how), /downloaded\. The cover letter is on your clipboard/);
     setNav(false);
     assert.equal(await shareInvoicePdf(invoice, "Invoice INV-0012", ""), "download", "no clipboard, no claim");

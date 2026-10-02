@@ -14,7 +14,7 @@ assert.ok(start > 0 && start < source.indexOf('  if (limitedLaunch.enabled && ac
 const gate = source.slice(start, source.indexOf('\n\n', start));
 const temp = new URL(`.records-load-${randomUUID()}.tmp.mjs`, import.meta.url);
 const bundle = await build({ stdin: {
-  contents: `import React from 'react'; import AccountRecordsLoadError from '../../src/components/shared/AccountRecordsLoadError.jsx'; export { AccountRecordsLoadError }; export function Gate({recordsLoadIssue,T}) { ${gate}\n return <div>Loaded account</div>; }`,
+  contents: `import React from 'react'; import AccountRecordsLoadError from '../../src/components/shared/AccountRecordsLoadError.jsx'; export { AccountRecordsLoadError }; export function Gate({recordsLoadIssue,T}) { const reloadKeepingLink = () => {}; ${gate}\n return <div>Loaded account</div>; }`,
   resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'jsx',
 }, bundle: true, write: false, platform: 'node', format: 'esm', jsx: 'automatic', external: ['react', 'react/jsx-runtime'], logLevel: 'silent' });
 await writeFile(temp, bundle.outputFiles[0].text);

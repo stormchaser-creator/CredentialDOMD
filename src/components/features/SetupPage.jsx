@@ -6,7 +6,8 @@ import { generateId, downscalePhoto } from "../../utils/helpers";
 import Modal from "../shared/Modal";
 import { deskRailStyle } from "../shared/deskSticky.js";
 import { isDea, currentDeaRecords, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
-import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine, packetPendingLine, packetMissingLine } from "../../utils/credentialExport";
+import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine, packetMissingLine } from "../../utils/credentialExport";
+import { downloadDocumentBlob } from "../../lib/supabase";
 import { FREE_BETA_LABEL } from "../../constants/beta";
 import { useSetupState } from "./setup/useSetupState";
 import NpiPanel from "./setup/NpiPanel";
@@ -650,30 +651,24 @@ function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, onO
     color: primary ? "#fff" : T.text,
     fontSize: 14.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
   });
-  // Linked and on this device are two different facts. The proof is safely in
-  // the account either way, but the ZIP is written from the bytes this device
-  // holds, so until the last file lands the download would be a partial packet
-  // handed over silently. Send is unaffected: it goes by doc id and the bytes
-  // are read server-side.
-  // A linked file Storage does not have is held too, but named, with the way
-  // to Documents, because it will never land on its own (SHARE-005).
-  const pending = packetPendingLine(summary);
+  // The ZIP fetches from the account what this device does not hold, and
+  // refuses (naming the files) rather than hand over a partial packet. It
+  // used to wait for every file to "come back" to this device, which no
+  // longer happens by itself: a load downloads no file (2026-10-02). Send is
+  // unaffected: it goes by doc id and the bytes are read server-side.
+  // A linked file Storage does not have holds the download, named, with the
+  // way to Documents, because no download can carry it (SHARE-005).
   const missing = packetMissingLine(summary);
-  const holdDownload = busy || !!pending || !!missing;
+  const holdDownload = busy || !!missing;
   return (
     <div style={{
       backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 16,
       padding: "18px 20px", boxShadow: T.shadow1,
     }}>
       <div style={{ fontSize: 19, fontWeight: 800, color: T.text, marginBottom: 6 }}>Your packet is assembled.</div>
-      <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.55, marginBottom: pending || missing ? 6 : 14, fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.55, marginBottom: missing ? 6 : 14, fontVariantNumeric: "tabular-nums" }}>
         {packetSummaryLine(summary)}
       </div>
-      {pending && (
-        <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: missing ? 6 : 14, fontVariantNumeric: "tabular-nums" }}>
-          {pending}
-        </div>
-      )}
       {missing && (
         <div role="status" style={{ fontSize: 12.5, color: T.danger, lineHeight: 1.5, marginBottom: 14 }}>
           {missing}
@@ -1109,23 +1104,23 @@ export default function SetupPage({
   const packetDocIds = useMemo(() => (emailOpen ? packetDocuments(data).map((d) => d.id) : EMPTY_IDS), [emailOpen, data]);
 
   // Both ways in (the card's Download and the Send sheet's whole-packet
-  // link) hold while a linked file is still coming back to this device: the
-  // ZIP is written from the bytes here, and a partial packet must never be
+  // link) hold while a linked file has no copy in the account, and the ZIP
+  // fetches the rest from the account (generateCredentialZip `download`): a
+  // file it cannot fetch stops it, named, and a partial packet is never
   // handed over silently. The summary is read fresh, because the sheet can
   // call this after packetSum was computed, and the refusal shows on the
   // card (the sheet closes before it calls).
   const downloadPacket = async () => {
     if (zipBusy) return;
-    const fresh = packetSummary(data);
-    const held = packetMissingLine(fresh) || packetPendingLine(fresh);
+    const held = packetMissingLine(packetSummary(data));
     if (held) { setZipError(held); return; }
     setZipBusy(true);
     setZipError(null);
     try {
-      const blob = await generateCredentialZip(data);
+      const blob = await generateCredentialZip(data, { download: downloadDocumentBlob });
       downloadBlob(blob, `CredentialDOMD_Packet_${new Date().toISOString().slice(0, 10)}.zip`);
     } catch (e) {
-      setZipError(`The file could not be built. ${e?.message || "Try again."}`);
+      setZipError(e?.name === "PacketFilesError" ? e.message : `The file could not be built. ${e?.message || "Try again."}`);
     } finally {
       setZipBusy(false);
     }
@@ -1153,7 +1148,7 @@ export default function SetupPage({
       open={emailOpen}
       onClose={() => setEmailOpen(false)}
       initialDocIds={packetDocIds}
-      onDownloadPacket={packetSum && !packetPendingLine(packetSum) && !packetMissingLine(packetSum) ? downloadPacket : undefined}
+      onDownloadPacket={packetSum && !packetMissingLine(packetSum) ? downloadPacket : undefined}
     />
   );
 

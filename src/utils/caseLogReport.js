@@ -1,6 +1,8 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { billedWRVU } from "./caseBilling.js";
+import { formatDate } from "./helpers.js";
+import { fileShareText } from "./shareText.js";
 
 /**
  * Career case-log engine. A surgeon's year runs July 1 – June 30 (the
@@ -136,8 +138,14 @@ export function buildCaseLogCsv(cases) {
       c.complication || "",
     ].map(esc).join(","));
   }
-  return lines.join("\n");
+  // A byte-order mark and CRLF rows: without the mark Excel read the file as
+  // Windows-1252, so "Hôpital" opened as "HÃ´pital" (every other CSV the app
+  // writes already starts with one).
+  return `\u{FEFF}${lines.join("\r\n")}\r\n`;
 }
+
+/** The case log CSV's file name, named like the PDF. */
+export const caseLogCsvName = (physician = "Physician", range = null) => `Case Log, ${physician}${range ? " " + range : ""}.csv`;
 
 export function buildCaseLogPdf(cases, { physician = "Physician", year = null, startYear = null } = {}) {
   const doc = new jsPDF({ unit: "pt", format: "letter", orientation: "landscape" });
@@ -168,9 +176,12 @@ export function buildCaseLogPdf(cases, { physician = "Physician", year = null, s
     startY: doc.lastAutoTable.finalY + 18,
     head: [["Date", "Category", "Procedure", "Facility", "Role", "CPT", "wRVU"]],
     body: sorted.map(c => [
-      c.date || "—",
+      // An undated case says so (it printed an em dash), and a date reads
+      // "Aug 12, 2026". The procedure prints whole: the column wraps it (it
+      // was cut at 90 characters mid-word).
+      c.date ? formatDate(c.date) : "Undated",
       c.category || "",
-      String(c.title || "").slice(0, 90),
+      String(c.title || ""),
       c.facility || "",
       c.role || "",
       parseCodes(c.cptCodes).join(", "),
@@ -180,20 +191,26 @@ export function buildCaseLogPdf(cases, { physician = "Physician", year = null, s
     headStyles: { fillColor: [13, 110, 253], fontSize: 8 },
     columnStyles: { 2: { cellWidth: 250 }, 5: { cellWidth: 110 } },
     margin: { left: 40, right: 40 },
-    didDrawPage: () => {
-      doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(160, 165, 172);
-      doc.text(`${physician} · ${title} · page ${doc.getNumberOfPages()}`, 40, doc.internal.pageSize.getHeight() - 20);
-    },
   });
+  // "page N of M" on every page, once the page count is known.
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(160, 165, 172);
+    doc.text(`${physician} · ${title} · page ${p} of ${pages}`, 40, doc.internal.pageSize.getHeight() - 20);
+  }
 
   const blob = doc.output("blob");
   return new File([blob], `Case Log, ${physician}${year ? " " + year : ""}.pdf`, { type: "application/pdf" });
 }
 
-export async function shareCaseLogFile(file) {
+export async function shareCaseLogFile(file, share = {}) {
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ title: file.name, files: [file] });
+      // A title and a short email with it (fileShareText): it used to go
+      // out with an empty body.
+      const { title, text } = share.settings || share.what ? fileShareText(share) : { title: file.name, text: undefined };
+      await navigator.share({ title, ...(text ? { text } : {}), files: [file] });
       return "share";
     } catch (err) {
       if (err?.name === "AbortError") return null;

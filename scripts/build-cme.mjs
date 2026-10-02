@@ -52,7 +52,9 @@ export function renderCme(input, stateData) {
   const topics = data.topics.map(t => `<article id="${e(t.id)}" class="topic" data-guide-entry data-guide-title="${e(t.title)}" data-guide-summary="${e(t.summary)}"><h3>${e(t.title)}</h3><p class="topic-intro">${e(t.summary)}</p>${t.paragraphs.map(p=>`<p>${e(p)}</p>`).join('')}${t.steps.length?`<ol>${t.steps.map(s=>`<li>${e(s)}</li>`).join('')}</ol>`:''}${refs(t)}</article>`).join('\n');
   const faqs = data.faqs.map(f => `<details id="${e(f.id)}" class="faq" data-guide-entry data-guide-title="${e(f.question)}" data-guide-summary="${e(f.answer)}" data-guide-tags="${e((f.tags||[]).join(' '))}"><summary>${e(f.question)}</summary><div><p>${e(f.answer)}</p>${refs(f)}</div></details>`).join('\n');
   const states = [...stateData.states].sort((a,b)=>a.name.localeCompare(b.name)).map(s => {
-    const hasDoPage = s.doBoardUrl && !s.doBoardName?.startsWith('null-equivalent');
+    // A state with one board for MDs and DOs says so in doBoardName (it used
+    // to say "null-equivalent: none", which leaked into the guide email).
+    const hasDoPage = s.doBoardUrl && !/^(?:null-equivalent|no separate osteopathic board)/i.test(s.doBoardName || '');
     return `<article class="state-card" id="board-${e(s.slug)}" data-state="${e(`${s.name} ${s.abbreviation}`.toLowerCase())}" data-abbreviation="${e(s.abbreviation.toLowerCase())}" data-state-name="${e(s.name.toLowerCase())}" data-guide-entry data-guide-title="${e(s.name)} licensing board and CME guide" data-guide-summary="Open the ${e(s.name)} licensing board and the existing state renewal guide." data-guide-tags="${e(s.abbreviation)} state MD DO license"><h3>${e(s.name)} <span>${e(s.abbreviation)}</span></h3><a href="${e(safeUrl(s.boardUrl))}">${hasDoPage?'MD licensing':'Medical licensing board'}</a>${hasDoPage?`<a href="${e(safeUrl(s.doBoardUrl))}">DO licensing</a>`:''}<a href="/states/${e(s.slug)}">State renewal guide →</a><p class="state-review">Guide review: ${e(s.verified || "Date not recorded")}</p></article>`;
   }).join('\n');
   const tutorials = [

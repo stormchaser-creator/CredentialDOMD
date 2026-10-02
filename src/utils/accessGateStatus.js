@@ -10,8 +10,12 @@
  * deletionUnconfirmedMessage, has four). Every such message asks for a
  * reload, so that is the button.
  */
-export function accessGateStatus({ enabled, initializationError, error, profileReady } = {}) {
+export function accessGateStatus({ enabled, initializationError, identityWaiting, error, profileReady } = {}) {
   if (initializationError) return { lines: String(initializationError).split("\n").filter(Boolean), action: "reload" };
+  // The identity check had no answer (a weak signal), and this device holds
+  // no membership answer to open the records on: it is asked again on its
+  // own (AppContext identity retry), so this is a wait, not a failure.
+  if (identityWaiting) return { lines: ["The connection is too weak to confirm your account right now. Trying again on its own."], action: "reload" };
   if (!enabled) return { lines: ["Checking your invitation…"], action: null };
   if (error) return { lines: [String(error)], action: profileReady ? "refresh" : "reload" };
   if (!profileReady) return { lines: ["Your account setup could not finish. Reload to try again."], action: "reload" };

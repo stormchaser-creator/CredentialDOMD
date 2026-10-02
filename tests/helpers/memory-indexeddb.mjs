@@ -24,6 +24,10 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
   const factory = {
     failOpen: false,
     failOpens: 0,
+    // The error a failing open reports (WebKit after iOS reclaimed the
+    // IndexedDB process: UnknownError "Connection to Indexed Database server
+    // lost"). Unset: the generic error the older tests expect.
+    failOpenError: null,
     failWrites: false,
     quotaBytes,
     readHook: null,
@@ -56,7 +60,9 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
           return;
         }
         if (factory.failOpen) {
-          req.error = new Error('InvalidStateError');
+          req.error = factory.failOpenError
+            ? Object.assign(new Error(factory.failOpenError.message || 'IndexedDB open failed'), { name: factory.failOpenError.name || 'Error' })
+            : new Error('InvalidStateError');
           req.onerror?.({ target: req });
           return;
         }
@@ -149,6 +155,30 @@ export class QuotaLocalStorage {
     const value = String(v);
     const before = this.map.has(k) ? (k.length + this.map.get(k).length) * 2 : 0;
     if (this.usedBytes() - before + (k.length + value.length) * 2 > this.quotaBytes) throw quotaError();
+    this.map.set(k, value);
+  }
+  removeItem(k) { this.map.delete(k); }
+  clear() { this.map.clear(); }
+}
+
+/**
+ * localStorage as WebKit counts it (measured in Playwright's WebKit,
+ * 2026-10-02): 5 MiB an origin, a key or value at 1 byte a character when
+ * every character is U+00FF or below, else at 2 bytes a character for the
+ * whole string. One em dash in the offline file doubles what it costs.
+ */
+export class WebKitLocalStorage {
+  constructor(quotaBytes = 5 * 1024 * 1024) { this.map = new Map(); this.quotaBytes = quotaBytes; }
+  static cost(s) { const t = String(s); return t.length * (/[\u0100-\uffff]/.test(t) ? 2 : 1); }
+  get length() { return this.map.size; }
+  key(i) { return [...this.map.keys()][i] ?? null; }
+  getItem(k) { return this.map.has(k) ? this.map.get(k) : null; }
+  usedBytes() { let n = 0; for (const [k, v] of this.map) n += WebKitLocalStorage.cost(k) + WebKitLocalStorage.cost(v); return n; }
+  freeBytes() { return this.quotaBytes - this.usedBytes(); }
+  setItem(k, v) {
+    const value = String(v);
+    const before = this.map.has(k) ? WebKitLocalStorage.cost(k) + WebKitLocalStorage.cost(this.map.get(k)) : 0;
+    if (this.usedBytes() - before + WebKitLocalStorage.cost(k) + WebKitLocalStorage.cost(value) > this.quotaBytes) throw quotaError();
     this.map.set(k, value);
   }
   removeItem(k) { this.map.delete(k); }

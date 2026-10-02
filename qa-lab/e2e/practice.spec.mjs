@@ -88,11 +88,12 @@ test('practice: agreement, logged time, invoice, email to billing, payment, dele
     const d = page.getByRole('dialog', { name: /Email invoice/ });
     await d.waitFor();
     // The preview fills in once the PDF is built.
-    await d.getByText(`${invoice.number}.pdf`).first().waitFor({ timeout: 30000 }).catch(() => {});
+    // The PDF is named like a subject: "Invoice <number> from <physician>.pdf".
+    await d.getByText(new RegExp(`Invoice ${invoice.number}\\b[^\\n]*\\.pdf`)).first().waitFor({ timeout: 30000 }).catch(() => {});
     const preview = (await d.innerText()).replace(/\s+/g, ' ');
     const to = await d.getByRole('textbox').first().inputValue();
     qa.check('the To field is the agreement\'s billing address', to === billing, to);
-    qa.check('the preview attaches the invoice PDF', new RegExp(`${invoice.number}\\.pdf`).test(preview));
+    qa.check('the preview attaches the invoice PDF', new RegExp(`Invoice ${invoice.number}\\b[^ ]*( from [^<>]*?)?\\.pdf`).test(preview), preview.slice(preview.indexOf('Attachments'), preview.indexOf('Attachments') + 160));
     await d.getByRole('button', { name: new RegExp(`^Send to ${billing.replace(/[.]/g, '\\.')}`) }).click();
     const mail = await waitFor('the invoice email', async () => (await emails({ to: billing }))[0] || null, { timeoutMs: 60000, intervalMs: 1000 }).catch(() => null);
     await qa.shot('invoice emailed');
@@ -100,7 +101,7 @@ test('practice: agreement, logged time, invoice, email to billing, payment, dele
     if (mail) {
       const full = await emailBody(mail.id);
       qa.check('subject names the invoice and facility', full.subject.includes(invoice.number) && full.subject.includes('QA Mercy Hospital'), full.subject);
-      qa.check('the PDF is attached', full.attachments.some((a) => a.filename === `${invoice.number}.pdf` && (a.content_type || '').includes('pdf') && a.size > 1000), JSON.stringify(full.attachments.map((a) => [a.filename, a.size])));
+      qa.check('the PDF is attached', full.attachments.some((a) => a.filename.startsWith(`Invoice ${invoice.number}`) && a.filename.endsWith('.pdf') && (a.content_type || '').includes('pdf') && a.size > 1000), JSON.stringify(full.attachments.map((a) => [a.filename, a.size])));
       qa.check('a copy goes to the physician', full.cc.includes(user.email) || full.bcc.includes(user.email), `cc ${full.cc} bcc ${full.bcc}`);
       qa.check('replies go to the physician', full.reply_to.includes(user.email), full.reply_to.join(','));
       qa.check('the body states the total due', /\$480\.00/.test(full.text || full.html || ''));

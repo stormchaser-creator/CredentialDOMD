@@ -29,6 +29,17 @@
 
 export const HANDOFF_KEY_BASE = "credentialdomd-invoice-handoff-v1";
 export const HANDOFF_STAMPS_BASE = "credentialdomd-invoice-handoff-stamps-v1";
+// The numbers whose note was answered (No, Forget it, a repeat's OK) or
+// recorded: [{ number, at }]. A note in a store the answer could not reach
+// (IndexedDB dropped behind Gmail, a full localStorage) is never shown again
+// while its tombstone lasts (2026-10-02: a "No" came back on the next page).
+export const HANDOFF_TOMBS_BASE = "credentialdomd-invoice-handoff-tombs-v1";
+// Cache Storage holds a copy of the notes, the owed stamps and the
+// tombstones: its quota is not localStorage's, and it opens when IndexedDB
+// does not (the owner's iPhone, 2026-10-02: localStorage full, IndexedDB not
+// opening). The service worker and the update keep it (public/sw.js,
+// UpdatePrompt.jsx); Sign out and Delete All My Data remove it.
+export const HANDOFF_CACHE_NAME = "credentialdomd-handoff-v1";
 export const HANDOFF_DB_NAME = "credentialdomd-invoice-handoff";
 // "<account>" -> a nonce, while a purge of that account's IndexedDB entry has
 // not committed. Holds no note. Never one of storageScope's BASE_KEYS.
@@ -60,6 +71,7 @@ export function _setHandoffStoreTimes(next = {}) {
 
 export const handoffKey = (account) => `${HANDOFF_KEY_BASE}:${account || "signed-out"}`;
 const stampsKey = (account) => `${HANDOFF_STAMPS_BASE}:${account || "signed-out"}`;
+const tombsKey = (account) => `${HANDOFF_TOMBS_BASE}:${account || "signed-out"}`;
 const purgeKey = (account) => `${HANDOFF_PURGE_BASE}:${account || "signed-out"}`;
 
 const webStore = (name) => { try { return globalThis[name] || null; } catch { return null; } };
@@ -85,17 +97,141 @@ const removeKey = (name, key) => { try { webStore(name)?.removeItem(key); } catc
 export const readWebNotes = (name, account) => readList(name, handoffKey(account));
 /** True when `name` took the list (an empty one removes the key). */
 export const writeWebNotes = (name, account, list) => writeList(name, handoffKey(account), list);
+/** Cache Storage's copy of the notes (see HANDOFF_CACHE_NAME). */
+export const writeCacheNotes = (account, list) => cachePut("notes", account, list);
+export const readCacheNotes = async (account) => { const v = await cacheGet("notes", account); return Array.isArray(v) ? v : []; };
+export const readCacheTombs = async (account) => { const v = await cacheGet("tombs", account); return Array.isArray(v) ? v : []; };
+export const readCacheStamps = async (account) => {
+  const v = await cacheGet("stamps", account);
+  return v && Array.isArray(v.list) ? { v: String(v.v || ""), list: v.list } : null;
+};
 
-/** The share stamps not yet confirmed by the server, newest last. */
+// The owed stamps are written as { v, list }: `v` orders the writes, so the
+// newest list wins whichever store holds it. A full localStorage keeps an
+// older list than sessionStorage (2026-10-02: a share stamp owed only in
+// sessionStorage was dropped after a reload, as the older localStorage list
+// was read first), and an empty list is written, not removed, so a stamp
+// the server took never comes back from an older copy. A plain array (the
+// earlier format) counts as the oldest.
+let writeCount = 0;
+const nextVersion = () => `${String(Date.now()).padStart(15, "0")}-${String(++writeCount).padStart(6, "0")}`;
+function readVersioned(name, key) {
+  try {
+    const raw = webStore(name)?.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return { v: "", list: parsed };
+    if (parsed && Array.isArray(parsed.list)) return { v: String(parsed.v || ""), list: parsed.list };
+  } catch { /* unreadable: none */ }
+  return null;
+}
+const seqOf = (s) => String(s?.seq || "").split("-").map(Number);
+const newerSeq = (a, b) => { const x = seqOf(a), y = seqOf(b); return (x[0] || 0) !== (y[0] || 0) ? (x[0] || 0) > (y[0] || 0) : (x[1] || 0) > (y[1] || 0); };
+/** The newest of several { v, list } copies; copies of the same age are merged, the newest stamp per number. */
+export function newestStamps(copies) {
+  const have = (copies || []).filter(Boolean);
+  if (!have.length) return { v: "", list: [] };
+  const top = have.reduce((a, b) => (b.v > a.v ? b : a));
+  const same = have.filter(c => c.v === top.v);
+  if (same.length === 1) return top;
+  const by = new Map();
+  for (const c of same) for (const st of c.list || []) {
+    const k = String(st?.number || "").trim().toLowerCase();
+    if (!k) continue;
+    if (!by.has(k) || newerSeq(st, by.get(k))) by.set(k, st);
+  }
+  return { v: top.v, list: [...by.values()].sort((a, b) => (newerSeq(a, b) ? 1 : -1)) };
+}
+/** The share stamps not yet confirmed by the server, newest last (the newest copy of sessionStorage and localStorage). */
 export function readStamps(account) {
-  const local = readList("localStorage", stampsKey(account));
-  return local.length ? local : readList("sessionStorage", stampsKey(account));
+  return newestStamps([readVersioned("sessionStorage", stampsKey(account)), readVersioned("localStorage", stampsKey(account))]).list;
+}
+/** The copy readStamps chose, with its version (for Cache Storage). */
+export function readStampsCopy(account) {
+  return newestStamps([readVersioned("sessionStorage", stampsKey(account)), readVersioned("localStorage", stampsKey(account))]);
 }
 export function writeStamps(account, list) {
-  const session = writeList("sessionStorage", stampsKey(account), list);
-  const local = writeList("localStorage", stampsKey(account), list);
+  const copy = { v: nextVersion(), list };
+  const value = JSON.stringify(copy);
+  const put = (name) => { const st = webStore(name); if (!st) return false; try { st.setItem(stampsKey(account), value); return true; } catch { return false; } };
+  const session = put("sessionStorage");
+  const local = put("localStorage");
+  cachePut("stamps", account, copy);
   return session || local;
 }
+
+// ── Tombstones ──
+/** The numbers answered or recorded on this device: [{ number, at }], newest per number, from both web stores. */
+export function readTombs(account) {
+  const by = new Map();
+  for (const name of ["sessionStorage", "localStorage"]) {
+    for (const t of readList(name, tombsKey(account))) {
+      const k = String(t?.number || "").trim().toLowerCase();
+      if (!k) continue;
+      if (!by.has(k) || String(t.at || "") > String(by.get(k).at || "")) by.set(k, t);
+    }
+  }
+  return [...by.values()];
+}
+/** Both web stores (and Cache Storage) get the list; true when one of the web stores took it. */
+export function writeTombs(account, list) {
+  const session = writeList("sessionStorage", tombsKey(account), list);
+  const local = writeList("localStorage", tombsKey(account), list);
+  cachePut("tombs", account, list);
+  return session || local;
+}
+
+// ── Cache Storage (HANDOFF_CACHE_NAME) ──
+// Keys are URLs on a host that is never fetched; each holds one JSON value.
+const cacheUrl = (kind, account) => `https://handoff.credentialdomd.invalid/${kind}/${encodeURIComponent(account || "signed-out")}`;
+const cacheApi = () => { try { const c = globalThis.caches; return c && typeof c.open === "function" ? c : null; } catch { return null; } };
+const cacheWrites = new Map();
+// One operation at a time per key, in the order asked: a purge never lands
+// before a write it follows.
+function cacheChain(url, op) {
+  const run = (cacheWrites.get(url) || Promise.resolve()).then(op, op);
+  cacheWrites.set(url, run);
+  run.then(() => { if (cacheWrites.get(url) === run) cacheWrites.delete(url); });
+  return run;
+}
+/** Writes `value` (JSON) under `kind` for `account`. Resolves true when stored. */
+export function cachePut(kind, account, value) {
+  const api = cacheApi();
+  if (!api || typeof globalThis.Response !== "function") return Promise.resolve(false);
+  const url = cacheUrl(kind, account);
+  const body = JSON.stringify(value);
+  return cacheChain(url, async () => {
+    try {
+      const cache = await api.open(HANDOFF_CACHE_NAME);
+      await cache.put(url, new Response(body, { headers: { "content-type": "application/json" } }));
+      return true;
+    } catch { return false; }
+  });
+}
+/** The JSON value under `kind` for `account`, or null. Waits for writes still on their way. */
+export async function cacheGet(kind, account) {
+  const api = cacheApi();
+  if (!api) return null;
+  const url = cacheUrl(kind, account);
+  try { await cacheWrites.get(url); } catch { /* read anyway */ }
+  try {
+    const cache = await api.open(HANDOFF_CACHE_NAME);
+    const hit = await cache.match(url);
+    return hit ? await hit.json() : null;
+  } catch { return null; }
+}
+/** Removes `account`'s entries (Sign out, Delete All My Data), after any write still on its way. */
+function cachePurge(account) {
+  const api = cacheApi();
+  if (!api) return Promise.resolve();
+  return Promise.all(["notes", "stamps", "tombs"].map((k) => {
+    const url = cacheUrl(k, account);
+    return cacheChain(url, async () => {
+      try { const cache = await api.open(HANDOFF_CACHE_NAME); await cache.delete(url); } catch { /* the next purge */ }
+    });
+  })).then(() => {});
+}
+
 
 const readItem = (name, key) => { try { return webStore(name)?.getItem(key) ?? null; } catch { return null; } };
 /** The device's purge generation now (null before any purge). */
@@ -114,7 +250,7 @@ export function syncHandoffGeneration() {
   try {
     for (let i = (session.length || 0) - 1; i >= 0; i -= 1) {
       const k = session.key(i);
-      if (k && (k.startsWith(`${HANDOFF_KEY_BASE}:`) || k.startsWith(`${HANDOFF_STAMPS_BASE}:`))) session.removeItem(k);
+      if (k && (k.startsWith(`${HANDOFF_KEY_BASE}:`) || k.startsWith(`${HANDOFF_STAMPS_BASE}:`) || k.startsWith(`${HANDOFF_TOMBS_BASE}:`))) session.removeItem(k);
     }
     if (now == null) session.removeItem(GENERATION_SEEN_KEY);
     else session.setItem(GENERATION_SEEN_KEY, now);
@@ -274,7 +410,9 @@ export function purgeHandoffStores(account) {
   for (const name of ["sessionStorage", "localStorage"]) {
     removeKey(name, handoffKey(account));
     removeKey(name, stampsKey(account));
+    removeKey(name, tombsKey(account));
   }
+  cachePurge(account);
   // Every other open tab drops what it holds (its memory, its sessionStorage).
   // After the removals above, so a full localStorage has room for it.
   const generation = `${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
@@ -318,4 +456,5 @@ export async function sweepHandoffPurges() {
 /** Tests only: a new page (the connection is opened again). */
 export function _resetHandoffStore() {
   dbPromise = null;
+  cacheWrites.clear();
 }

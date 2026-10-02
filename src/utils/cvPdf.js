@@ -1,4 +1,6 @@
 import { jsPDF } from "jspdf";
+import { fileShareText } from "./shareText.js";
+import { withDegree } from "./outgoingText.js";
 
 /**
  * Real PDF for the CV — the print-window approach dies silently in the
@@ -111,11 +113,11 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p);
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(160, 165, 172);
-    doc.text(`${name}${degree ? `, ${degree}` : ""} | Curriculum Vitae | page ${p} of ${pages}`, M, pageH - 24);
+    doc.text(`${withDegree(name, degree)} | Curriculum Vitae | page ${p} of ${pages}`, M, pageH - 24);
   }
 
   const blob = doc.output("blob");
-  const fname = `CV ${name}${degree ? `, ${degree}` : ""}.pdf`;
+  const fname = `CV ${withDegree(name, degree)}.pdf`;
   return new File([blob], fname, { type: "application/pdf" });
 }
 
@@ -123,7 +125,9 @@ export async function shareCvPdf(sections, meta) {
   const file = buildCvPdf(sections, meta);
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ title: file.name, files: [file] });
+      // A title and a short email with it: it went out with an empty body.
+      const { title, text } = fileShareText({ what: "CV", settings: meta?.settings || { name: meta?.name, degreeType: meta?.degree, npi: meta?.npi, email: meta?.email } });
+      await navigator.share({ title, text, files: [file] });
       return "share";
     } catch (err) {
       if (err?.name === "AbortError") return null;

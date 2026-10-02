@@ -1,14 +1,19 @@
 import * as XLSX from "xlsx";
 import { formatDate, localDay } from "./helpers.js";
 import { shareInvoicePdf } from "./invoicePdf.js";
-import { invoiceLayout } from "./invoiceLayout.js";
-import { money, invoicePayment, invoiceCoverEmail, invoiceCoverBlurb } from "./invoiceCover.js";
+import { invoiceLayout, invoiceColumns, plainItem } from "./invoiceLayout.js";
+import {
+  money, invoicePayment, invoiceCoverEmail, invoiceCoverBlurb, invoiceFileName, invoicePeriodRange, invoicePeriodLabel, senderName,
+} from "./invoiceCover.js";
 
 /**
  * Invoice export in the physician's format of choice. All three formats
  * render the same content: header/parties, the line items as day blocks
- * (invoiceLayout.js: Item | Time | Hours | Amount, each day closed by its
- * total; Excel adds a Day total column, see invoiceXlsxFile), total, terms. PDF stays the polished AP-department artifact; Word
+ * (invoiceLayout.js, each day closed by its total; Excel adds a Day total
+ * column, see invoiceXlsxFile), total, terms. The columns are the PDF's
+ * (invoiceColumns): Item | Time | Hours | Amount only when a row has a time
+ * or hours, Item | Details | Amount when rows carry words (an expense's
+ * note), otherwise Item | Amount. PDF stays the polished AP-department artifact; Word
  * and Excel exist so billing offices that re-key or edit can work from a
  * native document. An invoice whose day totals cannot be shown adding up
  * keeps the old Date | Item | Details | Amount table in every format.
@@ -17,34 +22,59 @@ import { money, invoicePayment, invoiceCoverEmail, invoiceCoverBlurb } from "./i
 /**
  * The table every non-PDF format prints. Each row: { kind, cells, row? }
  * where kind is "day" (a day's header, one cell across), "row" (row.detail
- * set: its words span Time and Hours), "total" (a day total) or "flat".
- * `total` rows also carry `amount`, the day total as a number.
+ * set: on a timed table its words span Time and Hours), "total" (a day
+ * total: its label in the column before Amount) or "flat". `total` rows also
+ * carry `amount`, the day total as a number. `n` is the column count and
+ * `cols` which set (invoiceColumns, or "flat").
  */
 function tableModel(inv) {
   const layout = invoiceLayout(inv);
   if (layout.mode === "flat") {
-    return { days: false, head: ["Date", "Item", "Details", "Amount"], rows: layout.rows.map((cells) => ({ kind: "flat", cells })) };
+    return { days: false, cols: "flat", n: 4, head: ["Date", "Item", "Details", "Amount"], rows: layout.rows.map((cells) => ({ kind: "flat", cells })) };
   }
+  const cols = invoiceColumns(layout.days);
+  const first = inv.kind === "expenses" ? "Expense" : "Item";
+  const head = cols === "timed" ? ["Item", "Time", "Hours", "Amount"] : cols === "detail" ? [first, "Details", "Amount"] : [first, "Amount"];
+  const n = head.length;
+  const blank = (k) => Array(Math.max(0, k)).fill("");
+  const cellsOf = (r) => {
+    if (cols === "timed") {
+      return r.detail != null
+        ? [r.item, r.detail, "", r.amountText]
+        : [r.item, [r.time, r.note].filter(Boolean).join(" \u{b7} "), r.hours, r.amountText];
+    }
+    if (cols === "detail") return [r.item, r.detail ?? [r.time, r.note, r.hours].filter(Boolean).join(" \u{b7} "), r.amountText];
+    return [plainItem(r, " \u{b7} "), r.amountText];
+  };
   const rows = [];
   for (const day of layout.days) {
-    rows.push({ kind: "day", cells: [day.window ? `${day.title} \u{b7} ${day.window}` : day.title, "", "", ""] });
-    for (const r of day.rows) {
-      rows.push({
-        kind: "row", row: r,
-        cells: r.detail != null
-          ? [r.item, r.detail, "", r.amountText]
-          : [r.item, [r.time, r.note].filter(Boolean).join(" \u{b7} "), r.hours, r.amountText],
-      });
-    }
-    rows.push({ kind: "total", cells: ["", "", day.totalLabel, money(day.total)], amount: day.total });
+    rows.push({ kind: "day", cells: [day.window ? `${day.title} \u{b7} ${day.window}` : day.title, ...blank(n - 1)] });
+    for (const r of day.rows) rows.push({ kind: "row", row: r, cells: cellsOf(r) });
+    rows.push({ kind: "total", cells: [...blank(n - 2), day.totalLabel, money(day.total)], amount: day.total });
   }
-  return { days: true, head: ["Item", "Time", "Hours", "Amount"], rows };
+  return { days: true, cols, n, head, rows };
+}
+
+/**
+ * The FROM block every format prints, the PDF's order: the sender in bold,
+ * then NPI, email and phone. The sender is the name; with no name in
+ * Settings it is the email (never the "Physician" placeholder, which read as
+ * an invoice signed by a generic word).
+ */
+export function fromBlock(inv = {}) {
+  const name = senderName(inv);
+  const email = String(inv.email || "").trim();
+  return {
+    sender: name || email,
+    details: [inv.npi ? `NPI ${inv.npi}` : "", name ? email : "", String(inv.phone || "").trim()].filter(Boolean),
+  };
 }
 
 /** "$1,234.56" as the number 1234.56; null for anything else ("+$75.00", "in $3,000.00 stipend"). */
 const moneyNumber = (text) => {
-  const m = String(text ?? "").match(/^\$([\d,]+\.\d{2})$/);
-  return m ? parseFloat(m[1].replace(/,/g, "")) : null;
+  // A negative amount is the flat table's rounding adjustment ("-$0.01").
+  const m = String(text ?? "").match(/^(-?)\$([\d,]+\.\d{2})$/);
+  return m ? (m[1] ? -1 : 1) * parseFloat(m[2].replace(/,/g, "")) : null;
 };
 
 /**
@@ -57,32 +87,43 @@ const moneyNumber = (text) => {
  * sits in its own column, Day total. Summed, the Amount cells above TOTAL
  * come to the invoice total, and so do the Day total cells.
  */
+// The widest the Item column grows to fit a long item (Excel allows 255).
+const ITEM_COL_MAX = 120;
+
 export function invoiceXlsxFile(inv) {
   const pay = invoicePayment(inv);
   const model = tableModel(inv);
-  const width = model.days ? 5 : 4;
+  const n = model.n;
+  const amountCol = n - 1;
+  const width = model.days ? n + 1 : n;
   // A day-block row as the sheet writes it: Amount a number only when the
   // row is a charge, a piece of work's dollars as words naming the charge
   // they are part of, a total's figure in the Day total column.
   let charge = "";
   const sheetRow = (r) => {
     if (!model.days) return r.cells;
-    if (r.kind === "total") return [r.cells[0], r.cells[1], r.cells[2], "", r.amount];
+    if (r.kind === "total") return [...r.cells.slice(0, amountCol), "", r.amount];
     if (r.kind !== "row") return r.cells;
     if (r.row.level === 0) charge = r.row.item.startsWith("Callback beyond") ? "callback" : r.row.item;
-    const n = moneyNumber(r.cells[3]);
-    if (n == null) return r.cells;
-    return [r.cells[0], r.cells[1], r.cells[2], r.row.sums ? n : `${r.cells[3]} in ${charge || "the line above"}`];
+    const v = moneyNumber(r.cells[amountCol]);
+    if (v == null) return r.cells;
+    return [...r.cells.slice(0, amountCol), r.row.sums ? v : `${r.cells[amountCol]} in ${charge || "the line above"}`];
   };
+  // The summary rows put their label in the column before Amount.
+  const sumRow = (label, value) => [...Array(Math.max(0, amountCol - 1)).fill(""), label, value];
+  const period = invoicePeriodRange(inv);
+  // FROM and BILL TO side by side, as many rows as the longer of the two.
+  const from = fromBlock(inv);
+  const left = [from.sender, ...from.details];
+  const right = [inv.facility || "Facility", inv.agency ? `via ${inv.agency}` : "", [inv.location, inv.billTo].filter(Boolean).join(" \u{b7} ")];
+  const parties = Array.from({ length: Math.max(left.length, right.length) }, (_, i) => [left[i] || "", "", right[i] || ""]);
   const top = [
     [`INVOICE ${inv.number || ""}`],
     [`Issued ${formatDate(inv.issuedDate || localDay())}`],
-    inv.periodStart ? [`Service period ${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? " – " + formatDate(inv.periodEnd) : ""}`] : [],
+    period ? [`${invoicePeriodLabel(inv)} ${period}`] : [],
     [],
     ["FROM", "", "BILL TO"],
-    [inv.physician || "Physician", "", inv.facility || "Facility"],
-    [inv.npi ? `NPI ${inv.npi}` : "", "", inv.agency ? `via ${inv.agency}` : ""],
-    [inv.email || "", "", [inv.location, inv.billTo].filter(Boolean).join(" · ")],
+    ...parties,
     [],
   ];
   const headAt = top.length;
@@ -91,21 +132,35 @@ export function invoiceXlsxFile(inv) {
     model.days ? [...model.head, "Day total"] : model.head,
     ...model.rows.map(sheetRow),
     [],
-    ["", "", "TOTAL", pay.total],
+    sumRow("TOTAL", pay.total),
     ...(pay.hasPayment
-      ? [["", "", "Paid", pay.paid], ["", "", pay.settled ? "PAID IN FULL" : "BALANCE DUE", pay.balance]]
+      ? [sumRow("Paid", pay.paid), sumRow(pay.settled ? "PAID IN FULL" : "BALANCE DUE", pay.balance)]
       : []),
     ...(inv.terms ? [[], [`Terms: ${inv.terms}`]] : []),
   ];
   const ws = XLSX.utils.aoa_to_sheet(head);
-  ws["!cols"] = model.days
-    ? [{ wch: 46 }, { wch: 34 }, { wch: 34 }, { wch: 22 }, { wch: 14 }]
-    : [{ wch: 14 }, { wch: 42 }, { wch: 60 }, { wch: 14 }];
-  // A day's header runs across the table; a row's detail across Time and Hours.
+  const COLS = {
+    timed: [46, 34, 34, 22, 14],
+    detail: [46, 56, 22, 14],
+    plain: [72, 22, 14],
+    flat: [14, 42, 60, 14],
+  };
+  // Excel shows a long label only up to the next filled cell, and the Amount
+  // beside a charge is always filled: column A widens to its longest item
+  // (a 110 character "On call (primary): <long hospital name> (ABBR)" was cut
+  // off at Amount), up to a width that still prints.
+  const widths = [...COLS[model.cols]];
+  if (model.days) {
+    const longest = model.rows.reduce((m, r) => (r.kind === "row" ? Math.max(m, String(r.cells[0] || "").length) : m), 0);
+    widths[0] = Math.max(widths[0], Math.min(ITEM_COL_MAX, longest + 2));
+  }
+  ws["!cols"] = widths.map((wch) => ({ wch }));
+  // A day's header runs across the table; on a timed table a row's detail
+  // runs across Time and Hours.
   ws["!merges"] = model.rows.flatMap((r, i) => {
     const at = headAt + 1 + i;
-    if (r.kind === "day") return [{ s: { r: at, c: 0 }, e: { r: at, c: width - 1 } }];
-    if (r.kind === "row" && r.row.detail != null) return [{ s: { r: at, c: 1 }, e: { r: at, c: 2 } }];
+    if (r.kind === "day" && width > 1) return [{ s: { r: at, c: 0 }, e: { r: at, c: width - 1 } }];
+    if (r.kind === "row" && model.cols === "timed" && r.row.detail != null) return [{ s: { r: at, c: 1 }, e: { r: at, c: 2 } }];
     return [];
   });
   // Charges as real currency numbers so Excel right-aligns and sums them. In
@@ -113,12 +168,12 @@ export function invoiceXlsxFile(inv) {
   // ("+$75.00", already inside its day's line) stays words.
   const range = XLSX.utils.decode_range(ws["!ref"]);
   for (let r = headAt + 1; r <= range.e.r; r++) {
-    for (let c = 3; c < width; c++) {
+    for (let c = amountCol; c < width; c++) {
       const cell = ws[XLSX.utils.encode_cell({ r, c })];
       if (!cell) continue;
       if (cell.t === "s" && !model.days) {
-        const n = moneyNumber(cell.v);
-        if (n != null) { cell.t = "n"; cell.v = n; }
+        const v = moneyNumber(cell.v);
+        if (v != null) { cell.t = "n"; cell.v = v; }
       }
       if (cell.t === "n") cell.z = '"$"#,##0.00';
     }
@@ -126,7 +181,7 @@ export function invoiceXlsxFile(inv) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Invoice");
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  return new File([out], `${inv.number || "invoice"}.xlsx`, {
+  return new File([out], invoiceFileName(inv, "xlsx"), {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
 }
@@ -134,12 +189,22 @@ export function invoiceXlsxFile(inv) {
 // The Word generator loads on demand — most sends are PDF, and the docx
 // package shouldn't ride in anyone's bundle until the first Word export.
 export async function invoiceDocxFile(inv) {
-  const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle } = await import("docx");
+  const {
+    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle,
+    TableLayoutType, Footer, PageNumber,
+  } = await import("docx");
   const model = tableModel(inv);
-  // Explicit DXA widths everywhere — percentage table widths render as a
-  // collapsed sliver in Quick Look / Pages (the lib emits "100%" into a
-  // numeric field). 9360 twips = 6.5" usable width on letter paper.
-  const COLW = model.days ? [3300, 2450, 2250, 1360] : [1450, 2500, 3960, 1450];
+  const n = model.n;
+  // Explicit DXA widths everywhere, and a FIXED table layout: percentage
+  // widths and autofit both collapse in Quick Look / iPhone Mail (empty
+  // columns became slivers). 9360 twips = 6.5" of text width on US Letter
+  // with 1" margins (the section below sets that page).
+  const COLW = {
+    timed: [3300, 2450, 2250, 1360],
+    detail: [3500, 4500, 1360],
+    plain: [8000, 1360],
+    flat: [1450, 2500, 3960, 1450],
+  }[model.cols];
   const cell = (text, { bold = false, right = false, header = false, col = 0, span = 1, fill, color, size = 18, indent = 0, rule = false, keepNext = false } = {}) => new TableCell({
     width: { size: COLW.slice(col, col + span).reduce((a, b) => a + b, 0), type: WidthType.DXA },
     columnSpan: span > 1 ? span : undefined,
@@ -149,7 +214,7 @@ export async function invoiceDocxFile(inv) {
       alignment: right ? AlignmentType.RIGHT : AlignmentType.LEFT,
       indent: indent ? { left: indent } : undefined,
       keepNext: keepNext || undefined,
-      children: [new TextRun({ text: String(text), bold: bold || header, color: header ? "FFFFFF" : color, size })],
+      children: [new TextRun({ text: String(text), bold: bold || header, color: header ? "FFFFFF" : color, size, font: "Arial" })],
     })],
   });
   // Page breaks: a day's header stays with its first row and a day's total
@@ -157,52 +222,87 @@ export async function invoiceDocxFile(inv) {
   // across pages; the column head repeats at the top of every page.
   const keepWithNext = model.rows.map((m, i) => m.kind === "day"
     || (m.kind === "row" && (model.rows[i - 1]?.kind === "day" || model.rows[i + 1]?.kind === "total")));
+  const amountCol = n - 1;
   // How a day-block row reads: a piece of work is small and grey, its
   // amount green inside the stipend and grey when it bills nothing.
   const dayRow = (m, keepNext) => {
-    if (m.kind === "day") return [cell(m.cells[0], { span: 4, fill: "E5EDF2", color: "1F3851", keepNext })];
+    if (m.kind === "day") return [cell(m.cells[0], { span: n, fill: "E5EDF2", color: "1F3851", keepNext })];
     if (m.kind === "total") {
       return [
-        cell(m.cells[2], { span: 3, right: true, bold: true, fill: "F7FAFA", rule: true }),
-        cell(m.cells[3], { col: 3, right: true, bold: true, fill: "F7FAFA", rule: true }),
+        cell(m.cells[amountCol - 1], { span: n - 1, right: true, bold: true, fill: "F7FAFA", rule: true }),
+        cell(m.cells[amountCol], { col: amountCol, right: true, bold: true, fill: "F7FAFA", rule: true }),
       ];
     }
     const r = m.row;
     const sub = r.level === 1 ? { color: "6E6E6E", size: 16, keepNext } : { keepNext };
     const amountColor = r.tone === "included" ? "109669" : r.tone === "quiet" ? "969696" : sub.color;
-    const amount = cell(m.cells[3], { col: 3, right: true, ...sub, color: amountColor });
+    const amount = cell(m.cells[amountCol], { col: amountCol, right: true, ...sub, color: amountColor });
     const item = cell(m.cells[0], { col: 0, ...sub, indent: r.level === 1 ? 240 : 0 });
+    if (model.cols === "plain") return [item, amount];
+    if (model.cols === "detail") return [item, cell(m.cells[1], { col: 1, ...sub }), amount];
     return r.detail != null
       ? [item, cell(m.cells[1], { col: 1, span: 2, ...sub }), amount]
       : [item, cell(m.cells[1], { col: 1, ...sub }), cell(m.cells[2], { col: 2, ...sub }), amount];
   };
+  // A summary row under the table: its label in the column before Amount.
+  const sumRow = (label, value, bold) => new TableRow({
+    cantSplit: true,
+    children: [
+      ...(amountCol > 1 ? [cell("", { col: 0, span: amountCol - 1 })] : []),
+      cell(label, { bold, col: amountCol - 1 }),
+      cell(value, { right: true, bold, col: amountCol }),
+    ],
+  });
   const pay = invoicePayment(inv);
   const rows = [
-    new TableRow({ tableHeader: true, cantSplit: true, children: model.head.map((h, i) => cell(h, { header: true, col: i })) }),
+    new TableRow({ tableHeader: true, cantSplit: true, children: model.head.map((h, i) => cell(h, { header: true, col: i, right: i === amountCol })) }),
     ...model.rows.map((m, i) => new TableRow({
       cantSplit: true,
       children: m.kind === "flat"
         ? [cell(m.cells[0], { col: 0 }), cell(m.cells[1], { bold: true, col: 1 }), cell(m.cells[2], { col: 2 }), cell(m.cells[3], { right: true, bold: true, col: 3 })]
         : dayRow(m, keepWithNext[i]),
     })),
-    new TableRow({ cantSplit: true, children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("TOTAL", { bold: true, col: 2 }), cell(money(pay.total), { right: true, bold: true, col: 3 })] }),
+    sumRow("TOTAL", money(pay.total), true),
     ...(pay.hasPayment ? [
-      new TableRow({ cantSplit: true, children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("Paid", { col: 2 }), cell(money(pay.paid), { right: true, col: 3 })] }),
-      new TableRow({ cantSplit: true, children: [cell("", { col: 0 }), cell("", { col: 1 }), cell(pay.settled ? "PAID IN FULL" : "BALANCE DUE", { bold: true, col: 2 }), cell(money(pay.balance), { right: true, bold: true, col: 3 })] }),
+      sumRow("Paid", money(pay.paid), false),
+      sumRow(pay.settled ? "PAID IN FULL" : "BALANCE DUE", money(pay.balance), true),
     ] : []),
   ];
-  const p = (text, opts = {}) => new Paragraph({ children: [new TextRun({ text, ...opts })] });
+  // The font on every run too: Quick Look and iPhone Mail ignore the document default.
+  const p = (text, opts = {}) => new Paragraph({ children: [new TextRun({ text, font: "Arial", ...opts })] });
+  const period = invoicePeriodRange(inv);
+  const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
   const doc = new Document({
+    // One readable font everywhere (it fell back to Times New Roman).
+    styles: { default: { document: { run: { font: "Arial", size: 20 } } } },
     sections: [{
+      properties: {
+        page: {
+          size: { width: 12240, height: 15840 },
+          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+        },
+      },
+      footers: {
+        default: new Footer({
+          children: [new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            children: [
+              new TextRun({ text: `Invoice ${inv.number || ""}${senderName(inv) ? ` \u{b7} ${senderName(inv)}` : ""} \u{b7} Page `, size: 15, color: "999999" }),
+              new TextRun({ children: [PageNumber.CURRENT], size: 15, color: "999999" }),
+              new TextRun({ text: " of ", size: 15, color: "999999" }),
+              new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 15, color: "999999" }),
+            ],
+          })],
+        }),
+      },
       children: [
-        new Paragraph({ children: [new TextRun({ text: `INVOICE ${inv.number || ""}`, bold: true, size: 40, color: "0A2540" })] }),
+        new Paragraph({ children: [new TextRun({ text: `INVOICE ${inv.number || ""}`, bold: true, size: 40, color: "0A2540", font: "Arial" })] }),
         p(`Issued ${formatDate(inv.issuedDate || localDay())}`, { size: 18, color: "666666" }),
-        ...(inv.periodStart ? [p(`Service period ${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? " – " + formatDate(inv.periodEnd) : ""}`, { size: 18, color: "666666" })] : []),
+        ...(period ? [p(`${invoicePeriodLabel(inv)} ${period}`, { size: 18, color: "666666" })] : []),
         p(""),
         p("FROM", { bold: true, size: 16, color: "10B981" }),
-        p(inv.physician || "Physician", { bold: true, size: 20 }),
-        ...(inv.npi ? [p(`NPI ${inv.npi}`, { size: 18, color: "666666" })] : []),
-        ...(inv.email ? [p(inv.email, { size: 18, color: "666666" })] : []),
+        ...(fromBlock(inv).sender ? [p(fromBlock(inv).sender, { bold: true, size: 20 })] : []),
+        ...fromBlock(inv).details.map((t) => p(t, { size: 18, color: "666666" })),
         p(""),
         p("BILL TO", { bold: true, size: 16, color: "10B981" }),
         p(inv.facility || "Facility", { bold: true, size: 20 }),
@@ -212,7 +312,14 @@ export async function invoiceDocxFile(inv) {
         new Table({
           width: { size: 9360, type: WidthType.DXA },
           columnWidths: COLW,
-          borders: { insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" } },
+          layout: TableLayoutType.FIXED,
+          // Light horizontal rules only: the library's default draws a heavy
+          // black box around every cell.
+          borders: {
+            top: none, left: none, right: none, insideVertical: none,
+            bottom: { style: BorderStyle.SINGLE, size: 4, color: "0A2540" },
+            insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" },
+          },
           rows,
         }),
         p(""),
@@ -221,7 +328,7 @@ export async function invoiceDocxFile(inv) {
     }],
   });
   const blob = await Packer.toBlob(doc);
-  return new File([blob], `${inv.number || "invoice"}.docx`, {
+  return new File([blob], invoiceFileName(inv, "docx"), {
     type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   });
 }

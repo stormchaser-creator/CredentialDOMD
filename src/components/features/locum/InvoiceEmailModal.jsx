@@ -11,6 +11,7 @@ import { money } from "../../../utils/invoiceCover";
 import { RECONNECTING_MESSAGE } from "../../../utils/limitedLaunchAccess.js";
 import { invoicePdfFile, invoiceTextPdfFile } from "../../../utils/invoicePdf";
 import { invoiceDocumentArgs } from "../../../utils/invoiceArgs";
+import { againRequestId } from "../../../utils/invoiceEmailDraft";
 import { billedReceiptDocs } from "../../../utils/receiptFiles";
 import { INVOICE_EMAIL_FROM_ADDRESS, isEmailAddress, normalizeAddress, recipientProblem } from "../../../utils/invoiceEmail";
 import {
@@ -42,9 +43,32 @@ import {
  * invoice, which can be stale.
  *
  * `invoke` is injectable for tests; the app uses the Supabase client.
+ *
+ * `invoiceDraft`: an invoice not recorded yet ("Email it for me" in the Work log,
+ * Days & call and Expenses previews; utils/invoiceEmailDraft.js). `invoice`
+ * is then { id, number } (the id it will be recorded under), `docArgs` the
+ * arguments of exactly the preview's PDF, `localReceipts` the receipts this
+ * device holds for it, `prefillTo` the agreement's address (else To starts
+ * empty: no guess from history), and `invoiceDraft` { requestId, body }: the
+ * request id is the invoice number's, so a retry on a weak network is a
+ * replay. The server decides membership for the send itself, so a check
+ * still running here does not hold Send. The screen records the invoice:
+ * `onSendStart()` as the request goes, then exactly one of `onSent` (a 2xx
+ * with the provider's id), `onUnconfirmed` (it may have gone) or `onFailed`
+ * (nothing went), except "still being sent" (the same request in flight),
+ * which leaves things as they are.
  */
-function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent, invoke: invokeProp }) {
-  const { data, theme: T, limitedLaunch, canWritePractice, practiceReadOnly } = useApp();
+// The page the email preview sits on, per app theme (a mail app's own plain
+// light or dark page).
+const PREVIEW_LIGHT = "#ffffff";
+const PREVIEW_DARK = "#1c1c1e";
+
+function InvoiceEmailModal({
+  open, invoice, contract, billName, onClose, onSent, invoke: invokeProp,
+  invoiceDraft = null, docArgs = null, localReceipts = null, prefillTo = "", toHint = "", records = "",
+  onSendStart = null, onUnconfirmed = null, onFailed = null,
+}) {
+  const { data, theme: T, isDark, limitedLaunch, canWritePractice, practiceReadOnly } = useApp();
   const iS = useInputStyle();
   const [phase, setPhase] = useState("idle"); // idle | checking | ready | sending | error
   const [check, setCheck] = useState(null);
@@ -60,23 +84,32 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
   const runRef = useRef(0);
   // Set once the physician types in To: a server suggestion never replaces it.
   const toEditedRef = useRef(false);
+  // A Send on its way: a second tap before the screen redraws sends nothing.
+  const sendingRef = useRef(false);
+  // An invoice not recorded yet whose last Send got no answer from the
+  // server (the connection dropped, or the same request was still on its
+  // way): it may have gone. Send again is safe (the same request id); closing
+  // instead tells the screen it may have gone (onUnconfirmed).
+  const uncertainRef = useRef(null);
 
   // Read-only is the server's answer for this membership. A check still in
   // progress is not: the letter is prepared, and Send waits for the answer.
   const readOnly = !!limitedLaunch?.enabled && !!practiceReadOnly;
-  const reconnecting = !!limitedLaunch?.enabled && !readOnly && !canWritePractice;
+  // An invoice not recorded yet: the server's access answer decides the send,
+  // and the record that follows is kept on the device while a check runs.
+  const reconnecting = !invoiceDraft && !!limitedLaunch?.enabled && !readOnly && !canWritePractice;
   const invoke = invokeProp || ((name, options) => invokeFn(supabase, name, options));
   const settings = data?.settings;
   const args = useMemo(
-    () => (invoice ? invoiceDocumentArgs(invoice, contract, settings || {}, billName || "") : null),
-    [invoice, contract, settings, billName],
+    () => (invoiceDraft ? docArgs : invoice ? invoiceDocumentArgs(invoice, contract, settings || {}, billName || "") : null),
+    [invoiceDraft, docArgs, invoice, contract, settings, billName],
   );
   const legacyText = invoice
     ? invoice.text || `Invoice ${invoice.number} for ${billName || "the facility"}: ${money(invoice.totalAmount)}.`
     : "";
-  const pdfFor = (a) => (invoice?.lines?.length ? invoicePdfFile(a) : invoiceTextPdfFile(a, legacyText));
+  const pdfFor = (a) => (invoiceDraft || invoice?.lines?.length ? invoicePdfFile(a) : invoiceTextPdfFile(a, legacyText));
 
-  const contractBillTo = String(contract?.billTo || "").trim();
+  const contractBillTo = String(invoiceDraft ? prefillTo || contract?.billTo || "" : contract?.billTo || "").trim();
   // Offer to save the typed address only where the agreement has none: an
   // existing entry is the physician's own and is changed in Contracts.
   const saveOffered = !!contract && !contractBillTo;
@@ -89,18 +122,22 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
     setMessage(note);
     try {
       const provisional = pdfFor(args);
-      const r = await callInvoiceEmail(invoke, { action: "check", invoiceId: invoice.id, pdfBytes: provisional.size });
+      const r = await callInvoiceEmail(invoke, {
+        action: "check", invoiceId: invoice.id, pdfBytes: provisional.size, ...(invoiceDraft ? { draft: invoiceDraft.body } : {}),
+      });
       if (token !== runRef.current) return;
       if (!r.ok) { setMessage(r.message); setPhase("error"); return; }
-      const localReceipts = billedReceiptDocs(invoice, data?.travelExpenses, data?.documents);
-      const docs = invoiceEmailDocuments({ args, check: r.data, pdfFor, localReceipts });
+      const held = invoiceDraft ? localReceipts || [] : billedReceiptDocs(invoice, data?.travelExpenses, data?.documents);
+      const docs = invoiceEmailDocuments({ args, check: r.data, pdfFor, localReceipts: held });
       const b64 = await fileToBase64(docs.pdf);
       if (token !== runRef.current) return;
       setCheck(r.data);
       setDocuments(docs);
       setPdfBase64(b64);
       const suggested = normalizeAddress(r.data?.suggestedTo);
-      if (!toEditedRef.current && !isEmailAddress(contractBillTo) && isEmailAddress(suggested)) setTo(suggested);
+      // An invoice not recorded yet takes the agreement's address or none:
+      // To is never filled from another invoice's history.
+      if (!invoiceDraft && !toEditedRef.current && !isEmailAddress(contractBillTo) && isEmailAddress(suggested)) setTo(suggested);
       setPhase("ready");
     } catch {
       if (token !== runRef.current) return;
@@ -112,7 +149,11 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
   // Every opening starts clean, with a new request id.
   useEffect(() => {
     if (!open || !invoice) return undefined;
-    requestIdRef.current = generateId();
+    // An invoice not recorded yet: the invoice number's own key, so a Send
+    // retried after a lost answer, or from a reopened screen, is a replay.
+    requestIdRef.current = invoiceDraft?.requestId || generateId();
+    sendingRef.current = false;
+    uncertainRef.current = null;
     setCheck(null);
     setDocuments(null);
     setPdfBase64("");
@@ -154,25 +195,65 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
   const saveShown = saveOffered && !ownAddresses.has(normalizeAddress(to));
 
   const send = async () => {
-    if (!canSend) return;
+    if (!canSend || sendingRef.current) return;
+    sendingRef.current = true;
     setPhase("sending");
     setMessage("");
-    const r = await callInvoiceEmail(invoke, invoiceEmailSendBody({
-      invoiceId: invoice.id, requestId: requestIdRef.current, draft, pdfBase64, confirmResend: !!attempt && attemptConfirmed,
-    }));
-    if (r.ok) {
+    const resend = !!attempt && attemptConfirmed;
+    // A deliberate new send over an unconfirmed one gets its own key (the
+    // same on every retry of it); otherwise the screen's.
+    const requestId = invoiceDraft && resend ? againRequestId(invoiceDraft.requestId, attempt.at) : requestIdRef.current;
+    const body = invoiceEmailSendBody({
+      invoiceId: invoice.id, requestId, draft, pdfBase64, confirmResend: resend, invoiceDraft: invoiceDraft?.body || null,
+    });
+    try { onSendStart?.(); } catch { /* the screen's note never stops the send */ }
+    let r;
+    try { r = await callInvoiceEmail(invoke, body); } finally { sendingRef.current = false; }
+    const sent = {
+      invoice, at: r.data?.sentAt, to: r.data?.to || draft.email.to, cc: r.data?.cc || draft.email.cc || "",
+      replay: !!r.data?.replay, emailId: r.data?.emailId || null, docArgs: draft.docArgs || args,
+    };
+    uncertainRef.current = null;
+    if (r.ok && (!invoiceDraft || sent.emailId)) {
       setPhase("ready");
-      onSent?.({
-        invoice, at: r.data.sentAt, to: r.data.to, cc: r.data.cc || "", replay: !!r.data.replay,
-        saveBillTo: saveShown && save && !r.data.replay ? draft.email.to : null,
-      });
+      onSent?.({ ...sent, saveBillTo: saveShown && save && !r.data.replay ? draft.email.to : null });
       return;
     }
+    // The provider took it without an id, or did not answer: it may have
+    // gone. Nothing more from this screen; the preview asks whether it did.
+    if (invoiceDraft && (r.ok || r.code === "send_unconfirmed")) {
+      setStopped(true);
+      setMessage(r.ok
+        ? `The email service did not confirm this send, so it may have gone. Check your copy${sent.cc ? ` at ${sent.cc}` : ""} before sending again.`
+        : r.message);
+      setPhase("ready");
+      onUnconfirmed?.(sent);
+      return;
+    }
+    // No answer from the function (the connection dropped, a gateway error),
+    // or the same request still on its way: nothing is known yet. Send again
+    // is answered from the server's ledger; closing says it may have gone.
+    if (invoiceDraft && (r.code === "send_in_progress" || r.code === "network" || /^http_5/.test(r.code))) {
+      uncertainRef.current = sent;
+      setMessage(r.code === "send_in_progress" ? r.message
+        : "The connection dropped before the answer came back, so this email may have gone. Tap Send again: if it went, it is not sent twice.");
+      setPhase("ready");
+      return;
+    }
+    if (invoiceDraft) onFailed?.({ ...sent, code: r.code, message: r.message });
     const next = afterRefusal(r.code);
     if (next === "recheck") { await prepare(r.message); return; }
     if (next === "stop") setStopped(true);
     setMessage(r.message);
     setPhase("ready");
+  };
+
+  // Closed after a Send that got no answer: the screen is told it may have gone.
+  const close = () => {
+    const unsure = invoiceDraft ? uncertainRef.current : null;
+    uncertainRef.current = null;
+    if (unsure) onUnconfirmed?.(unsure);
+    onClose?.();
   };
 
   if (!open || !invoice) return null;
@@ -185,10 +266,11 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
   const email = draft?.email;
 
   return (
-    <Modal open={open} onClose={phase === "sending" ? () => {} : onClose} title={`Email invoice ${invoice.number || ""}`.trim()}>
+    <Modal open={open} onClose={phase === "sending" ? () => {} : close} title={`Email invoice ${invoice.number || ""}`.trim()}>
       <div style={{ ...muted, marginBottom: 12 }}>
         Sent for you from {INVOICE_EMAIL_FROM_ADDRESS}, so the letter arrives with its paragraphs intact.
         {check?.sender && <> Replies go to <b style={{ color: T.text }}>{check.sender.replyTo}</b>.</>}
+        {invoiceDraft && <> Once it is sent, {invoice.number} goes on the Invoices tab as emailed{records ? ` and ${records} are billed` : ""}. If it does not go, nothing is recorded.</>}
       </div>
 
       {last && (
@@ -212,7 +294,7 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
 
       <Field label="To" hint={contractBillTo && !isEmailAddress(contractBillTo)
         ? `The agreement's invoice recipient (${contractBillTo}) is not an email address, so type one here.`
-        : undefined}>
+        : invoiceDraft && !contractBillTo && !to.trim() ? toHint || "No invoice email is saved for this agreement. Type the billing office's address." : undefined}>
         <input type="email" value={to} onChange={(e) => { toEditedRef.current = true; setTo(e.target.value); }} style={iS}
           placeholder="billing@hospital.org" autoCapitalize="off" autoCorrect="off" disabled={phase === "sending"} />
       </Field>
@@ -235,10 +317,19 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
             <div><b>Replies go to:</b> {email.replyTo}</div>
             <div><b>Subject:</b> {email.subject}</div>
           </div>
-          <div data-invoice-email-body="" style={{
-            marginTop: 10, padding: "10px 12px", borderRadius: 10, backgroundColor: T.card, border: `1px solid ${T.border}`,
-            fontSize: 13, color: T.text, whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5,
-          }}>{email.text}</div>
+          {/* The HTML part exactly as it is sent, in a sandboxed frame (no
+              script, no same origin): what the billing office's mail app
+              shows. The text part is the same letter, line for line.
+              The frame carries the app's theme as its color scheme and an
+              opaque page of that scheme: the email declares "light dark"
+              and sets no text colour, so a frame left at the default light
+              scheme drew black text on the dark theme's navy card whenever
+              the phone itself was in light mode. */}
+          <iframe data-invoice-email-body="" title="Email preview" sandbox="" srcDoc={email.html} style={{
+            display: "block", width: "100%", height: 380, marginTop: 10, borderRadius: 10,
+            border: `1px solid ${T.border}`,
+            colorScheme: isDark ? "dark" : "light", backgroundColor: isDark ? PREVIEW_DARK : PREVIEW_LIGHT,
+          }} />
           <div style={{ ...label, marginTop: 12 }}>Attachments</div>
           {email.attachments.map((name, i) => (
             <div key={`${i}-${name}`} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, color: T.text, padding: "2px 0" }}>
@@ -267,7 +358,7 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
             color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
           }}>Try again</button>
         )}
-        <button onClick={onClose} disabled={phase === "sending"} style={{
+        <button onClick={close} disabled={phase === "sending"} style={{
           padding: "12px 16px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent",
           color: T.textMuted, fontSize: 14, fontWeight: 700, cursor: phase === "sending" ? "default" : "pointer",
         }}>{stopped ? "Close" : "Cancel"}</button>

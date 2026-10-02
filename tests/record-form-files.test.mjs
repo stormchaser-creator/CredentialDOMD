@@ -18,6 +18,7 @@ import * as guard from '../src/utils/spreadsheetGuard.js';
 import * as inboxDocs from '../src/utils/inboxDocs.js';
 import * as helpers from '../src/utils/helpers.js';
 import * as credentialTypes from '../src/constants/credentialTypes.js';
+import * as documentBytes from '../src/utils/documentBytes.js';
 import { mountComponent } from './component-harness.mjs';
 
 const MB = 1024 * 1024;
@@ -36,7 +37,7 @@ const account = (rec, data = {}) => ({
   toggleFavorite: rec.fn('toggleFavorite'), navigate: rec.fn('navigate'),
 });
 const common = rec => ({
-  spreadsheetGuard: guard, inboxDocs,
+  spreadsheetGuard: guard, inboxDocs, documentBytes,
   aiClient: { useAiAvailable: () => true, describeAiStatus: () => 'AI is off.', aiAvailable: () => false },
   storageQuota: { checkStorageQuota: () => ({ ok: true }) },
   officeText: { isOfficeFile: () => false, UPLOAD_ACCEPT: '*' },
@@ -96,7 +97,7 @@ test('SYNC-013: a license whose file is missing from Storage says so instead of 
     app: account(rec, { documents: [MISSING('licenses:lic-1')] }),
     props: { title: 'Licenses', sectionKey: 'licenses', items: [{ id: 'lic-1', type: 'State Medical License', state: 'CO' }], fields: [{ key: 'type', label: 'Type' }], onShare() {}, onDelete() {}, autoViewId: 'lic-1', onAutoViewDone() {} },
     modules: {
-      helpers, inboxDocs, lifecycle: await import('../src/utils/lifecycle.js'), actionButton: await import('../src/components/shared/actionButton.js'),
+      helpers, inboxDocs, documentBytes, lifecycle: await import('../src/utils/lifecycle.js'), actionButton: await import('../src/components/shared/actionButton.js'),
       caseBilling: await import('../src/utils/caseBilling.js'), formLayout: await import('../src/utils/formLayout.js'),
     },
   });
@@ -108,7 +109,7 @@ test('SYNC-013: a health record whose file is missing from Storage says so', asy
   const ui = await mountComponent('src/components/features/HealthRecordsSection.jsx', {
     app: account(rec, { documents: [MISSING('healthRecords:hr-1')], healthRecords: [{ id: 'hr-1', category: 'TB Test', name: 'Synthetic TB test' }] }),
     props: { onShare() {}, autoViewId: 'hr-1', onAutoViewDone() {} },
-    modules: { helpers, inboxDocs, credentialTypes, sectionFields: await import('../src/utils/sectionFields.js') },
+    modules: { helpers, inboxDocs, documentBytes, credentialTypes, sectionFields: await import('../src/utils/sectionFields.js') },
   });
   assertMissingShown(ui, rec);
 });
@@ -118,7 +119,7 @@ test('SYNC-013: a screening whose file is missing from Storage says so', async (
   const ui = await mountComponent('src/components/features/ScreeningsSection.jsx', {
     app: account(rec, { documents: [MISSING('screenings:scr-1')], screenings: [{ id: 'scr-1', type: 'Background Check', components: [] }] }),
     props: { onShare() {}, autoViewId: 'scr-1', onAutoViewDone() {} },
-    modules: { helpers, inboxDocs, credentialTypes },
+    modules: { helpers, inboxDocs, documentBytes, credentialTypes },
   });
   assertMissingShown(ui, rec);
 });
@@ -128,7 +129,7 @@ test('a file still on its way keeps saying it is downloading', async () => {
   const ui = await mountComponent('src/components/features/ScreeningsSection.jsx', {
     app: account(rec, { documents: [{ ...MISSING('screenings:scr-1'), fileMissing: undefined }], screenings: [{ id: 'scr-1', type: 'Background Check', components: [] }] }),
     props: { onShare() {}, autoViewId: 'scr-1', onAutoViewDone() {} },
-    modules: { helpers, inboxDocs, credentialTypes },
+    modules: { helpers, inboxDocs, documentBytes, credentialTypes },
   });
   assert.match(ui.pageText(), /card\.pdf is downloading from the cloud; check back shortly/);
   assert.doesNotMatch(ui.pageText(), /missing from your account/);
@@ -137,8 +138,10 @@ test('a file still on its way keeps saying it is downloading', async () => {
 // -- 3. The Contracts form's "Use a document already uploaded" picker --
 // SYNC-013 step 4 repeats the check from Contracts. agreementDocCandidates
 // read only d.data, so a file Storage does not have sat in the picker as
-// "Still downloading to this device", disabled, for good.
-test('SYNC-013: the agreement picker says a file is missing, not still downloading', async () => {
+// "Still downloading to this device", disabled, for good. Since a load no
+// longer downloads any file (2026-10-02), every stored file sat there the
+// same way: one in the account is picked now and fetched as it is picked.
+test('SYNC-013: the agreement picker says a file is missing; a stored file is picked and fetched from the account', async () => {
   const docPrefill = await import('../src/utils/docPrefill.js');
   const docs = [
     { id: 'gone', name: 'gone-agreement.pdf', type: 'application/pdf', size: 2048, storagePath: 'user_synthetic/gone.pdf', fileMissing: true, linkedTo: '' },
@@ -148,15 +151,21 @@ test('SYNC-013: the agreement picker says a file is missing, not still downloadi
   const cands = docPrefill.agreementDocCandidates(docs);
   const byId = Object.fromEntries(cands.map(c => [c.doc.id, c]));
   assert.equal(byId.gone.missing, true, 'Storage has no file and this device has no bytes');
-  assert.equal(byId.coming.missing, false, 'still on its way');
+  assert.equal(byId.coming.missing, false, 'in the account');
+  assert.equal(byId.coming.ready, true, 'fetched when picked');
   assert.equal(byId.here.missing, false, 'bytes on this device can still be read');
   assert.equal(byId.here.ready, true);
 
   const rec = recorder();
+  let staged = [];
+  const fetched = [];
   const attach = await mountComponent('src/components/features/DocAttach.jsx', {
     app: account(rec, { documents: docs }),
-    props: { setForm: rec.fn('setForm'), attachedDocs: [], setAttachedDocs() {}, existingDocs: cands },
-    modules: { ...common(rec), docPrefill },
+    props: { setForm: rec.fn('setForm'), attachedDocs: [], setAttachedDocs: u => { staged = typeof u === 'function' ? u(staged) : u; }, existingDocs: cands },
+    modules: {
+      ...common(rec), docPrefill, storedBytes: await import('../src/utils/storedBytes.js'),
+      supabase: { downloadDocumentFile: async (path, o) => { fetched.push([path, o]); return { dataUrl: 'data:application/pdf;base64,JVBERi0xLjQ=' }; } },
+    },
   });
   const toggle = attach.nodes().find(n => n.type === 'button' && attach.text(n) === 'Use a document already uploaded');
   assert.ok(toggle);
@@ -169,9 +178,33 @@ test('SYNC-013: the agreement picker says a file is missing, not still downloadi
   assert.doesNotMatch(attach.text(gone), /Still downloading/);
   assert.equal(gone.props.disabled, true, 'a missing file cannot be picked');
   const coming = row('coming-agreement.pdf');
-  assert.match(attach.text(coming), /Still downloading to this device/);
-  assert.doesNotMatch(attach.text(coming), /Missing from your account/);
+  assert.doesNotMatch(attach.text(coming), /Still downloading|Missing from your account/);
+  assert.equal(coming.props.disabled, false, 'a file in the account can be picked');
   assert.equal(row('here-agreement.pdf').props.disabled, false);
+  // Picked: fetched from the account, staged with its bytes, read into the form.
+  await coming.props.onClick();
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(fetched.map(([path]) => path), ['user_synthetic/coming.pdf']);
+  assert.equal(JSON.stringify(staged.map(d => [d.existingId, d.data])), JSON.stringify([['coming', 'data:application/pdf;base64,JVBERi0xLjQ=']]));
+  assert.equal(rec.names().filter(n => n === 'analyzePDF').length, 1, 'read into the form');
+});
+
+test('SYNC-013: a stored file that cannot be fetched when picked is said, and nothing is staged', async () => {
+  const docPrefill = await import('../src/utils/docPrefill.js');
+  const docs = [{ id: 'coming', name: 'coming-agreement.pdf', type: 'application/pdf', size: 2048, storagePath: 'user_synthetic/coming.pdf', linkedTo: '' }];
+  const rec = recorder();
+  let staged = [];
+  const attach = await mountComponent('src/components/features/DocAttach.jsx', {
+    app: account(rec, { documents: docs }),
+    props: { setForm: rec.fn('setForm'), attachedDocs: [], setAttachedDocs: u => { staged = typeof u === 'function' ? u(staged) : u; }, existingDocs: docPrefill.agreementDocCandidates(docs) },
+    modules: { ...common(rec), docPrefill, storedBytes: await import('../src/utils/storedBytes.js'), supabase: { downloadDocumentFile: async () => ({ failed: true }) } },
+  });
+  attach.nodes().find(n => n.type === 'button' && attach.text(n) === 'Use a document already uploaded').props.onClick();
+  await attach.nodes().find(n => n.type === 'button' && attach.text(n).includes('coming-agreement.pdf')).props.onClick();
+  await new Promise(r => setTimeout(r, 0));
+  assert.match(attach.pageText(), /"coming-agreement\.pdf" could not be fetched from your account\. Check your connection and try again\./);
+  assert.equal(staged.length, 0);
+  assert.equal(rec.names().filter(n => n === 'analyzePDF').length, 0);
 });
 
 // -- 4. The record's edit form, "Documents already linked" --

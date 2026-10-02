@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, memo, useCallback } from "react";
+import { useMemo, useState, useRef, useEffect, memo, useCallback } from "react";
 import { snapToOption, canonicalizeSelectValue } from "../../utils/snapOption";
 import { useApp } from "../../context/AppContext";
 import { billedCodes } from "../../utils/caseBilling.js";
@@ -30,7 +30,10 @@ import { isEncrypted, hasLockCode, getLockCode, switchLockCode, encryptSecret, d
 import { SECTION as IDENTITY_SECTION, SECRET_FIELDS as IDENTITY_SECRET_FIELDS, isCiphertext } from "../../utils/protectedIdentity";
 import { offlineCopyUnread } from "../../utils/storageScope";
 import { checkStorageQuota } from "../../utils/storageQuota";
+import { saveFormDraft, clearFormDraft, draftableValues, formDraftTab, pickFormDraft } from "../../utils/formDrafts.js";
 import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
+import useDocumentBytes, { useDocumentFileStatus } from "../shared/useDocumentBytes";
+import { fileWaitLine, fileWaitTag, statusWithoutStore } from "../../utils/documentBytes";
 
 // Every billed code, spelled out — number, what it entails, units, value.
 // Structured detail from the import wins; a hand-typed code string still
@@ -64,8 +67,8 @@ function choiceOptions(f, form) {
   return Array.isArray(opts) ? opts.filter(o => o && o.value != null) : [];
 }
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort, favoritable = false }) {
-  const { data, setData, addItem, theme: T , user, isDesktop, toggleFavorite, navigate } = useApp();
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort, favoritable = false, draftKey = null, draftItems = null }) {
+  const { data, setData, addItem, theme: T , user, isDesktop, toggleFavorite, navigate, loadedFrom } = useApp();
   const iS = useInputStyle();
   // Whole numbers only where the database column is an integer.
   const wholeOnly = (f) => f.type === "number" && COLUMN_TYPES?.[sectionKey]?.[f.key] === "integer";
@@ -96,6 +99,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   };
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  // This section's open form, kept across iOS discarding the app (formDrafts).
+  // draftKey: one slot per screen where one collection has several (each
+  // custom category is its own screen over customRecords; one slot for all of
+  // them opened a Badges draft as an Add in Vaccines, link audit 2026-10-01).
+  const draftSlot = `crud:${draftKey || sectionKey}`;
+  // One slot per record (or Add) and per page: `${draftSlot}|${target}|${page}`.
+  const draftSlotFor = useCallback((target) => `${draftSlot}|${target || "add"}|${formDraftTab()}`, [draftSlot]);
   const [form, setForm] = useState({});
   const [attachedDocs, setAttachedDocs] = useState([]);
   const [scanningDoc, setScanningDoc] = useState(false);
@@ -170,6 +180,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     }
   }, [autoOpen, openAdd, onAutoOpenDone, prefillItem, onPrefillDone]);
   const closeForm = useCallback(() => {
+    clearFormDraft(draftSlotFor(editItem?.id));
+    clearFormDraft(draftSlot); // one kept by an earlier build, under the screen's slot alone
     setRequiredError(null);
     if (modalStreamRef.current) { modalStreamRef.current.getTracks().forEach(t => t.stop()); modalStreamRef.current = null; }
     setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null);
@@ -178,7 +190,76 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     // so anything that wants the physician taken back where they came from
     // has to hang off the close instead.
     if (arrivedByLink.current) { arrivedByLink.current = false; onAutoEditClosed?.(); }
-  }, [onAutoEditClosed]);
+  }, [onAutoEditClosed, draftSlot, draftSlotFor, editItem?.id]);
+
+  // What is typed into the open Add or Edit form is kept for this account
+  // (utils/formDrafts.js) as it is typed, and the form opens again with it
+  // when this screen next mounts: iOS discarding the installed app while he
+  // was in Mail to copy a number lost all of it (IOS-CRED-2, CRED-021).
+  // Saved or cancelled, it goes (closeForm). Portal passwords never.
+  //
+  // Review of 9484782c:
+  //  - An edit draft keeps the record the form opened from (`base`), and a
+  //    restore lays over the record as it is now only the fields the draft
+  //    changed from that base: the whole form put back every field the desk
+  //    had changed since, and Save sent them. Save itself sends the record
+  //    as it is now with the fields this form changed (handleSave).
+  //  - One slot per record and per page (draftSlotFor): an Edit opened from
+  //    a record's details no longer writes over another record's draft, and
+  //    a second desktop tab never opens the first tab's open form, nor
+  //    clears it (formDraftTabsAlive).
+  //  - Opened by a link to one record's details (autoViewId), a screen
+  //    restores nothing: the draft waits for the next plain visit.
+  //  - A draft whose record is not among the records on screen is dropped
+  //    only once the records were read for real (the cloud, or a device copy
+  //    that could be read): a launch on empty fallback records deleted it.
+  const secretKeys = useMemo(() => fields.filter(f => f.type === "secret" || f.type === "password").map(f => f.key), [fields]);
+  useEffect(() => {
+    if (!showForm) return;
+    saveFormDraft(draftSlotFor(editItem?.id), {
+      editId: editItem?.id || null,
+      base: editItem ? draftableValues(editItem, { secretKeys }) : null,
+      form: draftableValues(form, { secretKeys }),
+    });
+  }, [showForm, form, editItem, draftSlotFor, secretKeys]);
+  const recordsRead = loadedFrom === "cloud" || (loadedFrom === "local" && !offlineCopyUnread(user?.id));
+  // Only a screen opened plainly restores a draft (not by a link to add,
+  // edit or view a record, nor with a prefilled form).
+  const plainMount = useRef(null);
+  if (plainMount.current === null) plainMount.current = !autoOpen && !autoEditId && !prefillItem && !autoViewId;
+  const restoredDraft = useRef(false);
+  const restoring = useRef(false);
+  const showFormRef = useRef(showForm);
+  showFormRef.current = showForm;
+  const restoreDraft = useCallback(() => {
+    if (restoredDraft.current || restoring.current) return;
+    const open = (picked) => {
+      // Something else opened meanwhile; or a draft for a record not on
+      // screen yet, tried again once records come from a real read (below).
+      if (!picked || picked.stopped || picked.waiting || restoredDraft.current || showFormRef.current) return;
+      restoredDraft.current = true;
+      if (!picked.restore) return;
+      const { editing, changed } = picked.restore;
+      if (editing) openEdit(editing); else openAdd();
+      setForm(f => ({ ...f, ...changed }));
+      setScanMsg("Restored what you were typing before the app closed. Save it, or Cancel to discard it.");
+    };
+    // An edit opens on its record from every record this screen edits
+    // (draftItems: Case Logs shows one academic year of them), and a draft
+    // whose record is out of view here stays for the screen that shows it.
+    // It goes only when the record is gone from the account's collection.
+    let picked;
+    try {
+      picked = pickFormDraft({
+        base: draftSlot, slotFor: draftSlotFor, records: draftItems || items,
+        held: Array.isArray(data?.[sectionKey]) ? data[sectionKey] : (draftItems || items),
+        recordsRead, stillWanted: () => !restoredDraft.current && !showFormRef.current,
+      });
+    } catch { picked = { none: true }; }
+    if (typeof picked?.then !== "function") { open(picked); return; }
+    restoring.current = true;
+    picked.then(open, () => open({ none: true })).finally(() => { restoring.current = false; });
+  }, [draftSlot, draftSlotFor, items, draftItems, data, sectionKey, openAdd, openEdit, recordsRead]);
 
   // Cleanup camera stream on unmount
   useEffect(() => {
@@ -408,6 +489,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     const it = items.find(x => x.id === autoViewId);
     if (it) { setViewItem(it); onAutoViewDone?.(); }
   }, [autoViewId, items, onAutoViewDone]);
+  // The draft kept for this screen (restoreDraft above): on a plain mount,
+  // and again as the records arrive while one waits for its record.
+  useEffect(() => {
+    if (!plainMount.current || restoredDraft.current || showForm || viewItem) return;
+    void restoreDraft();
+  }, [items, draftItems, recordsRead]); // eslint-disable-line react-hooks/exhaustive-deps
   // Secret fields (portal passwords): masked, encrypted on save with a
   // device-held lock code, revealed on demand in the detail view.
   const [showSecret, setShowSecret] = useState({});
@@ -548,6 +635,11 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     (item) => (data.documents || []).filter(d => d.linkedTo === `${sectionKey}:${item.id}`),
     [data.documents, sectionKey]
   );
+  // The files of the record open (its view or its form), with their bytes
+  // while it is open (no longer all held from load).
+  useDocumentBytes([...(viewItem?.id ? linkedDocs(viewItem) : []), ...(editItem?.id ? linkedDocs(editItem) : [])]);
+  // Fetching, failed (tried again on its own) or offline, per file.
+  const fileStatus = useDocumentFileStatus() || statusWithoutStore;
   // Deleting a record deletes the files linked to it (AppContext
   // deleteItemFn), so the question names them, as an agreement's does.
   const confirmDelete = (item) => {
@@ -593,7 +685,16 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     // saved. A refused save (membership being re-checked) keeps the form open
     // with everything typed and attached, to save again; addItem said why.
     const commit = (values) => {
-      const saved = editItem ? onEdit({ ...editItem, ...values }) : onAdd({ ...values, id: itemId });
+      // An edit is the record as it is now with what this form changed from
+      // the record it opened from (editItem). A form kept open across the
+      // app's resume reload, or brought back from a draft, held the values
+      // from before, and saving it whole put them back over the desk's
+      // changes (review of 9484782c).
+      const now = editItem ? ((draftItems || items).find(x => x?.id === editItem.id) || editItem) : null;
+      const changed = editItem
+        ? Object.fromEntries(Object.entries(values).filter(([k, v]) => JSON.stringify(v ?? null) !== JSON.stringify(editItem[k] ?? null)))
+        : null;
+      const saved = editItem ? onEdit({ ...now, ...changed, id: editItem.id }) : onAdd({ ...values, id: itemId });
       if (saved === false) return;
       // Save attached documents and link them — addItem syncs each to cloud
       for (const doc of attachedDocs) {
@@ -649,7 +750,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       return;
     }
     commit(form);
-  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields, lockCodeDraft, lockWrong, savedSecrets, switchCode]);
+  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields, lockCodeDraft, lockWrong, savedSecrets, switchCode, items, draftItems]);
 
   // Typing a date unticks "date not yet known" (lifecycle.withFormField).
   const setField = useCallback((key, value) => {
@@ -1014,7 +1115,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                     ? <img src={doc.data} alt={doc.name} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
                     : <span style={{ fontSize: 20 }}>{doc.data ? "📕" : "⏳"}</span>}
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
-                  <span style={{ fontSize: 11, color: T.textDim, marginLeft: "auto", flexShrink: 0 }}>{doc.data ? "attached" : "syncing…"}</span>
+                  <span style={{ fontSize: 11, color: T.textDim, marginLeft: "auto", flexShrink: 0 }}>{doc.data ? "attached" : fileWaitTag(fileStatus(doc))}</span>
                 </div>
               ))}
             </div>
@@ -1184,7 +1285,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                       color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8,
                     }}>
                       <span style={{ fontSize: 16 }}>{"⏳"}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} is downloading from the cloud; check back shortly</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileWaitLine(doc.name, fileStatus(doc))}</span>
                     </div>
                   ) : docMime(doc).startsWith("image/") ? (
                     <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}

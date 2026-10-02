@@ -4,13 +4,16 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { ClerkProvider, useUser } from "@clerk/clerk-react";
 import App from "./App";
-import { install as installErrorReporting, ErrorBoundary, setErrorUser } from "./lib/errorReport";
+import { install as installErrorReporting, ErrorBoundary, setErrorUser, reportError } from "./lib/errorReport";
 import "./styles/base.css";
-import { sweepLapsedQueues, sweepSignOutIntents, watchSignOutIntents, sweepPendingOfflinePurges } from "./utils/storageScope";
+import { sweepLapsedQueues, sweepSignOutIntents, watchSignOutIntents, sweepPendingOfflinePurges, releaseRecoveredContinuitySources } from "./utils/storageScope";
 import { SIGN_IN_LOCALIZATION } from "./utils/signInMethods";
 import { appContentSecurityPolicy } from "./utils/appCsp";
 import { setInvoiceHandoffPurge } from "./utils/storageScope";
 import { purgeHandoffStores, sweepHandoffPurges } from "./utils/invoiceHandoffStore.js";
+import { setInvoiceNumberConflictHandler } from "./lib/supabase";
+import { requestRecordsRefresh } from "./utils/serverBilling.js";
+import { startPageDiscardWatch } from "./utils/pageDiscard.js";
 
 // Global error sink (window.onerror + unhandledrejection -> report-error
 // function -> public.client_errors). Installed before anything renders so a
@@ -20,10 +23,21 @@ captureLaunchInvitation();
 // tab before Clerk can rewrite the hash on the way through sign-in.
 captureAppDeepLink();
 installErrorReporting();
+// A page iOS discarded (no pagehide) is said once by the page that follows it
+// in this tab, with whether an invoice was with the share sheet or open on
+// screen (utils/pageDiscard.js).
+startPageDiscardWatch({ report: (message, extra) => reportError(message, "error", extra) });
 // Sign out and Delete All My Data remove the invoice hand-off notes with the
 // account's other keys (utils/invoiceHandoffStore.js). Its IndexedDB half,
 // when an earlier page could not finish it, is finished now.
 setInvoiceHandoffPurge(purgeHandoffStores);
+// An invoice whose number another invoice of the account carries (recorded
+// on another device) is not retried: the account is read again instead.
+setInvoiceNumberConflictHandler(requestRecordsRefresh);
+// The dead development-era copies an identity recovery left in localStorage
+// (the whole file, about 3 MB on WebKit for a busy account) go first, before
+// anything small needs the room (utils/storageScope.js).
+try { releaseRecoveredContinuitySources(); } catch { /* the next launch */ }
 sweepHandoffPurges().catch(() => {});
 // Writes a lapsed session left on this device whose account never came back
 // (utils/storageScope.js purgeUserStorage) go after their time limit.

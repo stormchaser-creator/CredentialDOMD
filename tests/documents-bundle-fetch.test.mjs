@@ -18,6 +18,7 @@ import * as customCategories from '../src/utils/customCategories.js';
 import * as officeText from '../src/utils/officeText.js';
 import * as receiptFiles from '../src/utils/receiptFiles.js';
 import * as shareText from '../src/utils/shareText.js';
+import * as shareHandoff from '../src/utils/shareHandoff.js';
 import { mountComponent, settle } from './component-harness.mjs';
 
 const base = { size: 2048, uploadedAt: '2026-09-01T10:00:00Z', type: 'application/pdf' };
@@ -44,7 +45,7 @@ async function documents({ failFirst = new Set() } = {}) {
       },
     },
     modules: {
-      inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, helpers, spreadsheetGuard: guard, phiGuard, customCategories, receiptFiles, shareText,
+      inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, helpers, spreadsheetGuard: guard, phiGuard, customCategories, receiptFiles, shareText, shareHandoff,
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },
       officeText: { isOfficeFile: f => /\.(docx?|xlsx?|csv|txt|rtf)$/i.test(f?.name || ''), UPLOAD_ACCEPT: '*', extractOfficeText: async () => '', mimeFromName: officeText.mimeFromName },
       aiClient: { useAiAvailable: () => true, describeAiStatus: () => 'AI is off.' },

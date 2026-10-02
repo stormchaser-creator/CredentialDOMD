@@ -26,7 +26,7 @@ const bundled = await build({
     builder.onResolve({ filter: /lib\/supabase$|utils\/credentialExport$/ }, () => ({ path: 'unused', namespace: 'fixture' }));
     builder.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({ contents: path === 'context'
       ? 'export const useApp = () => globalThis.__renewalCancelFixture;'
-      : 'export const supabase = null; export const generateCredentialZip = () => {throw Error("No export during render");}; export const downloadBlob = generateCredentialZip;' }));
+      : 'export const supabase = null; export const downloadDocumentBlob = async () => null; export const generateCredentialZip = () => {throw Error("No export during render");}; export const downloadBlob = generateCredentialZip;' }));
   } }],
 });
 const mod = { exports: {} };

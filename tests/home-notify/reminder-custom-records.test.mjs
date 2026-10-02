@@ -89,5 +89,5 @@ test('send-reminders reads the member\'s categories and names custom records thr
   assert.match(loop, /rows = withCurrentCategoryNames\(rows, read\.categories\.get\(p\.id\) \|\| \[\]\);/);
   assert.match(loop, /for \(const r of rows\) \{/, 'the renamed rows are the ones labelled');
   assert.ok(loop.indexOf('withCurrentCategoryNames') < loop.indexOf('reminderLabel(r, t.label, p.name)'));
-  assert.match(fn, /import \{ remindable, reminderLabel, withCurrentCategoryNames \} from "\.\.\/_shared\/reminderRows\.mjs";/);
+  assert.match(fn, /import \{ remindable, reminderLabel, withCurrentCategoryNames(?:, [A-Za-z, ]+)? \} from "\.\.\/_shared\/reminderRows\.mjs";/);
 });

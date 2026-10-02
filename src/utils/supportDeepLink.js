@@ -24,7 +24,8 @@ export function isAppDeepLink(hash) {
 // <SignIn routing="hash">. Clerk rewrites the hash (#/factor-one) and, once
 // signed in, goes to /app/ with no hash, so the link would be lost before
 // AppInner mounts. main.jsx therefore keeps the link in this tab's
-// sessionStorage and gives Clerk a clean address; AppInner takes it back.
+// sessionStorage and gives Clerk a clean address; App takes it back, and
+// keeps it there until its screen is on view (App.jsx).
 const STASH_KEY = "credentialdomd.app_deep_link";
 const STASH_MAX_AGE_MS = 60 * 60 * 1000;
 
@@ -53,6 +54,24 @@ export function captureAppDeepLink({
     try { storage?.removeItem(STASH_KEY); } catch { /* storage unavailable */ }
     return null;
   }
+}
+
+/**
+ * Keep `hash` for this tab again, before a reload the app asks for (Reload on
+ * a records load that failed, or on the identity screen). The link was taken
+ * at mount (takeAppDeepLink), so without this a reload opened Home and the
+ * ticket, request or backup the email named never opened (link audit,
+ * 2026-10-01: a flaky network at launch on an iPhone). True when kept.
+ */
+export function stashAppDeepLink(hash, { storage = tabStorage(), now = Date.now() } = {}) {
+  if (!isAppDeepLink(hash)) return false;
+  try { storage.setItem(STASH_KEY, JSON.stringify({ hash, at: now })); return true; }
+  catch { return false; }
+}
+
+/** Drop the link kept for this tab: its screen is on view. */
+export function forgetAppDeepLink({ storage = tabStorage() } = {}) {
+  try { storage?.removeItem(STASH_KEY); } catch { /* storage unavailable */ }
 }
 
 /** The link this tab was opened on, once; "" when there is none. */

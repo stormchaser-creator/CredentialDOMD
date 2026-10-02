@@ -8,11 +8,13 @@ import { EmailIcon, TextMsgIcon, CopyIcon, CheckIcon, FileIcon } from "../shared
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
 import { composeText } from "../../utils/notifications";
 import { scrubSsn } from "../../utils/outgoingText.js";
-import { credentialLetter, credentialSharePayload, smsCutNotice } from "../../utils/shareText";
+import { credentialLetter, credentialShareText, credentialSharePayload, smsCutNotice } from "../../utils/shareText";
 import { resolveDocuments, missingReceiptMessage } from "../../utils/receiptFiles";
+import { outgoingFileNames, renameFiles } from "../../utils/docLabel";
 import { downloadDocumentBlob } from "../../lib/supabase";
+import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
 
-function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
+function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare, onUnlogShare }) {
   const { data, theme: T } = useApp();
   const iS = useInputStyle();
   const [email, setEmail] = useState("");
@@ -68,14 +70,17 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const full = credentialLetter(item, section, data.settings, { note });
   const withDocs = credentialLetter(item, section, data.settings, { note, attached: hasDocs });
 
+  // Returns the entry's id, so a share the sheet says did not go can take it back.
   const log = (method, to) => {
+    const id = generateId();
     onLogShare?.({
-      id: generateId(),
+      id,
       itemId: item.id,
       itemName: item.name || item.type || item.title || item.category,
       section, method, recipient: to || "",
       sentAt: new Date().toISOString(),
     });
+    return id;
   };
 
   // Send history for THIS credential — who it went to and when.
@@ -91,7 +96,10 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
     // A button that says "Send with N documents attached" never sends the
     // letter alone: if any linked file is not in hand, or this browser cannot
     // share files, nothing opens and the sender is told why.
-    const files = hasDocs ? (docFiles?.files || []) : [];
+    // Named for what they are ("DEA Registration, CO, Ana Li DO.jpg"), never a
+    // camera's "image.jpg": the Gmail app takes the first name as the subject.
+    const resolvedFiles = hasDocs ? (docFiles?.files || []) : [];
+    const files = resolvedFiles.length === linkedDocs.length ? renameFiles(resolvedFiles, outgoingFileNames(linkedDocs, data)) : resolvedFiles;
     if (hasDocs && !docFiles) {
       flashHint("The linked documents are still loading. Try again in a moment, or use Email with attachments.");
       return;
@@ -113,16 +121,28 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
     // letter, line breaks and all.
     const blurb = scrubSsn(buildCredentialBlurb(item, section, data.settings, attach, note));
     const copied = attach ? await copyToClipboard(withDocs) : false;
-    const payload = credentialSharePayload({ files: attach ? files : [], subject, blurb, letter: full });
+    // With no file the share text is written as sentences (credentialShareText):
+    // the Gmail app collapsed the letter's lines and hyphen rules into one run.
+    const text = credentialShareText(item, section, data.settings, { note });
+    const payload = credentialSharePayload({ files: attach ? files : [], subject, blurb, letter: full, text });
     clearHint();
-    try {
-      await navigator.share(payload);
-      setSent("share"); setTimeout(() => setSent(null), 3000);
-      if (copied) flashHint("The formatted letter is on your clipboard if you want to paste it over the short intro.");
-      log("share", email);
-    } catch (err) {
-      if (err?.name !== "AbortError") setSent(null);
-    }
+    // Logged as the letter goes to the share sheet (utils/shareHandoff.js):
+    // on the iPhone app the sheet often never answers once Mail takes over,
+    // or iOS discards the page meanwhile, and a credential sent by Mail
+    // never reached its Send history (SHARE-002). Taken back only when the
+    // sheet says it did not go.
+    let logged = null;
+    const outcome = await shareAtHandoff(payload, {
+      share: (p) => navigator.share(p),
+      onHanded: () => {
+        logged = log("share", email);
+        setSent("share"); setTimeout(() => setSent(null), 3000);
+        if (copied) flashHint("The formatted letter is on your clipboard if you want to paste it over the short intro.");
+      },
+      onUndo: () => { if (logged) onUnlogShare?.(logged); setSent(null); clearHint(); },
+    });
+    const notStarted = shareNotStartedMessage(outcome, "The share sheet could not send this. Try again, or use Email.");
+    if (notStarted) flashHint(notStarted);
   };
 
   const doEmail = () => {
@@ -263,7 +283,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
           request={null}
           initialTo={email}
           initialSubject={subject}
-          initialNote={withDocs}
+          initialNote={credentialLetter(item, section, data.settings, { note, attached: true, serverSent: true })}
           initialDocIds={linkedDocs.map(d => d.id)}
           shareItem={{ id: item.id, name: item.name || item.type || item.title || item.category, section }}
         />

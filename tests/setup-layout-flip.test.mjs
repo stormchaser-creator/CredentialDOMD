@@ -25,9 +25,8 @@ async function finishedPacket() {
       setupTasks: { ladderState: () => null, TIER2_COPY: { header: 'Packet' } },
       credentialExport: {
         packetSummaryLine: credentialExport.packetSummaryLine,
-        packetPendingLine: credentialExport.packetPendingLine,
         packetMissingLine: credentialExport.packetMissingLine,
-        packetSummary: () => ({ lineItems: 14, documents: 2, onDevice: 2 }),
+        packetSummary: () => ({ lineItems: 14, documents: 2, missing: [] }),
         packetDocuments: () => [],
         generateCredentialZip: async () => new Blob(['zip']),
         downloadBlob() {},

@@ -152,7 +152,9 @@ function loadFixture({ edge, rows } = {}) {
     '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS },
     '../utils/syncRules.js': syncRules,
     '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null },
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
+      // The queue's write (storageScope makes room first in the app).
+      setItemMakingRoom: (key, value) => values.set(key, value) },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: options => createLimitedLaunchClient({
       ...options, url: 'https://synthetic.invalid', anonKey: 'synthetic-public', timeoutMs: 30,
       getSession: () => clerk.session,
@@ -253,6 +255,22 @@ test('when every try fails the load stops once, after three tries, with where it
   await assert.rejects(cut.api.ensureProfile(OWNER, FAST), error => profileSupportReference(error) === 'ID-INIT-UNAVAILABLE-BODY-H200');
   const slow = loadFixture({ edge: async (n, init) => hanging(init) });
   await assert.rejects(slow.api.ensureProfile(OWNER, FAST), error => profileSupportReference(error) === 'ID-INIT-UNAVAILABLE-TIMEOUT-NETWORK');
+});
+
+// IPHONE weak network (2026-10-01): with no answer at all, AppContext opens
+// the device copy read-only and asks again, instead of the stop screen. Only
+// a failure no server answered is marked; an answer never is.
+test('a check with no answer after every try is marked transient; a server answer never is', async () => {
+  for (const edge of [async () => Promise.reject(new TypeError('Load failed')), async (n, init) => hanging(init)]) {
+    const f = loadFixture({ edge });
+    await assert.rejects(f.api.ensureProfile(OWNER, FAST), error => error.code === 'continuity_initialization_failed' && error.transient === true);
+  }
+  for (const [status, body] of [[401, { error: 'unauthorized' }], [409, { error: 'identity_conflict' }], [426, { error: 'app_update_required' }]]) {
+    const f = loadFixture({ edge: async () => Response.json(body, { status }) });
+    await assert.rejects(f.api.ensureProfile(OWNER, FAST), error => error.code === 'continuity_initialization_failed' && error.transient !== true);
+  }
+  const other = loadFixture({ edge: async () => Response.json({ ...receipt(), subject: OTHER }) });
+  await assert.rejects(other.api.ensureProfile(OWNER, FAST), error => error.transient !== true);
 });
 
 test('must-pass: another account signing in during the identity read stops the load at once, with no retry', async () => {

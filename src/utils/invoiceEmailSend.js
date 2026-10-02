@@ -56,9 +56,12 @@ export function invoiceEmailDocuments({ args, check, pdfFor, localReceipts = [] 
   const letter = invoiceCoverEmail({ ...args, receipts: attachable.length }, { attached: true });
   const subject = invoiceSubject(args);
   const pdf = pdfFor(docArgs);
-  const pdfName = invoicePdfName(args.number);
+  const pdfName = invoicePdfName(args.number, args.physician);
   return {
-    letter, subject, pdf, pdfName, missing,
+    // docArgs: what the PDF was built from (an expense line says "receipt
+    // attached" only for receipts that ride), so a record made from this
+    // send keeps the lines that went.
+    letter, subject, pdf, pdfName, missing, docArgs,
     attachments: [
       { name: pdfName, size: pdf?.size || 0, kind: "invoice" },
       ...attachable.map((r) => ({ name: r.name, size: r.size || 0, kind: "receipt", id: r.id })),
@@ -81,10 +84,13 @@ export function invoiceEmailDraft({ documents, sender, to }) {
  * key that makes a retried tap safe. `confirmResend` is sent only when the
  * physician ticked "send it again anyway" over an unconfirmed earlier attempt.
  */
-export function invoiceEmailSendBody({ invoiceId, requestId, draft, pdfBase64, confirmResend = false }) {
+export function invoiceEmailSendBody({ invoiceId, requestId, draft, pdfBase64, confirmResend = false, invoiceDraft = null }) {
   return {
     action: "send",
     invoiceId,
+    // An invoice not recorded yet ("Email it for me"): what the server reads
+    // in place of its row (invoiceEmailDraft.emailDraftBody).
+    ...(invoiceDraft ? { draft: invoiceDraft } : {}),
     requestId,
     to: draft.email.to,
     subject: draft.subject,

@@ -33,7 +33,10 @@ import { CVGenerator } from "./components/features";
 import ReadOnlyRecords from "./components/features/ReadOnlyRecords.jsx";
 import LaunchAccessNotice from "./components/shared/LaunchAccessNotice.jsx";
 import BillingReturnNotice from "./components/shared/BillingReturnNotice.jsx";
+import UnansweredInvoices from "./components/shared/UnansweredInvoices.jsx";
+import BilledTwiceInvoices from "./components/shared/BilledTwiceInvoices.jsx";
 import SyncIssuesNotice from "./components/shared/SyncIssuesNotice.jsx";
+import IdentityWaitingNotice from "./components/shared/IdentityWaitingNotice.jsx";
 import { deskStickyVars, deskRailStyle, DESK_TOP_BAR_H } from "./components/shared/deskSticky.js";
 import OfflineBanner from "./components/shared/OfflineBanner.jsx";
 import OfflineUnavailable from "./components/shared/OfflineUnavailable.jsx";
@@ -57,13 +60,15 @@ import { reminderLeadDays } from "./utils/reminderPreferences";
 import { hasSeparateBoards, STATE_REQS_META } from "./constants/stateRequirements";
 import { stateTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateFetchTracker, certificatesNotIncludedMessage } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox } from "./components/features";
+import { takeHeldRefusalNotice } from "./utils/limitedLaunchAccess";
 import { useOpenRequests } from "./hooks/useNewRequestCount";
 import { useIntakeNotes } from "./hooks/useIntakeNotes";
 import { IntakeNotesBanner } from "./components/features/IntakeNotes";
 import { useRequestProposals } from "./hooks/useRequestProposals";
 import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
-import { supportDeepLink, takeAppDeepLink } from "./utils/supportDeepLink.js";
+import { supportDeepLink, takeAppDeepLink, stashAppDeepLink, forgetAppDeepLink } from "./utils/supportDeepLink.js";
+import { shareAtHandoff, shareNotStartedMessage } from "./utils/shareHandoff.js";
 import { RequestPacketSummary, ApproveSendButton, ReviewButton, canSendOnOneTap, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
 import { actionButtonStyle, cardActionSize, TAP_MIN } from "./components/shared/actionButton";
 import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
@@ -73,7 +78,7 @@ import { useIsAdmin } from "./lib/admin";
 import AdminPreviewBanner, { ADMIN_PREVIEW_BANNER_CLEARANCE } from "./components/pages/AdminPreview";
 import { isNonExpiring, mailtoHref, copyToClipboard, avatarInitials } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
-import { referencesShareTitle, followUpEmail } from "./utils/shareText";
+import { referencesShareTitle, referencesShareText, followUpEmail } from "./utils/shareText";
 import { buildSetup, setupOwns, dateless, setupSurfaceCounts } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen, supabase, downloadDocumentBlob } from "./lib/supabase";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
@@ -112,11 +117,66 @@ function statusFromColor(color) {
 
 /* ─── App Shell ───────────────────────────────────────────────── */
 
+// The email link this page opened on, taken once per page (StrictMode calls a
+// state initializer twice; the second call must not find it gone).
+let pageDeepLink = null;
+const openedOnLink = () => (pageDeepLink ??= takeAppDeepLink());
+const LINK_SCREENS = { "#backups": "export", "#requests": "requests" };
+
+// The screen on view, kept for this tab: when iOS discards the installed app
+// in the background (he takes a call, checks Mail) and he comes back, the
+// page loads again and used to open on Home, a running Work timer out of
+// sight two taps away (lab, 2026-10-01). It opens where he was instead, for
+// half an hour. sessionStorage: a new tab or window starts on Home.
+const LAST_SCREEN_KEY = "credentialdomd.last-screen";
+const LAST_SCREEN_MAX_AGE_MS = 30 * 60 * 1000;
+const SCREEN_TABS = new Set(["home", "credentials", "documents", "locum", "more"]);
+function lastScreen() {
+  try {
+    const v = JSON.parse(globalThis.sessionStorage?.getItem(LAST_SCREEN_KEY) || "null");
+    const age = Date.now() - Number(v?.at);
+    if (!v || !SCREEN_TABS.has(v.tab) || !(age >= 0 && age <= LAST_SCREEN_MAX_AGE_MS)) return null;
+    return { tab: v.tab, subPage: typeof v.subPage === "string" ? v.subPage : null };
+  } catch { return null; }
+}
+// An email link names its own screen; otherwise the last one, else Home.
+let pageScreen = null;
+const openingScreen = () => (pageScreen ??= LINK_SCREENS[openedOnLink()]
+  ? { tab: "more", subPage: LINK_SCREENS[openedOnLink()] }
+  : (!openedOnLink() && lastScreen()) || { tab: "home", subPage: null });
+
 export default function App() {
-  const [tab, setTab] = useState("home");
-  const [subPage, setSubPage] = useState(null);
+  const [tab, setTab] = useState(() => openingScreen().tab);
+  const [subPage, setSubPage] = useState(() => openingScreen().subPage);
+  useEffect(() => {
+    try { globalThis.sessionStorage?.setItem(LAST_SCREEN_KEY, JSON.stringify({ tab, subPage: typeof subPage === "string" ? subPage : null, at: Date.now() })); }
+    catch { /* storage unavailable: the next load opens on Home */ }
+  }, [tab, subPage]);
   const [navRecord, setNavRecord] = useState(null); // { sec, id } from Vera / deep links
   const handleNavigate = useCallback((t, sub, record) => { setTab(t); setSubPage(sub); if (record) setNavRecord({ ...record, nonce: Date.now() }); }, []);
+
+  // The email link this tab opened on: reply emails link to /app/#support/<ticket
+  // id> (older ones to /app/#support), backup emails to /app/#backups (More >
+  // Data & Backup, the one place a link to the archive is minted), and the
+  // "we read your forwarded request" email to /app/#requests (More >
+  // Requests). main.jsx keeps it in sessionStorage before sign-in can drop it
+  // (utils/supportDeepLink.js captureAppDeepLink); it is taken back here, in
+  // App, and held until its screen is on view. Taken in AppInner, it was lost
+  // when AppInner mounted again (the offline fallback giving way to Clerk as
+  // it loaded late) and on a Reload after a failed first load (link audit,
+  // 2026-10-01).
+  const [deepLink, setDeepLink] = useState(openedOnLink);
+  const settleDeepLink = useCallback(() => setDeepLink(""), []);
+  // Kept for this tab until its screen is on view, from the first render:
+  // App renders the sign-in screen too, and Clerk's email-code sign-in ends
+  // in a new page load of /app/ (or Safari discards the tab while he is in
+  // Mail for the code). Taken from storage here and nowhere else, the link
+  // was gone by then and the page opened on Home (link audit, 2026-10-01).
+  useEffect(() => {
+    if (deepLink) stashAppDeepLink(deepLink);
+    else forgetAppDeepLink();
+  }, [deepLink]);
+  const inner = <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} deepLink={deepLink} settleDeepLink={settleDeepLink} />;
 
   // ─── Offline fallback (src/utils/offlineSession.js) ────────
   // Clerk gates the whole render, and offline it never reaches loaded
@@ -154,7 +214,7 @@ export default function App() {
     <>
       {offlineSession && !clerkLoaded ? (
         <AppProvider onNavigate={handleNavigate} offlineSession={offlineSession}>
-          <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} />
+          {inner}
           <OfflineBanner />
           <AdminPreviewBanner aboveOffline />
         </AppProvider>
@@ -165,7 +225,7 @@ export default function App() {
           </SignedOut>
           <SignedIn>
             <AppProvider onNavigate={handleNavigate}>
-              <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} />
+              {inner}
               {/* Outside AppInner so it also shows on the pending and paused screens. */}
               <AdminPreviewBanner />
             </AppProvider>
@@ -218,7 +278,7 @@ function ProGate({ T, onUpgrade, featureName }) {
   );
 }
 
-function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
+function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", settleDeepLink = () => {} }) {
   // null until the physician picks a year: Case Logs then opens on the
   // default from the cases themselves (defaultCaseLogYear), below.
   const [caseLogYearPick, setCaseLogYear] = useState(null);
@@ -297,31 +357,41 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   useDeskKeyboard({ onSearchFallback: () => { setTab("home"); setSubPage(null); } });
 
 
-  const [locumSeed, setLocumSeed] = useState(null); // {sub, id} to open in the Locum dashboard from search
-  // Reply emails link to /app/#support/<ticket id> (older ones to
-  // /app/#support): open the sheet on "Your tickets", and on that ticket.
-  // Backup emails link to /app/#backups: open More > Data & Backup, the one
-  // place a link to the archive is minted (build-backup emails no link).
-  // The "we read your forwarded request" email links to /app/#requests:
-  // open More > Requests, where the packet it describes is waiting.
-  // main.jsx keeps the link in sessionStorage before sign-in can drop it
-  // (utils/supportDeepLink.js captureAppDeepLink); take it back here.
+  const [locumSeed, setLocumSeed] = useState(null); // {sub, id, contractId} to open in the Locum dashboard from search
+  // Home's card of invoices that went out (or may have) and are not recorded
+  // (UnansweredInvoices): opens the screen that answers one, Work log on the
+  // agreement it went out from, or Expenses.
+  const openUnansweredInvoice = (n) => {
+    const sub = n?.kind === "EXP" ? "expenses" : "work";
+    setLocumSeed({ sub, contractId: sub === "work" ? n?.contractId || null : null });
+    setTab("locum"); setSubPage(sub);
+  };
+  // Home's card of a recorded invoice that bills work another invoice bills
+  // (BilledTwiceInvoices): opens the Invoices tab, where it is deleted.
+  const openInvoicesTab = () => {
+    setLocumSeed({ sub: "invoices" });
+    setTab("locum"); setSubPage("invoices");
+  };
+  // A support link (App holds it, deepLink): the sheet opens on "Your
+  // tickets", and on that ticket, on every mount until it is closed. The
+  // tab of a #backups or #requests link is App's own; the link is done once
+  // the records are on view.
   useEffect(() => {
-    const hash = takeAppDeepLink();
-    const supportLink = supportDeepLink(hash);
-    if (supportLink) {
-      setSupportTab("tickets");
-      setSupportTicketId(supportLink.ticketId);
-      setShowSupport(true);
-    } else if (hash === "#backups") {
-      setTab("more");
-      setSubPage("export");
-    } else if (hash === "#requests") {
-      setTab("more");
-      setSubPage("requests");
-    }
-    // setTab / setSubPage are App's useState setters handed down as props: stable.
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const supportLink = supportDeepLink(deepLink);
+    if (!supportLink) return;
+    setSupportTab("tickets");
+    setSupportTicketId(supportLink.ticketId);
+    setShowSupport(true);
+  }, [deepLink]);
+  useEffect(() => {
+    if (deepLink && !supportDeepLink(deepLink) && loaded && !recordsLoadIssue) settleDeepLink();
+  }, [deepLink, loaded, recordsLoadIssue, settleDeepLink]);
+  // Reload, asked for by a screen that stopped the app: the email link this
+  // tab opened on, not yet on view, is kept for the page that loads next.
+  const reloadKeepingLink = useCallback(() => {
+    if (deepLink) stashAppDeepLink(deepLink);
+    window.location.reload();
+  }, [deepLink]);
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");
@@ -438,6 +508,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const t = setInterval(touchLastSeen, 15 * 60 * 1000);
     return () => clearInterval(t);
   }, [loaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A "not kept" alert a share's hand-off held for his return, on a page iOS
+  // discarded before he came back (limitedLaunchAccess takeHeldRefusalNotice):
+  // said once his records are on screen.
+  useEffect(() => {
+    if (!loaded || !user?.id) return;
+    // Asked of the other open tabs first (a hold still open there says its own).
+    takeHeldRefusalNotice(user.id).then((notice) => {
+      if (notice) { try { window.alert(notice); } catch { /* no window */ } }
+    }).catch(() => {});
+  }, [loaded, user?.id]);
 
   // Vera's open_record lands here: the section is already selected by
   // handleNavigate; open the record itself. (Must stay above the loading
@@ -518,19 +598,32 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const sendRenewalPacket = useCallback(async (st) => {
     const model = stateTranscriptModel(data, st, { certFiles: packetCerts });
     if (model.error) { window.alert(model.error); return; }
+    // Logged as the file goes to the share sheet (a desktop download is not
+    // a send, and share_log's method CHECK has no "download"). On the iPhone
+    // app the sheet often never answers once Mail takes over, and the packet
+    // that went was never recorded, nor was he told a certificate was left
+    // out (HOME-017). Which ones is known before the sheet opens; it is said
+    // once he is back (an alert before the share would spend the tap).
+    let logId = null, missingNote = "", told = false;
+    const tell = () => { if (missingNote && !told) { told = true; window.alert(missingNote); } };
     try {
-      const sent = await shareTranscriptPdf(model);
-      // Logged when it went through the share sheet. A desktop download is
-      // not a send, and share_log's method CHECK has no "download".
-      if (sent?.method === "share") addItem("shareLog", { id: generateId(), itemId: null, itemName: `${st} renewal packet`, section: "cme", method: sent.method, recipient: "", sentAt: new Date().toISOString() });
+      const sent = await shareTranscriptPdf(model, {
+        onHanded: ({ model: going }) => {
+          logId = generateId();
+          addItem("shareLog", { id: logId, itemId: null, itemName: `${st} renewal packet`, section: "cme", method: "share", recipient: "", sentAt: new Date().toISOString() });
+          missingNote = certificatesNotIncludedMessage(going);
+        },
+        onUndo: () => { if (logId) deleteItem("shareLog", logId); logId = null; missingNote = ""; },
+        onUnanswered: tell,
+      });
       // From what was actually sent (see shareTranscriptPdf), not the model
       // before the build.
-      const missing = sent ? certificatesNotIncludedMessage(sent.model) : "";
-      if (missing) window.alert(missing);
+      if (sent?.method === "download") missingNote = certificatesNotIncludedMessage(sent.model);
+      if (sent) tell();
     } catch (err) {
-      if (err?.name !== "AbortError") window.alert(`Could not build the transcript PDF: ${err.message}`);
+      if (err?.name !== "AbortError") window.alert(err?.name === "ShareBusy" ? err.message : `Could not build the transcript PDF: ${err.message}`);
     }
-  }, [data, addItem, packetCerts]);
+  }, [data, addItem, deleteItem, packetCerts]);
 
   const openShare = useCallback((item, section) => {
     // Sharing sends email through the cloud; offline it cannot go anywhere.
@@ -539,6 +632,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   }, [offlineMode]);
   const closeShare = useCallback(() => { setShareItem(null); setShareSection(null); }, []);
   const logShare = useCallback((entry) => addItem("shareLog", { ...entry, id: entry.id || crypto.randomUUID() }), [addItem]);
+  // A share the sheet said did not go (cancelled, or another still open): its entry goes.
+  const unlogShare = useCallback((id) => deleteItem("shareLog", id), [deleteItem]);
 
   // Send several peer references at once instead of one share sheet per
   // reference — the same one-share-carries-everything shape as the document
@@ -546,30 +641,44 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const shareManyReferences = useCallback(async (refs) => {
     if (offlineMode) { window.alert("You're offline. Sharing needs a connection. Try again once you're back online."); return; }
     if (!refs.length) return;
-    // No file rides along, so the share carries the multi-line list itself
-    // (the iOS Mail newline strip was seen on shares that carry a file).
+    // No file rides along. The share text is written as sentences with a
+    // greeting and sign-off, so it reads as an email even when the Gmail app
+    // collapses its line breaks (it ran two people together before); Copy
+    // keeps the multi-line list.
     const { full } = referenceSharePayload(refs);
-    let method = "share";
+    const shareText = referencesShareText(data.settings, refs);
+    // share_log_method_check allows email, text, clipboard and share.
+    const logRefs = (how) => {
+      let method = "share";
+      if (how === "clipboard") method = "clipboard";
+      const id = generateId();
+      addItem("shareLog", {
+        id, itemId: null, itemName: `Peer references (${refs.length})`,
+        section: "peerReferences", method, recipient: "",
+        sentAt: new Date().toISOString(),
+      });
+      return id;
+    };
     if (navigator.share) {
-      try { await navigator.share({ title: referencesShareTitle(data.settings, refs.length), text: full }); }
-      catch (err) {
-        if (err?.name !== "AbortError") window.alert("Sharing did not complete. Try again or use Vera's Copy draft button.");
-        return;
-      }
-    } else {
-      try {
-        if (!await copyToClipboard(full)) throw new Error("Copy failed");
-      } catch { window.alert("Copy did not complete. Use Vera's reference draft to select and copy the text."); return; }
-      // share_log_method_check allows email, text, clipboard and share.
-      method = "clipboard";
-      window.alert("The reference list has been copied. Paste it into an email or text.");
+      // Logged as the list goes to the share sheet (utils/shareHandoff.js):
+      // on the iPhone app the sheet often never answers once Mail takes over,
+      // and a list that went was never recorded (CRED-043).
+      let logId = null;
+      const outcome = await shareAtHandoff({ title: referencesShareTitle(data.settings, refs.length), text: shareText }, {
+        share: (p) => navigator.share(p),
+        onHanded: () => { logId = logRefs("share"); },
+        onUndo: () => { if (logId) deleteItem("shareLog", logId); logId = null; },
+      });
+      const notStarted = shareNotStartedMessage(outcome, "Sharing did not complete. Try again or use Vera's Copy draft button.");
+      if (notStarted) window.alert(notStarted);
+      return;
     }
-    addItem("shareLog", {
-      id: generateId(), itemId: null, itemName: `Peer references (${refs.length})`,
-      section: "peerReferences", method, recipient: "",
-      sentAt: new Date().toISOString(),
-    });
-  }, [data.settings, offlineMode, addItem]);
+    try {
+      if (!await copyToClipboard(full)) throw new Error("Copy failed");
+    } catch { window.alert("Copy did not complete. Use Vera's reference draft to select and copy the text."); return; }
+    logRefs("clipboard");
+    window.alert("The reference list has been copied. Paste it into an email or text.");
+  }, [data.settings, offlineMode, addItem, deleteItem]);
 
   const linkedDocs = useMemo(() => {
     if (!shareItem || !shareSection) return [];
@@ -658,7 +767,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       // An address in the recipient field goes in To:, never in "Hi <address>,".
       const mail = followUpEmail({
         label: describeItem(followUpItem, data.settings.name),
-        expirationDate: followUpItem.expirationDate, recipient, note,
+        expirationDate: followUpItem.expirationDate, recipient, note, settings: data.settings,
       });
       window.open(mailtoHref(mail.to, mail.subject, mail.body));
     }
@@ -667,7 +776,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       recipient, note, emailed, createdAt: new Date().toISOString(),
     });
     setFollowUpItem(null);
-  }, [followUpItem, followUpRecipient, followUpNote, addItem, data.settings.name]);
+  }, [followUpItem, followUpRecipient, followUpNote, addItem, data.settings]);
 
   // Board continuing-certification standing (cycle-windowed). Every DO sees
   // the AOA national cycle even before picking a specific board.
@@ -879,7 +988,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     </div>
   );
 
-  if (recordsLoadIssue) return <AccountRecordsLoadError theme={T} onRetry={() => window.location.reload()} />;
+  if (recordsLoadIssue) return <AccountRecordsLoadError theme={T} onRetry={reloadKeepingLink} />;
 
   // While an admin preview is on, every screen keeps room for its banner at the bottom.
   const previewClearance = adminPreview ? ADMIN_PREVIEW_BANNER_CLEARANCE : 0;
@@ -907,7 +1016,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             <div role="status" style={{ marginTop: 12, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>
               {gate.lines.map((line, i) => <p key={i} style={{ margin: i ? "10px 0 0" : 0 }}>{line}</p>)}
             </div>
-            {gate.action && <button style={{ ...actionButtonStyle(T, { isDesktop }), marginTop: 16 }} onClick={() => gate.action === "refresh" ? limitedLaunch.refresh() : window.location.reload()}>{gate.action === "refresh" ? "Try again" : "Reload"}</button>}
+            {gate.action && <button style={{ ...actionButtonStyle(T, { isDesktop }), marginTop: 16 }} onClick={() => gate.action === "refresh" ? limitedLaunch.refresh() : reloadKeepingLink()}>{gate.action === "refresh" ? "Try again" : "Reload"}</button>}
           </>
         ) : access === "revoked" ? (
           <>
@@ -2393,7 +2502,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         return <>
           <CaseLogSummary cases={allCases} year={caseLogYear} onYear={setCaseLogYear} />
           <CaseDictate categories={CASE_CATEGORIES} onDraft={setCaseDraft} />
-          <CrudSection title="Case Logs" sectionKey="caseLogs" favoritable {...crudTarget("caseLogs")} items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing: every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES, groups: CASE_CATEGORY_GROUPS, required: true }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
+          <CrudSection title="Case Logs" sectionKey="caseLogs" favoritable {...crudTarget("caseLogs")} items={shownCases} draftItems={allCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing: every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES, groups: CASE_CATEGORY_GROUPS, required: true }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
               {item.role && <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{item.role}</span>}
               {caseWRVU(item) > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{caseWRVU(item).toFixed(2)} wRVU</span>}
@@ -2742,8 +2851,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             boxShadow: T.shadow1,
           }}>
             <span style={{ fontSize: 20 }}>{"\ud83d\udcac"}</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Support</span>
-            <span style={{ fontSize: 12, color: T.textMuted }}>tickets & replies</span>
+            {/* "Get help": the name the welcome email, the refund wording and
+                the FAQ send members to. */}
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Get help</span>
+            <span style={{ fontSize: 12, color: T.textMuted }}>support tickets & replies</span>
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 
@@ -2838,7 +2949,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (tab === "documents") return <DocumentsSection />;
     if (tab === "share") return renderShare();
     if (tab === "credentials") return renderCredentials();
-    if (tab === "locum") return <LocumDashboard initialSub={locumSeed?.sub || subPage || undefined} focusId={locumSeed?.id} onFocusConsumed={() => setLocumSeed(null)} />;
+    if (tab === "locum") return <LocumDashboard initialSub={locumSeed?.sub || subPage || undefined} focusId={locumSeed?.id} openContract={locumSeed?.contractId || null} onFocusConsumed={() => setLocumSeed(null)} />;
     if (tab === "more") return renderMore();
   };
 
@@ -2988,8 +3099,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               answer asks for a reload. */}
           {/* Back from Stripe: the purchase is being confirmed, or nothing was charged. */}
           <BillingReturnNotice onReviewOffers={() => { setTab("more"); setSubPage("settings"); }} />
+          {/* The app opens here: an invoice that went to the share sheet and
+              was never answered (iOS dropped the app in Mail) is said here. */}
+          {tab === "home" && <UnansweredInvoices onOpen={openUnansweredInvoice} />}
+          {tab === "home" && <BilledTwiceInvoices onOpen={openInvoicesTab} />}
           {/* A save the cloud refused, named by record, on every tab. */}
           <SyncIssuesNotice />
+          {/* No answer from the identity check yet: this device's copy, read-only. */}
+          <IdentityWaitingNotice />
           {(limitedLaunch.reconnecting || limitedLaunch.checking || limitedLaunch.outdated) && <LaunchAccessNotice />}
           {renderContent()}
           {previewClearance > 0 && <div aria-hidden="true" data-admin-preview-clearance="" style={{ height: previewClearance }} />}
@@ -3013,11 +3130,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       // document-level scroll that causes it.
       overflow: "hidden",
     }}>
-      <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} />
+      <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} onUnlogShare={unlogShare} />
       {/* Billing is cloud-only; in offline mode the context's checkout/manage
           already no-op with a message, and the modal itself stays closed. */}
       <PricingModal open={showPricing && !offlineMode} onClose={() => setShowPricing(false)} />
-      <SupportModal open={showSupport} onClose={() => { setShowSupport(false); setSupportTab("new"); setSupportTicketId(null); }} initialTab={supportTab} initialTicketId={supportTicketId} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
+      <SupportModal open={showSupport} onClose={() => { setShowSupport(false); setSupportTab("new"); setSupportTicketId(null); if (supportDeepLink(deepLink)) settleDeepLink(); }} initialTab={supportTab} initialTicketId={supportTicketId} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
       <NotificationCenter open={notifCenterOpen} onClose={() => setNotifCenterOpen(false)} />
 
       {/* ─── SIDEBAR (desk width only) ─────────────────── */}

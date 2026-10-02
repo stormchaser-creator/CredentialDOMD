@@ -25,6 +25,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { launchEmailReviewHold } from "../_shared/launchEmailReview.mjs";
+// The greeting the reminder digest uses: titles skipped, accented letters
+// kept, "Hello," without a usable first name, never the mailbox name.
+import { reminderGreeting } from "../_shared/reminderRows.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const APP_URL = "https://credentialdomd.com/app/";
@@ -37,14 +40,8 @@ const corsHeaders = {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-function firstName(name: string | null | undefined, email: string) {
-  const raw = (name || "").replace(/\b(dr\.?|md|do|mbbs|phd)\b/gi, "").trim().split(/\s+/)[0];
-  if (raw && /^[a-z'-]+$/i.test(raw)) return raw[0].toUpperCase() + raw.slice(1).toLowerCase();
-  return email.split("@")[0];
-}
-
-function inviteText(name: string, email: string) {
-  return `${name},
+function inviteText(name: string | null | undefined, email: string) {
+  return `${reminderGreeting(name)}
 
 You are invited to the CredentialDOMD beta. It is the app I built to run my own locums practice: licenses and CME in one place, invoices and remittance reconciliation, RVU logging, expenses, and tax prep by state.
 
@@ -174,7 +171,7 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
       to: [email],
       reply_to: "stormchaser@elryx.com",
       subject: "Your CredentialDOMD invitation",
-      text: inviteText(firstName(name || row?.name, email), email),
+      text: inviteText(name || row?.name, email),
     }),
   });
   const rj = await r.json().catch(() => ({}));

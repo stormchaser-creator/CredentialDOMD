@@ -656,14 +656,207 @@ export function writeRefusalReason(authority = accessAuthority, scope = null) {
 // (reportWriteAccess), `section` naming the collection.
 const REFUSAL_QUIET_MS = 3000;
 let refusalShownAt = -Infinity;
+const refusalHolds = new Set();
 export function alertWriteRefused({ authority = accessAuthority, scope = null, section = null, alert = message => globalThis.window?.alert?.(message), now = () => Date.now() } = {}) {
   reportWriteAccess("write_refused", writeRefusalReason(authority, scope), section);
   const verifying = authority?.outdated?.() !== true && accessVerifying(authority, scope);
   if (verifying) requestAccessCheck(authority);
+  if (refusalHolds.size) {
+    // Held (holdWriteRefusalAlerts): said later by whoever holds it, or not at all.
+    // Written down for this account too (hold.keep): iOS can discard the
+    // page while Mail is in front, before it is said (review of 5cb89c90).
+    const message = writeRefusalMessage(authority, scope);
+    let accountId = null;
+    try { accountId = globalThis.window?.Clerk?.user?.id || null; } catch { accountId = null; }
+    for (const held of refusalHolds) held.keep({ message, alert, now, accountId });
+    return false;
+  }
   if (now() - refusalShownAt < REFUSAL_QUIET_MS) return false;
   alert(writeRefusalMessage(authority, scope));
   refusalShownAt = now();
   return true;
+}
+
+/**
+ * A refusal's alert held back instead of shown inside the current task: the
+ * share sheet's hand-off (utils/shareHandoff.js) writes its share log as
+ * navigator.share is called, and a window.alert in that same task asked iOS
+ * for two presentations at once, and said "can't save" for a send he might
+ * then cancel (link audit, 2026-10-01). The refusal is still reported and a
+ * check still asked for at once; only the alert waits. stop() ends the
+ * catching; show() says the first held message (once per burst, as any
+ * refusal); drop() forgets them, for a send that did not happen.
+ *
+ * Catching ends with stop(), but the hold stays open until show() or drop():
+ * a save caught while catching that the membership check refuses later
+ * (holdForAccess, an answer that was only old) brings its "not kept" alert
+ * here too, while the hold is open, instead of over the share sheet
+ * (review of 27a0d491). Once shown, a later one alerts as usual: he is back
+ * in front. Once dropped, it is never said: the send did not happen.
+ */
+export function holdWriteRefusalAlerts() {
+  const held = [];
+  let state = "open";
+  let awaiting = 0;
+  const id = `${Date.now().toString(36)}-${++heldRefusalSeq}`;
+  const hold = {
+    keep(entry) {
+      if (state !== "open" || held.some(one => one.message === entry.message)) return;
+      held.push(entry);
+      // Written down as well: the page may never come back to say it. First
+      // only a save the check took back (review of 9484782c); a save refused
+      // at once, on a launch with no answer yet, was lost the same way with
+      // the page (review of 5cb89c90). The first one is what show() says.
+      if (held.length === 1 || entry.always) rememberHeldRefusal(id, entry.message, entry.accountId ?? null);
+    },
+    // A save caught here that waits for the membership check (holdForAccess).
+    track(done) {
+      awaiting++;
+      Promise.resolve(done).finally(() => { awaiting--; }).catch(() => {});
+    },
+    get state() { return state; },
+  };
+  refusalHolds.add(hold);
+  liveHeldRefusals.add(id);
+  const releasePage = markHeldRefusalOpen(id);
+  const stop = () => { refusalHolds.delete(hold); };
+  const close = (to) => { stop(); state = to; held.length = 0; liveHeldRefusals.delete(id); forgetHeldRefusal(id); releasePage(); };
+  return {
+    hold,
+    stop,
+    get pending() { return held.length > 0; },
+    // Saves caught here still waiting for the check's answer.
+    get awaiting() { return awaiting; },
+    show() {
+      const first = held[0];
+      close("shown");
+      if (!first) return false;
+      // A save the check took back is always said, as settleHeldRound does.
+      if (!first.always && first.now() - refusalShownAt < REFUSAL_QUIET_MS) return false;
+      try { first.alert(first.message); } catch { /* no window */ }
+      refusalShownAt = first.now();
+      return true;
+    },
+    drop() { close("dropped"); },
+  };
+}
+
+// A held "not kept" alert for a save the check took back (holdWriteRefusalAlerts
+// `always`), written to the device until it is said or dropped. iOS can
+// discard the installed app while Mail is in front, and the alert held in
+// memory went with it: Send history was missing the share he was told was
+// sent, and he was never told why (review of 9484782c). The next load of the
+// same account says it (takeHeldRefusalNotice). Not kept past a day.
+const HELD_REFUSAL_KEY = "credentialdomd-held-refusal";
+const HELD_REFUSAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+export const HELD_REFUSAL_RELAUNCH_PREFIX = "Before the app closed: ";
+let heldRefusalSeq = 0;
+const liveHeldRefusals = new Set();
+function heldRefusalStore() {
+  try { return globalThis.localStorage || null; } catch { return null; }
+}
+function readHeldRefusals(store) {
+  try {
+    const list = JSON.parse(store.getItem(HELD_REFUSAL_KEY) || "[]");
+    return Array.isArray(list) ? list.filter(one => one && typeof one.message === "string") : [];
+  } catch { return []; }
+}
+function writeHeldRefusals(store, list) {
+  try {
+    if (list.length) store.setItem(HELD_REFUSAL_KEY, JSON.stringify(list));
+    else store.removeItem(HELD_REFUSAL_KEY);
+  } catch { /* storage full or blocked: the in-memory hold still says it */ }
+}
+function rememberHeldRefusal(id, message, accountId) {
+  const store = heldRefusalStore();
+  if (!store) return;
+  const list = readHeldRefusals(store).filter(one => one.id !== id);
+  list.push({ id, message, accountId, at: Date.now() });
+  writeHeldRefusals(store, list.slice(-5));
+}
+function forgetHeldRefusal(id) {
+  const store = heldRefusalStore();
+  if (!store) return;
+  const list = readHeldRefusals(store);
+  if (list.some(one => one.id === id)) writeHeldRefusals(store, list.filter(one => one.id !== id));
+}
+// Holds still open on any page. localStorage is shared by every tab of the
+// app, so a second desktop tab took a live tab's held alert, said "Before the
+// app closed:" though nothing closed, and the live tab said it again (review
+// of 5cb89c90). An open hold keeps a Web Lock under its id (released when it
+// closes, or with the page when it is closed or discarded); with no Web Locks,
+// the page answers a BroadcastChannel ping for it.
+const HELD_REFUSAL_LOCK = "credentialdomd-held-refusal:";
+const HELD_REFUSAL_CHANNEL = "credentialdomd-held-refusal";
+const webLocks = () => { try { const l = globalThis.navigator?.locks; return l && typeof l.request === "function" ? l : null; } catch { return null; } };
+let heldRefusalAnswers = null;
+function markHeldRefusalOpen(id) {
+  const locks = webLocks();
+  if (locks) {
+    let release = () => {};
+    const until = new Promise(resolve => { release = resolve; });
+    try { Promise.resolve(locks.request(HELD_REFUSAL_LOCK + id, () => until)).catch(() => {}); } catch { /* told by the ping below */ }
+    return () => release();
+  }
+  if (!heldRefusalAnswers && typeof globalThis.BroadcastChannel === "function") {
+    try {
+      heldRefusalAnswers = new globalThis.BroadcastChannel(HELD_REFUSAL_CHANNEL);
+      heldRefusalAnswers.onmessage = (event) => {
+        const ask = event?.data?.ask;
+        if (Array.isArray(ask)) {
+          const open = ask.filter(one => liveHeldRefusals.has(one));
+          if (open.length) { try { heldRefusalAnswers.postMessage({ open }); } catch { /* closed */ } }
+        }
+      };
+      heldRefusalAnswers.unref?.();
+    } catch { heldRefusalAnswers = null; }
+  }
+  return () => {};
+}
+// Of `ids`, the ones a hold on another page still has open.
+async function heldRefusalsOpenElsewhere(ids, waitMs) {
+  const locks = webLocks();
+  if (locks && typeof locks.query === "function") {
+    try {
+      const state = await locks.query();
+      const names = new Set([...(state?.held || []), ...(state?.pending || [])].map(one => one?.name));
+      return new Set(ids.filter(id => names.has(HELD_REFUSAL_LOCK + id)));
+    } catch { /* the ping below */ }
+  }
+  if (typeof globalThis.BroadcastChannel !== "function") return new Set();
+  return new Promise((resolve) => {
+    const open = new Set();
+    let channel = null, timer = null;
+    const done = () => { clearTimeout(timer); try { channel?.close(); } catch { /* closed */ } resolve(open); };
+    try {
+      channel = new globalThis.BroadcastChannel(HELD_REFUSAL_CHANNEL);
+      channel.onmessage = (event) => { for (const id of event?.data?.open || []) if (ids.includes(id)) open.add(id); };
+      channel.postMessage({ ask: ids });
+    } catch { done(); return; }
+    timer = setTimeout(done, waitMs);
+  });
+}
+
+/**
+ * The "not kept" alert a page held for this account and never said (it was
+ * discarded or reloaded first), as the words to say now, or null (a promise).
+ * Taken once: it is removed as it is read. Holds still open, on this page or
+ * another tab, are left to say their own.
+ */
+export async function takeHeldRefusalNotice(accountId, now = Date.now(), { waitMs = 250 } = {}) {
+  const store = heldRefusalStore();
+  if (!store || !accountId) return null;
+  const ours = one => !liveHeldRefusals.has(one.id) && (one.accountId == null || one.accountId === accountId);
+  const asked = readHeldRefusals(store).filter(ours).map(one => one.id);
+  if (!asked.length) return null;
+  const elsewhere = await heldRefusalsOpenElsewhere(asked, waitMs);
+  // Read again: another tab may have taken one meanwhile.
+  const list = readHeldRefusals(store);
+  const mine = list.filter(one => ours(one) && asked.includes(one.id) && !elsewhere.has(one.id));
+  if (!mine.length) return null;
+  writeHeldRefusals(store, list.filter(one => !mine.includes(one)));
+  const fresh = mine.find(one => Number.isFinite(one.at) && now - one.at >= 0 && now - one.at < HELD_REFUSAL_MAX_AGE_MS);
+  return fresh ? HELD_REFUSAL_RELAUNCH_PREFIX + fresh.message : null;
 }
 
 /**
@@ -766,7 +959,11 @@ export function holdForAccess({ scopes: needed = scopes, accountId = null, secti
     };
     round.done = authority.verify().then(settle, () => settle(null));
   }
-  round.entries.push({ needed: [...new Set(needed)], accountId, section, undo, quiet: quiet === true, keep: keep === true, awaitAnswer: awaitAnswer === true });
+  // Saved while a refusal's alert is held (a share log written as the share
+  // sheet is asked for): what the check later says is said by that hold.
+  const holds = [...refusalHolds];
+  for (const hold of holds) hold.track?.(round.done);
+  round.entries.push({ needed: [...new Set(needed)], accountId, section, undo, quiet: quiet === true, keep: keep === true, awaitAnswer: awaitAnswer === true, holds });
   return round.done;
 }
 
@@ -805,10 +1002,24 @@ function settleHeldRound(entries, at, authority, alert) {
   // is not, and a kept record of work done is told by the notice instead.
   const said = refused.filter(({ entry }) => !entry.quiet && !entry.keep);
   if (!said.length) return;
-  const reasons = said.map(({ result }) => result.reason);
-  const message = reasons.includes("read_only") ? READ_ONLY_AFTER_CHECK_MESSAGE
-    : reasons.includes("grace_expired") ? GRACE_EXPIRED_MESSAGE : writeRefusalMessage(authority);
-  try { alert(message); } catch { /* no window */ }
+  const messageFor = list => {
+    const reasons = list.map(({ result }) => result.reason);
+    return reasons.includes("read_only") ? READ_ONLY_AFTER_CHECK_MESSAGE
+      : reasons.includes("grace_expired") ? GRACE_EXPIRED_MESSAGE : writeRefusalMessage(authority);
+  };
+  // One saved while a share sheet's hand-off held refusals: still open, its
+  // alert waits there (never over the sheet); dropped, the send did not
+  // happen and it is not said; shown, he is back in front and it is said now.
+  const now = () => Date.now();
+  const loose = [];
+  for (const one of said) {
+    const holds = one.entry.holds || [];
+    if (!holds.length || holds.some(hold => hold.state === "shown")) { loose.push(one); continue; }
+    const open = holds.filter(hold => hold.state === "open");
+    for (const hold of open) hold.keep({ message: messageFor([one]), alert, now, always: true, accountId: one.entry.accountId });
+  }
+  if (!loose.length) return;
+  try { alert(messageFor(loose)); } catch { /* no window */ }
 }
 
 // A backup restore or direct collection replacement is checked as one operation.

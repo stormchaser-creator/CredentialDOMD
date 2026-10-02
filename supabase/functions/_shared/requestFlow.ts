@@ -37,7 +37,9 @@
  */
 
 import { oneTapReady } from "./requestPacket.ts";
+import { homeScreenHint } from "./homeScreenHint.ts";
 import { BUILT_IN_SECTIONS } from "./app/utils/sectionFields.js";
+import { withDegree } from "./app/utils/outgoingText.js";
 
 export interface ProposalItem {
   ask: string;
@@ -457,7 +459,7 @@ export function ackText(input: AckTextInput): string {
   const when = longDate(input.receivedAtIso);
   const received = when ? `was received on ${when}` : "was received";
   const signature = input.physicianName && String(input.physicianName).trim()
-    ? `${physician}${degree ? `, ${degree}` : ""}`
+    ? withDegree(physician, degree)
     : "CredentialDOMD";
   return `Hello ${firstName(input.requesterName)},\n\n`
     + `This confirms that ${what} to ${physician} ${received}. `
@@ -547,7 +549,7 @@ export function physicianSummaryText(input: SummaryInput): string {
     const mentions = (Array.isArray(input.unclear.mentions) ? input.unclear.mentions : [])
       .map((m) => String(m ?? "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 3);
     if (mentions.length) lines.push("", "It mentions:", ...mentions.map((m) => `- "${m}"`));
-    lines.push("", `${input.appUrl}#requests (opens your requests)`);
+    lines.push("", `${input.appUrl}#requests (opens your requests)`, homeScreenHint("More > Requests"));
     if (!input.requesterFound) lines.push("", NOT_FOUND_NOTE);
     return lines.join("\n");
   }
@@ -584,7 +586,7 @@ export function physicianSummaryText(input: SummaryInput): string {
       // Neither of these is in the reply to the requester (requestPacket.ts
       // coverNoteFor): each is a question for the physician, asked here and
       // on the request in the app.
-      else if (it.kind === "unknown") lines.push(`- ${ask}: not recognised. What did they mean? Nothing about it is in the reply.`);
+      else if (it.kind === "unknown") lines.push(`- ${ask}: not recognized. What did they mean? Nothing about it is in the reply.`);
       else lines.push(`- ${ask}: not on file. The reply says nothing about it unless you add it.`);
     }
     const n = Array.isArray(p.docIds) ? p.docIds.length : 0;
@@ -615,7 +617,7 @@ export function physicianSummaryText(input: SummaryInput): string {
 
   const review = String(input.review ?? "").replace(/\s+/g, " ").trim();
   if (review && p && Array.isArray(p.items) && p.items.length) lines.push(`To check: ${review}`);
-  lines.push(`${input.appUrl}#requests (opens your requests)`);
+  lines.push(`${input.appUrl}#requests (opens your requests)`, homeScreenHint("More > Requests"));
   if (!input.requesterFound && !saidNotFound) lines.push("", NOT_FOUND_NOTE);
   return lines.join("\n");
 }

@@ -1,4 +1,10 @@
 import { formatDate } from "./helpers.js";
+import { invoiceFileName } from "./invoiceEmail.js";
+import { oneDegree } from "./outgoingText.js";
+
+// The one file name every invoice file carries ("Invoice INV-1 from Al Li,
+// DO.pdf"): Gmail on the iPhone takes it as the subject.
+export { invoiceFileName };
 
 /**
  * Everything an invoice SAYS, in one pure module: the subject line, the
@@ -8,13 +14,19 @@ import { formatDate } from "./helpers.js";
  * site reads the same numbers the same way.
  *
  * Channel facts this module is shaped by (verified on Eric's iPhone):
- *  - iOS Mail HTML-renders text shared with a file and drops every line
- *    break, CRLF included, so the blurb has to read as one paragraph. Only
- *    "\n" and CRLF were ever tried; U+2028, U+2029 and <br> were not. The
- *    in-app probe (src/utils/shareProbe.js, Help & FAQ for admins) settles
- *    that; the blurb separator does not change until it has been run.
- *  - iOS Mail can promote the first line of shared text to the subject, so
- *    the blurb leads with a short subject-worthy line.
+ *  - iOS Mail and the Gmail app HTML-render text shared with a file into one
+ *    <div> and drop every line break, CRLF included, so the blurb has to
+ *    read as a short email both as one paragraph and with its breaks kept.
+ *    It is kept short for that reason (four sentences, signed with the name
+ *    alone); the paragraphs themselves only arrive through the server-sent
+ *    email (invoiceEmail.js, Send by email on the Invoices tab).
+ *    U+2028 draws a line break in WebKit but a space in Chromium (Gmail on
+ *    the web, Outlook on the web), and a text/plain part carries it raw, so
+ *    the blurb keeps plain "\n" (BLURB_BREAK) until the in-app probe
+ *    (src/utils/shareProbe.js, Help & FAQ for admins) has been run.
+ *  - Gmail on the iPhone takes the subject from the first file's name and
+ *    ignores the share title, so every invoice file is named like a subject
+ *    (invoiceFileName).
  *  - A mailto: body keeps its breaks only as CRLF (RFC 6068). mailtoHref does
  *    that conversion; builders here emit plain "\n" so the clipboard copy
  *    pastes cleanly everywhere.
@@ -44,18 +56,25 @@ export function normalizeInvoiceText(text) {
   return String(text || "").replace(/[─━┄┅┈┉═]{2,}/g, TEXT_RULE).replace(/\r\n?/g, "\n");
 }
 
-/** Where the money stands, read the same way by every document and cover. */
+/**
+ * Where the money stands, read the same way by every document and cover.
+ * Paid in full means the payments reached the total: a balance of 0 that
+ * came from anything else (an invoice written off after a partial payment)
+ * still owes total - paid on paper, and never prints PAID IN FULL.
+ */
 export function invoicePayment(inv = {}) {
   const total = parseFloat(inv.total) || 0;
   const paid = Math.max(0, parseFloat(inv.paid) || 0);
-  const balance = inv.balance != null && inv.balance !== ""
+  const hasPayment = paid > 0.005;
+  const settled = hasPayment && paid >= total - 0.005;
+  const stated = inv.balance != null && inv.balance !== ""
     ? Math.max(0, parseFloat(inv.balance) || 0)
     : Math.max(0, total - paid);
-  const hasPayment = paid > 0.005;
+  const balance = settled ? 0 : stated > 0.005 ? stated : Math.max(0, total - paid);
   return {
     total, paid, balance, hasPayment,
-    partial: hasPayment && balance > 0.005,
-    settled: hasPayment && balance <= 0.005,
+    partial: hasPayment && !settled,
+    settled,
   };
 }
 
@@ -67,9 +86,35 @@ export function invoicePeriod(inv = {}) {
   return b ? `${a} through ${b}` : a;
 }
 
-/** One subject line for every channel: share title, mailto subject, blurb lead. */
+/**
+ * The dates as a document prints them: "Aug 1, 2026 – Aug 31, 2026", one
+ * date for a one-day invoice, "" when unknown. The PDF header, Word, Excel
+ * and the text invoice all print this; prose (the covers) says "through".
+ */
+export function invoicePeriodRange(inv = {}) {
+  if (!inv.periodStart) return "";
+  const a = formatDate(inv.periodStart);
+  return inv.periodEnd && inv.periodEnd !== inv.periodStart ? `${a} \u{2013} ${formatDate(inv.periodEnd)}` : a;
+}
+
+/** What a document calls its dates: an expense invoice bills no services. */
+export const invoicePeriodLabel = (inv = {}) => (inv.kind === "expenses" ? "Expense dates" : "Service period");
+
+/**
+ * The physician's name, or "" for the "Physician" placeholder a profile with
+ * no name gets. A degree printed twice by a send site ("Jordan Rivera, DO,
+ * DO") reads once: the subject, file name, covers and documents all go
+ * through here.
+ */
+export const senderName = (inv = {}) => {
+  const n = oneDegree(inv.physician);
+  return n === "Physician" ? "" : n;
+};
+
+/** One subject line for every channel: share title, mailto subject. */
 export function invoiceSubject(inv = {}) {
-  const who = inv.physician ? ` from ${inv.physician}` : "";
+  const name = senderName(inv);
+  const who = name ? ` from ${name}` : "";
   const to = inv.facility ? ` for ${inv.facility}` : "";
   return `Invoice ${inv.number || ""}${who}${to}`.replace(/\s+/g, " ").trim();
 }
@@ -96,51 +141,71 @@ const receiptsLine = (inv) => {
   return n === 1 ? "The receipt is attached." : `${n} receipts are attached.`;
 };
 
-const signature = (inv) => [inv.physician || "", inv.npi ? `NPI ${inv.npi}` : "", inv.email || ""].filter(Boolean);
+// The signature: name with degree, NPI, email, phone (whatever the profile
+// has), in the PDF's FROM order. With no name the email signs, ahead of the
+// NPI, so the NPI never stands where the sender's name belongs.
+const signature = (inv) => {
+  const name = senderName(inv);
+  const email = String(inv.email || "").trim();
+  return [name || email, inv.npi ? `NPI ${inv.npi}` : "", name ? email : "", inv.phone || ""]
+    .map((s) => String(s).trim()).filter(Boolean);
+};
+
+// Between the blurb's paragraphs. Plain "\n" until the share probe has been
+// run on the owner's iPhone (see the header): every paragraph is written to
+// read as a sentence when a mail app collapses the breaks into spaces.
+export const BLURB_BREAK = "\n";
+
+const blurbMoney = (pay) => (pay.partial
+  ? `Balance due: ${money(pay.balance)} (invoice total ${money(pay.total)}, paid to date ${money(pay.paid)}).`
+  : pay.settled
+    ? `Invoice total: ${money(pay.total)}, paid in full.`
+    : `Total due: ${money(pay.total)}.`);
 
 /**
- * Share-sheet text. First line is subject-worthy (iOS Mail may promote it),
- * then one flowing paragraph that still reads correctly with every line
- * break stripped. `attached` is false when the invoice text follows the
- * blurb in the same body instead of riding as a file.
- *
- * Every navigator.share() caller passes this alongside its own `title`
- * (which the OS uses as the Subject), so the lead sentence already names
- * the invoice number, physician, and facility once. The paragraph below it
- * doesn't repeat them -- restating all three again read as a wall of text.
+ * Share-sheet text: the short email a mail app puts above the attached
+ * invoice. It has to read as a professional email twice over: with its line
+ * breaks (greeting, the one sentence that says what is attached, the money
+ * on its own line, an offer to answer questions, the sign-off and a one-line
+ * signature) and with every break collapsed into a space, as the Gmail app
+ * and iOS Mail render it (then it reads "Hello, attached is invoice ... Total
+ * due: $1,500.00. Please reach out with any questions. Thank you, Al Li,
+ * DO"). It does not restate the subject: the file name and the share title
+ * carry that. It signs with the name alone: the NPI, email and phone ran
+ * inline after it in the collapsed form ("Thank you, Al Li, DO · NPI ... ·
+ * email · phone", wrapping mid-address on a phone), and the attached
+ * invoice already prints them under FROM and on its questions line. The
+ * clipboard letter and the server email keep the full signature. `attached`
+ * is false when the invoice text follows the blurb in the same body instead
+ * of riding as a file.
  */
 export function invoiceCoverBlurb(inv = {}, { attached = true } = {}) {
   const pay = invoicePayment(inv);
-  const moneyText = pay.partial
-    ? `Invoice total: ${money(pay.total)}. Paid to date: ${money(pay.paid)}. Balance due: ${money(pay.balance)}.`
-    : pay.settled
-      ? `Invoice total: ${money(pay.total)}, paid in full.`
-      : `Total due: ${money(pay.total)}.`;
-  const sig = signature(inv);
-  const contact = sig.slice(1).join(", ");
-  const thanks = `Thank you, ${sig[0] || "the physician"}${contact ? ` (${contact})` : ""}.`;
-  const period = invoicePeriod(inv);
-  const which = attached ? "The attached invoice" : "The invoice below";
-  const coverageSentence = isExpenses(inv)
-    ? `${which} covers ${whereLine(inv)}.`
-    : period
-      ? `${which} covers ${period}.`
-      : `${attached ? "The attached invoice is ready for review." : "The invoice is below."}`;
   const receipts = receiptsLine(inv);
-  // Trailing space after the lead: if Mail strips the newlines the lead and
-  // the paragraph still read as two sentences.
-  return `${invoiceSubject(inv)}. \n\n`
-    + `${coverageSentence} ${moneyText} `
-    + `${itemizes(inv, "It")} ${receipts ? `${receipts} ` : ""}`
-    + `Please reach out with any questions. ${thanks}`;
+  return [
+    blurbLead(inv, attached),
+    [blurbMoney(pay), receipts].filter(Boolean).join(" "),
+    ...blurbClose(inv, { short: true }),
+  ].join(BLURB_BREAK + BLURB_BREAK);
 }
 
+const blurbLead = (inv, attached) => `Hello, ${attached ? "attached" : "below"} is invoice ${inv.number || ""} for ${whereLine(inv)}.`.replace(/\s+/g, " ");
+// The sign-off. `short` (a file rides along and carries the contact lines)
+// signs with the name, or the email when the profile has no name; otherwise
+// the whole signature, the only place the recipient finds the NPI, email
+// and phone.
+const blurbClose = (inv, { short = false } = {}) => {
+  const sig = short ? [senderName(inv) || String(inv.email || "").trim()].filter(Boolean) : signature(inv);
+  return ["Please reach out with any questions.", sig.length ? `Thank you,${BLURB_BREAK}${sig.join(" \u{b7} ")}` : "Thank you."];
+};
+
 /**
- * The long-form cover letter: pasted from the clipboard, or used as a
- * mailto: body (mailtoHref converts the "\n" breaks to CRLF). Money lands on
- * its own lines so a partial payment reads at a glance. `attached` is false
- * when the invoice text is pasted under the letter instead of riding as a
- * file (the long legacy-text resend with no file share available).
+ * The long-form cover letter: pasted from the clipboard, used as a mailto:
+ * body (mailtoHref converts the "\n" breaks to CRLF), and the letter the
+ * server-sent email is built from (text and HTML parts). Money lands on its
+ * own lines, each a sentence, so a partial payment reads at a glance and a
+ * collapsed body still reads as sentences. `attached` is false when the
+ * invoice text is pasted under the letter instead of riding as a file.
  */
 export function invoiceCoverEmail(inv = {}, { attached = true } = {}) {
   const pay = invoicePayment(inv);
@@ -150,27 +215,31 @@ export function invoiceCoverEmail(inv = {}, { attached = true } = {}) {
       ? [`Invoice total: ${money(pay.total)}`, "Paid in full. No balance is due."]
       : [`Total due: ${money(pay.total)}`];
   const receipts = receiptsLine(inv);
+  const sig = signature(inv);
   const paras = [
     "Hello,",
     `${attached ? "Attached" : "Below"} is invoice ${inv.number || ""} for ${whereLine(inv)}.`,
-    moneyLines.join("\n"),
+    moneyLines.map((l) => (/[.]$/.test(l) ? l : `${l}.`)).join("\n"),
     `${itemizes(inv, "The invoice")} ${receipts ? `${receipts} ` : ""}Please reach out with any questions.`,
-    ["Thank you,", ...signature(inv)].join("\n"),
+    sig.length ? ["Thank you,", ...sig].join("\n") : "Thank you.",
   ];
   return paras.join("\n\n");
 }
 
 /**
  * The share body when NO file can ride along (the installed app on a device
- * whose share sheet refuses files). Nothing is attached, so the recipient
- * gets the cover letter and the itemized invoice itself, multi-line, instead
- * of a one-paragraph blurb that promises an invoice "below" and a paste
- * instruction meant for the sender (ticket 821d2f76).
- * Callers only take this path when they hold the invoice text.
+ * whose share sheet refuses files), and the short mailto: body of a legacy
+ * text invoice. Nothing is attached, so the recipient gets the invoice in the
+ * message itself: a greeting that says it follows, the itemized invoice, an
+ * offer to answer questions and the sign-off last (never a one-paragraph
+ * blurb that promises an invoice "below" with nothing below, ticket 821d2f76).
+ * `text` is the itemized invoice; callers that hold the lines pass it as
+ * sentences, one line per day (invoiceSentenceText), so a mail app that
+ * collapses the breaks still shows readable sentences.
  */
 export function invoiceTextOnlyShare(inv = {}, text = "") {
   const invoice = normalizeInvoiceText(text).trim();
-  return [invoiceCoverEmail(inv, { attached: false }), invoice].filter(Boolean).join("\n\n");
+  return [blurbLead(inv, false), invoice, ...blurbClose(inv)].filter(Boolean).join("\n\n");
 }
 
 /**

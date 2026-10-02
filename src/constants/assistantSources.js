@@ -589,7 +589,7 @@ export const ASSISTANT_SOURCES = {
       "recordedReview": "2026-08 (single-source)",
       "sources": [
         {
-          "url": "https://medboard.nv.gov/Licensees/Renewals/"
+          "url": "https://medboard.nv.gov/"
         },
         {
           "url": "https://medboard.nv.gov/uploadedFiles/medboardnvgov/content/Forms/Licensure%20Fees.pdf"
@@ -949,13 +949,16 @@ export const ASSISTANT_SOURCES = {
       "recordedReview": "2026-08 (single-source)",
       "sources": [
         {
-          "url": "https://dsps.wi.gov/Pages/Professions/Physician/Default.aspx"
+          "url": "https://dsps.wi.gov/a-z-professions-list/physician-mddo/"
         },
         {
-          "url": "https://dsps.wi.gov/Credentialing/Renewal/RenewalDatesFees.pdf"
+          "url": "https://dsps.wi.gov/credentialing/credential-fees-and-renewal-dates/"
         },
         {
-          "url": "https://dsps.wi.gov/Documents/NewsMedia/20250808FeeAdjustmentNewsRelease.pdf"
+          "url": "https://web.archive.org/web/20260314164702/https://dsps.wi.gov/Pages/Professions/Physician/Default.aspx"
+        },
+        {
+          "url": "https://web.archive.org/web/20260508112735/https://dsps.wi.gov/Documents/NewsMedia/20250808FeeAdjustmentNewsRelease.pdf"
         },
         {
           "url": "https://docs.legis.wisconsin.gov/document/statutes/440.08(3)"

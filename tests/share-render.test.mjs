@@ -33,7 +33,7 @@ const bundled = await build({
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({
       contents: path === 'context' ? 'export const useApp = () => globalThis.__shareFixture;'
         : path === 'admin' ? 'export const useIsAdmin = () => !!globalThis.__shareAdmin; export const isAdminUser = () => !!globalThis.__shareAdmin;'
-          : 'export const supabase = null; export const downloadDocumentBlob = async () => null; export const allocateInvoiceNumberRpc = () => null;',
+          : 'export const supabase = null; export const downloadDocumentBlob = async () => null; export const allocateInvoiceNumberRpc = () => null; export const readInvoiceRecordState = () => null;',
       loader: 'js',
     }));
   } }],

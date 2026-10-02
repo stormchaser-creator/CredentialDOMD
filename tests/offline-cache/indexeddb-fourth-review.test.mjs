@@ -125,7 +125,7 @@ function app(U, { offlineMode = false } = {}) {
     preservePausedApplicationRecords: paused.preservePausedApplicationRecords, pausedApplicationLinks: paused.pausedApplicationLinks, reconcileDocumentLinks,
     applyHeldQueue: held.applyHeldQueue, localChangesSince: rebase.localChangesSince, rebaseLocalChanges: rebase.rebaseLocalChanges,
     accessAuthority: { suspendWrites() {} },
-    setData: v => { states.push(typeof v === 'function' ? v(states.at(-1)) : v); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {},
+    setData: v => { states.push(typeof v === 'function' ? v(states.at(-1)) : v); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },
   };
   vm.runInNewContext(loadCode, ctx);
@@ -365,9 +365,11 @@ test('a Protected Identity or Answer Bank change is refused while no store would
   assert.equal(h.api.guardedSetData(d => ({ ...d, identityVault: [] })), false, 'any other path in too');
   assert.deepEqual(h.state.current.answerBank, [answer], 'not held in memory either');
   assert.deepEqual(h.state.current.identityVault, [identity]);
-  assert.equal(h.alerts[0], paused.DEVICE_ONLY_UNSAVED_MESSAGE, 'the reason is said');
+  // The store would not open: a reload opens it again (2026-10-02), so that
+  // is what is said, not free space.
+  assert.equal(h.alerts[0], paused.DEVICE_ONLY_CLOSED_MESSAGE, 'the reason is said');
   assert.ok(!h.alerts.includes('membership'));
-  assert.doesNotMatch(paused.DEVICE_ONLY_UNSAVED_MESSAGE, /[—–]/, 'no dashes in member-facing copy');
+  assert.doesNotMatch(paused.DEVICE_ONLY_CLOSED_MESSAGE + paused.DEVICE_ONLY_UNSAVED_MESSAGE, /[—–]/, 'no dashes in member-facing copy');
   // Everything else still saves (the cloud keeps it).
   assert.equal(h.api.guardedSetData(d => ({ ...d, settings: { ...d.settings, name: 'Dr. Synthetic II' } })), true);
   await settle();

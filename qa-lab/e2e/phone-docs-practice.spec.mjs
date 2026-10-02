@@ -298,7 +298,7 @@ for (const width of [375, 390]) {
         await detail.getByRole('button', { name: 'Send by email' }).tap();
         const d = page.getByRole('dialog', { name: /Email invoice/ });
         await d.waitFor();
-        await d.getByText(`${invoice.number}.pdf`).first().waitFor({ timeout: 30000 }).catch(() => {});
+        await d.getByText(new RegExp(`Invoice ${invoice.number}\\b[^\\n]*\\.pdf`)).first().waitFor({ timeout: 30000 }).catch(() => {});
         const send = d.getByRole('button', { name: /^Send to / });
         await auditDialog(qa, page, 'Email invoice', d, { actions: [['Send to …', send]] });
         await send.tap();
@@ -306,7 +306,7 @@ for (const width of [375, 390]) {
         qa.check('one email to the billing office, captured by the mock Resend', !!mail, mail?.subject || 'none');
         if (mail) {
           const full = await emailBody(mail.id);
-          qa.check('the invoice PDF is attached', full.attachments.some((x) => x.filename === `${invoice.number}.pdf`), JSON.stringify(full.attachments.map((x) => x.filename)));
+          qa.check('the invoice PDF is attached', full.attachments.some((x) => x.filename.startsWith(`Invoice ${invoice.number}`) && x.filename.endsWith('.pdf')), JSON.stringify(full.attachments.map((x) => x.filename)));
         }
         await page.keyboard.press('Escape').catch(() => {});
       }, { soft: true });

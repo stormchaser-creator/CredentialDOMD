@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -648,7 +648,7 @@ a:hover { color: var(--emerald-light); }
   <p>From the board's own pages, August 2026. These are the primary sources we read:</p>
   <ul style="list-style:none;padding:0;">
       <li style="margin-bottom:6px;"><a href="https://www.tmb.texas.gov/apply-renew/physician/physician-renewal" target="_blank" rel="noopener">Primary renewal page: biennial cycle, four fixed expiration dates, even/odd license-year rule, full fee breakdown ($491.48 as of 9/1/2025), initial registration fees, 30-day grace, $75/$150 penalties, one-year auto-cancellation, portal URL, 2-business-day processing, 15-day save window, 60-90 day online window, $50 paper surcharge, postcard reminders</a></li>
-      <li style="margin-bottom:6px;"><a href="https://renewals.tmb.state.tx.us/ph/login.aspx" target="_blank" rel="noopener">Online physician renewal portal login; verified live (HTTP 200)</a></li>
+      <li style="margin-bottom:6px;"><a href="https://renewals.tmb.state.tx.us/ph/login.aspx" target="_blank" rel="noopener">Online physician renewal portal login</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.tmb.texas.gov/apply-renew/physician/license-cancellation-or-retirement-options-for-physicians" target="_blank" rel="noopener">Cancelled-license consequences and re-licensure path; retired status rules</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.tmb.texas.gov/resources/for-applicants-and-licensees/continuing-education-tracking" target="_blank" rel="noopener">CE Broker mandatory tracking for all renewals on or after 9/1/2026; free basic account; CE must be reported in CE Broker to renew</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.tmb.texas.gov/apply-renew/physician/continuing-education-requirements-for-physicians" target="_blank" rel="noopener">CME requirement: Tex. Admin. Code tit. 22, § 161.35</a></li>
@@ -843,5 +843,5 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-</body>
+<!--/email_off--></body>
 </html>

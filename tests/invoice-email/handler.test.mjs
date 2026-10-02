@@ -4,7 +4,7 @@ import { fakeWorld, fakePdfFor, expenseInvoice, workInvoice, contract, settings,
 import { invoiceDocumentArgs } from "../../src/utils/invoiceArgs.js";
 import { invoiceEmailDocuments, invoiceEmailDraft, invoiceEmailSendBody, fileToBase64 } from "../../src/utils/invoiceEmailSend.js";
 import { invoiceCoverEmail, invoiceSubject } from "../../src/utils/invoiceCover.js";
-import { invoiceEmailFooter } from "../../src/utils/invoiceEmail.js";
+import { invoiceEmailFooter, invoiceEmailHtml } from "../../src/utils/invoiceEmail.js";
 import { reservationVerdict, sendWindowStart, fromBase64, toBase64 } from "../../supabase/functions/_shared/invoiceEmailHandler.mjs";
 
 // send-invoice-email end to end, minus the network: the app's own draft code
@@ -45,11 +45,19 @@ test("the letter keeps its line breaks end to end: preview, request, handler, Re
   const paragraphs = mail.text.split("\n\n");
   assert.equal(paragraphs[0], "Hello,");
   assert.match(paragraphs[1], /^Attached is invoice INV-20260922-04 for physician services at Synthetic Hospital \(via Synthetic Locums\), covering Aug 24, 2026 through Aug 30, 2026\.$/);
-  assert.equal(paragraphs[2], "Total due: $12,500.50");
+  assert.equal(paragraphs[2], "Total due: $12,500.50.");
   assert.equal(paragraphs.at(-2), "Thank you,\nSynthetic Physician, DO\nNPI 9999999999\ndoc@example.test", "the signature keeps its own lines");
   assert.equal(paragraphs.at(-1), invoiceEmailFooter("Synthetic Physician, DO"));
   assert.doesNotMatch(mail.text, /\r|\u{2014}/u, "plain newlines, no em dash");
-  assert.ok(!mail.html, "text/plain only: nothing for a client to re-flow");
+  // Multipart: the HTML part is built from the same letter, and it is the
+  // HTML the preview showed.
+  assert.equal(mail.html, draft.email.html, "the HTML Resend got is the HTML the preview showed");
+  assert.equal(mail.html, invoiceEmailHtml(body.letter, "Synthetic Physician, DO"));
+  assert.match(mail.html, /<p style="[^"]*">Hello,<\/p>/, "a greeting paragraph");
+  assert.match(mail.html, /<table role="presentation"[^>]*>.*Total due.*\$12,500\.50.*<\/table>/, "the money set apart in a two-column block");
+  assert.match(mail.html, /<strong>Synthetic Physician, DO<\/strong><br><span[^>]*>NPI 9999999999<\/span><br><span[^>]*>doc@example\.test<\/span>/, "a signature block");
+  assert.ok(mail.html.includes(invoiceEmailFooter("Synthetic Physician, DO")), "the footer");
+  assert.doesNotMatch(mail.html.replace(/<[^>]+>/g, "\u{1}"), /\n/, "no raw line break inside any text node");
 });
 
 test("the preview is what is sent: from, to, cc, reply_to, subject and every attachment name", async () => {
@@ -67,7 +75,8 @@ test("the preview is what is sent: from, to, cc, reply_to, subject and every att
   assert.equal(mail.subject, e.subject);
   assert.equal(mail.subject, invoiceSubject(argsOf(expenseInvoice())));
   assert.deepEqual(mail.attachments.map((a) => a.filename), e.attachments);
-  assert.deepEqual(e.attachments, ["EXP-0007.pdf", "airfare.pdf", "hotel.jpg"]);
+  // Named like a subject: Gmail on the iPhone takes the first file's name.
+  assert.deepEqual(e.attachments, ["Invoice EXP-0007 from Synthetic Physician, DO.pdf", "airfare.pdf", "hotel.jpg"]);
   assert.deepEqual(res.body.sent, { ...e }, "the response echoes the composed message, field for field");
   // The invoice PDF that rode is byte for byte the one the app built for the preview.
   assert.equal(mail.attachments[0].content, body.pdf.base64);
@@ -134,7 +143,7 @@ test("a receipt that cannot be attached is named before Send, and neither the le
   assert.equal(pdf.lines[1].detail, "receipt on file", "the hotel receipt does not, so its line does not claim it");
   const res = await env.call(body);
   assert.equal(res.status, 200);
-  assert.deepEqual(env.world.mails[0].attachments.map((a) => a.filename), ["EXP-0007.pdf", "airfare.pdf"]);
+  assert.deepEqual(env.world.mails[0].attachments.map((a) => a.filename), ["Invoice EXP-0007 from Synthetic Physician, DO.pdf", "airfare.pdf"]);
 
   // Lines saved before they carried expenseId cannot say which receipt is
   // theirs, so with any receipt missing none of them may say "attached".
@@ -456,7 +465,7 @@ test("no amount or invoice term changes: the email is built from the resend's ow
   assert.equal(args.terms, before.terms);
   // The letter is the cover letter the app already writes, word for word.
   assert.equal(draft.letter, invoiceCoverEmail({ ...args, receipts: 2 }, { attached: true }));
-  assert.match(draft.email.text, /Invoice total: \$700\.00\nPaid to date: \$100\.00\nBalance due: \$600\.00/);
+  assert.match(draft.email.text, /Invoice total: \$700\.00\.\nPaid to date: \$100\.00\.\nBalance due: \$600\.00\./);
   const pdf = JSON.parse(decodeText(body.pdf.base64).split("\n")[1]);
   assert.deepEqual([pdf.total, pdf.paid, pdf.balance, pdf.terms], [700, 100, 600, before.terms]);
   assert.deepEqual(pdf.lines.map((l) => [l.date, l.label, l.amount]), before.lines.map((l) => [l.date, l.label, l.amount]));

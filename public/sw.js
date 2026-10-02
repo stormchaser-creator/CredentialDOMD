@@ -32,11 +32,14 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean caches from previous builds
+// Activate: clean caches from previous builds. The invoice hand-off copy
+// (credentialdomd-handoff-*, src/utils/invoiceHandoffStore.js) is the app's
+// data, not a build's files: it stays.
+const KEEP_CACHE = /^credentialdomd-handoff-/;
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE_NAME && !KEEP_CACHE.test(k)).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });

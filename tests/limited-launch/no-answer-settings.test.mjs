@@ -75,7 +75,9 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
   const imports = {
     '@supabase/supabase-js': { createClient }, '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS }, '../utils/syncRules.js': syncRules,
     '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => ACCOUNT,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null },
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
+      // The queue's write (storageScope makes room first in the app).
+      setItemMakingRoom: (key, value) => values.set(key, value) },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': {}, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},

@@ -44,7 +44,9 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false, c
     '../utils/syncRules.js': syncRules,
     // No data deletion purges anything here, so the purge fence never moves.
     '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null },
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
+      // The queue's write (storageScope makes room first in the app).
+      setItemMakingRoom: (key, value) => values.set(key, value) },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { return { initializeProfile: () => f.initializeProfile() }; } },
     '../utils/profileIssueDiagnostics.js': { profileInitializationError },
     '../utils/continuityRecovery.js': { PRODUCTION_CLERK_ISSUER: 'https://clerk.credentialdomd.com',

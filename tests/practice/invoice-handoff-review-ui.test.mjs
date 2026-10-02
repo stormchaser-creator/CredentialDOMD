@@ -248,7 +248,7 @@ test('a share sheet that answers "cancelled" only after its preview or sheet was
   sheet.cancel(); // iOS answers AbortError late, though the invoice went
   await settle();
   assert.match(shown(m), new RegExp(`${number} went to the share sheet .* and was never recorded`), 'the banner stays');
-  btn(m, t => t === 'Record it', 'Record it');
+  btn(m, t => t === 'Yes, it was sent', 'Yes, it was sent');
   assert.equal(srv.rows.has(number), true, 'the server keeps the stamp');
   assert.deepEqual(stamps.map(s => s[1]), [true], 'no unstamp sent');
   assert.deepEqual(recorded(m), []);
@@ -312,7 +312,7 @@ test('Record it from a note known only from the server checks no day and asks fi
   assert.equal(btn(mac, t => /^Invoice 0 days/.test(t), 'build').props.disabled, true);
 });
 
-test('Record it after a day of the note was deleted checks none, and a different total is asked about before it records', async () => {
+test('Yes after a day of the note was deleted checks none, and a different total is asked about before it records', async () => {
   const dev = fresh(); nav(never); const srv = server();
   const m = openWork({ srv });
   build(m);
@@ -325,7 +325,9 @@ test('Record it after a day of the note was deleted checks none, and a different
   const edited = { ...C, coveragePeriods: [{ start: '2026-09-05', end: '2026-09-05' }, { start: '2026-09-07', end: '2026-09-07' }] };
   const again = await page(m, { srv, data: { locumContracts: [edited], workLog: ENTRIES().filter(x => x.id !== 'b'), invoices: [] },
     confirm: (q) => { answers.push(q); return !/went out for/.test(q); } });
-  tap(again, t => t === 'Record it', 'Record it');
+  // Its days changed: Yes cannot record it in one tap, so it opens the picker.
+  tap(again, t => t === 'Yes, it was sent', 'Yes, it was sent');
+  assert.deepEqual(recorded(again), []);
   assert.equal(pickedDays(again).selected.size, 0, 'not the two days left of three');
   assert.match(shown(again), new RegExp(`This device does not know which days ${number} billed, or they have changed since`));
   pickedDays(again).onChange(new Set(['2026-09-05', '2026-09-07']));
@@ -336,21 +338,31 @@ test('Record it after a day of the note was deleted checks none, and a different
   assert.deepEqual(recorded(again), [], 'declined: nothing recorded');
 });
 
-test('Record it from this device\'s own note still checks exactly its days, and records with no question when the total matches', async () => {
+test('Yes, it was sent on this device\'s own note records exactly its days in one tap, with no question when the total matches', async () => {
   const dev = fresh(); nav(never); const srv = server();
   const m = openWork({ srv });
   build(m);
   const number = numberOf(m);
   await sendPdf(m);
   dev.session.clear(); dev.local.clear();
-  const again = await page(m, { srv, data: { locumContracts: [C], workLog: ENTRIES(), invoices: [] } });
-  tap(again, t => t === 'Record it', 'Record it');
-  assert.deepEqual([...pickedDays(again).selected].sort(), ['2026-09-05', '2026-09-06', '2026-09-07']);
-  assert.match(shown(again), new RegExp(`The days ${number} billed are checked`));
-  tap(again, t => /^Invoice 3 days/.test(t), 'build');
-  tap(again, t => t === 'Record as sent', 'Record as sent');
-  assert.equal(recorded(again)[0]?.number, number);
-  assert.equal(again.dialogs.filter(d => /went out for/.test(d[1])).length, 0);
+  // An entry logged since on a day the invoice did not bill stays unbilled.
+  const again = await page(m, { srv, data: { locumContracts: [C], workLog: [...ENTRIES(), e('z', '2026-09-04', '15')], invoices: [] } });
+  const yes = btn(again, t => t === 'Yes, it was sent', 'Yes, it was sent');
+  yes.props.onClick();
+  yes.props.onClick(); // a second tap on the same render records nothing more
+  await settle(); // Yes first checks it is still unrecorded (invoiceRecordCheck.js)
+  const [inv] = recorded(again);
+  assert.equal(inv?.number, number);
+  assert.equal(inv.method, 'share-confirmed');
+  assert.equal(inv.totalAmount, 6000);
+  assert.deepEqual([...inv.entryIds].sort(), ['a', 'b', 'c']);
+  assert.equal(picked(again).props.open, false);
+  assert.equal(again.dialogs.length, 0);
+  await settle();
+  assert.equal(srv.rows.has(number), false, 'the stamp is cleared');
+  assert.equal(recorded(again).length, 1, 'one record for two taps');
+  assert.equal(again.data.workLog.find(x => x.id === 'z').invoiceId, null);
+  assert.doesNotMatch(shown(again), /is not recorded/);
 });
 
 // ── A recorded invoice clears its stamp ──
@@ -395,15 +407,17 @@ test('Mark as sent under the number on the copy that was sent clears the stamp o
 
 // ── Stamps the server could not take ──
 
-test('a cancel whose unstamp was lost to the signal is sent again on the next page, and no "never recorded" comes back', async () => {
+test('"No, it did not go out" whose unstamp was lost to the signal is sent again on the next page, and no "never recorded" comes back', async () => {
   fresh();
   nav(async () => { const err = new Error('Share canceled'); err.name = 'AbortError'; throw err; });
   const srv = server();
-  srv.offlineFor = false; // the signal went between the tap and the cancel
+  srv.offlineFor = false; // the signal went between the tap and the answer
   const m = openWork({ srv });
   build(m);
   const number = numberOf(m);
   await sendPdf(m);
+  tap(m, t => t === 'No, it did not go out', 'No');
+  await settle();
   assert.equal(srv.rows.has(number), true, 'the server still holds the stamp');
   find(m.render(), n => n.props?.title === 'Invoice preview', 'preview').props.onClose();
 

@@ -23,8 +23,11 @@ import { DELETION_SUPPORT_REFERENCE } from "../utils/accountDeletionResult.js";
 import { vaultCount } from "../utils/privateVault";
 import { preservePausedApplicationRecords, pausedApplicationLinks, isDeviceOnlySection, DEVICE_ONLY_SECTIONS, deviceOnlySectionsChanged, deviceOnlyBlockedMessage } from "../utils/pausedApplicationRecords.js";
 import { reconcileDocumentLinks } from "../utils/documentLinks.js";
+import { createDocumentBytes, storedFileOf } from "../utils/documentBytes.js";
+import { docMime } from "../utils/inboxDocs";
 import { prepareRecord } from "../utils/recordWrite.js";
 import { withStoragePath } from "../utils/docStoragePath.js";
+import { clearServerBilled, setRecordsRefresher } from "../utils/serverBilling.js";
 import { trackedStates } from "../utils/compliance.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { MS_PER_DAY, generateId } from "../utils/helpers";
@@ -41,7 +44,7 @@ import {
   saveSettings as sbSaveSettings,
   bulkSync,
   uploadDocumentFile,
-  downloadDocumentFile,
+  downloadDocumentBlob,
   recordTombstone,
   listTombstones,
   replayPendingOps,
@@ -58,14 +61,46 @@ import {
 
 const AppContext = createContext(null);
 
-// Storage paths this session found no file at (reconcileDocumentFiles): not
-// requested again until the app reloads.
+// Stored files this session found missing (utils/documentBytes.js
+// missingKeyOf: the row's path, size, type and last change): not requested
+// again until the app reloads or the row's file is given again.
 const missingDocumentFiles = new Set();
+
+// A stored file as the data URL the screens show, for utils/documentBytes.js:
+// { dataUrl } | { missing: true } (Storage has no such object) | { failed: true }.
+// Read as a stream (onProgress), so a download that stalls on a weak link can
+// be told from one that is slow. A streamed file has no type of its own, so
+// the data URL carries the document's (docMime): untyped, it read
+// "data:application/octet-stream", and a file picked again under another name
+// no longer matched the stored copy's bytes on screen, and was stored twice
+// (QA lab DOCS-001 on this change).
+async function documentDataUrl(storagePath, { signal, onProgress, doc } = {}) {
+  const got = await downloadDocumentBlob(storagePath, { signal, detail: true, onProgress });
+  if (!got?.blob) return got?.missing ? { missing: true } : { failed: true };
+  if (signal?.aborted) return { failed: true };
+  const type = docMime(doc) || got.blob.type || "application/octet-stream";
+  const blob = got.blob.type === type ? got.blob : new Blob([got.blob], { type });
+  const dataUrl = await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(typeof e.target?.result === "string" ? e.target.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(blob);
+  });
+  return dataUrl ? { dataUrl } : { failed: true };
+}
 
 // How often an open, visible tab asks whether the account's data was deleted
 // on another device, and the shortest gap between two focus-driven asks.
 const RECHECK_INTERVAL_MS = 3 * 60 * 1000;
 const RECHECK_MIN_GAP_MS = 30 * 1000;
+// The app back in front: the account read again at most this often, so a
+// change made on another device shows, and a save queued without a signal
+// goes up, without a relaunch (IOS-SYNC-1, IOS-OFFLINE-2).
+const RESUME_REFRESH_MIN_GAP_MS = 30 * 1000;
+// An identity check that got no answer at launch (a weak signal) is asked
+// again after these pauses, and whenever the app comes back to the front or
+// online. The last pause repeats.
+const IDENTITY_RETRY_DELAYS_MS = Object.freeze([5000, 15000, 30000, 60000, 120000]);
 
 /**
  * Normalize Clerk's user → the `{ id, email }` shape the rest of the app
@@ -116,6 +151,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // congratulate an established physician for finishing setup.
   const [profileOwner, setProfileOwner] = useState(null);
   const [profileIssue, setProfileIssue] = useState(null);
+  // { accountId, supportReference } while this account's identity check has
+  // had no answer at all (every try timed out or never connected): the app
+  // shows this device's copy, read-only, and asks again (identity retry).
+  const [identityWaiting, setIdentityWaiting] = useState(null);
   const [recordsLoadIssue, setRecordsLoadIssue] = useState(null);
   // A setting the server refused while saving the rest, e.g. { field: "email",
   // address } when the address is on another account. Shown by the field.
@@ -368,6 +407,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       setProfileOwner(null);
       setLoaded(false);
       setData(DEFAULT_DATA);
+      clearServerBilled(Infinity);
     }
 
     if (user) {
@@ -402,6 +442,97 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     });
     return () => { try { unsub?.(); } catch { /* already gone */ } };
   }, [clerkLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The identity check had no answer at launch (identityWaiting): asked
+  // again on a backoff timer and whenever the app comes back to the front,
+  // gets the focus, is shown from the back-forward cache or comes back
+  // online, one try at a time. Its answer replaces the read-only device copy
+  // with the account (or, for a real identity problem, the screen that says
+  // so).
+  useEffect(() => {
+    const ownerId = user?.id || null;
+    if (offlineMode || !ownerId || identityWaiting?.accountId !== ownerId || typeof window === "undefined") return undefined;
+    let stopped = false, busy = false, attempt = 0, timer = null;
+    const retry = async () => {
+      if (stopped || busy || getActiveUserId() !== ownerId) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      busy = true;
+      // fromWait: a records read that fails after the identity answered
+      // keeps the device copy on screen and this retry going.
+      try { await loadDataForUser(ownerId, { fromWait: true }); } catch { /* the next try */ }
+      finally { busy = false; }
+    };
+    const schedule = () => {
+      const wait = IDENTITY_RETRY_DELAYS_MS[Math.min(attempt, IDENTITY_RETRY_DELAYS_MS.length - 1)];
+      timer = setTimeout(async () => { await retry(); attempt += 1; if (!stopped) schedule(); }, wait);
+    };
+    const onVisible = () => { if (typeof document === "undefined" || document.visibilityState === "visible") void retry(); };
+    const onWake = () => { void retry(); };
+    document.addEventListener?.("visibilitychange", onVisible);
+    window.addEventListener("online", onWake);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("pageshow", onWake);
+    schedule();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener?.("visibilitychange", onVisible);
+      window.removeEventListener("online", onWake);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("pageshow", onWake);
+    };
+  }, [offlineMode, user?.id, identityWaiting?.accountId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The account read again, quietly, when the app comes back to the front,
+  // is shown from the back-forward cache, or comes back online. An installed
+  // iPhone app stays in memory for days: a license added or renamed at the
+  // desk meanwhile never showed until a relaunch (IOS-SYNC-1), and a save
+  // made in a dead zone stayed on the phone, queued, although the signal was
+  // back (IOS-OFFLINE-2): only a load sends the queue. At most every
+  // RESUME_REFRESH_MIN_GAP_MS, except back online with saves waiting. The
+  // records on screen stay while it reads, open forms included, and a read
+  // that fails changes nothing (quiet).
+  useEffect(() => {
+    if (offlineMode || !loaded || !user?.id || identityWaiting || typeof document === "undefined") return undefined;
+    const ownerId = user.id;
+    let busy = false, lastAt = 0, onlineWhileBusy = false, stopped = false;
+    const current = () => dataOwnerRef.current === ownerId && getActiveUserId() === ownerId && window.Clerk?.user?.id === ownerId;
+    const refresh = async ({ force = false } = {}) => {
+      if (busy || !current() || document.visibilityState === "hidden") return;
+      if (!force && Date.now() - lastAt < RESUME_REFRESH_MIN_GAP_MS) return;
+      busy = true; lastAt = Date.now();
+      try { await loadDataForUser(ownerId, { quiet: true }); } catch { /* quiet */ }
+      finally { busy = false; }
+      // Back online while that read was under way (its last try may have
+      // gone out before the signal came back, and failed quietly): one more,
+      // at once, while saves still wait (review of 9484782c).
+      if (onlineWhileBusy && !stopped) {
+        onlineWhileBusy = false;
+        if (pendingOpCount(ownerId) > 0) void refresh({ force: true });
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
+    const onPageShow = (event) => { if (event?.persisted) void refresh(); };
+    const onOnline = () => {
+      if (busy) { onlineWhileBusy = true; return; }
+      void refresh({ force: pendingOpCount(ownerId) > 0 });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
+    // A screen that learned from the server that its copy is out of date (an
+    // invoice recorded on another device, 2026-10-02) asks for this read at
+    // once: an installed iPhone app has no reload button.
+    // (Guarded: tests run this effect alone, without the module's imports.)
+    const offRefresher = typeof setRecordsRefresher === "function" ? setRecordsRefresher(() => { void refresh({ force: true }); }) : () => {};
+    return () => {
+      stopped = true;
+      offRefresher();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [offlineMode, loaded, user?.id, identityWaiting]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Delete All My Data run on another device while this one stays open: the
   // records on screen predate it, and so does anything this tab would write
@@ -463,8 +594,18 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     };
   }, [offlineMode, loaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function loadDataForUser(authUserId) {
+  // `quiet`: a read again while this account's records are on screen (the
+  // app back in front, back online). A failure leaves the screen as it is:
+  // the next load, or the next launch, tries again.
+  // `fromWait`: the identity retry (identityWaiting), with the device copy on
+  // screen read-only. A records read that fails once the identity answered
+  // keeps that copy on screen and the retry going, instead of an empty
+  // "records unavailable" screen that tries no more (review of 9484782c).
+  async function loadDataForUser(authUserId, { quiet = false, fromWait = false } = {}) {
     const generation = ++dataLoadGeneration.current;
+    // What the server said about billed rows before this read began is in
+    // what it reads (utils/serverBilling.js): dropped once it lands.
+    const readBegan = Date.now();
     const current = () => generation === dataLoadGeneration.current
       && getActiveUserId() === authUserId
       && (offlineMode || window.Clerk?.user?.id === authUserId);
@@ -494,6 +635,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         setProfileOwner(authUserId);
         loadStage = "records";
         setProfileIssue(null);
+        setIdentityWaiting(null);
         // The server deleted this account's data (Delete All My Data on
         // another device, or the deletion 7 days after a cancellation) and
         // took the tombstone ledger with it; the account is open and empty
@@ -687,10 +829,61 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
             // device holding a stale copy; acceptable while data loss is the
             // greater risk.
             let pushed = 0;
+            // This device's invoices another device recorded first: never in
+            // the cloud, under a number one of the cloud's invoices carries
+            // (the server keeps one invoice per number, and that one stands;
+            // review of release/goal2). What this device billed onto them
+            // follows the account's billing instead:
+            //  - a row pushed with such an invoice's id goes up with the cloud
+            //    row's invoice id (unbilled when the row is only here); a
+            //    stipend marker made only for that invoice is not pushed;
+            //  - a row pushed with an invoice id other than the one the
+            //    account has it on (an invoice that exists) keeps the
+            //    account's: the server refuses that move anyway (23P01);
+            //  - a row the cloud has on such an invoice (its edit landed
+            //    before the invoice was refused) moves to the account's
+            //    invoice that lists it, or is unbilled when none does.
+            const invoiceNumberOf = (x) => String(x?.number ?? "").trim().toLowerCase();
+            const cloudInvoiceIds = new Set((merged.invoices || []).map(x => x?.id).filter(Boolean));
+            const cloudInvoiceNumbers = new Set((merged.invoices || []).map(invoiceNumberOf).filter(Boolean));
+            const droppedInvoices = new Set((local.invoices || [])
+              .filter(x => x?.id && !cloudInvoiceIds.has(x.id) && cloudInvoiceNumbers.has(invoiceNumberOf(x))).map(x => x.id));
+            const BILLED_KEYS = ["dutyDays", "workLog", "travelExpenses"];
+            const stipendMarker = (key, x) => key === "workLog" && x?.type === "CallDay" && !x.startTime && !(Number(x.durationMin) > 0);
+            const billedAsAccount = (key, x, cloud) => {
+              if (!BILLED_KEYS.includes(key) || !x?.invoiceId) return x;
+              if (!cloud) return !droppedInvoices.has(x.invoiceId) ? x : stipendMarker(key, x) ? null : { ...x, invoiceId: null };
+              const movedOff = cloud.invoiceId && cloud.invoiceId !== x.invoiceId && cloudInvoiceIds.has(cloud.invoiceId);
+              return droppedInvoices.has(x.invoiceId) || movedOff ? { ...x, invoiceId: cloud.invoiceId ?? null } : x;
+            };
+            if (droppedInvoices.size) {
+              for (const key of BILLED_KEYS) {
+                const repaired = (merged[key] || [])
+                  .filter(x => x?.invoiceId && droppedInvoices.has(x.invoiceId) && !stipendMarker(key, x))
+                  .map(x => {
+                    const listing = (merged.invoices || []).find(inv => Array.isArray(inv?.entryIds) && inv.entryIds.includes(x.id)
+                      && (key === "travelExpenses" ? inv.kind === "expenses" : inv.kind !== "expenses"));
+                    return { ...x, invoiceId: listing?.id ?? null };
+                  });
+                if (!repaired.length) continue;
+                const byId = new Map(repaired.map(x => [x.id, x]));
+                merged[key] = merged[key].map(x => byId.get(x?.id) || x);
+                bulkSync(profileId, key, repaired, authUserId).catch(() => {});
+                pushed += repaired.length;
+              }
+            }
             for (const key of COLLECTION_KEYS) {
               const localItems = local[key] || [];
               if (localItems.length === 0) continue;
               const cloudById = new Map((merged[key] || []).map(x => [x?.id, x]));
+              // An invoice this device holds that never reached the cloud,
+              // under a number the account's invoices already carry: recorded
+              // on another device (the server keeps one invoice per number,
+              // migration 20261002030000). The cloud's stands; this copy is
+              // dropped, never pushed again (2026-10-02).
+              const cloudNumbers = key === "invoices"
+                ? new Set((merged[key] || []).map(x => String(x?.number ?? "").trim().toLowerCase()).filter(Boolean))
+                : null;
               const toPush = [];
               // A document on this device only whose file never uploaded has
               // no storage path, and documents.storage_path is NOT NULL: no
@@ -701,9 +894,27 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
               for (const x of localItems) {
                 if (!x?.id || tombstones.has(x.id) || heldQueue.deleted.has(x.id) || sinceStart.touches(key, x.id)) continue;
                 const cloud = cloudById.get(x.id);
+                // An edit queued as what it changed, already laid over the
+                // row read back (applyHeldQueue): replay sends it as that.
+                // Pushed whole here, it put back every column the desk
+                // changed since (review of 9484782c). A file given again
+                // ("Upload it again") that has not reached Storage still goes
+                // up, under that row: skipped, its bytes were the only copy,
+                // and saveData dropped them under the old missing path
+                // (review of 43b72a8f).
+                if (heldQueue.edited?.has(`${key}:${x.id}`)) {
+                  if (cloud && key === "documents" && !x.storagePath && x.data && x.pendingUpload) {
+                    keepLocal.push({ ...cloud, data: x.data, type: x.type, size: x.size, storagePath: undefined, fileMissing: undefined, pendingUpload: true });
+                  }
+                  continue;
+                }
                 if (!cloud) { // never reached the cloud
+                  if (cloudNumbers?.has(String(x.number ?? "").trim().toLowerCase())) continue;
                   if (key === "documents" && !x.storagePath) keepLocal.push(x);
-                  else toPush.push(x);
+                  else {
+                    const row = billedAsAccount(key, x, null);
+                    if (row) toPush.push(row);
+                  }
                   continue;
                 }
                 // A local edit whose cloud write failed is newer than the cloud
@@ -728,7 +939,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
                 }
                 // A document edit keeps the cloud's file location if this copy
                 // never learned it.
-                if (localT && localT > cloudT) toPush.push(key === "documents" && !x.storagePath ? { ...x, storagePath: cloud.storagePath } : x);
+                if (localT && localT > cloudT) toPush.push(key === "documents" && !x.storagePath ? { ...x, storagePath: cloud.storagePath } : billedAsAccount(key, x, cloud));
               }
               if (toPush.length > 0 || keepLocal.length > 0) {
                 // Replace-in-place for rows already present, append the missing.
@@ -793,6 +1004,12 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
               );
             }
           }
+          // The files already on screen, for a load again of the account on
+          // view (the app back in front, the membership answer): the device
+          // copy never holds an uploaded file's bytes (saveData drops them
+          // once it has a storagePath), so without this every return to the
+          // front downloaded every stored file again (link audit, 2026-10-01).
+          merged.documents = keepScreenFileBytes(authUserId, begun, loadedUnder, merged.documents);
 
           dataOwnerRef.current = authUserId;
           loadedDeletionRef.current = loadedUnder;
@@ -810,6 +1027,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           setData(merged);
           setLoadedFrom("cloud");
           setLoaded(true);
+          // (Guarded: tests run this function alone, without the module's imports.)
+          if (typeof clearServerBilled === "function") clearServerBilled(readBegan);
 
           // Cache on-device under this account's key
           cachedRecordsRef.current = merged;
@@ -817,14 +1036,42 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
 
           // Background: reconcile document FILES with cloud storage.
           //  - file on this device but not in the cloud → upload it
-          //  - metadata synced from another device without bytes → download
           // A file added while this load ran is uploaded by its own save.
+          // A file in the cloud is NOT downloaded here any more: every file
+          // of the account held as a data URL took 270 to 700 MB on the
+          // owner's iPhone, and iOS discarded the page in Gmail mid-share
+          // (2026-10-02). A screen that shows a file asks for its bytes
+          // (requestDocumentBytes) and lets them go when it closes.
           reconcileDocumentFiles(profileId, (merged.documents || []).filter(d => !(sinceStart.touches("documents", d?.id) && !d?.storagePath)), authUserId, current);
           return;
         }
       }
     } catch (err) {
       if (!current()) return;
+      if (quiet) return;
+      // No answer from the identity check at all, after its retries: a weak
+      // signal at launch, not an identity problem. The account's own device
+      // copy opens read-only (the screen says so), and the check is asked
+      // again on its own (identity retry below). It used to stop on "Your
+      // account identity could not be verified" with no records until a
+      // Reload tap, on the owner's iPhone (2026-10-01).
+      if (err.code === "continuity_initialization_failed" && err.transient === true && !err.recoveryConflict) {
+        const supportReference = profileSupportReference(err);
+        accessAuthority.suspendWrites();
+        setProfileIssue(null);
+        setIdentityWaiting({ accountId: authUserId, supportReference });
+        reportUnlessLeaving(`Account load used this device's copy, read-only (${supportReference}).`);
+        if (current()) loadLocalData(authUserId, current, begun);
+        return;
+      }
+      if (fromWait && err.code === "account_records_unavailable" && dataOwnerRef.current === authUserId) {
+        accessAuthority.suspendWrites();
+        setProfileOwner(null);
+        setIdentityWaiting({ accountId: authUserId, supportReference: ACCOUNT_RECORDS_SUPPORT_REFERENCE });
+        reportUnlessLeaving(`Account records load used this device's copy, read-only (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}).`);
+        return;
+      }
+      setIdentityWaiting(null);
       if (["continuity_initialization_failed", "continuity_retirement_unavailable", "account_records_unavailable"].includes(err.code)) {
         // An unresolved identity or incomplete cloud read must never appear
         // as a fresh empty account. Preserve every existing disk copy.
@@ -944,6 +1191,28 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return localChangesSince(begun.records, dataRef.current);
   }
 
+  // `docs` with the bytes of the files on screen put back, when the screen
+  // holds this account's records under the same purge as this load: matched
+  // by id and the same stored file (documentBytes storedFileOf: storagePath,
+  // size and MIME type, so a file given again on another device, written to
+  // the same path, downloads, and an emailed file just filed does not).
+  function keepScreenFileBytes(authUserId, begun, loadedUnder, docs) {
+    if (!Array.isArray(docs) || !docs.length || !begun || dataOwnerRef.current !== authUserId || loadedDeletionRef.current !== begun.under) return docs;
+    if (!sameDeletionStamp(begun.under.stamp ?? null, loadedUnder?.stamp ?? null)
+      || (begun.under.fence ?? null) !== (loadedUnder?.fence ?? null)) return docs;
+    const onScreen = new Map((dataRef.current?.documents || [])
+      .filter(d => d?.id && d.data && d.storagePath && !d.fileMissing).map(d => [d.id, d]));
+    if (!onScreen.size) return docs;
+    return docs.map(d => {
+      const shown = !d?.data && d?.storagePath ? onScreen.get(d.id) : null;
+      return shown && storedFileOf(shown) === storedFileOf(d) ? { ...d, data: shown.data } : d;
+    });
+  }
+
+  // Files on this device that are not in the cloud yet: each is uploaded
+  // with its whole row. A file in the cloud is never downloaded here: a
+  // screen that shows it asks for its bytes (requestDocumentBytes,
+  // utils/documentBytes.js) and lets them go when it closes.
   async function reconcileDocumentFiles(profileId, docs, authUserId, current) {
     for (const doc of docs) {
       if (!current()) return;
@@ -957,21 +1226,6 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           if (path) {
             const updated = { ...doc, storagePath: path, pendingUpload: undefined };
             setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? updated : x) }) : d);
-          }
-        } else if (!doc.data && doc.storagePath) {
-          // Storage has no file for this row: say so on the document (in state
-          // only, never an edit) and stop asking for it this session. It used
-          // to read "Fetching the file" for ever and be requested every load.
-          const markMissing = () => setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? { ...x, fileMissing: true } : x) }) : d);
-          if (missingDocumentFiles.has(doc.storagePath)) { markMissing(); continue; }
-          const got = await downloadDocumentFile(doc.storagePath, { detail: true });
-          if (!current()) return;
-          const dataUrl = typeof got === "string" ? got : got?.dataUrl;
-          if (dataUrl) {
-            setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? { ...x, data: dataUrl, fileMissing: undefined } : x) }) : d);
-          } else if (got?.missing) {
-            missingDocumentFiles.add(doc.storagePath);
-            markMissing();
           }
         }
       } catch { /* per-file best effort — retried on next load */ }
@@ -1563,8 +1817,85 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     if (onNavigate) onNavigate(tab, sub || null, record || null);
   }, [onNavigate]);
 
+  // ─── A stored file's bytes, only while a screen shows it ───
+  // The screens that show a file (Documents, a record's linked files, an
+  // agreement's, a request's attachments) ask for its bytes as they open and
+  // let them go as they close: the account's files are no longer all held in
+  // memory (2026-10-02, the owner's iPhone). utils/documentBytes.js keeps what
+  // is wanted and fetches it, for the account rather than for one load: tied
+  // to the load current when the screen asked, a download that landed after
+  // the membership answer's second load began was thrown away and never asked
+  // for again, and every stored file read "Fetching the file from your
+  // account." for good after a reload (QA lab DOCS-008/009). A file with no
+  // cloud copy yet (pendingUpload, no storagePath) keeps its bytes: they are
+  // the only copy.
+  const offlineModeRef = useRef(offlineMode);
+  offlineModeRef.current = offlineMode;
+  const documentBytesRef = useRef(null);
+  if (!documentBytesRef.current) {
+    documentBytesRef.current = createDocumentBytes({
+      documents: () => dataRef.current?.documents || [],
+      // The account whose records are on screen, while it is the signed-in one.
+      account: () => {
+        const owner = dataOwnerRef.current;
+        return owner && getActiveUserId() === owner ? owner : null;
+      },
+      fetch: documentDataUrl,
+      // Bytes on the documents on screen: not a change to any record (no
+      // cloud write), put in memory at once so a change made before the next
+      // render starts from them, and only while that account's records are
+      // the ones on screen.
+      update: (fn, account) => {
+        const mine = () => !!account && dataOwnerRef.current === account && getActiveUserId() === account;
+        if (!mine()) return;
+        const apply = (d) => {
+          if (!Array.isArray(d?.documents)) return d;
+          const documents = fn(d.documents);
+          return documents === d.documents ? d : { ...d, documents };
+        };
+        dataRef.current = apply(dataRef.current);
+        setData(d => (mine() ? apply(d) : d));
+      },
+      // An offline session has no cloud client to ask.
+      canFetch: () => !offlineModeRef.current,
+      missing: missingDocumentFiles,
+    });
+  }
+  const documentBytes = documentBytesRef.current;
+  const requestDocumentBytes = useCallback((ids) => documentBytes.want(ids), [documentBytes]);
+  const releaseDocumentBytes = useCallback((ids) => documentBytes.unwant(ids), [documentBytes]);
+  // Whatever replaced the documents on screen (a load, an edit, a purge):
+  // what a screen wants and has no bytes is asked for again.
+  useEffect(() => { documentBytes.pump(); }, [data.documents, documentBytes]);
+  // Another account, or none: nothing asked for the last one lands here.
+  useEffect(() => { documentBytes.reset(); }, [user?.id, documentBytes]);
+  // Back online or back in front: what failed is asked for at once (and,
+  // gone offline, the files waiting say so). Hidden (the owner's iPhone in
+  // Mail): the bytes no screen shows are let go.
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onOnline = () => documentBytes.retryNow();
+    const onOffline = () => documentBytes.retryNow();
+    const onVisible = () => {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState === "hidden") documentBytes.hidden();
+      else documentBytes.visible();
+    };
+    const onPageHide = () => documentBytes.hidden();
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener?.("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener?.("visibilitychange", onVisible);
+    };
+  }, [documentBytes]);
+
   const value = useMemo(() => ({
-    data, setData: guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, loaded, loadedFrom,
+    data, setData: guardedSetData, requestDocumentBytes, releaseDocumentBytes, documentBytes, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, loaded, loadedFrom,
     recordsLoadIssue: recordsLoadIssue?.accountId === user?.id ? recordsLoadIssue : null, theme, themeName, isDark, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItem: deleteItemFn, toggleFavorite,
     settingsRefusal: settingsRefusal?.accountId === user?.id ? settingsRefusal : null, clearSettingsRefusal,
@@ -1574,8 +1905,9 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
-    isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null, billingReturn }, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly,
-  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+    isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null, identityWaiting: identityWaiting?.accountId === user?.id, billingReturn },
+    identityWaiting: identityWaiting?.accountId === user?.id ? identityWaiting : null, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly,
+  }), [guardedSetData, requestDocumentBytes, releaseDocumentBytes, documentBytes, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, identityWaiting, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

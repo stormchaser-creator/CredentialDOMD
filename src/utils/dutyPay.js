@@ -99,8 +99,11 @@ export function dutyDayPay(contract, duty) {
   }
   for (const p of callPeriodsOf(duty)) {
     const role = p.role === "backup" ? "backup" : "primary";
+    // "On call (primary): <hospital>": the role before the hospital, so a
+    // hospital typed with its abbreviation never reads "(EVH) (backup)".
+    // It still starts "On call", which summarizeDuties and DutyLog key on.
     lines.push({
-      label: `On call: ${p.hospital} (${role})`,
+      label: `On call (${role}): ${p.hospital}`,
       amount: callRate(contract, p.hospital, role),
     });
   }

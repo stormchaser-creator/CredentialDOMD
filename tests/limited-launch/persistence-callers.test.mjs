@@ -70,7 +70,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     // The non-uuid id repair runs before replay; replay runs only with
     // something queued, after the deletion ledger is read.
     repairStoredIds: asyncDependency('repairStoredIds'),
-    pendingOpCount: () => f.pending, lsGetJSON: () => null, lsSetJSON() {}, BASE_KEYS: {}, generateId: () => 'synthetic-id',
+    pendingOpCount: () => f.pending, lsGetJSON: (...args) => f.handlers.lsGetJSON?.(...args) ?? null, lsSetJSON() {}, BASE_KEYS: {}, generateId: () => 'synthetic-id',
     loadFromSupabase: asyncDependency('loadFromSupabase', () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, documents: [], licenses: [] })),
     loadData: asyncDependency('loadData', () => ({ _userId: 'profileA', ...stateFor(ownerA) })),
     saveData: asyncDependency('saveData'),
@@ -91,6 +91,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     reconcileDocumentLinks, applyHeldQueue, localChangesSince, rebaseLocalChanges, localCopyCurrent: () => true,
     setData: update => { calls.push({ name: 'setData', actor }); if (deferReact) queuedUpdates.push(update); else applyUpdate(update); },
     setProfileIssue: value => { calls.push({ name: 'setProfileIssue', actor, value }); },
+    setIdentityWaiting() {},
     setRecordsLoadIssue: value => { calls.push({ name: 'setRecordsLoadIssue', actor, value }); },
     setProfileOwner: value => { calls.push({ name: 'setProfileOwner', actor, value }); },
     setLoaded: value => { calls.push({ name: 'setLoaded', actor, value }); },
@@ -160,13 +161,14 @@ test('document upload finishing after switch cannot update metadata/state or upl
   assertNoLateWrites(f);
 });
 
-test('document download finishing after switch cannot attach old bytes to the new account', async () => {
-  const doc = { id: file.id, storagePath: `${ownerA}/${file.id}` }, f = fixture({ documents: [doc] }), pending = deferred();
-  f.handlers.downloadDocumentFile = () => pending.promise;
-  const reconcile = f.api.reconcileDocumentFiles('profileA', [doc], ownerA, f.current());
-  await tick(); f.switchAccount(); pending.resolve(file.data); await reconcile;
-  assert.equal(f.named('downloadDocumentFile').length, 1);
-  assertNoLateWrites(f);
+// A stored file is never downloaded by the reconciler: a screen that shows it
+// asks for its bytes (utils/documentBytes.js, whose tests cover a download
+// that lands after an account switch).
+test('the reconciler downloads no stored file, and writes nothing for one', async () => {
+  const doc = { id: file.id, storagePath: `${ownerA}/${file.id}` }, f = fixture({ documents: [doc] });
+  await f.api.reconcileDocumentFiles('profileA', [doc], ownerA, f.current());
+  assert.equal(f.named('downloadDocumentFile').length, 0);
+  assert.equal(f.named('setData').length, 0);
   assert.equal(Object.hasOwn(f.state.documents[0], 'data'), false);
 });
 
@@ -231,15 +233,15 @@ test('same-owner offline load reads only that account cache and restores its pro
   assert.equal(f.warnings.length, 0);
 });
 
-test('same-owner reconciliation uploads local bytes and downloads missing bytes', async () => {
+test('same-owner reconciliation uploads local bytes and downloads no stored file', async () => {
   const docs = [file, { id: 'doc-two', storagePath: `${ownerA}/doc-two` }], f = fixture({ documents: docs });
   await f.api.reconcileDocumentFiles('profileA', docs, ownerA, f.current());
   assert.equal(f.named('uploadDocumentFile').length, 1);
   assert.deepEqual(f.named('uploadDocumentFile')[0].args.slice(1), [ownerA, 'profileA'], 'the file and its row, for this profile');
-  assert.equal(f.named('downloadDocumentFile').length, 1);
+  assert.equal(f.named('downloadDocumentFile').length, 0, 'a screen asks for a stored file when it shows it');
   assert.equal(f.named('sbUpdate').length, 0, 'no partial update of a row that may not exist');
   assert.equal(f.state.documents[0].storagePath, `${ownerA}/${file.id}`);
-  assert.equal(f.state.documents[1].data, file.data);
+  assert.equal(f.state.documents[1].data, undefined, 'the stored file is not held');
   assert.equal(f.stateWrites.every(write => write.actor === ownerA), true);
   assert.equal(f.warnings.length, 0);
 });
@@ -594,22 +596,6 @@ test('SYNC-008: the link sweep sends its two-column writes as partial updates', 
   assert.equal(sweep[0].args[5]?.partial, true);
 });
 
-test('SYNC-013: a file Storage does not have is marked missing in state and not requested again this session', async () => {
-  const doc = { id: 'doc-missing', name: 'sheet.xlsx', storagePath: `${ownerA}/doc-missing` };
-  const f = fixture({ documents: [doc] });
-  f.handlers.downloadDocumentFile = async () => ({ missing: true });
-  await f.api.reconcileDocumentFiles('profileA', [doc], ownerA, f.current());
-  assert.equal(f.state.documents[0].fileMissing, true);
-  assert.equal(f.named('sbUpdate').length, 0, 'a device note, never an edit');
-  await f.api.reconcileDocumentFiles('profileA', [doc], ownerA, f.current());
-  assert.equal(f.named('downloadDocumentFile').length, 1, 'asked once');
-  // An outage is not "missing": nothing is marked, and it is asked again.
-  const g = fixture({ documents: [{ ...doc, id: 'doc-offline', storagePath: `${ownerA}/doc-offline` }] });
-  g.handlers.downloadDocumentFile = async () => ({ failed: true });
-  await g.api.reconcileDocumentFiles('profileA', g.state.documents, ownerA, g.current());
-  assert.equal(g.state.documents[0].fileMissing, undefined);
-});
-
 test('SYNC-013: a document given its file again goes through the file upload, not a row push that would borrow the old path', async () => {
   const cloudDoc = { id: 'doc-again', name: 'a.pdf', storagePath: `${ownerA}/doc-again`, updatedAt: '2026-09-01T00:00:00.000Z' };
   const f = fixture();
@@ -641,6 +627,33 @@ test('SYNC-013: a stale copy with bytes and no path leaves a newer cloud row sta
   assert.equal(doc.data, file.data, 'the bytes are kept for this session');
 });
 
+// Review of 43b72a8f. A file given again on the iPhone whose upload failed,
+// then renamed while the write failed or waited for the membership answer:
+// the load lays the queued rename over the row read back, and the self-heal
+// skipped the record. The row kept its old missing path, saveData dropped the
+// bytes under it, and nothing uploaded the only copy of the new file.
+test('SYNC-013: a file given again whose rename is still queued at load is uploaded under the renamed row, never left under the old path', async () => {
+  const cloudDoc = { id: 'doc-again', name: 'a.pdf', linkedTo: 'licenses:l1', storagePath: `${ownerA}/doc-again`, mimeType: 'image/png', updatedAt: '2026-09-29T12:00:00.000Z' };
+  const onDevice = { id: 'doc-again', name: 'Renamed.pdf', linkedTo: 'licenses:l1', type: 'application/pdf', size: 1, data: file.data, pendingUpload: true, updatedAt: '2026-09-30T08:00:00.000Z' };
+  const f = fixture();
+  f.pending = 0;
+  f.handlers.lsGetJSON = () => [{ op: 'upsert', collectionKey: 'documents', payload: { ...onDevice, data: undefined }, changed: ['name'], ts: 1, queueId: 'q1' }];
+  f.handlers.readCachedData = () => ({ settings: { name: 'Cached A' }, licenses: [], documents: [onDevice] });
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, licenses: [{ id: 'l1' }], documents: [cloudDoc] });
+  await f.api.loadDataForUser(ownerA);
+  await tick();
+  const saved = f.named('saveData')[0].args[0].documents.find((d) => d.id === 'doc-again');
+  assert.equal(saved.storagePath, undefined, 'the device copy is not filed under the old missing path, which would drop its bytes');
+  assert.equal(saved.data, file.data, 'the device copy keeps the only copy of the new file');
+  assert.equal(saved.pendingUpload, true);
+  const [upload] = f.named('uploadDocumentFile');
+  assert.ok(upload, 'the new file goes up');
+  assert.equal(upload.args[0].data, file.data);
+  assert.equal(upload.args[0].name, 'Renamed.pdf', 'under the queued rename');
+  assert.equal(upload.args[0].type, 'application/pdf', 'the new file\'s type');
+  assert.equal(f.named('bulkSync').filter((c) => c.args[1] === 'documents').length, 0, 'never pushed whole');
+});
+
 test('SYNC-013: a file given again that has not reached Storage is uploaded even after the row was edited elsewhere, under the row\'s own details', async () => {
   const cloudDoc = { id: 'doc-again', name: 'Renamed elsewhere.pdf', linkedTo: 'licenses:l1', storagePath: `${ownerA}/doc-again`, mimeType: 'image/png', updatedAt: '2026-09-29T12:00:00.000Z' };
   const f = fixture();
@@ -662,3 +675,19 @@ test('SYNC-013: a file given again that has not reached Storage is uploaded even
   assert.equal(doc.pendingUpload, undefined, 'the note clears once the file is in Storage');
 });
 
+
+// 2026-10-02, the owner's iPhone: every stored file of the account was
+// downloaded at load and held as a data URL (hundreds of MB), and iOS
+// discarded the page in Gmail mid-share. A load now downloads none; a screen
+// asks for the files it shows (AppContext requestDocumentBytes,
+// utils/documentBytes.js: tests/document-bytes-store.test.mjs).
+test('an account load with three stored files downloads none of them', async () => {
+  const stored = ['doc-a', 'doc-b', 'doc-c'].map(id => ({ id, name: `Synthetic ${id}`, storagePath: `${ownerA}/${id}` }));
+  const f = fixture({ documents: [] });
+  f.pending = 0;
+  f.handlers.loadFromSupabase = () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, documents: stored, licenses: [] });
+  await f.api.loadDataForUser(ownerA);
+  for (let i = 0; i < 20; i += 1) await tick();
+  assert.equal(f.named('downloadDocumentFile').length, 0, 'no file is downloaded at load');
+  assert.ok(f.state.documents.length === 3 && f.state.documents.every(d => !d.data), 'no stored file held as a data URL');
+});

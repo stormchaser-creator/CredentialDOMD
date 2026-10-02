@@ -62,7 +62,8 @@ export function agreementDocCandidates(documents, { contractId } = {}) {
     .map((d) => {
       const linkedAgreement = String(d.linkedTo || "").startsWith("locumContracts:");
       const rank = d.linkedTo && d.linkedTo === own ? 3 : linkedAgreement ? 2 : AGREEMENT_NAME_HINT.test(d.name || "") ? 1 : 0;
-      return { doc: d, rank, linkedAgreement, ready: !!d.data, missing: !!d.fileMissing && !d.data };
+      // Ready: on this device, or in the account (fetched when picked).
+      return { doc: d, rank, linkedAgreement, ready: !!d.data || (!!d.storagePath && !d.fileMissing), missing: !!d.fileMissing && !d.data };
     })
     .sort((a, b) => b.rank - a.rank || String(b.doc.uploadedAt || "").localeCompare(String(a.doc.uploadedAt || "")));
 }

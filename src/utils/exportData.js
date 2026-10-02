@@ -15,7 +15,9 @@ const EXPORTS = {
       Date: c.date || "", Category: c.category || "", Description: c.title || "",
       Facility: c.facility || "", Role: c.role || "", Attending: c.attending || "",
       "CPT Codes": c.cptCodes || "", wRVU: caseWRVU(c) || "",
-      Complication: c.complication || "", Notes: c.notes || "",
+      // The physician's own memo, labelled as such so it is not mistaken
+      // for part of the record if the file is passed on.
+      Complication: c.complication || "", "Private notes": c.notes || "",
     }),
   },
   cme: {
@@ -25,7 +27,7 @@ const EXPORTS = {
       Category: x.category || "", Provider: x.provider || "",
       "Certificate #": x.certificateNumber || "",
       Topics: Array.isArray(x.topics) ? x.topics.join(", ") : (x.topics || ""),
-      Notes: x.notes || "",
+      "Private notes": x.notes || "",
     }),
   },
   workLog: {
@@ -43,7 +45,7 @@ const EXPORTS = {
       Expires: l.expirationDate || "",
       // Historical and superseded licences are exported too, with what they are.
       Status: lifecycleSummary(l), "Status source": l.statusSource || "",
-      Notes: l.notes || "",
+      "Private notes": l.notes || "",
     }),
   },
   invoices: {
@@ -51,7 +53,8 @@ const EXPORTS = {
     // the column and the date filter both.
     label: "Invoices", dateField: "sentAt", dayOf: i => sentDay(i.sentAt),
     row: i => ({
-      Number: i.number || "", Total: i.totalAmount ?? "",
+      // A number, shown as currency in the sheet (makeSpreadsheetFile).
+      Number: i.number || "", Total: i.totalAmount == null || i.totalAmount === "" ? "" : Number(i.totalAmount),
       Sent: sentDay(i.sentAt), Paid: i.paidAt ? String(i.paidAt).slice(0, 10) : "",
     }),
   },
@@ -85,6 +88,18 @@ export function buildExport(data, { section, dateFrom, dateTo }) {
 /** Rows → a real .xlsx (or .csv) File, built in the browser. */
 export function makeSpreadsheetFile({ rows, label, format = "xlsx", filename }) {
   const ws = XLSX.utils.json_to_sheet(rows);
+  // Columns as wide as what they hold (they opened at Excel's default and
+  // cut long facility names off), and money columns as currency (an invoice
+  // total read 18225).
+  const heads = Object.keys(rows[0] || {});
+  ws["!cols"] = heads.map((h) => ({ wch: Math.min(60, Math.max(h.length, ...rows.map((r) => String(r[h] ?? "").length)) + 2) }));
+  heads.forEach((h, c) => {
+    if (!/^(?:Total|Amount)$/.test(h)) return;
+    for (let r = 1; r <= rows.length; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell?.t === "n") cell.z = '"$"#,##0.00';
+    }
+  });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, label.slice(0, 31));
   const isCsv = format === "csv";

@@ -125,11 +125,11 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
       await d.getByRole('button', { name: '+ Add a call period' }).click();
       await d.locator('select').nth(1).selectOption(GRID[1].hospital);
       await d.getByRole('button', { name: 'Primary', exact: true }).nth(1).click();
-      qa.check('the second call period reads Backup at QSH, $400.00', /On call: QA South Hospital \(QSH\) \(backup\) \$400\.00/.test((await d.innerText()).replace(/\s+/g, ' ')));
+      qa.check('the second call period reads Backup at QSH, $400.00', /On call \(backup\): QA South Hospital \(QSH\) \$400\.00/.test((await d.innerText()).replace(/\s+/g, ' ')));
       // The × is named for its row (43341dc1).
       await d.getByRole('button', { name: 'Remove call period 2', exact: true }).click();
     } });
-    qa.check('the day\'s preview itemises $2,000 day worked + $1,500 primary call = $3,500.00', /Day worked \$2000\.00/.test(p1) && /On call: QA North Hospital \(QNH\) \(primary\) \$1500\.00/.test(p1) && /This day invoices \$3500\.00/.test(p1), p1.slice(p1.indexOf('Day worked'), p1.indexOf('Day worked') + 200));
+    qa.check('the day\'s preview itemises $2,000 day worked + $1,500 primary call = $3,500.00', /Day worked \$2000\.00/.test(p1) && /On call \(primary\): QA North Hospital \(QNH\) \$1500\.00/.test(p1) && /This day invoices \$3500\.00/.test(p1), p1.slice(p1.indexOf('Day worked'), p1.indexOf('Day worked') + 200));
     await logDay({ date: day2, notes: 'QA clinic day' });
     await logDay({ date: day3, worked: false, calls: [{ hospital: GRID[1].hospital, role: 'backup' }], notes: 'QA backup call only' });
     await logDay({ date: day4, notes: 'QA day to delete' });
@@ -180,7 +180,7 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
     await preview.waitFor();
     const text = (await preview.innerText()).replace(/\s+/g, ' ');
     await qa.shot('duty invoice preview');
-    qa.check('the preview itemises day rates and grid call rates to $5,150.00', /Day worked/.test(text) && /On call: QA North Hospital \(QNH\) \(backup\)/.test(text) && /On call: QA South Hospital \(QSH\) \(backup\)/.test(text) && /TOTAL DUE \$5,150\.00/.test(text), text.slice(0, 700));
+    qa.check('the preview itemises day rates and grid call rates to $5,150.00', /Day worked/.test(text) && /On call \(backup\): QA North Hospital \(QNH\)/.test(text) && /On call \(backup\): QA South Hospital \(QSH\)/.test(text) && /TOTAL DUE \$5,150\.00/.test(text), text.slice(0, 700));
     await preview.getByRole('button', { name: 'Copy text & mark sent' }).click();
     const inv = await waitFor('the invoice', async () => row(`select * from public.invoices where user_id = '${profile.id}'`), { timeoutMs: 20000 }).catch(() => null);
     qa.check('an invoices row for $5,150.00 on the day-rate agreement covering the three days', !!inv && Number(inv.total_amount) === 5150 && inv.contract_id === contract.id && (inv.entry_ids || []).length === 3 && inv.period_start === day1 && inv.period_end === day3, inv && { number: inv.number, total: inv.total_amount, entries: inv.entry_ids, period: `${inv.period_start}..${inv.period_end}` });

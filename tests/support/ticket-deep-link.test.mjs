@@ -43,6 +43,7 @@ test('with support operations on, the linked ticket opens through the operations
 
 test('App.jsx hands the email link to the sheet and clears it on close', () => {
   const app = readFileSync(new URL('../../src/App.jsx', import.meta.url), 'utf8');
-  assert.match(app, /const supportLink = supportDeepLink\(hash\);\n\s+if \(supportLink\) \{\n\s+setSupportTab\("tickets"\);\n\s+setSupportTicketId\(supportLink\.ticketId\);\n\s+setShowSupport\(true\);/);
-  assert.match(app, /<SupportModal open=\{showSupport\} onClose=\{\(\) => \{ setShowSupport\(false\); setSupportTab\("new"\); setSupportTicketId\(null\); \}\} initialTab=\{supportTab\} initialTicketId=\{supportTicketId\}/);
+  // App holds the link (tests/iphone/deep-link-held.test.mjs); AppInner opens the sheet from it.
+  assert.match(app, /const supportLink = supportDeepLink\(deepLink\);\n\s+if \(!supportLink\) return;\n\s+setSupportTab\("tickets"\);\n\s+setSupportTicketId\(supportLink\.ticketId\);\n\s+setShowSupport\(true\);/);
+  assert.match(app, /<SupportModal open=\{showSupport\} onClose=\{\(\) => \{ setShowSupport\(false\); setSupportTab\("new"\); setSupportTicketId\(null\); if \(supportDeepLink\(deepLink\)\) settleDeepLink\(\); \}\} initialTab=\{supportTab\} initialTicketId=\{supportTicketId\}/);
 });

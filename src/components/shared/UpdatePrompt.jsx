@@ -99,7 +99,9 @@ function UpdatePrompt({ allowAutomaticUpdates = true } = {}) {
       if (window.caches) {
         const keys = await caches.keys();
         if (pauseAutomaticUpdate()) return;
-        await Promise.all(keys.map((k) => caches.delete(k)));
+        // The invoice hand-off copy is the account's data, not the build's
+        // files (utils/invoiceHandoffStore.js HANDOFF_CACHE_NAME): it stays.
+        await Promise.all(keys.filter((k) => !/^credentialdomd-handoff-/.test(k)).map((k) => caches.delete(k)));
       }
     } catch { /* cache wipe is best-effort */ }
 

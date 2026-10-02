@@ -44,7 +44,7 @@ const built = await build({
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({
       contents: path === 'context' ? 'export const useApp = () => globalThis.__send.context;'
         : path === 'admin' ? 'export const useIsAdmin = () => false; export const isAdminUser = () => false;'
-          : 'export const supabase = null; export const downloadDocumentBlob = (p) => globalThis.__send.download(p); export const allocateInvoiceNumberRpc = () => null;',
+          : 'export const supabase = null; export const downloadDocumentBlob = (p) => globalThis.__send.download(p); export const allocateInvoiceNumberRpc = () => null; export const readInvoiceRecordState = () => null;',
       loader: 'js',
     }));
   } }],
@@ -386,5 +386,65 @@ test('resend with receipts: the clipboard letter is count-free and a refused bun
     const pdf = await pdfText(log.shares[0].files[0]);
     assert.doesNotMatch(pdf, /receipts? attached/);
     assert.match(pdf, /receipt on file/);
+  });
+});
+
+// Review of release/goal2 (2026-10-01): a resend from the Invoices tab sent
+// camera receipts as "image.jpg" and "image (2).jpg", where the Expenses
+// share and the server email name them by what they are.
+test('resend with receipts: camera receipts go out named for their expense and the physician', async () => {
+  await withBrowser({}, async (log) => {
+    const data = expenseData();
+    data.settings = { name: 'Synthetic Physician', degreeType: 'DO' };
+    data.documents = data.documents.map((d) => ({ ...d, name: 'image.jpg' }));
+    const inv = {
+      id: 'inv-x', number: 'EXP-0007', kind: 'expenses', billToLabel: 'Example Locums', periodStart: '2026-08-01', periodEnd: '2026-08-02',
+      entryIds: ['e1', 'e2'], totalAmount: 700, totalMinutes: 0, sentAt: '2026-08-05T12:00:00Z',
+      lines: [
+        { date: '2026-08-01', label: 'Airfare: Example Air', detail: 'receipt on file', amount: 400, expenseId: 'e1' },
+        { date: '2026-08-02', label: 'Lodging: Example Inn', detail: 'receipt on file', amount: 300, expenseId: 'e2' },
+      ],
+    };
+    data.travelExpenses = data.travelExpenses.map((e) => ({ ...e, invoiceId: 'inv-x' }));
+    globalThis.__send = { context: context({ ...data, invoices: [inv] }), download: async () => null };
+    const ui = harness('Invoices', {});
+    button(ui.render(), 'Resend').props.onClick({ stopPropagation() {} });
+    await flush();
+    find(ui.render(), (n) => typeof n.props?.onPick === 'function').props.onPick('pdf');
+    for (let i = 0; i < 50 && !log.shares.length; i++) await flush();
+    assert.equal(log.shares.length, 1);
+    assert.deepEqual(log.shares[0].files.slice(1).map((f) => f.name),
+      ['Airfare, Example Air, Synthetic Physician DO.jpg', 'Lodging, Example Inn, Synthetic Physician DO.jpg']);
+  });
+});
+
+// SHARE-002 on the installed iPhone app (QA lab, WebKit + the iOS model): the
+// share sheet's promise never settles once Mail takes over, or iOS discards
+// the page meanwhile, and a credential sent by Mail never reached its Send
+// history. It is logged as the letter goes (utils/shareHandoff.js).
+test('Send sheet: a share sheet that never answers still logs the send; a cancelled one takes it back', async () => {
+  await withBrowser({ share: () => new Promise(() => {}) }, async (log) => {
+    const onDevice = { id: 'doc-a', name: 'CA license.pdf', type: 'application/pdf', data: pdfData, linkedTo: 'licenses:lic-a' };
+    globalThis.__send = { context: context({ documents: [onDevice] }), download: async () => null };
+    const logged = [], unlogged = [];
+    const ui = harness('ShareModal', { open: true, onClose() {}, item: license, section: 'licenses', linkedDocs: [onDevice], onLogShare: (e) => logged.push(e), onUnlogShare: (id) => unlogged.push(id) });
+    ui.render();
+    await flush();
+    void sendButton(ui.render()).props.onClick();
+    for (let i = 0; i < 10; i++) await flush();
+    assert.equal(log.shares.length, 1, 'the letter and file went to the share sheet');
+    assert.deepEqual(logged.map(e => [e.method, e.itemId]), [['share', 'lic-a']], 'in the Send history although the sheet never answered');
+    assert.deepEqual(unlogged, []);
+  });
+  await withBrowser({ share: async () => { throw Object.assign(new Error('cancel'), { name: 'AbortError' }); } }, async (log) => {
+    const onDevice = { id: 'doc-a', name: 'CA license.pdf', type: 'application/pdf', data: pdfData, linkedTo: 'licenses:lic-a' };
+    globalThis.__send = { context: context({ documents: [onDevice] }), download: async () => null };
+    const logged = [], unlogged = [];
+    const ui = harness('ShareModal', { open: true, onClose() {}, item: license, section: 'licenses', linkedDocs: [onDevice], onLogShare: (e) => logged.push(e), onUnlogShare: (id) => unlogged.push(id) });
+    ui.render();
+    await flush();
+    await sendButton(ui.render()).props.onClick();
+    assert.equal(log.shares.length, 1);
+    assert.deepEqual(unlogged, [logged[0].id], 'a cancelled share is taken back out of the history');
   });
 });

@@ -64,7 +64,14 @@ type Guide = {
 // requirement on a DEA renewal. It is not on the state pages because it is
 // not a state rule, which is exactly why the email carries it.
 const MATE_NOTE =
-  "One federal requirement applies wherever you practise: since June 2023 every DEA registration renewal asks you to attest to a one-time 8 hours of training on treating and managing patients with opioid or other substance use disorders. It is one-time, not per cycle, and past ACGME residency training or board certification in addiction medicine can satisfy it.";
+  "One federal requirement applies wherever you practice: since June 2023 every DEA registration renewal asks you to attest that you have completed 8 hours of training on treating and managing patients with opioid or other substance use disorders. You complete those hours once, not every cycle, and they can be spread across more than one course; past ACGME residency training or board certification in addiction medicine can satisfy the requirement.";
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+// "2026-08" reads "August 2026": the guide's verified month as a person writes it.
+const verifiedText = (v?: string) => {
+  const m = String(v || "").match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : String(v || "");
+};
 
 const A = (url: string, label?: string) =>
   `<a href="${esc(url)}" style="color:#1d4ed8;word-break:break-word;">${esc(label || url)}</a>`;
@@ -92,7 +99,7 @@ function emailHtml(state: string, s: Guide) {
   const parts: string[] = [];
 
   parts.push(`<h1 style="margin:0 0 4px;font-size:22px;color:#111;">${esc(state)} medical license renewal</h1>`);
-  parts.push(`<p style="margin:0 0 18px;font-size:13px;color:#666;">The full guide${s.verified ? `, verified ${esc(s.verified)}` : ""}. Everything below is in this email; the links go to the board's own pages.</p>`);
+  parts.push(`<p style="margin:0 0 18px;font-size:13px;color:#666;">The full guide${s.verified ? `, verified ${esc(verifiedText(s.verified))}` : ""}. Everything below is in this email; the links go to the board's own pages.</p>`);
 
   // At a glance
   const rows: string[] = [];
@@ -169,7 +176,7 @@ function emailText(state: string, s: Guide) {
     : "";
 
   L.push(`${state.toUpperCase()} MEDICAL LICENSE RENEWAL`);
-  if (s.verified) L.push(`The full guide, verified ${s.verified}.`);
+  if (s.verified) L.push(`The full guide, verified ${verifiedText(s.verified)}.`);
   rule();
   L.push("AT A GLANCE");
   if (s.renewalCycle) L.push(`Cycle: ${s.renewalCycle}`);

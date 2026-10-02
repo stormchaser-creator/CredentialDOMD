@@ -41,7 +41,7 @@ const built = await build({
     b.onLoad({ filter: /.*/, namespace: "fixture" }, ({ path }) => ({
       contents: path === "context"
         ? "export const useApp = () => globalThis.__email.context;"
-        : "export const supabase = { functions: { invoke: (n, o) => globalThis.__email.invoke(n, o) } }; export const downloadDocumentBlob = async () => null; export const allocateInvoiceNumberRpc = () => null;",
+        : "export const supabase = { functions: { invoke: (n, o) => globalThis.__email.invoke(n, o) } }; export const downloadDocumentBlob = async () => null; export const allocateInvoiceNumberRpc = () => null; export const readInvoiceRecordState = () => null;",
       loader: "js",
     }));
   } }],
@@ -90,6 +90,18 @@ const find = (tree, predicate) => {
   if (Array.isArray(tree)) { for (const c of tree) { const hit = find(c, predicate); if (hit) return hit; } return null; }
   if (predicate(tree)) return tree;
   return find(tree.props?.children, predicate);
+};
+// The preview is the HTML part itself, in a sandboxed frame. Its words, a
+// paragraph per paragraph and a line per <br> or table row, for matching.
+const htmlText = (html) => String(html || "")
+  .replace(/<\/p>|<\/table>/g, "\n\n").replace(/<br>|<\/tr>/g, "\n").replace(/<\/td><td[^>]*>/g, " ")
+  .replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+  .replace(/\n{3,}/g, "\n\n").trim();
+const shownOf = (tree) => {
+  const frame = find(tree, (n) => n.props && "data-invoice-email-body" in n.props);
+  assert.equal(frame.type, "iframe");
+  assert.equal(frame.props.sandbox, "", "no script, no same origin");
+  return { html: frame.props.srcDoc, text: htmlText(frame.props.srcDoc) };
 };
 const textOf = (n) => (n == null || typeof n === "boolean" ? ""
   : typeof n === "string" || typeof n === "number" ? String(n)
@@ -165,7 +177,7 @@ test("Send by email: what the screen shows is what the billing office gets, line
   await withApp(env, ctx, async (invocations) => {
     const { invoices, modal } = await openFromResend(ctx);
     const tree = modal.render();
-    const shown = textOf(find(tree, (n) => n.props && "data-invoice-email-body" in n.props));
+    const { html: shownHtml, text: shown } = shownOf(tree);
     assert.match(shown, /^Hello,\n\nAttached is invoice INV-20260922-04/);
     const to = find(tree, (n) => n.type === "input" && n.props.type === "email");
     assert.equal(to.props.value, "billing@hospital.example", "the agreement's invoice email is filled in");
@@ -176,13 +188,14 @@ test("Send by email: what the screen shows is what the billing office gets, line
     assert.match(preview, /Copy to you: doc\.verified@example\.test/);
     assert.match(preview, /Replies go to: doc\.verified@example\.test/);
     assert.match(preview, /Subject: Invoice INV-20260922-04 from Synthetic Physician, DO for Synthetic Hospital/);
-    assert.match(preview, /INV-20260922-04\.pdf/);
+    assert.match(preview, /Invoice INV-20260922-04 from Synthetic Physician, DO\.pdf/);
 
     await button(tree, "Send to billing@hospital.example").props.onClick();
     await flush();
     assert.equal(env.world.mails.length, 1);
     const mail = env.world.mails[0];
-    assert.equal(mail.text, shown, "the body that went is the body that was shown");
+    assert.equal(mail.html, shownHtml, "the HTML that went is the HTML that was shown");
+    assert.match(mail.text, /^Hello,\n\nAttached is invoice INV-20260922-04/, "the text part is the same letter");
     assert.deepEqual(mail.to, ["billing@hospital.example"]);
     assert.deepEqual(mail.cc, ["doc.verified@example.test"]);
     assert.deepEqual(mail.reply_to, ["doc.verified@example.test"]);
@@ -205,6 +218,29 @@ test("Send by email: what the screen shows is what the billing office gets, line
   });
 });
 
+// The email declares "light dark" and sets no text colour. A frame left at
+// the default (light) scheme with no page of its own showed black text on the
+// dark theme's navy card whenever the phone was in light mode (the default
+// app theme is dark). The frame now carries the app's scheme and an opaque
+// page of that scheme, and the HTML it shows is still exactly what is sent.
+test("Send by email: the preview frame takes the app's theme, so the letter is readable in either theme", async () => {
+  for (const isDark of [true, false]) {
+    const env = fakeWorld();
+    const ctx = context(env, { invoices: [workInvoice()], locumContracts: [contract("billing@hospital.example")] }, { isDark });
+    await withApp(env, ctx, async () => {
+      const { modal } = await openFromResend(ctx);
+      const tree = modal.render();
+      const frame = find(tree, (n) => n.props && "data-invoice-email-body" in n.props);
+      assert.equal(frame.props.style.colorScheme, isDark ? "dark" : "light");
+      assert.equal(frame.props.style.backgroundColor, isDark ? "#1c1c1e" : "#ffffff");
+      assert.match(frame.props.srcDoc, /<meta name="color-scheme" content="light dark">/, "the sent HTML is unchanged");
+      await button(tree, "Send to billing@hospital.example").props.onClick();
+      await flush();
+      assert.equal(env.world.mails[0].html, frame.props.srcDoc, "the preview is still the email");
+    });
+  }
+});
+
 test("Send by email: a missing receipt is named before the tap and nothing claims it", async () => {
   const env = fakeWorld();
   env.world.storage.delete(`${SUBJECT}/${IDS.docHotel}`);
@@ -221,13 +257,13 @@ test("Send by email: a missing receipt is named before the tap and nothing claim
     find(tree, (n) => n.type === "input" && n.props.type === "email").props.onChange({ target: { value: "AP@Agency.Example" } });
     tree = modal.render();
     assert.equal(find(tree, (n) => n.type === "input" && n.props.type === "checkbox"), null);
-    const shown = textOf(find(tree, (n) => n.props && "data-invoice-email-body" in n.props));
+    const { html: shownHtml, text: shown } = shownOf(tree);
     assert.match(shown, /The receipt is attached\./);
     await button(tree, "Send to ap@agency.example").props.onClick();
     await flush();
     const mail = env.world.mails[0];
-    assert.equal(mail.text, shown);
-    assert.deepEqual(mail.attachments.map((a) => a.filename), ["EXP-0007.pdf", "airfare.pdf"]);
+    assert.equal(mail.html, shownHtml);
+    assert.deepEqual(mail.attachments.map((a) => a.filename), ["Invoice EXP-0007 from Synthetic Physician, DO.pdf", "airfare.pdf"]);
     const pdf = pdfText(mail.attachments[0].content);
     assert.match(pdf, /receipt attached/, "the airfare line: its receipt rode");
     assert.match(pdf, /receipt on file/, "the hotel line: its receipt did not");
@@ -316,12 +352,12 @@ test("Send by email: a receipt only this device holds is named before Send, and 
     const tree = modal.render();
     const alert = textOf(find(tree, (n) => n.props?.role === "alert"));
     assert.match(alert, /2 receipts could not be attached \(parking\.jpg, hotel\.jpg\) because this device has not finished saving them to your account\./);
-    const shown = textOf(find(tree, (n) => n.props && "data-invoice-email-body" in n.props));
+    const { html: shownHtml, text: shown } = shownOf(tree);
     assert.match(shown, /The receipt is attached\./, "the letter counts the one that rides");
     await button(tree, "Send to ap@agency.example").props.onClick();
     await flush();
     const mail = env.world.mails[0];
-    assert.deepEqual(mail.attachments.map((a) => a.filename), ["EXP-0007.pdf", "airfare.pdf"]);
+    assert.deepEqual(mail.attachments.map((a) => a.filename), ["Invoice EXP-0007 from Synthetic Physician, DO.pdf", "airfare.pdf"]);
     const pdf = pdfText(mail.attachments[0].content);
     assert.doesNotMatch(pdf, /receipt attached/, "airfare's parking receipt did not ride, so its line may not say attached");
     assert.match(pdf, /receipt on file/);

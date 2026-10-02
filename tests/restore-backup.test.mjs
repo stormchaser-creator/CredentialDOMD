@@ -560,17 +560,19 @@ test('QA3 review: a restore the membership check refuses after it was applied sa
 // refused with the reason, and what to do, before anything changes.
 test('a restore that brings Protected Identity back while the offline copy cannot take it names that reason, not a read-only membership', async () => {
   const { restoreRefusal, restoreRefusedMessage, RESTORE_READ_ONLY_MESSAGE } = await import('../src/utils/restoreBackup.js');
-  const { DEVICE_ONLY_UNREAD_MESSAGE, DEVICE_ONLY_UNSAVED_MESSAGE } = await import('../src/utils/pausedApplicationRecords.js');
+  const { DEVICE_ONLY_UNREAD_MESSAGE, DEVICE_ONLY_UNSAVED_MESSAGE, DEVICE_ONLY_CLOSED_MESSAGE } = await import('../src/utils/pausedApplicationRecords.js');
   const before = { settings: {}, licenses: [], identityVault: [] };
   const next = { settings: {}, licenses: [{ id: 'lic-synthetic' }], identityVault: [{ id: 'identity-synthetic-restore', label: 'Synthetic application' }] };
   assert.equal(restoreRefusal(before, next, 'unread'), DEVICE_ONLY_UNREAD_MESSAGE);
-  assert.equal(restoreRefusal(before, next, 'unavailable'), DEVICE_ONLY_UNSAVED_MESSAGE);
+  // A store that would not open: a reload, not free space (2026-10-02).
+  assert.equal(restoreRefusal(before, next, 'unavailable'), DEVICE_ONLY_CLOSED_MESSAGE);
+  assert.doesNotMatch(DEVICE_ONLY_CLOSED_MESSAGE, /free|storage is full/i);
   assert.equal(restoreRefusal(before, next, 'full'), DEVICE_ONLY_UNSAVED_MESSAGE);
   assert.equal(restoreRefusal(before, next, null), null, 'nothing blocks it while the copy can take it');
   const syncedOnly = { ...next, identityVault: [] };
   assert.equal(restoreRefusal(before, syncedOnly, 'unread'), null, 'a backup with no Protected Identity is not refused for it');
   assert.equal(restoreRefusedMessage(before, syncedOnly, null), RESTORE_READ_ONLY_MESSAGE, 'a guard refusal otherwise is the membership one');
-  assert.doesNotMatch(DEVICE_ONLY_UNREAD_MESSAGE + DEVICE_ONLY_UNSAVED_MESSAGE, /read-only|—/);
+  assert.doesNotMatch(DEVICE_ONLY_UNREAD_MESSAGE + DEVICE_ONLY_UNSAVED_MESSAGE + DEVICE_ONLY_CLOSED_MESSAGE, /read-only|—/);
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(new URL('../src/components/features/DataExport.jsx', import.meta.url), 'utf8');
   const check = src.indexOf('restoreRefusal(current, plan.merged, deviceOnlyBlocked?.() ?? null)');

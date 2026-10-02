@@ -145,6 +145,8 @@ import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
 import { storageSubjects } from "../_shared/clerkContinuity.ts";
 import { approveRequestBody, longDate, replySubject, shareLogItem, unverifiedApproveRefusal, withoutGuessBlock } from "../_shared/requestFlow.ts";
+import { withDegree } from "../_shared/app/utils/outgoingText.js";
+import { invoiceEmailFooter } from "../_shared/app/utils/invoiceEmail.js";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_API = (Deno.env.get("RESEND_API_BASE") ?? "https://api.resend.com").replace(/\/$/, "");
@@ -316,7 +318,8 @@ function cleanHeaderText(s: string | null | undefined, max = 80): string {
 
 /** RFC 5322 display name; quoted because it contains a comma. */
 function fromHeader(name: string, degree: string): string {
-  const display = name ? `${name}${degree ? `, ${degree}` : ""} via CredentialDOMD` : "CredentialDOMD";
+  // withDegree: a name typed as "Jordan Rivera, DO" is not "DO, DO".
+  const display = name ? `${withDegree(name, degree)} via CredentialDOMD` : "CredentialDOMD";
   return `"${display}" <${DOCS_ADDR}>`;
 }
 
@@ -500,7 +503,8 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
     if (!EMAIL_RE.test(physEmail)) return json(400, { error: "Add your email in Settings first" });
     const name = cleanHeaderText(prof.name);
     const degree = cleanHeaderText(prof.degree_type, 20);
-    const displayName = name || physEmail;
+    // The footer names the physician as the From line does, degree and all.
+    const displayName = name ? withDegree(name, degree) : physEmail;
     let replyTo = physEmail;
 
     // Approve and send: the row supplies the recipient, the call (or, for an
@@ -755,7 +759,9 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
     // your email what you meant by:" over the sender's own words; that block
     // never goes to a third party (requestFlow.ts withoutGuessBlock).
     text = withoutGuessBlock(text);
-    const footer = `Sent from CredentialDOMD on behalf of ${displayName}. Reply to this email to reach ${displayName} directly.`;
+    // One footer for every email sent on the physician's behalf: a name that
+    // ends "D.O." is not followed by a second period.
+    const footer = invoiceEmailFooter(displayName);
     const fullText = `${text ? `${text}\n\n` : ""}${footer}`;
 
     const payload: Record<string, unknown> = {

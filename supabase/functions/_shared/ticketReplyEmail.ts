@@ -21,6 +21,8 @@
 // Every reply email links to its own ticket in the app: /app/#support/<id>
 // opens the Support sheet on that ticket (src/utils/supportDeepLink.js).
 
+import { homeScreenHint } from "./homeScreenHint.ts";
+
 export const AUTOMATED_REPLY_LABEL = "CredentialDOMD Support \u{b7} Automated";
 export const SUPPORT_APP_URL = "https://credentialdomd.com/app/";
 export const REPLY_FROM_ADDRESS = "whit@credentialdomd.com";
@@ -88,7 +90,8 @@ export function ticketReplyEmail(reply: string, attachment: boolean, { support =
   const text = [
     reply,
     attachment ? "A file is attached to this reply. Open the ticket in the app to see it." : "",
-    `Open this ticket in the app to reply: ${ticketAppLink(ticketId)} (More > Support > Your tickets)`,
+    `Open this ticket in the app to reply: ${ticketAppLink(ticketId)} (More > Get help > Your tickets)`,
+    homeScreenHint("More > Get help > Your tickets"),
     ...signature,
   ].filter(Boolean).join("\n\n");
   const fromName = automated ? "CredentialDOMD Support" : "Eric Whitney, DO";
