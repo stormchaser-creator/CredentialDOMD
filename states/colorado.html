@@ -346,7 +346,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -481,7 +481,7 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">If you miss the deadline</div>
-        <div style="color:var(--text-secondary);">Colorado law (CRS 12-20-202(1)(e), loaded from the official 2024 CRS Title 12 printout) gives a 60-day grace period after expiration: you may renew without disciplinary sanction for practicing on the expired license during those 60 days, but you must satisfy all renewal requirements and pay a delinquency fee. If you do not renew within the 60-day grace period, the license is treated as Expired and you are ineligible to practice until reinstated (CRS 12-20-202(2)). Reinstatement (per the board's Medical Licensing Guide and Reinstatement application) requires the reinstatement application and fee, a current certified NPDB self-query report, an FSMB Disciplinary Action Report sent to DORA, out-of-state license verifications, a chronological practice history for the last year, liability insurance attestation, and, if you have not actively practiced for the last year, a continued-competency narrative under Board Rule 1.8. If the license has been expired more than 2 years, CRS 12-20-202(2)(c)(II) additionally requires a satisfactory demonstration of competency (active out-of-state license in good standing, restricted practice, remedial coursework, CME, examination, or other measures the Board accepts). Active military personnel and non-dishonorably-discharged veterans get mandatory reinstatement if they meet the statutory requirements.</div>
+        <div style="color:var(--text-secondary);">Colorado law (CRS 12-20-202(1)(e)) gives a 60-day grace period after expiration: you may renew without disciplinary sanction for practicing on the expired license during those 60 days, but you must satisfy all renewal requirements and pay a delinquency fee. If you do not renew within the 60-day grace period, the license is treated as Expired and you are ineligible to practice until reinstated (CRS 12-20-202(2)). Reinstatement (per the board's Medical Licensing Guide and Reinstatement application) requires the reinstatement application and fee, a current certified NPDB self-query report, an FSMB Disciplinary Action Report sent to DORA, out-of-state license verifications, a chronological practice history for the last year, liability insurance attestation, and, if you have not actively practiced for the last year, a continued-competency narrative under Board Rule 1.8. If the license has been expired more than 2 years, CRS 12-20-202(2)(c)(II) additionally requires a satisfactory demonstration of competency (active out-of-state license in good standing, restricted practice, remedial coursework, CME, examination, or other measures the Board accepts). Active military personnel and non-dishonorably-discharged veterans get mandatory reinstatement if they meet the statutory requirements.</div>
       </div>
   </div>
 </section>
@@ -523,7 +523,7 @@ a:hover { color: var(--emerald-light); }
   </h2>
   <p>These are the mistakes Colorado physicians most commonly make during renewal:</p>
   <ul class="pitfall-list">
-        <li class="pitfall-item">The April 30 odd-year expiration is statewide and fixed, not tied to your issuance date or birthday. A license issued mid-cycle still expires April 30 of the next odd-numbered year, so your first renewal period can be much shorter than 2 years (board pages loaded: dpo.colorado.gov/Medical/Applications).</li>
+        <li class="pitfall-item">The April 30 odd-year expiration is statewide and fixed, not tied to your issuance date or birthday. A license issued mid-cycle still expires April 30 of the next odd-numbered year, so your first renewal period can be much shorter than 2 years.</li>
     <li class="pitfall-item">Missing the 60-day grace window (through about June 29 of the renewal year) converts a simple late renewal with a delinquency fee into a full reinstatement: NPDB certified self-query, FSMB Disciplinary Action Report, practice-history documentation, and possible continued-competency review under Rule 1.8. The NPDB and FSMB reports can take weeks to arrive (CRS 12-20-202; Medical Licensing Guide PDF).</li>
     <li class="pitfall-item">If the license sits expired more than 2 years, CRS 12-20-202(2)(c)(II) requires you to demonstrate competency to practice (out-of-state active license, remedial courses, CME, exam, or restricted practice), and the board's re-entry pathway can require a CPEP assessment for physicians out of active practice 2 or more years (dpo.colorado.gov/Medical/DRLicenseRequirements, Reinstatement/Re-Entry tab).</li>
     <li class="pitfall-item">Reactivation and reinstatement are different applications: reactivation moves an Inactive license to Active; reinstatement moves an Expired license to Active. Using the wrong one restarts the process (dpo.colorado.gov/Medical/DRLicenseRequirements).</li>
@@ -811,6 +811,6 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-<script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
+<!--/email_off--><script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
 </body>
 </html>

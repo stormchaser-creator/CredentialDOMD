@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -628,8 +628,8 @@ a:hover { color: var(--emerald-light); }
   <ul style="list-style:none;padding:0;">
       <li style="margin-bottom:6px;"><a href="https://www.sdbmoe.gov/professions-physicians/professions-physicians-physician-license-md-do/" target="_blank" rel="noopener">Board physician license (MD/DO) page: renewal responsibility, reminders are courtesy only, forfeited licenses not automatically renewable, MySD portal and statute/rule links</a></li>
       <li style="margin-bottom:6px;"><a href="https://sdbmoe.gov/faqs/" target="_blank" rel="noopener">Board FAQ: online renewals open 90 days before expiration via MySD account</a></li>
-      <li style="margin-bottom:6px;"><a href="https://sdlegislature.gov/api/Statutes/36-4-24.1.html" target="_blank" rel="noopener">SDCL 36-4-24.1: renewal application, biennial fee set by rule, $400 statutory cap (verbatim text loaded)</a></li>
-      <li style="margin-bottom:6px;"><a href="https://sdlegislature.gov/api/Statutes/36-4-24.2.html" target="_blank" rel="noopener">SDCL 36-4-24.2: forfeiture for failure to renew by March 1 in odd-numbered years; discretionary reinstatement via reciprocity fee and application (verbatim text loaded)</a></li>
+      <li style="margin-bottom:6px;"><a href="https://sdlegislature.gov/api/Statutes/36-4-24.1.html" target="_blank" rel="noopener">SDCL 36-4-24.1: renewal application, biennial fee set by rule, $400 statutory cap</a></li>
+      <li style="margin-bottom:6px;"><a href="https://sdlegislature.gov/api/Statutes/36-4-24.2.html" target="_blank" rel="noopener">SDCL 36-4-24.2: forfeiture for failure to renew by March 1 in odd-numbered years; discretionary reinstatement via reciprocity fee and application</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.sdbmoe.gov/professions-physicians/professions-physicians-physician-license-md-do/" target="_blank" rel="noopener">CME requirement: No statutory CME requirement</a></li>
   </ul>
   <p style="font-size:13px;color:var(--text-muted);">Boards change fees and rules; always confirm on the board page before you pay. Report anything out of date to support@credentialdomd.com.</p>
@@ -814,6 +814,6 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-<script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
+<!--/email_off--><script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
 </body>
 </html>

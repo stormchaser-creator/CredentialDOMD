@@ -1,7 +1,7 @@
-// 20261001T2202-0051d3c is replaced at build time (see stampBuildId in vite.config.js).
+// 20261002T1320-a6a00f5 is replaced at build time (see stampBuildId in vite.config.js).
 // Because the id changes every deploy, this file's bytes change every deploy,
 // which is what makes the browser fire `updatefound` and install the new SW.
-const BUILD_ID = "20261001T2202-0051d3c";
+const BUILD_ID = "20261002T1320-a6a00f5";
 const CACHE_NAME = `credentialdomd-${BUILD_ID}`;
 
 // All URLs are relative to the SW's own location so the same file works at
@@ -16,8 +16,8 @@ const PRECACHE_URLS = [
   "./manifest.json",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",
-  "./assets/index-D5aKBW0l.js",
-  "./assets/index-Dy61Q32e.css"
+  "./assets/index-Dy61Q32e.css",
+  "./assets/index-i1XvzYqy.js"
 ];
 
 // Install: precache shell (bypass the HTTP cache so we never precache staleness).
@@ -32,11 +32,14 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean caches from previous builds
+// Activate: clean caches from previous builds. The invoice hand-off copy
+// (credentialdomd-handoff-*, src/utils/invoiceHandoffStore.js) is the app's
+// data, not a build's files: it stays.
+const KEEP_CACHE = /^credentialdomd-handoff-/;
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE_NAME && !KEEP_CACHE.test(k)).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });

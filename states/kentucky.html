@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -539,7 +539,7 @@ a:hover { color: var(--emerald-light); }
         <li class="pitfall-item">The wallet card is print-it-now-or-lose-it: the Board no longer mails wallet cards, the only one provided must be printed at the end of the online renewal, and once the receipt screen is closed it cannot be reproduced (Board renewal page).</li>
     <li class="pitfall-item">IMLC compact license holders must NOT renew through the KBML portal: licenses issued through the Interstate Medical Licensure Compact are renewed on the IMLCC website (imlcc.org/renew), per both the Board renewal page and the Winter 2026 newsletter.</li>
     <li class="pitfall-item">Do not create a new account on the eBusiness portal: the login page warns renewing licensees already have one (username = KY license number, password = last 4 of SSN); creating a new profile derails the renewal.</li>
-    <li class="pitfall-item">The Board's own renewal page (kbml.ky.gov/physician/Pages/Physician-Renewal.aspx) returned HTTP 401 when loaded on 2026-08-19; it appears to be taken down outside the roughly January to April renewal season, so bookmark the eBusiness portal login directly.</li>
+    <li class="pitfall-item">The Board's own renewal page (kbml.ky.gov/physician/Pages/Physician-Renewal.aspx) was unavailable in August 2026; it appears to be offline outside the roughly January to April renewal season, so bookmark the eBusiness portal login directly.</li>
     <li class="pitfall-item">Affirmative answers (malpractice, DUI, board action) require attached legal documentation and Board review; the Board explicitly warns not to wait until the deadline because review can delay the renewal.</li>
     <li class="pitfall-item">Missing April 1 is expensive and offline: the license goes automatically inactive, reactivation requires contacting the Board for a paper re-registration form, and the re-registration fee is $250 versus the normal $150.</li>
   </ul>
@@ -825,6 +825,6 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-<script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
+<!--/email_off--><script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
 </body>
 </html>

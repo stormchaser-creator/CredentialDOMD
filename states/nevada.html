@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -638,7 +638,7 @@ a:hover { color: var(--emerald-light); }
   <h2><span class="section-number">&#10003;</span> Where this comes from</h2>
   <p>From the board's own pages, August 2026. These are the primary sources we read:</p>
   <ul style="list-style:none;padding:0;">
-      <li style="margin-bottom:6px;"><a href="https://medboard.nv.gov/Licensees/Renewals/" target="_blank" rel="noopener">Board of Medical Examiners licensee pages; confirmed Current Licensee Portal URL (nsbme.us.thentiacloud.net) and 2025-2027 biennium framing</a></li>
+      <li style="margin-bottom:6px;"><a href="https://medboard.nv.gov/" target="_blank" rel="noopener">Board of Medical Examiners home: Current Licensee Portal link (nsbme.us.thentiacloud.net/webs/nsbme/service) and the License Reinstatement page for the 2025 to 2027 biennium</a></li>
       <li style="margin-bottom:6px;"><a href="https://medboard.nv.gov/uploadedFiles/medboardnvgov/content/Forms/Licensure%20Fees.pdf" target="_blank" rel="noopener">MD board Licensure Fees schedule: $750 active MD biennial registration, $375 inactive, $1,500 active reinstatement, $375 second-half-of-biennium, payment rules and 2.5% card fee</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.leg.state.nv.us/NRS/NRS-630.html" target="_blank" rel="noopener">NRS 630.267 (biennial registration due June 30 of odd years, expiration, reinstatement at twice the fee, 2-year cap, DEA/Pharmacy reporting) and NRS 630.268 (fee caps: $1,000 biennial physician registration)</a></li>
       <li style="margin-bottom:6px;"><a href="https://www.leg.state.nv.us/NRS/NRS-633.html" target="_blank" rel="noopener">NRS 633.471 (DO renewal on or before December 31 of even-numbered years as amended 2025, CME 40-hour floor), NRS 633.481 (automatic expiration and restoration), NRS 633.501 (fee caps incl. $1,000 biennial DO renewal, $300 late fee)</a></li>
@@ -826,6 +826,6 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-<script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
+<!--/email_off--><script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
 </body>
 </html>

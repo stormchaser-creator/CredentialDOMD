@@ -347,7 +347,7 @@ a:hover { color: var(--emerald-light); }
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
 </head>
-<body>
+<body><!--email_off-->
 
 <!-- NAV -->
 <header class="nav">
@@ -635,7 +635,7 @@ a:hover { color: var(--emerald-light); }
       <li style="margin-bottom:6px;"><a href="https://health.ri.gov/licensing/physicians" target="_blank" rel="noopener">Board's physician licensing page: Online Renewals link to healthri.mylicense.com, 60-day renewal notices, reactivation/reinstatement contact (DOH.Elicense@health.ri.gov), links to fee regulation and licensure regulation</a></li>
       <li style="margin-bottom:6px;"><a href="https://rules.sos.ri.gov/regulations/part/216-10-05-2" target="_blank" rel="noopener">DOH fee regulation 216-RICR-10-05-2 § 2.9: $1,090 renewal (MD and DO), $870 renewal with approved training, $170 late renewal fee, $1,090 inactive-to-active reinstatement</a></li>
       <li style="margin-bottom:6px;"><a href="https://rules.sos.ri.gov/regulations/part/216-40-05-1" target="_blank" rel="noopener">Physician licensure regulation 216-RICR-40-05-1: § 1.5.6 biennial expiration on July 1 of even-numbered years, filing/postmark deadlines, automatic lapse, discretionary reinstatement; § 1.5.5 40-hour CME by June 1 of even years</a></li>
-      <li style="margin-bottom:6px;"><a href="http://webserver.rilegislature.gov/Statutes/TITLE5/5-37/5-37-10.htm" target="_blank" rel="noopener">RIGL 5-37-10: application on or before June 1, certificate effective July 1 expiring June 30 two years later, automatic lapse July 1, discretionary reinstatement at current fee plus 23-1-54 additional fee</a></li>
+      <li style="margin-bottom:6px;"><a href="https://webserver.rilegislature.gov/Statutes/TITLE5/5-37/5-37-10.htm" target="_blank" rel="noopener">RIGL 5-37-10: application on or before June 1, certificate effective July 1 expiring June 30 two years later, automatic lapse July 1, discretionary reinstatement at current fee plus 23-1-54 additional fee</a></li>
       <li style="margin-bottom:6px;"><a href="https://rules.sos.ri.gov/regulations/part/216-40-05-1" target="_blank" rel="noopener">CME requirement: 216-RICR-40-05-1.5.5</a></li>
   </ul>
   <p style="font-size:13px;color:var(--text-muted);">Boards change fees and rules; always confirm on the board page before you pay. Report anything out of date to support@credentialdomd.com.</p>
@@ -820,6 +820,6 @@ document.querySelectorAll('.faq-question').forEach(q => {
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
 <script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
-<script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
+<!--/email_off--><script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
 </body>
 </html>

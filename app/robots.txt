@@ -1,6 +1,5 @@
 User-agent: *
 Allow: /
-Allow: /landing/
 Allow: /states/
 Disallow: /app/
 
