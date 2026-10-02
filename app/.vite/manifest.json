@@ -5,8 +5,8 @@
     "src": "__vite-browser-external",
     "isDynamicEntry": true
   },
-  "_mammoth.browser-BssdbD_M.js": {
-    "file": "assets/mammoth.browser-BssdbD_M.js",
+  "_mammoth.browser-DclZI-R2.js": {
+    "file": "assets/mammoth.browser-DclZI-R2.js",
     "name": "mammoth.browser",
     "isDynamicEntry": true,
     "imports": [
@@ -14,13 +14,14 @@
     ]
   },
   "index.html": {
-    "file": "assets/index-BsT4xTZ4.js",
+    "file": "assets/index-CP-qQkFx.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
+      "src/utils/appRulesData.js",
       "node_modules/@anthropic-ai/sdk/index.mjs",
-      "_mammoth.browser-BssdbD_M.js",
+      "_mammoth.browser-DclZI-R2.js",
       "node_modules/html2canvas/dist/html2canvas.esm.js",
       "node_modules/dompurify/dist/purify.es.mjs",
       "node_modules/canvg/lib/index.es.js",
@@ -32,7 +33,7 @@
     ]
   },
   "node_modules/@anthropic-ai/sdk/index.mjs": {
-    "file": "assets/index-CYbAJjtP.js",
+    "file": "assets/index-k75cI25_.js",
     "name": "index",
     "src": "node_modules/@anthropic-ai/sdk/index.mjs",
     "isDynamicEntry": true,
@@ -56,7 +57,7 @@
     ]
   },
   "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs": {
-    "file": "assets/node.browser-BcFLFeDT.js",
+    "file": "assets/node.browser-Dk3sPoI1.js",
     "name": "node.browser",
     "src": "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs",
     "isDynamicEntry": true,
@@ -66,7 +67,7 @@
     ]
   },
   "node_modules/canvg/lib/index.es.js": {
-    "file": "assets/index.es-BLhDf2SR.js",
+    "file": "assets/index.es-Be3qxBCZ.js",
     "name": "index.es",
     "src": "node_modules/canvg/lib/index.es.js",
     "isDynamicEntry": true,
@@ -96,6 +97,12 @@
     "file": "assets/cmsAll-CdA6ZqUV.js",
     "name": "cmsAll",
     "src": "src/constants/cpt/cmsAll.js",
+    "isDynamicEntry": true
+  },
+  "src/utils/appRulesData.js": {
+    "file": "assets/appRulesData-CCPwlP85.js",
+    "name": "appRulesData",
+    "src": "src/utils/appRulesData.js",
     "isDynamicEntry": true
   }
 }
