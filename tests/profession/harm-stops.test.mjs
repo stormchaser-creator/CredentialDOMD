@@ -2,6 +2,7 @@
 // physician rule (DESIGN 8.1 step 7, 7.3, 7.5). MD and DO output is pinned
 // by md-do-golden.test.mjs; these are the PA, NP and blank sides. Synthetic
 // records only.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject } from '../../src/utils/helpers.js';

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TAP_MIN } from "../shared/actionButton";
 import { MEMBER_VIEW_WITHHELD_LINE, memberViewSection } from "../../../supabase/functions/_shared/memberView.mjs";
-import { createReadOnlyView, recordCard, recordDetails, profileDetails, documentsFor, groupSections, sectionRecords, homeSummary, formatCountdown, memberDisplayName, VIEWER_GROUPS, READ_ONLY_MESSAGE } from "../../utils/memberViewer.js";
+import { createReadOnlyView, recordCard, recordDetails, profileDetails, documentsFor, groupSections, sectionRecords, homeSummary, formatCountdown, memberDisplayName, snapshotData, VIEWER_GROUPS, READ_ONLY_MESSAGE } from "../../utils/memberViewer.js";
+import { appRulesReady, loadAppRules, needsAppRules } from "../../utils/appRules.js";
 import { MEMBER_VIEW_MESSAGES, MEMBER_VIEW_MAX_FAILED_CHECKS } from "../../utils/memberViewClient.js";
 import { adminViewBannerStyle, ADMIN_VIEW_BANNER_BUTTON_STYLE } from "../shared/adminViewBanner.js";
 import { STATUS_COLORS, formatDate } from "../../utils/helpers.js";
@@ -33,6 +34,19 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
   const sessionId = opened?.session?.id;
   const view = useMemo(() => createReadOnlyView(opened?.snapshot), [opened]);
   const snapshot = view.data;
+  // A PA or NP member's cards read the PA and NP rule data, which this
+  // administrator's app may not have loaded (utils/appRules.js): loaded here
+  // first, with a neutral line meanwhile.
+  const rulesNeeded = useMemo(() => { try { return needsAppRules(snapshotData(snapshot)); } catch { return false; } }, [snapshot]);
+  const [, setRulesLoaded] = useState(0);
+  const rulesReady = !rulesNeeded || appRulesReady();
+  useEffect(() => {
+    if (rulesReady) return undefined;
+    let live = true, timer = null;
+    const load = () => loadAppRules().then(() => { if (live) setRulesLoaded(n => n + 1); }, () => { if (live) timer = setTimeout(load, 3000); });
+    load();
+    return () => { live = false; clearTimeout(timer); };
+  }, [rulesReady]);
   // The banner must say whose account is open, also for a profile with no
   // name yet: the name, else the account email the Accounts row showed.
   const memberName = memberDisplayName(opened, snapshot, fallbackName);
@@ -269,7 +283,8 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
     </dl>
   </div>;
 
-  const content = tab === "home" ? home() : tab === "documents" ? documents() : tab === "profile" ? profile() : sectionList(tab);
+  const content = !rulesReady ? <p style={quiet}>Loading...</p>
+    : tab === "home" ? home() : tab === "documents" ? documents() : tab === "profile" ? profile() : sectionList(tab);
 
   return <div role="dialog" aria-modal="true" aria-label={`Read-only support view of ${memberName}'s account`} data-member-viewer=""
     style={{ position: "fixed", inset: 0, zIndex: 300, backgroundColor: T.bg, color: T.text, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>

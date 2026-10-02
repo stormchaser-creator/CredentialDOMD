@@ -117,7 +117,8 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         create policy beta_access_admin_all on beta_access for all to authenticated using(is_admin(current_profile_id())) with check(is_admin(current_profile_id()));
         create table support_tickets(id uuid primary key default gen_random_uuid(),user_id uuid,status text,priority text,
           archived_at timestamptz,agent_approved_at timestamptz,created_at timestamptz not null default now());
-        create table client_errors(id uuid primary key default gen_random_uuid(),created_at timestamptz not null default now());
+        create table client_errors(id uuid primary key default gen_random_uuid(),created_at timestamptz not null default now(),
+          kind text not null default 'error' check (kind in ('error','unhandledrejection','react')),extra jsonb not null default '{}'::jsonb);
         create table page_views(day date,path text,hits integer,referrer_domain text not null default 'direct');
         create table page_visits(created_at timestamptz,path text,referrer text default '');
         -- Production shapes the attention counts and reply idempotency read.
@@ -186,7 +187,8 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         # The 2026-09-25 follow-ups apply on top, twice each, and every check
         # below runs against the final definitions.
         for name in ['20260925110000_admin_access_regrant_guard.sql', '20260925111000_admin_operations_followups.sql',
-                     '20260925112000_support_reply_idempotency.sql', '20260930030000_admin_refusals_not_retryable.sql']:
+                     '20260925112000_support_reply_idempotency.sql', '20260930030000_admin_refusals_not_retryable.sql',
+                     '20261002080000_client_events_info.sql']:
             followup = (ROOT / 'supabase/migrations' / name).read_text()
             sql(followup); sql(followup)
         check('migration is rerunnable and creates no audit actions', sql('select count(*) from admin_operations_audit').stdout.strip() == '0')
@@ -401,6 +403,19 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         check('report carries the same attention block and stays schema 1', value('admin_operations_report(7)')['attention'] == attention and value('admin_operations_report(7)')['schema_version'] == 1)
         for who, subject in [('anon', ''), ('authenticated', 'user_Admin2')]:
             check(f'{who}:{subject or "anonymous"} cannot read attention counts', role('select admin_attention_counts()', who, subject, False).returncode != 0)
+        # An informational event (a page the browser discarded) is stored as
+        # 'info' and never counted as a new error (20261002080000).
+        sql("insert into client_errors(created_at,kind) values(now(),'info')")
+        check('an info event is stored and not counted as a new error', value('admin_attention_counts()') == attention)
+        events = (ROOT / 'supabase/migrations/20261002080000_client_events_info.sql').read_text()
+        events_rollback = (ROOT / 'docs/rollback/20261002080000_client_events_info.rollback.sql').read_text()
+        sql(events_rollback); sql(events_rollback)
+        check('rollback keeps the event as an error row, counted again', value('admin_attention_counts()')['new_errors_since_seen'] == 3
+              and sql("select count(*) from client_errors where kind='error' and extra->>'reported_kind'='info'").stdout.strip() == '1')
+        check('rollback restores the three-kind check', sql("insert into client_errors(kind) values('info')", ok=False).returncode != 0)
+        sql(events); sql("delete from client_errors where extra->>'reported_kind'='info'")
+        check('re-applied after rollback, info is accepted and not counted', sql("insert into client_errors(created_at,kind) values(now(),'info')", ok=False).returncode == 0
+              and value('admin_attention_counts()') == attention)
         check('attention snapshot is internal only', value("has_function_privilege('authenticated','public.admin_attention_snapshot(uuid,timestamptz,timestamptz)','EXECUTE')") is False)
 
         # Traffic drill-down: one row per day, raw rows through the cutover day.

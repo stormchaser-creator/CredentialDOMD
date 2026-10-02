@@ -1,6 +1,7 @@
 // A PA or NP never receives a physician rule set or DEFAULT_STATE_REQ, in any
 // state, for any licence kind (DESIGN 3.2, 7.3). MD and DO lookups return the
 // very objects they always did.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STATE_REQS, DEFAULT_STATE_REQ, getStateEntry, getStateReq } from '../../src/constants/stateRequirements.js';

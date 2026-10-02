@@ -1,5 +1,6 @@
 // Regression tests for the October 2026 state data review (PA and NP rules
 // re-read against their primary sources). Synthetic records only.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { PA_STATE_RULES } from '../../src/constants/paStateRules.js';

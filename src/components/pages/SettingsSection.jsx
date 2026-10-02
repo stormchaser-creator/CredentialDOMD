@@ -14,6 +14,7 @@ import { STATES, STATE_NAMES } from "../../constants/states";
 import { findProvidersByName, extractLicensesFromNPI } from "../../utils/npiLookup";
 import { splitName, mergeNpiLicenses, additionalStatesAfterImport } from "../../utils/npiImport";
 import { degreeAfterNppes, NUCC_PA_SPECIALTIES, NUCC_NP_SPECIALTIES, nuccSpecialtyId, isNuccSpecialtyId, professionOf } from "../../constants/professions";
+import { afterAppRules, degreeNeedsAppRules, preloadAppRules, APP_RULES_UNAVAILABLE } from "../../utils/appRules.js";
 import { normalizeBirthday, formatBirthday } from "../../utils/cmePassport";
 import { generateId, downscalePhoto, avatarInitials } from "../../utils/helpers";
 import {
@@ -56,7 +57,8 @@ const professionLabel = (d) => (PROFESSION_OPTIONS.find(([k]) => k === d) || [d,
 
 function SettingsSection({ onUpgrade }) {
   const { data, addItem, updateSettings, theme: T, toggleTheme, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop,
-    isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage, limitedLaunch, settingsRefusal, clearSettingsRefusal } = useApp();
+    isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage, limitedLaunch, settingsRefusal, clearSettingsRefusal,
+    appRulesWaiting, recordsWithAppRules } = useApp();
   const iS = useInputStyle();
   const s = data.settings;
 
@@ -68,11 +70,32 @@ function SettingsSection({ onUpgrade }) {
   const appProfession = s.degreeType === "PA" || s.degreeType === "NP";
   // MD to DO (or back) stays within the physician profession: one tap, as it
   // always was. Only a change of profession (physician, PA, NP) asks.
+  // PA or NP: their rule data starts loading at the first touch, and is in
+  // before the switch is confirmed (utils/appRules.js).
+  const warmRules = (d) => { if (degreeNeedsAppRules(d)) preloadAppRules(); };
+  // A PA or NP choice is saved once their rule data is in (afterAppRules):
+  // saved before, the app had no rules to show her records with.
+  const [degreeWait, setDegreeWait] = useState(null);
+  const [degreeUnavailable, setDegreeUnavailable] = useState(false);
+  const saveDegree = (d, then = () => {}) => {
+    setDegreeUnavailable(false);
+    afterAppRules(d, () => { update("degreeType", d); then(); }, {
+      waiting: (on) => setDegreeWait(on ? d : null),
+      unavailable: () => setDegreeUnavailable(true),
+    });
+  };
+  const degreeStatus = (degreeWait || degreeUnavailable) && (
+    <div role={degreeUnavailable ? "alert" : "status"} style={{ marginTop: 8, fontSize: 13, color: T.textMuted, lineHeight: 1.45 }}>
+      {degreeUnavailable ? APP_RULES_UNAVAILABLE : `Loading the ${degreeWait} rules...`}
+    </div>
+  );
   const chooseDegree = (d) => {
+    warmRules(d);
+    if (degreeWait) return;
     if (d === s.degreeType) { setPendingDegree(null); return; }
     if (professionKnown && professionOf(d) !== professionOf(s.degreeType)) { setPendingDegree(d); return; }
     setPendingDegree(null);
-    update("degreeType", d);
+    saveDegree(d);
   };
   // Lead time: a draft while typing (it may sit empty), saved on blur or
   // Enter through the same 7..365 clamp send-reminders applies (NOTIFY-004).
@@ -130,6 +153,12 @@ function SettingsSection({ onUpgrade }) {
   const [bdayText, setBdayText] = useState(() => formatBirthday(data.settings.birthMonthDay));
   const [npiLoading, setNpiLoading] = useState(false);
   const [npiResults, setNpiResults] = useState(null); // array of search results
+  // A result chosen while the PA and NP rules load is in flight until it has
+  // written: a second tap, on it or another result, would read the same saved
+  // records and add every new licence twice. The ref refuses it in the same
+  // tick; the state holds the rows.
+  const npiImporting = useRef(false);
+  const [npiImportBusy, setNpiImportBusy] = useState(false);
   const [npiNote, setNpiNote] = useState(""); // how the search was widened
   const [npiError, setNpiError] = useState(null);
   const [licenseImportMsg, setLicenseImportMsg] = useState(null);
@@ -179,8 +208,22 @@ function SettingsSection({ onUpgrade }) {
     }
   };
 
-  // User selects a result — apply NPI + profile data + import licenses
+  // A result chosen: its NPI and profile data are applied and its licenses imported.
+  // While the PA and NP rules load, the screen shows an earlier profession in
+  // place of a PA or NP and keeps a PA, RN or APRN licence off it: the import
+  // reads the records as saved once the rules are in, so it never adds a
+  // hidden licence again nor puts an MD answer over a PA it cannot see
+  // (review of f06d9276).
   const applyNpiResult = (result) => {
+    if (!appRulesWaiting || typeof recordsWithAppRules !== "function") return importNpiResult(result, data);
+    if (npiImporting.current) return;
+    npiImporting.current = true; setNpiImportBusy(true);
+    recordsWithAppRules().then(({ data: saved }) => importNpiResult(result, saved), () => {
+      setNpiError(APP_RULES_UNAVAILABLE);
+      setTimeout(() => setNpiError(null), 6000);
+    }).finally(() => { npiImporting.current = false; setNpiImportBusy(false); });
+  };
+  const importNpiResult = (result, records) => {
     const settingsUpdates = { npi: result.npi };
     if (result.firstName && result.lastName) {
       settingsUpdates.name = `${result.firstName} ${result.lastName}`;
@@ -189,25 +232,25 @@ function SettingsSection({ onUpgrade }) {
     // and the record's NUCC taxonomies. An MD or DO answer replaces a blank,
     // MD or DO as before; a PA or NP answer fills a blank only, and nothing
     // here ever replaces a chosen PA or NP (src/constants/professions.js).
-    const { degree } = degreeAfterNppes(data.settings.degreeType, { credential: result.credential, taxonomies: result.allTaxonomies }, { site: "settings" });
+    const { degree } = degreeAfterNppes(records.settings.degreeType, { credential: result.credential, taxonomies: result.allTaxonomies }, { site: "settings" });
     if (degree) settingsUpdates.degreeType = degree;
     if (result.address?.state) {
       settingsUpdates.primaryState = result.address.state;
     }
-    if (result.address?.phone && !s.phone) {
+    if (result.address?.phone && !records.settings.phone) {
       settingsUpdates.phone = result.address.phone;
     }
 
     // Every license the registry lists (one per state + number), minus any
     // the physician already has on file.
     const npiLicenses = extractLicensesFromNPI(result);
-    const newLicenses = mergeNpiLicenses(data.licenses, npiLicenses, {
-      degreeType: settingsUpdates.degreeType || data.settings.degreeType, makeId: generateId,
+    const newLicenses = mergeNpiLicenses(records.licenses, npiLicenses, {
+      degreeType: settingsUpdates.degreeType || records.settings.degreeType, makeId: generateId,
     });
 
     // Also track every state the registry shows a license in
-    const primary = settingsUpdates.primaryState || data.settings.primaryState;
-    settingsUpdates.additionalStates = additionalStatesAfterImport(data.settings.additionalStates, primary, npiLicenses);
+    const primary = settingsUpdates.primaryState || records.settings.primaryState;
+    settingsUpdates.additionalStates = additionalStatesAfterImport(records.settings.additionalStates, primary, npiLicenses);
 
     // Add licenses via CRUD helper (syncs to Supabase)
     for (const lic of newLicenses) {
@@ -408,10 +451,10 @@ function SettingsSection({ onUpgrade }) {
               {npiNote && <div style={{ fontSize: 12, color: T.textDim, marginBottom: 6 }}>{npiNote}</div>}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 260, overflowY: "auto" }}>
                 {npiResults.map(r => (
-                  <button key={r.npi} onClick={() => applyNpiResult(r)} style={{
+                  <button key={r.npi} onClick={() => applyNpiResult(r)} disabled={npiImportBusy} style={{
                     display: "flex", alignItems: "flex-start", gap: 10, width: "100%",
                     textAlign: "left", padding: "12px 14px", border: `1px solid ${T.border}`,
-                    borderRadius: 10, backgroundColor: T.input, cursor: "pointer",
+                    borderRadius: 10, backgroundColor: T.input, cursor: "pointer", ...(npiImportBusy ? { cursor: "wait", opacity: 0.6 } : {}),
                     transition: "border-color 0.15s, background-color 0.15s",
                   }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.backgroundColor = T.accentGlow; }}
@@ -476,7 +519,7 @@ function SettingsSection({ onUpgrade }) {
           )}
           <div role="group" aria-label="Profession" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, borderRadius: 10, overflow: "hidden", border: `1px solid ${professionKnown ? T.inputBorder : T.warning}`, backgroundColor: professionKnown ? T.inputBorder : T.warning }}>
             {PROFESSION_OPTIONS.map(([d, full]) => (
-              <button key={d} aria-pressed={s.degreeType === d} onClick={() => chooseDegree(d)} style={{
+              <button key={d} aria-pressed={s.degreeType === d} onPointerDown={() => warmRules(d)} onClick={() => chooseDegree(d)} style={{
                 minHeight: 52, padding: "10px 4px", border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer",
                 backgroundColor: s.degreeType === d ? T.accent : T.input,
                 color: s.degreeType === d ? "#fff" : T.textMuted,
@@ -487,13 +530,14 @@ function SettingsSection({ onUpgrade }) {
               </button>
             ))}
           </div>
+          {degreeStatus}
           {pendingDegree && (
             <div role="group" aria-label="Change profession" style={{ marginTop: 8, padding: "12px 14px", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 10 }}>
               <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5, marginBottom: 10 }}>
                 Switching to {professionLabel(pendingDegree)} ({pendingDegree}) changes which state rules, license types and {pendingDegree === "NP" ? "CE" : "CME"} categories apply. Your records stay as they are.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => { update("degreeType", pendingDegree); setPendingDegree(null); }} style={{
+                <button disabled={!!degreeWait} onClick={() => saveDegree(pendingDegree, () => setPendingDegree(null))} style={{
                   flex: 1, minHeight: TAP_MIN + 8, borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
                 }}>Switch to {pendingDegree}</button>
                 <button onClick={() => setPendingDegree(null)} style={{
@@ -953,12 +997,13 @@ function SettingsSection({ onUpgrade }) {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {PROFESSION_OPTIONS.map(([d, full]) => (
-                <button key={d} onClick={() => update("degreeType", d)} aria-label={`I am ${d === "MD" || d === "NP" ? "an" : "a"} ${d} (${full})`} style={{
+                <button key={d} onPointerDown={() => warmRules(d)} disabled={!!degreeWait} onClick={() => { warmRules(d); saveDegree(d); }} aria-label={`I am ${d === "MD" || d === "NP" ? "an" : "a"} ${d} (${full})`} style={{
                   minHeight: TAP_MIN + 8, padding: "10px 0", borderRadius: 10, border: "none",
                   backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
                 }}>{d === "MD" || d === "NP" ? `I am an ${d}` : `I am a ${d}`}</button>
               ))}
             </div>
+            {degreeStatus}
           </div>
         )}
 

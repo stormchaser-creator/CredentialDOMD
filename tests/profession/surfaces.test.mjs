@@ -5,6 +5,7 @@
 // pharmacology hours, Find CME notes and Vera's category guidance. MD and DO
 // output is pinned by md-do-golden.test.mjs; each test here also checks the
 // physician side it touches. Synthetic records only.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { questionValue, withAnswer, agreementShownFor, unverifiedLines } from '../../src/utils/recordAnswers.js';

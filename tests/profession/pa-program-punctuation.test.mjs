@@ -1,5 +1,6 @@
 // The PA program task and the PA licence test read typed and CV-imported
 // punctuation, and the "Physician Associate" title. Synthetic records only.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

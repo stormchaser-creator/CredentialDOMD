@@ -132,6 +132,24 @@ export function classifyWriteError(error) {
   return "transient";
 }
 
+/**
+ * The same for a failed Storage upload (storage-js StorageApiError: an HTTP
+ * `status` and a `statusCode` string, no Postgres code). 403 is the
+ * membership trigger or row-level security on storage.objects ("denied"),
+ * which Storage can also answer as a 400 whose statusCode is "403"; 413 is a
+ * file over the bucket's size limit, which the same bytes meet every time
+ * ("permanent"). Anything else, and a request that never reached Storage,
+ * is "transient".
+ */
+export function classifyStorageError(error) {
+  if (!error) return null;
+  const status = Number(error.status);
+  const statusCode = String(error.statusCode ?? "");
+  if (status === 403 || statusCode === "403" || String(error.code || "") === "42501") return "denied";
+  if (status === 413 || statusCode === "413") return "permanent";
+  return "transient";
+}
+
 /** A short, value-free code for a write failure: safe to report and to show. */
 export function writeErrorCode(error) {
   if (!error) return "";

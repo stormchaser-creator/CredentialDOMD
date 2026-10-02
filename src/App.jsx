@@ -42,6 +42,8 @@ import SyncIssuesNotice from "./components/shared/SyncIssuesNotice.jsx";
 import IdentityWaitingNotice from "./components/shared/IdentityWaitingNotice.jsx";
 import { deskStickyVars, deskRailStyle, DESK_TOP_BAR_H } from "./components/shared/deskSticky.js";
 import OfflineBanner from "./components/shared/OfflineBanner.jsx";
+import AppRulesNotice from "./components/shared/AppRulesNotice.jsx";
+import { APP_RULES_UNAVAILABLE } from "./utils/appRules.js";
 import OfflineUnavailable from "./components/shared/OfflineUnavailable.jsx";
 import AccountRecordsLoadError from "./components/shared/AccountRecordsLoadError.jsx";
 import LimitedLaunchMembership from "./components/pages/LimitedLaunchMembership.jsx";
@@ -227,6 +229,7 @@ export default function App() {
         <AppProvider onNavigate={handleNavigate} offlineSession={offlineSession}>
           {inner}
           <OfflineBanner />
+          <AppRulesNotice />
           <AdminPreviewBanner aboveOffline />
         </AppProvider>
       ) : (
@@ -237,6 +240,7 @@ export default function App() {
           <SignedIn>
             <AppProvider onNavigate={handleNavigate}>
               {inner}
+              <AppRulesNotice />
               {/* Outside AppInner so it also shows on the pending and paused screens. */}
               <AdminPreviewBanner />
             </AppProvider>
@@ -294,7 +298,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // default from the cases themselves (defaultCaseLogYear), below.
   const [caseLogYearPick, setCaseLogYear] = useState(null);
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, loaded, recordsLoadIssue, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, updateSettings, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
+  const { data, loaded, appRulesLaunchFailed, retryAppRules, recordsLoadIssue, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, updateSettings, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
   const defaultCaseYear = useMemo(() => defaultCaseLogYear(data.caseLogs), [data.caseLogs]);
   const caseLogYear = caseLogYearPick ?? defaultCaseYear;
   // Admin, from public.app_admins by way of ai-proxy's status GET. A hook, so
@@ -1004,9 +1008,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
 
   if (!loaded) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.textMuted }}>
-      <div style={{ textAlign: "center" }}>
+      <div style={{ textAlign: "center", maxWidth: 360, padding: "0 16px" }}>
         <AsclepiusIcon size={40} color={T.accent} />
         <div style={{ marginTop: 12, fontSize: 14, fontWeight: 500 }}>Loading...</div>
+        {/* The PA and NP rules could not be loaded (no connection): said, with a way to try again; it also retries on its own. */}
+        {appRulesLaunchFailed && <>
+          <div role="status" style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}>{APP_RULES_UNAVAILABLE}</div>
+          <button type="button" onClick={retryAppRules} style={{ marginTop: 12, minHeight: TAP_MIN, padding: "10px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Try again</button>
+        </>}
       </div>
     </div>
   );

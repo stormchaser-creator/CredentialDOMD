@@ -2,6 +2,7 @@
 // record questions and agreement facts on a licence, the card details and
 // their answers, the profession review card, and the CME page. Physician
 // records render nothing new. Synthetic records only.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mountComponent } from '../component-harness.mjs';

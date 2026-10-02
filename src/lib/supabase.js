@@ -11,7 +11,7 @@ import { createContinuityBinding, recoverContinuity, continuitySourceSubject, PR
 import { accountDataDeletedAt, honorAccountDataDeletion } from "../utils/dataDeletion.js";
 import { getLockCode, saveLockCode, configureSecretContinuity } from "../utils/secretBox.js";
 import { profileInitializationError } from "../utils/profileIssueDiagnostics.js";
-import { classifyWriteError, writeErrorCode, PERMANENT_RETRY_LIMIT, REQUIRED_COLUMN_DEFAULTS, withRequiredDefaults, documentMime, isUuid, INTEGER_COLUMNS, toIntegerOrNull, rebaseSetupState, closedTaskStamp } from "../utils/syncRules.js";
+import { classifyWriteError, classifyStorageError, writeErrorCode, PERMANENT_RETRY_LIMIT, REQUIRED_COLUMN_DEFAULTS, withRequiredDefaults, documentMime, isUuid, INTEGER_COLUMNS, toIntegerOrNull, rebaseSetupState, closedTaskStamp } from "../utils/syncRules.js";
 
 // The typeof guard is the same one src/constants/defaults.js carries, and for
 // the same reason: this module owns redactForExport, which the export paths and
@@ -1407,6 +1407,13 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
   // reports them (the result's `refused`), and a later answer that allows
   // them again sends them and takes the mark off.
   const refusedNow = new Map(), allowedAgain = new Set();
+  // How many ops this pass left queued because the membership answer (or the
+  // want of one) did not allow them: the caller sends them on a later answer
+  // that does (AppContext settleFirstAnswer). `unanswered`: the queue ids of
+  // those left while there was no answer at all this session (a load before
+  // the page load's first answer), which the load shows as they will be.
+  let withheld = 0;
+  const unanswered = [];
   // Saves another page of this browser wrote ahead and is still deciding on
   // its own answer (writeAhead, writeAheadRecord): that page sends it (a
   // settings save in its profile order), or takes it back.
@@ -1444,6 +1451,8 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
       if (op.awaitingAccess === true && op.accessRefused !== true && replayRefusal(op, needed, owner.accountId) === "read_only") {
         refusedNow.set(op.queueId, op.op === "settings" ? "settings" : op.collectionKey);
       }
+      withheld += 1;
+      if (typeof accessAuthority.state === "function" && !accessAuthority.state(owner.accountId)) unanswered.push(op.queueId);
       continue;
     }
     if (op.accessRefused === true) allowedAgain.add(op.queueId);
@@ -1573,7 +1582,7 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
   const refused = new Set();
   try {
     const current = JSON.parse(localStorage.getItem(key) || "[]");
-    if (!Array.isArray(current)) return { refused: [] };
+    if (!Array.isArray(current)) return { refused: [], withheld, unanswered, failed: failed.size, unsent: unsentOf(failed) };
     const remaining = current.filter(op => !completed.has(op.queueId))
       .map(op => failed.has(op.queueId) ? { ...op, ...failed.get(op.queueId) } : op)
       .map(op => {
@@ -1586,9 +1595,19 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
     else localStorage.removeItem(key);
   } catch { /* ignore */ }
   notifySync(owner.accountId);
-  // The sections of the saves marked refused by this pass, for the report.
-  return { refused: [...refused] };
+  // The sections of the saves marked refused by this pass, for the report,
+  // what it left for want of an answer that allows it, and how many sends
+  // failed (still queued; a load whose read followed them shows the account
+  // without them: AppContext reads it again on the first answer). `unsent`:
+  // those of them that failed for a reason that can clear (the network, or
+  // a membership refusal the first answer can lift). A permanent refusal is
+  // not: the account read again holds what it held, and the send is refused
+  // the same way (utils/loadOwes.js).
+  return { refused: [...refused], withheld, unanswered, failed: failed.size, unsent: unsentOf(failed) };
 }
+
+// How many of a replay pass's failed sends were not refused as permanent.
+const unsentOf = (failed) => [...failed.values()].filter(f => !f.permanent).length;
 
 // Why a queued op may not be sent now, as the membership answer says
 // (writeStatus reason, "read_only" when the answer refuses it outright), or
@@ -2415,11 +2434,15 @@ export function documentStoragePath(docId) {
  * then took it. When the row is already there it stands, and null is
  * returned (nothing of this copy was written).
  */
-export async function uploadDocumentFile(item, authUserId, userId) {
+export async function uploadDocumentFile(item, authUserId, userId, { onHeld = null, onFailed = null } = {}) {
   const owner = recordContext("documents", item, undefined, true, authUserId);
   // Kept on this device while membership could not be confirmed: its
   // pendingUpload mark (or the next load's self-heal) sends it later.
-  if (owner.authorized && await heldForAccess(owner)) return null;
+  // `onHeld` tells the caller so (AppContext: the load that owes it).
+  if (owner.authorized && await heldForAccess(owner)) {
+    try { onHeld?.(); } catch { /* the caller's note never stops the upload path */ }
+    return null;
+  }
   if (!supabase || !userId || !item?.id) return null;
   const startedAt = Date.now();
   const row = clientRow("documents", item);
@@ -2428,8 +2451,12 @@ export async function uploadDocumentFile(item, authUserId, userId) {
   row.created_at = own;
   const insertOnly = !row.updated_at;
   if (insertOnly) row.updated_at = own;
+  // `onFailed(kind)`: the file or its row did not land, and how the error is
+  // classified (as bulkSync's). A null for any other reason (no bytes, the
+  // row already there) is not a failure.
+  const failedAs = (kind) => { try { onFailed?.(kind); } catch { /* the caller's note never stops the upload path */ } };
   if (item.data) {
-    const path = await uploadForOwner(item, owner);
+    const path = await uploadForOwner(item, owner, failedAs);
     if (!path) return null;
     row.storage_path = path;
     row.size_bytes = item.size || null;
@@ -2440,8 +2467,8 @@ export async function uploadDocumentFile(item, authUserId, userId) {
     ? owner.db.from("documents").upsert(row, { onConflict: "id", ignoreDuplicates: true }).select("id")
     : owner.db.from("documents").upsert(row, { onConflict: "id" })));
   owner.check();
-  noteWriteOutcome(owner, "documents", item.id, error);
-  if (error) return null;
+  const kind = noteWriteOutcome(owner, "documents", item.id, error);
+  if (error) { failedAs(kind); return null; }
   // Insert-only, and the row was there already: it stands as it is.
   if (insertOnly && Array.isArray(data) && data.length === 0) return null;
   dropSupersededWrites(owner, "documents", item.id, startedAt);
@@ -2488,7 +2515,8 @@ async function removeDocumentObject(owner, itemId, storagePath) {
   return null;
 }
 
-async function uploadForOwner(item, owner) {
+// `onFailed(kind)`: told how a failed upload is classified (classifyStorageError).
+async function uploadForOwner(item, owner, onFailed = null) {
   owner.check();
   if (!supabase || !item?.data) return null;
   const path = `${owner.accountId}/${item.id}`;
@@ -2498,7 +2526,11 @@ async function uploadForOwner(item, owner) {
   const { error } = await writeRequest(owner, () => owner.db.storage.from("documents")
     .upload(path, blob, { contentType: documentMime(item), upsert: true }));
   owner.check();
-  if (error) { console.warn("Document file upload failed:", error.message); return null; }
+  if (error) {
+    console.warn("Document file upload failed:", error.message);
+    try { onFailed?.(classifyStorageError(error)); } catch { /* the caller's note never stops the upload */ }
+    return null;
+  }
   return path;
 }
 
@@ -3197,7 +3229,13 @@ export async function deleteItem(userId, collectionKey, itemId, previous) {
 }
 
 // ─── Bulk sync (for initial migration from localStorage) ─────
-export async function bulkSync(userId, collectionKey, items, authUserId) {
+// `onHeld`: called when the rows are kept on this device for want of a
+// membership answer (the count returned then is not a count of failures).
+// `onFailed(kind)`: called for each row that did not land, with how its
+// error is classified (syncRules classifyWriteError: "transient", "denied"
+// or "permanent"), so a caller can tell the network from a refusal that
+// sending the row again cannot change (AppContext owedSync).
+export async function bulkSync(userId, collectionKey, items, authUserId, { onHeld = null, onFailed = null } = {}) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = writeContext(authUserId);
   const previous = items.map(item => accessAuthority.previousRecord(collectionKey, item?.id, owner.accountId));
@@ -3208,7 +3246,10 @@ export async function bulkSync(userId, collectionKey, items, authUserId) {
     ]), owner.accountId, { ...options, awaitAnswer: true }));
   // Kept on this device while membership could not be confirmed: none of
   // these rows went up (the caller counts them; the next load pushes them).
-  if (owner.authorized && await heldForAccess(owner)) return items.length;
+  if (owner.authorized && await heldForAccess(owner)) {
+    try { onHeld?.(); } catch { /* the caller's note never stops the sync */ }
+    return items.length;
+  }
   if (!supabase || !userId || !items.length) return;
   const table = tableName(collectionKey);
   const startedAt = Date.now();
@@ -3245,8 +3286,12 @@ export async function bulkSync(userId, collectionKey, items, authUserId) {
     }
     // The self-heal push is how a refused record comes back every load, so
     // a refusal here is reported and listed like one on the save itself.
-    noteWriteOutcome(owner, collectionKey, row.id, e2 || null);
-    if (e2) { failed += 1; console.warn(`Row ${row.id} of ${collectionKey} still failing:`, e2.message); }
+    const kind = noteWriteOutcome(owner, collectionKey, row.id, e2 || null);
+    if (e2) {
+      failed += 1;
+      console.warn(`Row ${row.id} of ${collectionKey} still failing:`, e2.message);
+      try { onFailed?.(kind); } catch { /* the caller's note never stops the sync */ }
+    }
     else dropSupersededWrites(owner, collectionKey, row.id, startedAt);
   }
   // How many rows did not land, for a caller that must say so (a restore).

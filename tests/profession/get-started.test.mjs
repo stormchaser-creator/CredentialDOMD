@@ -1,6 +1,7 @@
 // Home's empty state for a member with no records (GetStartedCard): a blank
 // profession is asked on the card itself before any licence is added; a
 // chosen profession adds its own licence in one tap, as before.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mountComponent } from '../component-harness.mjs';
@@ -27,7 +28,8 @@ test('a blank member is asked her profession on the first card, with the one-tap
 test('the picker: "Which license do you hold?" with MD, DO, PA and NP, one tap each; "Not now" only where offered', async () => {
   const chosen = [];
   const T2 = { ...T, textDim: '#777' };
-  const home = await mountComponent('src/components/features/ProfessionPicker.jsx', {
+  const appRules = await import('../../src/utils/appRules.js');
+  const home = await mountComponent('src/components/features/ProfessionPicker.jsx', { modules: { appRules },
     props: { id: 'get-started-profession', why: 'Your profession sets the license types and the rules the app tracks.', onChoose: d => chosen.push(d), theme: T2 } });
   // Home's card reads exactly as it did before the picker was shared.
   assert.equal(home.pageText(), 'Which license do you hold? Your profession sets the license types and the rules the app tracks.MDDOPANP');
@@ -36,7 +38,7 @@ test('the picker: "Which license do you hold?" with MD, DO, PA and NP, one tap e
   buttons.find(b => home.text(b) === 'NP').props.onClick();
   assert.deepEqual(chosen, ['NP']);
   let dismissed = 0;
-  const inline = await mountComponent('src/components/features/ProfessionPicker.jsx', {
+  const inline = await mountComponent('src/components/features/ProfessionPicker.jsx', { modules: { appRules },
     props: { id: 'x', why: 'Why.', onChoose: () => {}, onDismiss: () => { dismissed++; }, theme: T2 } });
   const notNow = inline.nodes().filter(n => n.type === 'button').find(b => inline.text(b) === 'Not now');
   notNow.props.onClick();
@@ -58,7 +60,8 @@ test('Home: a refused profile save says so and opens no Add License form; a save
   const { readFileSync } = await import('node:fs');
   // The helper as written in ProfessionPicker.jsx (node does not load JSX).
   const src = readFileSync(new URL('../../src/components/features/ProfessionPicker.jsx', import.meta.url), 'utf8');
-  const helper = src.slice(src.indexOf('export function chooseProfessionThen'), src.indexOf('export default function ProfessionPicker'));
+  const helper = `import { afterAppRules } from ${JSON.stringify(new URL('../../src/utils/appRules.js', import.meta.url).href)};\n`
+    + src.slice(src.indexOf('export function chooseProfessionThen'), src.indexOf('// A PA or NP tap waits here'));
   const { chooseProfessionThen } = await import(`data:text/javascript;base64,${Buffer.from(helper).toString('base64')}`);
   for (const refused of [true, false]) {
     const calls = [];

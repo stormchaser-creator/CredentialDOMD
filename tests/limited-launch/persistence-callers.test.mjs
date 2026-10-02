@@ -237,7 +237,7 @@ test('same-owner reconciliation uploads local bytes and downloads no stored file
   const docs = [file, { id: 'doc-two', storagePath: `${ownerA}/doc-two` }], f = fixture({ documents: docs });
   await f.api.reconcileDocumentFiles('profileA', docs, ownerA, f.current());
   assert.equal(f.named('uploadDocumentFile').length, 1);
-  assert.deepEqual(f.named('uploadDocumentFile')[0].args.slice(1), [ownerA, 'profileA'], 'the file and its row, for this profile');
+  assert.deepEqual(f.named('uploadDocumentFile')[0].args.slice(1, 3), [ownerA, 'profileA'], 'the file and its row, for this profile');
   assert.equal(f.named('downloadDocumentFile').length, 0, 'a screen asks for a stored file when it shows it');
   assert.equal(f.named('sbUpdate').length, 0, 'no partial update of a row that may not exist');
   assert.equal(f.state.documents[0].storagePath, `${ownerA}/${file.id}`);
@@ -522,27 +522,33 @@ test('server-wiped account purges before replay and stops if the recovery marker
 
 const syncStart = source.indexOf('  // Enrollment may finish after the initial cloud load.');
 const syncEnd = source.indexOf('  // End protected-access reconciliation.', syncStart);
-const syncCode = source.slice(syncStart, syncEnd);
-test('first protected write access retries reconciliation once per owner/scope without render loops', () => {
+// The effect, and the decision it hands each answer to (reconcileAccessAnswer).
+const reconcileStart = source.indexOf('  // The membership check answered and allows changes');
+const reconcileEnd = source.indexOf('  // The first answer that allows changes, after the latest load', reconcileStart);
+const syncCode = `${source.slice(syncStart, syncEnd)}\n${source.slice(reconcileStart, reconcileEnd)}`;
+// goal4 (2026-10-02): the first answer that allows changes finishes what the
+// load left (settleFirstAnswer) instead of reading the whole account again;
+// a later change of the scopes in the session still reads it again.
+test('first protected write access settles once per owner/scope, reads again only on a change, without render loops', () => {
   const ref = { current: null }, calls = [];
   const context = { useRef: () => ref, useEffect: fn => fn(), limitedLaunch: { enabled: true, status: 'ready' }, loaded: true,
     offlineMode: false, user: { id: ownerA }, profileOwner: ownerA, getActiveUserId: () => context.user.id,
     window: { Clerk: { user: { id: ownerA } } }, canWriteCredential: false, canWritePractice: false,
-    loadDataForUser: id => calls.push(id) };
+    loadDataForUser: id => calls.push(['load', id]), settleFirstAnswer: id => calls.push(['settle', id]) };
   vm.runInNewContext(`{${syncCode}}`, context);
   assert.deepEqual(calls, []);
   context.canWriteCredential = true;
   for (let i = 0; i < 3; i++) vm.runInNewContext(`{${syncCode}}`, context);
-  assert.deepEqual(calls, [ownerA]);
+  assert.deepEqual(calls, [['settle', ownerA]], 'the first answer settles what the load left, once');
   context.canWritePractice = true;
   for (let i = 0; i < 3; i++) vm.runInNewContext(`{${syncCode}}`, context);
-  assert.deepEqual(calls, [ownerA, ownerA]);
+  assert.deepEqual(calls, [['settle', ownerA], ['load', ownerA]], 'a scope added in the session reads the account again, once');
   context.user = { id: ownerB }; context.window.Clerk.user = context.user;
   vm.runInNewContext(`{${syncCode}}`, context); // stale prior account's profile readiness
   assert.equal(calls.length, 2);
   context.profileOwner = ownerB;
   vm.runInNewContext(`{${syncCode}}`, context);
-  assert.deepEqual(calls, [ownerA, ownerA, ownerB]);
+  assert.deepEqual(calls, [['settle', ownerA], ['load', ownerA], ['settle', ownerB]], 'another account\'s first answer is its own first');
 });
 test('reconciliation waits for loaded, online and current protected account state', () => {
   for (const change of [{ loaded: false }, { offlineMode: true }, { profileOwner: ownerB },
@@ -551,7 +557,7 @@ test('reconciliation waits for loaded, online and current protected account stat
     const calls = [], context = { useRef: () => ({ current: null }), useEffect: fn => fn(), limitedLaunch: { enabled: true, status: 'ready' },
       loaded: true, offlineMode: false, user: { id: ownerA }, profileOwner: ownerA, getActiveUserId: () => ownerA,
       window: { Clerk: { user: { id: ownerA } } }, canWriteCredential: true, canWritePractice: true,
-      loadDataForUser: id => calls.push(id), ...change };
+      loadDataForUser: id => calls.push(id), settleFirstAnswer: id => calls.push(id), ...change };
     vm.runInNewContext(`{${syncCode}}`, context);
     assert.deepEqual(calls, []);
   }

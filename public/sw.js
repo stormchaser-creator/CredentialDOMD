@@ -20,34 +20,80 @@ const PRECACHE_URLS = [
 ];
 /* __PRECACHE_END__ */
 
+// The PA and NP rule data's own chunk (src/utils/appRules.js), stamped at
+// build time like the list above. Precached only on a device whose app has
+// needed it: the page leaves APP_RULES_FLAG in Cache Storage the first time it
+// loads the data, so a PA or NP opens offline after an update while an MD or
+// DO device never downloads it.
+/* __APP_RULES_BEGIN__ */
+const APP_RULES_URLS = [];
+/* __APP_RULES_END__ */
+const FLAG_CACHE = "credentialdomd-flags";
+const APP_RULES_FLAG = "./__app-rules-wanted";
+async function wantsAppRules() {
+  try { return !!(await (await caches.open(FLAG_CACHE)).match(APP_RULES_FLAG)); } catch { return false; }
+}
+// Puts this build's rule chunk in this build's cache, if it is not there.
+// Best effort: a failure here never stops the update (the page loads the
+// chunk itself when it needs it, online).
+async function cacheAppRules() {
+  if (!APP_RULES_URLS.length) return;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const missing = [];
+    for (const u of APP_RULES_URLS) if (!(await cache.match(u))) missing.push(u);
+    if (missing.length) await cache.addAll(missing.map((u) => new Request(u, { cache: "no-cache" })));
+  } catch { /* fetched when needed */ }
+}
+
 // Install: precache shell (bypass the HTTP cache so we never precache staleness).
 // skipWaiting → the new worker activates immediately (CallSync-style silent
 // updates); the page reload is handled by UpdatePrompt.
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.addAll(PRECACHE_URLS.map((u) => new Request(u, { cache: "no-cache" })))
-    )
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(PRECACHE_URLS.map((u) => new Request(u, { cache: "no-cache" })));
+      if (await wantsAppRules()) await cacheAppRules();
+    })
   );
   self.skipWaiting();
 });
 
 // Activate: clean caches from previous builds. The invoice hand-off copy
 // (credentialdomd-handoff-*, src/utils/invoiceHandoffStore.js) is the app's
-// data, not a build's files: it stays.
-const KEEP_CACHE = /^credentialdomd-handoff-/;
+// data, not a build's files: it stays, as does the device's flags cache
+// (APP_RULES_FLAG above).
+const KEEP_CACHE = /^credentialdomd-(handoff-|flags$)/;
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME && !KEEP_CACHE.test(k)).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
+  const cleaned = caches.keys().then((keys) =>
+    Promise.all(keys.filter((k) => k !== CACHE_NAME && !KEEP_CACHE.test(k)).map((k) => caches.delete(k)))
+  ).then(() => self.clients.claim());
+  event.waitUntil(cleaned);
+  // The flag can land between the install's look and now (the first launch
+  // of this build loads the chunk through the old worker, into the old
+  // build's cache this activation just deleted): looked at again once the
+  // worker is active, never inside waitUntil. Until activation ends, every
+  // request of the page waits for it, cross-origin ones included, and on a
+  // weak network this fetch can take tens of seconds on an iPhone: the
+  // account read and every save waited behind a best-effort cache warm-up
+  // (review of f06d9276). Should the worker stop first, the page's
+  // APP_RULES_WANTED (src/utils/appRules.js) and the fetch handler cache it.
+  cleaned.then(async () => { if (await wantsAppRules()) await cacheAppRules(); }).catch(() => {});
 });
 
 // The UpdatePrompt UI posts this when the user accepts an update.
+// APP_RULES_WANTED: a page of this build whose account needs the PA and NP
+// rule data has it (src/utils/appRules.js rememberAppRulesOnDevice): this
+// build's chunk goes in this build's cache now, whenever the flag was
+// written, so the next launch opens offline. A page of another build is
+// ignored (its chunk is not this worker's).
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === "APP_RULES_WANTED" && event.data.build === BUILD_ID) {
+    const done = cacheAppRules();
+    if (typeof event.waitUntil === "function") event.waitUntil(done);
   }
 });
 

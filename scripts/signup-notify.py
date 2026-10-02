@@ -425,7 +425,9 @@ def query_sql(since, present, now=None):
     and (to_jsonb(m)->>'verification_id') is null
     and coalesce(m.body, '') not ilike 'CredentialDOMD Support%'
     and coalesce((to_jsonb(m)->>'is_admin_reply')::boolean, false) = false""",
-        f"""select 'CLIENT ERROR', coalesce(p.name, e.auth_user_id, 'signed-out'), coalesce(p.email,''), e.kind || ': ' || left(regexp_replace(e.message, '\\s+', ' ', 'g'),90), e.created_at, null
+        # kind 'info' is an event, not a fault (a page the browser discarded):
+        # said as such (migration 20261002080000).
+        f"""select case when e.kind = 'info' then 'CLIENT EVENT' else 'CLIENT ERROR' end, coalesce(p.name, e.auth_user_id, 'signed-out'), coalesce(p.email,''), e.kind || ': ' || left(regexp_replace(e.message, '\\s+', ' ', 'g'),90), e.created_at, null
   from client_errors e left join profiles p on p.auth_user_id = e.auth_user_id
   where e.created_at > {s}{upto('e.created_at')}""",
         f"select 'BETA JOINED', coalesce(name,''), coalesce(email,''), '', activated_at, null from beta_access where activated_at > {s}{upto('activated_at')}",

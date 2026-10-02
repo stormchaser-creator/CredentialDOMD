@@ -1,5 +1,6 @@
 // Release goal3 follow-up fixes (PA and NP). Synthetic members and records
 // only. Each test names the defect it pins.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -1,4 +1,4 @@
-import { useState, useMemo, useId } from "react";
+import { useState, useMemo, useId, useRef } from "react";
 import { TAP_MIN } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
@@ -7,6 +7,7 @@ import { generateId } from "../../../utils/helpers";
 import { lookupNPI, findProvidersByName, extractLicensesFromNPI } from "../../../utils/npiLookup";
 import { splitName, mergeNpiLicenses, additionalStatesAfterImport } from "../../../utils/npiImport";
 import { degreeAfterNppes } from "../../../constants/professions";
+import { APP_RULES_UNAVAILABLE } from "../../../utils/appRules.js";
 
 /**
  * The registry lookup and import, in one place.
@@ -26,9 +27,15 @@ import { degreeAfterNppes } from "../../../constants/professions";
  *    inside a row rather than owning the page
  */
 export default function NpiPanel({ onImported, dense = false }) {
-  const { data, updateSettings, addItem, theme: T } = useApp();
+  const { data, updateSettings, addItem, theme: T, appRulesWaiting, recordsWithAppRules } = useApp();
   const iS = useInputStyle();
   const s = data.settings || {};
+  // While the PA and NP rules load, the screen shows an earlier profession in
+  // place of a PA or NP and keeps a PA, RN or APRN licence off it: what is
+  // written reads the records as saved once the rules are in, so an MD
+  // answer never replaces a PA it cannot see, and a hidden licence is never
+  // added again (review of f06d9276).
+  const waitsForRules = !!appRulesWaiting && typeof recordsWithAppRules === "function";
 
   // Two panels can be on screen at once (Licenses and Public records), so the label ids are per panel.
   const npiId = useId();
@@ -40,6 +47,11 @@ export default function NpiPanel({ onImported, dense = false }) {
   const [note, setNote] = useState("");  // context, muted
   const [searchState, setSearchState] = useState(s.primaryState || "");
   const [imported, setImported] = useState(0);
+  // An import waiting on the rules is in flight until it has written: a
+  // second tap in that wait would read the same saved records and add every
+  // new licence twice. The ref refuses it in the same tick; the state shows it.
+  const importing = useRef(false);
+  const [importBusy, setImportBusy] = useState(false);
 
   const npiLicenses = useMemo(() => (result ? extractLicensesFromNPI(result) : []), [result]);
   // What an import would actually add. Same key the merge uses, so a
@@ -56,10 +68,15 @@ export default function NpiPanel({ onImported, dense = false }) {
     if (!r) { setMsg("No provider found for that NPI. Check the digits, or clear the field to search by name."); return; }
     setNpi(clean);
     setResult(r);
+    let saved = s;
+    if (waitsForRules) {
+      try { saved = (await recordsWithAppRules()).data.settings || {}; }
+      catch { setMsg(APP_RULES_UNAVAILABLE); return; }
+    }
     const patch = { npi: clean };
     // Fills a blank profession only: MD or DO from the credential as before,
     // PA or NP from the NUCC taxonomy or the credential (professions.js).
-    const { degree } = degreeAfterNppes(s.degreeType, { credential: r.credential, taxonomies: r.allTaxonomies }, { site: "setup" });
+    const { degree } = degreeAfterNppes(saved.degreeType, { credential: r.credential, taxonomies: r.allTaxonomies }, { site: "setup" });
     if (degree) patch.degreeType = degree;
     updateSettings(patch);
   };
@@ -97,11 +114,20 @@ export default function NpiPanel({ onImported, dense = false }) {
 
   const runImport = () => {
     if (!result) return;
+    if (!waitsForRules) { importRows(data); return; }
+    if (importing.current) return;
+    importing.current = true; setImportBusy(true);
+    recordsWithAppRules()
+      .then(({ data: saved }) => importRows(saved), () => setMsg(APP_RULES_UNAVAILABLE))
+      .finally(() => { importing.current = false; setImportBusy(false); });
+  };
+  const importRows = (records) => {
+    const rs = records.settings || {};
     const rows = extractLicensesFromNPI(result);
-    const newOnes = mergeNpiLicenses(data.licenses, rows, { degreeType: s.degreeType, makeId: generateId });
+    const newOnes = mergeNpiLicenses(records.licenses, rows, { degreeType: rs.degreeType, makeId: generateId });
     for (const lic of newOnes) addItem("licenses", lic);
-    const extras = additionalStatesAfterImport(s.additionalStates, s.primaryState, rows);
-    if (extras.join("|") !== (s.additionalStates || []).join("|")) updateSettings({ additionalStates: extras });
+    const extras = additionalStatesAfterImport(rs.additionalStates, rs.primaryState, rows);
+    if (extras.join("|") !== (rs.additionalStates || []).join("|")) updateSettings({ additionalStates: extras });
     setImported(newOnes.length);
     onImported?.(newOnes.length, newOnes);
   };
@@ -200,7 +226,7 @@ export default function NpiPanel({ onImported, dense = false }) {
 
       {result && npiLicenses.length > 0 && (
         fresh.length > 0
-          ? <button onClick={runImport} style={primaryBtn}>Import {fresh.length} license{fresh.length === 1 ? "" : "s"}</button>
+          ? <button onClick={runImport} disabled={importBusy} style={importBusy ? { ...primaryBtn, opacity: 0.6, cursor: "wait" } : primaryBtn}>{importBusy ? "Importing..." : `Import ${fresh.length} license${fresh.length === 1 ? "" : "s"}`}</button>
           : <div style={{ fontSize: 13, color: T.textMuted, fontWeight: 600 }}>
               All {npiLicenses.length} registry license{npiLicenses.length === 1 ? " is" : "s are"} already on file.
             </div>

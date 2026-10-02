@@ -3,6 +3,7 @@
 // the licence term, an unanswered Hawaii prescriber question, the ANCC
 // development category, certification transcripts and legacy licence
 // dedupe. Synthetic records only. Time is frozen at local noon on 2026-10-01.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { complianceFor } from '../../src/utils/compliance.js';

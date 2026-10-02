@@ -6,12 +6,14 @@
 // rules. "Not now" reads no CV; Vera then answers only what needs no rule and
 // shows the choice again when a rule is needed. Members who chose MD, DO, PA
 // or NP never see the picker. Every record here is synthetic.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { sharedRuleResolver } from '../helpers/shared-rule-resolver.mjs';
 import { mountComponent, settle } from '../component-harness.mjs';
 import { mountVera, recorder } from '../assistant-harness.mjs';
 import * as cvImport from '../../src/utils/cvImport.js';
@@ -167,7 +169,7 @@ const bundleAssistant = async () => {
         b.onResolve({ filter: new RegExp(filter) }, () => ({ path: filter, namespace: 'stub' }));
         b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents, loader: 'js' }));
       }
-    } }],
+    } }, sharedRuleResolver],
   });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);
@@ -555,7 +557,7 @@ test('Vera passes needsProfession from the model reply through to the screen', a
         b.onResolve({ filter: new RegExp(filter) }, () => ({ path: filter, namespace: 'stub' }));
         b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents, loader: 'js' }));
       }
-    } }],
+    } }, sharedRuleResolver],
   });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);

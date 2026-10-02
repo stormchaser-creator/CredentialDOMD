@@ -3,6 +3,7 @@
 // profession asks first, an NPPES lookup never overwrites a chosen PA or NP,
 // and the licence form and record questions follow the profession's types.
 // The real components through the component harness; synthetic records only.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -31,6 +32,8 @@ const settingsModules = async () => ({
   forwardingAddresses: await import(src('utils/forwardingAddresses.js')),
   compliance: await import(src('utils/compliance.js')),
   professions: await import(src('constants/professions.js')),
+  // The real loader: the PA and NP data is installed (helpers/app-rules.mjs), so a choice saves at once.
+  appRules: await import(src('utils/appRules.js')),
   useInputStyle: { useInputStyle: () => ({}) },
   useForwardingAddresses: { useForwardingAddresses: () => ({ rows: [], loading: false }) },
   aiClient: { useSharedAiStatus: () => ({}), fetchSharedAiStatus() {}, describeAiStatus: () => '', describeOpusStatus: () => '', describeAiBudget: () => null, useAnthropicAvailable: () => false },
@@ -177,7 +180,7 @@ test('Setup About you offers four chips; tapping NP saves it', async () => {
     updateSettings: u => { saved.push(u); return true; } };
   const c = await mountComponent('src/components/features/SetupPage.jsx', { app, exportName: 'IdentityDrawer', modules: {
     reminderPreferences: await import(src('utils/reminderPreferences.js')), contactFormat: await import(src('utils/contactFormat.js')),
-    useInputStyle: { useInputStyle: () => ({}) }, states: await import(src('constants/states.js')),
+    useInputStyle: { useInputStyle: () => ({}) }, states: await import(src('constants/states.js')), appRules: await import(src('utils/appRules.js')),
   } });
   const chips = c.nodes().filter(n => n.type === 'button' && /^(MD|DO|PA|NP)$/.test(c.text(n)));
   assert.deepEqual(chips.map(b => c.text(b)), ['MD', 'DO', 'PA', 'NP']);

@@ -3,6 +3,9 @@ import { useUser, useClerk } from "@clerk/clerk-react";
 import { accessAuthority, accessVerifying, alertWriteRefused, dataChangeStatus, holdForAccess, reportWriteAccess, scopesForWrite, setWriteAccessReporter, settleWriteAccess, writeRefusalReason } from "../utils/limitedLaunchAccess.js";
 import { applyHeldQueue, changesBetween, revertChanges } from "../utils/heldChanges.js";
 import { localChangesSince, rebaseLocalChanges } from "../utils/loadRebase.js";
+import { beginLoadOwes, firstAnswerPlan, layWithheldSaves, readAfterReplay, replayLeftUnsent } from "../utils/loadOwes.js";
+import { needsAppRules, preloadAppRules, loadAppRules, rememberAppRulesOnDevice, withoutAppRuleNeeds } from "../utils/appRules.js";
+import { useAppRulesReady, useAppRulesFailed } from "../hooks/useAppRulesReady.js";
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES, themeNameOf, nextThemeName } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
@@ -11,7 +14,7 @@ import { loadData, saveData, readCachedData, clearLocalData, onCacheFullChange, 
   adoptOfflineCopyRead, deviceOnlyForLoad, offlineCopyUnchangedSinceKnown, deviceOnlyUnsavedState, onDeviceOnlyUnsavedChange,
   setCacheWritePending, spillOfflineSave, offlineCopyMayBeBehind } from "../utils/storage";
 import { onPageLeave } from "../utils/pageLeave.js";
-import { setActiveUserId, getActiveUserId, setStorageFullReporter, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, adoptLegacyStorage, hasLegacyStorage, lsGet, lsGetJSON, lsSetJSON, scopedKey, BASE_KEYS, WIPE_SEEN_KEY, LOCAL_FENCE_KEY, localFence, adoptLocalFence, localCopyCurrent, pendingOpCount, awaitingAccessOpCount, accessRefusedOpCount, deviceOnlyRecordCounts, retireContinuityRecovery, offlineCopyUnread, markOfflineCopyRead, probeOfflineFile } from "../utils/storageScope";
+import { setActiveUserId, getActiveUserId, setStorageFullReporter, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, adoptLegacyStorage, hasLegacyStorage, lsGet, lsGetJSON, lsSet, lsSetJSON, scopedKey, BASE_KEYS, WIPE_SEEN_KEY, LOCAL_FENCE_KEY, localFence, adoptLocalFence, localCopyCurrent, pendingOpCount, awaitingAccessOpCount, accessRefusedOpCount, deviceOnlyRecordCounts, retireContinuityRecovery, offlineCopyUnread, markOfflineCopyRead, probeOfflineFile } from "../utils/storageScope";
 import { repairStoredIds } from "../utils/idRepair.js";
 import { accountDataDeletedAt, honorAccountDataDeletion, sameDeletionStamp } from "../utils/dataDeletion.js";
 import { recordLastIdentity } from "../utils/offlineSession";
@@ -103,6 +106,12 @@ const RESUME_REFRESH_MIN_GAP_MS = 30 * 1000;
 // again after these pauses, and whenever the app comes back to the front or
 // online. The last pause repeats.
 const IDENTITY_RETRY_DELAYS_MS = Object.freeze([5000, 15000, 30000, 60000, 120000]);
+// How long the page load's first membership answer waits for the writes the
+// load before it began (they wait on that answer) to settle before deciding
+// what the load still owes (settleFirstAnswer).
+const OWED_WRITES_WAIT_MS = 5000;
+// The tracked states the screens get while the rule data loads.
+const NO_STATES = Object.freeze([]);
 
 /**
  * Normalize Clerk's user → the `{ id, email }` shape the rest of the app
@@ -187,6 +196,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // (beginLoadOver). Writing them regardless put this window's older copy
   // over Protected Identity rows another window had saved.
   const cachedRecordsRef = useRef(null);
+  // What the latest account load left for the membership answer
+  // (utils/loadOwes.js), and the account whose kept saves are being replayed.
+  const loadOwesRef = useRef(null);
+  const replayingRef = useRef(null);
 
   // ─── Desktop breakpoint (>=1024px) ────────────────────────
   // One flag for the whole app: components branch on layout here instead of
@@ -340,64 +353,18 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return onSyncChange(refresh);
   }, [user?.id]);
 
-  // Saves kept on this device for want of a membership answer (queued
-  // awaitingAccess, lib/supabase.js) go up as soon as a check answers, not at
-  // the next launch. Replay sends each only if that answer allows it. One the
-  // answer refuses (the membership is read-only now) is marked, so the notice
-  // says it was not saved instead of promising a sync, and it is reported.
-  //
-  // Nothing goes up that predates a data deletion. Delete All My Data on
-  // another device empties the account AND its deletion ledger, so every save
-  // queued here before it would come back as a new record. As on a load
-  // (utils/dataDeletion.js), the account's deletion stamp is read first: a
-  // new one (or a purge by another tab here) sends nothing and loads the
-  // account again, which purges this device's copy before anything is
-  // replayed. A stamp that cannot be read sends nothing either; the next
-  // answer or the next load asks again. Then the deletion ledger, so nothing
-  // deleted since is put back.
+  // Saves kept on this device for want of a membership answer go up as soon
+  // as a check answers, not at the next launch (replayKeptSaves).
   useEffect(() => {
     if (offlineMode || !user?.id || !accessAuthority.enabled) return undefined;
     const ownerId = user.id;
-    let running = false;
     // Also run when a save another page of this browser wrote ahead turns
     // out to have no live page behind it after a replay here left it to that
     // page (lib/supabase.js onWrittenAheadFreed): the page this one reloaded
     // flushed it at pagehide, and it would otherwise wait for the next answer.
-    const replayKept = (accountId) => {
-      if (running || accountId !== ownerId) return;
-      const waiting = awaitingAccessOpCount(ownerId);
-      if (waiting === 0) return;
-      // Every kept save is marked refused already and this answer allows no
-      // change: nothing to send and nothing new to mark.
-      if (accessRefusedOpCount(ownerId) >= waiting
-        && !["credential", "practice"].some(scope => accessAuthority.allows(scope, "write", ownerId))) return;
-      const profileId = userIdRef.current;
-      const under = loadedDeletionRef.current?.owner === ownerId ? loadedDeletionRef.current : null;
-      const current = () => dataOwnerRef.current === ownerId && getActiveUserId() === ownerId
-        && userIdRef.current === profileId && loadedDeletionRef.current === under;
-      if (!profileId || !under || !current()) return;
-      // This device purged since these records loaded (another tab honored a
-      // deletion, or ran Delete All My Data): no request needed.
-      const purgedHere = () => !sameDeletionStamp(under.stamp ?? null, lsGet(WIPE_SEEN_KEY, ownerId))
-        || !localCopyCurrent(ownerId, under.fence ?? null);
-      const loadAgain = () => { setLoaded(false); void loadDataForUser(ownerId); };
-      running = true;
-      void (async () => {
-        try {
-          if (purgedHere()) { loadAgain(); return; }
-          const stamp = await readAccountDataDeletion(ownerId);
-          if (!current()) return;
-          if ((stamp && !sameDeletionStamp(under.stamp ?? null, stamp)) || purgedHere()) { loadAgain(); return; }
-          const tombstones = await listTombstones(profileId);
-          if (!current() || purgedHere()) return;
-          const replayed = await replayPendingOps(profileId, ownerId, { tombstones });
-          for (const section of replayed?.refused || []) reportWriteAccess("write_refused", "read_only", section);
-        } catch { /* the stamp, the ledger or the network: the next answer, or the next load, tries again */ }
-        finally { running = false; }
-      })();
-    };
-    const stopAnswers = accessAuthority.onAnswer(replayKept);
-    const stopFreed = onWrittenAheadFreed(replayKept);
+    const replay = (accountId) => { if (accountId === ownerId) replayKeptSaves(ownerId); };
+    const stopAnswers = accessAuthority.onAnswer(replay);
+    const stopFreed = onWrittenAheadFreed(replay);
     return () => { stopAnswers?.(); stopFreed(); };
   }, [offlineMode, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -418,6 +385,9 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     }
 
     if (user) {
+      // A PA or NP account on this device: its rule data starts loading now,
+      // alongside the account read (utils/appRules.js).
+      if (lsGet(BASE_KEYS.appRulesHint, user.id) === "1") preloadAppRules();
       loadDataForUser(user.id);
     } else {
       // Not authenticated: nothing to load. There is no namespace without a
@@ -608,7 +578,38 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // screen read-only. A records read that fails once the identity answered
   // keeps that copy on screen and the retry going, instead of an empty
   // "records unavailable" screen that tries no more (review of 9484782c).
-  async function loadDataForUser(authUserId, { quiet = false, fromWait = false } = {}) {
+  //
+  // What the load leaves for the membership answer is noted on its own record
+  // (utils/loadOwes.js; settleFirstAnswer below).
+  // (Guarded: tests run this function alone, without the component's refs.)
+  async function loadDataForUser(authUserId, options = {}) {
+    const owes = typeof loadOwesRef === "object" && loadOwesRef ? beginLoadOwes(loadOwesRef, authUserId) : null;
+    try { return await readAccountForUser(authUserId, options, owes); }
+    finally { owes?.finish(); }
+  }
+
+  // A write a load begins and does not wait for: never unhandled, and noted
+  // on the load's record (`owes`) when the membership answer held or refused
+  // it, or when it threw (the network): utils/loadOwes.js failed().
+  function owedWrite(owes, write) {
+    const settled = Promise.resolve(write).catch((error) => { owes?.failed(error); });
+    owes?.track(settled);
+    return settled;
+  }
+
+  // The self-heal push (bulkSync): rows kept for want of an answer are held
+  // (onHeld); a row that did not land is told by how it failed (onFailed),
+  // and nothing queues it (only a load pushes it again): on the network it
+  // is lost (review of e1f4b4c9: a weak network failed the push, and the
+  // record only on this device stayed there all session), refused by the
+  // membership on the server it is held, and refused as permanent it is
+  // neither, since a load again pushes it and is refused the same way, on
+  // every launch (review of f06d9276; utils/loadOwes.js).
+  function owedSync(owes, push) {
+    return owedWrite(owes, push({ onHeld: () => owes?.held(), onFailed: kind => owes?.unlanded(kind) }));
+  }
+
+  async function readAccountForUser(authUserId, { quiet = false, fromWait = false } = {}, owes = null) {
     const generation = ++dataLoadGeneration.current;
     // What the server said about billed rows before this read began is in
     // what it reads (utils/serverBilling.js): dropped once it lands.
@@ -705,17 +706,22 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         // patient chart the read flagged, a record deleted on another device)
         // is dropped instead of re-created behind its tombstone. When the
         // ledger cannot be read, the queue waits for the next load.
+        // What the replay leaves for want of an answer that allows it (before
+        // the page load's first answer: every record save) is noted (owes):
+        // that answer sends it.
+        let replayed = null;
         if (pendingOpCount(authUserId) > 0) {
           let replayTombstones = null;
           try { replayTombstones = await listTombstones(profile.id); } catch { /* unread: replay waits */ }
           if (!current()) return;
           if (replayTombstones) {
             try {
-              const replayed = await replayPendingOps(profile.id, authUserId, { tombstones: replayTombstones });
+              replayed = await replayPendingOps(profile.id, authUserId, { tombstones: replayTombstones });
               // Saves kept for want of a membership answer that the answer now refuses (lib/supabase.js accessRefused).
               for (const section of replayed?.refused || []) reportWriteAccess("write_refused", "read_only", section);
-            } catch { /* offline */ }
+            } catch { replayed = null; /* offline */ }
           }
+          owes?.noteReplay(replayed, pendingOpCount(authUserId));
         }
         if (!current()) return;
         let sbData;
@@ -725,6 +731,9 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // Do not hydrate, repair links, or cache an incomplete online read.
           // A fresh browser has no local rows with which to fill those gaps.
           assertCompleteAccountRecords(sbData, profile.id, COLLECTION_KEYS);
+          // A PA or NP: the rule data loads while the rest of this load runs.
+          // (Guarded: tests run this function alone, without the module's imports.)
+          if (typeof preloadAppRules === "function" && needsAppRules(sbData)) preloadAppRules();
         } catch {
           if (!current()) return;
           throw accountRecordsLoadError();
@@ -819,7 +828,15 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // up, and the merge above put that back on screen although the
           // notice says the change stays on this device. Read after the
           // replay, so only what is still waiting counts. utils/heldChanges.js.
-          const heldQueue = applyHeldQueue(merged, lsGetJSON(BASE_KEYS.pendingOps, authUserId), COLLECTION_KEYS);
+          // So do the saves from an earlier session the replay above left for
+          // want of any answer yet (replayed.unanswered): the page load's first
+          // answer sends them without reading the account again
+          // (settleFirstAnswer), and the screen already shows them as sent.
+          const unanswered = new Set(Array.isArray(replayed?.unanswered) ? replayed.unanswered : []);
+          if (unanswered.size) owes?.markLaidOver();
+          const queued = lsGetJSON(BASE_KEYS.pendingOps, authUserId);
+          const heldQueue = applyHeldQueue(merged, unanswered.size && Array.isArray(queued)
+            ? queued.map(op => (op && unanswered.has(op.queueId) ? { ...op, awaitingAccess: true } : op)) : queued, COLLECTION_KEYS);
           merged = heldQueue.data;
 
           // These two unfinished editors have no cloud/restore registration.
@@ -875,7 +892,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
                 if (!repaired.length) continue;
                 const byId = new Map(repaired.map(x => [x.id, x]));
                 merged[key] = merged[key].map(x => byId.get(x?.id) || x);
-                bulkSync(profileId, key, repaired, authUserId).catch(() => {});
+                owedSync(owes, notes => bulkSync(profileId, key, repaired, authUserId, notes));
                 pushed += repaired.length;
               }
             }
@@ -956,17 +973,26 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
                 merged[key] = [...byId.values()];
               }
               if (toPush.length > 0) {
-                bulkSync(profileId, key, toPush, authUserId).catch(() => {});
+                owedSync(owes, notes => bulkSync(profileId, key, toPush, authUserId, notes));
                 pushed += toPush.length;
               }
             }
             if (!merged.settings.name && local.settings?.name) {
               merged.settings = { ...merged.settings, ...local.settings };
-              sbSaveSettings(profileId, merged.settings, authUserId).catch(() => {});
+              owedWrite(owes, sbSaveSettings(profileId, merged.settings, authUserId));
             }
             if (pushed > 0) {
               console.log(`CredentialDOMD: pushed ${pushed} local item(s) to cloud`);
             }
+          }
+
+          // A save the replay left for want of an answer, of a record neither
+          // the read nor this device's copy holds, shows as it will be sent
+          // (utils/loadOwes.js layWithheldSaves).
+          if (unanswered.size) {
+            const takenNumbers = new Set((merged.invoices || []).map(x => String(x?.number ?? "").trim().toLowerCase()).filter(Boolean));
+            merged = layWithheldSaves(merged, queued, unanswered, COLLECTION_KEYS, (key, id, item) => tombstones.has(id) || heldQueue.deleted.has(id)
+              || (key === "invoices" && takenNumbers.has(String(item?.number ?? "").trim().toLowerCase())));
           }
 
           // Adds, edits, deletes, stars and settings made on this device since
@@ -991,10 +1017,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // Partial writes: a failure is queued as a narrow patch, never an
           // upsert that could not insert a row from two columns.
           for (const d of linkPass.cleared) {
-            sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }, d, authUserId, { partial: true }).catch(() => {});
+            owedWrite(owes, sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }, d, authUserId, { partial: true }));
           }
           for (const d of linkPass.relinked) {
-            sbUpdate(profileId, "documents", { id: d.id, linkedTo: d.linkedTo }, d, authUserId, { partial: true }).catch(() => {});
+            owedWrite(owes, sbUpdate(profileId, "documents", { id: d.id, linkedTo: d.linkedTo }, d, authUserId, { partial: true }));
           }
 
           // A cloud document row carries metadata only (bytes live in Storage).
@@ -1053,7 +1079,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // owner's iPhone, and iOS discarded the page in Gmail mid-share
           // (2026-10-02). A screen that shows a file asks for its bytes
           // (requestDocumentBytes) and lets them go when it closes.
-          reconcileDocumentFiles(profileId, (merged.documents || []).filter(d => !(sinceStart.touches("documents", d?.id) && !d?.storagePath)), authUserId, current);
+          owedWrite(owes, reconcileDocumentFiles(profileId, (merged.documents || []).filter(d => !(sinceStart.touches("documents", d?.id) && !d?.storagePath)), authUserId, current, owes));
+          owes?.markCloud();
           return;
         }
       }
@@ -1224,22 +1251,27 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // with its whole row. A file in the cloud is never downloaded here: a
   // screen that shows it asks for its bytes (requestDocumentBytes,
   // utils/documentBytes.js) and lets them go when it closes.
-  async function reconcileDocumentFiles(profileId, docs, authUserId, current) {
+  async function reconcileDocumentFiles(profileId, docs, authUserId, current, owes = null) {
     for (const doc of docs) {
       if (!current()) return;
       try {
         if (doc.data && !doc.storagePath) {
           // The file AND its whole row, in one step (lib/supabase.js). The
           // path is set here only once both landed: a storagePath makes the
-          // cache drop these bytes, which may be the only copy.
-          const path = await uploadDocumentFile(doc, authUserId, profileId);
+          // cache drop these bytes, which may be the only copy. One kept for
+          // want of a membership answer, or refused by it, is owed (owes),
+          // and so is one that failed on the network, which nothing else
+          // sends again before the next load. One refused as permanent is
+          // not: the next load uploads it again and meets the same refusal
+          // (review of f06d9276).
+          const path = await uploadDocumentFile(doc, authUserId, profileId, { onHeld: () => owes?.held(), onFailed: kind => owes?.unlanded(kind) });
           if (!current()) return;
           if (path) {
             const updated = { ...doc, storagePath: path, pendingUpload: undefined };
             setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? updated : x) }) : d);
           }
         }
-      } catch { /* per-file best effort — retried on next load */ }
+      } catch (error) { owes?.failed(error); /* per-file best effort, retried on next load */ }
     }
   }
 
@@ -1283,6 +1315,161 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     setLoadedFrom("local");
     if (typeof setDeviceCopyBehind === "function") setDeviceCopyBehind(behind);
     setLoaded(true);
+  }
+
+  // Saves kept on this device for want of a membership answer (queued
+  // awaitingAccess, lib/supabase.js) go up as soon as a check answers, not at
+  // the next launch. Replay sends each only if that answer allows it. One the
+  // answer refuses (the membership is read-only now) is marked, so the notice
+  // says it was not saved instead of promising a sync, and it is reported.
+  // `all`: every queued save, kept for an answer or not (the page load's first
+  // answer, when the load's replay withheld saves for want of one:
+  // settleFirstAnswer).
+  //
+  // Nothing goes up that predates a data deletion. Delete All My Data on
+  // another device empties the account AND its deletion ledger, so every save
+  // queued here before it would come back as a new record. As on a load
+  // (utils/dataDeletion.js), the account's deletion stamp is read first: a
+  // new one (or a purge by another tab here) sends nothing and loads the
+  // account again, which purges this device's copy before anything is
+  // replayed. A stamp that cannot be read sends nothing either; the next
+  // answer or the next load asks again. Then the deletion ledger, so nothing
+  // deleted since is put back. What the replay still withholds is noted on
+  // the latest load's record (owes), for an answer that allows it.
+  //
+  // Returns null when it did not run (nothing to send, or not this account's
+  // records any more), else what happened: the replay's result, or
+  // { reloaded } (a deletion: the account loads again), { failed } (the
+  // stamp, the ledger or the network), { stale } (a newer load took over).
+  // `all` while another replay of this account runs: this one waits for it,
+  // then runs on what is left.
+  function replayKeptSaves(ownerId, { all = false } = {}) {
+    if (!ownerId) return null;
+    const running = replayingRef.current;
+    if (running?.owner === ownerId) return all ? running.run.then(() => replayKeptSaves(ownerId, { all })) : null;
+    const waiting = awaitingAccessOpCount(ownerId);
+    if (waiting === 0 && !(all && pendingOpCount(ownerId) > 0)) return null;
+    // Every kept save is marked refused already and this answer allows no
+    // change: nothing to send and nothing new to mark.
+    if (accessRefusedOpCount(ownerId) >= waiting
+      && !["credential", "practice"].some(scope => accessAuthority.allows(scope, "write", ownerId))) return null;
+    const profileId = userIdRef.current;
+    const under = loadedDeletionRef.current?.owner === ownerId ? loadedDeletionRef.current : null;
+    const current = () => dataOwnerRef.current === ownerId && getActiveUserId() === ownerId
+      && userIdRef.current === profileId && loadedDeletionRef.current === under;
+    if (!profileId || !under || !current()) return null;
+    // This device purged since these records loaded (another tab honored a
+    // deletion, or ran Delete All My Data): no request needed.
+    const purgedHere = () => !sameDeletionStamp(under.stamp ?? null, lsGet(WIPE_SEEN_KEY, ownerId))
+      || !localCopyCurrent(ownerId, under.fence ?? null);
+    const loadAgain = () => { setLoaded(false); void loadDataForUser(ownerId); return { reloaded: true }; };
+    const mark = { owner: ownerId, run: null };
+    replayingRef.current = mark;
+    mark.run = (async () => {
+      try {
+        if (purgedHere()) return loadAgain();
+        const stamp = await readAccountDataDeletion(ownerId);
+        if (!current()) return { stale: true };
+        if ((stamp && !sameDeletionStamp(under.stamp ?? null, stamp)) || purgedHere()) return loadAgain();
+        const tombstones = await listTombstones(profileId);
+        if (!current() || purgedHere()) return { stale: true };
+        const replayed = (await replayPendingOps(profileId, ownerId, { tombstones })) || { refused: [], withheld: 0, unanswered: [] };
+        for (const section of replayed?.refused || []) reportWriteAccess("write_refused", "read_only", section);
+        // Only what is still withheld: a debt the load noted (its own replay
+        // could not run) stays for the first answer's read (utils/loadOwes.js).
+        const owes = loadOwesRef.current;
+        if (owes?.owner === ownerId) owes.noteAnswerReplay(replayed);
+        return replayed;
+      } catch { return { failed: true }; /* the stamp, the ledger or the network: the next answer, or the next load, tries again */ }
+      finally { if (replayingRef.current === mark) replayingRef.current = null; }
+    })();
+    return mark.run;
+  }
+
+  // Delete All My Data on another device since the latest load read this
+  // account: "same"; "moved" (a newer load is on screen, or the account is
+  // not this one's any more); "purge" (the stamp moved, or this device
+  // purged: the account loads again behind the loading screen, as a replay
+  // that meets a deletion does); "unread" (the stamp cannot be read, or the
+  // load noted none: only a read again settles it). One profile read.
+  async function deletionSinceLoad(ownerId) {
+    const under = loadedDeletionRef.current?.owner === ownerId ? loadedDeletionRef.current : null;
+    if (!under) return "unread";
+    const purgedHere = () => !sameDeletionStamp(under.stamp ?? null, lsGet(WIPE_SEEN_KEY, ownerId))
+      || !localCopyCurrent(ownerId, under.fence ?? null);
+    if (purgedHere()) return "purge";
+    let stamp;
+    try { stamp = await readAccountDataDeletion(ownerId); } catch { return "unread"; }
+    if (loadedDeletionRef.current !== under || dataOwnerRef.current !== ownerId) return "moved";
+    return (stamp && !sameDeletionStamp(under.stamp ?? null, stamp)) || purgedHere() ? "purge" : "same";
+  }
+
+  // The membership check answered and allows changes (the effect below calls
+  // this with the scopes it allows as `key`). The page load's first such
+  // answer used to read the whole account again, about 37 table reads and a
+  // second write of the device copy on every launch (2026-10-02), although
+  // the load before it had read everything. It now finishes only what that
+  // load left for it (settleFirstAnswer). A later change of the scopes in the
+  // same session (read-only to active, Practice added: enrollment finishing
+  // after the load) still reads the account again, as it always did.
+  function reconcileAccessAnswer(ownerId, key) {
+    const earlier = reconciledAccess.current;
+    if (earlier === key) return null;
+    reconciledAccess.current = key;
+    if (typeof earlier === "string" && earlier.startsWith(`${ownerId}:`)) return loadDataForUser(ownerId);
+    return settleFirstAnswer(ownerId);
+  }
+
+  // The first answer that allows changes, after the latest load of the
+  // account and the writes it began have settled (or OWED_WRITES_WAIT_MS has
+  // passed: a write still in flight then is decided when it settles). The
+  // account is read again when that load held or lost a write (for want of
+  // an answer, or on the network), when its replay could not run, when it
+  // never finished a cloud read, or when Delete All My Data ran elsewhere
+  // since (the stamp is read on every first answer: one profile read; one
+  // that cannot be read is a load too). Saves its replay withheld, and
+  // anything its writes queued, are sent by a replay (the stamp and the
+  // deletion ledger, no table reads). utils/loadOwes.js.
+  async function settleFirstAnswer(ownerId) {
+    let owes = loadOwesRef.current;
+    let timedOut = false;
+    while (owes && owes.owner === ownerId) {
+      await owes.done;
+      let timer = null;
+      timedOut = false;
+      await Promise.race([owes.settled(), new Promise(resolve => { timer = setTimeout(() => { timedOut = true; resolve(); }, OWED_WRITES_WAIT_MS); })]);
+      clearTimeout(timer);
+      if (loadOwesRef.current === owes) break;
+      owes = loadOwesRef.current;
+    }
+    const mine = () => dataOwnerRef.current === ownerId && getActiveUserId() === ownerId && window.Clerk?.user?.id === ownerId;
+    if (!mine()) return;
+    // A write still in flight at the deadline that then did not land: the
+    // load it owes, once it is known (the plan below could not see it).
+    if (timedOut && owes) {
+      void owes.settled().then(() => {
+        if (loadOwesRef.current === owes && mine() && (owes.lostWrites || owes.heldWrites) && firstAnswerPlan(owes, ownerId) === "load") void loadDataForUser(ownerId);
+      });
+    }
+    const plan = firstAnswerPlan(owes, ownerId, pendingOpCount(ownerId));
+    if (plan === "load") { await loadDataForUser(ownerId); return; }
+    if (plan === "replay") {
+      const replayed = await replayKeptSaves(ownerId, { all: true });
+      if (replayed?.reloaded || replayed?.stale) return;
+      // A send that failed and can still land (the network, a membership
+      // refusal) is not on screen: read again. One refused as permanent
+      // would be refused the same way on the read (utils/loadOwes.js).
+      if (replayLeftUnsent(replayed)) { if (loadOwesRef.current === owes && mine()) await loadDataForUser(ownerId); return; }
+      if (replayed) {
+        if (readAfterReplay(owes, replayed) && loadOwesRef.current === owes && mine()) await loadDataForUser(ownerId);
+        return;
+      }
+      // The replay did not run (nothing left to send): the stamp, as below.
+    }
+    const since = await deletionSinceLoad(ownerId);
+    if ((since !== "purge" && since !== "unread") || loadOwesRef.current !== owes || !mine()) return;
+    if (since === "purge") setLoaded(false);
+    await loadDataForUser(ownerId);
   }
 
   // ─── Auth actions (Clerk) ─────────────────────────────────
@@ -1497,20 +1684,82 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const membershipStatus = limitedLaunch.access?.accessStatus ?? null;
   useEffect(() => { noteMembershipStatus(membershipStatus); }, [membershipStatus]);
 
-  // Enrollment may finish after the initial cloud load. Retry the owner-bound
-  // replay/self-heal once when protected write scopes become available.
+  // Enrollment may finish after the initial cloud load. When protected write
+  // scopes become available, finish what the load left for them
+  // (reconcileAccessAnswer: the withheld saves, or the account read again
+  // only when the load held or lost a write).
   const reconciledAccess = useRef(null);
   useEffect(() => {
     if (!limitedLaunch.enabled || !loaded || offlineMode || !user?.id || profileOwner !== user.id
       || getActiveUserId() !== user.id || window.Clerk?.user?.id !== user.id
       || limitedLaunch.status !== "ready" || (!canWriteCredential && !canWritePractice)) return;
-    const key = `${user.id}:${canWriteCredential}:${canWritePractice}`;
-    if (reconciledAccess.current === key) return;
-    reconciledAccess.current = key;
-    void loadDataForUser(user.id);
+    void reconcileAccessAnswer(user.id, `${user.id}:${canWriteCredential}:${canWritePractice}`);
   }, [limitedLaunch.enabled, limitedLaunch.status, loaded, offlineMode, user?.id, profileOwner, canWriteCredential, canWritePractice]); // eslint-disable-line react-hooks/exhaustive-deps
   // End protected-access reconciliation.
   accessAuthority.registerRecords(dataOwnerRef.current, data);
+
+  // The PA and NP rule data these records read (utils/appRules.js): until it
+  // is in at launch, the screens get the loading state (loaded false, no
+  // records), so a rule card never reads "not yet verified" for want of the
+  // data. An MD or DO never loads it.
+  //
+  // Once this account has been on screen, a change that needs the data
+  // (another device's profession change, a PA, RN or APRN licence added by a
+  // member with no physician degree) never takes the screen back to
+  // "Loading...": that unmounted every screen, and a CV scan, Vera's question
+  // and what the member was typing went with it (review of e1f4b4c9). The
+  // screen shows everything but what needs the data until it is in
+  // (withoutAppRuleNeeds), with a line saying so (appRulesWaiting, App.jsx).
+  const appRulesNeeded = needsAppRules(data);
+  const appRulesOk = useAppRulesReady(appRulesNeeded);
+  const appRulesFailedNow = useAppRulesFailed();
+  const appRulesShownRef = useRef(null);
+  const appRulesKeepScreen = !appRulesOk && loaded && !!user?.id && appRulesShownRef.current?.owner === user.id;
+  if (loaded && appRulesOk && user?.id && dataOwnerRef.current === user.id) {
+    const degree = data?.settings?.degreeType ?? "";
+    if (appRulesShownRef.current?.owner !== user.id || appRulesShownRef.current.degree !== degree) appRulesShownRef.current = { owner: user.id, degree };
+  }
+  const shownLoaded = loaded && (appRulesOk || appRulesKeepScreen);
+  const maskedData = useMemo(() => (appRulesKeepScreen ? withoutAppRuleNeeds(data, appRulesShownRef.current?.degree) : null), [appRulesKeepScreen, data]);
+  const shownData = appRulesOk ? data : appRulesKeepScreen ? maskedData : DEFAULT_DATA;
+  // A PA or NP profession reads as the one shown before while it waits
+  // (withoutAppRuleNeeds), so the rules on screen are that profession's: the
+  // line names both (`profession`, `shownProfession`), so they are never
+  // taken for hers (review of f06d9276).
+  const savedDegree = data?.settings?.degreeType ?? "";
+  const shownDegree = maskedData?.settings?.degreeType ?? "";
+  const appRulesWaiting = useMemo(() => (appRulesKeepScreen
+    ? { failed: appRulesFailedNow, ...(savedDegree !== shownDegree ? { profession: savedDegree, shownProfession: shownDegree } : {}) }
+    : null), [appRulesKeepScreen, appRulesFailedNow, savedDegree, shownDegree]);
+  // At launch: the loading screen says so when the data cannot be loaded (no
+  // connection), and offers to try again (App.jsx).
+  const appRulesLaunchFailed = loaded && appRulesNeeded && !appRulesOk && !appRulesKeepScreen && appRulesFailedNow;
+  // The next launch of this account on this device starts loading it at once;
+  // once it is in, this device keeps it for the next build (public/sw.js).
+  useEffect(() => {
+    const ownerId = user?.id;
+    if (!loaded || !ownerId || dataOwnerRef.current !== ownerId) return;
+    if (appRulesNeeded) lsSet(BASE_KEYS.appRulesHint, "1", ownerId);
+    else if (lsGet(BASE_KEYS.appRulesHint, ownerId) !== null) lsSet(BASE_KEYS.appRulesHint, "0", ownerId);
+  }, [loaded, user?.id, appRulesNeeded]);
+  useEffect(() => {
+    if (loaded && appRulesNeeded && appRulesOk) rememberAppRulesOnDevice();
+  }, [loaded, appRulesNeeded, appRulesOk]);
+  const retryAppRules = useCallback(() => { loadAppRules().catch(() => {}); }, []);
+  // The records as saved, and the states they track, once the PA and NP rule
+  // data they read is in. A screen kept while it loads shows them without
+  // what needs it (an earlier profession in place of a PA or NP, a PA, RN or
+  // APRN licence off the screen); what acts on them reads them whole: Vera's
+  // answer, an NPI import (review of f06d9276: Vera answered a PA as an MD,
+  // an import added a hidden licence again, and an MD answer from the
+  // registry replaced the PA it could not see). Rejects when the data cannot
+  // be loaded.
+  const recordsWithAppRules = useCallback(async () => {
+    await loadAppRules();
+    const d = dataRef.current || DEFAULT_DATA;
+    const st = d.settings || {};
+    return { data: d, trackedStates: trackedStates(st.primaryState, st.additionalStates, d.licenses, st.degreeType) };
+  }, []);
 
   // Check before replacing local state, so a denied restore never overwrites saved data.
   //
@@ -1897,6 +2146,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     () => trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses, data.settings.degreeType),
     [data.settings.primaryState, data.settings.additionalStates, data.licenses, data.settings.degreeType],
   );
+  // The states the screen tracks while it waits for the rule data (above).
+  const maskedTrackedStates = useMemo(
+    () => (maskedData ? trackedStates(maskedData.settings?.primaryState, maskedData.settings?.additionalStates, maskedData.licenses, maskedData.settings?.degreeType) : NO_STATES),
+    [maskedData],
+  );
 
   // record = { sec, id } opens that record's editor after the section renders
   const navigate = useCallback((tab, sub, record) => {
@@ -1981,11 +2235,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [documentBytes]);
 
   const value = useMemo(() => ({
-    data, setData: guardedSetData, requestDocumentBytes, releaseDocumentBytes, documentBytes, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, loaded, loadedFrom,
+    data: shownData, appRulesWaiting, appRulesLaunchFailed, retryAppRules, recordsWithAppRules, setData: guardedSetData, requestDocumentBytes, releaseDocumentBytes, documentBytes, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, loaded: shownLoaded, loadedFrom,
     recordsLoadIssue: recordsLoadIssue?.accountId === user?.id ? recordsLoadIssue : null, theme, themeName, isDark, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItem: deleteItemFn, toggleFavorite,
     settingsRefusal: settingsRefusal?.accountId === user?.id ? settingsRefusal : null, clearSettingsRefusal,
-    allTrackedStates, navigate, userIdRef, syncIssues: syncState.issues, pendingWrites: syncState.pending, awaitingAccessWrites: syncState.awaitingAccess, accessRefusedWrites: syncState.accessRefused, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, deviceCopyBehind: loadedFrom === "local" && deviceCopyBehind,
+    allTrackedStates: appRulesOk ? allTrackedStates : appRulesKeepScreen ? maskedTrackedStates : NO_STATES, navigate, userIdRef, syncIssues: syncState.issues, pendingWrites: syncState.pending, awaitingAccessWrites: syncState.awaitingAccess, accessRefusedWrites: syncState.accessRefused, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, deviceCopyBehind: loadedFrom === "local" && deviceCopyBehind,
     // Auth
     user, authChecked, offlineMode,
     signOut: handleSignOut,
@@ -1993,7 +2247,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
     isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null, identityWaiting: identityWaiting?.accountId === user?.id, billingReturn },
     identityWaiting: identityWaiting?.accountId === user?.id ? identityWaiting : null, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly,
-  }), [guardedSetData, requestDocumentBytes, releaseDocumentBytes, documentBytes, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, identityWaiting, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, deviceCopyBehind, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [guardedSetData, requestDocumentBytes, releaseDocumentBytes, documentBytes, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, identityWaiting, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, shownData, shownLoaded, appRulesOk, appRulesKeepScreen, maskedTrackedStates, appRulesWaiting, appRulesLaunchFailed, retryAppRules, recordsWithAppRules, loadedFrom, deviceCopyBehind, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

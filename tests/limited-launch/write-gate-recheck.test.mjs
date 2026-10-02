@@ -508,15 +508,18 @@ test('replay does not send a queued write a newer save of the same record replac
   assert.deepEqual(f.queue(), []);
 });
 
-// AppContext's replay on a fresh answer, cut from the source, with this
-// device's deletion bookkeeping as the test sets it.
-const answerTrigger = between('  // Saves kept on this device for want of a membership answer', '  // ─── Load data when user changes');
+// AppContext's replay on a fresh answer, cut from the source (the effect and
+// the replayKeptSaves it calls), with this device's deletion bookkeeping as
+// the test sets it.
+const answerTrigger = `${between('  // Saves kept on this device for want of a membership answer go up', '  // ─── Load data when user changes')}
+${between('  // Saves kept on this device for want of a membership answer (queued', '  // The membership check answered and allows changes')}`;
 function watchAnswers(f, over = {}) {
   const seen = { loads: [], stampReads: 0 };
   vm.runInNewContext(answerTrigger, {
     useEffect: fn => fn(), offlineMode: false, user: { id: ACCOUNT }, accessAuthority: f.authority, userIdRef: { current: PROFILE },
     dataOwnerRef: { current: ACCOUNT }, getActiveUserId: () => ACCOUNT, listTombstones: f.api.listTombstones, replayPendingOps: f.api.replayPendingOps, onWrittenAheadFreed: f.api.onWrittenAheadFreed,
-    awaitingAccessOpCount: () => f.queue().filter(op => op.awaitingAccess === true).length,
+    awaitingAccessOpCount: () => f.queue().filter(op => op.awaitingAccess === true).length, pendingOpCount: () => f.queue().length,
+    replayingRef: { current: null }, loadOwesRef: { current: null },
     accessRefusedOpCount: () => f.queue().filter(op => op.awaitingAccess === true && op.accessRefused === true).length,
     // The records in memory were loaded with no data deletion on record, and
     // this device's purge fence has not moved since.

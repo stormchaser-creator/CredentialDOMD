@@ -3,6 +3,7 @@
 // and an https link or is listed as not yet verified with the board link;
 // periods are encoded the three ways the engine reads; no dashes; and the
 // numbers the engine sees for the spot-check states are the ledger's own.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';

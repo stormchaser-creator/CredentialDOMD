@@ -2,6 +2,7 @@
 // 4.8, 5.3): the sidebar tagline, the multi-state matrix, and the Home and
 // Credentials wiring in App.jsx. MD and DO keep every string they had.
 // Synthetic records only.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

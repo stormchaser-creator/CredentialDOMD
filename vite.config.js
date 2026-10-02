@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
-import { computePrecacheUrls, stampPrecache, verifyPrecache } from './scripts/sw-precache.mjs'
+import { computePrecacheUrls, computeAppRulesUrls, stampPrecache, stampAppRules, verifyPrecache } from './scripts/sw-precache.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -41,7 +41,7 @@ function stampBuildId() {
           throw new Error('stamp-build-id: dist/.vite/manifest.json missing. build.manifest must stay enabled.')
         }
         const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-        sw = stampPrecache(sw, computePrecacheUrls(manifest))
+        sw = stampAppRules(stampPrecache(sw, computePrecacheUrls(manifest)), computeAppRulesUrls(manifest))
         writeFileSync(swPath, sw)
       }
       writeFileSync(resolve(dist, 'version.json'), JSON.stringify({ build: BUILD_ID }) + '\n')
@@ -57,8 +57,8 @@ function assertPrecache() {
     name: 'assert-precache',
     apply: 'build',
     closeBundle() {
-      const { count, entryAssets } = verifyPrecache(resolve(__dirname, 'dist'))
-      console.log(`[assert-precache] OK: ${count} precache URLs cover all ${entryAssets} entry assets`)
+      const { count, entryAssets, appRules } = verifyPrecache(resolve(__dirname, 'dist'))
+      console.log(`[assert-precache] OK: ${count} precache URLs cover all ${entryAssets} entry assets; ${appRules} PA/NP rule file(s) for devices that need them`)
     },
   }
 }

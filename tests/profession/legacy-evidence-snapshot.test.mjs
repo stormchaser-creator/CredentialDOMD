@@ -3,11 +3,13 @@
 // shows (its import note, or the one registry nursing row on its number), and
 // Vera's snapshot pairs the licence date with the licence countdown. Synthetic
 // records only. Time is frozen at local noon on 2026-10-01.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { sharedRuleResolver } from '../helpers/shared-rule-resolver.mjs';
 import { markAlreadyOnFile } from '../../src/utils/publicRecord.js';
 import { mergeNpiLicenses, licenseKeysOnFile, nursingKindFromNote } from '../../src/utils/npiImport.js';
 
@@ -24,7 +26,7 @@ const bundle = async (entry, stubs = {}) => {
         b.onResolve({ filter: new RegExp(filter) }, () => ({ path: filter, namespace: 'stub' }));
         b.onLoad({ filter: new RegExp(`^${filter.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}$`), namespace: 'stub' }, () => ({ contents, loader: 'js' }));
       }
-    } }],
+    } }, sharedRuleResolver],
   });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);

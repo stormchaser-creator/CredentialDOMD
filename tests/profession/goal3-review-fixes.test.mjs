@@ -1,11 +1,13 @@
 // Release goal3 review fixes (PA and NP on top of goal2). Synthetic members
 // only. Each test names the defect it pins.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { sharedRuleResolver } from '../helpers/shared-rule-resolver.mjs';
 import { withDegree, oneDegree } from '../../src/utils/outgoingText.js';
 import { invoiceSenderFields, physicianLabel, archiveSenderFields } from '../../src/utils/invoiceArgs.js';
 import { invoiceEmailSender, invoiceFileName } from '../../src/utils/invoiceEmail.js';
@@ -177,6 +179,7 @@ async function identity(degreeType) {
   const c = await mountComponent('src/components/features/SetupPage.jsx', { app, exportName: 'IdentityDrawer', modules: {
     reminderPreferences: await import(src('utils/reminderPreferences.js')), contactFormat: await import(src('utils/contactFormat.js')),
     useInputStyle: { useInputStyle: () => ({}) }, states: await import(src('constants/states.js')), professions: await import(src('constants/professions.js')),
+    appRules: await import(src('utils/appRules.js')),
   } });
   const chip = (d) => c.nodes().find((n) => n.type === 'button' && c.text(n) === d);
   const button = (re) => c.nodes().find((n) => n.type === 'button' && re.test(c.text(n)));
@@ -250,7 +253,7 @@ async function bundleStubbed(entry, stubs) {
         b.onResolve({ filter: new RegExp(filter) }, () => ({ path: filter, namespace: 'stub' }));
         b.onLoad({ filter: new RegExp(`^${filter.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}$`), namespace: 'stub' }, () => ({ contents, loader: 'js' }));
       }
-    } }] });
+    } }, sharedRuleResolver] });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);
   return mod.exports;

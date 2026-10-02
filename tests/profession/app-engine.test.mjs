@@ -1,6 +1,7 @@
 // The PA and NP CE engine with injected synthetic rules (DESIGN 3.3). The
 // rule data here is invented for the test and never ships: the shipped rule
 // data is tested in app-rules-provenance.test.mjs.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeCompliance, complianceFor, complianceListFor, standingScore, trackedStates, alertingStates, findStateLicense } from '../../src/utils/compliance.js';

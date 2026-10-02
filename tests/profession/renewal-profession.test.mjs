@@ -2,6 +2,7 @@
 // medical board portal, physician fee or physician guide; MD and DO exactly
 // as before (renewalView is in the goldens; the reminder line is pinned here
 // against the line send-reminders built inline before it was extracted).
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

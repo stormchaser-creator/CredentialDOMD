@@ -3,6 +3,7 @@
 // the legacy licence answering to one nursing key, and the state card naming
 // the date its countdown counts to. Synthetic records only. Time is frozen at
 // local noon on 2026-10-01.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { complianceFor, standingScore, complianceListFor } from '../../src/utils/compliance.js';

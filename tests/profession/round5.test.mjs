@@ -1,6 +1,7 @@
 // Fifth review round: copy and links a PA or NP sees on the Setup, Settings,
 // Vera receipt and card paths, and the invoice sender label. MD and DO stay
 // as they were. Synthetic records only.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

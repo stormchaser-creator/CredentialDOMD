@@ -27,6 +27,7 @@ import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
 import { isKnownDegree } from "../../constants/professions.js";
+import { appRulesReady, loadAppRules, needsAppRules, APP_RULES_UNAVAILABLE } from "../../utils/appRules.js";
 import { alertWriteRefused } from "../../utils/limitedLaunchAccess.js";
 import ProfessionPicker from "./ProfessionPicker";
 
@@ -70,7 +71,7 @@ const slimForArchive = (msgs) =>
  * credentialer. onClearRequest lets the app drop it on New chat.
  */
 function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest }) {
-  const { data, addItem, editItem, deleteItem, updateSettings, allTrackedStates, userIdRef, navigate, theme: T, isDesktop } = useApp();
+  const { data, addItem, editItem, deleteItem, updateSettings, allTrackedStates, userIdRef, navigate, theme: T, isDesktop, appRulesWaiting, recordsWithAppRules } = useApp();
   const iS = useInputStyle();
   // The Opus badge says what answers: Claude only when "Vera answers with"
   // is Claude Opus AND Opus is reachable (own key, or the shared one), as
@@ -294,10 +295,29 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       setInput("");
       setAttachment(null);
     }
-    const degree = opts.degree || data.settings?.degreeType;
+    // A screen kept while the PA and NP rules load (appRulesWaiting) shows
+    // her records without what needs them, and an earlier profession in
+    // place of a PA or NP. Her answer reads them as saved, the rules first
+    // (review of f06d9276: Vera answered a PA as an MD). `records` and
+    // `tracked` are what this turn reads from here on.
+    let records = data, tracked = allTrackedStates;
+    const waited = !!appRulesWaiting && typeof recordsWithAppRules === "function";
+    if (waited) {
+      setBusy(true);
+      try { ({ data: records, trackedStates: tracked } = await recordsWithAppRules()); }
+      catch {
+        failedMapRef.current.set(userMsg.id, { text, attachment: att });
+        setMsgs(m => m.map(x => x.id === userMsg.id ? { ...x, failed: true } : x));
+        setErr(APP_RULES_UNAVAILABLE);
+        setBusy(false);
+        return;
+      }
+    }
+    const degree = opts.degree || records.settings?.degreeType;
     // The file this question carried, kept for a re-send once she chooses.
     const askedAtt = explicitAtt || (retryAtt?.implicit ? retryAtt : null);
     if (!isKnownDegree(degree) && !professionDeferred && !opts.deferred) {
+      if (waited) setBusy(false);
       setProfessionWait({ msgId: userMsg.id, text, attachment: askedAtt });
       return;
     }
@@ -309,10 +329,18 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       // profession, which counts only medical licences. They are worked out
       // here for her choice, so her own PA, APRN or RN licence state is in
       // the answer to the question she was waiting on.
-      const chosenSettings = opts.degree ? { ...data.settings, degreeType: opts.degree } : null;
+      const chosenSettings = opts.degree ? { ...records.settings, degreeType: opts.degree } : null;
+      // Her answer reads the PA and NP rule data when her profession (or a
+      // PA, RN or APRN licence with no physician degree) needs it: in first
+      // (the picker waits for it; this is the backstop). Read before it was
+      // in, the snapshot threw and she saw an internal message instead of an
+      // answer (review of e1f4b4c9).
+      if (needsAppRules(chosenSettings ? { ...records, settings: chosenSettings } : records) && !appRulesReady()) {
+        try { await loadAppRules(); } catch { throw Object.assign(new Error(APP_RULES_UNAVAILABLE), { code: "app_rules_unavailable" }); }
+      }
       const snapshot = chosenSettings
-        ? buildSnapshot({ ...data, settings: chosenSettings }, trackedStates(chosenSettings.primaryState, chosenSettings.additionalStates, data.licenses, opts.degree))
-        : buildSnapshot(data, allTrackedStates);
+        ? buildSnapshot({ ...records, settings: chosenSettings }, trackedStates(chosenSettings.primaryState, chosenSettings.additionalStates, records.licenses, opts.degree))
+        : buildSnapshot(records, tracked);
       // The whole settings object, not just the two keys: assistant.js reads
       // settings.assistantModel to decide whether Vera thinks on Opus. Handing
       // it apiKey/anthropicKey alone made it build a settings stand-in that had
@@ -324,11 +352,11 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       // cloud load used to rebuild settings without it and the toggle fell
       // back to Gemini on the next online start; LOCAL_ONLY_SETTINGS in
       // lib/supabase.js is what carries it across that merge now.
-      const result = await assistantTurn({ history, snapshot, settings: data.settings, attachment: att });
+      const result = await assistantTurn({ history, snapshot, settings: records.settings, attachment: att });
       // Her section list is enforced by her prompt alone. Repair in code: an
       // invented section becomes a proposed category instead of a record that
       // shows as done and then exists nowhere. See customCategories.js.
-      result.actions = repairActions(result.actions, { data });
+      result.actions = repairActions(result.actions, { data: records });
       // Deterministic honesty net: if the reply CLAIMS the developer will
       // hear about something but carries no feedback action, attach one
       // built from the user's own words — the model once said "I'll pass
@@ -361,17 +389,17 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       if (nav) {
         const sec = findSection(nav.section) || null;
         let target = null;
-        if (sec && nav.id && (data[sec.key] || []).some(x => x?.id === nav.id)) target = { sec, id: nav.id };
+        if (sec && nav.id && (records[sec.key] || []).some(x => x?.id === nav.id)) target = { sec, id: nav.id };
         else {
           const q = nav.query || nav.summary || "";
-          const groups = searchRecords(data, q, { limitPerSection: 3 });
+          const groups = searchRecords(records, q, { limitPerSection: 3 });
           const g = (sec && groups.find(x => x.sec.key === sec.key)) || groups[0];
           if (g?.hits?.length) target = { sec: g.sec, id: g.hits[0].id };
           else if (sec) target = { sec, id: null };
         }
         if (target) {
           const sub = target.sec.key === "customRecords"
-            ? `custom:${(data.customRecords || []).find(r => r?.id === target.id)?.categoryId || "unsorted"}`
+            ? `custom:${(records.customRecords || []).find(r => r?.id === target.id)?.categoryId || "unsorted"}`
             : target.sec.sub;
           navTo = [target.sec.tab, sub, target.id ? { sec: target.sec.key, id: target.id } : null];
           result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, done: true, summary: `Opened ${target.sec.label}${target.id ? "" : " (record not found, showing the section)"}` } : a);
@@ -410,10 +438,11 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     } catch (e2) {
       failedMapRef.current.set(userMsg.id, { text, attachment: att });
       setMsgs(m => m.map(x => x.id === userMsg.id ? { ...x, failed: true } : x));
-      setErr(e2.message);
+      // The rule data missing is never shown as its internal message.
+      setErr(e2?.code === "app_rules_not_loaded" ? APP_RULES_UNAVAILABLE : e2.message);
     }
     setBusy(false);
-  }, [input, attachment, msgs, data, allTrackedStates, logToCloud, requestContext, professionWait, professionDeferred]);
+  }, [input, attachment, msgs, data, allTrackedStates, appRulesWaiting, recordsWithAppRules, logToCloud, requestContext, professionWait, professionDeferred]);
 
   // The member picks her profession: it is saved to her profile, then the
   // question that waited for it is answered with that profession's rules.

@@ -58,6 +58,10 @@ export const BASE_KEYS = {
   // no profession: Vera then answers what needs no rule and asks again only
   // when a rule is needed, on every visit (AssistantSection.jsx).
   veraProfessionLater: "credentialdomd-vera-profession-later",
+  // "1" when this account's records read the PA and NP rule data (a PA or NP,
+  // utils/appRules.js needsAppRules): the next launch starts loading it at
+  // once, before the account is read.
+  appRulesHint: "credentialdomd-app-rules-hint",
 };
 
 // The invoice hand-off notes (utils/invoiceHandoffStore.js purgeHandoffStores)

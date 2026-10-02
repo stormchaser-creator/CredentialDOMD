@@ -20,7 +20,7 @@ async function drawer({ name = '', fullName = 'Synthetic Member' } = {}) {
   };
   const c = await mountComponent('src/components/features/SetupPage.jsx', { app, exportName: 'IdentityDrawer', modules: {
     reminderPreferences: await import(src('utils/reminderPreferences.js')), contactFormat: await import(src('utils/contactFormat.js')),
-    useInputStyle: { useInputStyle: () => ({}) }, states: await import(src('constants/states.js')),
+    useInputStyle: { useInputStyle: () => ({}) }, states: await import(src('constants/states.js')), appRules: await import(src('utils/appRules.js')),
   } });
   const input = () => c.nodes().find(n => n.type === 'input' && n.props.id === 'setup-full-name');
   const buttons = () => c.nodes().filter(n => n.type === 'button');

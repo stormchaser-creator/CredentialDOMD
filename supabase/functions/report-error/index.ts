@@ -5,7 +5,7 @@
  * report even when Clerk is broken (a crash at auth init has no token).
  *
  * Body (JSON, <= 8 KB): {
- *   kind: 'error' | 'unhandledrejection' | 'react',
+ *   kind: 'error' | 'unhandledrejection' | 'react' | 'info',
  *   message, stack?, url?, user_agent?, build?, auth_user_id?, extra?
  * }
  * Response: { ok: true } | { error }
@@ -43,7 +43,10 @@ const MAX_EXTRA = 2048;
 const MAX_USER_ID = 64;
 const RATE_WINDOW_MIN = 10;
 const RATE_MAX_ROWS = 30;
-const KINDS = new Set(["error", "unhandledrejection", "react"]);
+// "info": an event worth knowing about that is not a fault (a page the
+// browser discarded, utils/pageDiscard.js). Stored as such, so the owner's
+// alerts and the Admin Errors count leave it out (20261002080000).
+const KINDS = new Set(["error", "unhandledrejection", "react", "info"]);
 
 // Anything that looks like a credential is replaced before it touches the DB.
 const SECRET_RE =
@@ -157,9 +160,17 @@ Deno.serve(async (req) => {
     profile_id = data?.id ?? null;
   }
 
-  const { error } = await db.from("client_errors").insert({
+  let { error } = await db.from("client_errors").insert({
     kind, message, stack, url, user_agent, build, auth_user_id, profile_id, extra, ip_hash,
   });
+  // A table whose kind check predates "info" (this function deployed before
+  // migration 20261002080000): the event is kept as an error row, marked,
+  // rather than lost.
+  if (error && kind === "info" && error.code === "23514") {
+    ({ error } = await db.from("client_errors").insert({
+      kind: "error", message, stack, url, user_agent, build, auth_user_id, profile_id, extra: { ...extra, reported_kind: "info" }, ip_hash,
+    }));
+  }
   if (error) {
     console.error("report-error insert failed:", error.message);
     return json({ error: "Insert failed" }, 500);

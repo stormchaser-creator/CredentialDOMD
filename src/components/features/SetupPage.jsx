@@ -20,6 +20,7 @@ import { canFillFromPublicRecord } from "../../utils/publicRecord";
 import { emailRemindersOn, reminderLeadDays } from "../../utils/reminderPreferences";
 import { emailProblem } from "../../utils/contactFormat";
 import { isAdvancedPractice, isKnownDegree, licenseKindOf, professionOf, DEGREE_LABELS } from "../../constants/professions";
+import { afterAppRules, degreeNeedsAppRules, preloadAppRules, APP_RULES_UNAVAILABLE } from "../../utils/appRules.js";
 import CMEImport from "./CMEImport";
 import EmailPacketModal from "./EmailPacketModal";
 import { KeptPanel, KeptPanelSlot } from "../shared/KeptPanel";
@@ -119,11 +120,27 @@ export function IdentityDrawer() {
   // (DESIGN 1.8): it changes which state rules, license types and CME
   // categories apply. MD to DO (or back) and a first choice stay one tap.
   const [pendingDegree, setPendingDegree] = useState(null);
+  // PA or NP: their rule data starts loading at the first touch, and is in
+  // before the switch is confirmed (utils/appRules.js).
+  const warmRules = (d) => { if (degreeNeedsAppRules(d)) preloadAppRules(); };
+  // A PA or NP choice is saved once their rule data is in (afterAppRules):
+  // saved before, the app had no rules to show her records with.
+  const [degreeWait, setDegreeWait] = useState(null);
+  const [degreeUnavailable, setDegreeUnavailable] = useState(false);
+  const saveDegree = (d, then = () => {}) => {
+    setDegreeUnavailable(false);
+    afterAppRules(d, () => { updateSettings({ degreeType: d }); then(); }, {
+      waiting: (on) => setDegreeWait(on ? d : null),
+      unavailable: () => setDegreeUnavailable(true),
+    });
+  };
   const chooseDegree = (d) => {
+    warmRules(d);
+    if (degreeWait) return;
     if (d === s.degreeType) { setPendingDegree(null); return; }
     if (isKnownDegree(s.degreeType) && professionOf(d) !== professionOf(s.degreeType)) { setPendingDegree(d); return; }
     setPendingDegree(null);
-    updateSettings({ degreeType: d });
+    saveDegree(d);
   };
   const commitName = (value) => {
     const next = String(value ?? "").trim();
@@ -132,7 +149,7 @@ export function IdentityDrawer() {
   };
 
   const chip = (label, active, onClick) => (
-    <button key={label} aria-pressed={active} onClick={onClick} style={{
+    <button key={label} aria-pressed={active} onPointerDown={() => warmRules(label)} onClick={onClick} style={{
       flex: 1, padding: "12px 0", borderRadius: 12,
       border: `2px solid ${active ? T.accent : T.border}`,
       backgroundColor: active ? T.accentDim : "transparent",
@@ -164,13 +181,15 @@ export function IdentityDrawer() {
       <div role="group" aria-labelledby="setup-degree-label" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "4px 0 12px" }}>
         {[["MD", "MD"], ["DO", "DO"], ["PA", "PA"], ["NP", "NP"]].map(([d, label]) => chip(label, s.degreeType === d, () => chooseDegree(d)))}
       </div>
+      {degreeWait && <div role="status" style={{ margin: "-4px 0 12px", fontSize: 13, color: T.textMuted }}>Loading the {degreeWait} rules...</div>}
+      {degreeUnavailable && <div role="alert" style={{ margin: "-4px 0 12px", fontSize: 13, color: T.textMuted, lineHeight: 1.45 }}>{APP_RULES_UNAVAILABLE}</div>}
       {pendingDegree && (
         <div role="group" aria-label="Change profession" style={{ margin: "-4px 0 12px", padding: "12px 14px", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 10 }}>
           <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5, marginBottom: 10 }}>
             Switching to {DEGREE_LABELS[pendingDegree] || pendingDegree} ({pendingDegree}) changes which state rules, license types and {pendingDegree === "NP" ? "CE" : "CME"} categories apply. Your records stay as they are.
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => { updateSettings({ degreeType: pendingDegree }); setPendingDegree(null); }} style={{
+            <button disabled={!!degreeWait} onClick={() => saveDegree(pendingDegree, () => setPendingDegree(null))} style={{
               flex: 1, minHeight: 44, borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
             }}>Switch to {pendingDegree}</button>
             <button onClick={() => setPendingDegree(null)} style={{

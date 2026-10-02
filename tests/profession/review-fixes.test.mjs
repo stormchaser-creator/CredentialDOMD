@@ -1,6 +1,7 @@
 // Regression tests for the October 2026 PA and NP review findings (code
 // findings). Synthetic records only: no real member's name, NPI or state of
 // practice. Time is frozen at local noon on 2026-10-01.
+import '../helpers/app-rules.mjs';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

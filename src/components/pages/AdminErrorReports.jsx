@@ -124,7 +124,7 @@ export default function AdminErrorReports({ rows = [], users = [], T, onCleared 
                   onClick={() => setOpenId(expanded ? null : group.id)}
                   style={{ width: "100%", padding: "10px 12px", textAlign: "left", border: "none", borderRadius: 12, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontFamily: "inherit" }}>
                   <span style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", color: group.kind === "react" ? "#ef4444" : "#f59e0b" }}>{group.kind || "Error"}</span>
+                    <span style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", color: group.kind === "react" ? "#ef4444" : group.kind === "info" ? T.textMuted : "#f59e0b" }}>{group.kind || "Error"}</span>
                     <span style={{ fontSize: 11, color: T.textMuted }}>{group.ids.length} report{group.ids.length === 1 ? "" : "s"} · {timestamp} · {who(group)}</span>
                   </span>
                   <span style={{ display: "block", fontSize: 13, marginTop: 5, wordBreak: "break-word" }}>{group.message || "No error message recorded"}</span>

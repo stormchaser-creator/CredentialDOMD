@@ -25,8 +25,10 @@ captureAppDeepLink();
 installErrorReporting();
 // A page iOS discarded (no pagehide) is said once by the page that follows it
 // in this tab, with whether an invoice was with the share sheet or open on
-// screen (utils/pageDiscard.js).
-startPageDiscardWatch({ report: (message, extra) => reportError(message, "error", extra) });
+// screen (utils/pageDiscard.js). An event, not an error: kind "info", which
+// the operator's alerts and the Admin Errors count leave out
+// (migration 20261002080000).
+startPageDiscardWatch({ report: (message, extra) => reportError(message, "info", extra) });
 // Sign out and Delete All My Data remove the invoice hand-off notes with the
 // account's other keys (utils/invoiceHandoffStore.js). Its IndexedDB half,
 // when an earlier page could not finish it, is finished now.

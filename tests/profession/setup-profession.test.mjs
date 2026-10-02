@@ -3,6 +3,7 @@
 // certification, education and life support rows ask for the profession's
 // own records. MD and DO are pinned by tests/profession/md-do-golden.test.mjs
 // and scripts/setup-tasks.test.mjs. Synthetic records only.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSetup, datable, evidenceQueue } from '../../src/utils/setupTasks.js';

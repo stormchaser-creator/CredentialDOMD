@@ -3,12 +3,14 @@
 // context; every write path refuses; nothing lands in browser storage; the
 // banner names the member and the time left; the member's log shows the view
 // and each file opened.
+import '../helpers/app-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
+import { sharedRuleResolver } from '../helpers/shared-rule-resolver.mjs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { mountComponent, settle } from '../component-harness.mjs';
@@ -84,7 +86,7 @@ test('the viewer is isolated: no AppContext, no sync, no storage, no AI, no shar
 
 const require = createRequire(import.meta.url);
 const bundled = await build({ entryPoints: [`${root}src/components/features/MemberViewer.jsx`], bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic',
-  external: ['react', 'react/jsx-runtime'], define: { 'import.meta.env': '{}' }, logLevel: 'silent' });
+  external: ['react', 'react/jsx-runtime'], define: { 'import.meta.env': '{}' }, logLevel: 'silent', plugins: [sharedRuleResolver] });
 const viewerModule = { exports: {} };
 new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(require, viewerModule, viewerModule.exports);
 const MemberViewer = viewerModule.exports.default;

@@ -8,12 +8,44 @@
 // data gets a stub with no board at all.
 //
 // `rules` is injectable so the engine is testable with synthetic rule data.
-import { PA_STATE_RULES } from "../constants/paStateRules.js";
-import { NP_STATE_RULES } from "../constants/npStateRules.js";
+//
+// The PA and NP rule data (about 470 KB of the generated modules) is not in
+// the app's entry bundle: every MD and DO downloaded and parsed it at launch
+// and never read it (goal4, 2026-10-02). utils/appRules.js loads it as its own
+// chunk for a member who needs it and installs it here (installAppRules); the
+// app shows its loading screen until it is in, so a rule card never reads
+// "not yet verified" for want of the data. Reaching the data before then is a
+// fault, never an unverified state: it throws `app_rules_not_loaded`.
 import { professionOf } from "../constants/professions.js";
 import { STATE_NAMES } from "../constants/states.js";
 
-export const DEFAULT_APP_RULES = Object.freeze({ pa: PA_STATE_RULES, np: NP_STATE_RULES });
+let installed = null;
+
+/** Put the generated PA and NP rule data in place (utils/appRules.js). */
+export function installAppRules({ pa, np } = {}) {
+  if (!pa || typeof pa !== "object" || !np || typeof np !== "object") throw new Error("PA and NP rule data are both required.");
+  installed = Object.freeze({ pa, np });
+}
+
+/** True once the PA and NP rule data is in place. */
+export const appRulesInstalled = () => installed !== null;
+
+/** Tests only: back to the state before any member needed the data. */
+export function _uninstallAppRules() { installed = null; }
+
+function installedRules() {
+  if (installed) return installed;
+  const error = new Error("The PA and NP rule data is not loaded yet.");
+  error.code = "app_rules_not_loaded";
+  throw error;
+}
+
+// The generated rule data, once installed. Read only for a PA or NP (or a PA,
+// RN or APRN licence held by a member with no physician degree).
+export const DEFAULT_APP_RULES = Object.freeze({
+  get pa() { return installedRules().pa; },
+  get np() { return installedRules().np; },
+});
 
 const NOUN = { pa: "physician assistant license", rn: "RN license", aprn: "APRN license" };
 

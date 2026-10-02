@@ -54,6 +54,7 @@ export async function mountComponent(path, { modules = {}, app = {}, props = {},
   const react = {
     useState(init) { const i = cursor++; if (!(i in hooks)) hooks[i] = typeof init === 'function' ? init() : init; return [hooks[i], v => { hooks[i] = typeof v === 'function' ? v(hooks[i]) : v; }]; },
     useRef(init) { const i = cursor++; return hooks[i] ??= ({ current: init }); },
+    useId() { const i = cursor++; return hooks[i] ??= `:r${i}:`; },
     useMemo(fn, deps) { const i = cursor++; if (!hooks[i] || !same(hooks[i].deps, deps)) hooks[i] = { deps, value: fn() }; return hooks[i].value; },
     useCallback(fn, deps) { return react.useMemo(() => fn, deps); },
     useEffect(fn, deps) { const i = cursor++; if (!hooks[i] || !deps || !same(hooks[i].deps, deps)) { const old = hooks[i]; hooks[i] = { deps }; effects.push(() => { old?.cleanup?.(); const c = fn(); hooks[i].cleanup = typeof c === 'function' ? c : null; }); } },

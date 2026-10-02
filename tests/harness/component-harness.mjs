@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { sharedRuleResolver } from '../helpers/shared-rule-resolver.mjs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -88,7 +89,7 @@ export async function loadScreens(exportsSource, { expose = {}, real: keep = [],
           contents: `${await readFile(path, 'utf8')}\nexport { ${names.join(', ')} };`, loader: 'jsx',
         }));
       }
-    } }],
+    } }, sharedRuleResolver],
   });
   const mod = { exports: {} };
   const req = (name) => (name === 'react' ? reactStub : require(name));
