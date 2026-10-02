@@ -10,6 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadScreens, mount, nodes, textOf, find, field, click, button, pinClock } from '../harness/component-harness.mjs';
 import { mountComponent } from '../component-harness.mjs';
+import { settleOutcome } from '../helpers/settle-outcome.mjs';
 
 const clock = pinClock(test, 'America/Denver', '2026-08-12T12:00:00-06:00');
 const screens = await loadScreens('export {default as WorkLog} from "./src/components/features/locum/WorkLog.jsx"; export {default as RVULog} from "./src/components/features/locum/RVULog.jsx"; export {default as Expenses} from "./src/components/features/locum/Expenses.jsx"; export {default as DutyLog} from "./src/components/features/locum/DutyLog.jsx"; export {default as DocumentsSection} from "./src/components/features/DocumentsSection.jsx"; export {default as Contracts} from "./src/components/features/locum/Contracts.jsx"; export {default as TaskNotes} from "./src/components/features/locum/TaskNotes.jsx"; export {default as Forecast} from "./src/components/features/locum/Forecast.jsx";');
@@ -77,7 +78,8 @@ test('Expenses: a refused save keeps the form and its staged receipt photo', asy
     find(m.render(), n => n.type === 'input' && n.props.placeholder === '$ amount', 'amount').props.onChange({ target: { value: '42.50' } });
     const upload = nodes(m.render()).find(n => n.type === 'input' && n.props.type === 'file' && n.props.multiple);
     upload.props.onChange({ target: { files: [new File([new Uint8Array([1, 2, 3])], 'synthetic-receipt.jpg', { type: 'image/jpeg' })], value: '' } });
-    for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r));
+    // The receipt is read from a real File (another thread): wait for it, bounded.
+    await settleOutcome(20);
     assert.match(textOf(m.render()), /synthetic-receipt\.jpg/, 'the receipt is staged');
     click(m, 'Add expense');
     assert.deepEqual(writes(m), [], 'neither the expense nor its receipt was written');
@@ -165,7 +167,7 @@ test('Documents: an upload that was not saved is never sent to be read', async (
     const m = mount(screens.DocumentsSection, { data: { settings: { apiKey: 'synthetic-key' }, locumContracts: [], documents: [], licenses: [], privileges: [], insurance: [], cme: [], healthRecords: [], education: [], deductibles: [], customCategories: [], customRecords: [] }, refuse: refuseAll });
     const upload = nodes(m.render()).find(n => n.type === 'input' && n.props.type === 'file' && n.props.multiple);
     upload.props.onChange({ target: { files: [new File(['%PDF-1.4 synthetic'], 'license.pdf', { type: 'application/pdf' })], value: '' } });
-    for (let i = 0; i < 40; i++) await new Promise(r => setImmediate(r));
+    await settleOutcome(40);
     assert.ok(m.calls.some(c => c[0] === 'refused' && c[1] === 'add' && c[2] === 'documents'), 'the file save was tried and refused');
     assert.deepEqual(requests.filter(url => !/ai-proxy/.test(url)), [], 'nothing was sent to be read');
     assert.match(textOf(m.render()), /"license\.pdf" was not saved, so it was not read\. Nothing was changed\./);

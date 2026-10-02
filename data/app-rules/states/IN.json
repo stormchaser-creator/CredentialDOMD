@@ -1,0 +1,172 @@
+{
+  "state": "IN",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Indiana Physician Assistant Committee and Medical Licensing Board of Indiana, Indiana Professional Licensing Agency",
+      "url": "https://www.in.gov/pla/professions/physician-assistant-home/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Renewal requires evidence of current NCCPA certification; the state sets no hour count.",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "notes": [
+        {
+          "text": "The two hour opioid prescribing CE tied to the Indiana controlled substance registration expired July 1, 2025.",
+          "facts": [
+            "pa.ce.opioidCsrCeExpiredBoard2",
+            "pa.ce.opioidCsrCeExpired"
+          ]
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal.lii"
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "A written collaborative agreement with an Indiana physician is submitted to the board; amendments are resubmitted, and the board and committee are notified within 15 days when it ends. A new collaborating physician reviews at least 10% of charts with a prescription in the first year, for every PA however long they have practiced.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.terminationNotice",
+          "pa.practice.chartReviewIpla",
+          "pa.practice.chartReview"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Whether the board must approve the collaborative agreement before practice begins (the statute lets the PA proceed unless the board denies it; the current Indiana Administrative Code text was not loaded)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Indiana State Board of Nursing, Indiana Professional Licensing Agency",
+      "url": "https://www.in.gov/pla/professions/nursing-home/"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlc"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline",
+          "reason": "RN licenses expire October 31 of each odd-numbered year."
+        }
+      },
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline",
+          "reason": "RN licenses expire October 31 of each odd-numbered year: every two years."
+        }
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalDeadline"
+        }
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalDeadline"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "Indiana's APRN credential is prescriptive authority; NPs who do not prescribe practice on the RN license.",
+            "fact": "np.aprn.separateLicenceOrCertificate"
+          },
+          {
+            "text": "First renewal: authority granted less than 12 months before expiry needs no CE; 12 months or more, 15 contact hours including 4 in pharmacology.",
+            "fact": "np.aprn.firstRenewalProration"
+          }
+        ],
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "bodiesVerified": false,
+          "covers": [
+            "total"
+          ],
+          "fact": "np.aprn.certificationInLieuIpla",
+          "note": "The board's audit page accepts national certification in lieu of the 30 contact hours; IC 25-23-1-19.7 and 848 IAC 5-1-3 state the hours and certification as separate requirements, so this is not yet settled."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 8,
+          "measure": "pharmacology",
+          "label": "Pharmacology, part of the 30 contact hours",
+          "facts": [
+            "np.aprn.pharmacologyHoursPerCycle",
+            "np.aprn.ceHoursPerCycle"
+          ]
+        }
+      ],
+      "unverified": [
+        "Whether national certification stands in for the APRN contact hours (the board's audit page says so; the statute and rule list both)"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "Every NP practices in collaboration with a licensed practitioner, shown by a practice agreement or hospital privileges. A written collaborative practice agreement is needed for prescriptive authority, and a current signed and dated copy goes in with each renewal.",
+        "facts": [
+          "np.practice.collaborationAllAprns",
+          "np.practice.agreementOnlyForPrescribing.lii",
+          "np.practice.agreementFilingAndRenewal.lii"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

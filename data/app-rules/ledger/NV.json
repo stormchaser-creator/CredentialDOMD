@@ -1,0 +1,574 @@
+{
+ "state": "NV",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Nevada State Board of Medical Examiners (PAs supervised by MDs; PAs supervised by DOs are licensed by the Nevada State Board of Osteopathic Medicine under NRS 633)",
+   "url": "https://medboard.nv.gov/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "June 30 of odd-numbered years (biennial period July 1 to June 30; current period ends June 30, 2027)"
+  },
+  "ce": {
+   "hoursPerCycle": 40,
+   "categoryRules": "40 hours per biennium (prorated 30/20/10 if first licensed in the second, third or fourth six-month block), all AAPA Category 1, AMA PRA Category 1 or Board approved. Board summary: at least 20 hours within scope of practice or specialty (prorated 15/10/5) and at least 2 hours Ethics, Pain Management or Addiction Care every biennium. Mandated SBIRT, controlled substance, HIV stigma and cultural competency hours count toward the total (NAC 630.358(4), 630.3585(2)).",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": "not confirmed (NCCPA certification is a licensure qualification and involuntary loss must be reported within 30 days)",
+   "topicMandates": [
+    {
+     "topic": "Ethics, Pain Management, or Addiction Care",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all active PAs"
+    },
+    {
+     "topic": "Misuse and abuse of controlled substances, opioid prescribing, or addiction",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "PAs registered to dispense controlled substances (NRS 453.231); counts toward the 40 hours (NAC 630.358(4))"
+    },
+    {
+     "topic": "Screening, Brief Intervention and Referral to Treatment (SBIRT)",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "all PAs, within 2 years of initial licensure"
+    },
+    {
+     "topic": "Suicide detection, intervention and prevention",
+     "hours": 2,
+     "period": "every 4 years",
+     "appliesTo": "all PAs per the Board's CME summary and current PA reinstatement form (first within 2 years of initial licensure, then every 4 years); NRS 630.253(5) itself names only licence holders practising medicine"
+    },
+    {
+     "topic": "Cultural competency and diversity, equity and inclusion",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "PAs whose supervising physician is a psychiatrist"
+    },
+    {
+     "topic": "Stigma, discrimination and unrecognized bias toward persons with or at high risk of HIV",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "PAs providing emergency services in a hospital or primary care, within 2 years of starting"
+    },
+    {
+     "topic": "Medical consequences of terrorism involving weapons of mass destruction",
+     "hours": 4,
+     "period": "one-time",
+     "appliesTo": "PAs, within 2 years of initial licensure (NAC 630.353); NOT YET VERIFIED as currently enforced: absent from the Board's current CME summary and 2025-2027 PA reinstatement form; 4 hours is from the Board's older status-change form"
+    }
+   ],
+   "controlledSubstanceCe": "2 hours each licensure period on substance use disorders and opioid prescribing for PAs registered to dispense controlled substances (NRS 630.2535)."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Before providing services, the PA files a Board form naming practice location and supervising physician, signed by both; termination of supervision must be reported within 72 hours and a new notice filed before practice resumes.",
+   "notes": "Supervising physician must be available for consultation at all times (may be by telephone), review selected charts, and spend part of a day at least monthly at a site where the PA practices. PA services are limited to the supervising physician's specialty area. PA may only prescribe controlled substance schedules the supervising physician may prescribe."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Certificate of registration from the Nevada State Board of Pharmacy (NRS 639.1373), which requires passing a pharmacy law examination; CS dispensing registration is renewed biennially (NRS 453.226)",
+   "ceForPrescribers": "2 hours per licensure period on substance use disorders and opioid prescribing if registered to dispense controlled substances (NRS 630.2535)."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "NAC 630.340(1)",
+    "url": "https://www.leg.state.nv.us/nac/nac-630.html",
+    "quote": "The license of a physician assistant is valid for 2 years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "40 hours (prorated 30/20/10) AAPA CME or AMA Category 1",
+    "cite": "NAC 630.350(1)",
+    "url": "https://www.leg.state.nv.us/nac/nac-630.html",
+    "quote": "has completed the following number of hours of continuing medical education as defined by the American Academy of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "June 30 of odd-numbered years (biennium July 1 to June 30; current period ends June 30, 2027)",
+    "cite": "NSBME CME Requirements Summary (MDs, PAs, AAs)",
+    "url": "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/CME_Requirements_MDs_PAs_AAs.pdf",
+    "quote": "Prior to 7/1/2025 or 7/1/2025-12/31/2025 ... 1/1/2027-6/30/2027 10",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "All CME AAPA Category 1 (PAs) or Board approved",
+    "cite": "NSBME CME Requirements Summary",
+    "url": "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/CME_Requirements_MDs_PAs_AAs.pdf",
+    "quote": "All CMEs must be AMA PRA Category 1 (for MDs and AAs), classified by the AAPA as Category 1 (for PAs), or NSBME Board approved",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.ethics",
+    "value": "2 hours Ethics, Pain Management or Addiction Care each biennium",
+    "cite": "NSBME CME Requirements Summary",
+    "url": "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/CME_Requirements_MDs_PAs_AAs.pdf",
+    "quote": "All licensees must complete a minimum of 2 hours of Ethics, Pain Management or Addiction Care CME each biennium",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.controlledSubstances",
+    "value": "2 hours each licensure period for PAs registered to dispense CS",
+    "cite": "NRS 630.2535(1)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-630.html",
+    "quote": "registered to dispense controlled substances pursuant to NRS 453.231 to complete at least 2 hours of training relating specifically to persons with substance use",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.sbirt",
+    "value": "2 hours SBIRT within 2 years after initial licensure",
+    "cite": "NRS 630.253(2)(c)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-630.html",
+    "quote": "least 2 hours of training in the screening, brief intervention and referral to treatment approach to substance use disorder within 2 years after initial licensure",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.ce.topicMandates.suicide",
+    "value": "2 hours within 2 years of initial licensure, then every 4 years (Board applies it to PAs; statute text names only holders of a licence to practice medicine)",
+    "cite": "NSBME CME Requirements Summary",
+    "url": "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/CME_Requirements_MDs_PAs_AAs.pdf",
+    "quote": "must be completed by all licensees within 2 years of your initial licensure, and once every 4 years thereafter: 2 hours: Suicide Detection",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.culturalCompetency",
+    "value": "2 hours biennially for PAs supervised by a psychiatrist",
+    "cite": "NRS 630.253(2)(d)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-630.html",
+    "quote": "biennial completion by each psychiatrist and each physician assistant practicing under the supervision of a psychiatrist",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.hivStigma",
+    "value": "2 hours within 2 years of starting emergency or primary care",
+    "cite": "NRS 630.253(2)(f)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-630.html",
+    "quote": "at least 2 hours of training in the stigma, discrimination and unrecognized bias toward persons who have acquired or are at a high risk",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.wmd",
+    "value": "One-time course within 2 years of initial licensure; in addition to the 40 hours; 4 hours AMA Category 1 per the Board's older status-change form",
+    "cite": "NAC 630.353(1)(a)",
+    "url": "https://www.leg.state.nv.us/nac/nac-630.html",
+    "quote": "If the physician assistant was initially licensed by the Board on or after October 1, 2003, within 2 years of initial licensure.",
+    "loaded": true,
+    "verified": false,
+    "reason": "NAC 630.353 is still in the NAC, but NRS 630.253 no longer requires it, and the Board's current CME summary and current 2025-2027 PA reinstatement form omit it. Whether the Board still enforces it is unconfirmed; the 4-hour figure appears only on the status-change form's statements about the 2023-2025 period, not in NAC 630.353."
+   },
+   {
+    "field": "pa.ce.nccpa",
+    "value": "NCCPA certification is a licensure qualification; involuntary loss must be reported within 30 days",
+    "cite": "NAC 630.280(5); NAC 630.380(1)(k)",
+    "url": "https://www.leg.state.nv.us/nac/nac-630.html",
+    "quote": "Failed to notify the Board of an involuntary loss of certification by the National Commission on Certification of Physician Assistants within 30 days",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Signed notice to Board before practice; termination notice within 72 hours",
+    "cite": "NAC 630.340(2)-(3)",
+    "url": "https://www.leg.state.nv.us/nac/nac-630.html",
+    "quote": "Before providing medical services, a physician assistant, on a form prescribed by the Board, shall notify the Board of the name and location of the",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.practice.onsite",
+    "value": "Supervising physician on site part of a day at least monthly",
+    "cite": "NAC 630.370(3)",
+    "url": "https://www.leg.state.nv.us/nac/nac-630.html",
+    "quote": "At least once a month, the supervising physician shall spend part of a day at any location where the physician assistant provides medical services",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.separateAuthorityRegistration",
+    "value": "State Board of Pharmacy certificate of registration",
+    "cite": "NAC 630.370(1)(e)(1); NRS 639.1373",
+    "url": "https://www.leg.state.nv.us/nac/nac-630.html",
+    "quote": "The provisions of the certificate of registration issued to his or her physician assistant by the State Board of Pharmacy pursuant to NRS 639.1373",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.scheduleLimit",
+    "value": "CS schedules limited to those the supervising physician may prescribe",
+    "cite": "NRS 630.271(2)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-630.html",
+    "quote": "shall limit the authority of a physician assistant to prescribe controlled substances to those schedules of controlled substances that the supervising physician is authorized to",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.ce.topicMandates.suicide.paForm",
+    "value": "Board applies 2 hours suicide prevention every 4 years to PAs",
+    "cite": "NSBME PA Reinstatement Application 2025-2027",
+    "url": "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/Physician_Assistant_Reinstatement_Application.pdf",
+    "quote": "a physician assistant must complete at least 2 hours of CME on Suicide Prevention and Awareness every 4 years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.ethics.paForm",
+    "value": "40 hours AAPA or AMA Category 1, 2 of which ethics, pain management or addiction care",
+    "cite": "NSBME PA Reinstatement Application 2025-2027",
+    "url": "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/Physician_Assistant_Reinstatement_Application.pdf",
+    "quote": "a minimum of forty (40) hours of AAPA or AMA Category 1 continuing medical education (CME), two (2) hours of which were in medical ethics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.ce.mandatesCountTowardTotal",
+    "value": "Controlled substance and SBIRT hours count toward the 40",
+    "cite": "NAC 630.358(4)",
+    "url": "https://www.leg.state.nv.us/nac/nac-630.html",
+    "quote": "entitled to receive credit towards the continuing medical education required pursuant to subsection 1 of NAC 630.350",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.biennium",
+    "value": "Biennial registration period 2025-2027 ends June 30, 2027",
+    "cite": "NSBME PA Status Change to Active form 2025-2027",
+    "url": "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/Physician_Assistant_Status_Change_to_Active.pdf",
+    "quote": "between 7/1/2026 - 6/30/2027",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": "Board of Pharmacy registration certificate required to prescribe or dispense CS, after passing a pharmacy law exam",
+    "cite": "NRS 639.1373(2)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-639.html",
+    "quote": "must apply for and obtain a registration certificate from the Board, pay a fee to be set by regulations adopted by the Board and pass",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.prescribing.csRegistrationBiennial",
+    "value": "Practitioners who dispense CS obtain a Board of Pharmacy registration biennially, with proof of PDMP access",
+    "cite": "NRS 453.226(1)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-453.html",
+    "quote": "shall obtain biennially a registration issued by the Board in accordance with its regulations",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Nevada State Board of Nursing",
+   "url": "https://nevadanursingboard.org/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Applicant's birthday, every second birthday",
+   "ceHoursPerCycle": 30,
+   "nlcCompactMember": false,
+   "topicMandates": [
+    {
+     "topic": "Medical consequences of terrorism involving weapons of mass destruction (bioterrorism)",
+     "hours": 4,
+     "period": "one-time",
+     "appliesTo": "all nurses, within 2 years after initial licensure"
+    },
+    {
+     "topic": "Cultural competency and diversity, equity and inclusion",
+     "hours": 4,
+     "period": "every cycle",
+     "appliesTo": "all licensees under NRS 632"
+    },
+    {
+     "topic": "Stigma, discrimination and unrecognized bias toward persons with or at high risk of HIV",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "licensees providing emergency services in a hospital or primary care, within 2 years of starting"
+    }
+   ],
+   "ceNotes": "30 hours per 2-year period; exempt for the first biennial period after graduation, except the mandated courses in NRS 632.343(3)."
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse)",
+   "separateLicenceOrCertificate": "separate licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Same date as RN licence (birthday, biennial)",
+   "ceHoursPerCycle": 45,
+   "ceNotes": "45 hours directly related to role or population of focus; may include the RN renewal CE (30 hours). Must include the 2 controlled substance hours (if prescribing or dispensing CS) and the suicide prevention hours when due. As a chapter 632 licensee the APRN also carries the RN mandates (4 hours cultural competency every biennium, one-time 4-hour WMD course, HIV stigma if in emergency or primary care). APRNs must also maintain a portfolio subject to audit (NAC 632.291(3), 632.2563). No separate pharmacology hour requirement.",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": "yes if the APRN program was completed on or after July 1, 2014",
+   "topicMandates": [
+    {
+     "topic": "Misuse and abuse of controlled substances, opioid prescribing or addiction",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "APRNs authorized to prescribe CS (NRS 639.2351) or registered to dispense CS (NRS 453.231)"
+    },
+    {
+     "topic": "Suicide prevention and awareness",
+     "hours": 2,
+     "period": "every 4 years",
+     "appliesTo": "all APRNs; first course within 2 years after initial licensure"
+    },
+    {
+     "topic": "Screening, Brief Intervention and Referral to Treatment (SBIRT)",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "all APRNs, within 2 years after initial licensure"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Authorization under NRS 639.2351 (State Board of Pharmacy) to prescribe controlled substances, poisons, dangerous drugs and devices",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "2 hours each renewal on controlled substance misuse, opioid prescribing or addiction for CS prescribers or dispensers.",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none (protocol with a collaborating physician only for Schedule II before 2 years or 2,000 hours of clinical experience)",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "No standing agreement. Schedule II prescribing requires 2 years or 2,000 hours of clinical experience, or a protocol approved by a collaborating physician."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "Biennially on the licensee's birthday",
+    "cite": "NAC 632.192(5)",
+    "url": "https://www.leg.state.nv.us/nac/nac-632.html",
+    "quote": "each license or certificate will expire biennially on the licensees or certificate holders birthday",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "NRS 632.343(1)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "completion, during the 2-year period before renewal of the license, of 30 hours in a program of continuing education approved by the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.bioterrorism",
+    "value": "4 hours one-time within 2 years after initial licensure",
+    "cite": "NRS 632.343(3)(b)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "to be completed within 2 years after initial licensure, relating to the medical consequences of an act of terrorism",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.culturalCompetency",
+    "value": "4 hours biennially",
+    "cite": "NRS 632.343(3)(c)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "at least 4 hours of instruction relating to cultural competency and diversity, equity and inclusion to be completed biennially",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": false,
+    "cite": "Nevada State Board of Nursing General FAQs",
+    "url": "https://nevadanursingboard.org/wp-content/uploads/2023/01/General-FAQs.pdf",
+    "quote": "No, Nevada is not a member of the Nurse Licensure Compact (eNLC).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "Same as RN licence",
+    "cite": "NAC 632.290(1)",
+    "url": "https://www.leg.state.nv.us/nac/nac-632.html",
+    "quote": "The license issued to an advanced practice registered nurse expires at the same time as a license for a registered nurse.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": "45 hours, role or population related, may include RN CE",
+    "cite": "NAC 632.291(1)(a)(3)",
+    "url": "https://www.leg.state.nv.us/nac/nac-632.html",
+    "quote": "Has completed satisfactorily 45 hours of continuing education which: (I) Must be directly related to his or her role or population of focus",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.controlledSubstances",
+    "value": "2 hours for CS prescribers or dispensers",
+    "cite": "NAC 632.291(1)(a)(3)(III)",
+    "url": "https://www.leg.state.nv.us/nac/nac-632.html",
+    "quote": "Must include 2 hours of training that relate specifically to the misuse and abuse of controlled substances, the prescribing of opioids or addiction",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "Required for APRNs whose program was completed on or after July 1, 2014",
+    "cite": "NAC 632.291(1)(b)",
+    "url": "https://www.leg.state.nv.us/nac/nac-632.html",
+    "quote": "completes a program designed to prepare an advanced practice registered nurse on or after July 1, 2014, proof that the advanced practice registered nurse has",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "np.aprn.topicMandates.suicide",
+    "value": "2 hours every 4 years; first within 2 years of initial licensure",
+    "cite": "NRS 632.343(3)(a)(1), (6)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "at least 2 hours of instruction every 4 years on evidence-based suicide prevention and awareness",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.sbirt",
+    "value": "2 hours SBIRT within 2 years after initial licensure",
+    "cite": "NRS 632.343(3)(d)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "at least 2 hours of training in the screening, brief intervention and referral to treatment approach to substance use disorder",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.scheduleII",
+    "value": "Schedule II needs 2 years or 2,000 hours clinical experience, or collaborating physician protocol",
+    "cite": "NRS 632.237(3)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "a controlled substance listed in schedule II unless: (a) The advanced practice registered nurse has at least 2 years or 2,000 hours of clinical experience",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "np.prescribing.separateAuthorityRegistration",
+    "value": "Prescribing authority via NRS 639.2351",
+    "cite": "NRS 632.237(2)(c)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "If authorized pursuant to NRS 639.2351 and subject to the limitations set forth in subsection 3, prescribe controlled substances, poisons, dangerous drugs and devices",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.hivStigma",
+    "value": "2 hours within 2 years of starting emergency or primary care",
+    "cite": "NRS 632.343(3)(e)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "at least 2 hours of training in the stigma, discrimination and unrecognized bias toward persons who have acquired or are at a high risk",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": "APRN must obtain a State Board of Pharmacy certificate of registration to prescribe",
+    "cite": "NRS 639.2351(1)(b)",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-639.html",
+    "quote": "Applies for and obtains a certificate of registration from the State Board of Pharmacy and pays the fee",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember.statute",
+    "value": "NRS 632 (rev. 9/9/2026) contains no Nurse Licensure Compact provision",
+    "cite": "NRS chapter 632",
+    "url": "https://www.leg.state.nv.us/nrs/nrs-632.html",
+    "quote": "(no occurrence of 'Licensure Compact' in the chapter as revised 9/9/2026)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: whether current NCCPA certification is checked at each renewal is unconfirmed. NAC 630.280(5) makes it a licensure qualification, NAC 630.380(1)(k) requires reporting an involuntary loss within 30 days, and the status-change form asks about it, but NAC 630.350 lists only CME for renewal.",
+  "PA: weapons of mass destruction course (NAC 630.353) still in the NAC but absent from the Board's current CME summary, current PA reinstatement form and NRS 630.253; treat as not yet verified.",
+  "PA: suicide prevention applies to PAs per Board documents; the statute (NRS 630.253(5)) and NAC 630.1545 name only holders of a licence to practice medicine.",
+  "PA: the 20-hour scope-of-practice minimum comes from the Board's CME summary (applies to all licensee types); it is not in NAC 630.350 and is not on the current PA reinstatement form.",
+  "PA: PAs supervised by osteopathic physicians are licensed by the Nevada State Board of Osteopathic Medicine (NRS 633 / NAC 633); those requirements were not researched or verified.",
+  "NP: 'full' practice authority is derived from NRS 632.237 (no standing collaboration requirement; Schedule II limited before 2 years or 2,000 hours unless under a collaborating physician protocol); no board page using the word 'full' was loaded.",
+  "Missed-mandate sweep: NRS 630, NAC 630, NRS 632 and NAC 632 were searched; no implicit bias, human trafficking, child abuse CE, end of life, Alzheimer (only double-credit incentive for PAs), infection control or domestic violence CE requirement was found for PAs or APRNs."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "corrections": [
+   "PA categoryRules: added the Board summary's prorated scope-of-practice minimum (20/15/10/5) and that mandated SBIRT, controlled substance and HIV hours count toward the 40 (NAC 630.358(4), 630.3585(2)).",
+   "PA weapons of mass destruction course: changed from verified to NOT YET VERIFIED as currently enforced. NAC 630.353 is still in the NAC, but NRS 630.253 (rev. 9/9/2026) no longer contains it and the Board's current CME summary and 2025-2027 PA reinstatement form omit it. Hours set to 4 from the Board's older status-change form, flagged.",
+   "PA suicide prevention: confirmed the Board applies it to PAs (current 2025-2027 PA reinstatement form cites NRS 630.253(5) for PAs) while the statute text names only physicians; recorded both.",
+   "PA prescribing: loaded NRS 639.1373 and NRS 453.226 directly (researcher had only cross references). Added that the Board of Pharmacy certificate requires a pharmacy law exam and the CS registration is biennial with proof of PDMP access.",
+   "NP: added the HIV stigma fact (NRS 632.343(3)(e)) that was in topicMandates but had no fact row, the NRS 639.2351 pharmacy registration fact, and statutory support for non-membership in the NLC (the Board FAQ cited was dated 2023).",
+   "NP: noted the RN first-biennium exemption (NRS 632.343(1)), that the cultural competency, WMD and HIV mandates apply to APRN licensees too, and the APRN portfolio audit (NAC 632.291(3))."
+  ],
+  "sourcesReloaded": [
+   "https://www.leg.state.nv.us/nac/nac-630.html",
+   "https://www.leg.state.nv.us/nrs/nrs-630.html",
+   "https://www.leg.state.nv.us/nac/nac-632.html",
+   "https://www.leg.state.nv.us/nrs/nrs-632.html",
+   "https://www.leg.state.nv.us/nrs/nrs-639.html",
+   "https://www.leg.state.nv.us/nrs/nrs-453.html",
+   "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/CME_Requirements_MDs_PAs_AAs.pdf",
+   "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/Physician_Assistant_Reinstatement_Application.pdf",
+   "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/Physician_Assistant_Status_Change_to_Active.pdf",
+   "https://nevadanursingboard.org/wp-content/uploads/2023/01/General-FAQs.pdf"
+  ]
+ }
+}

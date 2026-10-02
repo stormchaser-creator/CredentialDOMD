@@ -1,4 +1,5 @@
-import { complianceFor, alertingStates } from "./compliance";
+import { complianceListFor, alertingStates } from "./compliance";
+import { appCardTitle } from "./cmePresentation.js";
 import { getItemLabel, formatDate, mailtoHref } from "./helpers";
 import { scrubSsn } from "./outgoingText.js";
 import { smsBody, alertTextBody, alertCutNotice } from "./shareText";
@@ -6,6 +7,7 @@ import { isAlertable } from "./lifecycle";
 import { reminderLeadDays } from "./reminderPreferences.js";
 import { alertRecords } from "./alertItems.js";
 import { daysUntilDate, localToday } from "./dateDays.js";
+import { certificationCards } from "./certCompliance.js";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -66,28 +68,60 @@ export function generateAlerts(data) {
   // held. A license awaiting confirmation or whose date is not known yet is
   // a Resolve task, never an alert, so its state's CME raises none either,
   // picked or not (compliance.js alertingStates).
-  const allStates = alertingStates(data.settings.primaryState, data.settings.additionalStates, data.licenses);
+  const allStates = new Set(alertingStates(data.settings.primaryState, data.settings.additionalStates, data.licenses, data.settings.degreeType));
   const cmeIssues = [];
 
-  allStates.forEach(st => {
-    const comp = complianceFor(data, st);
+  // One entry per card: per state for physicians (as before), per state and
+  // licence kind for a PA or NP (compliance.js complianceListFor).
+  complianceListFor(data).filter(x => allStates.has(x.st)).forEach(({ st, kind, key, comp }) => {
     // Only surface a CME gap once its renewal is within the reminder lead
     // window (default 90 days) — same gating "soon" license alerts get.
     // With no linked license expiration we don't know how far out it is,
     // so err toward showing it.
-    const withinLead = comp.daysLeft == null || comp.daysLeft <= lead;
-    if (!comp.fullyCompliant && withinLead) {
+    // A PA or NP card whose CME period runs past an annual licence renewal
+    // (Mississippi, Alabama, North Carolina, Tennessee) has two dates: the
+    // hours and topics are due at the period end, what the renewal checks
+    // (current certification) at the licence date. Each gap waits for its own.
+    const ceDays = comp.periodDaysLeft !== undefined ? comp.periodDaysLeft : comp.daysLeft;
+    const licDays = comp.licenseDaysLeft !== undefined ? comp.licenseDaysLeft : comp.daysLeft;
+    const hoursDue = ceDays == null || ceDays <= lead;
+    const renewalDue = licDays == null || licDays <= lead;
+    if (!comp.fullyCompliant && (hoursDue || renewalDue)) {
       const issues = [];
-      if (!comp.totalMet && !comp.noGeneralReq) issues.push(`${comp.totalEarned}/${comp.totalRequired} total hrs`);
-      if (!comp.cat1Met && comp.cat1Required > 0) issues.push(`Cat 1: ${comp.cat1Earned}/${comp.cat1Required} hrs`);
-      comp.topicResults.filter(t => !t.met).forEach(t => issues.push(`${t.topic}: ${t.earned}/${t.required} hrs`));
+      if (hoursDue) {
+        // Only a known shortfall is an issue: a PA or NP rule not yet verified
+        // has no hour target (totalRequired null) and raises nothing here.
+        if (!comp.totalMet && !comp.noGeneralReq && comp.totalRequired != null) issues.push(`${comp.totalEarned}/${comp.totalRequired} total hrs`);
+        if (!comp.cat1Met && comp.cat1Required > 0) issues.push(`Cat 1: ${comp.cat1Earned}/${comp.cat1Required} hrs`);
+        // A PA or NP course with no stated hours reads "not recorded", never "0/0 hrs".
+        comp.topicResults.filter(t => t.met === false).forEach(t => issues.push(comp.profession && t.checklist ? `${t.topic}: completion not recorded` : `${t.topic}: ${t.earned}/${t.required} hrs`));
+      }
       // The renewal date the gap counts toward, when a license anchors it:
       // a fixed date, unlike daysLeft, which changes every day.
       const end = comp.windowAnchored && comp.windowEnd instanceof Date ? comp.windowEnd : null;
-      const renewal = end ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}` : null;
-      if (issues.length) cmeIssues.push({ state: st, issues, daysLeft: comp.daysLeft, renewal });
+      let renewal = end ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}` : null;
+      let days = hoursDue ? ceDays : null;
+      const checks = renewalDue ? (comp.credentialChecks || []).filter(c => c.met === false) : [];
+      for (const c of checks) issues.push(`${c.label}: not on file`);
+      // A renewal check is due at the licence date, the sooner of the two.
+      if (checks.length && comp.licenseRenewal && comp.periodDue) { renewal = comp.licenseRenewal; days = licDays; }
+      else if (days == null) days = licDays;
+      const app = kind && kind !== "medical";
+      if (issues.length) cmeIssues.push({ state: st, issues, daysLeft: days, renewal, ...(app ? { key, kind, label: appCardTitle(comp) } : {}) });
     }
   });
+
+  // A PA's NCCPA card and an NP's certifier cards: a credit shortfall on the
+  // certification a state renewal depends on (Pennsylvania, Ohio: current
+  // NCCPA certification) is a gap like any state card's, inside the same lead
+  // window of the certification's own deadline.
+  for (const c of certificationCards(data, { now })) {
+    if (c.needsRole || c.status !== "needs-hours" || c.required == null) continue;
+    if (c.daysLeft != null && c.daysLeft > lead) continue;
+    const end = c.windowEnd instanceof Date ? c.windowEnd : null;
+    const renewal = end ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}` : (c.expirationDate || null);
+    cmeIssues.push({ state: c.body, issues: [c.assessment], daysLeft: c.daysLeft, renewal, key: c.id, kind: "cert", label: c.label });
+  }
 
   const count = expired.length + soon.length + cmeIssues.length;
   if (count === 0) return null;
@@ -120,7 +154,9 @@ export function generateAlerts(data) {
     // By state, issue count and renewal date, never daysLeft: a countdown in
     // the fingerprint changed it every day, and the banner's snooze (which
     // holds while the fingerprint is unchanged) ended the next morning.
-    ...cmeIssues.map(ci => `cme:${ci.state}:${ci.issues.length}:${ci.renewal ?? "x"}`),
+    // Physician entries keep `cme:TX:...`, so existing snoozes survive; a PA
+    // or NP card is `cme:TX:aprn:...`.
+    ...cmeIssues.map(ci => `cme:${ci.key ?? ci.state}:${ci.issues.length}:${ci.renewal ?? "x"}`),
   ];
   const fingerprint = fpParts.sort().join("|");
 
@@ -130,7 +166,8 @@ export function generateAlerts(data) {
 export function buildNotificationMessage(data, alerts) {
   if (!alerts) return null;
   const now = new Date();
-  const name = data.settings.name || "Doctor";
+  const deg0 = data.settings.degreeType;
+  const name = data.settings.name || (deg0 === "PA" || deg0 === "NP" ? "Clinician" : "Doctor");
   const deg = data.settings.degreeType;
   const fmtDate = (d) => formatDate(d);
 
@@ -160,10 +197,10 @@ export function buildNotificationMessage(data, alerts) {
   }
 
   if (alerts.cmeIssues.length > 0) {
-    lines.push("", "\ud83d\udccb CME COMPLIANCE GAPS:");
+    lines.push("", deg0 === "NP" ? "\ud83d\udccb CE COMPLIANCE GAPS:" : "\ud83d\udccb CME COMPLIANCE GAPS:");
     alerts.cmeIssues.forEach(ci => {
       // renewal countdown for context
-      lines.push(`  ${ci.state}:`);
+      lines.push(`  ${ci.label ?? ci.state}:`);
       ci.issues.forEach(issue => lines.push(`    - ${issue}`));
     });
   }
@@ -181,7 +218,7 @@ export function buildNotificationMessage(data, alerts) {
   const subjectParts = [];
   if (alerts.expired.length > 0) subjectParts.push(`${alerts.expired.length} EXPIRED`);
   if (alerts.soon.length > 0) subjectParts.push(`${alerts.soon.length} expiring soon`);
-  if (alerts.cmeIssues.length > 0) subjectParts.push(`CME gaps in ${alerts.cmeIssues.map(c => c.state).join(", ")}`);
+  if (alerts.cmeIssues.length > 0) subjectParts.push(`${deg0 === "NP" ? "CE" : "CME"} gaps in ${[...new Set(alerts.cmeIssues.map(c => c.label ?? c.state))].join(", ")}`);
 
   return {
     subject: `CredentialDOMD Alert: ${subjectParts.join(" \u00b7 ")}`,

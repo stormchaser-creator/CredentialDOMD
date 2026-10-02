@@ -39,7 +39,7 @@ import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiMode
  *  - Anything else is "generic CSV" with a manual column-mapping step.
  */
 import { CME_TOPICS } from "../constants/cmeTopics.js";
-import { CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../constants/credentialTypes.js";
+import { CME_CATEGORIES_MD, CME_CATEGORIES_DO, CME_CATEGORIES_PA, CME_CATEGORIES_NP, NCCPA_ACTIVITY_FIELD } from "../constants/credentialTypes.js";
 import { geminiCall, proxyErrorMessage } from "./aiClient.js";
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -371,6 +371,8 @@ export function parseHours(v) {
  * say and we defaulted to AMA PRA Category 1.
  */
 export function mapCreditType(raw, deg) {
+  if (deg === "PA") return mapPaCredit(raw);
+  if (deg === "NP") return mapNpCredit(raw);
   const list = deg === "DO" ? CME_CATEGORIES_DO : CME_CATEGORIES_MD;
   const s = String(raw || "").toLowerCase().replace(/\s+/g, " ").trim();
   const pick = (name) => list.includes(name) ? name : "Other";
@@ -439,6 +441,50 @@ const TOPIC_PATTERNS = [
  * intake could never tag a state-only mandate, so its compliance bar could
  * never be met from an imported or scanned entry.
  */
+/**
+ * A PA's credit type (DESIGN 8.2 step 5). AAPA is read before any generic
+ * "Category 1"; a Category 1 with no sponsor named is AAPA Category 1 CME
+ * marked assumed, and the import holds it until the member picks the
+ * sponsor (an assumed AAPA row would count toward a state's AAPA minimum).
+ * Nursing contact hours are Category 2 for a PA. Self-Assessment and
+ * PI-CME are NCCPA activity types, returned as `activity`.
+ */
+function mapPaCredit(raw) {
+  const s = String(raw || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const activity = /self.?assessment/.test(s) ? "Self-Assessment" : /\bpi[- ]?cme\b|performance improvement/.test(s) ? "PI-CME" : null;
+  const out = (category, assumed) => (activity ? { category, assumed, activity } : { category, assumed });
+  if (!s) return out("AAPA Category 1 CME", true);
+  const exact = CME_CATEGORIES_PA.find(c => c.toLowerCase() === s);
+  if (exact) return out(exact, false);
+  if (/panre[- ]?la/.test(s)) return out("NCCPA PANRE-LA (Category 1 Self-Assessment)", false);
+  const cat2 = /category 2|cat\.? ?2|\bcat2\b/.test(s);
+  if (/\baapa\b/.test(s)) return out(cat2 ? "Category 2 CME" : "AAPA Category 1 CME", false);
+  if (/ama pra|pra cat/.test(s)) return out(cat2 ? "Category 2 CME" : "AMA PRA Category 1", false);
+  if (/\baoa\b/.test(s) || /\b(1|2)-?[ab]\b/.test(s)) return /1-?a\b/.test(s) ? out("AOA Category 1-A", false) : out("Other", true);
+  if (/\baafp\b|prescribed/.test(s)) return out("AAFP Prescribed Credit", false);
+  if (cat2) return out("Category 2 CME", false);
+  if (/contact hour|\bcne\b|\bancc\b|nursing/.test(s)) return out("Category 2 CME", false);
+  return out("AAPA Category 1 CME", true);
+}
+
+/**
+ * An NP's credit type: contact hours, CNE or ANCC are accredited nursing CE;
+ * a bare "CE" is assumed to be. AMA PRA Category 1, AAPA Category 1 and Joint
+ * Accreditation keep their own names.
+ */
+function mapNpCredit(raw) {
+  const s = String(raw || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!s) return { category: "Accredited Nursing CE", assumed: true };
+  const exact = CME_CATEGORIES_NP.find(c => c.toLowerCase() === s);
+  if (exact) return { category: exact, assumed: false };
+  if (/joint accredit/.test(s)) return { category: "Joint Accreditation CE", assumed: false };
+  if (/\baapa\b/.test(s)) return { category: "AAPA Category 1 CME", assumed: false };
+  if (/ama pra|pra cat/.test(s)) return /category 2|cat\.? ?2/.test(s) ? { category: "Other", assumed: true } : { category: "AMA PRA Category 1", assumed: false };
+  if (/contact hour|\bcne\b|\bancc\b|nursing|\bnurse\b/.test(s)) return { category: "Accredited Nursing CE", assumed: false };
+  if (/category 1|cat\.? ?1/.test(s)) return { category: "AMA PRA Category 1", assumed: true };
+  return { category: "Accredited Nursing CE", assumed: true };
+}
+
 export function guessTopics(text, subjects = "", extraTopics = []) {
   const hay = `${text || ""} ${subjects || ""}`.toLowerCase();
   if (!hay.trim()) return [];
@@ -496,6 +542,8 @@ function finishRow(r, deg, extraTopics = []) {
   const cat = mapCreditType(r.rawCategory, deg);
   r.category = r.category || cat.category;
   r.categoryAssumed = r.categoryAssumed || (!r.rawCategory ? true : cat.assumed);
+  // A PA's Self-Assessment or PI-CME activity (never set for MD or DO).
+  if (cat.activity) r.customFields = { ...(r.customFields || {}), [NCCPA_ACTIVITY_FIELD]: cat.activity };
   if (!r.topics?.length) r.topics = guessTopics(r.title, r.rawSubjects, extraTopics);
   const w = [];
   if (!r.date) w.push("no date");
@@ -614,6 +662,9 @@ export function toCmeEntry(row) {
     topics: [...(row.topics || [])],
     notes: row.notes || "",
   };
+  // Only a PA's NCCPA activity type or an NP's pharmacology hours travel as
+  // custom fields; a physician's row has none, so its entry is as before.
+  if (row.customFields && Object.keys(row.customFields).length) entry.customFields = { ...row.customFields };
   return entry;
 }
 
@@ -1405,7 +1456,7 @@ export async function readImportFile(file) {
 }
 
 
-const TRANSCRIPT_PROMPT = (deg) => `You read continuing medical education transcripts and course histories for a physician (${deg === "DO" ? "DO" : "MD"}). Return ONLY a JSON array, no markdown. One object per completed activity:
+const TRANSCRIPT_PROMPT = (deg) => `You read continuing medical education transcripts and course histories for ${deg === "PA" ? "a physician assistant (PA)" : deg === "NP" ? "a nurse practitioner (NP), whose continuing education is in contact hours" : `a physician (${deg === "DO" ? "DO" : "MD"})`}. Return ONLY a JSON array, no markdown. One object per completed activity:
 {"date":"YYYY-MM-DD","title":"...","provider":"...","hours":number,"creditType":"...","subjects":"...","certificateNumber":"..."}
 Rules: date is the completion date. hours is the credit total for that activity (a number). creditType is the credit designation as printed (for example "AMA PRA Category 1", "AOA Category 1-A", "MOC Part II"); use "" if the document does not say. subjects is any subject-area or topic text printed for the row (comma separated) or "". certificateNumber is a certificate or confirmation number if printed, else "" (a CE Broker course tracking number like 20-123456 is NOT a certificate number; leave it out). Do not invent rows, dates, hours, or numbers that are not printed. Skip summary and total lines.`;
 

@@ -1,0 +1,53 @@
+{
+ "state": "GA",
+ "facts": [
+  {
+   "field": "np.rn.ceAcademic",
+   "profession": "np",
+   "value": "Completion of an accredited academic program in nursing or a related field",
+   "cite": "Ga. Comp. R. & Regs. r. 410-13-.01(1)(c)",
+   "url": "https://rules.sos.ga.gov/gac/410-13-.01",
+   "quote": "Completion of an accredited academic program of study in nursing or a related field as recognized by the Board",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "np.rn.ceFacilityCompetency",
+   "profession": "np",
+   "value": "Facility verified competency plus at least 500 hours practiced",
+   "cite": "Ga. Comp. R. & Regs. r. 410-13-.01(1)(d)",
+   "url": "https://rules.sos.ga.gov/gac/410-13-.01",
+   "quote": "Verification of competency by a health care facility or entity licensed under O.C.G.A. §31-7 ... and at least 500 hours practiced",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "np.rn.ceOtherApproved",
+   "profession": "np",
+   "value": "Other board approved activities that show competency",
+   "cite": "Ga. Comp. R. & Regs. r. 410-13-.01(1)(e)",
+   "url": "https://rules.sos.ga.gov/gac/410-13-.01",
+   "quote": "Other activities as prescribed and approved by the board that show competency in the nursing field",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "np.prescribing.hydrocodoneDelegation",
+   "profession": "np",
+   "value": "Hour applies to APRNs delegated prescriptive authority under O.C.G.A. 43-34-25(d.1)",
+   "cite": "Ga. Comp. R. & Regs. r. 360-32-.05(3)(a)2.",
+   "url": "https://rules.sos.ga.gov/gac/360-32-.05",
+   "quote": "an APRN to whom he/she delegates prescriptive authority pursuant to O.C.G.A. § 43-34-25(d.1) completes one hour of continuing education biennially",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  }
+ ]
+}

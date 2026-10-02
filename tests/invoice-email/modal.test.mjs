@@ -1,4 +1,5 @@
 import test from "node:test";
+import { settleOutcome } from '../helpers/settle-outcome.mjs';
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -107,7 +108,8 @@ const textOf = (n) => (n == null || typeof n === "boolean" ? ""
   : typeof n === "string" || typeof n === "number" ? String(n)
     : Array.isArray(n) ? n.map(textOf).join("") : textOf(n.props?.children));
 const button = (tree, label) => find(tree, (n) => n.type === "button" && textOf(n).includes(label));
-const flush = async (turns = 30) => { for (let i = 0; i < turns; i++) await new Promise((r) => setImmediate(r)); };
+// Bounded wait for the outcome, not a fixed number of turns (tests/helpers/settle-outcome.mjs).
+const flush = (turns = 30) => settleOutcome(turns);
 const pdfText = (b64) => [...Buffer.from(b64, "base64").toString("latin1").matchAll(/\((.*)\) Tj/g)].map((m) => m[1]).join("\n");
 
 function context(env, data, extra = {}) {

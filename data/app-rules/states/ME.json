@@ -1,0 +1,202 @@
+{
+  "state": "ME",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Maine Board of Licensure in Medicine (or Maine Board of Osteopathic Licensure; PA may be licensed by either)",
+      "url": "https://www.maine.gov/md/licensure/pa-license"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "title": {
+        "value": "Physician associate license",
+        "fact": "pa.licence.title"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 100,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 50,
+        "fact": "pa.ce.categoryRules",
+        "label": "Category 1 (AAPA, AMA, ACCME, AAFP, MMA, AOA or MOA accredited)",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit"
+        ],
+        "unverifiedAccepted": [
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "The jurisprudence exam is taken every other renewal cycle (approximately 4 years).",
+          "fact": "pa.licence.jurisprudenceExam"
+        },
+        {
+          "text": "CME is prorated during the first licensure period.",
+          "fact": "pa.ce.firstPeriodProration"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 3,
+        "label": "Prescribing of opioid medication, Category 1, every two years",
+        "facts": [
+          "pa.ce.topicMandates[opioid]",
+          "pa.ce.topicMandates[opioid].appliesTo (BOLIM)"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "With under 4,000 documented clinical hours a PA works under a collaborative agreement (or a scope of practice agreement in a group practice or facility) submitted to the board for approval. Since April 3, 2026 no agreement is required above 4,000 verified clinical hours.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.collaborativeAgreementFiling",
+          "pa.practice.over4000",
+          "pa.practice.agreementFilingAndRenewal (effective)"
+        ]
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Maine State Board of Nursing",
+      "url": "https://www.maine.gov/boardofnursing/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "facts": [
+            "np.rn.renewalCycleYears",
+            "np.rn.renewalDeadline"
+          ],
+          "reason": "The RN renewal statute sets no CE condition."
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "unverified": [
+        "Whether any RN continuing education rule applies beyond the renewal statute (the absence was not exhaustively confirmed)"
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 50,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "categoryMin": {
+          "value": 30,
+          "fact": "np.aprn.categoryRules",
+          "label": "Category I",
+          "accepted": [
+            "Accredited Nursing CE",
+            "AMA PRA Category 1",
+            "Joint Accreditation CE"
+          ],
+          "unverifiedAccepted": [
+            "AAPA Category 1 CME"
+          ]
+        },
+        "notes": [
+          {
+            "text": "No more than 20 of the contact hours may be Category II.",
+            "fact": "np.aprn.categoryRules#2"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 3,
+          "label": "Prescribing of opioid medication, Category I, every two years",
+          "facts": [
+            "np.aprn.topicMandates[opioid]",
+            "np.aprn.topicMandates[opioid].period"
+          ],
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          }
+        },
+        {
+          "topic": "Pharmacology",
+          "hours": 15,
+          "measure": "pharmacology",
+          "label": "Pharmacology, 15 contact hours every two years, for NPs who do not prescribe",
+          "fact": "np.aprn.nonPrescriberPharmacology",
+          "condition": {
+            "field": "Does not prescribe",
+            "question": "Do you practice without prescribing (no prescriptions since your last renewal)?",
+            "description": "Maine NPs who do not prescribe submit 15 contact hours of pharmacology at renewal."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "conditional": true,
+        "text": "An NP practices for at least 24 months under a supervising physician or supervising NP, or employed by a clinic or hospital whose medical director is a licensed physician, before practicing without supervision; the supervisory relationship is registered with the board.",
+        "facts": [
+          "np.practice.transition",
+          "np.practice.agreementFilingAndRenewal#2",
+          "np.practice.transitionEmployment"
+        ]
+      }
+    }
+  }
+}

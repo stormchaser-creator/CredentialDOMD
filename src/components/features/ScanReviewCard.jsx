@@ -4,7 +4,7 @@ import OtherDocumentReview from "./OtherDocumentReview";
 import { identifierReason } from "../../utils/customCategories";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
-import { SECTION_META, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS, EDUCATION_TYPES, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../../constants/credentialTypes";
+import { SECTION_META, getLicenseTypes, getCMECategories, getEducationTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS } from "../../constants/credentialTypes";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getStateEntry } from "../../constants/stateRequirements";
 import { STATES } from "../../constants/states";
@@ -77,11 +77,12 @@ const FIELD_DEFS = {
 
 const TYPE_OPTIONS = {
   license: (deg) => getLicenseTypes(deg),
-  cmeCategory: (deg) => (deg === "DO" ? CME_CATEGORIES_DO : CME_CATEGORIES_MD),
+  // The profession's own lists (MD and blank: the MD list, as before).
+  cmeCategory: (deg) => getCMECategories(deg),
   privilege: () => PRIVILEGE_TYPES,
   insurance: () => INSURANCE_TYPES,
   healthRecord: (_deg, edited) => getHealthRecordTypes(edited?.category),
-  education: () => EDUCATION_TYPES,
+  education: (deg) => getEducationTypes(deg),
 };
 
 // Concept aliases so reclassifying a scan carries over the fields that mean the same thing

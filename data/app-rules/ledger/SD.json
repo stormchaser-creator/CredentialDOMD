@@ -1,0 +1,415 @@
+{
+ "state": "SD",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "South Dakota Board of Medical and Osteopathic Examiners (SDBMOE), with a Physician Assistant Council",
+   "url": "https://sdbmoe.gov/professions-physician-assistant-pa/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA)",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annual; renewal application filed before May 1 each year (ARSD 20:52:01:09). Statute says annually on a date set by the board. Note: ARSD 20:52:01:09 still cites SDCL 36-4A-32, which SL 2025 ch 149 repealed; the May 1 filing date in the rule has not been amended."
+  },
+  "ce": {
+   "hoursPerCycle": 30,
+   "hoursNote": "30 hours of board approved post graduate study in the preceding 12 months, every annual renewal. Proof of current NCCPA certification satisfies the requirement.",
+   "categoryRules": "Post graduate studies approved by the board; no AAPA Category 1 split stated in statute or rule",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaNote": "Not required for renewal itself, but NCCPA certification is required to practise without a collaborative agreement; a PA who loses NCCPA certification must return to a collaborative agreement.",
+   "topicMandates": [],
+   "controlledSubstanceCe": "No state controlled substance CE found in statute or rule; federal DEA one-time 8 hour SUD training (MATE) applies to DEA registrants."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Collaborative agreement (board approved form) with an SD physician required until the PA is NCCPA certified and files an affidavit of at least 6,000 practice hours (effective July 1, 2025, SL 2025 ch 149). Agreement kept at the primary practice site and provided to the board on request; PA notifies the board in writing when an agreement terminates. No periodic renewal of the agreement is stated.",
+   "notes": "Board online account has an option (since July 1, 2025) to request the 6,000 hour exemption affidavit."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "South Dakota Controlled Substance Registration (Department of Health) required, and must be obtained before DEA registration. PAs may prescribe drugs other than Schedule I (SDCL 36-4A-26.1(6)). The state registration expires together with the DEA registration (ARSD 44:58:03:01).",
+   "ceForPrescribers": "None found at state level"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": "1 (annual)",
+    "cite": "SDCL 36-4A-31",
+    "url": "https://sdlegislature.gov/api/Statutes/36-4A.html?all=true",
+    "quote": "A physician assistant license issued by the board must be renewed annually on a date set by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "Before May 1 each year",
+    "cite": "ARSD 20:52:01:09",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:52.html?all=true",
+    "quote": "An application for annual renewal ... shall be filed with the board before the first day of May of each year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "30 hours in the preceding 12 months",
+    "cite": "SDCL 36-4A-31(3)",
+    "url": "https://sdlegislature.gov/api/Statutes/36-4A.html?all=true",
+    "quote": "during the preceding twelve months, of at least thirty hours of post-graduate studies approved by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": "true",
+    "cite": "SDCL 36-4A-31",
+    "url": "https://sdlegislature.gov/api/Statutes/36-4A.html?all=true",
+    "quote": "may document compliance with subdivision (3) by providing proof of current certification from the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.boardPage",
+    "value": "Board page restates 30 hours annually or current NCCPA",
+    "cite": "SDBMOE Physician Assistant page",
+    "url": "https://sdbmoe.gov/professions-physician-assistant-pa/",
+    "quote": "must complete at least 30 hours of continuing education annually or maintain current certification by the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "Collaborative agreement until NCCPA certified plus 6,000 hour affidavit",
+    "cite": "SDCL 36-4A-1.2",
+    "url": "https://sdlegislature.gov/api/Statutes/36-4A.html?all=true",
+    "quote": "A physician assistant may practice without a collaborative agreement if the physician assistant: (1) Is certified by the National Commission ... (2) Files an affidavit",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFiling",
+    "value": "Kept at primary practice site; copy to board on request",
+    "cite": "SDCL 36-4A-1.1",
+    "url": "https://sdlegislature.gov/api/Statutes/36-4A.html?all=true",
+    "quote": "shall keep a copy of the agreement on file at the physician assistant's primary practice site. The physician assistant shall provide a copy of the",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.lossOfNccpa",
+    "value": "PA without agreement who loses NCCPA certification must have a collaborative agreement",
+    "cite": "ARSD 20:52:01:03 (effective Nov 3, 2025)",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:52.html?all=true",
+    "quote": "is no longer certified by or fails to renew certification by the National Commission ... must have a collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.termination",
+    "value": "Written notice to board when a collaborative agreement terminates",
+    "cite": "ARSD 20:52:01:05",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:52.html?all=true",
+    "quote": "shall notify the board, in writing, of the termination of a collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scope",
+    "value": "Legend and prescription drugs not listed in Schedule I (34-20B-12)",
+    "cite": "SDCL 36-4A-26.1(6)",
+    "url": "https://sdlegislature.gov/api/Statutes/36-4A.html?all=true",
+    "quote": "Order, prescribe, dispense, and administer medical devices, legend drugs, and prescription drugs not listed in § 34-20B-12",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "true; state registration from Department of Health",
+    "cite": "SDCL 34-20B-29",
+    "url": "https://sdlegislature.gov/api/Statutes/34-20B-29.html",
+    "quote": "Any person who prescribes ... any controlled drug or substance within this state ... shall obtain a registration issued by the department",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsBeforeDea",
+    "value": "State CS registration required before DEA issues or renews",
+    "cite": "SD DOH Controlled Substance Registration page",
+    "url": "https://doh.sd.gov/healthcare-professionals/health-facility-licensure/controlled-substance-registration/",
+    "quote": "Providers must first complete the state Controlled Substance Registration application before the DEA will issue a new DEA number",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationInterval",
+    "value": "SD CS registration expires with the holder's DEA registration; reregister no more than 60 days before expiry",
+    "cite": "ARSD 44:58:03:01, 44:58:03:03",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/44:58:03.html?all=true",
+    "quote": "The expiration date of the registration coincides with the expiration date of the person's DEA registration.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalStatuteRepealNote",
+    "value": "SDCL 36-4A-32 (cited by the May 1 renewal rule) was repealed in 2025; 36-4A-31 now governs annual renewal",
+    "cite": "SDCL 36-4A-32",
+    "url": "https://sdlegislature.gov/api/Statutes/36-4A.html?all=true",
+    "quote": "36-4A-32 . Repealed. Source: SL 1973, ch 250, § 15; SL 1999, ch 192, § 6; SL 2007, ch 207, § 21; SL 2025, ch",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.lapse",
+    "value": "Unrenewed licence is suspended; reinstatement within 12 months on application plus fees, later only with specific board approval",
+    "cite": "SDCL 36-4A-33",
+    "url": "https://sdlegislature.gov/api/Statutes/36-4A.html?all=true",
+    "quote": "Any license not renewed pursuant to § 36-4A-31 is suspended.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "South Dakota Board of Nursing (CNP practice also governed by SDCL 36-9A)",
+   "url": "https://www.sdbon.org/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Biennially on the licensee's birth date (initial licence expires on the birth date in the second calendar year after issue)",
+   "ceHoursPerCycle": 0,
+   "ceNote": "No continuing education hour requirement found for RN renewal. Instead, active status requires nursing employment of at least 140 hours in any 12 month period over the preceding 6 years, or 480 hours accumulated in 6 years, or a board approved refresher course.",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "CNP (Certified Nurse Practitioner); licensed under SDCL 36-9A, not under the 'APRN' definition in 36-9-1",
+   "separateLicenceOrCertificate": "Separate CNP licence from the Board of Nursing; requires an SD RN licence or multistate privilege",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 0,
+   "ceNote": "No CE hour requirement for CNP renewal; renewal requires evidence of current national certification, an unencumbered RN licence or privilege, and a no misconduct affidavit. Expiry aligns with the SD RN licence, or the second birthday after issue for a multistate RN privilege holder.",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "nationalCertificationNote": "Exempt if licensed before June 26, 1996.",
+   "topicMandates": []
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "No separate state prescriptive authority certificate (prescriptive authority rules chapter 20:62:04 repealed); prescribing including Schedule II is in the CNP scope. A South Dakota Controlled Substance Registration (Department of Health) is required for controlled substances, before DEA registration. The state registration expires together with the DEA registration (ARSD 44:58:03:01); CNPs must also register with the SD PDMP before prescribing controlled substances (ARSD 20:62:03:11).",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "None found at state level; federal DEA one-time 8 hour SUD training (MATE) applies.",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": 1040,
+   "agreementFilingAndRenewal": "A new CNP without 1,040 licensed practice hours in the preceding five years submits a written collaborative agreement with an SD physician, CNP or CNM (collaborator: unencumbered licence, at least two years in a comparable area). After 1,040 hours the licensee submits evidence to the board to inactivate the agreement."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalDeadline",
+    "value": "Biennial, on birth date",
+    "cite": "ARSD 20:48:03:10",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:48:03.html?all=true",
+    "quote": "An initial license expires on the licensee's birth date in the second calendar year following issuance, and biennially on the licensee's birth date thereafter",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "ARSD 20:48:03:10 amended by 53 SDR 8, effective August 3, 2026; re-loaded text still sets biennial expiry on the birth date."
+   },
+   {
+    "field": "rn.renewalCycleYears",
+    "value": "2",
+    "cite": "SDCL 36-9-45",
+    "url": "https://sdlegislature.gov/api/Statutes/36-9.html?all=true",
+    "quote": "The license of any person licensed under the provisions of this chapter shall be renewed biennially",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.practiceHours",
+    "value": "140 hours in any 12 months over the preceding 6 years, or 480 hours in 6 years, or refresher course",
+    "cite": "ARSD 20:48:03:16",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:48:03.html?all=true",
+    "quote": "must be employed in nursing for a minimum of 140 hours in any 12-month period over the preceding 6 years to be eligible for active",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": "true",
+    "cite": "SDCL 36-9-98",
+    "url": "https://sdlegislature.gov/api/Statutes/36-9.html?all=true",
+    "quote": "The Nurse Licensure Compact is enacted into law and entered into with all other jurisdictions that legally join the compact",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": "2",
+    "cite": "SDCL 36-9A-22",
+    "url": "https://sdlegislature.gov/api/Statutes/36-9A.html?all=true",
+    "quote": "The license of every person licensed under the provisions of this chapter shall be renewed biennially",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalRequirements",
+    "value": "RN licence or privilege, current national certification, misconduct affidavit, fee; no CE hours listed",
+    "cite": "ARSD 20:62:02:06",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:62.html?all=true",
+    "quote": "Evidence of holding an unencumbered South Dakota registered nurse license or privilege to practice; (2) Evidence of current certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.expiration",
+    "value": "Aligned with SD RN expiry, or second birthday after issue for multistate privilege holders",
+    "cite": "ARSD 20:62:02:05",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:62.html?all=true",
+    "quote": "the expiration date shall be consistent with the expiration date of the registered nurse license renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "true; pass and maintain current certification",
+    "cite": "ARSD 20:62:02:02(3)",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:62.html?all=true",
+    "quote": "has passed a nationally recognized certification examination approved by the board ... and maintains current certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPracticeHours",
+    "value": "1,040 hours; collaborative agreement until met",
+    "cite": "SDCL 36-9A-4(4)-(5)",
+    "url": "https://sdlegislature.gov/api/Statutes/36-9A.html?all=true",
+    "quote": "Has a written collaborative agreement with a physician ... or a certified nurse practitioner or certified nurse midwife ... to meet the one thousand forty",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Collaborator requirements and inactivation after 1,040 hours",
+    "cite": "ARSD 20:62:02:02(7)",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:62.html?all=true",
+    "quote": "Upon meeting the required one thousand forty hours of licensed practice, a licensee may submit evidence to the Board of Nursing to request inactivation of",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority",
+    "value": "full after transition; general duty to collaborate and refer",
+    "cite": "SDCL 36-9A-13.1",
+    "url": "https://sdlegislature.gov/api/Statutes/36-9A.html?all=true",
+    "quote": "shall collaborate with other health care providers and refer or transfer patients as appropriate",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scope",
+    "value": "Includes controlled substances on Schedule II",
+    "cite": "SDCL 36-9A-12(4)(b)",
+    "url": "https://sdlegislature.gov/api/Statutes/36-9A.html?all=true",
+    "quote": "Prescribe, procure, administer, and furnish pharmacological agents, including over the counter, legend, and controlled drugs or substances listed on Schedule II",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "true; Nurse Practitioner listed on DOH registration page",
+    "cite": "SDCL 34-20B-29; SD DOH Controlled Substance Registration page",
+    "url": "https://doh.sd.gov/healthcare-professionals/health-facility-licensure/controlled-substance-registration/",
+    "quote": "SDCL 36-9A (nurse practitioners) and SDCL 36-4A (physician assistants) grant specific prescriptive authority for controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationInterval",
+    "value": "SD CS registration expires with the holder's DEA registration; reregister no more than 60 days before expiry",
+    "cite": "ARSD 44:58:03:01, 44:58:03:03",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/44:58:03.html?all=true",
+    "quote": "The expiration date of the registration coincides with the expiration date of the person's DEA registration.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pdmpRegistration",
+    "value": "CNP must register with the SD PDMP before prescribing any controlled substance",
+    "cite": "ARSD 20:62:03:11",
+    "url": "https://sdlegislature.gov/api/Rules/Rule/20:62.html?all=true",
+    "quote": "shall register with the state's prescription drug monitoring program (PDMP) and meet requirements in SDCL chapter 34-20E",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.practiceVerificationForm",
+    "value": "To practise without a collaborative agreement a CNP files a Practice Verification Form showing 1,040 CNP practice hours",
+    "cite": "SD Board of Nursing CNP Practice page",
+    "url": "https://www.sdbon.org/Practice/CNP.asp",
+    "quote": "To practice without a collaborative agreement, a CNP must have on file with the Board office a Practice Verification Form verifying a minimum of 1,040",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.aprnCompact",
+    "value": "SD adopted the APRN Compact in 2024; not in effect (needs seven states, four joined)",
+    "cite": "SD Board of Nursing APRN Compact page (updated 3/30/2026)",
+    "url": "https://www.sdbon.org/Additional%20resources%20licensure/APRNcompact.asp",
+    "quote": "The compact is not in effect yet; seven states need to join before it will be implemented.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.mateAttestation",
+    "value": "SD DOH page notes new or renewing registrants attest to the federal 8 hour SUD training",
+    "cite": "SD DOH Controlled Substance Registration page",
+    "url": "https://doh.sd.gov/healthcare-professionals/health-facility-licensure/controlled-substance-registration/",
+    "quote": "All medical registrants submitting a new or renewing a current registration must attest to completing an eight-hour training",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA renewal date: ARSD 20:52:01:09 says file before May 1 annually, but that rule cites the repealed SDCL 36-4A-32 and the board page says initial licence durations vary; the board's current renewal calendar was not confirmed beyond the rule.",
+  "No state opioid or controlled substance CE mandate found for PAs or CNPs in SDCL 36-4A, 36-9A, ARSD 20:52, 20:62 or 44:58:03; absence rests on those texts, not a board statement.",
+  "Whether SD PAs must register with the SD PDMP before prescribing (SDCL 34-20E) was not loaded; confirmed only for CNPs (ARSD 20:62:03:11).",
+  "SD Board of Nursing renewal page loaded but states only portal instructions; CNP renewal content comes from ARSD 20:62:02:06."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verificationCorrections": [
+  "SD CS registration interval: resolved the researcher's unverified item; it expires with the holder's DEA registration (ARSD 44:58:03:01), reregister no earlier than 60 days before.",
+  "Added CNP PDMP registration before prescribing controlled substances (ARSD 20:62:03:11).",
+  "Added CNP Practice Verification Form for the 1,040 hour exemption (board CNP page).",
+  "Added APRN Compact adopted 2024 but not in effect (board page updated 3/30/2026).",
+  "PA renewal: noted that ARSD 20:52:01:09 (May 1) cites SDCL 36-4A-32, repealed by SL 2025 ch 149; added suspension and reinstatement rule (36-4A-33).",
+  "RN renewal rule 20:48:03:10 was amended effective August 3, 2026 (53 SDR 8); re-loaded text still sets biennial birth date expiry, value unchanged.",
+  "Added DOH page fact on federal 8 hour SUD training attestation at CS registration."
+ ]
+}

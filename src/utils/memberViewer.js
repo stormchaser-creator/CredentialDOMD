@@ -12,8 +12,8 @@ import { MEMBER_VIEW_SECTIONS, MEMBER_VIEW_PROFILE_FIELDS, memberViewSection } f
 import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring, plainDashes, titleAfterType, titleWithType } from "./helpers.js";
 import { reminderLeadDays } from "./reminderPreferences.js";
 import { LIFECYCLE_LABELS, LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote } from "./lifecycle.js";
-import { complianceFor, findStateLicense, trackedStates, resolvePendingLicense } from "./compliance.js";
-import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, rollingWindowLabel } from "./cmePresentation.js";
+import { complianceListFor, resolvePendingLicense, undatedLicenseOnFile } from "./compliance.js";
+import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine } from "./cmePresentation.js";
 import { timedBlockLabel } from "./coverageBlocks.js";
 
 export const READ_ONLY_MESSAGE = "This is a read-only support view. Nothing can be changed here.";
@@ -241,21 +241,27 @@ export function snapshotData(snapshot) {
  */
 export function stateCmeCards(snapshot) {
   const data = snapshotData(snapshot);
-  return trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses)
-    .map(st => ({ st, comp: complianceFor(data, st), lic: findStateLicense(data.licenses, st) }))
+  // The member's own card list (compliance.js complianceListFor): per state
+  // for a physician, per state and licence for a PA or NP.
+  return complianceListFor(data)
     .sort((a, b) => (a.comp.daysLeft ?? 9e9) - (b.comp.daysLeft ?? 9e9))
-    .map(({ st, comp, lic }) => {
+    .map(({ st, kind, key, comp, lic }) => {
       const dl = comp.daysLeft;
       const oneAOnly = (comp.cat1Keywords || []).every(k => String(k).startsWith("AOA Category"));
+      const app = !!comp.profession;
+      const waiting = lifecycleNote(resolvePendingLicense(data.licenses, st, kind || "medical"));
       return {
         st,
+        ...(app ? { key, kind, title: appCardTitle(comp) } : {}),
         comp,
         primary: st === data.settings.primaryState,
-        hoursLine: comp.noGeneralReq ? "Topic-specific" : totalHoursLabel(comp),
+        // A PA or NP card in certification or options mode has no hour total and
+        // is not "topic-specific": totalHoursLabel says what it is.
+        hoursLine: comp.noGeneralReq && !app ? "Topic-specific" : totalHoursLabel(comp),
         status: comp.fullyCompliant ? "met" : comp.assessmentStatus === "needs-confirmation" ? "confirm" : "gaps",
         // A licence still on the Resolve card is on file, just not dated: the
         // member's card says which question is open, and so does this one.
-        renews: plainDashes(comp.windowAnchored ? `License renews ${formatDate(lic.expirationDate)}` : rollingWindowLabel(st, comp.cycle, lifecycleNote(resolvePendingLicense(data.licenses, st)))),
+        renews: plainDashes(comp.windowAnchored ? anchoredRenewalLine(comp, lic.expirationDate) : app ? appRenewalLine(comp, waiting, undatedLicenseOnFile(data.licenses, st, kind)) : rollingWindowLabel(st, comp.cycle, waiting)),
         daysLeft: dl,
         daysLabel: dl == null ? "" : dl <= 0 ? "OVERDUE" : `${dl} days`,
         urgency: dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok",
@@ -284,7 +290,10 @@ export function homeSummary(snapshot) {
     .filter(row => row.count > 0);
   // A cut CME or license list would make the cards read lower than the member's.
   const cmePartial = (snapshot?.truncated || []).some(key => key === "cme" || key === "licenses");
-  return { attention, cmeStates: stateCmeCards(snapshot), cmePartial, counts, documents: (snapshot?.documents || []).length };
+  // The licence the member's cards anchor on, for the "nothing tracked" line.
+  const deg = snapshotData(snapshot).settings?.degreeType;
+  const licenseNoun = deg === "PA" ? "physician assistant license" : deg === "NP" ? "APRN or RN license" : "medical license";
+  return { attention, cmeStates: stateCmeCards(snapshot), cmePartial, counts, documents: (snapshot?.documents || []).length, licenseNoun };
 }
 
 /**

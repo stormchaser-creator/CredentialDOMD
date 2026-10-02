@@ -32,7 +32,7 @@ function NotificationBanner({ onOpenCenter }) {
   const alertSummary = [
     alerts.expired.length > 0 ? `${alerts.expired.length} Expired` : "",
     alerts.soon.length > 0 ? `${alerts.soon.length} Expiring` : "",
-    alerts.cmeIssues.length > 0 ? "CME Gaps" : "",
+    alerts.cmeIssues.length > 0 ? (data.settings.degreeType === "NP" ? "CE Gaps" : "CME Gaps") : "",
   ].filter(Boolean).join(" \u00b7 ");
 
   // No contact info — show inline setup

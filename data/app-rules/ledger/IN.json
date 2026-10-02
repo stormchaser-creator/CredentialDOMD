@@ -1,0 +1,508 @@
+{
+ "state": "IN",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Indiana Physician Assistant Committee and Medical Licensing Board of Indiana, Indiana Professional Licensing Agency",
+   "url": "https://www.in.gov/pla/professions/physician-assistant-home/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "30 June of each even-numbered year"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "categoryRules": "No state hour count or category split. Renewal requires evidence of current NCCPA certification; NCCPA's own CME rules then apply.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [],
+   "controlledSubstanceCe": "None. The 2 hour opioid prescribing and opioid abuse CE tied to the Indiana controlled substance registration (IC 35-48-3-3.5) expired 1 July 2025."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Written collaborative agreement submitted to the Board before practice begins (on employer letterhead, signed by PA and physician); every amendment is resubmitted; the physician registers intent to collaborate; PA or physician notifies the Board and Committee within 15 days when a collaboration ends. No fixed renewal interval for the agreement.",
+   "notes": "Chart review within 10 business days: at least 10% of charts with a prescription in the first year of prescribing authority, then a percentage set in the agreement. A physician may collaborate with no more than 4 PAs at the same time. PAs on Inactive status need not keep NCCPA certification."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Prescriptive authority is requested with the licence application or later through a Change or Add Collaborator request, and must appear in the collaborative agreement; controlled substances also need an Indiana CSR and DEA registration.",
+   "ceForPrescribers": "None beyond NCCPA certification."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "844 IAC 2.2-2-3(a)",
+    "url": "https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-3",
+    "quote": "shall renew his or her license every two (2) years, in even-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-verified via the LII mirror of the Indiana Administrative Code (https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-3); iar.iga.in.gov serves only a JavaScript shell to non-browser clients. The mirror shows the same value with older wording (supervising physician / supervisory agreement); the researcher quote with collaborating wording was taken from iar and was not re-loaded here.",
+    "researcherUrl": "https://iar.iga.in.gov/code/current/844/2.2",
+    "researcherQuote": "A physician assistant holding a license issued by the committee shall renew their license every two (2) years, in even-numbered years"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "30 June of even-numbered years",
+    "cite": "IPLA Physician Assistant Licensing Information (date set by IPLA under IC 25-27.5-4-5)",
+    "url": "https://www.in.gov/pla/professions/physician-assistant-home/physician-assistant-licensing-information",
+    "quote": "Physician Assistant licenses expire on June 30th of even-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "844 IAC 2.2-2-3(d)(1)(A)",
+    "url": "https://iar.iga.in.gov/code/current/844/2.2",
+    "quote": "Evidence of current NCCPA certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-verified via the LII mirror of the Indiana Administrative Code (https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-3); iar.iga.in.gov serves only a JavaScript shell to non-browser clients. The mirror shows the same value with older wording (supervising physician / supervisory agreement); the researcher quote with collaborating wording was taken from iar and was not re-loaded here."
+   },
+   {
+    "field": "pa.ce.nccpaLapseIsMisconduct",
+    "value": true,
+    "cite": "844 IAC 2.2-2-6(11)",
+    "url": "https://iar.iga.in.gov/code/current/844/2.2",
+    "quote": "Failed to maintain certification issued by the NCCPA.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-verified via the LII mirror of the Indiana Administrative Code (https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-6); iar.iga.in.gov serves only a JavaScript shell to non-browser clients. The mirror shows the same value with older wording (supervising physician / supervisory agreement); the researcher quote with collaborating wording was taken from iar and was not re-loaded here."
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "Written collaborative agreement with an Indiana physician",
+    "cite": "IC 25-27.5-5-2(e)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "A physician assistant's collaborative agreement with a collaborating physician must:   (1) be in writing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Submitted to the Board; amendments resubmitted",
+    "cite": "IC 25-27.5-5-2(f)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "Any amendment to the collaborative agreement must be resubmitted to the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "IC 25-27.5-5-2(f): the PHYSICIAN submits the agreement; the PA may prescribe under it unless the board denies it."
+   },
+   {
+    "field": "pa.practice.agreementBeforePractice",
+    "value": "Agreement approved before practice begins",
+    "cite": "844 IAC 2.2-2-1(h)",
+    "url": "https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-1",
+    "quote": "the physician assistant must submit a supervisory agreement to the committee, which must be approved by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-verified via the LII mirror of the Indiana Administrative Code (https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-1); iar.iga.in.gov serves only a JavaScript shell to non-browser clients. The mirror shows the same value with older wording (supervising physician / supervisory agreement); the researcher quote with collaborating wording was taken from iar and was not re-loaded here.",
+    "researcherUrl": "https://iar.iga.in.gov/code/current/844/2.2",
+    "researcherQuote": "Before beginning practice as a physician assistant, the physician assistant shall submit a collaboration agreement to the committee, which must be approved by the board."
+   },
+   {
+    "field": "pa.practice.terminationNotice",
+    "value": "15 days",
+    "cite": "844 IAC 2.2-2-2 (subsection (c) per researcher on iar; (d) in the LII mirror)",
+    "url": "https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-2",
+    "quote": "within fifteen (15) days, notify both the board and the committee that the supervising relationship with the physician assistant is terminated.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-verified via the LII mirror of the Indiana Administrative Code (https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-2); iar.iga.in.gov serves only a JavaScript shell to non-browser clients. The mirror shows the same value with older wording (supervising physician / supervisory agreement); the researcher quote with collaborating wording was taken from iar and was not re-loaded here.",
+    "researcherUrl": "https://iar.iga.in.gov/code/current/844/2.2",
+    "researcherQuote": "The collaborating physician shall, within fifteen (15) days, notify both the board and committee that the collaborating relationship with the physician assistant is terminated."
+   },
+   {
+    "field": "pa.practice.chartReview",
+    "value": "10% of prescription charts in first prescribing year, within 10 business days",
+    "cite": "IC 25-27.5-6-1(c)(1)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "For the first year in which a physician assistant obtains authority to prescribe, at least ten percent (10%) of the patient's records for any prescription",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": "Indiana CSR plus DEA registration",
+    "cite": "IC 25-27.5-5-6(d)(1)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "Obtain an Indiana controlled substance registration and a federal Drug Enforcement Administration registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.csrExpiry",
+    "value": "CSR expires when the practitioner licence expires",
+    "cite": "IC 35-48-3-3(b)",
+    "url": "https://iga.in.gov/ic/2026/Title_35.html",
+    "quote": "A registration issued to a dispenser under this subsection expires whenever the dispenser's license as a practitioner expires.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.opioidCsrCeExpired",
+    "value": "Opioid CE for CSR expired 1 July 2025",
+    "cite": "IC 35-48-3-3.5",
+    "url": "https://iga.in.gov/ic/2026/Title_35.html",
+    "quote": "Expired 7-1-2025 by P.L.55-2018, SEC.1.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.opioidCsrCeExpiredBoard",
+    "value": "No proof of opioid CE for CSR applications after 1 July 2025",
+    "cite": "IPLA Controlled Substances Registration page",
+    "url": "https://www.in.gov/pla/professions/controlled-substance-registration",
+    "quote": "will not be required to provide proof of completion of opioid continuing education.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.opioidCsrCeExpiredBoard2",
+    "value": "Expiry of opioid CE confirmed on IPLA CSR page",
+    "cite": "IPLA Controlled Substances Registration page",
+    "url": "https://www.in.gov/pla/professions/controlled-substance-registration",
+    "quote": "complete two (2) hours of continuing education on the topic of opioid prescribing and opioid abuse expired",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.ratio",
+    "value": "No more than 4 PAs at the same time per physician",
+    "cite": "IC 25-27.5-6-2",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "may not collaborate with more than four (4) physician assistants at the same time.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.chartReviewIpla",
+    "value": "New collaborating physician reviews 10% of charts within 10 days in the first year, for every PA regardless of experience",
+    "cite": "IPLA Physician Assistant Licensing Information",
+    "url": "https://www.in.gov/pla/professions/physician-assistant-home/physician-assistant-licensing-information",
+    "quote": "This is for all PAs, regardless of how long you have been practicing as a PA.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.authorityViaAgreement",
+    "value": "Prescriptive authority is requested with the licence application or later via Change or Add Collaborator",
+    "cite": "IPLA Physician Assistant Licensing Information",
+    "url": "https://www.in.gov/pla/professions/physician-assistant-home/physician-assistant-licensing-information",
+    "quote": "The initial application submitted for a Physician Assistant will include the request for Prescriptive Authority.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.statuteDependentPractice",
+    "value": "PA must practise dependently with a collaborating physician",
+    "cite": "IC 25-27.5-5-2(a)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "must engage in a dependent practice with a collaborating physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Indiana State Board of Nursing, Indiana Professional Licensing Agency",
+   "url": "https://www.in.gov/pla/professions/nursing-home/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "31 October of each odd-numbered year",
+   "ceHoursPerCycle": 0,
+   "nlc": true,
+   "topicMandates": [],
+   "notes": "No CE for RN renewal. Indiana is a Nurse Licensure Compact state (IC 25-42); a multistate licence adds a $25 fee."
+  },
+  "aprn": {
+   "title": "APRN Prescriptive Authority (or APRN - Compact RN); NPs who do not prescribe practise on the RN licence",
+   "separateLicenceOrCertificate": "No separate NP practice licence. The 'APRN' credential is prescriptive authority only; it requires an active Indiana RN licence (or a home-state multistate RN licence for the APRN - Compact RN version).",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "31 October of each odd-numbered year (APRN - Compact RN follows the home-state compact RN expiry)",
+   "ceHoursPerCycle": 30,
+   "pharmacologyHoursPerCycle": 8,
+   "nationalCertificationRequired": true,
+   "ceRules": "Applies to holders of prescriptive authority: 30 contact hours in the 2 years before renewal including 8 pharmacology, from a nationally approved nursing CE sponsor. First renewal is prorated: granted less than 12 months before expiry, none; 12 months or more, 15 hours including 4 pharmacology. Random audit of at least some licensees every 2 years.",
+   "topicMandates": []
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Yes. APRN Prescriptive Authority is its own credential from the Board of Nursing, renewed every 2 years with the RN licence.",
+   "pharmacologyCeForPrescribers": "8 contact hours per 2-year cycle (within the 30).",
+   "controlledSubstanceCe": "None. The 2 hour opioid CE for the CSR expired 1 July 2025.",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "reduced",
+   "agreementType": "collaboration",
+   "transitionToPracticeHours": 0,
+   "agreementFilingAndRenewal": "All APRNs (except CRNAs) must operate in collaboration with a licensed practitioner evidenced by a practice agreement, or under hospital privileges (IC 25-23-1-19.4(c)). A written collaborative practice agreement filed with the Board is required for prescriptive authority (848 IAC 5-2-1); a current signed and dated agreement is submitted with each prescriptive authority renewal, and collaborator changes are reported to the Board. The agreement must require the APRN to send prescribing documentation to the practitioner within 7 days, including at least a 5% random chart sample (848 IAC 5-1-1)."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "31 October of odd-numbered years",
+    "cite": "IC 25-23-1-16.1(a)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "a license to practice as a registered nurse expires on October 31 in each odd-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 0,
+    "cite": "IPLA Nursing Licensing Information",
+    "url": "https://www.in.gov/pla/professions/nursing-home/nursing-licensing-information",
+    "quote": "There are no CEU requirements for the renewal of LPN or RN licenses in Indiana.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlc",
+    "value": true,
+    "cite": "IC 25-23-1-16.1(c); IC 25-42",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "If the license being renewed is a multistate license (as defined in IC 25-42-1-11 ) under IC 25-42 (Nurse Licensure Compact)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.separateLicenceOrCertificate",
+    "value": "APRN credential is prescriptive authority only",
+    "cite": "IPLA Nursing Licensing Information",
+    "url": "https://www.in.gov/pla/professions/nursing-home/nursing-licensing-information",
+    "quote": "The Advanced Practice Registered Nurse (APRN) license is for the authority to prescribe as an advanced practice registered nurse in Indiana.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "31 October of odd-numbered years, renewed for successive 2-year periods",
+    "cite": "IC 25-23-1-19.5(c)(1)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "expires on October 31 of the odd-numbered year following the year the authority was granted or renewed",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "IC 25-23-1-19.7(b)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "attest to the board that the applicant has successfully completed at least thirty (30) contact hours of continuing education.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": 8,
+    "cite": "IC 25-23-1-19.7(b)(2)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "include at least eight (8) contact hours of pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.firstRenewalProration",
+    "value": "15 hours incl. 4 pharmacology if granted 12 months or more before expiry; none if less",
+    "cite": "IC 25-23-1-19.7(a)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "at least fifteen (15) contact hours of continuing education.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "IC 25-23-1-19.7(c)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "must maintain national certification or certification equivalence",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementType",
+    "value": "Collaboration evidenced by a practice agreement, or hospital privileges",
+    "cite": "IC 25-23-1-19.4(c)(1)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "in collaboration with a licensed practitioner as evidenced by a practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementOnlyForPrescribing",
+    "value": true,
+    "cite": "848 IAC 5-2-1",
+    "url": "https://iar.iga.in.gov/code/current/848/5",
+    "quote": "No written practice agreement shall be necessary unless the advanced practice nurse seeks prescriptive authority.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-verified via LII mirror https://www.law.cornell.edu/regulations/indiana/848-IAC-5-2-1 (iar.iga.in.gov is JavaScript only). Text matches the researcher quote. CAUTION: IC 25-23-1-19.4(c) (statute, amended 2020) says every APRN other than a CRNA shall operate in collaboration evidenced by a practice agreement OR under hospital privileges. The rule (first filed 1994, readopted 2024) limits only the WRITTEN agreement filing to prescribers. Do not tell a non-prescribing NP that no collaboration is needed."
+   },
+   {
+    "field": "np.practice.agreementFilingAndRenewal",
+    "value": "Current signed and dated agreement submitted with every prescriptive authority renewal",
+    "cite": "848 IAC 5-1-3(e)(2)",
+    "url": "https://iar.iga.in.gov/code/current/848/5",
+    "quote": "A current signed and dated written collaborative practice agreement that contains all of the information required under section 1 of this rule.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-verified via LII mirror https://www.law.cornell.edu/regulations/indiana/848-IAC-5-1-3 (iar.iga.in.gov is JavaScript only). Text matches the researcher quote."
+   },
+   {
+    "field": "np.aprn.renewalDeadlineRule",
+    "value": "31 October odd years",
+    "cite": "848 IAC 5-1-3(a)",
+    "url": "https://iar.iga.in.gov/code/current/848/5",
+    "quote": "Prescriptive authority for the advanced practice nurse expires on October 31 in each odd-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-verified via LII mirror https://www.law.cornell.edu/regulations/indiana/848-IAC-5-1-3 (iar.iga.in.gov is JavaScript only). Text matches the researcher quote."
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": "Indiana CSR required to dispense controlled substances; APRN is a listed CSR practitioner type",
+    "cite": "IC 35-48-3-3(b)",
+    "url": "https://iga.in.gov/ic/2026/Title_35.html",
+    "quote": "every person who dispenses or proposes to dispense any controlled substance within Indiana must have a registration issued by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.opioidCsrCeExpired",
+    "value": "Opioid CE for CSR expired 1 July 2025",
+    "cite": "IC 35-48-3-3.5",
+    "url": "https://iga.in.gov/ic/2026/Title_35.html",
+    "quote": "Expired 7-1-2025 by P.L.55-2018, SEC.1.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.collaborationAllAprns",
+    "value": "Every APRN (not CRNA) operates in collaboration evidenced by a practice agreement, or under hospital privileges",
+    "cite": "IC 25-23-1-19.4(c)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "in collaboration with a licensed practitioner as evidenced by a practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.prescribingReview",
+    "value": "APRN submits prescribing documentation to the collaborating practitioner within 7 days, including at least a 5% random chart sample",
+    "cite": "848 IAC 5-1-1",
+    "url": "https://www.law.cornell.edu/regulations/indiana/848-IAC-5-1-1",
+    "quote": "within seven (7) days. Documentation of prescribing practices shall include, but not be limited to, at least a five percent (5%) random sampling",
+    "note": "Also on the IPLA nursing licensing page. Loaded via LII mirror; iar.iga.in.gov is JavaScript only.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.notCurrentPracticing",
+    "value": "No active collaborative agreement at renewal: prescriptive authority renews as Current/Not Practicing and associated CSRs follow",
+    "cite": "IPLA Nursing Licensing Information",
+    "url": "https://www.in.gov/pla/professions/nursing-home/nursing-licensing-information",
+    "quote": "If there is no current collaborative agreement with an Indiana licensed practitioner at the time of your renewal, your license will be renewed under",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.compactVariantExpiry",
+    "value": "APRN - Compact RN prescriptive authority expires with the home-state compact RN licence",
+    "cite": "IPLA Nursing Licensing Information",
+    "url": "https://www.in.gov/pla/professions/nursing-home/nursing-licensing-information",
+    "quote": "This APRN – Compact RN will have the same expiration date as your current Compact License from your home state.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.audit",
+    "value": "Board may audit up to 10% of licensees; keep CE certificates 3 years",
+    "cite": "IPLA Nursing Licensing Information",
+    "url": "https://www.in.gov/pla/professions/nursing-home/nursing-licensing-information",
+    "quote": "The Indiana State Board of Nursing may audit up to 10% of licensees to ensure compliance.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.practiceAgreementAudit",
+    "value": "IPLA randomly audits 1% to 10% of prescribing APRN practice agreements before 31 December of each even year",
+    "cite": "IC 25-23-1-19.8(a)",
+    "url": "https://iga.in.gov/ic/2026/Title_25.html",
+    "quote": "randomly audit at least one percent (1%) but not more than ten percent (10%) of the practice agreements",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.csrExpiry",
+    "value": "CSR expires with the practitioner licence and renews concurrently",
+    "cite": "IC 35-48-3-3(b)",
+    "url": "https://iga.in.gov/ic/2026/Title_35.html",
+    "quote": "The board shall renew a dispenser's registration under this subsection concurrently with any state license authorizing the dispenser to act as a practitioner.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "'reduced' practice authority for Indiana NPs is a classification label; primary sources confirm collaboration for all non-CRNA APRNs (IC 25-23-1-19.4(c)) and a filed written agreement for prescriptive authority (848 IAC 5-2-1).",
+  "National certification as a renewal condition is confirmed only for prescriptive authority holders (IC 25-23-1-19.7(c)); NPs who do not prescribe practise on the RN licence and no certification maintenance rule for them was found.",
+  "Current iar.iga.in.gov text of 844 IAC 2.2 and 848 IAC 5 could not be loaded by curl (JavaScript only) and the browser pane had no free tab; values confirmed via the LII mirror, whose 844 IAC 2.2 wording is older (supervising rather than collaborating). Subsection lettering for the 15 day termination notice differs ((c) vs (d)).",
+  "IPLA applies the 10% first-year chart review to every new collaborating physician; the statute ties it to the first year of prescribing authority. The board practice is stricter; both recorded.",
+  "Federal DEA MATE Act one-time 8 hour training not re-verified here (federal)."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verifiedBy": "verifier-2026-10",
+ "verificationNotes": "Statutes re-loaded from iga.in.gov 2026 Title 25 and Title 35 HTML; IPLA PA, nursing and CSR pages re-loaded; admin code via LII mirror because iar.iga.in.gov is JavaScript only. No Indiana topic mandates (opioid CSR CE expired 1 July 2025; RN renewal has no CE).",
+ "corrections": [
+  "IN 844 IAC 2.2 facts: iar.iga.in.gov blocks non-browser fetches; values re-confirmed through the LII mirror, but the mirror text still uses supervising wording and puts the 15 day notice in subsection (d), not (c). Values unchanged; notes added on each fact.",
+  "IN NP practice: the researcher summary says a collaborative agreement is required for prescriptive authority and not otherwise. IC 25-23-1-19.4(c) requires every non-CRNA APRN to operate in collaboration (practice agreement or hospital privileges); only the written agreement filed with the Board is tied to prescriptive authority (848 IAC 5-2-1). agreementFilingAndRenewal text corrected.",
+  "IN NP: added missed requirement 848 IAC 5-1-1 (prescribing documentation to the collaborating practitioner within 7 days with at least a 5% chart sample), confirmed on the IPLA nursing page as well.",
+  "IN NP: researcher's 'random audit of at least some licensees every 2 years' made specific: IC 25-23-1-19.8 audits 1% to 10% of practice agreements before 31 December of even years; IPLA says up to 10% of licensees, keep certificates 3 years.",
+  "IN PA: added fact entries for the 4 PA limit (IC 25-27.5-6-2), the IPLA first-year 10% chart review applying to every PA with a new collaborator, how prescriptive authority is requested, and dependent practice. These were in researcher prose without facts. Statute 25-27.5-6-1(c)(1) ties the 10% review to the first year of prescribing authority; IPLA applies it to each new collaborating physician.",
+  "IN 844 IAC 2.2-2-1, -2, -3 facts: quote and url replaced with the LII mirror text actually loaded (older supervising wording); researcher iar quote kept as researcherQuote."
+ ]
+}

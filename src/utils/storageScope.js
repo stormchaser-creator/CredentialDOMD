@@ -54,6 +54,10 @@ export const BASE_KEYS = {
   // discard the app while he is in another one. Kept when a session merely
   // ends, like the running timer; Sign out and Delete All My Data remove it.
   formDrafts: "credentialdomd-form-drafts",
+  // "Not now" to Vera's "Which license do you hold?" ("1"), for a member with
+  // no profession: Vera then answers what needs no rule and asks again only
+  // when a rule is needed, on every visit (AssistantSection.jsx).
+  veraProfessionLater: "credentialdomd-vera-profession-later",
 };
 
 // The invoice hand-off notes (utils/invoiceHandoffStore.js purgeHandoffStores)
@@ -1680,6 +1684,89 @@ async function writeOfflineTextNow(key, text, guard, seq, generation, how = {}) 
   return { saved: false, stopped: false, refused, chars };
 }
 
+// ─── A write still committing when the page goes away ────────
+// An IndexedDB write begun in pagehide, in visibilitychange to hidden on a
+// reload, or in unload never lands: the page is torn down before its
+// transaction is created or committed, and nothing says so. Measured in
+// Playwright's WebKit and Chromium (2026-10-02): a put issued in pagehide
+// landed 0 times in 10 across a reload, the same put issued before the
+// reload 10 in 10, and a localStorage write in pagehide 10 in 10. So the
+// offline file's write still under way when the page is left is put into
+// localStorage then, synchronously, as this build's own copy, which every
+// read takes first and the next session moves into IndexedDB
+// (readOfflineText, hydrateOfflineStores).
+//
+// Only where the plain fallback write would put it (writeOfflineTextNow): a
+// copy small enough to leave the reserve, under the write's own guard, with
+// no purge owed, the copy read, and no other writer since `knownStamp` (a
+// merge needs the IndexedDB copy, which cannot be read now). Refused, the
+// write goes on as it was and the copy is marked behind (below).
+export function spillOfflineText(key, text, guard, { knownStamp = null } = {}) {
+  const owner = keyOwner(key);
+  if (!owner || !isDataKey(key) || typeof text !== "string") return { saved: false, reason: "invalid" };
+  if (unreadKeys.has(key)) return { saved: false, reason: "unread" };
+  if (pendingPurge(owner) !== null || offlineWipeOwed(owner)) return { saved: false, reason: "purge_pending" };
+  if (guard && !guard()) return { saved: false, reason: "stopped" };
+  if (writtenSince(owner, knownStamp)) return { saved: false, reason: "foreign" };
+  const local = lsText(key);
+  if (local != null && !ownLocalCopy(key, local)) return { saved: false, reason: "foreign" };
+  if (local === text) return { saved: true, stamp: offlineWriteStamp(owner) };
+  if (!largeCopyFitsLocally(key, text)) return { saved: false, reason: "reserved" };
+  try { putOwnLocalCopy(key, text); } catch (error) { return { saved: false, reason: isQuotaError(error) ? "quota" : "error" }; }
+  const prev = offlineWriteStamp(owner);
+  const stamp = bumpWriteStamp(owner);
+  noteOwnStamp(stamp, prev, true);
+  return { saved: true, stamp };
+}
+
+// The offline file may not hold the latest change made on this device: a
+// save of it was begun (or a change was waiting to be saved) and has not
+// landed yet. Written synchronously, in localStorage, so it outlives a page
+// torn down mid-save, and taken back when the latest save lands. A launch
+// that can only show the device copy (a weak signal) reads it, and then
+// never says a section holds no saved records. Per tab ({ tab: time }): one
+// tab's save landing says nothing of another's. Holds no record data.
+export const OFFLINE_BEHIND_BASE = "credentialdomd-offline-behind";
+const behindTab = `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}`;
+function behindEntries(userId) {
+  const v = lsGetJSON(OFFLINE_BEHIND_BASE, userId);
+  return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+}
+function writeBehind(userId, entries) {
+  const k = scopedKey(OFFLINE_BEHIND_BASE, userId);
+  if (!k) return;
+  try {
+    if (Object.keys(entries).length) localStorage.setItem(k, JSON.stringify(entries));
+    else localStorage.removeItem(k);
+  } catch { /* full or unavailable: the copy then reads as current, as before this mark */ }
+}
+/** This tab has a change of `userId`'s file not yet in any store. */
+export function markOfflineCopyBehind(userId) {
+  if (!userId) return;
+  const entries = behindEntries(userId);
+  if (behindTab in entries) return;
+  entries[behindTab] = Date.now();
+  writeBehind(userId, entries);
+}
+/**
+ * This tab's changes are all in the stored copy. `before` (a time): every
+ * tab's mark made before it goes too (a load that read the account from the
+ * cloud began then, and its copy holds what reached the account).
+ */
+export function clearOfflineCopyBehind(userId, { before = null } = {}) {
+  if (!userId) return;
+  const entries = behindEntries(userId);
+  let changed = false;
+  for (const [tab, at] of Object.entries(entries)) {
+    if (tab === behindTab || (Number.isFinite(before) && Number(at) < before)) { delete entries[tab]; changed = true; }
+  }
+  if (changed) writeBehind(userId, entries);
+}
+/** May `userId`'s stored file lack a change made on this device (any tab)? */
+export function offlineCopyBehind(userId) {
+  return !!userId && Object.keys(behindEntries(userId)).length > 0;
+}
+
 /** Did a write refuse for want of space (in either store)? */
 export function refusedForSpace(refused) {
   return Array.isArray(refused) && refused.some((r) => r.endsWith("_quota"));
@@ -2033,6 +2120,7 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
   // ended: they exist nowhere else.
   lsRemove(OFFLINE_WRITTEN_BASE, userId);
   lsRemove(LOCAL_COPIES_BASE, userId);
+  lsRemove(OFFLINE_BEHIND_BASE, userId);
   if (keptOwnCopy != null) noteOwnLocalCopy(scopedKey(BASE_KEYS.data, userId), keptOwnCopy);
   if (!keepLocal) lsRemove(DEVICE_ONLY_PENDING_BASE, userId);
   // This tab's copies of what localStorage had no room for (the running

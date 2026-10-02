@@ -201,10 +201,10 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
   const stateCard = (state) => {
     const tone = { danger: T.danger, warning: "#f59e0b", ok: T.accent }[state.urgency] || T.textMuted;
     const mark = state.status === "met" ? "\u{2713}" : state.status === "confirm" ? "?" : "!";
-    return <div key={state.st} data-member-view-state={state.st} style={{ borderTop: `1px solid ${T.border}`, padding: "10px 0" }}>
+    return <div key={state.key ?? state.st} data-member-view-state={state.key ?? state.st} style={{ borderTop: `1px solid ${T.border}`, padding: "10px 0" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
-          {state.st}{state.primary && <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, marginLeft: 8 }}>PRIMARY</span>}
+          {state.title || state.st}{state.primary && <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, marginLeft: 8 }}>PRIMARY</span>}
         </span>
         <span style={{ fontSize: 14, fontWeight: 700, color: state.comp.totalMet ? T.accent : T.text }}>{state.hoursLine} <span aria-label={state.status === "met" ? "Met" : state.status === "confirm" ? "Needs confirmation" : "Gaps"}>{mark}</span></span>
       </div>
@@ -236,7 +236,7 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
         <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>CME progress</div>
         <p style={{ ...quiet, margin: "4px 0 6px" }}>The member&apos;s Home cards, counted the same way: hours inside each state&apos;s current renewal window.</p>
         {summary.cmePartial && <p style={quiet}>Only the newest records were loaded, so these hours can read lower than the member&apos;s.</p>}
-        {!summary.cmeStates.length && <p style={quiet}>No state is tracked: no primary state in Settings and no medical license on file.</p>}
+        {!summary.cmeStates.length && <p style={quiet}>No state is tracked: no primary state in Settings and no {summary.licenseNoun || "medical license"} on file.</p>}
         {summary.cmeStates.map(state => stateCard(state))}
       </div>
       <div style={card}>

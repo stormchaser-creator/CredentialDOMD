@@ -1,0 +1,165 @@
+{
+  "state": "SC",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "South Carolina Board of Medical Examiners (LLR), advised by the Physician Assistant Committee",
+      "url": "https://llr.sc.gov/med/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Renewal requires an active NCCPA certification; the state sets no CME hour total.",
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "certificationRequired": {
+      "value": true,
+      "facts": [
+        "ce.nccpaCertificationRequiredForRenewal",
+        "ce.nccpaRenewalDocument"
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 4,
+        "label": "Approved procedures of prescribing and monitoring Schedule II to IV controlled substances, every two years",
+        "fact": "ce.topicMandates.controlledSubstances",
+        "condition": {
+          "field": "Holds controlled substance prescriptive authority",
+          "question": "Do you hold controlled substance prescriptive authority?",
+          "description": "Applies to clinicians with controlled substance prescriptive authority."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A PA practices under written scope of practice guidelines signed by all supervising physicians; the PA may begin ten business days after they are submitted to the board. With under two years of continuous practice, or after a specialty change, a PA needs sixty days on site before practicing off site.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFiling",
+          "practice.offsiteRule"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "The statute or rule that requires a South Carolina controlled substance registration for PAs (only the renewal form's question was loaded)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "South Carolina State Board of Nursing (LLR)",
+      "url": "https://llr.sc.gov/nurse/aprn.aspx"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        },
+        "options": [
+          {
+            "text": "30 contact hours from a continuing education provider the board recognizes",
+            "fact": "rn.ceHoursPerCycle"
+          },
+          {
+            "text": "Maintained certification or recertification by a national certifying body",
+            "fact": "rn.ceHoursPerCycle"
+          },
+          {
+            "text": "An academic nursing program",
+            "fact": "rn.ceHoursPerCycle"
+          },
+          {
+            "text": "Employer verification of competency",
+            "fact": "rn.ceHoursPerCycle"
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "An APRN must achieve and maintain national certification, which also meets continued competency; prescribers add pharmacotherapeutics hours.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 20,
+          "measure": "pharmacology",
+          "label": "Pharmacotherapeutics every two years, for prescriptive authority",
+          "fact": "prescribing.pharmacologyCeForPrescribers",
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          }
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 2,
+          "label": "Prescribing controlled substances, 2 of the 20 pharmacotherapeutics hours",
+          "fact": "prescribing.controlledSubstanceCe",
+          "condition": {
+            "field": "Holds controlled substance prescriptive authority",
+            "question": "Do you hold controlled substance prescriptive authority?",
+            "description": "Applies to clinicians with controlled substance prescriptive authority."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "practice agreement",
+        "text": "An NP performing medical acts does so under a practice agreement with a physician readily available for consultation, reviewed, dated and signed at least annually. Changes in practice setting or physician are reported to the board within 15 business days. An NP also spends a portion of their time practicing in an underserved or rural area or serving an underserved population.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal",
+          "practice.changeNotice",
+          "practice.underservedRequirement.add"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

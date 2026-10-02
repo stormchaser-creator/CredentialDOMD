@@ -1,0 +1,421 @@
+{
+ "state": "TN",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Tennessee Board of Physician Assistants (formerly the Committee on Physician Assistants of the Board of Medical Examiners)",
+   "url": "https://www.tn.gov/health/licensure/pa.html"
+  },
+  "licence": {
+   "title": "Physician Assistant licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Last day of the licensee's birth month, biennial birthdate renewal system (Rule 1130-01-.09(1)(a))"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "100 hours in the 2 years before renewal; at least 50 must be Category I; programs approved by the AMA, AAPA or NCCPA. Proof period follows the NCCPA 2 year cycle for certified PAs, or a birth year based equivalent for non certified PAs.",
+   "acceptsNccpaCertificationInLieu": null,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Controlled substance prescribing including TN Department of Health treatment guidelines on opioids, benzodiazepines, barbiturates and carisoprodol (Category I)",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all PAs (counts within the 100 hours)"
+    },
+    {
+     "topic": "Opioid addiction risks course(s) approved by the board, after notice that the PA was identified as a high risk prescriber (T.C.A. 68-1-128)",
+     "hours": 20,
+     "period": "on notice",
+     "appliesTo": "PAs identified by the Department of Health as high risk prescribers"
+    }
+   ],
+   "controlledSubstanceCe": "2 Category I hours every cycle for all PAs (Rule 1130-01-.12(1)(a)). PAs identified as high risk prescribers must complete approved course(s) totalling at least 20 hours on opioid addiction risks (Board of Physician Assistants policy approved July 18, 2025)."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Written protocol jointly developed and signed by PA and supervising physician, kept at the practice location and reviewed at least every 2 years; notify the board of the primary supervising physician and of any change within 15 days.",
+   "notes": "Public Chapter 1042 (2024) renames the relationship 'collaborating physician' and creates board 'endorsement' (6,000 postgraduate clinical hours) allowing practice under a collaborative agreement instead of protocols, but the act's operative effective date is the effective date of task force rules not yet in force; April 2026 board minutes target January 2027. The published rule chapter 1130-01 is still the August 2021 revision."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "Notice of Authorization for Prescribing form (with formulary) filed with the board and the Tennessee Board of Pharmacy before prescribing (Rule 1130-01-.21(2)).",
+   "ceForPrescribers": "2 Category I hours in controlled substance prescribing every cycle (applies to all PAs)."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "last day of birth month, biennial",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.09(1)(a)",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "the last day of the month in which a license holder’s birthday falls pursuant to the Division of Health Related Boards “biennial birthdate renewal system”",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "100 hours per 2 years, at least 50 Category I",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.12(1)(a)",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "complete one hundred (100) hours of continuing medical education satisfactory to the Committee. At least fifty (50) hours shall be obtained in",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.controlledSubstance",
+    "value": "2 Category I hours every cycle",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.12(1)(a)",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "at least two (2) Category I hours of the required continuing education hours shall address education related to controlled substance prescribing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptedSponsors",
+    "value": "AMA, AAPA or NCCPA approved",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.12(3)",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "the continuing education program must be approved in content, structure and format by the A.M.A., the A.A.P.A., or the N.C.C.P.A.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": "false: rule sets a CE period for PAs not certified by NCCPA",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.12(2)(a)2",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "For those not certified by the N.C.C.P.A.; the most recent two (2) year period (depending upon the year of birth of the licensee",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categorySplitBoardPage",
+    "value": "Board page says Category I/II split follows NCCPA logging form (rule text sets at least 50 Category I)",
+    "cite": "Board of Physician Assistants web page, Continuing Education tab",
+    "url": "https://www.tn.gov/health/licensure/pa.html",
+    "quote": "The division of hours between Category I and Category II continuing medical education must be consistent with the requirements of the N.C.C.P.A.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Re-loaded. Conflict with Rule 1130-01-.12(1)(a) remains: rule says at least 50 Category I; page defers to the NCCPA split. Track the rule floor (50 Category I)."
+   },
+   {
+    "field": "pa.practice.protocol",
+    "value": "written protocol, signed by both, reviewed at least every 2 years",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.01(32)",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "These protocols shall be signed by both the supervising physician and the physician assistant and reviewed at least every two (2) years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.notifyChange",
+    "value": "notify board of primary supervising physician change within 15 days",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.10(3)",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "shall notify the Committee of any change in such primary supervising physician within fifteen (15) days of the change.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.notice",
+    "value": "Notice of Authorization for Prescribing form to board and Board of Pharmacy",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.21(2)",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "shall complete a Notice of Authorization for Prescribing form, including the biographical information and formulary, and submit it",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.endorsementThreshold",
+    "value": "6,000 hours documented postgraduate clinical experience for endorsement (not yet operative)",
+    "cite": "Public Chapter 1042 (2024), amending T.C.A. 63-19-106(c)(3)",
+    "url": "https://publications.tnsosfiles.com/acts/113/pub/pc1042.pdf",
+    "quote": "have six thousand (6,000) hours of documented postgraduate clinical experience, have a physician willing to enter into a collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.endorsementEffectiveDate",
+    "value": "operative only when task force rules take effect",
+    "cite": "Public Chapter 1042 (2024), Section 14",
+    "url": "https://publications.tnsosfiles.com/acts/113/pub/pc1042.pdf",
+    "quote": "For all other purposes, this act takes effect on the effective date of the rules promulgated pursuant to SECTION 2, subsection (h)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.endorsementStatus",
+    "value": "rules not yet in effect as of April 2026; target January 2027",
+    "cite": "Board of Physician Assistants minutes, April 17, 2026",
+    "url": "https://www.tn.gov/content/dam/tn/health/docs/PAMIN041726.docx",
+    "quote": "Looking to hopefully have in place by January 2027 once Rules go into effect.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Re-loaded. SOS rules index for agency 1130 (publications.tnsosfiles.com/rules/1130/1130.htm) still lists only 1130-01.20210816 on 2026-10-01, so no endorsement or collaboration rules are in force."
+   },
+   {
+    "field": "pa.ce.topicMandates.highRiskPrescriber",
+    "value": "20 hours of board approved opioid addiction CE when identified as a high risk prescriber",
+    "cite": "Board of Physician Assistants policy statement (approved July 18, 2025) under T.C.A. 68-1-128",
+    "url": "https://www.tn.gov/content/dam/tn/health/healthprofboards/pa/Continuing%20Education%20Requirements%20for%20Identified%20High%20Risk%20Prescribers.pdf",
+    "quote": "must complete a continuing education course or courses that individually or combined total no less than twenty (20) hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "PDF is an image; read by OCR."
+   },
+   {
+    "field": "pa.ce.proofPeriodNccpa",
+    "value": "NCCPA certified PAs report CE for the NCCPA 2 year period; others for an equivalent period based on birth year",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.12(2)(a)1",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "For those certified by the N.C.C.P.A.; the most recent two (2) year period (depending upon the year of initial certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.recordRetention",
+    "value": "keep CE documentation 4 years from end of the renewal period",
+    "cite": "Tenn. Comp. R. & Regs. 1130-01-.12(2)(b)",
+    "url": "https://publications.tnsosfiles.com/rules/1130/1130-01.20210816.pdf",
+    "quote": "This documentation must be retained for a period of four (4) years from the end of the renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Tennessee Board of Nursing",
+   "url": "https://www.tn.gov/health/licensure/nurs.html"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "nlcCompactMember": true,
+   "ceNote": "No fixed hour count: RNs attest to a personal competence file with at least 2 items from a 14 item menu each renewal period (Rule 1000-01-.18(2)); one option is 10 contact hours of CE, another is current national certification.",
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN certificate (role: Nurse Practitioner); prescribing requires a Certificate of Fitness",
+   "separateLicenceOrCertificate": "certificate (APRN certificate plus Certificate of Fitness to prescribe)",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Controlled substance prescribing including TN Department of Health treatment guidelines on opioids, benzodiazepines, barbiturates and carisoprodol",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "APRNs holding a Certificate of Fitness"
+    },
+    {
+     "topic": "Opioid addiction risks course(s) approved by the Board of Nursing, after notice of identification as a high risk prescriber (T.C.A. 68-1-128)",
+     "hours": 20,
+     "period": "on notice",
+     "appliesTo": "APRNs identified by the Department of Health as high risk prescribers"
+    }
+   ],
+   "note": "Renewal competence for APRNs = evidence of national certification plus 1 item from the RN competence list; Certificate of Fitness holders add 2 contact hours of controlled substance prescribing CE. Initial Certificate of Fitness requires 3 quarter hours of pharmacology instruction (education, not recurring CE)."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Certificate of Fitness from the Board of Nursing, plus a notice filed with the board before prescribing (formulary and collaborating physician name), updated before any change.",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "2 contact hours every renewal period (Certificate of Fitness holders)",
+   "stateCsRegistrationRequired": null
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "collaboration (protocols with a collaborating physician; BME Rule 0880-06 uses 'supervising physician')",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "Prescribing APRN must have a collaborating physician complying with BME Rule 0880-06: protocols required, jointly developed, dated and signed, reviewed and updated biennially, kept at the practice site; the physician reviews at least 20% of charts every 30 days, personally reviews and signs within 30 days any chart where a controlled drug was prescribed or a prescription fell outside the protocols, and visits any remote site at least every 30 days. Notice to the Board of Nursing names the collaborating physician and formulary and must be updated before prescribing under any change.",
+   "authorityNote": "'restricted' is the AANP classification label; the primary rules confirm a collaborating physician is required for prescribing."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "last day of birth month, biennial",
+    "cite": "Tenn. Comp. R. & Regs. 1000-01-.05(1)",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-01.20260408.pdf",
+    "quote": "The due date for renewal is the last day of the month in which a licensee’s birth date falls",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ce",
+    "value": "competence file with at least 2 items; 10 contact hours is one option",
+    "cite": "Tenn. Comp. R. & Regs. 1000-01-.18(2)(a)9",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-01.20260408.pdf",
+    "quote": "Successful completion of (10) contact hours per renewal period of continuing education/in-service education applicable to nursing practice.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlc",
+    "value": "Tennessee participates in the Enhanced Nurse Licensure Compact",
+    "cite": "Tenn. Comp. R. & Regs. 1000-01-.19",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-01.20260408.pdf",
+    "quote": "A link to the rules of the Enhanced Nurse Licensure Compact is located on the Board’s website",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Re-loaded. Rule 1000-01-.19 (authority T.C.A. 63-7-401 et seq.) only points to the Enhanced NLC rules; it confirms participation indirectly. Statute text not loaded."
+   },
+   {
+    "field": "np.aprn.renewal",
+    "value": "APRN certificate renewed biennially with RN licence or multistate privilege",
+    "cite": "Tenn. Comp. R. & Regs. 1000-04-.05",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-04.20241008.pdf",
+    "quote": "All advanced practice registered nurses must biennially renew their Tennessee Advanced Practice Registered Nurse certificate.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "true: evidence of initial or continuing national certification each renewal",
+    "cite": "Tenn. Comp. R. & Regs. 1000-01-.18(2)(b)1",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-01.20260408.pdf",
+    "quote": "Evidence of initial or continuing national certification; and",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.controlledSubstance",
+    "value": "2 contact hours, Certificate of Fitness holders",
+    "cite": "Tenn. Comp. R. & Regs. 1000-01-.18(2)(c)3",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-01.20260408.pdf",
+    "quote": "A. minimum of two (2) contact hours of continuing education designed specifically to address controlled substance prescribing practices.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.certificateOfFitnessPharmacology",
+    "value": "3 quarter hours pharmacology instruction (initial, not recurring)",
+    "cite": "Tenn. Comp. R. & Regs. 1000-04-.04(2)(c)",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-04.20241008.pdf",
+    "quote": "including, but not limited to, at least three (3) quarter hours of pharmacology instruction or its equivalent;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.notice",
+    "value": "notice to board before prescribing: formulary and collaborating physician",
+    "cite": "Tenn. Comp. R. & Regs. 1000-04-.04(4)",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-04.20241008.pdf",
+    "quote": "shall, prior to prescribing, file a notice with the Board containing:",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.collaboratingPhysician",
+    "value": "prescribing APRN must have a collaborating physician under BME Rule 0880-06",
+    "cite": "Tenn. Comp. R. & Regs. 1000-04-.04(6)",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-04.20241008.pdf",
+    "quote": "must have a collaborating physician who complies with Board of Medical Examiners Rule Chapter 0880-06",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.protocolReview",
+    "value": "protocols reviewed and updated biennially",
+    "cite": "Tenn. Comp. R. & Regs. 0880-06-.02(5)(c)",
+    "url": "https://publications.tnsosfiles.com/rules/0880/0880-06.pdf",
+    "quote": "Shall be reviewed and updated biennially;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.chartReview",
+    "value": "physician reviews at least 20% of charts every 30 days",
+    "cite": "Tenn. Comp. R. & Regs. 0880-06-.02(8)",
+    "url": "https://publications.tnsosfiles.com/rules/0880/0880-06.pdf",
+    "quote": "a supervising physician shall personally review at least twenty percent (20%) of charts monitored or written by the certified nurse practitioner every thirty (30) days.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.dea",
+    "value": "Certificate of Fitness holders maintain DEA registration at practice location",
+    "cite": "Tenn. Comp. R. & Regs. 1000-04-.04(3)",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-04.20241008.pdf",
+    "quote": "shall maintain their Drug Enforcement Administration registration certificate to prescribe controlled substances at their practice location",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.competenceItems",
+    "value": "at least 2 items from the competence list each renewal period",
+    "cite": "Tenn. Comp. R. & Regs. 1000-01-.18(2)",
+    "url": "https://publications.tnsosfiles.com/rules/1000/1000-01.20260408.pdf",
+    "quote": "shall consist of at least two (2) of the items below for the applicable renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.highRiskPrescriber",
+    "value": "20 hours of board approved opioid addiction CE when identified as a high risk prescriber",
+    "cite": "Board of Nursing policy statement, amended May 16, 2025, under T.C.A. 68-1-128",
+    "url": "https://www.tn.gov/content/dam/tn/health/healthprofboards/nursing/position-statements/Amended%20BON%20Policy%20Statement%20-%20High%20Risk%20Prescriber%205.16.25.pdf",
+    "quote": "must complete a continuing education course or courses that individually or combined total no less than twenty (20) hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.controlledDrugChartReview",
+    "value": "physician reviews and signs within 30 days any chart where a controlled drug was prescribed",
+    "cite": "Tenn. Comp. R. & Regs. 0880-06-.02(7)(e)",
+    "url": "https://publications.tnsosfiles.com/rules/0880/0880-06.pdf",
+    "quote": "shall so certify by signature on any patient within thirty (30) days: ... (e) when a controlled drug has been prescribed.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.remoteSiteVisit",
+    "value": "physician visits any remote site at least every 30 days",
+    "cite": "Tenn. Comp. R. & Regs. 0880-06-.02(9)",
+    "url": "https://publications.tnsosfiles.com/rules/0880/0880-06.pdf",
+    "quote": "The supervising physician shall be required to visit any remote site at least once every thirty (30) days",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA and NP: Tennessee CSMD registration for prescribers with a DEA registration (T.C.A. 53-10-305) was not confirmed: the statute is only on Lexis and Justia returned 403, and CSMD Rule 1140-11 does not state the registration duty. stateCsRegistrationRequired stays null; Tennessee has no separate state controlled substance licence in any source loaded.",
+  "PA: whether current NCCPA certification is accepted in lieu of the 100 hour requirement is not stated in Rule 1130-01-.12; left null. The board page ties the Category I/II split to NCCPA while the rule sets at least 50 Category I.",
+  "PA: Public Chapter 1042 (2024) endorsement and collaborative agreement framework is enacted but not operative until task force rules take effect (April 17, 2026 minutes target January 2027). On 2026-10-01 the SOS index still lists only 1130-01.20210816. Recheck before shipping.",
+  "NP: 'restricted' practice authority is the AANP classification label, not a term in Tennessee law; the collaborating physician requirement is confirmed in Rule 1000-04-.04(6) and BME Rule 0880-06 (August 2004 revision, still says 'supervising physician')."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10"
+}

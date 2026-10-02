@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoiceBusy } from "../../utils/invoiceBusy";
+import { reloadPage } from "../../utils/pageLeave.js";
 
 /**
  * UpdatePrompt — CallSync-style silent auto-update.
@@ -78,7 +79,7 @@ function UpdatePrompt({ allowAutomaticUpdates = true } = {}) {
     if (pauseAutomaticUpdate()) return;
     if (reloading.current) return;
     reloading.current = true;
-    window.location.reload();
+    reloadPage();
   }, [pauseAutomaticUpdate]);
 
   // Activate any waiting SW, wipe caches, reload fresh.

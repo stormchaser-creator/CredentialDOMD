@@ -3,6 +3,7 @@ import { canReviewBillingOffer, lastAnswer, OUTDATED_MESSAGE } from "../../utils
 import { scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { actionButtonStyle } from "./actionButton.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
+import { reloadPage } from "../../utils/pageLeave.js";
 
 // OUTDATED_MESSAGE, with its first sentence in bold.
 const OUTDATED_PARTS = [OUTDATED_MESSAGE.slice(0, OUTDATED_MESSAGE.indexOf(".") + 1), OUTDATED_MESSAGE.slice(OUTDATED_MESSAGE.indexOf(".") + 2)];
@@ -25,7 +26,7 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
   // reload for the current version does.
   if (limitedLaunch.outdated) {
     const [strong, rest] = OUTDATED_PARTS;
-    return line(strong, rest, <button type="button" style={button(true)} onClick={() => globalThis.location?.reload()}>Reload</button>);
+    return line(strong, rest, <button type="button" style={button(true)} onClick={() => reloadPage()}>Reload</button>);
   }
   // A check that has not answered yet is not a membership decision.
   if (!access || limitedLaunch.error || access.needsRefresh) {
@@ -41,12 +42,18 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
     // already has its own banner with its own Retry.
     const open = ["credential", "practice"].some(scope => lastAnswer(access, scope, limitedLaunch.remembered) !== false);
     if (!limitedLaunch.reconnecting || !open || offlineMode) return null;
+    // The identity check had no answer at launch (a weak signal):
+    // IdentityWaitingNotice already says the records are this device's copy
+    // and that it is trying again on its own, which it does (AppContext
+    // identity retry), loading the account with no tap. "Reload to reconnect
+    // your account" directly under it was wrong.
+    if (limitedLaunch.identityWaiting) return null;
     // With no ready profile no check can run, and nothing loads the account
     // again on its own when the connection returns: only a reload does, and
     // the note says exactly that.
     if (limitedLaunch.profileReady === false) {
       return line("Showing this device's copy.", "Reload to reconnect your account. Changes can't be saved until then.",
-        <button type="button" style={button(true)} onClick={() => globalThis.location?.reload()}>Reload</button>);
+        <button type="button" style={button(true)} onClick={() => reloadPage()}>Reload</button>);
     }
     return line("Reconnecting to your account.", "Changes can't be saved until the connection is back.",
       <button type="button" style={button(true)} onClick={() => { void limitedLaunch.refresh(); }}>Try again</button>);

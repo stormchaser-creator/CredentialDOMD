@@ -1,0 +1,543 @@
+{
+ "state": "MO",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Missouri State Board of Registration for the Healing Arts (Advisory Commission for Physician Assistants)",
+   "url": "https://pr.mo.gov/physicianassistants.asp"
+  },
+  "licence": {
+   "title": "Physician Assistant license",
+   "renewalCycleYears": 1,
+   "renewalCycleNote": "Board instructions say all PA licences expire January 31 and renewal information is mailed each year; RSMo 334.738.3 says a licence is valid for two years and may be renewed annually. Treat as annual renewal by January 31 until the Board confirms.",
+   "renewalDeadline": "January 31 (forms postmarked February 1 or later are delinquent)"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "hoursNote": "No state CME hour count found in 20 CSR 2150-7 or RSMo 334.735 to 334.749. Continued licensure rests on active NCCPA certification (statutory definition of physician assistant), which carries NCCPA's own CME and recertification exam cycle.",
+   "categoryRules": null,
+   "acceptsNccpaCertificationInLieu": null,
+   "nccpaCertificationRequiredForRenewal": true,
+   "nccpaNote": "RSMo 334.735.1 defines a physician assistant as a person who has passed the NCCPA exam and has active NCCPA certification.",
+   "topicMandates": [],
+   "controlledSubstanceCe": "None found in Missouri PA statute or rules."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Written collaborative practice arrangement required before practice; PA must inform the Board in writing of the collaborating physician's name and practice address(es) before practising; any change reported within 15 days; arrangement reviewed at least annually and kept 8 years after termination (not filed with the Board).",
+   "notes": "Collaborating physician reviews at least 10% of charts (20% of controlled substance prescriptions) with documentation submitted at least every 14 days, and is present at least once every two weeks where the PA diagnoses and initiates treatment (telehealth allowed). Before prescribing controlled substances when the physician is not on site, the PA completes 120 hours in a four-month period practising with the collaborating physician on site."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "stateCsRegistrationNote": "Missouri Bureau of Narcotics and Dangerous Drugs (BNDD) registration plus DEA.",
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Certificate of controlled substance prescriptive authority from the Board of Healing Arts (advanced pharmacology course, 300 clock hours of clinical prescribing training with the collaborating physician, one year of supervised practice or rotations). Schedule III to V; Schedule II limited to hydrocodone products (and Schedule II for certified hospice patients); Schedule III narcotics and Schedule II hydrocodone limited to a 120-hour supply without refill; buprenorphine for medication-assisted treatment up to 30 days. 120 hours in four months practising with the collaborating physician on site before prescribing controlled substances when the physician is not on site.",
+   "ceForPrescribers": "None found."
+  },
+  "facts": [
+   {
+    "field": "licence.renewalDeadline",
+    "value": "January 31",
+    "cite": "20 CSR 2150-7.120(1)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-7.pdf",
+    "quote": "make application for licensure renewal with the board on application forms furnished by the board, before January 31 of the year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.expiry",
+    "value": "All PA licences expire January 31",
+    "cite": "Board PA application instructions (form 375-0453)",
+    "url": "https://pr.mo.gov/boards/healingarts/375-0453.pdf",
+    "quote": "All physician assistant licenses expire on January 31.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 1,
+    "cite": "Board PA application instructions (form 375-0453)",
+    "url": "https://pr.mo.gov/boards/healingarts/375-0453.pdf",
+    "quote": "Information on renewing your license will be mailed to you on or before December 1 of each year",
+    "loaded": true,
+    "verified": false,
+    "verifiedBy": "verifier-2026-10",
+    "unverifiedReason": "Conflict between RSMo 334.738.3 ('valid for two years ... may be renewed annually') and Board instructions (expire January 31; renewal information mailed each year). The fee rule 20 CSR 2150-7.200 lists a renewal fee without a period. Not resolved from a primary source; confirm with the Board before building a reminder."
+   },
+   {
+    "field": "licence.statuteValidity",
+    "value": "Valid two years, renewable annually (conflicting wording)",
+    "cite": "RSMo 334.738.3",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.738",
+    "quote": "A license is valid for two years from the date it is issued and may be renewed annually by filing an application for renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "RSMo 334.735.1(7) (definition of physician assistant)",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.735",
+    "quote": "has passed the certifying examination administered by the National Commission on Certification of Physician Assistants and has active certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "collaborative practice arrangement",
+    "cite": "20 CSR 2150-7.135(2)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-7.pdf",
+    "quote": "unless licensed and pursuant to a written physician assistant collaborative practice arrangement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.boardNotice",
+    "value": "Inform Board of collaborating physician before practice",
+    "cite": "20 CSR 2150-7.135(2)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-7.pdf",
+    "quote": "A physician assistant shall not practice until informing the board, in writing, of the collaborating physician's name and practice address(es).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.changeNotice",
+    "value": "15 days",
+    "cite": "20 CSR 2150-7.122(1)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-7.pdf",
+    "quote": "a change in a collaborative practice arrangement, for any reason, must submit written notification and the required form to the board within fifteen (15) days",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.annualReview",
+    "value": true,
+    "cite": "20 CSR 2150-7.135(5)(C)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-7.pdf",
+    "quote": "Be reviewed at least annually and revised as the collaborating physician and licensed physician assistant deem necessary;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.chartReview",
+    "value": "10% of charts every 14 days; 20% of CS prescriptions",
+    "cite": "20 CSR 2150-7.135(6)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-7.pdf",
+    "quote": "The collaborating physician shall complete a review of ten percent (10%) of the total health care services delivered by the physician assistant.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.onSiteHoursBeforeCs",
+    "value": "120 hours in four months",
+    "cite": "RSMo 334.747.2",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.747",
+    "quote": "at least one hundred twenty hours in a four-month period by the physician assistant during which the physician assistant shall practice with the collaborating physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "RSMo 334.747.1(1)",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.747",
+    "quote": "shall register with the federal Drug Enforcement Administration and the state bureau of narcotics and dangerous drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": true,
+    "cite": "RSMo 334.747.3; 20 CSR 2150-7.130",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.747",
+    "quote": "A physician assistant shall receive a certificate of controlled substance prescriptive authority from the board of healing arts upon verification of the completion",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.clinicalTraining",
+    "value": "300 clock hours",
+    "cite": "RSMo 334.747.3(2)",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.747",
+    "quote": "Completion of a minimum of three hundred clock hours of clinical training by the collaborating physician in the prescription of drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.statuteChartReview",
+    "value": "Statute: PA submits at least 10% of charts every 14 days; 20% of controlled substance charts reviewed every 14 days",
+    "cite": "RSMo 334.735.9(8)-(9)",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.735",
+    "quote": "the physician assistant shall submit a minimum of ten percent of the charts documenting the physician assistant's delivery of health care services",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.physicianPresence",
+    "value": "Collaborating physician present at least once every two weeks where the PA diagnoses and initiates treatment (telehealth provisions apply)",
+    "cite": "20 CSR 2150-7.135",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-7.pdf",
+    "quote": "the collaborating physician shall be present for sufficient periods of time, at least once every two (2) weeks, except in extraordinary circumstances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.recordRetention",
+    "value": "Arrangement kept 8 years after termination",
+    "cite": "20 CSR 2150-7.135(5)(D)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-7.pdf",
+    "quote": "Be maintained by the collaborating physician and licensed physician assistant for a minimum of eight (8) years after the termination of the agreement;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.supplyLimit",
+    "value": "Schedule III narcotics and Schedule II hydrocodone limited to a 120-hour supply without refill",
+    "cite": "RSMo 334.735.8(1)",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.735",
+    "quote": "Schedule III narcotic controlled substances and Schedule II - hydrocodone prescriptions shall be limited to a one hundred twenty-hour supply without refill.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.buprenorphine",
+    "value": "Buprenorphine for medication-assisted treatment up to a 30-day supply",
+    "cite": "RSMo 334.747.1(1)",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.747",
+    "quote": "enorphine may be prescribed for up to a thirty-day supply without refill for patients receiving medication-assisted treatment for substance use disorders",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "federal.deaOneTimeTraining",
+    "value": "One-time 8-hour DEA training (opioid or other substance use disorders) for DEA registrants",
+    "cite": "DEA Diversion Control Division letter to registrants",
+    "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_Training_Letter_Final.pdf",
+    "quote": "enacted a new one-time, eight-hour training requirement for all Drug Enforcement Administration (DEA)-registered practitioners on the treatment and management of patients",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Missouri State Board of Nursing",
+   "url": "https://pr.mo.gov/nursing.asp"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "April 30 of each odd-numbered year",
+   "ceHoursPerCycle": 0,
+   "ceNote": "The RN renewal rule (20 CSR 2200-4.020(8)) asks for fee and workforce data only; no RN continuing education requirement was found.",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN licence (certified nurse practitioner)",
+   "separateLicenceOrCertificate": true,
+   "renewalCycleYears": 2,
+   "renewalNote": "Runs concurrent with the Missouri or multistate RN licence; APRN must provide primary source evidence of recertification by an approved certifying body before the current expiration date.",
+   "ceHoursPerCycle": null,
+   "ceNote": "No state hour count for certified APRNs; national recertification is the renewal evidence. Uncertified APRNs approved before January 1, 2010 instead need 800 practice hours and 60 contact hours every two years.",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": []
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Certificate of controlled substance prescriptive authority from the Board of Nursing: advanced pharmacology (or 3 credit hours or 45 CE units of pharmacology within 5 years), 300 clock hours preceptorial prescribing experience, 1,000 hours of APRN practice after graduation, and CS authority delegated in a collaborative practice arrangement.",
+   "pharmacologyCeForPrescribers": "None per cycle found; 45 pharmacology CE units within 5 years is one way to meet the initial pharmacology requirement.",
+   "controlledSubstanceCe": "None found.",
+   "stateCsRegistrationRequired": true,
+   "stateCsNote": "BNDD registration after the Board grants CS prescriptive authority, plus DEA."
+  },
+  "practice": {
+   "authority": "restricted",
+   "authorityNote": "Label follows the AANP taxonomy (not a primary source). Primary fact: APRN practice requires a written collaborative practice arrangement with a physician under RSMo 334.104.",
+   "agreementType": "collaborative practice arrangement",
+   "transitionToPracticeHours": "One month practising with the collaborating physician continuously present before practising where the physician is not continuously present (exceptions for population-based public health and certain primary care or behavioral health pairings). Separately, 1,000 hours of APRN practice before a certificate of controlled substance prescriptive authority.",
+   "agreementFilingAndRenewal": "Not filed with the Board of Nursing. Signed before implementation, reviewed at least annually with documentation kept in the arrangement, retained 8 years after termination; the collaborating physician reports arrangements to the Board of Healing Arts within 30 days of a change and at each physician renewal. Chart review: 10% of services (20% of CS prescriptions) every 14 days."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": 2,
+    "cite": "20 CSR 2200-4.010 (fee and renewal schedule, item 4)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "License renewal for a professional nurse and an APRN shall be biennial, occurring on odd-numbered years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalDeadline",
+    "value": "April 30 of odd-numbered years",
+    "cite": "20 CSR 2200-4.010 (fee and renewal schedule, item 4)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "the license shall expire on April 30 of each odd-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": 0,
+    "cite": "20 CSR 2200-4.020(8)(B) (renewal requires fee and workforce data; no CE stated)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "The required fee and information related to the nurse's practice and demographics for the purpose of collecting nursing workforce data shall be submitted",
+    "loaded": true,
+    "verified": false,
+    "verifiedBy": "verifier-2026-10",
+    "unverifiedReason": "No primary source states the absence of RN CE. The renewal rule (20 CSR 2200-4.020(8)) asks for fee and workforce data only, and the Board's RN renewal instructions page (loaded) lists no CE step. Absence is inferred, not stated."
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "20 CSR 2200-4.100(5)(A)1; RSMo 335.360 (Nurse Licensure Compact, effective July 20, 2017)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "Maintain a current unencumbered RN license or current multistate privilege to practice in Missouri.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewal",
+    "value": "Concurrent with RN licence",
+    "cite": "20 CSR 2200-4.100(5)(A)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "renewal periods shall be for one (1), two (2), or three (3) years as determined by the MSBN and run concurrent with the Missouri",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "20 CSR 2200-4.100(5)(A)4",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "Provide primary source evidence of recertification by a certifying body, approved by the MSBN, to the MSBN prior to the current expiration date.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.lapseOnLostCertification",
+    "value": true,
+    "cite": "20 CSR 2200-4.100(5)(A)6",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "Failure to satisfy any of the requirements of paragraphs (5)(A)1. and 4. of this rule shall result in the lapse of the APRN license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": true,
+    "cite": "RSMo 335.019.2",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=335.019",
+    "quote": "The board of nursing may grant a certificate of controlled substance prescriptive authority to an advanced practice registered nurse who:",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.practiceHoursBeforeCs",
+    "value": "1,000 hours",
+    "cite": "RSMo 335.019.2(3)",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=335.019",
+    "quote": "Provides evidence of a minimum of one thousand hours of practice in an advanced practice nursing category prior to application",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.preceptorHours",
+    "value": "300 clock hours",
+    "cite": "RSMo 335.019.2(2)",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=335.019",
+    "quote": "a minimum of three hundred clock hours preceptorial experience in the prescription of drugs, medicines, and therapeutic devices with a qualified preceptor",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pharmacologyAlternative",
+    "value": "45 CE units in pharmacology within 5 years",
+    "cite": "20 CSR 2200-4.100 (CS prescriptive authority)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "Evidence of successful completion of forty-five (45) continuing education units in pharmacology within the last five (5) years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "20 CSR 2200-4.100(4)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "Once the APRN has received controlled substance prescriptive authority from the MSBN, he/she may apply for a BNDD registration number",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPracticeHours",
+    "value": "One month with physician continuously present",
+    "cite": "RSMo 334.104.9",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.104",
+    "quote": "at least a one-month period of time during which the advanced practice registered nurse shall practice with the collaborating physician continuously present",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.annualReview",
+    "value": true,
+    "cite": "20 CSR 2200-4.200(3)(B)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "The collaborative practice arrangement shall be reviewed at least annually and revised as needed",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.notFiledWithBon",
+    "value": true,
+    "cite": "Missouri Board of Nursing Collaborative Practice page",
+    "url": "https://pr.mo.gov/nursing-advanced-practice-collaborative-practice.asp",
+    "quote": "APRNs are not required to provide the Board of Nursing with a copy of their Collaborative Practice Agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.chartReview",
+    "value": "10% every 14 days; 20% of CS prescriptions",
+    "cite": "20 CSR 2200-4.200(3)(E)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "The collaborating physician shall complete a review of a minimum of ten percent (10%) of the total health care services",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalWindow",
+    "value": "RN renewal opens February 1 and closes April 30 of odd years; no grace period",
+    "cite": "Missouri Board of Nursing Renewal Information page",
+    "url": "https://pr.mo.gov/nursing-renewal.asp",
+    "quote": "Your RN license will be eligible for renewal every odd-numbered year between February 1 and April 30.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.noGracePeriod",
+    "value": true,
+    "cite": "Missouri Board of Nursing Renewal Information page",
+    "url": "https://pr.mo.gov/nursing-renewal.asp",
+    "quote": "There is no grace period to renew. A nurse is required to renew 3 business days prior to the expiration date.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.uncertifiedRenewal",
+    "value": "APRNs approved as noncertified before January 1, 2010: 800 practice hours and 60 contact hours every 2 years",
+    "cite": "20 CSR 2200-4.100(5)(B)",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "A minimum of sixty (60) contact hours in their advanced practice nursing population focus area of practice.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.recertificationEvidence",
+    "value": "Primary source evidence of recertification must reach the Board before the APRN licence expires",
+    "cite": "20 CSR 2200-4.100(5)(A)4",
+    "url": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2200-4.pdf",
+    "quote": "It is the APRN’s responsibility to be sure that their recertification credentials have been received by the MSBN;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.statuteOneMonthExceptions",
+    "value": "One-month continuous presence rule does not apply to population-based public health, or to primary care and behavioral health pairings meeting the statute",
+    "cite": "RSMo 334.104.9",
+    "url": "https://revisor.mo.gov/main/OneSection.aspx?section=334.104",
+    "quote": "or to collaborative practice arrangements between a primary care physician and a primary care advanced practice registered nurse or a behavioral health physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "federal.deaOneTimeTraining",
+    "value": "One-time 8-hour DEA training (opioid or other substance use disorders) for DEA registrants",
+    "cite": "DEA Diversion Control Division letter to registrants",
+    "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_Training_Letter_Final.pdf",
+    "quote": "enacted a new one-time, eight-hour training requirement for all Drug Enforcement Administration (DEA)-registered practitioners on the treatment and management of patients",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "MO PA renewal cycle length: RSMo 334.738.3 says a licence is 'valid for two years' and 'may be renewed annually'; Board instructions say all PA licences expire January 31 with renewal information mailed each year. Recorded as annual with verified:false; confirm with the Board before building a reminder.",
+  "MO PA: no state CME hour requirement exists in 20 CSR 2150-7 or RSMo 334.735 to 334.749; active NCCPA certification is part of the statutory definition (RSMo 334.735.1(7)). The renewal form (MOPRO portal, login only) was not loaded, so whether the Board checks NCCPA status at each renewal is not confirmed.",
+  "MO RN: absence of an RN CE requirement is inferred (renewal rule and Board renewal page list no CE); no Board text states it outright.",
+  "MO NP practice authority label 'restricted' is the AANP classification; primary sources establish mandatory written collaborative practice arrangements (RSMo 334.104; 20 CSR 2200-4.200).",
+  "MO BNDD registration renewal interval for PAs and APRNs was not researched; only the duty to register (RSMo 334.747.1; 20 CSR 2200-4.100(4)) is confirmed."
+ ],
+ "verification": {
+  "by": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "MO PA practice.agreementType: quote replaced with an exact contiguous passage from 20 CSR 2150-7.135(2) (the original used an ellipsis). Value unchanged.",
+   "MO PA: added statutory chart review (10% of charts every 14 days, 20% of controlled substance charts, RSMo 334.735.9), physician presence at least once every two weeks, 8-year retention, the 120-hour (5-day) supply limit for Schedule III narcotics and Schedule II hydrocodone, and the 30-day buprenorphine allowance, each from a loaded primary source.",
+   "MO NP rn.renewalCycleYears and rn.renewalDeadline: cite '20 CSR 2200-4.010(1)(H)4' could not be matched to that subsection label in the loaded PDF; recorded as 20 CSR 2200-4.010 (renewal schedule item 4). Values (biennial, April 30 of odd years) confirmed.",
+   "MO NP practice.chartReview: quote corrected to the exact rule text ('a review of a minimum of ten percent'); the researcher's quote dropped 'a minimum of'. Value unchanged.",
+   "MO NP rn.nlcCompactMember: weak quote ('The party states find that:') replaced with 20 CSR 2200-4.100(5)(A)1, which recognises a multistate privilege for APRN renewal; RSMo 335.360 (effective July 20, 2017) re-loaded and kept as the compact citation.",
+   "MO NP: added RN renewal window (February 1 to April 30, odd years) and no grace period from the Board renewal page, the APRN duty to have recertification received before expiry, the uncertified-APRN renewal rule as a fact (800 hours, 60 contact hours), and the statutory exceptions to the one-month continuous presence rule.",
+   "MO both professions: re-checked 20 CSR 2150-7 (current SOS file dated 9/30/25), 20 CSR 2200-4 (file dated 4/30/24 and 6/30/24) and RSMo 334.735, 334.738, 334.747, 334.104, 335.019 (all effective 8/28/2023 or earlier versions noted). No CE topic mandate (opioid, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide prevention, infection control, cultural competency, domestic violence) appears for PAs or APRNs; none added. Federal one-time 8-hour DEA training added for both."
+  ],
+  "stillUnverified": [
+   "MO PA renewal cycle length: RSMo 334.738.3 says a licence is 'valid for two years' and 'may be renewed annually'; Board instructions say all PA licences expire January 31 with renewal information mailed each year. Recorded as annual with verified:false; confirm with the Board before building a reminder.",
+   "MO PA: no state CME hour requirement exists in 20 CSR 2150-7 or RSMo 334.735 to 334.749; active NCCPA certification is part of the statutory definition (RSMo 334.735.1(7)). The renewal form (MOPRO portal, login only) was not loaded, so whether the Board checks NCCPA status at each renewal is not confirmed.",
+   "MO RN: absence of an RN CE requirement is inferred (renewal rule and Board renewal page list no CE); no Board text states it outright.",
+   "MO NP practice authority label 'restricted' is the AANP classification; primary sources establish mandatory written collaborative practice arrangements (RSMo 334.104; 20 CSR 2200-4.200).",
+   "MO BNDD registration renewal interval for PAs and APRNs was not researched; only the duty to register (RSMo 334.747.1; 20 CSR 2200-4.100(4)) is confirmed."
+  ]
+ }
+}

@@ -26,7 +26,8 @@
  * the only data it can compare against, and is the single copy.
  */
 
-import { licenseKey } from "./npiImport.js";
+import { licenseKey, licenseKeysOnFile } from "./npiImport.js";
+import { licenseKindOf } from "../constants/professions.js";
 
 /** Values these registers use to mean "nothing here". Mirrors normalize.ts;
  * a browser module cannot import a Deno function file. */
@@ -50,7 +51,12 @@ const arr = (v) => (Array.isArray(v) ? v : []);
 export function dedupeKey(section, item) {
   if (section === "licenses") {
     const k = licenseKey(item?.state, clean(item?.licenseNumber));
-    return k === "|" ? "" : `licenses:${k}`;
+    if (k === "|") return "";
+    // An NP's RN and APRN licences often share a state and a number and are
+    // two licences (normalize.ts and npiImport.js key them apart the same
+    // way); an APRN on file never hides the RN finding, or the reverse.
+    const nursing = licenseKindOf(item?.type);
+    return nursing === "rn" || nursing === "aprn" ? `licenses:${k}|${nursing}` : `licenses:${k}`;
   }
   if (section === "privileges") {
     const f = norm(item?.facility || item?.name);
@@ -142,6 +148,15 @@ function replacedSettingsKeys(fields, settings) {
 export function markAlreadyOnFile(findings, existing = {}, settings = {}) {
   const have = new Set();
   for (const [section, items] of Object.entries(existing || {})) {
+    // Licences: a legacy medical-typed licence answers to the nursing key its
+    // note or the offered licence findings support (npiImport.js
+    // licenseKeysOnFile).
+    if (section === "licenses") {
+      const offered = arr(findings).filter((f) => f?.section === "licenses")
+        .map((f) => ({ state: f.fields?.state, licenseNumber: clean(f.fields?.licenseNumber), kind: licenseKindOf(f.fields?.type) }));
+      for (const k of licenseKeysOnFile(arr(items).map((l) => ({ ...l, licenseNumber: clean(l?.licenseNumber) })), offered)) have.add(k.endsWith("|") ? `licenses:${k.slice(0, -1)}` : `licenses:${k}`);
+      continue;
+    }
     for (const item of arr(items)) {
       for (const k of dedupeKeysOnFile(section, item)) have.add(k);
     }
@@ -234,6 +249,30 @@ export const FOCUS_COPY = {
     line: "PubMed is searched on your author name, so the list will hold other people's papers. Read each one before you keep it.",
   },
 };
+
+// A PA's or NP's education row is a PA program or a nursing program, and
+// Medicare states the year but never which degree the program granted
+// (supabase/functions/public-record/normalize.ts normalizeCmsClinician).
+const APP_EDUCATION_COPY = {
+  PA: {
+    title: "PA program",
+    noun: "your PA program",
+    line: "Medicare states the year you graduated, not the degree your program granted, so you choose the degree. It files most schools as \"OTHER\", so the program itself is not offered, and postgraduate training is in neither register.",
+  },
+  NP: {
+    title: "Nursing education",
+    noun: "nursing education",
+    line: "Medicare states the year you graduated, not the degree your program granted, so you choose the degree. It files most schools as \"OTHER\", so the program itself is not offered, and postgraduate training is in neither register.",
+  },
+};
+
+/** The focus copy for a section, in the member's profession. MD, DO and blank get FOCUS_COPY unchanged. */
+export function focusCopyFor(section, degreeType) {
+  const k = focusSectionKey(section);
+  if (!k) return null;
+  if (k === "education" && APP_EDUCATION_COPY[degreeType]) return APP_EDUCATION_COPY[degreeType];
+  return FOCUS_COPY[k];
+}
 
 /** The section key a caller may open on, or "" for the whole screen. */
 export function focusSectionKey(section) {

@@ -1,0 +1,16 @@
+{
+ "state": "MO",
+ "facts": [
+  {
+   "field": "aprn.expiresWithCertification",
+   "profession": "np",
+   "value": "The APRN license expires on the earlier of the anchor RN license and the national certification",
+   "cite": "Missouri Board of Nursing, Requirements to Maintain an Active Missouri APRN License",
+   "url": "https://pr.mo.gov/boards/nursing/RequirementstoMaintainanActiveMissouriAPRNLicense.pdf",
+   "quote": "Nursys will always show the ... of the APRN license as the earlier of these two dates",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -13,6 +13,8 @@ import { STATE_REQS } from "../constants/stateRequirements.js";
 import { ASSISTANT_SOURCES } from "../constants/assistantSources.js";
 import { getStatusColor } from "./helpers.js";
 import { isAlertable, isInactive } from "./lifecycle.js";
+import { isAdvancedPractice, isPhysicianDegree, licenseKindOf, professionOf } from "../constants/professions.js";
+import { ruleSetFor } from "./ruleResolver.js";
 
 export const DEA_PORTAL = "https://www.deadiversion.usdoj.gov/online_forms_apps.html";
 // When the DEA fee text was last checked (added with the renewal links on
@@ -34,7 +36,26 @@ const https = (value) => {
  * split by degree but whose DO route is not on file gets no board or portal at
  * all (unknownDORoute): only the state guide, never a guessed MD page.
  */
-export function renewalRoute(jurisdiction, degree) {
+// The licence kinds a PA or NP renews with their own board: the PA board or
+// the board of nursing, from the PA and NP rule data.
+const APP_KINDS = new Set(["pa", "rn", "aprn"]);
+
+/**
+ * A PA, RN or APRN licence's board, from the PA and NP rule data: name and
+ * link only. Never a medical board portal, physician fee or physician guide.
+ */
+function appRoute(jurisdiction, degree, kind) {
+  const set = ruleSetFor(jurisdiction, kind === "pa" ? "PA" : "NP", kind);
+  return { jurisdiction, degree: degree || null, kind, board: set.board, boardUrl: https(set.boardUrl), portal: null, guide: null,
+    // The license's own renewal interval, verified separately from the CE
+    // counting cycle; absent, the box names no interval.
+    cycle: Number.isFinite(set.licenseCycle) && set.licenseCycle > 0 ? set.licenseCycle : null, verified: set.verified };
+}
+
+export function renewalRoute(jurisdiction, degree, kind) {
+  // A PA or NP licence (or one held by a blank member) goes to its own board.
+  if (APP_KINDS.has(kind) && !isPhysicianDegree(degree)) return appRoute(jurisdiction, degree, kind);
+  if (isAdvancedPractice(degree) && !kind) return appRoute(jurisdiction, degree, professionOf(degree) === "pa" ? "pa" : "aprn");
   const r = Object.hasOwn(RENEWAL_INFO, jurisdiction) ? RENEWAL_INFO[jurisdiction] : null;
   if (!r) return null;
   const d = degreeOf(degree);
@@ -108,7 +129,16 @@ export function researchedLabel(recorded) {
  * in the expansion, labelled with when it was last researched.
  */
 export function renewalView(item, degree, { alertable = true } = {}) {
-  if (!item || !/license|dea/i.test(item.type || "") || isInactive(item)) return null;
+  if (!item || isInactive(item)) return null;
+  // MD and DO: today's path, byte for byte. Everyone else: a PA, RN or APRN
+  // licence gets its own board's box (board name and link, the cycle only
+  // when verified, no fee, no portal). A PA or NP member's DEA keeps the DEA
+  // box; any other record of theirs, including one filed as a medical
+  // licence, gets none (the profession review asks them to retype it).
+  const kind = licenseKindOf(item.type);
+  if (!isPhysicianDegree(degree) && APP_KINDS.has(kind)) return appView(item, degree, kind, alertable);
+  if (isAdvancedPractice(degree) && kind !== "dea") return null;
+  if (!/license|dea/i.test(item.type || "")) return null;
   const st = item.state;
   const info = st && Object.hasOwn(RENEWAL_INFO, st) ? RENEWAL_INFO[st] : null;
   if (!info) return null;
@@ -142,5 +172,28 @@ export function renewalView(item, degree, { alertable = true } = {}) {
     due: isDea ? null : (info.due || null),
     fee,
     feeCaption: fee ? `last researched ${researched || "on an unrecorded date"}, confirm with ${authority}` : null,
+  };
+}
+
+function appView(item, degree, kind, alertable) {
+  const st = item.state;
+  if (!st) return null;
+  const route = appRoute(st, degree, kind);
+  if (!route.board && !route.boardUrl) return null;
+  const color = getStatusColor(item.expirationDate);
+  const urgent = alertable && isAlertable(item) && (color === "red" || color === "orange" || color === "amber");
+  return {
+    isDea: false, urgent, boardOnly: true, kind,
+    cycleShort: route.cycle ? (route.cycle === 1 ? "Every year" : `Every ${route.cycle} years`) : null,
+    cycleFull: null,
+    portal: null, portalLabel: null, showPortalOnLine: false,
+    // Where a PA working with a DO is licensed by the osteopathic board
+    // (Pennsylvania, Nevada, Maine, West Virginia), the rule data's board
+    // name says so; shortening it at " (" would name only the medical
+    // board, so the full name stands. Only the medical board's link is
+    // verified, so no osteopathic link is added.
+    board: (/osteopathic/i.test(route.board || "") ? String(route.board).replace(/\s+/g, " ").trim() : shortBoardName(route.board)) || null, boardUrl: route.boardUrl,
+    alternativeBoard: null, unknownDORoute: false, guide: null, due: null, fee: null, feeCaption: null,
+    caption: route.boardUrl ? "Board link from the research checked Oct 2026" : "Board link not yet verified",
   };
 }

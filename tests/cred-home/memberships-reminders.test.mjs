@@ -44,7 +44,7 @@ test('an ended membership raises no alert and is not in the ring', () => {
   assert.deepEqual(standingScore({ items }).needsAction.map(n => n.item.id), ['m-now']);
   const app = readFileSync(`${root}src/App.jsx`, 'utf8');
   assert.match(app, /const lapsingCreds = useMemo\(\(\) => lapsingRecords\(allCreds\), \[allCreds\]\);/);
-  assert.match(app, /items: lapsingCreds, missingRequired: missingExpiration, stateComps: ringComps,/);
+  assert.match(app, /items: lapsingCreds, missingRequired: missingExpiration, stateComps: \[\.\.\.ringComps, \.\.\.certRingComps\],/);
   assert.match(app, /for \(const c of lapsingCreds\) \{/);
 });
 

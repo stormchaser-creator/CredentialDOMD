@@ -1,0 +1,560 @@
+{
+ "state": "MA",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Massachusetts Board of Registration of Physician Assistants",
+   "url": "https://www.mass.gov/how-to/renew-your-physician-assistant-license"
+  },
+  "licence": {
+   "title": "Physician Assistant (full licence; temporary licence pending NCCPA exam)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "On or before March 1 of every odd-numbered year",
+   "otherRenewalConditions": "Apply to participate in MassHealth (billing or non-billing ordering and referring provider) as a condition of granting or renewing the licence (c. 112 s. 9F)"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "At least 40 of the 100 hours must be Category I (AMA or AAPA criteria); at least 4 hours in pharmacology or pharmacokinetics; prescriber training under M.G.L. c. 94C, s. 18(e) counts within the requirement",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Pharmacology or pharmacokinetics",
+     "hours": 4,
+     "period": "every cycle",
+     "appliesTo": "all PAs"
+    },
+    {
+     "topic": "Controlled substance prescriber training (pain management, opioid misuse risk, identifying patients at risk, counseling on storage and disposal, prescription quantities, opioid antagonists and overdose prevention)",
+     "hours": null,
+     "period": "every cycle (attested at each renewal)",
+     "appliesTo": "PAs who prescribe controlled substances; statute and the Board's Dec 2016 advisory set 6 topics and no hour count; whether new hours are needed each cycle (vs proof of training once) is not stated"
+    },
+    {
+     "topic": "Domestic and sexual violence training",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "all PAs (263 CMR 3.08: condition of licensure, renewal or reinstatement; a licensee who already completed a Board approved course is not required to repeat it unless the Board requires it)"
+    },
+    {
+     "topic": "Cognitive impairment, Alzheimer's disease and dementia (diagnosis, treatment and care)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "PAs who serve adult populations (M.G.L. c. 112, s. 9F); no hour count",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    }
+   ],
+   "controlledSubstanceCe": "Training required by M.G.L. c. 94C, s. 18(e) as a prerequisite to obtaining or renewing the licence for PAs who prescribe controlled substances; hours not stated in statute or 263 CMR"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Written prescribing guidelines with the supervising physician must be signed by both, reviewed, dated and initialed annually, kept available for review; they need not be filed with the Board. Schedule II prescriptions must be reviewed by the supervising physician within 96 hours.",
+   "notes": "M.G.L. c. 112, s. 9E still requires continuous physician supervision (not personal presence) as of 2026-10-01; bills to move to collaboration (e.g. S.1502 of the 194th General Court) were found but not enacted in the loaded statute text. Board page offers a form to report a change or addition in supervising physician or work setting."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Massachusetts Controlled Substances Registration with DPH under M.G.L. c. 94C (plus DEA); prescriptions follow the written supervising physician guidelines",
+   "ceForPrescribers": "c. 94C s. 18(e) training for controlled substance prescribers at each licence or renewal; 4 pharmacology hours apply to all PAs"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalDeadline",
+    "value": "March 1 of every odd-numbered year",
+    "cite": "263 CMR 3.05(1)",
+    "url": "https://www.mass.gov/doc/263-cmr-3-licensure-of-individual-physician-assistants/download",
+    "quote": "Each physician assistant shall renew his or her license to practice on or before March 1st of every odd-numbered calendar year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "100 hours per renewal period",
+    "cite": "263 CMR 3.05(3)",
+    "url": "https://www.mass.gov/doc/263-cmr-3-licensure-of-individual-physician-assistants/download",
+    "quote": "A licensed physician assistant must complete a minimum of 100 hours of continuing education (CE) for each license renewal period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.pharmacology",
+    "value": "4 hours pharmacology or pharmacokinetics",
+    "cite": "263 CMR 3.05(3)(a); 263 CMR 5.06(6)",
+    "url": "https://www.mass.gov/doc/263-cmr-3-licensure-of-individual-physician-assistants/download",
+    "quote": "at least four hours on the topic of pharmacology or pharmacokinetics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "40 hours Category I (AMA or AAPA)",
+    "cite": "263 CMR 3.05(3)(b)",
+    "url": "https://www.mass.gov/doc/263-cmr-3-licensure-of-individual-physician-assistants/download",
+    "quote": "at least 40 hours in courses or programs which meet the criteria for Category I courses",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.boardSummary",
+    "value": "100 contact hours, minimum 40 Category 1, attested at renewal",
+    "cite": "Board renewal page",
+    "url": "https://www.mass.gov/how-to/renew-your-physician-assistant-license",
+    "quote": "completion of 100 contact hours with a minimum of 40 in Category 1 of continuing education for the current registration period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.controlledSubstanceCe",
+    "value": "Prescriber training is a prerequisite to obtaining or renewing the licence",
+    "cite": "M.G.L. c. 94C, s. 18(e)",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXV/Chapter94C/Section18",
+    "quote": "Practitioners who prescribe controlled substances, except veterinarians, shall be required, as a prerequisite to obtaining or renewing their professional licenses, to complete appropriate training",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.domesticViolence",
+    "value": "Domestic and sexual violence training is a condition of licensure and renewal; not repeated once a Board approved course is completed (263 CMR 3.08(1),(3))",
+    "cite": "263 CMR 3.08(3); M.G.L. c. 112, s. 264",
+    "url": "https://www.mass.gov/doc/263-cmr-3-licensure-of-individual-physician-assistants/download",
+    "quote": "applicants and licensees shall participate in domestic violence and sexual violence training as a condition for licensure, renewal, or reinstatement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "Supervision by a registered physician",
+    "cite": "M.G.L. c. 112, s. 9E",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section9E",
+    "quote": "a physician assistant may perform medical services when such services are rendered under the supervision of a registered physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.guidelinesAnnualReview",
+    "value": "Prescribing guidelines reviewed annually, dated and initialed by both",
+    "cite": "263 CMR 5.06(4)(c)",
+    "url": "https://www.mass.gov/doc/263-cmr-5-scope-of-practice-employment-of-physician-assistants-and-standards-of-conduct/download",
+    "quote": "Such guidelines shall be reviewed annually and dated and initialed by both the supervising physician and the physician assistant",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.guidelinesFiling",
+    "value": "Guidelines not filed with agencies",
+    "cite": "263 CMR 5.06(4)(b)",
+    "url": "https://www.mass.gov/doc/263-cmr-5-scope-of-practice-employment-of-physician-assistants-and-standards-of-conduct/download",
+    "quote": "Copies of such guidelines, however, need not be filed with those agencies.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scheduleIIReview",
+    "value": "Schedule II prescriptions reviewed by supervising physician within 96 hours",
+    "cite": "263 CMR 5.06(3)",
+    "url": "https://www.mass.gov/doc/263-cmr-5-scope-of-practice-employment-of-physician-assistants-and-standards-of-conduct/download",
+    "quote": "shall be reviewed by his or her supervising physician, or by a temporary supervising physician designated pursuant to 263 CMR 5.04(3)(g), within 96 hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "Controlled substance prescribers must be registered under c. 94C",
+    "cite": "M.G.L. c. 94C, s. 18(a)",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXV/Chapter94C/Section18",
+    "quote": "A prescription for a controlled substance may be issued only by a practitioner who is: (1) authorized to prescribe controlled substances; and (2) registered",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.paRegistration",
+    "value": "DPH registers PAs to prescribe under supervising physician guidelines",
+    "cite": "M.G.L. c. 94C, s. 7(g)",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXV/Chapter94C/Section7",
+    "quote": "The commissioner shall promulgate regulations which provide for the registration of physicians assistants to issue written prescriptions",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": "Not required: 263 CMR 3.05 lists 100 CE hours, 4 pharmacology, 40 Category I and c. 94C s. 18(e) training, no NCCPA; NCCPA verification appears only for reinstating a lapsed licence (3.06(1)(c))",
+    "cite": "263 CMR 3.05 and 3.06(1)(c)",
+    "url": "https://www.mass.gov/doc/263-cmr-3-licensure-of-individual-physician-assistants/download",
+    "quote": "an authorization signed by the applicant, authorizing the NCCPA to provide the Board with such information as the Board deems necessary to verify",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.dementia",
+    "value": "One-time cognitive impairment (Alzheimer's and dementia) course; applies only to PAs who serve adult populations",
+    "cite": "M.G.L. c. 112, s. 9F",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section9F",
+    "quote": "include the 1–time completion of a course of training and education on the diagnosis, treatment and care of patients with cognitive impairments",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.massHealthEnrollment",
+    "value": "Applying to participate in MassHealth (for ordering and referring) is a condition of granting or renewing the PA licence",
+    "cite": "M.G.L. c. 112, s. 9F; Board renewal page",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section9F",
+    "quote": "as a condition of granting or renewing a physician assistant's certificate of registration that the physician assistant apply to participate in the medical assistance program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.controlledSubstanceCe.boardAdvisory",
+    "value": "Board advisory (Dec 8, 2016) lists 6 required topics for PAs who prescribe controlled substances and states no hour count",
+    "cite": "Board of Registration of Physician Assistants, Advisory on PA Mandatory CME",
+    "url": "https://www.mass.gov/doc/mandatory-cme-pharmacology/download",
+    "quote": "For those physician assistants who prescribe controlled substances, pursuant to M.G.L.c. 94C §18, physician assistants must complete CMEs in the following topics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.boardSummary.attestations",
+    "value": "Renewal attestation covers 263 CMR 3.05 CE, c. 94C s. 18 prescriber training, Chapter 260 domestic violence training and MassHealth ORP enrollment",
+    "cite": "Board renewal page",
+    "url": "https://www.mass.gov/how-to/renew-your-physician-assistant-license",
+    "quote": "Renew your license every odd year, by March 1st.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.collaborationBillStatus",
+    "value": "S.1502 (194th General Court, PA collaboration) not enacted: last action 5/18/2026, referred to Senate Ways and Means",
+    "cite": "S.1502 bill history",
+    "url": "https://malegislature.gov/Bills/194/S1502",
+    "quote": "Committee recommended ought to pass and referred to the committee on Senate Ways and Means",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.rulesCurrency",
+    "value": "263 CMR 3.00 PDF footer shows 4/25/25 (effective 1/9/25)",
+    "cite": "263 CMR 3.00 footer",
+    "url": "https://www.mass.gov/doc/263-cmr-3-licensure-of-individual-physician-assistants/download",
+    "quote": "4/25/25 (Effective 1/9/25) 263 CMR - 10",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Massachusetts Board of Registration in Nursing",
+   "url": "https://www.mass.gov/how-to/renew-your-nursing-license"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "11:59 PM on the licensee's birthday in even-numbered years (RN and APRN authorization renew together)",
+   "ceHoursPerCycle": 15,
+   "nlcCompact": false,
+   "nlcNote": "Compact enacted November 2024 but not in effect until implementation is complete; Board targets May 2027",
+   "topicMandates": [
+    {
+     "topic": "Alzheimer's disease and dementia (cognitive impairment) training",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "nurses who serve adult populations (c. 112 s. 74, 74A); no prescribed course or hours; renewing licensees had to complete it by November 7, 2022",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    },
+    {
+     "topic": "Domestic and sexual violence training (Chapter 260)",
+     "hours": null,
+     "period": "unverified",
+     "appliesTo": "all nurses; one-time status for nurses not confirmed in a loaded nursing source",
+     "verified": false,
+     "reason": "required by c. 112 s. 264 for licensure and renewal; one-time vs each renewal not stated for nurses in any loaded nursing source"
+    }
+   ],
+   "firstRenewalCeExempt": true
+  },
+  "aprn": {
+   "title": "APRN, clinical category Certified Nurse Practitioner (CNP); also PNMHCS for psychiatric",
+   "separateLicenceOrCertificate": "Board authorization to practice as an APRN attached to the MA RN licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 15,
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Controlled substance prescriber training under M.G.L. c. 94C, s. 18(e)",
+     "hours": null,
+     "period": "every cycle (attested at each renewal)",
+     "appliesTo": "APRNs engaging in prescriptive practice (required for initial authorization and renewal)"
+    }
+   ],
+   "otherRenewalConditions": "Current CNP certification from a Board recognized certifying organization; MassHealth enrollment (billing or non-billing ordering and referring provider)"
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Massachusetts Controlled Substances Registration with DPH under M.G.L. c. 94C plus DEA",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "c. 94C s. 18(e) training at initial authorization and each renewal; no hour count in loaded sources",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "supervision (prescriptive practice guidelines) until 2 years of supervised practice, then none",
+   "transitionToPracticeHours": "2 years of supervised practice after certification (not stated in hours)",
+   "agreementFilingAndRenewal": "During the first 2 years, CNP and PNMHCS guidelines with a Qualified Healthcare Professional must be signed and kept on file in the workplace, available to the Board on request; independence begins on submitting an attestation of 2 years supervised practice to the Board",
+   "authorityNote": "Label derived from statute: independent prescriptive practice after 2 years of supervised practice and a Board attestation (c. 112 s. 80E; 244 CMR 4.07(2)(a)); 'full' is not a term in the primary sources."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalDeadline",
+    "value": "Birthday in even-numbered years for RN and APRN",
+    "cite": "Board renewal page",
+    "url": "https://www.mass.gov/how-to/renew-your-nursing-license",
+    "quote": "Your RN license and APRN authorization expires at 11:59PM on your birthday in even numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "15 hours within the 2 years before renewal",
+    "cite": "244 CMR 5.02",
+    "url": "https://www.mass.gov/doc/244-cmr-5-continuing-education/download",
+    "quote": "15 hours of continuing education within the two years immediately preceding renewal of registration are required for licensure.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.firstRenewalCeExempt",
+    "value": "No CE for first renewal",
+    "cite": "Board CE page",
+    "url": "https://www.mass.gov/info-details/mandatory-continuing-education-for-nurses",
+    "quote": "You do not have to complete any CE requirements for your first renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompact",
+    "value": "Not in effect; implementation targeted May 2027",
+    "cite": "Board NLC page",
+    "url": "https://www.mass.gov/info-details/the-nurse-licensure-compact-nlc",
+    "quote": "the NLC is not in effect in Massachusetts until implementation is complete.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.alzheimers",
+    "value": "One-time cognitive impairment course; statute limits it to nurses who serve adult populations; renewing licensees had to complete it by November 7, 2022",
+    "cite": "Chapter 220 of the Acts of 2018, per Board renewal page",
+    "url": "https://www.mass.gov/how-to/renew-your-nursing-license",
+    "quote": "applicants for initial licensure must complete a one-time course of training and education in the diagnosis, treatment and care of patients with cognitive impairments",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.domesticViolence",
+    "value": "Domestic and sexual violence training required for licensure and renewal (period for nurses unconfirmed)",
+    "cite": "M.G.L. c. 112, s. 264",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section264",
+    "quote": "shall develop and administer standards for licensure, registration or certification pursuant to this chapter, as applicable, and any renewal thereof, that require training",
+    "loaded": true,
+    "verified": false,
+    "verifiedBy": "verifier-2026-10",
+    "reason": "Statute c. 112 s. 264 (loaded) and the Board CE page (loaded, lists 'Domestic and Sexual Violence Training (Chapter 260)') confirm the requirement for nurses; no nursing rule or page states whether it is one-time or every renewal."
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "Current CNP certification required to renew",
+    "cite": "244 CMR 4.05(3)(b)3",
+    "url": "https://www.mass.gov/doc/244-cmr-4-advanced-practice-registered-nursing/download",
+    "quote": "Current CNP certification granted by a Board Recognized APRN Certifying Organization;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.prescriberTraining",
+    "value": "c. 94C s. 18(e) training required at renewal if prescribing",
+    "cite": "244 CMR 4.05(3)(b)5",
+    "url": "https://www.mass.gov/doc/244-cmr-4-advanced-practice-registered-nursing/download",
+    "quote": "If engaging in prescriptive practice, completion of training required pursuant to M.G.L. c. 94C, § 18(e).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPractice",
+    "value": "Independent prescriptive practice after not less than 2 years supervised practice",
+    "cite": "M.G.L. c. 112, s. 80E",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section80E",
+    "quote": "completed not less than 2 years of supervised practice following certification from a board-recognized certifying body",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Guidelines signed and kept on file in the workplace",
+    "cite": "244 CMR 4.07(2)(c)3",
+    "url": "https://www.mass.gov/doc/244-cmr-4-advanced-practice-registered-nursing/download",
+    "quote": "CNP and PNMHCS guidelines shall be signed. The guidelines will be kept on file in the workplace",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.attestation",
+    "value": "Attestation of 2 years supervised practice to the Board ends supervision",
+    "cite": "244 CMR 4.07(2)(a)",
+    "url": "https://www.mass.gov/doc/244-cmr-4-advanced-practice-registered-nursing/download",
+    "quote": "may engage in prescriptive practice without supervision upon submission of an attestation to the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "APRNs register with DPH under c. 94C and with DEA",
+    "cite": "244 CMR 4.07(1)",
+    "url": "https://www.mass.gov/doc/244-cmr-4-advanced-practice-registered-nursing/download",
+    "quote": "eligible to register with the Department of Public Health pursuant to M.G.L. c. 94C and the U.S. Drug Enforcement Administration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.massHealth",
+    "value": "MassHealth enrollment required for all APRNs",
+    "cite": "Board renewal page; M.G.L. c. 112, s. 80B",
+    "url": "https://www.mass.gov/how-to/renew-your-nursing-license",
+    "quote": "Whether you bill MassHealth or not, you still need to enroll as a fully participating provider or as a nonbilling provider.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.alzheimersScope",
+    "value": "Cognitive impairment course is 1-time and applies only to RNs who serve adult populations",
+    "cite": "M.G.L. c. 112, s. 74",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section74",
+    "quote": "such course requirement shall only apply to registered nurses who serve adult populations",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.firstRenewalCeExemptRule",
+    "value": "New licensees need not submit CE for the current registration period",
+    "cite": "244 CMR 5.05(3)",
+    "url": "https://www.mass.gov/doc/244-cmr-5-continuing-education/download",
+    "quote": "New licensees shall not be required to submit evidence of continuing education for the current registration period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.mandatoryReportingAttestation",
+    "value": "Renewal attestation includes compliance with mandatory child abuse and neglect reporting law (c. 119 s. 51A); an attestation, not a training hour requirement",
+    "cite": "Board renewal page",
+    "url": "https://www.mass.gov/how-to/renew-your-nursing-license",
+    "quote": "Mandatory abuse reporting laws, including the reporting of abuse or neglect of children",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.qualifiedHealthcareProfessional",
+    "value": "Supervisor during the first 2 years may be a physician or a CNP/CRNA/PNMHCS with qualifying independent practice years",
+    "cite": "244 CMR 4.07(1)",
+    "url": "https://www.mass.gov/doc/244-cmr-4-advanced-practice-registered-nursing/download",
+    "quote": "either: a. a combination of supervised practice for a minimum of two years plus independent practice authority for a minimum of one year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceForPrescribers",
+    "value": "During each APRN authorization renewal period the APRN must meet state and federal CE requirements tied to the MCSR",
+    "cite": "244 CMR 4.07(5)",
+    "url": "https://www.mass.gov/doc/244-cmr-4-advanced-practice-registered-nursing/download",
+    "quote": "subsequently during each APRN authorization renewal period the APRN must comply with all state and federal requirements for continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.massHealthStatute",
+    "value": "Applying to participate in MassHealth is a condition of granting or renewing APRN authorization",
+    "cite": "M.G.L. c. 112, s. 80B",
+    "url": "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section80B",
+    "quote": "as a condition of granting or renewing authorization in advanced practice nursing, that the nurse apply to participate in the medical assistance program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA and APRN controlled substance prescriber training (M.G.L. c. 94C, s. 18(e)): no hour count exists in the statute, 263 CMR, 244 CMR or the PA Board's 2016 advisory; whether new hours are needed every cycle or one completed program suffices is not stated.",
+  "Domestic and sexual violence training for nurses: required by c. 112 s. 264 and listed on the Board CE page; one-time vs every renewal is not stated in any loaded nursing source.",
+  "Practice authority label 'full' for MA NPs is derived from c. 112 s. 80E and 244 CMR 4.07(2) (independent after 2 years supervised practice plus attestation); the label is not a primary source term.",
+  "263 CMR 5.00 PDF text carries no visible revision footer; contents checked against 263 CMR 3.05(3) and match."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "PA: added missed one-time cognitive impairment (Alzheimer's/dementia) course for PAs serving adult populations (M.G.L. c. 112, s. 9F); the researcher had marked it unconfirmed for PAs.",
+   "PA: added missed MassHealth participation as a condition of granting or renewing the PA licence (c. 112 s. 9F; Board renewal page attestation).",
+   "PA: Board 'Mandatory CME - Pharmacology' document now loaded (it is a PDF at /doc/mandatory-cme-pharmacology/download, Dec 8, 2016 advisory): 6 topics, no hour count. Hours stay null.",
+   "PA: c. 94C s. 18(e) training period changed from a bare 'every cycle' to 'attested at each renewal' with a note that repetition of new hours each cycle is not stated in statute, rule or advisory.",
+   "PA: domestic violence fact quote replaced with 263 CMR 3.08(1) text showing it is a condition of licensure and renewal; 3.08(3) one-time exemption kept.",
+   "PA: S.1502 status now confirmed on malegislature.gov bill history (Senate Ways and Means since 5/18/2026, not enacted); 263 CMR 3.00 currency confirmed from the PDF footer (4/25/25, effective 1/9/25).",
+   "NP: Alzheimer's/dementia one-time course scope corrected: statute (c. 112 s. 74) limits it to nurses who serve adult populations; the researcher had 'all nurses'.",
+   "NP: domestic violence training period for nurses set to 'unverified' (was 'one-time'); statute and Board CE page confirm the requirement but not the period.",
+   "NP: added 244 CMR 5.05(3) as the rule source for the first-renewal CE exemption, the Qualified Healthcare Professional definition (244 CMR 4.07(1)), 244 CMR 4.07(5) CE duty each renewal, and c. 112 s. 80B MassHealth condition (the 244 CMR 4.05(3)(b) renewal list itself omits MassHealth; it is in the statute and on the Board renewal page).",
+   "NP: c. 94C s. 18(e) training period recorded as attested at each renewal; no hour count anywhere."
+  ],
+  "sourcesLoaded": [
+   "https://www.mass.gov/how-to/renew-your-physician-assistant-license (built-in browser)",
+   "https://www.mass.gov/doc/263-cmr-3-licensure-of-individual-physician-assistants/download (Chrome, pdf.js)",
+   "https://www.mass.gov/doc/263-cmr-5-scope-of-practice-employment-of-physician-assistants-and-standards-of-conduct/download (Chrome, pdf.js)",
+   "https://www.mass.gov/doc/mandatory-cme-pharmacology/download (Chrome, pdf.js)",
+   "https://www.mass.gov/how-to/renew-your-nursing-license (Chrome)",
+   "https://www.mass.gov/info-details/mandatory-continuing-education-for-nurses (Chrome)",
+   "https://www.mass.gov/info-details/the-nurse-licensure-compact-nlc (Chrome)",
+   "https://www.mass.gov/doc/244-cmr-5-continuing-education/download (Chrome, pdf.js)",
+   "https://www.mass.gov/doc/244-cmr-4-advanced-practice-registered-nursing/download (Chrome, pdf.js)",
+   "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXV/Chapter94C/Section18",
+   "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXV/Chapter94C/Section7",
+   "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section9E",
+   "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section9F",
+   "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section74",
+   "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section80B",
+   "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section80E",
+   "https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section264",
+   "https://malegislature.gov/Bills/194/S1502"
+  ]
+ }
+}

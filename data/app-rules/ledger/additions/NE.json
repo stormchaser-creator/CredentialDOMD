@@ -1,0 +1,38 @@
+{
+ "state": "NE",
+ "facts": [
+  {
+   "field": "np.rn.graduationRoutes",
+   "profession": "np",
+   "value": "Graduated two to five years ago plus 20 contact hours, or graduated within the last two years",
+   "cite": "DHHS Nurse Licensing Renewal and Continuing Education",
+   "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+   "quote": "Have graduated from a nursing program in more than two, but less than five years AND have completed at least 20 contact hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.newLicenseWaiver",
+   "profession": "np",
+   "value": "RN license received within the past 24 months: CE not required",
+   "cite": "DHHS Nurse Licensing Renewal and Continuing Education",
+   "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+   "quote": "Waiver: Received RN or LPN license within the past 24 months. NOTE: Continuing education is not required",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.refresherPortfolio",
+   "profession": "np",
+   "value": "Refresher course in five years, or a continuing competency portfolio",
+   "cite": "DHHS Nurse Licensing Renewal and Continuing Education",
+   "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+   "quote": "Have completed an approved refresher course within the last five years ... Have developed and maintained a portfolio",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

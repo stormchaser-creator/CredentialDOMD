@@ -1,0 +1,71 @@
+{
+ "state": "IA",
+ "facts": [
+  {
+   "field": "pa.board.page",
+   "profession": "pa",
+   "value": "Iowa Board of Physician Associates page",
+   "cite": "Iowa DIAL, Physician Associates",
+   "url": "https://dial.iowa.gov/licenses/health-professions/physician-associates",
+   "quote": "The Iowa Board of Physician Associates evaluates the qualifications of applicants for licensure and grants licenses to those who qualify",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.board.page",
+   "profession": "np",
+   "value": "Iowa Board of Nursing page",
+   "cite": "Iowa DIAL, Nursing & Professional Midwifery",
+   "url": "https://dial.iowa.gov/licenses/health-professions/nursing-professional-midwifery",
+   "quote": "The mission of the Iowa Board of Nursing is to protect the public health, safety and welfare by regulating the licensure of nurses",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.categoryIProviders",
+   "profession": "pa",
+   "value": "Category I by AAPA, AMA, AOA CCME, AAFP or ACCME accredited organizations",
+   "cite": "481 IAC 782.3(2)(a)",
+   "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.782.pdf",
+   "quote": "the American Medical Association, the American Osteopathic Association Council on Continuing Medical Education, the American Academy of Family Physicians",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.carryover",
+   "profession": "pa",
+   "value": "Up to 50 percent of the required hours (maximum 50) may carry to the next period",
+   "cite": "481 IAC 782.2(1)",
+   "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.782.pdf",
+   "quote": "may apply up to 50 percent of the required hours to the following renewal period ... a maximum of 50 hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.mandatoryReporter.regularly",
+   "profession": "np",
+   "value": "Applies to a licensee who regularly examines, attends, counsels or treats children (or adults) in Iowa",
+   "cite": "481 IAC 617.8(3)(d)(2), (3)",
+   "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.617.pdf",
+   "quote": "A licensee who regularly examines, attends, counsels or treats children in Iowa must indicate on the renewal application completion of training",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.initialPeriod",
+   "profession": "np",
+   "value": "Initial licenses run 24 to 36 months, then a three-year cycle",
+   "cite": "481 IAC 617.8(2)",
+   "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.617.pdf",
+   "quote": "The board shall issue licenses by endorsement and examination for a 24- to 36-month period ... placed on a three-year renewal cycle",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -1,0 +1,115 @@
+{
+ "state": "AL",
+ "facts": [
+  {
+   "field": "pa.ce.period",
+   "profession": "pa",
+   "value": "Two calendar years from January 1, 2025",
+   "cite": "Ala. Admin. Code r. 540-X-7-.29(1)",
+   "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+   "quote": "Effective January 1, 2025, every two calendar years, each physician assistant licensed by the Board must earn not less than fifty (50) hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.equivalents.aoa",
+   "profession": "pa",
+   "value": "AOA Category 1-A is equivalent to AMA PRA Category 1",
+   "cite": "Ala. Admin. Code r. 540-X-7-.29(3)(a)",
+   "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+   "quote": "Programs of continuing medical education designated as Category 1-A which are sponsored or conducted by organizations or entities accredited by the American Osteopathic Association",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.equivalents.aafp",
+   "profession": "pa",
+   "value": "AAFP Prescribed credit is equivalent to AMA PRA Category 1",
+   "cite": "Ala. Admin. Code r. 540-X-7-.29(3)(b)",
+   "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+   "quote": "designated to confer \"Prescribed credits\" which are sponsored or conducted by organizations or entities accredited by the American Academy of Family Physicians",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.equivalents.other",
+   "profession": "pa",
+   "value": "Board-designated programs, ACOG Cognate credits, and advanced life support courses (2 credits each; BLS excluded)",
+   "cite": "Ala. Admin. Code r. 540-X-7-.29(3)(c), (d), (f)",
+   "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+   "quote": "designated as such by the Alabama Board of Medical Examiners ... ACOG Cognate Credits ... maximum of two (2) Category 1 credits for each course",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.exemptions",
+   "profession": "pa",
+   "value": "Exempt the calendar year of initial licensure and a calendar year of military deployment",
+   "cite": "Ala. Admin. Code r. 540-X-7-.29(7), (8)",
+   "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+   "quote": "is exempt from the minimum continuing medical education requirement for the calendar year in which he or she receives his or her initial license",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.supervisedPracticeWindow",
+   "profession": "pa",
+   "value": "Within 48 months before or 12 months after registration to a physician",
+   "cite": "Ala. Admin. Code r. 540-X-7-.03(2)",
+   "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-7",
+   "quote": "not more than forty-eight (48) months prior to or within twelve (12) months of registration to a physician",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.aprn.pharmacologyRenewal",
+   "profession": "np",
+   "value": "6 contact hours of pharmacology at every CRNP renewal (no prescribing condition)",
+   "cite": "Ala. Admin. Code r. 610-X-9-.16(5)(d)",
+   "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+   "quote": "Approval for advanced practice may be continued at the time of renewal, upon verification of ... Six contact hours of pharmacology",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.aprn.collaborativePracticeWindow",
+   "profession": "np",
+   "value": "Within 48 months before or 12 months after commencement of collaborative practice",
+   "cite": "Ala. Admin. Code r. 610-X-9-.16(5)(e)",
+   "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+   "quote": "not more than forty-eight (48) months prior to or within twelve (12) months of commencement of the collaborative practice",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.aprn.firstRenewalPharmacology",
+   "profession": "np",
+   "value": "No pharmacology hours at the first renewal when one year or less remained at initial approval",
+   "cite": "Ala. Admin. Code r. 610-X-4-.08(7)(d)",
+   "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+   "quote": "If one year or less remains in the license period at the time of initial approval ... pharmacology are not required",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.firstRenewalProration",
+   "profession": "np",
+   "value": "First renewal: 4 Board-provided hours plus one hour per remaining month, up to 24",
+   "cite": "Ala. Admin. Code r. 610-X-4-.08(3)(c)3.(i)",
+   "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+   "quote": "first license renewal, earn four contact hours of Board-provided continuing education ... one contact hour for each calendar month remaining ... maximum of 24",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

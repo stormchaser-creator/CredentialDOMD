@@ -79,7 +79,8 @@ test("a file shared alone carries a title and a short email, not an empty body",
   assert.match(read("src/utils/cvPdf.js"), /navigator\.share\(\{ title, text, files: \[file\] \}\)/);
   // fix/links-iphone hands the share to shareAtHandoff; the payload is the same.
   assert.match(read("src/utils/cmeTranscriptPdf.js"), /shareAtHandoff\(\{ title, text, files:/);
-  assert.match(read("src/utils/cmeTranscriptPdf.js"), /fileName: transcriptFileName\(stateName, physicianBlock\(data\)\)/);
+  // feat/np-pa: a PA's or NP's transcript names its licence kind; MD and DO keep this name.
+  assert.match(read("src/utils/cmeTranscriptPdf.js"), /fileName: app\s+\? transcriptFileName\([^\n]+\n\s+: transcriptFileName\(stateName, physicianBlock\(data\)\)/);
 });
 
 test("references name whose they are, number each person and sign off", () => {

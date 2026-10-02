@@ -1,0 +1,169 @@
+{
+  "state": "AZ",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Arizona Regulatory Board of Physician Assistants",
+      "url": "https://www.azpa.gov/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycle",
+        "reason": "The license renews every two years."
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.biennialRule"
+      },
+      "total": {
+        "value": 40,
+        "fact": "pa.ce.biennialRule"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A"
+        ],
+        "facts": [
+          "pa.ce.acceptedSponsors",
+          "pa.ce.hoursPerCycle"
+        ]
+      },
+      "totalUnverifiedAccepted": [
+        "AAFP Prescribed Credit",
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "bodiesVerified": false,
+        "covers": [
+          "total"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu",
+        "note": "Arizona deems the hours met by certification from a certifying body the board approves; the board's naming of NCCPA is not yet verified."
+      },
+      "notes": [
+        {
+          "text": "During the first biennial license period the Board sets a pro-rated number of hours.",
+          "fact": "pa.ce.firstPeriodProration"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 3,
+        "label": "Opioid related, substance use disorder related or addiction related CE, part of the 40 hours",
+        "facts": [
+          "pa.ce.boardOpioidPage",
+          "pa.ce.topicMandates.opioid"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "conditional": true,
+        "text": "Under 8,000 board certified clinical practice hours a signed supervision agreement is kept on file at the main practice location. With 8,000 certified hours no supervision agreement is required; the PA continues to collaborate with, consult or refer.",
+        "facts": [
+          "pa.practice.supervisionAgreement",
+          "pa.practice.agreementFiling",
+          "pa.practice.after8000"
+        ]
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Arizona State Board of Nursing",
+      "url": "https://www.azbn.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 4,
+          "fact": "np.rn.renewalCycle"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "facts": [
+            "np.rn.practiceRequirement",
+            "np.rn.boardRenewalPage"
+          ],
+          "reason": "Renewal rests on nursing practice hours in the five years before renewal or the listed alternatives; the rule and the board's renewal page name no CE hours."
+        },
+        "cycleYears": {
+          "value": 4,
+          "fact": "np.rn.renewalCycle"
+        }
+      },
+      "practiceHours": {
+        "hours": 960,
+        "years": 5,
+        "facts": [
+          "np.rn.practiceRequirement",
+          "np.rn.practiceAlternatives"
+        ],
+        "label": "At least 960 practice hours in the 5 years before this renewal, or a post-licensure nursing degree or advanced practice certificate within the past five years"
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "Renewal requires current national certification and APRN practice hours; no state CE hours are set.",
+        "cycleYears": {
+          "value": 4,
+          "facts": [
+            "np.rn.renewalCycle",
+            "np.aprn.expiry"
+          ],
+          "reason": "The certificate expires with the four-year RN license, or earlier when national certification expires."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "practiceHours": {
+        "hours": 960,
+        "years": 5,
+        "facts": [
+          "np.aprn.practiceRequirement",
+          "np.aprn.practiceAlternatives"
+        ],
+        "label": "At least 960 advanced practice hours in the 5 years before this renewal, or an advanced practice nursing education program completed within the past five years"
+      },
+      "topics": [
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 3,
+          "label": "Opioid related, substance use disorder related or addiction related CE, each renewal cycle",
+          "facts": [
+            "np.aprn.topicMandates.opioid",
+            "np.aprn.boardRenewalPage"
+          ],
+          "condition": {
+            "field": "Holds a DEA registration",
+            "question": "Do you hold an active DEA registration?",
+            "description": "Applies to DEA registered prescribers."
+          }
+        }
+      ]
+    }
+  }
+}

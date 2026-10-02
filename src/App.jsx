@@ -8,6 +8,9 @@ import {
   StarIcon,
 } from "./components/shared/Icons";
 import EmptyState from "./components/shared/EmptyState";
+import GetStartedCard from "./components/features/GetStartedCard";
+import ProfessionPicker, { chooseProfessionThen } from "./components/features/ProfessionPicker";
+import { alertWriteRefused } from "./utils/limitedLaunchAccess.js";
 import CustomCategorySection, { NewCategoryPanel } from "./components/features/CustomCategorySection";
 import { liveCategories, unsortedRecords, categoryLabelFor } from "./utils/customCategories";
 import SideNav from "./components/shared/SideNav";
@@ -89,22 +92,30 @@ import {
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
 } from "./constants";
 import { boardComplianceFor, aoaNationalEntry } from "./utils/boardCompliance";
-import { licenseFields, privilegeFields, insuranceFields } from "./utils/credentialForms";
+import { certificationCards, certificationRingComps } from "./utils/certCompliance";
+import { licenseFields, licenseTypeTab, privilegeFields, insuranceFields } from "./utils/credentialForms";
 import { isAlertable, isInactive, lifecycleNote, needsResolution, LIFECYCLE_LABELS, lifecycleOf } from "./utils/lifecycle";
 import { licenseDeskColumns } from "./components/features/licenseDeskColumns";
 import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
 } from "./utils/helpers";
 import ConditionalCmeTopics from "./components/shared/ConditionalCmeTopics";
+import AppCardDetails from "./components/shared/AppCardDetails";
+import RecordQuestions from "./components/shared/RecordQuestions";
+import ProfessionReviewCard from "./components/shared/ProfessionReviewCard";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
-import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel } from "./utils/cmePresentation";
-import { complianceFor, standingScore, findStateLicense, windowNotes, splitByCycle, alertingStates, resolvePendingLicense, cmeTopics } from "./utils/compliance";
+import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine, certificationMetLine } from "./utils/cmePresentation";
+import { complianceFor, complianceListFor, standingScore, windowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
+import { isPracticeLicense, isAdvancedPractice } from "./constants/professions";
+import { getEducationTypes } from "./constants/credentialTypes";
+import { professionMismatches } from "./utils/professionReview";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
 import { credentialRecords, alertRecords, lapsingRecords } from "./utils/alertItems.js";
 import { daysUntilDate, localToday } from "./utils/dateDays.js";
 import { clearStateBanner, openActionItems } from "./utils/clearState";
 import { selectFavorites } from "./utils/favorites";
 import { accessGateStatus } from "./utils/accessGateStatus.js";
+import { reloadPage } from "./utils/pageLeave.js";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -283,7 +294,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // default from the cases themselves (defaultCaseLogYear), below.
   const [caseLogYearPick, setCaseLogYear] = useState(null);
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, loaded, recordsLoadIssue, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
+  const { data, loaded, recordsLoadIssue, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, updateSettings, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
   const defaultCaseYear = useMemo(() => defaultCaseLogYear(data.caseLogs), [data.caseLogs]);
   const caseLogYear = caseLogYearPick ?? defaultCaseYear;
   // Admin, from public.app_admins by way of ai-proxy's status GET. A hook, so
@@ -390,7 +401,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // tab opened on, not yet on view, is kept for the page that loads next.
   const reloadKeepingLink = useCallback(() => {
     if (deepLink) stashAppDeepLink(deepLink);
-    window.location.reload();
+    reloadPage();
   }, [deepLink]);
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
@@ -595,8 +606,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // separate file in the same share. A certificate that could not be read is
   // named in the PDF's index as not included, and the physician is told.
   // When no PDF can be built for a state (no window, no entries) it says why.
-  const sendRenewalPacket = useCallback(async (st) => {
-    const model = stateTranscriptModel(data, st, { certFiles: packetCerts });
+  // `kind` is a PA's or NP's card licence ("aprn", "rn", "pa"); a physician's
+  // card passes none and gets the state's medical licence transcript.
+  const sendRenewalPacket = useCallback(async (st, kind) => {
+    const model = kind ? stateTranscriptModel(data, st, { certFiles: packetCerts, kind }) : stateTranscriptModel(data, st, { certFiles: packetCerts });
     if (model.error) { window.alert(model.error); return; }
     // Logged as the file goes to the share sheet (a desktop download is not
     // a send, and share_log's method CHECK has no "download"). On the iPhone
@@ -787,8 +800,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     if (data.settings.degreeType === "DO" && data.cme.length > 0 && !list.some(b => b.source === "AOA")) {
       list.unshift(aoaNationalEntry(data));
     }
+    // A PA's NCCPA card and an NP's certifier cards, anchored on their own
+    // certification records (src/utils/certCompliance.js). A record whose
+    // role is not answered yet is left to the record's question.
+    for (const c of certificationCards(data)) if (!c.needsRole) list.push(c);
     return list;
   }, [data]);
+  const certRoleQuestions = useMemo(() => certificationCards(data).filter(c => c.needsRole), [data]);
 
   // The setup board, derived from the records themselves. Memoized the way
   // the other Home cards are, because buildSetup walks most collections.
@@ -811,9 +829,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     const s = data.settings;
     const gaps = [];
     if (!s.name) gaps.push("your name");
-    if (!s.degreeType) gaps.push("degree (MD or DO, which decides the CME rules that apply)");
+    if (!s.degreeType) gaps.push("profession (MD, DO, PA or NP, which decides the rules that apply)");
     if (!s.primaryState) gaps.push("primary state");
-    if (!(s.specialties || []).length) gaps.push("board specialty (drives your board's CME requirements)");
+    // A PA's or NP's certification is asked in setup, never a board specialty.
+    if (!isAdvancedPractice(s.degreeType) && !(s.specialties || []).length) gaps.push("board specialty (drives your board's CME requirements)");
     if (!s.npi) gaps.push("NPI");
     if (!s.email) gaps.push("email");
     return gaps;
@@ -888,23 +907,23 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   const statesMissingLicense = useMemo(() => {
     // A historical or superseded record says nothing about a state today.
     const current = (data.licenses || []).filter(l => !isInactive(l));
-    const licensed = new Set(current.filter(l => l.state && /medical license/i.test(l.type || "")).map(l => l.state));
+    // The profession's practice licence (a medical licence for MD, DO and
+    // blank, as before; a PA licence; an APRN or RN licence).
+    const licensed = new Set(current.filter(l => l.state && isPracticeLicense(l, data.settings.degreeType)).map(l => l.state));
     const out = new Set();
     for (const l of current) {
       if (l.state && !licensed.has(l.state)) out.add(l.state);
     }
     return [...out];
-  }, [data.licenses]);
+  }, [data.licenses, data.settings.degreeType]);
 
   // Per-state CME compliance, anchored to each license's renewal window,
   // sorted soonest-deadline-first. Drives the home cards AND the ring.
+  // One card per state for physicians (as before); a PA licence card per
+  // state, and an NP's APRN and RN cards (compliance.js complianceListFor).
   const stateComps = useMemo(() =>
-    allTrackedStates.map(st => ({
-      st,
-      comp: complianceFor(data, st),
-      lic: findStateLicense(data.licenses, st),
-    })).sort((a, b) => (a.comp.daysLeft ?? 9e9) - (b.comp.daysLeft ?? 9e9)),
-  [allTrackedStates, data]);
+    complianceListFor(data).sort((a, b) => (a.comp.daysLeft ?? 9e9) - (b.comp.daysLeft ?? 9e9)),
+  [data]);
 
   // The states whose CME the ring counts: the states of licences that can
   // alert, and the primary and Settings picks where no licence is held. A
@@ -913,9 +932,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // review records" under it, even when the NPI import saved its state
   // among the picks (HOME-013, compliance.js alertingStates).
   const ringComps = useMemo(() => {
-    const counted = new Set(alertingStates(data.settings.primaryState, data.settings.additionalStates, data.licenses));
+    const counted = new Set(alertingStates(data.settings.primaryState, data.settings.additionalStates, data.licenses, data.settings.degreeType));
     return stateComps.filter(x => counted.has(x.st));
-  }, [stateComps, data.settings.primaryState, data.settings.additionalStates, data.licenses]);
+  }, [stateComps, data.settings.primaryState, data.settings.additionalStates, data.licenses, data.settings.degreeType]);
 
   // Standing score for the ring: an item is good only while it expires beyond
   // the reminder window; inside the window, past it, missing a required date,
@@ -923,10 +942,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // standingScore leaves historical, superseded, pending and date-unknown
   // records out of the ring entirely (src/utils/lifecycle.js), and ringComps
   // leaves out the CME of a state only such a record is held in.
+  // A PA's NCCPA card and an NP's certifier cards count in the ring like a
+  // state card (certCompliance.js certificationRingComps): a credit shortfall
+  // on the certification a renewal depends on lowers it inside the lead window.
+  const certRingComps = useMemo(() => certificationRingComps(data), [data]);
   const standing = useMemo(() => standingScore({
-    items: lapsingCreds, missingRequired: missingExpiration, stateComps: ringComps,
+    items: lapsingCreds, missingRequired: missingExpiration, stateComps: [...ringComps, ...certRingComps],
     leadDays: reminderLeadDays(data.settings.reminderLeadDays),
-  }), [lapsingCreds, missingExpiration, ringComps, data.settings.reminderLeadDays]);
+  }), [lapsingCreds, missingExpiration, ringComps, certRingComps, data.settings.reminderLeadDays]);
   const compliancePercent = standing.percent;
 
   // Credential counts for ring stats
@@ -1151,7 +1174,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     // Hero: Compliance Ring + Stats. The ring's companion numbers are read
     // by the phone's stat rows and the desk's stat tiles alike.
     const cmeSummary = cmeReviewSummary(ringComps);
-    const reviewCmeState = (st) => setCmeDetail({ st });
+    // A PA or NP card opens with its own kind (an NP's RN card, not the APRN default).
+    const reviewCmeState = (st, kind) => setCmeDetail(kind ? { st, kind, comp: complianceFor(data, st, kind) } : { st });
     const openCmeProfile = () => { setTab("more"); setSubPage("settings"); };
     const openCmeLicenses = () => { setTab("credentials"); setSubPage("licenses"); };
     const allCurrent = credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && credStats.undated === 0;
@@ -1161,13 +1185,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 0 }}>
         {standing.needsAction.slice(0, max).map(({ item, days }) => {
           const isCme = item._sec === "cme" && String(item.id).startsWith("cme:");
-          const label = isCme ? `${item.state} CME${item.needsConfirmation ? ": confirm applicability" : ""}` : describeItem(item, data.settings.name, item._sec);
+          const label = isCme ? `${item.title || item.state} ${item.ceNoun || "CME"}${item.needsConfirmation ? ": confirm applicability" : ""}` : describeItem(item, data.settings.name, item._sec);
           const when = item.needsConfirmation ? "review rule" : days == null ? (isCme ? "review records" : "no expiration date")
             : days < 0 ? `expired ${-days} day${-days === 1 ? "" : "s"} ago`
             : days === 0 ? "expires today" : `${days} day${days === 1 ? "" : "s"} left`;
           const color = item.needsConfirmation ? T.textMuted : days != null && days < 0 ? T.danger : T.warning;
           const go = () => {
-            if (isCme) { reviewCmeState(item.state); return; }
+            if (isCme && item.kind === "cert") { setTab("credentials"); setSubPage("cme"); return; }
+            if (isCme) { reviewCmeState(item.state, item.kind); return; }
             setTab("credentials"); setSubPage(item._rail || item._sec);
             setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" });
           };
@@ -1284,18 +1309,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
         </div>
       </div>
     );
+    // A blank profession is asked on this card before any licence is added
+    // (GetStartedCard), so a PA never files her licence under physician types.
+    // A refused save opens nothing: the form would offer the physician list.
     const getStarted = (
-      <div onClick={() => openAddIn("licenses")} style={{
-        backgroundColor: T.card, borderRadius: 16, padding: "32px 24px",
-        marginBottom: 16, cursor: "pointer", border: `2px dashed ${T.border}`,
-        textAlign: "center", boxShadow: T.shadow1,
-      }}>
-        <div style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: T.accentDim, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-          <AsclepiusIcon size={26} color={T.accent} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 4 }}>Get Started</div>
-        <div style={{ fontSize: 14, color: T.textMuted }}>Add your medical license to begin tracking credentials</div>
-      </div>
+      <GetStartedCard
+        degreeType={data.settings.degreeType}
+        onAdd={() => openAddIn("licenses")}
+        onChooseProfession={(d) => chooseProfessionThen(updateSettings, d, () => openAddIn("licenses"), () => alertWriteRefused({ scope: "credential" }))}
+        theme={T}
+      />
     );
     const hero = allCreds.length > 0 ? (isDesktop ? deskHero : phoneHero) : getStarted;
 
@@ -1532,9 +1555,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     const homeModals = (
       <>
         {/* CME math — which entries counted, which didn't, and why */}
-        <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? `${cmeDetail.st} CME: the math` : "CME"}>
+        <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? (cmeDetail.comp?.profession ? `${appCardTitle(cmeDetail.comp)}: the math` : `${cmeDetail.st} CME: the math`) : "CME"}>
           {cmeDetail && (() => {
-            const comp = complianceFor(data, cmeDetail.st);
+            const comp = complianceFor(data, cmeDetail.st, cmeDetail.kind);
             const deg = data.settings.degreeType;
             // The credit types the engine actually filtered on. This used to be
             // recomputed here from the degree, which for a CA DO listed AMA PRA
@@ -1550,7 +1573,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
               <>
                 <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
                   <strong style={{ color: T.text }}>{comp.windowLabel}.</strong>
-                  {comp.daysLeft != null && ` ${comp.daysLeft} days left.`} Only hours dated inside this window count toward this renewal.
+                  {(comp.periodDaysLeft ?? comp.daysLeft) != null && ` ${comp.periodDaysLeft ?? comp.daysLeft} days left.`} Only hours dated inside this window count toward this renewal.
                   {windowNotes(comp).map((n, i) => (
                     <div key={i} style={{ marginTop: 4, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
                   ))}
@@ -1560,11 +1583,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                 <ConditionalCmeTopics comp={comp} />
                 {/* Requirement scoreboard */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                  {!comp.noGeneralReq && (
+                  {!comp.noGeneralReq && comp.totalRequired != null && (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
                       <span style={{ color: T.text, fontWeight: 600 }}>Total logged hours</span>
                       <span style={{ fontWeight: 800, color: comp.totalMet ? T.success : T.warning }}>{comp.totalEarned} / {comp.totalRequired}</span>
                     </div>
+                  )}
+                  {certificationMetLine(comp) && (
+                    <div style={{ fontSize: 12.5, color: T.textMuted, padding: "0 10px" }}>{certificationMetLine(comp)}</div>
                   )}
                   {comp.cat1Required > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
@@ -1639,7 +1665,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                 )}
                 <RuleProvenance
                   reportKey={cmeDetail.st}
-                  subject={`${cmeDetail.st}${hasSeparateBoards(cmeDetail.st) ? ` (${deg || "MD"})` : ""}`}
+                  subject={comp.profession ? appCardTitle(comp) : `${cmeDetail.st}${hasSeparateBoards(cmeDetail.st) ? ` (${deg || "MD"})` : ""}`}
                   citation={comp.source}
                   meta={STATE_REQS_META}
                   verified={comp.verified}
@@ -1918,36 +1944,57 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
         }}>Find CME</button>
       </div>
     );
+    const homeDeg = data.settings.degreeType;
+    const missingNoun = homeDeg === "PA" ? "physician assistant license" : homeDeg === "NP" ? "APRN or RN license" : "medical license";
+    const missingCe = homeDeg === "NP" ? "CE" : "CME";
     const licenseWarnings = statesMissingLicense.map(st => (
       <button key={`ml-${st}`} onClick={() => { setTab("credentials"); setSubPage("licenses"); }} style={{
         textAlign: "left", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`,
         borderRadius: 14, padding: "12px 14px", cursor: "pointer",
       }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.warning }}>
-          {st}: no medical license on file
+          {st}: no {missingNoun} on file
         </div>
         <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
-          You have a {st} credential (like a DEA registration) but the {st} medical
-          license itself isn't in the app. Add it and {st} CME &amp; renewal tracking
+          You have a {st} credential (like a DEA registration) but the {st} {missingNoun} itself isn't in the app. Add it and {st} {missingCe} &amp; renewal tracking
           turn on automatically. Tap to add it.
         </div>
       </button>
     ));
-    const renderStateCard = ({ st, comp, lic }) => {
+    // A PA or NP: records filed under the other profession's types, and
+    // certification records whose role is not answered yet (DESIGN 4.2,
+    // decision 16). An MD or DO holding a PA or NP typed record sees the
+    // review too.
+    if (professionMismatches(data).length) licenseWarnings.push(<ProfessionReviewCard key="profession-review" />);
+    for (const c of certRoleQuestions) {
+      const record = (data.licenses || []).find(l => l && l.id === c.recordId);
+      if (!record) continue;
+      licenseWarnings.push(
+        <div key={c.id} style={{ textAlign: "left", backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 14, padding: "12px 14px" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.label}</div>
+          <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>This certifier also certifies other roles. Say which this is and its renewal card appears here.</div>
+          <RecordQuestions item={record} />
+        </div>
+      );
+    }
+    const renderStateCard = ({ st, key, kind, comp, lic }) => {
       const unmetTopics = comp.topicResults.filter(t => !t.met);
       const dl = comp.daysLeft;
       const urgency = dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok";
       // A licence here that is still a Resolve task is on file, just not dated.
-      const waiting = comp.windowAnchored ? null : resolvePendingLicense(data.licenses, st);
+      const waiting = comp.windowAnchored ? null : resolvePendingLicense(data.licenses, st, kind || "medical");
+      // A PA or NP card: full state name and licence, the board link when a
+      // rule is not yet verified, and never a physician number.
+      const app = !!comp.profession;
       return (
-        <div key={st} onClick={() => setCmeDetail({ st, comp })} style={{
+        <div key={key ?? st} onClick={() => setCmeDetail({ st, kind, comp })} style={{
           backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
           boxShadow: T.shadow1, cursor: "pointer",
           borderLeft: `3px solid ${comp.fullyCompliant ? T.success : comp.assessmentStatus === "needs-confirmation" ? T.border : T.warning}`,
         }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{st}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{app ? appCardTitle(comp) : st}</span>
               {st === data.settings.primaryState && (
                 <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, backgroundColor: T.accentDim, padding: "2px 6px", borderRadius: 4 }}>PRIMARY</span>
               )}
@@ -1971,7 +2018,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <span style={{ fontSize: 12, color: T.textDim }}>
               {comp.windowAnchored
-                ? `License renews ${formatDate(lic.expirationDate)}`
+                ? anchoredRenewalLine(comp, lic.expirationDate)
+                : app ? appRenewalLine(comp, waiting ? lifecycleNote(waiting) : null, undatedLicenseOnFile(data.licenses, st, kind))
                 : rollingWindowLabel(st, comp.cycle, waiting ? lifecycleNote(waiting) : null)}
             </span>
             {dl != null && (
@@ -1996,7 +2044,18 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           </div>
 
           <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>{cmeAssessmentLabel(comp)}</div>
+          {app && comp.boardUrl && (!comp.rulesVerified || (comp.unverifiedItems || []).length > 0) && (
+            <a href={comp.boardUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: 32, boxSizing: "border-box", marginBottom: 4 }}>
+              {comp.board || "Board website"} &rarr;
+            </a>
+          )}
+          {/* Unverified rules (the label says so) and unverified items both say
+              when no verified board link exists. */}
+          {app && !comp.boardUrl && comp.rulesVerified && (comp.unverifiedItems || []).length > 0 && (
+            <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>Board link not yet verified.</div>
+          )}
           <ConditionalCmeTopics comp={comp} />
+          <AppCardDetails comp={comp} lic={lic} />
           {/* Progress bar */}
           {!comp.noGeneralReq && comp.totalRequired > 0 && (
             <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginBottom: unmetTopics.length > 0 ? 8 : 0 }}>
@@ -2038,7 +2097,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           )}
           {needsPriorCompletionReview(comp) && <p style={{ fontSize: 11.5, color: T.textMuted, lineHeight: 1.5 }}>{PRIOR_COMPLETION_NOTE}</p>}
           <div style={{ marginTop: 8 }}>
-            <button onClick={(e) => { e.stopPropagation(); sendRenewalPacket(st); }} style={{
+            <button onClick={(e) => { e.stopPropagation(); sendRenewalPacket(st, app ? kind : undefined); }} style={{
               padding: "6px 12px", minHeight: 32, fontSize: 12, fontWeight: 700, borderRadius: 8,
               border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer",
             }}>
@@ -2053,21 +2112,21 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     // Board certification standing \u2014 cycle-windowed, from Settings \u2192
     // Board Specialties. Replaces the old lifetime-sum AOA card.
     const boardHeading = (
-      <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>Board Certification</h3>
+      <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>{isAdvancedPractice(data.settings.degreeType) ? "National Certification" : "Board Certification"}</h3>
     );
     const boardCards = boardComps.filter(b => !b.followsParent).map(b => (
-      <div key={b.id} onClick={() => setBoardDetail(b)} style={{
-        backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1, cursor: "pointer",
+      <div key={b.id} onClick={() => { if (!b.body) setBoardDetail(b); }} style={{
+        backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1, cursor: b.body ? "default" : "pointer",
         borderLeft: `3px solid ${b.met ? T.success : T.warning}`,
       }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{b.label}</div>
           <div style={{ fontSize: 13.5, fontWeight: 800, color: b.met ? T.success : T.warning, flexShrink: 0 }}>
-            {b.earned}/{b.required} hrs
+            {b.required == null ? "Not yet verified" : `${b.earned}/${b.required} ${b.unit === "credits" ? "credits" : "hrs"}`}
           </div>
         </div>
         <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
-          {`${b.unit} \u00b7 ${b.windowLabel}`}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
+          {b.body ? (b.windowLabel || b.assessment) : `${b.unit} \u00b7 ${b.windowLabel}`}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
         </div>
         {b.required > 0 && (
           <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginTop: 8 }}>
@@ -2093,13 +2152,21 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
             }}>Find CME &rarr;</button>
           )}
         </div>
-        {b.assessment && (
+        {b.assessment && !b.body && (
           <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>
             Also required: {b.assessment}
           </div>
         )}
         {b.notes && (
           <div style={{ fontSize: 11, color: T.textDim, marginTop: 3 }}>{b.notes}</div>
+        )}
+        {b.body && b.windowLabel && b.assessment && (
+          <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>{b.assessment}</div>
+        )}
+        {b.body && b.exam && <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 3 }}>{b.exam}</div>}
+        {b.body && (b.lines || []).map(line => <div key={line} style={{ fontSize: 11, color: T.textDim, marginTop: 3, lineHeight: 1.4 }}>{line}</div>)}
+        {b.body && b.url && (
+          <a href={b.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: 32, boxSizing: "border-box" }}>{b.body} renewal rules &rarr;</a>
         )}
       </div>
     ));
@@ -2457,12 +2524,28 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 10 }}>Every state license number the federal registry lists, in one lookup.</div>
           <NpiPanel dense />
         </div>
+        {/* A member with no profession is asked it here too, as on Home: the
+            Add form, the empty card and the multi-state matrix all land on
+            this page, and the licence types and rules follow the choice.
+            Until she chooses, the form offers every profession's types. */}
+        {!data.settings.degreeType && (
+          <div style={{ marginBottom: 12, padding: "14px 16px", borderRadius: 14, backgroundColor: T.card, border: `1px solid ${T.border}` }}>
+            <ProfessionPicker
+              id="licenses-profession"
+              why="Your profession sets the license types and the rules the app tracks."
+              onChoose={(d) => chooseProfessionThen(updateSettings, d, () => {}, () => alertWriteRefused({ scope: "credential" }))}
+              theme={T}
+            />
+          </div>
+        )}
         <CrudSection title="Licenses" sectionKey="licenses" favoritable {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={licenseDeskColumns(T, reminderLeadDays(data.settings.reminderLeadDays))} filterTabs={[
-          { key: "medical", label: "Medical Licenses", match: i => /medical license|physician|osteopathic|training license/i.test(i.type || "") },
+          // MD and DO keep "Medical Licenses"; a PA, an NP and a member with
+          // no profession yet get "State Licenses" (credentialForms.js).
+          licenseTypeTab(data.settings.degreeType),
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
           { key: "life", label: "Life Support", match: i => /\b(bls|acls|atls|pals|nrp)\b|life support/i.test(i.type || "") },
-        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." fields={licenseFields({ degreeType: data.settings.degreeType, records: data.licenses, physicianName: data.settings.name })} renderExtra={item => <RenewalInfo item={item} />} />
+        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub={data.settings.degreeType === "PA" ? "Add your physician assistant license, DEA, and certifications." : data.settings.degreeType === "NP" ? "Add your APRN and RN licenses, DEA, and certifications." : data.settings.degreeType ? "Add your medical licenses, DEA, and certifications." : "Add your licenses, DEA, and certifications."} fields={licenseFields({ degreeType: data.settings.degreeType, records: data.licenses, physicianName: data.settings.name })} renderExtra={item => <><RenewalInfo item={item} /><RecordQuestions item={item} /></>} />
       </>);
     }
     if (sub === "cme") return <CMESection onShare={openShare} {...crudTarget("cme")} />;
@@ -2493,7 +2576,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       { key: "expirationDate", label: "Expires (if it does)", type: "date" },
       { key: "notes", label: "Notes", type: "textarea" },
     ]} />;
-    if (sub === "education") return <CrudSection title="Education" sectionKey="education" favoritable {...crudTarget("education")} items={[...(data.education || [])].sort((a, b) => (b.graduationDate || b.startDate || "").localeCompare(a.graduationDate || a.startDate || ""))} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES, required: true }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "education") return <CrudSection title="Education" sectionKey="education" favoritable {...crudTarget("education")} items={[...(data.education || [])].sort((a, b) => (b.graduationDate || b.startDate || "").localeCompare(a.graduationDate || a.startDate || ""))} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: getEducationTypes(data.settings.degreeType), required: true }, { key: "name", label: "Display Name", placeholder: data.settings.degreeType === "PA" ? "e.g. MPAS, Example University" : data.settings.degreeType === "NP" ? "e.g. MSN, Example University" : "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (sub === "caseLogs") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;
       {

@@ -1,0 +1,386 @@
+{
+ "state": "ID",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Idaho State Board of Medicine (Physician Assistant Advisory Committee), Division of Occupational and Professional Licenses",
+   "url": "https://dopl.idaho.gov/paac/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA); Graduate Physician Assistant for up to 6 months pending NCCPA exam",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Licensee's birthday every 2 years: DOPL began moving licences to 2-year birthday renewals on 1 April 2026; existing licensees are assigned to even or odd birth years during the transition"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "categoryRules": "No state hour count or AAPA category split. At renewal the PA attests to current NCCPA certification (or a Board-approved similar certifier); NCCPA's own CME rules then apply.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [],
+   "controlledSubstanceCe": "None found in IDAPA 24.33.02 or the Medical Practice Act sections loaded. Federal DEA training is outside state rules."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Not filed with the Board. Collaboration is set out in facility bylaws or procedures (facilities with credentialing and privileging) or in a written collaborative practice agreement for all other practices; the agreement must be given to the Board on request. No renewal interval in statute or rule.",
+   "notes": "Agreement must list the parties, each PA's authorized scope, and any monitoring parameters (IDAPA 24.33.02.200.01). A PA may own a practice after 2 years of licensure in any US jurisdiction, with a collaborative practice agreement."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Prescribing authority is applied for with the Board (rule refers to a newly licensed PA applying for prescribing authority); no separate renewal found in the current rule.",
+   "ceForPrescribers": "None found beyond NCCPA certification."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "Idaho Code 54-1807A(1)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title54/T54CH18/SECT54-1807A/",
+    "quote": "All physician assistants shall renew their licenses biennially.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "2-year licence expiring on the licensee's birthday (transition began 1 April 2026; the former choice of a 1-year or 2-year licence expiring in June is ending; existing licensees phased in by even or odd birth year)",
+    "cite": "DOPL announcement for Physician Assistants, 10 March 2026",
+    "url": "https://dopl.idaho.gov/pressrelease/big-changes-are-on-the-way-stay-informed-about-important-licensure-updates-that-may-impact-your-renewal-cycle-27/",
+    "quote": "transitioning from the option of 1-year licenses or 2-year licenses in the month of June to 2-year licenses that renew on the licensees' birthdates",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.singleYearOption",
+    "value": "Ending: licensees who chose a 1-year renewal move to a 2-year renewal at double the fee",
+    "cite": "DOPL announcement for Physician Assistants, 10 March 2026",
+    "url": "https://dopl.idaho.gov/pressrelease/big-changes-are-on-the-way-stay-informed-about-important-licensure-updates-that-may-impact-your-renewal-cycle-27/",
+    "quote": "If you previously opted for a 1-year renewal, once you move to a 2-year renewal cycle, your licensing fee will double",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "IDAPA 24.33.02.200.04",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243302.pdf",
+    "quote": "Prior to renewal of a license physician assistants shall attest to current certification by the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.initialCertification",
+    "value": "Current NCCPA certification required for licensure",
+    "cite": "Idaho Code 54-1810A(2)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title54/T54CH18/SECT54-1810A/",
+    "quote": "Each applicant must submit proof of current certification by the national commission on certification of physician assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "collaboration (facility bylaws/procedures, or written collaborative practice agreement)",
+    "cite": "Idaho Code 54-1807A(2)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title54/T54CH18/SECT54-1807A/",
+    "quote": "or in a written collaborative practice agreement for all other facilities and practices.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Provided to the Board on request; not filed",
+    "cite": "Idaho Code 54-1807A(2)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title54/T54CH18/SECT54-1807A/",
+    "quote": "The collaborative practice agreement shall be provided to the board upon request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementContents",
+    "value": "Parties; authorized scope of each PA; any monitoring parameters",
+    "cite": "IDAPA 24.33.02.200.01",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243302.pdf",
+    "quote": "A collaborative practice agreement, in addition to complying with Section 54-1807A(2), Idaho Code, will contain the following elements",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.separateAuthorityRegistration",
+    "value": "Prescribing authority applied for after full licensure",
+    "cite": "IDAPA 24.33.02.200.04.a",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243302.pdf",
+    "quote": "the graduate physician assistant's license will be converted to a permanent license and he may apply for prescribing authority.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": "Yes, Idaho Board of Pharmacy controlled substance registration, renewed every 2 years",
+    "cite": "Idaho Code 37-2716(a)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title37/T37CH27/SECT37-2716/",
+    "quote": "prescribes, administers, or conducts research with any controlled substance within this state shall obtain biennially a registration issued by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Statute says biennial. IDAPA 24.36.01 (Board of Pharmacy) did not load from adminrules.idaho.gov (404); a secondary search summary says pharmacy registrations renew annually by birth month. Renewal interval in the current pharmacy rule not yet verified."
+   },
+   {
+    "field": "pa.prescribing.pdmpRegistration",
+    "value": "Prescribers must also register with the Division for online access to the controlled substances prescription database (PDMP)",
+    "cite": "Idaho Code 37-2716(b)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title37/T37CH27/SECT37-2716/",
+    "quote": "Every dispenser and prescriber, except veterinarians, shall also register with the division to obtain online access to the controlled substances prescriptions database.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.noChangeFromBirthdayTransition",
+    "value": "Birthday transition does not change CE requirements",
+    "cite": "DOPL announcement for Physician Assistants, 10 March 2026",
+    "url": "https://dopl.idaho.gov/pressrelease/big-changes-are-on-the-way-stay-informed-about-important-licensure-updates-that-may-impact-your-renewal-cycle-27/",
+    "quote": "There are no changes to your current Continuing Education requirements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.boardDescriptionOfNccpaCme",
+    "value": "Board FAQ: PA attests to NCCPA certification, which requires 100 CME hours per 2 years",
+    "cite": "Idaho Board of Medicine PAAC page FAQ",
+    "url": "https://dopl.idaho.gov/paac/",
+    "quote": "which certification requires a minimum of one hundred (100) hours of continuing medical education over a two-year (2) period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementNotToBeSent",
+    "value": "Do not send the agreement unless the Board asks; Board keeps no unrequested copies",
+    "cite": "Idaho Board of Medicine, FAQ Collaborative Practice",
+    "url": "https://dopl.idaho.gov/wp-content/uploads/2023/08/PAAC-CollaborativePractice-FAQ.pdf",
+    "quote": "Please do not provide the Board with a copy unless the Board specifically requests it.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.noPaRatio",
+    "value": "No limit on PAs per collaborating physician",
+    "cite": "Idaho Board of Medicine, FAQ Collaborative Practice",
+    "url": "https://dopl.idaho.gov/wp-content/uploads/2023/08/PAAC-CollaborativePractice-FAQ.pdf",
+    "quote": "The statutes and Board rules do not limit the number of PAs who can collaborate with a single physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Idaho Board of Nursing, Division of Occupational and Professional Licenses",
+   "url": "https://dopl.idaho.gov/bon/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 0,
+   "nlc": true,
+   "topicMandates": [],
+   "notes": "Current IDAPA 24.34.01 lists only the renewal application and fee for RN renewal; no contact hour requirement appears in the current rule text. Idaho is a Nurse Licensure Compact state (Idaho Code 54-1418)."
+  },
+  "aprn": {
+   "title": "APRN (role: Certified Nurse Practitioner, CNP)",
+   "separateLicenceOrCertificate": "Separate APRN licence from the Board of Nursing; a current Idaho RN licence or compact privilege must be maintained",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "otherRenewalRequirements": "Evidence of participation in a Board-acceptable peer review process at each renewal (Idaho Code 54-1411(2); IDAPA 24.34.01.100.11.c)",
+   "topicMandates": [],
+   "notes": "No state contact hour or pharmacology hour count in current IDAPA 24.34.01; competence is shown by national certification plus peer review. Third-party CE vendor pages still cite older hour counts (30 incl. 10 pharmacology, or 15 plus 10); not current rule."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "No. All APRNs may prescribe and dispense under the APRN licence (IDAPA 24.34.01.200.05.b).",
+   "pharmacologyCeForPrescribers": "None found in current rule.",
+   "controlledSubstanceCe": "None found in Idaho statute or rule loaded.",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": 0,
+   "agreementFilingAndRenewal": "No collaborative or supervisory agreement required; APRN consults, collaborates and refers as appropriate."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "Idaho Code 54-1411(1)(a)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title54/T54CH14/SECT54-1411/",
+    "quote": "No license shall be valid unless renewed each and every two (2) years on the renewal dates fixed by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "Rule text: renewal dated not later than 31 August of the renewal year; DOPL is moving nursing licences to 2-year birthday renewals from 1 April 2026",
+    "cite": "IDAPA 24.34.01.100.02.c; DOPL announcement 10 March 2026",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "dated not later than August 31 of the appropriate renewal year. All licenses are renewed as prescribed in Section 54-1411, Idaho Code.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Nursing release (10 March 2026) confirms 2-year licences moving to birthday expiry; rule text still says 31 August."
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "0 (renewal requires application and fee only)",
+    "cite": "IDAPA 24.34.01.100.02.c",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "The original completed renewal application and renewal fee as prescribed in Section 400 of these rules, are submitted to the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlc",
+    "value": true,
+    "cite": "Idaho Code 54-1418",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title54/T54CH14/SECT54-1418/",
+    "quote": "The terms and conditions of the nurse licensure compact are hereby enacted in substantially the following form",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "IDAPA 24.34.01.100.11",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "The advanced practice registered nurse license may be renewed every two (2) years as specified in Section 54-1411, Idaho Code",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.rnLicenceRequired",
+    "value": true,
+    "cite": "IDAPA 24.34.01.100.11.a",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "Maintains a current registered nurse license or privilege to practice in Idaho.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "IDAPA 24.34.01.100.11.b",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "Submits evidence of current APRN certification by a national organization recognized by the Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.peerReview",
+    "value": "Peer review participation required at every renewal",
+    "cite": "Idaho Code 54-1411(2)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title54/T54CH14/SECT54-1411/",
+    "quote": "must provide proof, satisfactory to the board, of the applicant's competence to practice by documenting completion of a peer review process.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.separateAuthorityRegistration",
+    "value": "None; prescribing comes with the APRN licence",
+    "cite": "IDAPA 24.34.01.200.05.b",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "Prescribing and Dispensing Authorization. All advanced practice registered nurses may prescribe",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "full (no agreement; consult and refer as appropriate)",
+    "cite": "IDAPA 24.34.01.200.04.c",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "consult and collaborate with and refer to other health care professionals as appropriate.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": "Yes, Idaho Board of Pharmacy controlled substance registration every 2 years",
+    "cite": "Idaho Code 37-2716(a)",
+    "url": "https://legislature.idaho.gov/statutesrules/idstat/Title37/T37CH27/SECT37-2716/",
+    "quote": "shall obtain biennially a registration issued by the board in accordance with Idaho law.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.birthdayTransition",
+    "value": "Nursing licences moving to 2-year licences expiring on the licensee birthday from 1 April 2026; single-year renewal no longer offered",
+    "cite": "DOPL announcement for Nursing, 10 March 2026",
+    "url": "https://dopl.idaho.gov/pressrelease/big-changes-are-on-the-way-stay-informed-about-important-licensure-updates-that-may-impact-your-renewal-cycle-28/",
+    "quote": "There will no longer be an option for single year renewal. Every licensee will get at least 2 years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.practiceHoursAtRenewal",
+    "value": "APRN who has not practised the minimum required time in the renewal period may be given a temporary licence; the rule states no hour figure",
+    "cite": "IDAPA 24.34.01.100.03.k",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "An advanced practice registered nurse who has not practiced the minimum required period of time during the renewal period may be issued a temporary license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": "None in current rule: renewal elements are RN licence or privilege, national certification, and peer review only",
+    "cite": "IDAPA 24.34.01.100.11",
+    "url": "https://adminrules.idaho.gov/rules/current/24/243401.pdf",
+    "quote": "Peer Review Process. Provides evidence, satisfactory to the Board, of participation in a peer review process acceptable to the Board.",
+    "note": "Full text of IDAPA 24.34.01 searched for contact hour, continuing education and pharmacology hour terms: none tied to renewal. CE vendor pages (nursece4less, ceufast) still claim 30 hours with 10 pharmacology; they are stale.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA and NP exact expiry during the DOPL birthday transition: the releases say current licensees are phased in by even or odd birth year; the assignment table was not published in the pages loaded. IDAPA 24.34.01.100.02.c still says 31 August and IDAPA 24.33.02.400 still lists an 'Annual License Renewal Fee'.",
+  "Idaho Board of Pharmacy controlled substance registration: Idaho Code 37-2716 says biennial; IDAPA 24.36.01 could not be loaded (adminrules.idaho.gov 404, bop.idaho.gov unreachable). A secondary summary says annual renewal by birth month. Renewal interval and date not yet verified.",
+  "'full' practice authority for NPs is a classification label; primary sources confirm no agreement requirement and independent prescribing for all APRNs.",
+  "Whether PA prescribing authority is a distinct credential that renews separately: rule only says a PA may apply for it; not confirmed.",
+  "No state topic mandates found for PAs or nurses: IDAPA 24.33.02 and 24.34.01 were read in full and contain none; Idaho Code Title 54 chapters 14 and 18 were not searched exhaustively.",
+  "Federal DEA MATE Act one-time 8 hour training not re-verified here (federal)."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verifiedBy": "verifier-2026-10",
+ "verificationNotes": "Every researcher url re-loaded with curl (statutes, IDAPA 24.33.02 and 24.34.01 PDFs, both DOPL releases, PAAC page, CP FAQ PDF). All quotes matched. WebSearch budget was exhausted mid-run, so missed-mandate checks relied on full-text reads of the rules.",
+ "corrections": [
+  "ID PA renewalDeadline: researcher cited the Board of Nursing release (-28). The PA release is a separate page (-27, category Physician Assistants); re-cited to it. It shows PA licences previously expired in June with a 1-year or 2-year option.",
+  "ID PA singleYearOption: the quote 'There will no longer be an option for single year renewal' is from the nursing release, not the PA release. Replaced with the PA release's own wording.",
+  "ID PA: added two board-page facts (CE unchanged by birthday transition; board FAQ states NCCPA requires 100 CME hours per 2 years).",
+  "ID PA practice: added board FAQ facts (do not file the agreement unless asked; no physician to PA ratio).",
+  "ID CS registration: statute (biennial) confirmed, but flagged that the Board of Pharmacy rule may still set annual renewal; rule not loadable, left in unverified.",
+  "ID NP: added the IDAPA 24.34.01.100.03.k practice-time provision the researcher missed (no hour figure is stated, so no number recorded).",
+  "ID NP: CE vendor summaries currently claim 30 APRN contact hours incl. 10 pharmacology (researcher said 15+10); the current rule has neither. Recorded the absence as a fact citing 24.34.01.100.11."
+ ]
+}

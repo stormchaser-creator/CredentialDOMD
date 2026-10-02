@@ -1,0 +1,385 @@
+{
+ "state": "NM",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "New Mexico Medical Board",
+   "url": "https://www.nmmb.state.nm.us/"
+  },
+  "licence": {
+   "title": "Physician Assistant (supervised or collaborative licence)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "March 1 of the year following expiration of NCCPA (or board-approved) certification; late renewal with fees until June 1, then lapsed"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "categoryRules": "No separate state CME hour count; current NCCPA (or board-approved certifying agency) certification is required at each renewal",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [
+    {
+     "topic": "Pain management and prescribing of controlled substances",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "PAs holding federal DEA and New Mexico controlled substances registrations; may also count toward NCCPA"
+    },
+    {
+     "topic": "Pain management (new licensees)",
+     "hours": 5,
+     "period": "one-time",
+     "appliesTo": "licensees with DEA and NM CS registration, during the first year of licensure"
+    }
+   ],
+   "controlledSubstanceCe": "3 hours pain management every biennial cycle for DEA plus NM CS registrants; 5 hours in first year of licensure"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Supervising physician files written notice of intent to supervise on board forms; the PA renews the registration of supervision with the board every two years along with the licence (NMSA 61-6C-3(F)); notice to the board within 30 days after an employer ends a PA's employment. Collaborative status available (primary care, 3 years supervised practice, malpractice insurance, current NCCPA).",
+   "notes": "Two tracks: supervised PA (direction via written utilization plan or direct communication, QA program) and collaborative PA for primary care after three years. No renewal cadence for the supervision form found in rule."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "3 hours pain management per biennial cycle (5 hours first year) for DEA plus NM CS registrants"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "March 1 of the year following NCCPA certification expiry",
+    "cite": "16.10.15.18(A) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0015.html",
+    "quote": "Physician assistant licenses expire on March 1 of the year following expiration of certification by NCCPA or other certifying agency approved by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "16.10.15.18(A) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0015.html",
+    "quote": "proof of current certification of NCCPA or other certifying agency approved by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "16.10.14.11(C) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0014.html",
+    "quote": "in addition to the national commission on certification of physician assistants (NCCPA) certification required during each biennial renewal cycle",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.painMgmt",
+    "value": "3 hours per biennial cycle for DEA plus NM CS registrants",
+    "cite": "16.10.14.11(C) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0014.html",
+    "quote": "who hold a federal drug enforcement administration registration and a New Mexico controlled substances registration, shall be required to complete and submit three",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.painMgmtFirstYear",
+    "value": "5 hours in first year of licensure",
+    "cite": "16.10.14.11(E) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0014.html",
+    "quote": "shall complete five continuing medical education hours in pain management during the first year of licensure.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisionNotice",
+    "value": "Supervising physician files notice of intent",
+    "cite": "16.10.15.10(B) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0015.html",
+    "quote": "All supervising physicians shall submit written notice of intent to supervise a physician assistant on forms prescribed by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisionDirection",
+    "value": "Written utilization plan or direct communication",
+    "cite": "16.10.15.11(A)(1) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0015.html",
+    "quote": "This may be done through a written utilization plan or by other direct communications.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.collaborativeEligibility",
+    "value": "Primary care, 3 years supervised clinical practice",
+    "cite": "16.10.15.12(C)-(D) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0015.html",
+    "quote": "completed three years of clinical practice as a physician assistant with supervision by a licensed physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "16.10.14.11(C) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0014.html",
+    "quote": "hold a federal drug enforcement administration registration and a New Mexico controlled substances registration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisionRegistrationRenewal",
+    "value": "Licence and registration of supervision renewed biennially with proof of current NCCPA (or board-designated) certification",
+    "cite": "NMSA 1978, 61-6C-3(F)",
+    "url": "https://www.nmmb.state.nm.us/wp-content/uploads/2026/09/PA-ACT.pdf",
+    "quote": "shall biennially submit proof of current certification by the national commission on certification of physician assistants",
+    "note": "Scanned PDF of the PA Act (Westlaw print current through 2023 session), read by OCR",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.terminationNotice",
+    "value": "Written notice to the board within 30 days after employment ends",
+    "cite": "16.10.15.10(C) NMAC",
+    "url": "https://www.srca.nm.gov/parts/title16/16.010.0015.html",
+    "quote": "Within 30 days after an employer terminates the employment of a physician assistant, the supervising physician or the physician assistant shall submit a written notice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.collaborativeStatute",
+    "value": "Collaboration allowed after 3 years supervised practice; collaborative PA must carry malpractice insurance",
+    "cite": "NMSA 1978, 61-6C-6",
+    "url": "https://www.nmmb.state.nm.us/wp-content/uploads/2026/09/PA-ACT.pdf",
+    "quote": "completed three years of clinical practice as a physician assistant with the supervision of a licensed physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.noRecentLawChange",
+    "value": "2025 HB267 and 2026 HB150 (PA supervision changes) both died",
+    "cite": "nmlegis.gov bill status",
+    "url": "https://www.nmlegis.gov/Legislation/Legislation?chamber=H&legType=B&legNo=150&year=26",
+    "quote": "Died",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "New Mexico Board of Nursing",
+   "url": "https://www.bon.nm.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 30,
+   "nlcCompactMember": true,
+   "renewalDeadline": "End of renewal month (birth month) every two years",
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "CNP (Certified Nurse Practitioner) licence",
+   "separateLicenceOrCertificate": "licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": "30 hours within 24 months; for APRNs a valid APRN national certification meets the RN and APRN CE requirement (16.12.17.9(A)(3)(a) NMAC, effective January 1, 2026)",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Management of non-cancer pain",
+     "hours": 5,
+     "period": "every cycle",
+     "appliesTo": "APRNs (CNPs) with a DEA registration at any time during the renewal period whose licence permits prescribing opioids (16.12.9.10 and 16.12.17.14(J)(2)(a) NMAC)"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": "None per cycle beyond the 5 non-cancer pain hours; prescriptive authority needs 400 hours of prescribing experience or a 400-hour preceptorship, one time",
+   "controlledSubstanceCe": "5 contact hours non-cancer pain management per renewal for DEA holders",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "No collaborative agreement required; CNP makes independent decisions. Prescriptive authority needs 400 hours of prescribing experience in the prior two years, or a 400-hour preceptorship."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "16.12.16.9(Q)(1) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.16%20NMAC%20-%20Registered%20Nurse%20%28RN%29%20Licensure.pdf",
+    "quote": "Licensed nurses shall be required to complete the renewal process by the end of their renewal month every two years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "16.12.16.9(Q)(3) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.16%20NMAC%20-%20Registered%20Nurse%20%28RN%29%20Licensure.pdf",
+    "quote": "30 hours of approved CE must be accrued within the 24 months immediately preceding expiration of license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.certificationMeetsCe",
+    "value": "Valid APRN national certification meets the RN and APRN CE requirement",
+    "cite": "16.12.17.9(A)(3)(a) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "Advanced practice registered nurses must submit a copy of valid APRN national certification. The national certification meets the requirement for RN and APRN continuing education.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "16.12.16.2 NMAC; NM Board of Nursing home page",
+    "url": "https://www.bon.nm.gov/",
+    "quote": "NM BON will begin charging a $50 fee for Multistate Compact Licenses.",
+    "loaded": true,
+    "verified": true,
+    "note": "16.12.16.2 NMAC also applies to nurses practising on a multistate privilege under the nurse licensure compact",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "16.12.17.14(J)(1) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "NPs must maintain national certification. A copy of the specialty certification/recertification card shall be presented at the time of each subsequent renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalSubmission",
+    "value": "Copy of valid APRN national certification at renewal",
+    "cite": "16.12.17.9(A)(3)(a) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "Advanced practice registered nurses must submit a copy of valid APRN national certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.painMgmt",
+    "value": "5 contact hours non-cancer pain per renewal if DEA",
+    "cite": "16.12.17.14(J)(2)(a) NMAC; 16.12.9.10 NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "A CNP with DEA registration at any time during their most recent renewal period shall obtain five contact hours in the management of non-cancer pain",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "full",
+    "cite": "16.12.17.14(L)(1) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "The CNP makes independent decisions regarding the health care needs of the client and also makes independent decisions in carrying out health care regimens.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.authorityExperience",
+    "value": "400 hours prescribing experience or preceptorship (one-time)",
+    "cite": "16.12.17.14(L)(5)(a)(i) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "Verifies 400 hours of work experience in which prescribing dangerous drugs has occurred within the two years immediately preceding the date of the application.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "16.12.17.14(L)(5)(a)(ii) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "CNPs may not possess, prescribe or distribute controlled substances until they have both a current state-controlled substances registration and a current DEA registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.formulary",
+    "value": null,
+    "cite": "16.12.2.12 NMAC (formulary)",
+    "url": "https://www.srca.nm.gov/parts/title16/16.012.0002.html",
+    "quote": "It is the CNPs responsibility to maintain a formulary of dangerous drugs and controlled substances that may be prescribed with each renewal",
+    "loaded": true,
+    "verified": false,
+    "superseded": true,
+    "verifiedBy": "verifier-2026-10",
+    "unverifiedReason": "Superseded: 16.12.2 NMAC was repealed January 1, 2026, and the CNP section of the replacement 16.12.17.14 NMAC has no formulary requirement. Do not show this to CNPs."
+   },
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "16.12.17.9(A)(1) NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "Advanced practice registered nurses shall be required to complete the renewal process by the end of their renewal month every two years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.painMgmt.everyRenewal",
+    "value": "5 contact hours non-cancer pain every renewal period for APRNs with DEA registration whose licence permits prescribing opioids",
+    "cite": "16.12.9.10 NMAC (Rp 1/1/2026)",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.09%20NMAC%20-%20Management%20of%20Chronic%20Pain%20with%20Controlled%20Substances.pdf",
+    "quote": "These practitioners shall be required to obtain five contact hours every renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.rulesEffective",
+    "value": "16.12.16 and 16.12.17 NMAC effective January 1, 2026",
+    "cite": "16.12.17.5 NMAC",
+    "url": "https://files.bon.nm.gov/Law%20%26%20Rules/Rules/16.12.17%20NMAC%20-%20Advanced%20Practice%20Registered%20Nurse%20%28APRN%29%20Licensure.pdf",
+    "quote": "EFFECTIVE DATE: January 1, 2026, unless a later date is cited at the end of a section.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "16.10.15 and 16.10.14 NMAC (PA) were read from the SRCA compilation (latest history 2/8/2022). NMMB's own rules page still posts the 2022-02-08 versions as current. No later NM Register amendment was found, but the Register itself was not searched.",
+  "The NM PA Act was read from the scanned NMMB PDF (Westlaw print current through the 2023 session) using OCR. Both 2025 and 2026 bills to change PA supervision died. No other 2024 to 2026 session law amending 61-6C was checked.",
+  "Whether a collaborative PA must file a written collaboration agreement with the board: 16.10.15 NMAC and NMSA 61-6C-3(G) require only a 'supervising or collaborating relationship'. No filing rule was found.",
+  "NM PA: no state CME hour count beyond NCCPA certification and the controlled substance pain hours. The app should treat NCCPA status as the general CME mechanism.",
+  "The NM Board of Pharmacy controlled substance registration renewal period (16.19.20 NMAC) could not be read clearly from the SRCA page. Left unconfirmed.",
+  "NM CNP: national certification meets the CE requirement under 16.12.17.9(A)(3)(a). Whether the board still applies the RN 30-hour count to an APRN holding only a single-state RN licence was not confirmed beyond that sentence.",
+  "Checked 16.12.16, 16.12.17 and 16.10.14/15 NMAC and found no topic mandate on implicit bias, human trafficking, child abuse, HIV, Alzheimer, suicide prevention, infection control, cultural competency or domestic violence for PAs or NPs."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "NM PA: the supervision registration renews every two years with the licence (NMSA 1978, 61-6C-3(F), PA Act PDF on nmmb.state.nm.us). The researcher had listed this cadence as unknown.",
+   "NM PA: confirmed on nmlegis.gov that 2026 HB150 and 2025 HB267 both died, so PA supervision law is unchanged. NMMB still posts the 16.10.14 and 16.10.15 NMAC versions dated 2022-02-08 as current.",
+   "NM NP: 16.12.2 NMAC is REPEALED. The NM Board of Nursing replaced it on January 1, 2026 with 16.12.16 NMAC (RN), 16.12.17 NMAC (APRN) and a replaced 16.12.9 NMAC (pain). The researcher cited 16.12.2 from the stale SRCA compilation. Every NP fact is re-cited to the current rule PDFs on files.bon.nm.gov.",
+   "NM NP: the RN rule's 'certification accepted in lieu of the 30 hours' sentence was removed. New 16.12.16.11(E) says only that certification 'may be used as an approved CE'. For APRNs, 16.12.17.9(A)(3)(a) now says national certification 'meets the requirement for RN and APRN continuing education'.",
+   "NM NP: removed the CNP 'maintain a formulary with each renewal' fact. The CNP section of the current 16.12.17.14 NMAC has no formulary requirement; only CRNAs keep one (16.12.17.15)."
+  ]
+ }
+}

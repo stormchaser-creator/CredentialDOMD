@@ -1,0 +1,478 @@
+{
+ "state": "CT",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Connecticut Department of Public Health (licensing) with the Connecticut Medical Examining Board (discipline)",
+   "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician-assistant/physician-assistant-licensure"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annually, during the licensee's birth month"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "hoursNote": "Connecticut sets no hour total of its own; renewal requires meeting the NCCPA mandatory CME requirements and any NCCPA recertification exam. NCCPA itself requires 100 CME credits per 2 year cycle and PANRE or PANRE-LA by year 10.",
+   "categoryRules": "Whatever NCCPA requires for current certification (state statute defers to NCCPA)",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "nccpaNote": "Statute requires meeting NCCPA CME and passing any NCCPA continued competency exam; DPH does not collect proof, the licensee attests.",
+   "topicMandates": [
+    {
+     "topic": "Prescribing controlled substances and pain management",
+     "hours": 1,
+     "period": "every 2 years",
+     "appliesTo": "all PA licensees"
+    },
+    {
+     "topic": "Screening for PTSD, suicide risk, depression and grief, and suicide prevention training",
+     "hours": 2,
+     "period": "first renewal, then every 6 years",
+     "appliesTo": "all PA licensees (registration periods beginning on and after January 1, 2022)",
+     "provider": "Must be training administered by AAPA (or successor), a hospital or other licensed health care institution, or a regionally accredited institution of higher education"
+    }
+   ],
+   "controlledSubstanceCe": "1 contact hour in prescribing controlled substances and pain management in the preceding 2 year period"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Written delegation agreement set by the supervising physician and reviewed by the physician not less than annually; not filed with DPH. DPH does not register supervising physicians and does not need notice of a change in the supervisory relationship.",
+   "notes": "Schedule II or III prescriptions require the supervising physician to document approval in the record as the delegation agreement prescribes. The 2026 Supplement (2025 session) made no change to §§ 20-12c, 20-12d or 20-12j."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": false,
+   "csRegistrationNote": "Department of Consumer Protection controlled substance registration, renewed biennially with a separate fee for each place of practice where controlled substances are stored or dispensed (21a-321); a prescriber must also register for CPMRS (PDMP) access (21a-317(2)); DEA separately.",
+   "ceForPrescribers": "1 contact hour controlled substances and pain management every 2 years (applies to all PAs at renewal)"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 1,
+    "cite": "Conn. Gen. Stat. § 20-12j(b)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_370.htm",
+    "quote": "Each person holding a license as a physician assistant shall, annually, during the month of such person's birth, renew such license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "Conn. Gen. Stat. § 20-12j(b)(1)-(2)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_370.htm",
+    "quote": "has met the mandatory continuing medical education requirements of the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[controlled substances]",
+    "value": "1 contact hour every 2 years",
+    "cite": "Conn. Gen. Stat. § 20-12j(b)(3)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_370.htm",
+    "quote": "not less than one contact hour of training or education in prescribing controlled substances and pain management in the preceding two-year period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[mental health]",
+    "value": "2 contact hours, first renewal then every 6 years",
+    "cite": "Conn. Gen. Stat. § 20-12j(b)(4)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_370.htm",
+    "quote": "during the first renewal period and not less than once every six years thereafter, earn not less than two contact hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce (board restatement)",
+    "value": "NCCPA CME plus 1 hour controlled substances; attestation only",
+    "cite": "DPH PA Continuing Education page",
+    "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician-assistant/continuing-education",
+    "quote": "Physician assistants need not submit verification of current NCCPA certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "The DPH PA CE page restates only the NCCPA and 1 hour controlled substance rules and omits the 2 hour PTSD/suicide prevention mandate; the statute (20-12j(b)(4)) controls."
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "supervision",
+    "cite": "Conn. Gen. Stat. § 20-12c(a)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_370.htm",
+    "quote": "shall have a clearly identified supervising physician who maintains the final responsibility for the care of patients",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Quote also restated on the DPH Physicians Supervising Physician Assistants page."
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "written delegation agreement reviewed at least annually",
+    "cite": "Conn. Gen. Stat. § 20-12d(a)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_370.htm",
+    "quote": "The supervising physician shall review the written delegation agreement not less than annually",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "Conn. Gen. Stat. §§ 21a-316, 21a-317",
+    "url": "https://www.cga.ct.gov/current/pub/chap_420c.htm",
+    "quote": "obtain a certificate of registration issued by the Commissioner of Consumer Protection",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csRegistrationRenewal",
+    "value": "biennial",
+    "cite": "Conn. Gen. Stat. § 21a-321",
+    "url": "https://www.cga.ct.gov/current/pub/chap_420c.htm",
+    "quote": "shall be accompanied by a biennial renewal fee",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaHours (NCCPA own rule)",
+    "value": "100 CME credits per 2 year cycle; PANRE or PANRE-LA by end of year 10",
+    "cite": "NCCPA Maintain Certification page",
+    "url": "https://www.nccpa.net/maintain-certification/",
+    "quote": "five two-year cycles during which all Board Certified PAs must earn and log 100 Continuing Medical Education (CME) credits",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFiling",
+    "value": "No registration of supervising physicians and no notice to DPH of supervision changes",
+    "cite": "DPH Physicians Supervising Physician Assistants page",
+    "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician/physicians-supervising-physician-assistants",
+    "quote": "Physicians are not required to notify the Department of a change in a supervisory relationship with physician assistants.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pmpRegistration",
+    "value": "Prescribers must register for PDMP (CPMRS) access",
+    "cite": "Conn. Gen. Stat. § 21a-317(2)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_420c.htm",
+    "quote": "if the practitioner is engaged in prescribing a controlled substance, register for access to the electronic prescription drug monitoring program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCategory1Split",
+    "value": "At least 50 of the 100 NCCPA credits per 2 year cycle must be Category 1",
+    "cite": "NCCPA CME page (certifying body rule, which CT adopts by reference)",
+    "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+    "quote": "you must earn and log at least 100 CME credits, including at least 50 Category 1 CME credits.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "currency.2026Session",
+    "value": "No 2026 public act changed PA renewal, CE, supervision or APRN CE",
+    "cite": "OLR Report 2026-R-0080, 2026 Acts Affecting Health Professions and Institutions (June 22, 2026)",
+    "url": "https://www.cga.ct.gov/2026/rpt/pdf/2026-R-0080.pdf",
+    "quote": "Each summary indicates the public act (PA) or special act (SA) number.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Reviewed the full report: PA and APRN items are a MOLST change (PA 26-68 s.192), Medicaid opioid prescribing considerations (PA 26-146 s.4) and pharmacist reimbursement; none touch 20-12c, 20-12d, 20-12j, 20-94d, 20-87a or 19a-88. The 2026 Supplement (2025 session) changed 20-12b and 20-94a only in ways unrelated to renewal CE."
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Connecticut Department of Public Health with the Connecticut State Board of Examiners for Nursing",
+   "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/aprn/advanced-practice-registered-nurse-licensure"
+  },
+  "rn": {
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annually, during the licensee's birth month",
+   "ceHoursPerCycle": 0,
+   "ceNote": "No general RN contact hour total in statute; only the 2 hour mental health topic every 6 years for RNs actively practicing in Connecticut.",
+   "nlcCompactMember": true,
+   "nlcNote": "Connecticut implemented the Nurse Licensure Compact October 1, 2025 (statute text runs until January 1, 2028). Applies to RN/LPN only, not APRN.",
+   "topicMandates": [
+    {
+     "topic": "Screening for PTSD, suicide risk, depression and grief, and suicide prevention training",
+     "hours": 2,
+     "period": "first renewal, then every 6 years",
+     "appliesTo": "RNs actively practicing in Connecticut"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse)",
+   "separateLicenceOrCertificate": "separate APRN licence (requires a Connecticut RN licence)",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annually, during the licensee's birth month",
+   "ceHoursPerCycle": 50,
+   "ceCycleNote": "50 contact hours within the preceding 24 months, checked at each annual renewal; first renewal exempt",
+   "pharmacologyHoursPerCycle": 5,
+   "pharmacologyNote": "5 contact hours in pharmacotherapeutics within the 50",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Infectious diseases including HIV/AIDS",
+     "hours": 1,
+     "period": "within the 50 hours of each rolling 24 month window, checked at every annual renewal",
+     "appliesTo": "all APRNs"
+    },
+    {
+     "topic": "Risk management",
+     "hours": 1,
+     "period": "within the 50 hours of each rolling 24 month window, checked at every annual renewal",
+     "appliesTo": "all APRNs"
+    },
+    {
+     "topic": "Sexual assault",
+     "hours": 1,
+     "period": "within the 50 hours of each rolling 24 month window, checked at every annual renewal",
+     "appliesTo": "all APRNs"
+    },
+    {
+     "topic": "Domestic violence",
+     "hours": 1,
+     "period": "within the 50 hours of each rolling 24 month window, checked at every annual renewal",
+     "appliesTo": "all APRNs"
+    },
+    {
+     "topic": "Cultural competency",
+     "hours": 1,
+     "period": "within the 50 hours of each rolling 24 month window, checked at every annual renewal",
+     "appliesTo": "all APRNs"
+    },
+    {
+     "topic": "Substance abuse including prescribing controlled substances and pain management",
+     "hours": 1,
+     "period": "within the 50 hours of each rolling 24 month window, checked at every annual renewal",
+     "appliesTo": "all APRNs"
+    },
+    {
+     "topic": "Mental health conditions common to veterans and their families, including suicide prevention",
+     "hours": 2,
+     "period": "first renewal, then every 6 years",
+     "appliesTo": "all APRNs"
+    }
+   ],
+   "optionalTopics": [
+    {
+     "topic": "Cognitive or mental health conditions including Alzheimer disease, dementia, delirium and geriatric depression",
+     "hours": 2,
+     "period": "first renewal then once every 6 years",
+     "status": "optional (\"may include\"), not required"
+    }
+   ],
+   "ceExemptions": "First renewal exempt; a licensee not in active practice may apply (notarized) for exemption and then owes 25 contact hours in the 12 months before returning; void licence reinstatement needs 25 hours in the prior year; up to 10 hours waivable for Board of Examiners service.",
+   "nationalCertNote": "Renewal statute 19a-88(c)(2) names only four certifiers (ANA, NAACOG Certification Corporation, NBPNP, AANA) with no \"other approved bodies\" clause; licensure statute 20-94a(a)(2) adds \"other appropriate national certifying bodies approved by the Board of Examiners for Nursing\" and \"their successors\". AANPCB acceptance is not stated in any primary source loaded."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": "5 contact hours pharmacotherapeutics per 24 months (part of the 50)",
+   "controlledSubstanceCe": "1 contact hour substance abuse including prescribing controlled substances and pain management per 24 months",
+   "stateCsRegistrationRequired": true,
+   "csRegistrationNote": "Department of Consumer Protection controlled substance registration (biennial) plus CPMRS registration; DEA separately."
+  },
+  "practice": {
+   "authority": "full",
+   "authorityNote": "Full practice only after the APRN has held the licence 3 years AND practiced at least 3 years and 2,000 hours in collaboration with a physician, then gives written notice to the DPH Commissioner before practising without collaboration and keeps the documentation 3 years. DPH publishes the list of such APRNs each December 1.",
+   "agreementType": "collaboration",
+   "transitionToPracticeHours": 2000,
+   "transitionNote": "First 3 years after licensure in collaboration with a physician, and at least 2,000 hours, before practicing without collaboration. APRN must notify the DPH Commissioner in writing before beginning independent practice and keep documentation for 3 years.",
+   "agreementFilingAndRenewal": "Collaboration on prescriptive authority must be in writing (covers schedule II and III levels); not filed with DPH under the statute. After transition, written notice to the Commissioner before practicing without collaboration."
+  },
+  "facts": [
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": 1,
+    "cite": "Conn. Gen. Stat. § 19a-88(c)(2)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_368a.htm",
+    "quote": "Each person holding a license as an advanced practice registered nurse shall, annually, during the month of such person's birth, register",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "Conn. Gen. Stat. § 19a-88(c)(2)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_368a.htm",
+    "quote": "No such license shall be renewed unless the department is satisfied that the person maintains current certification as either a nurse practitioner",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceHoursPerCycle",
+    "value": "50 contact hours per 24 months",
+    "cite": "Conn. Gen. Stat. § 20-94d(b)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "shall earn a minimum of fifty contact hours of continuing education within the preceding twenty-four-month period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.pharmacologyHoursPerCycle",
+    "value": 5,
+    "cite": "Conn. Gen. Stat. § 20-94d(b)(3)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "include at least five contact hours of training or education in pharmacotherapeutics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.topicMandates[six 1 hour topics]",
+    "value": "1 hour each: infectious disease/HIV, risk management, sexual assault, domestic violence, cultural competency, substance abuse incl. CS prescribing",
+    "cite": "Conn. Gen. Stat. § 20-94d(b)(4)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "include at least one contact hour of training or education in each of the following topics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.topicMandates[veterans mental health]",
+    "value": "2 hours first renewal then every 6 years",
+    "cite": "Conn. Gen. Stat. § 20-94d(b)(5)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "not less than two contact hours of training or education during the first renewal period in which continuing education is required",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.firstRenewalExempt",
+    "value": true,
+    "cite": "Conn. Gen. Stat. § 20-94d(d)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "A licensee applying for the first time for license renewal pursuant to section 19a-88 is exempt from the continuing education requirements",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ce (board restatement)",
+    "value": "50 contact hours per 24 months incl 5 pharmacotherapeutics",
+    "cite": "DPH APRN Continuing Education page",
+    "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/aprn/continuing-education",
+    "quote": "APRNs shall earn a minimum of fifty (50) contact hours of continuing education within the preceding twenty-four (24) month period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPracticeHours",
+    "value": "3 years and 2,000 hours in collaboration",
+    "cite": "Conn. Gen. Stat. § 20-87a(b)(3)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "in collaboration with a physician for a period of not less than three years and not less than two thousand hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "written collaboration for prescriptive authority during transition; notice to Commissioner before independent practice",
+    "cite": "Conn. Gen. Stat. § 20-87a(b)(2)(A), (b)(3)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "shall submit written notice to the Commissioner of Public Health of his or her intention to practice without collaboration with a physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalCycleYears",
+    "value": 1,
+    "cite": "Conn. Gen. Stat. § 19a-88(c)(1)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_368a.htm",
+    "quote": "Each person holding a license to practice as a registered nurse, shall, annually, during the month of such person's birth, register",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates",
+    "value": "2 hours mental health/suicide prevention, first renewal then every 6 years",
+    "cite": "Conn. Gen. Stat. § 20-94e(b)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "during the first renewal period and not less than once every six years thereafter, earn not less than two contact hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "Conn. Gen. Stat. § 20-99b; DPH NLC article",
+    "url": "https://portal.ct.gov/dph/knowledge-base/articles/licensing/nurse-licensure-compact",
+    "quote": "Effective Oct. 1, 2025, the State of Connecticut implemented its participation in the Nurse Licensure Compact (NLC).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "Conn. Gen. Stat. §§ 21a-316, 21a-317",
+    "url": "https://www.cga.ct.gov/current/pub/chap_420c.htm",
+    "quote": "advanced practice registered nurse as defined in subsection (b) of section 20-87a",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.optionalTopics[Alzheimer/dementia]",
+    "value": "2 hours MAY be included; not a mandate",
+    "cite": "Conn. Gen. Stat. § 20-94d(b)(6)",
+    "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+    "quote": "may include not less than two contact hours of training or education during the first renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.inactiveExemption",
+    "value": "Not in active practice: exemption on notarized application; 25 hours within 12 months before return",
+    "cite": "DPH APRN Continuing Education page",
+    "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/aprn/continuing-education",
+    "quote": "shall complete twenty-five (25) contact hours of continuing education that meets the criteria described above within the twelve (12) month period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "Connecticut acts of the 2026 session with effective dates on or after October 1, 2026 are not yet codified; the OLR 2026 acts report (loaded) shows none affecting PA or APRN renewal, CE or practice agreements, but codified text was not available.",
+  "AANPCB (and PNCB) acceptance for APRN renewal: the renewal statute 19a-88(c)(2) names ANA, NAACOG Certification Corporation, NBPNP and AANA only; Board approval of AANPCB was not confirmed in a primary source loaded.",
+  "DCP controlled substance registration renewal month (the statute says biennial with staggered schedule per 21a-10(b)); the exact expiry date for an individual registration was not confirmed."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "corrections": [
+  "CT PA: added the provider restriction on the 2 hour PTSD/suicide prevention course (AAPA, a hospital or licensed health care institution, or a regionally accredited college), per CGS 20-12j(b)(4).",
+  "CT PA: noted that the DPH PA CE page omits the 2 hour PTSD/suicide prevention mandate; statute 20-12j(b)(4) still requires it.",
+  "CT PA: resolved the open question on filing. The DPH supervising physicians page (loaded) says supervising physicians are not registered and DPH need not be told of supervision changes; the agreement is kept by the parties.",
+  "CT PA and APRN: added PDMP (CPMRS) registration as a statutory condition of the DCP registration for prescribers (21a-317(2)) and the per location CSR fee (21a-321).",
+  "CT PA: confirmed the NCCPA 50 Category 1 minimum on the NCCPA CME page (resolves the researcher's open item); CT has no split of its own.",
+  "CT both: checked currency. The 2026 Supplement (2025 session) and the OLR 2026 acts report show no change to PA renewal/CE/supervision or APRN CE/collaboration; the researcher's first unverified item is resolved.",
+  "CT APRN: corrected the period of the six 1 hour topics from \"every 2 years\" to \"within the 50 hours of the rolling 24 month window checked at each annual renewal\" (20-94d(b)); they are part of the 50, not extra.",
+  "CT APRN: added the 20-94d(b)(6) Alzheimer/dementia topic as OPTIONAL (\"may include\") so the app does not treat it as required or miss it.",
+  "CT APRN: added the inactive practice exemption and the 25 hour return/reinstatement rule from the DPH APRN CE page.",
+  "CT APRN: refined the certifier note. The renewal statute 19a-88(c)(2) lists four certifiers without the \"other approved bodies\" clause found only in licensure statute 20-94a(a)(2); AANPCB acceptance remains unconfirmed."
+ ]
+}

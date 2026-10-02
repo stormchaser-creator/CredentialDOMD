@@ -1,0 +1,138 @@
+{
+  "state": "SD",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "South Dakota Board of Medical and Osteopathic Examiners (SDBMOE), with a Physician Assistant Council",
+      "url": "https://sdbmoe.gov/professions-physician-assistant-pa/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 1,
+        "fact": "licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 30,
+        "facts": [
+          "ce.hoursPerCycle",
+          "ce.boardPage"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu"
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "A collaborative agreement with a South Dakota physician, kept at the primary practice site, is required until the PA is NCCPA certified and files an affidavit of at least 6,000 practice hours. The board is told in writing when an agreement ends. A PA without an agreement who loses or does not renew NCCPA certification must again have a collaborative agreement.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFiling",
+          "practice.termination",
+          "practice.lossOfNccpa"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "South Dakota Board of Nursing (CNP practice also governed by SDCL 36-9A)",
+      "url": "https://www.sdbon.org/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalDeadline"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "facts": [
+            "rn.practiceHours",
+            "rn.renewalCycleYears"
+          ],
+          "reason": "Active status rests on nursing employment hours or a refresher course; no CE hours are set."
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "practiceHours": {
+        "hours": 480,
+        "years": 6,
+        "label": "At least 140 hours of nursing employment in any 12 months over the preceding 6 years, or 480 hours in 6 years (or a board approved refresher course)",
+        "fact": "rn.practiceHours"
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "CNP renewal requires an RN license or privilege, current national certification and a misconduct affidavit; no CE hours are listed.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "facts": [
+          "aprn.nationalCertificationRequired",
+          "aprn.renewalRequirements"
+        ]
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative agreement",
+        "conditional": true,
+        "text": "A new CNP without 1,040 licensed practice hours in the preceding five years practices under a written collaborative agreement with a South Dakota physician, CNP or CNM; after 1,040 hours the CNP asks the board to inactivate it.",
+        "facts": [
+          "practice.transitionToPracticeHours",
+          "practice.agreementFilingAndRenewal"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

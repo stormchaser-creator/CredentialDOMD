@@ -1,0 +1,38 @@
+{
+ "state": "WA",
+ "facts": [
+  {
+   "field": "ce.maintenanceProgram",
+   "profession": "pa",
+   "value": "In lieu of 100 hours: NCCPA certification, or an AAPA or NCCPA maintenance of competency program",
+   "cite": "WAC 246-918-180(2)",
+   "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-180",
+   "quote": "(b) Compliance with a continuing maintenance of competency program through the American Academy of Physician Assistants (AAPA) or the NCCPA",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.board.page",
+   "profession": "pa",
+   "value": "Washington Medical Commission home page",
+   "cite": "Washington Medical Commission",
+   "url": "https://wmc.wa.gov/",
+   "quote": "Continuing Medical Education (CME) Requirements",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.board.page",
+   "profession": "np",
+   "value": "Washington State Board of Nursing home page",
+   "cite": "Washington State Board of Nursing",
+   "url": "https://nursing.wa.gov/",
+   "quote": "Continuing Competency",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

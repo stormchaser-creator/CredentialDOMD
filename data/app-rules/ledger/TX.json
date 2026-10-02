@@ -1,0 +1,584 @@
+{
+ "state": "TX",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Texas Physician Assistant Board (administered by the Texas Medical Board)",
+   "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant"
+  },
+  "licence": {
+   "title": "Physician Assistant licence (biennial registration permit)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Expiration date on the registration; renew online 60 to 90 days before expiry; no grace period"
+  },
+  "ce": {
+   "hoursPerCycle": 40,
+   "categoryRules": "At least 20 hours formal Category I from an AAPA approved sponsor (or board approved, including the HHSC human trafficking course); remaining up to 20 hours informal Category II. Up to 80 excess hours may carry forward one renewal period.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Human trafficking prevention course approved by Texas HHSC",
+     "hours": null,
+     "period": "every cycle",
+     "appliesTo": "PAs providing direct patient care; not covered by NCCPA certification; cannot be carried forward"
+    },
+    {
+     "topic": "Pain management and prescription of opioids (Category 1 or 1A)",
+     "hours": null,
+     "period": "not yet verified (statute: annually; TMB chart: each renewal)",
+     "appliesTo": "PAs with a prescriptive authority agreement authorizing opioids or with PMP access; within 1 year of issuance, then every renewal; not covered by NCCPA certification",
+     "hoursNote": "CONFLICT, not yet verified: TMB chart says 2 hours each renewal; Occ. Code 157.0513(a)(4) says not less than 2 hours annually."
+    },
+    {
+     "topic": "Forensic evidence collection (course accepted by the Governor's Sexual Assault Survivors' Task Force)",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "PAs who treat patients in an emergency room setting; begins with licences expiring February 28, 2027"
+    },
+    {
+     "topic": "Nutrition and metabolic health (Texas Nutrition Advisory Committee guidelines)",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all PAs; licences expiring on or after May 30, 2027"
+    }
+   ],
+   "controlledSubstanceCe": "Pain management and opioid prescribing CE for PAs whose PAA authorizes opioids or who have PMP access. TMB chart: 2 hours (within 1 year of issuance, then each renewal). Statute 157.0513(a)(4): not less than 2 hours annually. Count per biennium unresolved.",
+   "ceTracking": "Mandatory CE tracking through CE Broker for all TMB licensees begins September 1, 2026; CE is reported to CE Broker before renewal."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Supervising physician relationship registered with TMB before practice; changes updated within 30 days. If prescriptive authority is delegated: prescriptive authority agreement in writing, reviewed, signed and dated annually; meetings at least monthly.",
+   "notes": "Prescriptive authority agreement terms confirmed in Tex. Occ. Code 157.0512 (loaded from tcss.legis.texas.gov). A physician may hold PAAs with at most seven APRNs and PAs combined (or FTE), except in medically underserved or hospital facility based practice (157.0512(c),(d))."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": "Physician registers prescriptive delegation with TMB (Occ. Code 157.0511) and a prescriptive authority agreement must be in place (157.0512). DEA verifies delegation on the TMB website.",
+   "ceForPrescribers": "2 hours pain management and opioid prescribing each renewal if PAA authorizes opioids or PA has PMP access."
+  },
+  "facts": [
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "40 hours per 24 month registration period",
+    "cite": "TMB PA continuing education page; 22 TAC 183.16(a)",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/continuing-education-requirements-for-physician-assistants",
+    "quote": "Physician assistants need to complete at least 40 credits of continuing medical education every 24 months.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "at least 20 formal Category I from AAPA approved sponsor",
+    "cite": "22 TAC 183.16(a)(1) (adopted text, eff. 1/9/2025, LII reproduction)",
+    "url": "https://www.law.cornell.edu/regulations/texas/22-Tex-Admin-Code-SS-183-16",
+    "quote": "At least 20 hours must be from formal courses: (A) designated for Category I credit by a CME sponsor approved by the American Academy",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Researcher cited the July 2026 proposal; the adopted rule says the same for this subsection."
+   },
+   {
+    "field": "pa.ce.carryForward",
+    "value": "max 80 excess hours; not past a single renewal period (no more than 2 years after the next registration)",
+    "cite": "22 TAC 183.16(d) (adopted text, LII reproduction)",
+    "url": "https://www.law.cornell.edu/regulations/texas/22-Tex-Admin-Code-SS-183-16",
+    "quote": "A maximum of 80 total excess credit hours may be carried forward",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Human trafficking course hours cannot be carried forward (TMB CE page)."
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": "true for formal and informal hours; not for human trafficking or opioid CE",
+    "cite": "TMB PA continuing education page, Alternate Compliance",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/continuing-education-requirements-for-physician-assistants",
+    "quote": "A licensee shall be presumed to have complied with the formal and informal hours requirement of this section if the licensee is meeting",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaExclusions",
+    "value": "NCCPA MOC does not cover human trafficking or opioid requirement",
+    "cite": "TMB PA CME Hours Requirement Chart",
+    "url": "https://www.tmb.texas.gov/file/pa-cme-hours-requirement-chart",
+    "quote": "DOES NOT cover the Human trafficking prevention",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": "false",
+    "cite": "TMB PA renewal FAQ",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/physician-assistant-renewal",
+    "quote": "NCCPA Certification is required for initial licensure in Texas but not for renewal of an active Texas Physician Assistant License.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.opioid",
+    "value": "2 hours, PAA authorizing opioids or PMP access, every renewal",
+    "cite": "TMB PA CME Hours Requirement Chart",
+    "url": "https://www.tmb.texas.gov/file/pa-cme-hours-requirement-chart",
+    "quote": "any PA who 1) has a prescriptive authority agreement authorizing prescribing of opioids, or 2) has authorization to access the Prescription Monitoring Program",
+    "loaded": true,
+    "verified": false,
+    "verifierNote": "Board chart quote re-loaded and matches, but the period conflicts with the statute: Tex. Occ. Code 157.0513(a)(4) (loaded) requires a PA whose PAA authorizes opioids to complete 'not less than two hours of continuing education annually'. TMB chart lists 2 hours within 1 year of issuance, then every renewal. Count per biennium (2 or 4) is unresolved."
+   },
+   {
+    "field": "pa.ce.topicMandates.humanTrafficking",
+    "value": "HHSC approved course each renewal, direct patient care",
+    "cite": "TMB PA continuing education page (HB 2059, 86th Leg.)",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/continuing-education-requirements-for-physician-assistants",
+    "quote": "to complete a human trafficking prevention course approved by the Texas Health and Human Services Commission (HHSC)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.forensic",
+    "value": "2 hours for ER PAs; starts with licences expiring Feb 28, 2027",
+    "cite": "TMB PA continuing education page (HB 47, 89th Leg.)",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/continuing-education-requirements-for-physician-assistants",
+    "quote": "the requirement will begin for physicians and physician assistants whose license expire on February 28, 2027.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Statute Occ. Code 204.1563 (HB 47 version, loaded) confirms 2 hours for PAs whose practice includes treating patients in an emergency room setting. TMB page says the requirement starts with licences expiring February 28, 2027 because no approved course exists yet."
+   },
+   {
+    "field": "pa.ce.topicMandates.nutrition",
+    "value": "1 hour every biennial renewal; licences expiring on or after May 30, 2027",
+    "cite": "Tex. Occ. Code 204.1563 and 22 TAC 183.16 per TMB page",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/continuing-education-requirements-for-physician-assistants",
+    "quote": "This applies to licensees whose licenses expire on or after May 30, 2027.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Statute Occ. Code 204.1563 (SB 25 version, loaded) requires the CE and leaves hours to rule; the 1 hour figure is on the TMB page and in the July 2026 proposed 183.16(a)(2)(B); the adopted 183.16 (eff. 1/9/2025) does not yet contain it."
+   },
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": "biennial registration",
+    "cite": "TMB PA renewal page",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/physician-assistant-renewal",
+    "quote": "To maintain an active license, you will need to renew your registration biennially.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": "false: DPS controlled substances registration eliminated Sept 1, 2016",
+    "cite": "TMB prescribing and supervision page (SB 195, 2015)",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician/prescribing-and-supervision",
+    "quote": "the requirement for controlled substances registration (CSR) with the Texas Department of Public Safety (DPS) was eliminated on September 1, 2016.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.paaAnnualReview",
+    "value": "PAA reviewed, signed and dated annually",
+    "cite": "TMB prescribing and supervision page (Occ. Code 157.0512)",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician/prescribing-and-supervision",
+    "quote": "Be in writing and reviewed, signed and dated by the parties to the agreement on an annual basis",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Also confirmed in Tex. Occ. Code 157.0512 (loaded): subsection (m) annual review; subsection (f)(3) meetings at least once a month."
+   },
+   {
+    "field": "pa.practice.paaMeetings",
+    "value": "meetings at least monthly for PAAs entered on or after Sept 1, 2019",
+    "cite": "TMB prescribing and supervision page",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician/prescribing-and-supervision",
+    "quote": "all prescriptive authority agreements must be conducted on at least a monthly basis",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Also confirmed in Tex. Occ. Code 157.0512 (loaded): subsection (m) annual review; subsection (f)(3) meetings at least once a month."
+   },
+   {
+    "field": "pa.practice.registrationChange",
+    "value": "register supervising physician before practice; notify within 30 days of change",
+    "cite": "TMB prescribing and supervision page",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician/prescribing-and-supervision",
+    "quote": "PAs are likewise required to register their supervising physicians with the Board prior to beginning to practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.opioidStatute",
+    "value": "PAA authorizing opioids: not less than 2 hours CE annually",
+    "cite": "Tex. Occ. Code 157.0513(a)(4)",
+    "url": "https://tcss.legis.texas.gov/resources/OC/htm/OC.157.htm",
+    "quote": "is required to complete not less than two hours of continuing education annually regarding safe and effective pain management",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.ceBrokerTracking",
+    "value": "mandatory CE Broker tracking from September 1, 2026",
+    "cite": "TMB PA continuing education page",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/continuing-education-requirements-for-physician-assistants",
+    "quote": "Mandatory CE Tracking for ALL TMB licensees begins September 1, 2026.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.paaStatute",
+    "value": "PAA reviewed at least annually; QA meetings at least monthly; copy kept until 2nd anniversary of termination",
+    "cite": "Tex. Occ. Code 157.0512(f)(3), (j), (m)",
+    "url": "https://tcss.legis.texas.gov/resources/OC/htm/OC.157.htm",
+    "quote": "The prescriptive authority agreement and any amendments must be reviewed at least annually, dated, and signed by the parties to the agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.termStatute",
+    "value": "licence term two or more years as set by board rule",
+    "cite": "Tex. Occ. Code 204.156(a)",
+    "url": "https://tcss.legis.texas.gov/resources/OC/htm/OC.204.htm",
+    "quote": "A license issued under this chapter is valid for a term of two or more years, as determined by physician assistant board rule.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Texas Board of Nursing",
+   "url": "https://www.bon.texas.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 20,
+   "nlcCompactMember": true,
+   "ceNote": "20 contact hours CNE in area of practice OR a board approved national nursing certification achieved, maintained or renewed in the period (Rule 216.3(a),(b)). Licence expires on the last day of the birth month.",
+   "topicMandates": [
+    {
+     "topic": "Nursing jurisprudence and nursing ethics (CNE only; certification and CME not accepted)",
+     "hours": 2,
+     "period": "every 6 years (every third 2 year licensing period)",
+     "appliesTo": "all nurses"
+    },
+    {
+     "topic": "Older adult or geriatric care",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "nurses whose practice includes older adult or geriatric populations; may instead maintain board approved certification related to older adult or geriatric populations"
+    },
+    {
+     "topic": "Forensic evidence collection",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "nurses employed in an ER setting, within 2 years of starting ER employment"
+    },
+    {
+     "topic": "Human trafficking prevention course approved by HHSC",
+     "hours": null,
+     "period": "every cycle",
+     "appliesTo": "nurses providing direct patient care"
+    },
+    {
+     "topic": "Basic forensic evidence collection training before performing a forensic examination on a sexual assault survivor",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "nurses, including APRNs, who perform forensic examinations on sexual assault survivors"
+    },
+    {
+     "topic": "Nutrition and metabolic health (Occ. Code 301.309, SB 25, eff. September 1, 2025)",
+     "hours": null,
+     "period": "not yet verified",
+     "appliesTo": "all nurse licence holders; hours and start date to be set by BON rule, not yet published on the BON CE page"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "APRN licence (role: Nurse Practitioner, with population focus); prescriptive authority is a separate authorization",
+   "separateLicenceOrCertificate": "licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 20,
+   "pharmacologyHoursPerCycle": 5,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Pharmacotherapeutics (in addition to the 20 hours; certification does not satisfy)",
+     "hours": 5,
+     "period": "every cycle",
+     "appliesTo": "APRNs with prescriptive authority"
+    },
+    {
+     "topic": "Prescribing controlled substances (in addition to the 20 and the 5)",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "APRNs with prescriptive authority who prescribe controlled substances"
+    },
+    {
+     "topic": "Safe and effective pain management and opioid prescribing (2 hours annually)",
+     "hours": 4,
+     "period": "every cycle",
+     "appliesTo": "APRNs whose prescriptive authority agreement authorizes opioids; counts toward the 20"
+    },
+    {
+     "topic": "Approved procedures of prescribing and monitoring controlled substances (PMP access)",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "APRNs authorized to receive PMP information; within 1 year of initial licensure if licensed after September 1, 2020"
+    }
+   ],
+   "note": "The APRN's 20 hours (role and population focus) or national certification satisfies both RN and APRN renewal; they are not additive. Renewal also requires attesting to current national certification and at least 400 practice hours in the preceding biennium (22 TAC 221.8). Pharmacotherapeutics hours: Category I CME may be used, certification may not (BON CE page). Pain management and PMP hours count toward the 20."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Prescriptive authority granted by the BON on application; physician delegation registered with TMB; prescriptive authority agreement (22 TAC 222.5) or facility based protocol required.",
+   "pharmacologyCeForPrescribers": 5,
+   "controlledSubstanceCe": "3 contact hours each period for CS prescribers, plus 4 hours per period of pain management/opioid CE if the PAA authorizes opioids",
+   "stateCsRegistrationRequired": false
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "practice agreement (prescriptive authority agreement with a delegating physician)",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "Prescriptive authority agreement reviewed at least annually, dated and signed; quality assurance meetings at least once a month; chart review count set by the parties; APRN keeps a copy until the second anniversary of termination. Physician registers delegation with TMB.",
+   "authorityNote": "'restricted' is the AANP classification label; the primary sources confirm physician delegation plus a prescriptive authority agreement for prescribing."
+  },
+  "facts": [
+   {
+    "field": "np.rn.ce",
+    "value": "20 contact hours CNE or national certification per licensing period",
+    "cite": "22 TAC 216.3(a),(b) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "complete 20 contact hours of continuing nursing education (CNE) in the nurse’s area of practice within the licensing period OR",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": "2 years, expires last day of birth month",
+    "cite": "22 TAC 216.1(14) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "subsequent licensing periods will be 2 years in length",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlc",
+    "value": "Texas is an eNLC state",
+    "cite": "BON Enhanced Nurse Licensure Compact page",
+    "url": "https://www.bon.texas.gov/licensure_nurse_licensure_compact_eNLC.asp.html",
+    "quote": "Texas remains a compact state, affording Texas nurses the ability to respond to the challenges of modern health care",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.jurisprudence",
+    "value": "2 hours every third 2 year period",
+    "cite": "22 TAC 216.3(g) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "at least 2 contact hours of CNE relating to nursing jurisprudence and nursing ethics before the end of every third two-year licensing period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.forensic",
+    "value": "2 hours one-time for ER nurses",
+    "cite": "22 TAC 216.3(d) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "This is a one-time requirement within two years of the initial date of the nurse’s employment in an ER setting.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.olderAdult",
+    "value": "2 hours every period if practice includes older adults",
+    "cite": "22 TAC 216.3(h) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "required to complete at least 2 contact hours of CNE relating to older adult or geriatric populations before the end of every licensing period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.humanTrafficking",
+    "value": "HHSC approved course every period, direct patient care",
+    "cite": "22 TAC 216.3(i) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "Any nurse who provides direct patient care must complete a human trafficking prevention course that is approved by the Executive Director",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ce",
+    "value": "20 hours in role and population focus, or national certification; not additive to RN",
+    "cite": "22 TAC 216.3 via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "the required 20 contact hours for APRNs are not in addition to the required 20 contact hours for RN license renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": "5 additional hours pharmacotherapeutics, prescriptive authority holders",
+    "cite": "22 TAC 216.3(c)(3) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "must complete at least 5 additional contact hours of continuing education in pharmacotherapeutics before the end of every licensing period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "3 additional hours for CS prescribers (28 total)",
+    "cite": "22 TAC 216.3(c)(3) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "must complete at least 3 additional contact hours of continuing education related to prescribing controlled substances before the end of every licensing period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Re-loaded on the BON CE page, which cites Rule 216.3(c)(3). The 216.3 text reproduced by LII (last amended eff. 11/19/2019) has no 3 hour controlled substance item; the current TAC (SOS Appian portal) and BON rule pages did not load. Recheck the adopted rule text before shipping."
+   },
+   {
+    "field": "np.aprn.topicMandates.opioid",
+    "value": "2 hours annually (4 per period) if PAA authorizes opioids",
+    "cite": "22 TAC 216.3(c)(4) via BON CE page",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "must complete not less than 2 hours of continuing education annually (meaning, 4 hours every licensing period)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Matches 22 TAC 216.3(c)(4) (LII) and Occ. Code 157.0513(a)(4): not less than 2 hours annually."
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "true: must attest to current national certification at renewal",
+    "cite": "22 TAC 221.8 (LII reproduction)",
+    "url": "https://www.law.cornell.edu/regulations/texas/22-Tex-Admin-Code-SS-221-8",
+    "quote": "An applicant must attest on forms provided by the Board to maintaining current national certification or recertification as applicable",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Applies to APRNs who completed APRN education on or after January 1, 1996, or were licensed based on national certification (221.8(a)(2)(A),(B))."
+   },
+   {
+    "field": "np.aprn.practiceHours",
+    "value": "400 hours practice in preceding biennium",
+    "cite": "22 TAC 221.8 (LII reproduction)",
+    "url": "https://www.law.cornell.edu/regulations/texas/22-Tex-Admin-Code-SS-221-8",
+    "quote": "An applicant must attest, on forms provided by the Board, to having a minimum of 400 hours of current practice within the preceding biennium.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.lapsedCertification",
+    "value": "may not practice as APRN while certification lapsed",
+    "cite": "BON APRN practice FAQ (Rule 221.8)",
+    "url": "https://www.bon.texas.gov/faq_practice_aprn.asp.html",
+    "quote": "If your certification has lapsed, you are not eligible to practice as an APRN in Texas until your certification or recertification status is current",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.paaAnnualReview",
+    "value": "PAA reviewed at least annually, dated and signed",
+    "cite": "22 TAC 222.5 (LII reproduction)",
+    "url": "https://www.law.cornell.edu/regulations/texas/22-Tex-Admin-Code-SS-222-5",
+    "quote": "The prescriptive authority agreement and any amendments must be reviewed at least annually, dated, and signed by the parties to the agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Same requirement in Tex. Occ. Code 157.0512(m) (loaded)."
+   },
+   {
+    "field": "np.practice.paaMeetings",
+    "value": "QA meetings at least monthly",
+    "cite": "BON APRN practice FAQ",
+    "url": "https://www.bon.texas.gov/faq_practice_aprn.asp.html",
+    "quote": "How often are quality assurance meetings required? The meetings must occur at least monthly.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": "false: DPS CSR eliminated Sept 1, 2016",
+    "cite": "TMB prescribing and supervision page (SB 195, 2015)",
+    "url": "https://www.tmb.texas.gov/apply-renew/physician/prescribing-and-supervision",
+    "quote": "DPS has stopped accepting applications for the Texas Controlled Substances Registration under Chapter 481.061 of the Health and Safety Code.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.pmp",
+    "value": "2 hours one-time for APRNs authorized to access the PMP",
+    "cite": "22 TAC 216.3(c)(6)",
+    "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+    "quote": "Any APRN licensed prior to September 1, 2020, and authorized to receive information from the PMP must complete 2 hours of continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.forensicExaminer",
+    "value": "one-time forensic evidence collection training before performing a sexual assault forensic exam",
+    "cite": "22 TAC 216.3(d)(1) (LII reproduction)",
+    "url": "https://www.law.cornell.edu/regulations/texas/22-Tex-Admin-Code-SS-216-3",
+    "quote": "who performs a forensic examination on a sexual assault survivor must have basic forensic evidence collection training or the equivalent education prior to performing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.nutrition",
+    "value": "nutrition and metabolic health CE required by statute; hours set by future BON rule",
+    "cite": "Tex. Occ. Code 301.309",
+    "url": "https://tcss.legis.texas.gov/resources/OC/htm/OC.301.htm",
+    "quote": "a license holder shall complete, in accordance with this section and rules adopted under this section, continuing education regarding nutrition and metabolic health",
+    "loaded": true,
+    "verified": false,
+    "verifierNote": "Statute confirmed; hours and effective renewal date not yet set in any BON source loaded. Show as not yet verified with the BON CE page link."
+   },
+   {
+    "field": "np.rn.ceStatuteCap",
+    "value": "BON may not require more than 20 hours CE per 2 year period (general continuing competency)",
+    "cite": "Tex. Occ. Code 301.303(b)",
+    "url": "https://tcss.legis.texas.gov/resources/OC/htm/OC.301.htm",
+    "quote": "The board may not require participation in more than a total of 20 hours of continuing education in a two-year licensing period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: opioid CE period conflict. Occ. Code 157.0513(a)(4) says not less than 2 hours annually for PAs whose PAA authorizes opioids; the TMB chart says 2 hours within 1 year of issuance and then each renewal. hours left null until TMB rule text is read.",
+  "PA: 22 TAC 183.16 adopted text (eff. 1/9/2025, via LII) has no forensic or nutrition subsection; those are in the July 2026 proposed amendment. The statute (Occ. Code 204.1563, both versions) and the TMB page confirm the requirements; the 1 hour nutrition figure rests on the TMB page and the proposal.",
+  "PA: exact registration expiration date pattern (for example birth month) was not stated on the TMB renewal page or in Occ. Code 204.156.",
+  "PA: the human trafficking course length (hours) is set by HHSC approval, not stated by TMB; left null.",
+  "NP: the 3 hour controlled substance CE (BON page, citing 216.3(c)(3)) is not in the LII copy of 216.3 (last amended 11/19/2019). The official TAC and BON rule pages did not load (BON rule URLs return the home page). Recheck before shipping.",
+  "NP: nutrition and metabolic health CE is enacted for nurses (Occ. Code 301.309) but no hours or start date are published by the BON yet.",
+  "NP: the BON FAQ still mentions DPS registrations in legacy CRNA and hydrocodone text; the TMB page says DPS CSR ended September 1, 2016.",
+  "NP: 'restricted' practice authority is the AANP classification label, not Texas statutory wording."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10"
+}

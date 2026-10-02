@@ -1,0 +1,516 @@
+{
+ "state": "MT",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Montana Board of Medical Examiners",
+   "url": "https://boards.bsd.dli.mt.gov/medical-examiners/license-information/physician-assistant"
+  },
+  "licence": {
+   "title": "Physician Assistant license (PA-C)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "October 31 of the renewal year (online renewal September 1 to October 31); 100% late fee after expiry"
+  },
+  "ce": {
+   "hoursPerCycle": 0,
+   "hoursNote": "No Montana CME requirement for PA renewal was found; the former rule requiring PAs to maintain NCCPA certification (ARM 24.156.1616) was repealed effective April 29, 2017. NCCPA exam passage is a licensure criterion only.",
+   "categoryRules": null,
+   "acceptsNccpaCertificationInLieu": null,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [],
+   "controlledSubstanceCe": "None found in Montana PA statute or rules."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Only PAs with fewer than 8,000 hours of postgraduate clinical experience need a collaborative agreement (with a physician or a PA who has 8,000 or more hours), documented in written practice-level policies and procedures that are provided to the Board on request; not routinely filed. PAs who actively practised 8,000 hours before October 1, 2023 are exempt.",
+   "notes": "Chart review frequency and amount are set at the practice level in the collaboration agreement (ARM 24.156.1623). PAs who qualify for independent practice (8,000 hours) apply for an Independent Practice endorsement on the licence through the Board (Board instructions). Montana participates in the PA Licensure Compact (ARM 24.156.1627, effective May 9, 2026)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "stateCsRegistrationNote": "Statute requires DEA registration for PAs who prescribe controlled substances (MCA 37-20-404(3)(d)). Every Title 37 prescriber must register with the Montana Prescription Drug Registry at initial licensure or renewal (MCA 37-7-1503), pays an annual registry fee (MCA 37-7-1511) and must check the registry before prescribing an opioid or benzodiazepine (MCA 37-7-1515). Whether the Board of Pharmacy requires a separate state controlled substance registration for prescribers (MCA 50-32-301 and 50-32-308 speak of registration of dispensers and practitioners) was not confirmed.",
+   "separateAuthorityRegistration": false,
+   "separateAuthorityNote": "Prescribing authority is statutory: Schedules III to V, Schedule II limited to periods not exceeding 34 days.",
+   "ceForPrescribers": "None found.",
+   "pmpRegistrationRequired": true
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 2,
+    "cite": "Montana BME FAQ",
+    "url": "https://boards.bsd.dli.mt.gov/medical-examiners/faq",
+    "quote": "Two years for all licenses except Resident Physicians.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "October 31",
+    "cite": "Montana BME FAQ",
+    "url": "https://boards.bsd.dli.mt.gov/medical-examiners/faq",
+    "quote": "October 31 - Nutritionists, Physician Assistants, Podiatrists",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalWindow",
+    "value": "September 1 to October 31",
+    "cite": "Montana BME Renewal Process page",
+    "url": "https://boards.bsd.dli.mt.gov/medical-examiners/license-information/renewal-process",
+    "quote": "These licensees may renew online between Sept. 1 and Oct. 31 of their renewal year: Acupuncturists, Nutritionists, Physician Assistants, Podiatrists",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": false,
+    "cite": "ARM 24.156.1616 (repealed, 2017 MAR p. 487, Eff. 4/29/17), per the official rules.mt.gov subchapter 24.156.16 listing",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/sections/e1e66990-72a9-430d-957f-ce1393909b38",
+    "quote": "24.156.1616 INEFFECTIVE MAINTAINING NCCPA CERTIFICATION (REPEALED)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licensure.nccpaExam",
+    "value": true,
+    "cite": "MCA 37-20-402(1)(c)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0200/part_0040/section_0020/0370-0200-0040-0020.html",
+    "quote": "has taken and passed an examination administered by the national commission on certification of physician assistants.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "collaborative agreement under 8,000 hours",
+    "cite": "MCA 37-20-203(2)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0200/part_0020/section_0030/0370-0200-0020-0030.html",
+    "quote": "A physician assistant with fewer than 8,000 hours of postgraduate clinical experience shall practice medicine with a collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Written policies; copy to Board on request",
+    "cite": "MCA 37-20-203(4)(b)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0200/part_0020/section_0030/0370-0200-0020-0030.html",
+    "quote": "provide a copy of the written policies and procedures and documentation of compliance under this subsection (4) to the board upon the board's request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.exemption",
+    "value": "8,000 hours before Oct 1, 2023 exempt",
+    "cite": "MCA 37-20-203(5)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0200/part_0020/section_0030/0370-0200-0020-0030.html",
+    "quote": "A licensed physician assistant actively practicing for 8,000 hours prior to October 1, 2023, is exempt from the collaborative agreement requirement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.chartReview",
+    "value": "Set at practice level",
+    "cite": "ARM 24.156.1623",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/926a6545-4755-4757-9ff4-d597fd8c7c83",
+    "quote": "Chart review for a physician assistant shall occur, with frequency and amount to be determined at the practice level",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": true,
+    "cite": "MCA 37-20-404(3)(d)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0200/part_0040/section_0040/0370-0200-0040-0040.html",
+    "quote": "A physician assistant shall maintain registration with the federal drug enforcement administration if the physician assistant is authorized to prescribe controlled substances.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scheduleII",
+    "value": "Limited periods not exceeding 34 days",
+    "cite": "MCA 37-20-404(3)(b)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0200/part_0040/section_0040/0370-0200-0040-0040.html",
+    "quote": "Prescribing, dispensing, and administration of Schedule II drugs listed in 50-32-224 may be authorized for limited periods not to exceed 34 days.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalRule",
+    "value": "Physician Assistant: biennially, October 31",
+    "cite": "ARM 24.101.413 (Renewal Dates and Requirements, amended Eff. 1/10/26)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/4565e7df-cfbf-4c65-a128-cafbc6402095",
+    "quote": "Physician Assistant Biennially October 31",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": 0,
+    "cite": "rules.mt.gov subchapter 24.156.16 listing (PA renewal rule 24.156.1620 repealed; no effective CE rule)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/sections/e1e66990-72a9-430d-957f-ce1393909b38",
+    "quote": "24.156.1620 INEFFECTIVE PHYSICIAN ASSISTANT LICENSE RENEWAL (REPEALED)",
+    "loaded": true,
+    "verified": false,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10",
+    "unverifiedReason": "Absence of PA CME is inferred: the only effective rules in ARM 24.156.16 are 1604, 1623 and 1627 and none sets CME; the Board FAQ says physicians need no CME but says nothing for PAs. No primary text states 'PAs need no CME'."
+   },
+   {
+    "field": "practice.independentPracticeEndorsement",
+    "value": "PAs eligible for independent practice (8,000 hours) apply for an Independent Practice endorsement on their licence",
+    "cite": "Montana BME, Instructions for Physician Assistant Independent Practice Application",
+    "url": "https://boards.bsd.dli.mt.gov/_docs/med/ecp/Instructions_for_PA_Independent_Practice_Endorsement.pdf",
+    "quote": "The application is built like an endorsement. Check the box next to “Independent Practice” then click “continue.”",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.paCompact",
+    "value": "Montana participates in the PA Licensure Compact; compact privilege applications under ARM 24.156.1627, Eff. 5/9/26",
+    "cite": "ARM 24.156.1627",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/ff787565-7ece-416d-82ca-fe08d691d1e3",
+    "quote": "A Montana-licensed physician assistant who wishes to apply for compact privilege in another state that is a member of the Physician Assistant Licensure Compact",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.mpdrRegistration",
+    "value": "Register with the Montana Prescription Drug Registry at initial licensure or renewal (all Title 37 prescribers)",
+    "cite": "MCA 37-7-1503(1)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0070/part_0150/section_0030/0370-0070-0150-0030.html",
+    "quote": "shall register to use the prescription drug registry at the time of initial licensure or renewal of licensure.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.mpdrMandatoryUse",
+    "value": "Check the registry before prescribing an opioid or benzodiazepine (exceptions listed in statute)",
+    "cite": "MCA 37-7-1515",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0070/part_0150/section_0150/0370-0070-0150-0150.html",
+    "quote": "shall review a patient's records under the prescription drug registry before the prescriber issues a prescription for an opioid or a benzodiazepine for the patient",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.mpdrFee",
+    "value": "Annual registry fee for every Title 37 prescriber",
+    "cite": "MCA 37-7-1511(1)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0070/part_0150/section_0110/0370-0070-0150-0110.html",
+    "quote": "Each person licensed under Title 37 to prescribe or dispense prescription drugs shall pay to the board an annual, nonrefundable fee",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "federal.deaOneTimeTraining",
+    "value": "One-time 8-hour DEA training (opioid or other substance use disorders) for DEA registrants",
+    "cite": "DEA Diversion Control Division letter to registrants",
+    "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_Training_Letter_Final.pdf",
+    "quote": "enacted a new one-time, eight-hour training requirement for all Drug Enforcement Administration (DEA)-registered practitioners on the treatment and management of patients",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Montana Board of Nursing",
+   "url": "https://boards.bsd.dli.mt.gov/nursing/license-information/aprn"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 of odd or even years depending on the licensee's cycle",
+   "ceHoursPerCycle": 0,
+   "ceNote": "Board repealed CE renewal requirements effective November 18, 2023 (MAR 24-159-93).",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN license (Certified Nurse Practitioner, CNP)",
+   "separateLicenceOrCertificate": true,
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 (odd or even year by licensee); APRN page and prescriptive authority page differ on whether all nursing licences renew in even years",
+   "ceHoursPerCycle": 0,
+   "pharmacologyHoursPerCycle": 0,
+   "ceNote": "The former 24 contact hours (12 pharmacology for prescribers) were repealed in 2023. APRN must submit verification of national recertification within 30 days of issuance and keep an individualized quality assurance plan.",
+   "nationalCertificationRequired": true,
+   "topicMandates": []
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Prescriptive authority endorsement on the APRN licence (ARM 24.159.1463), renewed concurrently with the licence every two years; lapses 45 days after a missed renewal and then requires reapplication.",
+   "pharmacologyCeForPrescribers": "None per cycle. Initial endorsement: graduate pharmacology course within 5 years, or a 3 credit course or 45 contact hours of pharmacology CE if graduated more than 5 years ago.",
+   "controlledSubstanceCe": "None found.",
+   "stateCsRegistrationRequired": null,
+   "stateCsNote": "No Board of Nursing controlled substance registration beyond the prescriptive authority endorsement. Every Title 37 prescriber registers with the Montana Prescription Drug Registry at initial licensure or renewal (MCA 37-7-1503), pays an annual registry fee (MCA 37-7-1511) and checks the registry before prescribing an opioid or benzodiazepine (MCA 37-7-1515). A separate Board of Pharmacy controlled substance registration for prescribers (MCA 50-32-301, 50-32-308) was not confirmed either way.",
+   "pmpRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "authorityNote": "Label follows the AANP taxonomy; primary rule describes APRN practice as independent and/or collaborative with no physician agreement requirement found in ARM 24.159.14.",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None required."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": 2,
+    "cite": "Montana BON FAQ",
+    "url": "https://boards.bsd.dli.mt.gov/nursing/faq",
+    "quote": "All RN, LPN, and APRN licenses expire on December 31st every two years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalDeadline",
+    "value": "December 31, odd or even year",
+    "cite": "Montana BON RN page",
+    "url": "https://boards.bsd.dli.mt.gov/nursing/license-information/rn",
+    "quote": "If you are an \"odd\" licensee, your license must be renewed by December 31st of odd numbered years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": 0,
+    "cite": "Montana BON Continuing Education page",
+    "url": "https://boards.bsd.dli.mt.gov/nursing/continuing-education",
+    "quote": "the Montana Board of Nursing no longer requires continuing education contact hours to be completed as a requirement for renewal of a nursing license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceRepeal",
+    "value": "CE renewal rules repealed (ARM 24.159.2101, .2102, .2104, .2106), certified Nov 7, 2023",
+    "cite": "MAR Notice 24-159-93 adoption",
+    "url": "https://boards.bsd.dli.mt.gov/_docs/nur/24-159-93adp-arm.pdf",
+    "quote": "The board is repealing the specific CE requirements for license renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "Montana BON FAQ",
+    "url": "https://boards.bsd.dli.mt.gov/nursing/faq",
+    "quote": "The Montana Board of Nursing is a compact state, effective October 1, 2015.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "Montana BON APRN page",
+    "url": "https://boards.bsd.dli.mt.gov/nursing/license-information/aprn",
+    "quote": "Renewal Period: Occurs every other year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "ARM 24.159.1406(1)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/4b4d673e-3911-430f-a7c7-40ca8b8f9770",
+    "quote": "The APRN licensed in Montana may only practice in the role and population focus in which the APRN has current national certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.recertificationReporting",
+    "value": "Submit recertification within 30 days",
+    "cite": "ARM 24.159.1469(1)(a)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/a0282e90-5e03-4ca4-899a-9c801a7a813b",
+    "quote": "submit verification of national recertification to the board within 30 days of issuance",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.qualityAssurancePlan",
+    "value": true,
+    "cite": "ARM 24.159.1469(1)(b)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/a0282e90-5e03-4ca4-899a-9c801a7a813b",
+    "quote": "maintain an individualized quality assurance plan",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.renewal",
+    "value": "Concurrent with licence, every two years",
+    "cite": "ARM 24.159.1468(1)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/f4f79238-598a-4b22-9cf7-17f4ee55af69",
+    "quote": "The term of an APRN's prescriptive authority is concurrent with licensure and ends every two years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.lapse",
+    "value": "Lapses 45 days after missed renewal",
+    "cite": "ARM 24.159.1468(3)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/f4f79238-598a-4b22-9cf7-17f4ee55af69",
+    "quote": "the APRN's prescriptive authority will lapse and expire after 45 days.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.initialPharmacology",
+    "value": "45 contact hours if graduated over 5 years ago",
+    "cite": "Montana BON Prescriptive Authority page (ARM 24.159.1463)",
+    "url": "https://boards.bsd.dli.mt.gov/nursing/license-information/prescriptive-authority",
+    "quote": "Either a graduate level course of three semester credits or 45 contact hours of continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority",
+    "value": "independent and/or collaborative",
+    "cite": "ARM 24.159.1406(1)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/4b4d673e-3911-430f-a7c7-40ca8b8f9770",
+    "quote": "APRN practice is an independent and/or collaborative practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalRule",
+    "value": "Nurse Practitioner and APRN Prescriptive Authority: biennially, December 31",
+    "cite": "ARM 24.101.413 (Renewal Dates and Requirements)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/4565e7df-cfbf-4c65-a128-cafbc6402095",
+    "quote": "Nurse Practitioner Biennially December 31 APRN Prescriptive Authority Biennially December 31",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceRulesRepealedEffective",
+    "value": "Biennial CE rule 24.159.2102 repealed, effective 11/18/23",
+    "cite": "rules.mt.gov subchapter 24.159.21 listing",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/sections/357d8300-d586-46d3-be9b-3202d87f196d",
+    "quote": "24.159.2102 INEFFECTIVE BIENNIAL CONTINUING EDUCATION REQUIREMENTS (REPEALED)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.cnpIndependent",
+    "value": "CNP practice is independent and/or collaborative",
+    "cite": "ARM 24.159.1470",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/f2c423db-f51e-4de9-948d-c682eb12e152",
+    "quote": "Certified Nurse Practitioner (CNP) practice means the independent and/or collaborative management of primary and/or acute health care",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.initialPharmacologyRule",
+    "value": "45 contact hours of pharmacology CE in the past five years (or 3 credit course) for initial authority if graduated over 5 years ago",
+    "cite": "ARM 24.159.1463(1)(b)",
+    "url": "https://rules.mt.gov/browse/collections/aec52c46-128e-4279-9068-8af5d5432d74/policies/675e38d8-1522-43c3-88d8-556fd2028e82",
+    "quote": "must complete either a graduate level course of three semester credits or 45 contact hours of continuing education in the past five years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.mpdrRegistration",
+    "value": "Register with the Montana Prescription Drug Registry at initial licensure or renewal",
+    "cite": "MCA 37-7-1503(1)",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0070/part_0150/section_0030/0370-0070-0150-0030.html",
+    "quote": "shall register to use the prescription drug registry at the time of initial licensure or renewal of licensure.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.mpdrMandatoryUse",
+    "value": "Check the registry before prescribing an opioid or benzodiazepine (exceptions listed in statute)",
+    "cite": "MCA 37-7-1515",
+    "url": "https://mca.legmt.gov/bills/mca/title_0370/chapter_0070/part_0150/section_0150/0370-0070-0150-0150.html",
+    "quote": "shall review a patient's records under the prescription drug registry before the prescriber issues a prescription for an opioid or a benzodiazepine for the patient",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "federal.deaOneTimeTraining",
+    "value": "One-time 8-hour DEA training (opioid or other substance use disorders) for DEA registrants",
+    "cite": "DEA Diversion Control Division letter to registrants",
+    "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_Training_Letter_Final.pdf",
+    "quote": "enacted a new one-time, eight-hour training requirement for all Drug Enforcement Administration (DEA)-registered practitioners on the treatment and management of patients",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "MT PA: absence of any PA CME requirement is inferred from the official rules.mt.gov listing (only 24.156.1604, 1623 and 1627 effective in the PA subchapter) and the absence of a CME clause in MCA 37-20; the Board has no page stating it for PAs.",
+  "MT PA and NP: whether the Board of Pharmacy requires a separate state controlled substance registration for prescribers (MCA 50-32-301, 50-32-308) was not confirmed; recorded as null.",
+  "MT NP: renewal year conflict. The APRN and RN pages say odd or even licensees renew December 31 of their year; the Prescriptive Authority page says all nursing licences renew December 31 of even years. ARM 24.101.413 says only 'Biennially, December 31'. Take the year from the licence itself.",
+  "MT NP: 'full' practice label is the AANP taxonomy; primary support is ARM 24.159.1406 and 24.159.1470 (independent and/or collaborative practice) with no agreement rule among effective 24.159.14 rules. No transition-to-practice hour rule exists among the effective rules.",
+  "MT PA renewal: which calendar year (odd or even) a given PA renews in is not stated; ARM 24.101.413 says 'Biennially, October 31'.",
+  "MT PA Independent Practice endorsement: the Board instructions PDF confirms the endorsement exists; the rule or statute that creates it and any renewal of the endorsement were not found."
+ ],
+ "verification": {
+  "by": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "MT PA ce.nccpaCertificationRequiredForRenewal: source moved from the 2022 Board compilation PDF to the current official rules.mt.gov subchapter listing (rule status INEFFECTIVE, REP 2017 MAR p. 487, Eff. 4/29/17). Value (false) unchanged.",
+   "MT PA: MCA URLs updated from archive.legmt.gov to mca.legmt.gov (the archive redirects there); 37-20-402 history now shows a 2025 amendment, text of the quoted clauses unchanged.",
+   "MT PA: added missed items: Independent Practice endorsement on the licence for PAs with 8,000 hours (Board instructions PDF), ARM 24.101.413 as the primary renewal rule (biennial, October 31), PA Compact rule 24.156.1627 (Eff. 5/9/26), and Montana Prescription Drug Registry duties: register at initial licensure or renewal (MCA 37-7-1503), mandatory check before opioid or benzodiazepine prescriptions (MCA 37-7-1515), annual fee (MCA 37-7-1511). The researcher's 'MPDR fee at renewal' is corrected to an annual fee per statute.",
+   "MT PA ce.hoursPerCycle: added as an explicit fact with verified:false (absence inferred from the official subchapter listing, not stated by the Board).",
+   "MT NP: added ARM 24.101.413 (Nurse Practitioner and APRN Prescriptive Authority renew biennially on December 31), the rules.mt.gov listing showing ARM 24.159.2102 repealed, ARM 24.159.1470 (CNP practice independent and/or collaborative), ARM 24.159.1463(1)(b) as the rule source for the 45 pharmacology hours, and Prescription Drug Registry registration and mandatory use (pmpRegistrationRequired set true).",
+   "MT both professions: no CE topic mandate exists to miss: Montana has no renewal CE for PAs (no effective rule) or for RNs/APRNs (repealed Eff. 11/18/23). Checked for opioid/pain, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide prevention, infection control, cultural competency and domestic violence: none in MCA Title 37 ch. 8 and 20 provisions or ARM 24.156.16 / 24.159.14 loaded. Federal one-time 8-hour DEA training added for both."
+  ],
+  "stillUnverified": [
+   "MT PA: absence of any PA CME requirement is inferred from the official rules.mt.gov listing (only 24.156.1604, 1623 and 1627 effective in the PA subchapter) and the absence of a CME clause in MCA 37-20; the Board has no page stating it for PAs.",
+   "MT PA and NP: whether the Board of Pharmacy requires a separate state controlled substance registration for prescribers (MCA 50-32-301, 50-32-308) was not confirmed; recorded as null.",
+   "MT NP: renewal year conflict. The APRN and RN pages say odd or even licensees renew December 31 of their year; the Prescriptive Authority page says all nursing licences renew December 31 of even years. ARM 24.101.413 says only 'Biennially, December 31'. Take the year from the licence itself.",
+   "MT NP: 'full' practice label is the AANP taxonomy; primary support is ARM 24.159.1406 and 24.159.1470 (independent and/or collaborative practice) with no agreement rule among effective 24.159.14 rules. No transition-to-practice hour rule exists among the effective rules.",
+   "MT PA renewal: which calendar year (odd or even) a given PA renews in is not stated; ARM 24.101.413 says 'Biennially, October 31'.",
+   "MT PA Independent Practice endorsement: the Board instructions PDF confirms the endorsement exists; the rule or statute that creates it and any renewal of the endorsement were not found."
+  ]
+ }
+}

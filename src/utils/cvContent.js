@@ -3,6 +3,7 @@ import { formatDate, isCurrentJob } from "./helpers.js";
 import { isOnCv, lifecycleOf } from "./lifecycle.js";
 import { websiteLabel } from "./contactFormat.js";
 import { withDegree } from "./outgoingText.js";
+import { DEGREE_LABELS, isAdvancedPractice, isPhysicianDegree, isPracticeLicense } from "../constants/professions.js";
 
 /**
  * The one place a CV's shape is decided. Preview, plain text, and PDF all
@@ -36,7 +37,10 @@ export function buildCvContent(data, template = "clinical") {
   const s = data.settings || {};
     const sections = [];
     const deg = s.degreeType || "";
-    const fullDegree = deg === "DO" ? "Doctor of Osteopathic Medicine" : deg === "MD" ? "Doctor of Medicine" : "";
+    const fullDegree = deg === "DO" ? "Doctor of Osteopathic Medicine" : deg === "MD" ? "Doctor of Medicine" : (DEGREE_LABELS[deg] || "");
+    // "Dr." only for MD and DO (as before); a PA, an NP or a member who has
+    // not chosen a profession is never given an honorific on a CV.
+    const physician = isPhysicianDegree(deg);
     const yr = (d) => (d ? String(d).slice(0, 4) : "");
     // A CV states only the precision it has. A stored Jan-1 date means
     // "that year" — printing "January 1, 2006" would assert a day nobody knew.
@@ -69,7 +73,7 @@ export function buildCvContent(data, template = "clinical") {
     // HEADER — Dr. Name / address / email / website / phone
     sections.push({
       type: "header",
-      name: s.name ? `Dr. ${s.name}` : "Physician Name",
+      name: s.name ? (physician ? `Dr. ${s.name}` : s.name) : physician || !deg ? "Physician Name" : "Your Name",
       degree: deg,
       fullDegree,
       address: s.address || "",
@@ -149,7 +153,7 @@ export function buildCvContent(data, template = "clinical") {
       if (activities.length > 0) {
         sections.push({
           type: "section",
-          title: "Medical Student",
+          title: deg === "PA" ? "PA Student" : deg === "NP" ? "Nursing Student" : "Medical Student",
           items: activities.map(e => ({
             primary: `${namesThePhysician(e.name) ? e.type : e.name}${eduYears(e) ? ` ${eduYears(e)}` : ""}`,
             secondary: e.institution || "",
@@ -172,7 +176,8 @@ export function buildCvContent(data, template = "clinical") {
       // and superseded licences stay in the full export for disclosures.
       const lic = (data.licenses || []).filter(isOnCv);
       const isBoard = (l) => /board/i.test(l.type || "");
-      const isMedical = (l) => /medical license/i.test(l.type || "");
+      // A PA's or NP's practice licences (PA, APRN, RN) are their "Licenses".
+      const isMedical = (l) => (isAdvancedPractice(deg) ? isPracticeLicense(l, deg) : /medical license/i.test(l.type || ""));
       const isDEA = (l) => /dea/i.test(l.type || "");
       for (const b of lic.filter(isBoard)) {
         items.push({
@@ -184,7 +189,7 @@ export function buildCvContent(data, template = "clinical") {
       const meds = lic.filter(isMedical).sort((a, b) =>
         (STATE_NAMES[a.state] || a.state || "").localeCompare(STATE_NAMES[b.state] || b.state || ""));
       if (meds.length > 0) {
-        items.push({ primary: "Medical Licenses", secondary: "", date: "", subhead: true });
+        items.push({ primary: isAdvancedPractice(deg) ? "Licenses" : "Medical Licenses", secondary: "", date: "", subhead: true });
         for (const m of meds) {
           // The stored status says provisional; older records said it only in
           // their type text.

@@ -1,0 +1,559 @@
+{
+ "state": "FL",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Florida Board of Medicine (Council on Physician Assistants)",
+   "url": "https://flboardofmedicine.gov/physician-assistant-renewal/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "January 31 of each even-numbered year (midnight ET)"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "At least 50 hours Category I (AAPA, ACCME, AMA, AOA, or AAFP approved); remaining 50 may be Category II. Mandated topic hours count inside the 100.",
+   "acceptsNccpaCertificationInLieu": true,
+   "acceptsNccpaCertificationInLieuNote": "Current NCCPA certification at renewal substitutes for the general hours (board page: 98 general hours, or 97 at first renewal); the mandated topics (medical errors, domestic violence when due, HIV/AIDS at first renewal, prescriber hours) must still be documented.",
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Prevention of medical errors",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all PAs"
+    },
+    {
+     "topic": "Domestic violence",
+     "hours": 2,
+     "period": "every 6 years (every third biennium)",
+     "appliesTo": "all PAs"
+    },
+    {
+     "topic": "HIV/AIDS (Category I, must include Florida law)",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "first renewal only"
+    },
+    {
+     "topic": "Specialty area(s) of the supervising physician(s)",
+     "hours": 10,
+     "period": "every cycle",
+     "appliesTo": "PAs with prescriptive privileges; counts toward the 100 (Rule 64B8-30.005(6): 'These hours may be utilized to meet the general continuing education requirement')"
+    },
+    {
+     "topic": "Safe and effective prescribing of controlled substances (part of the 10 specialty hours)",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "PAs with prescriptive privileges"
+    },
+    {
+     "topic": "Human trafficking",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "ch. 458 licensees incl. PAs; statute deadline 'By January 1, 2021', hour counts inside total CE (s. 456.0341(2)); not listed on the board's PA renewal CE table, so treatment of PAs licensed after 2021 is not confirmed"
+    }
+   ],
+   "controlledSubstanceCe": "3 hours every biennium on safe and effective prescribing of controlled substances, within the 10 specialty hours, for PAs with prescriptive privileges; course must come from a statewide professional association of physicians in Florida accredited for AMA PRA Category 1 (or AAPA Category 1 / AOA 1-A)."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Supervising physician must notify the Department on a department form of intent to delegate prescriptive authority before delegating, and of any change in prescriptive privileges. Renewal requires current primary practice address; no periodic agreement re-filing found in the sources loaded.",
+   "notes": "Prescribing PAs pay a prescribing registration ($10 add-on shown on board renewal page) at renewal. Rule 64B8-30.005 effective 6/22/2026."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "Prescribing registration / prescriber number obtained through the licence (checkbox on renewal application); supervising physician files notice of delegation.",
+   "ceForPrescribers": "10 hours in supervising physician specialty incl. 3 hours controlled substance prescribing, every biennium",
+   "chronicPainDesignation": "s. 456.44(2): a PA (or APRN) who prescribes Schedule II, III or IV controlled substances for chronic nonmalignant pain must designate himself or herself as a controlled substance prescribing practitioner on the practitioner profile. This is a designation, not a separate state CS registration."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "Rule 64B8-30.005(1), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B8-30.005",
+    "quote": "A Physician Assistant must renew his licensure on a biennial basis.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "January 31, even years",
+    "cite": "Board of Medicine PA renewal page",
+    "url": "https://flboardofmedicine.gov/physician-assistant-renewal/",
+    "quote": "All physician assistant licenses expire at midnight, Eastern Time, January 31, of each even year, unless renewed.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 100,
+    "cite": "Rule 64B8-30.005(2)(b), F.A.C.; s. 458.347(6)(c), F.S.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B8-30.005",
+    "quote": "Completion of 100 hours of Continuing Medical Education in the previous two (2) years or documentation that the licensee is certified",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "min 50 Category I",
+    "cite": "Rule 64B8-30.005(2)(b), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B8-30.005",
+    "quote": "A minimum of 50 hours must be Category I Continuing Medical Education approved by the American Academy of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "Board of Medicine PA renewal page",
+    "url": "https://flboardofmedicine.gov/physician-assistant-renewal/",
+    "quote": "A current NCCPA certification can substitute for the 97 general CME hours.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.medicalErrors",
+    "value": 2,
+    "cite": "Rule 64B8-30.005(2)(e), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B8-30.005",
+    "quote": "Completion of two hours of continuing medical education relating to prevention of medical errors",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.domesticViolence",
+    "value": "2 hours every third biennium",
+    "cite": "Rule 64B8-30.005(2)(c), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B8-30.005",
+    "quote": "As part of every third biennial renewal licensure period, all licensees shall complete two (2) hours of training in domestic violence",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.hivAids",
+    "value": "1 hour, first renewal",
+    "cite": "Rule 64B8-30.005(2)(d), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B8-30.005",
+    "quote": "Upon a licensee's first renewal of licensure, the licensee must document the completion of one (1) hour of Category I",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.prescriberHours",
+    "value": "10 hours incl. 3 controlled substances",
+    "cite": "Rule 64B8-30.005(6), F.A.C.; s. 458.347 F.S.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B8-30.005",
+    "quote": "all physician assistants with prescriptive privileges shall complete a minimum of 10 hours of continuing education in the specialty area(s) of the supervising physician(s)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.controlledSubstanceCe",
+    "value": 3,
+    "cite": "Rule 64B8-30.005(6), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B8-30.005",
+    "quote": "Three of the 10 hours must consist of a continuing education course on the safe and effective prescribing of controlled substance medications",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.humanTrafficking",
+    "value": "1 hour, by Jan 1 2021",
+    "cite": "s. 456.0341(1), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0456/Sections/0456.0341.html",
+    "quote": "By January 1, 2021, each licensee or certificateholder shall complete a board-approved ... 1-hour continuing education course on human trafficking.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "s. 456.0341(2) requires the hour to be counted inside the total CE hours. Applies to ch. 458 licensees (PAs). Text is a one-time 'By January 1, 2021' deadline; how the board applies it to PAs licensed after 2021 is not stated on the PA renewal page."
+   },
+   {
+    "field": "pa.practice.prescribingDelegationNotice",
+    "value": "physician notifies department before delegating",
+    "cite": "s. 458.347(4)(e)2., F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0458/Sections/0458.347.html",
+    "quote": "The supervising physician must notify the department of his or her intent to delegate, on a department-approved form, before delegating such authority",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaInLieuStatute",
+    "value": "100 hours or current NCCPA certificate",
+    "cite": "s. 458.347(6)(c), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0458/Sections/0458.347.html",
+    "quote": "Each licensed physician assistant shall biennially complete 100 hours of continuing medical education or shall hold a current certificate issued by the National Commission",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.prescriberHoursStatute",
+    "value": "10 hours with each licensure renewal, 3 on controlled substances",
+    "cite": "s. 458.347(4)(e)4., F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0458/Sections/0458.347.html",
+    "quote": "complete a minimum of 10 continuing medical education hours in the specialty practice in which the physician assistant has prescriptive privileges with each licensure renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.ce.hivAidsStatute",
+    "value": "HIV/AIDS course no later than first renewal; applies to ch. 458 and part I ch. 464 licensees",
+    "cite": "s. 456.033(1), F.S. (2026 Florida Statutes)",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0456/Sections/0456.033.html",
+    "quote": "Each person shall be required by the appropriate board to complete no later than upon first renewal a continuing educational course",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.domesticViolenceStatute",
+    "value": "2 hours every third biennial renewal; ch. 458 and part I ch. 464",
+    "cite": "s. 456.031(1)(a), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0456/Sections/0456.031.html",
+    "quote": "to complete a 2-hour continuing education course, approved by the board, on domestic violence",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.dea2HourCourseNotApplicable",
+    "value": "s. 456.0301 2 hour DEA prescriber course does not apply to PAs or APRNs (their practice acts require 3 hours)",
+    "cite": "s. 456.0301(1)(a), F.S. (amended ch. 2026-6)",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0456/Sections/0456.0301.html",
+    "quote": "This paragraph does not apply to a licensee who is required by his or her applicable practice act to complete a minimum of 2 hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.chronicPainDesignation",
+    "value": "PAs and APRNs prescribing Schedule II-IV for chronic nonmalignant pain must designate themselves on the practitioner profile",
+    "cite": "s. 456.44(2), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0456/Sections/0456.44.html",
+    "quote": "Designate himself or herself as a controlled substance prescribing practitioner on his or her practitioner profile.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Florida Board of Nursing",
+   "url": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 24,
+   "nlcCompactMember": true,
+   "renewalDeadline": "Biennial, in three renewal groups at midnight ET: Group 1 April 30, 2028; Group 2 July 31, 2028; Group 3 April 30, 2027 (RN and APRN pages list the same groups)",
+   "topicMandates": [
+    {
+     "topic": "Prevention of medical errors",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all nurses"
+    },
+    {
+     "topic": "Florida laws and rules",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all nurses"
+    },
+    {
+     "topic": "Recognizing impairment in the workplace",
+     "hours": 2,
+     "period": "every 4 years (every other biennium)",
+     "appliesTo": "all nurses"
+    },
+    {
+     "topic": "Human trafficking",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all nurses"
+    },
+    {
+     "topic": "Domestic violence",
+     "hours": 2,
+     "period": "every 6 years (every third biennium)",
+     "appliesTo": "all nurses"
+    },
+    {
+     "topic": "HIV/AIDS",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "first biennium only"
+    }
+   ],
+   "notes": "1 contact hour per calendar month of the licensure cycle (24 for a full biennium). Nurses certified by an NCCA or ABSNC accredited specialty program are exempt from the general CE, but not from the 2 hour human trafficking course (or, for APRNs, the 3 hour controlled substance course)."
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse); optional Autonomous APRN registration",
+   "separateLicenceOrCertificate": "separate APRN licence (plus active RN licence)",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 24,
+   "ceNote": "RN CE (1 contact hour per month, 24 for a full biennium) satisfies both licences; up to 50% may be CME (Rule 64B9-5.002(4)). APRNs add the 3 hour controlled substance course every biennium within the 30 hour statutory cap. Board APRN table: 16 general + medical errors 2 + laws and rules 2 + human trafficking 2 + impairment 2 (every other biennium) + controlled substances 3 = 27 in a biennium when impairment is due. Domestic violence (2, every third biennium): the board page says these hours are in addition to the 24, while Rule 64B9-5.002(2) lists it among courses that are a mandatory part of the hours; this conflict is unresolved. Autonomous APRNs: 10 additional hours on top of 30 hours of CE (s. 464.0123(5)(b)).",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Safe and effective prescription of controlled substances",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "all APRNs (not waived by certification exemption)"
+    },
+    {
+     "topic": "Additional board-approved CE for autonomous registration (graduate level per Rule 64B9-4.020(4))",
+     "hours": 10,
+     "period": "every cycle",
+     "appliesTo": "registered Autonomous APRNs only; in addition to the 30 hours of CE under s. 464.013, and the NCCA/ABSNC certification exemption does not remove it"
+    }
+   ],
+   "nationalCertificationNote": "Conditional: the renewal page requires a copy of current national certification from licensees who were required to be nationally certified at original licensure."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "No separate prescriptive authority registration found; APRN prescribes within the supervisory protocol (or under autonomous registration for primary care). Dispensing requires a separate dispensing registration.",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "3 hours every biennium (s. 464.013(3)(b))",
+   "stateCsRegistrationRequired": null,
+   "chronicPainDesignation": "s. 456.44(2): a PA (or APRN) who prescribes Schedule II, III or IV controlled substances for chronic nonmalignant pain must designate himself or herself as a controlled substance prescribing practitioner on the practitioner profile. This is a designation, not a separate state CS registration."
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "supervisory protocol with a physician (unless registered as Autonomous APRN for primary care)",
+   "transitionToPracticeHours": 3000,
+   "agreementFilingAndRenewal": "Protocol maintained on site at each practice location; the physician files notice of the protocol with the Board of Medicine within 30 days of entering it and within 30 days after terminating it. Autonomous APRN registration (primary care only) requires 3,000 supervised clinical hours in the prior 5 years plus graduate pharmacology and differential diagnosis coursework; renewed with the APRN licence with updated financial responsibility form."
+  },
+  "facts": [
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "1 contact hour per month (24 per biennium)",
+    "cite": "Rule 64B9-5.002(1), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B9-5.002",
+    "quote": "During each biennium, one contact hour must be earned for each calendar month of the licensure cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates",
+    "value": "medical errors 2, laws and rules 2, impairment 2 every other, human trafficking 2, domestic violence every third, HIV/AIDS first",
+    "cite": "Rule 64B9-5.002(2), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B9-5.002",
+    "quote": "A two hour course in Florida laws and rules each biennium; (d) A two hour course in recognizing impairment in the workplace every other biennium",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.certificationExemption",
+    "value": true,
+    "cite": "s. 464.013(3)(a), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0464/Sections/0464.013.html",
+    "quote": "A nurse who is certified by a health care specialty program accredited by the National Commission for Certifying Agencies ... is exempt",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.controlledSubstanceCe",
+    "value": 3,
+    "cite": "s. 464.013(3)(b), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0464/Sections/0464.013.html",
+    "quote": "advanced practice registered nurses ... must complete at least 3 hours of continuing education on the safe and effective prescription of controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.humanTrafficking",
+    "value": "2 hours every biennium",
+    "cite": "s. 464.013(3)(c), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0464/Sections/0464.013.html",
+    "quote": "All licensees must complete this course for every biennial licensure renewal on or after January 1, 2019.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "Groups: April 30 2027, April 30 2028, July 31 2028",
+    "cite": "APRN renewal page",
+    "url": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/",
+    "quote": "Group 1 – current license will expire at midnight, Eastern Standard Time, April 30, 2028",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "true for APRNs who were required to be certified at original licensure (they submit current certification at renewal)",
+    "cite": "APRN renewal page",
+    "url": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/",
+    "quote": "Licensees who were required to be nationally certified, at the time of original licensure, must submit a copy of their current national certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.autonomousCe",
+    "value": 10,
+    "cite": "Rule 64B9-4.020(4), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B9-4.020",
+    "quote": "For registration renewal, an autonomous APRN must complete ten (10) additional graduate-level continuing education credits",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.protocol",
+    "value": "supervisory protocol maintained on site",
+    "cite": "s. 464.012(3), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0464/Sections/0464.012.html",
+    "quote": "within the framework of an established protocol that must be maintained on site at the location or locations at which",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.protocolNotice",
+    "value": "physician notice within 30 days",
+    "cite": "s. 458.348(1)(b), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0458/Sections/0458.348.html",
+    "quote": "Notice shall be filed within 30 days of entering into the relationship, orders, or protocol.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": 3000,
+    "cite": "s. 464.0123(1)(c), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0464/Sections/0464.0123.html",
+    "quote": "at least 3,000 clinical practice hours, which may include clinical instructional hours provided by the applicant, within the 5 years immediately preceding the registration request",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.autonomousScope",
+    "value": "primary care only",
+    "cite": "s. 464.0123, F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0464/Sections/0464.0123.html",
+    "quote": "Engage in autonomous practice only in primary care practice, including family medicine, general pediatrics, and general internal medicine",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "APRN licensure page (Board of Nursing)",
+    "url": "https://floridasnursing.gov/renewals/advanced-practice-registered-nurse/",
+    "quote": "Florida became part of the NLC on January 19, 2018.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "three groups: April 30 2028, July 31 2028, April 30 2027",
+    "cite": "Board of Nursing RN renewal page",
+    "url": "https://floridasnursing.gov/registered-nurse-renewal/",
+    "quote": "Group 3 – current license will expire at midnight, Eastern Standard Time, April 30, 2027",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.autonomousRenewalCe",
+    "value": "10 hours in addition to 30 hours of CE, regardless of certification exemption",
+    "cite": "s. 464.0123(5)(b), F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0464/Sections/0464.0123.html",
+    "quote": "must complete at least 10 hours of continuing education approved by the board, in addition to completing 30 hours of continuing education requirements",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.autonomousRnOptional",
+    "value": "autonomous APRNs need not renew the Florida RN licence",
+    "cite": "Board of Nursing APRN renewal page (Autonomous APRN tab)",
+    "url": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/",
+    "quote": "Autonomous Advanced Practice Registered Nurse are not required to renew their Florida RN license; it is optional.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceAsRnCe",
+    "value": "RN CE satisfies both RN and APRN licences; up to 50% may be CME",
+    "cite": "Rule 64B9-5.002(4), F.A.C.",
+    "url": "https://www.flrules.org/gateway/ruleNo.asp?id=64B9-5.002",
+    "quote": "may satisfy up to 50% of the continuing education requirement by completing continuing medical education coursework equivalent to the contact hours required",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.domesticViolenceCounting",
+    "value": "conflict: board page says DV hours are additional to 24; rule lists DV as part of the hours",
+    "cite": "Board of Nursing APRN renewal page; Rule 64B9-5.002(2)(f)",
+    "url": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/",
+    "quote": "Domestic Violence is required every third biennium and the hours are in addition to the 24 hours required for renewal.",
+    "verified": false,
+    "reason": "Rule 64B9-5.002(2) says the listed courses, including domestic violence, are a mandatory part of the hours in subsection (1); the board page says DV is in addition. Unresolved conflict between two primary sources.",
+    "loaded": true
+   },
+   {
+    "field": "np.rn.hivAidsStatute",
+    "value": "HIV/AIDS no later than first renewal applies to part I ch. 464",
+    "cite": "s. 456.033, F.S.",
+    "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0456/Sections/0456.033.html",
+    "quote": "part I of chapter 464; chapter 465",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "Florida practitioner CS registration: no general state controlled substance registration for PAs or APRNs was found; s. 456.44(2) chronic pain designation is confirmed. stateCsRegistrationRequired left null (absence not confirmed by a primary source).",
+  "PA human trafficking: s. 456.0341 applies to ch. 458 licensees (PAs) with a one-time 'By January 1, 2021' deadline; the board's PA renewal CE table omits it, so treatment of PAs licensed after 2021 is not confirmed.",
+  "Nurse domestic violence hours: board page says the 2 hours are in addition to 24; Rule 64B9-5.002(2) says they are part of the hours. Unresolved.",
+  "Autonomous APRN base CE: s. 464.0123(5)(b) says 10 hours in addition to 30 hours of CE; the board page shows the general 24 hour table plus 10. The base (24 vs 30) for autonomous registrants is not resolved by a board statement.",
+  "AANP-style 'restricted' practice label is a classification, not a Florida term; the statutory facts (supervisory protocol, autonomous primary care option after 3,000 hours) are confirmed.",
+  "No general APRN pharmacology hour requirement found beyond the 3 hour controlled substance course (autonomous registration requires 3 graduate semester hours of pharmacology at registration, s. 464.0123(1)(d), not per cycle).",
+  "Federal DEA MATE 8 hour one-time training is federal, not Florida law; not loaded in this verification."
+ ],
+ "verification": {
+  "by": "verifier-2026-10",
+  "date": "2026-10-01",
+  "corrections": [
+   "np.rn.renewalDeadline: researcher said 'April 30 or July 31'; the RN and APRN renewal pages list THREE groups (April 30 2028, July 31 2028, April 30 2027). Group 3 renews in odd years.",
+   "Autonomous APRN CE: researcher listed only '+10 graduate-level hours'. s. 464.0123(5)(b) requires the 10 hours IN ADDITION TO 30 hours of CE under s. 464.013, 'regardless of whether the registrant is otherwise required' (i.e. the certification exemption does not apply to an autonomous registrant). Added fact; the board page's general table still shows the 24 hour RN schedule, so the 30 vs 24 base for autonomous registrants is flagged unverified-by-board.",
+   "Added: board page states autonomous APRNs are not required to renew the Florida RN licence (optional). Researcher implied RN + APRN always both renew.",
+   "np.aprn.nationalCertificationRequired: refined to conditional wording (board page: licensees 'who were required to be nationally certified, at the time of original licensure').",
+   "Domestic violence for nurses: board page says the 2 DV hours are in addition to the 24; Rule 64B9-5.002(2) says the listed courses are 'a mandatory part of the hours'. Recorded as an unresolved primary-source conflict (verified:false) rather than the researcher's one-sided note.",
+   "PA HIV/AIDS: researcher left s. 456.033 status unchecked; the 2026 Florida Statutes text is current and applies to ch. 458 (PAs) and part I of ch. 464 (nurses). Unverified item resolved.",
+   "Checked missed mandate: s. 456.0301 (2 hour controlled substance course for every DEA registrant, amended by ch. 2026-6) exempts licensees whose practice act already requires 2+ hours; PA (3 hours, s. 458.347(4)(e)4.) and APRN (3 hours, s. 464.013(3)(b)) are therefore not double-counted. Added as a fact.",
+   "Added missed item: s. 456.44(2) chronic nonmalignant pain prescriber designation on the practitioner profile (applies to PAs and APRNs). stateCsRegistrationRequired stays null: no general Florida practitioner CS registration was found, but absence is not confirmed by a primary source."
+  ]
+ }
+}

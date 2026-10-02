@@ -1,0 +1,235 @@
+{
+  "state": "KY",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Kentucky Board of Medical Licensure",
+      "url": "https://kbml.ky.gov/ah/Pages/Physician-Assistant.aspx"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 100,
+        "fact": "pa.ce.hoursPerCycle"
+      }
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Child Abuse Recognition",
+        "hours": 1.5,
+        "label": "Prevention and recognition of pediatric abusive head trauma, once, within the first two years of licensure or before the first renewal",
+        "period": "lifetime",
+        "periodReason": "A one-time course within the first two years of licensure.",
+        "fact": "pa.ce.topicMandates.abusiveHeadTrauma"
+      },
+      {
+        "topic": "Geriatric Medicine",
+        "hours": 1,
+        "label": "Alzheimer's disease and other forms of dementia, a one time course, within the first two years of initial licensure or, for current licensees, before the end of the first renewal cycle after the regulation took effect",
+        "period": "lifetime",
+        "facts": [
+          "pa.ce.topicMandates.dementia",
+          "pa.ce.dementia.deadline"
+        ]
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": 7.5,
+        "label": "Controlled substance diversion, pain management, addiction disorders or use of KASPER, each two-year cycle",
+        "fact": "pa.ce.topicMandates.controlledSubstances",
+        "condition": {
+          "field": "Holds controlled substance prescriptive authority",
+          "question": "Are you authorized to prescribe or administer Schedule II to V controlled substances?",
+          "description": "Applies to clinicians with controlled substance prescriptive authority."
+        }
+      },
+      {
+        "topic": "Pediatric Controlled Substance Ingestion",
+        "hours": 1,
+        "label": "Recognition and prevention of pediatric ingestion or inhalation of controlled substances, once every three years",
+        "period": {
+          "years": 3
+        },
+        "fact": "pa.ce.topicMandates.pediatricIngestion"
+      },
+      {
+        "topic": "Substance Use Disorders",
+        "hours": 12,
+        "label": "Addiction medicine, each two-year cycle, for buprenorphine prescribers",
+        "facts": [
+          "pa.ce.topicMandates.buprenorphine",
+          "pa.ce.regulationCurrent"
+        ],
+        "condition": {
+          "field": "Prescribes buprenorphine",
+          "question": "Are you authorized to prescribe or administer buprenorphine products?",
+          "description": "Kentucky addiction medicine hours for buprenorphine prescribers."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A PA may not provide any service until a supervision agreement on the board's standardized form is signed and in effect; it and every amendment are filed with the board. If the supervising physician stops supervising, the PA notifies the board in writing within three business days.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.supervisorChangeNotice"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether the pediatric ingestion or inhalation hour applies to every PA (the statute) or counts inside the 7.5 prescriber hours (the board's FAQ); the regulation does not list it yet",
+      "Whether the board still enforces the 12 addiction medicine hours for buprenorphine prescribers",
+      "How often the supervision agreement must be renewed (the implementing regulation was not loaded)",
+      "Which state controlled substance authority KRS 311.858(4)(b)4 refers to"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Kentucky Board of Nursing",
+      "url": "https://kbn.ky.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 1,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 1,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "options": [
+          {
+            "text": "14 contact hours of continuing education in the earning period",
+            "fact": "np.rn.ceHoursPerCycle"
+          },
+          {
+            "text": "Current national certification or recertification, plus the required topic hours",
+            "fact": "np.rn.ceAlternatives"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Child Abuse Recognition",
+          "hours": 1.5,
+          "label": "Pediatric abusive head trauma, once",
+          "period": "lifetime",
+          "fact": "np.rn.topicMandates.oneTime"
+        },
+        {
+          "topic": "Domestic Violence",
+          "hours": 3,
+          "label": "Domestic violence and elder abuse, neglect and exploitation, once",
+          "period": "lifetime",
+          "fact": "np.rn.topicMandates.oneTime"
+        },
+        {
+          "topic": "Geriatric Medicine",
+          "hours": 1,
+          "label": "Alzheimer's disease and other forms of dementia, once (nurses active on July 15, 2024 finish by October 31, 2027)",
+          "period": "lifetime",
+          "facts": [
+            "np.rn.topicMandates.oneTime",
+            "np.rn.topicMandates.dementiaDeadline"
+          ]
+        },
+        {
+          "topic": "Suicide Prevention",
+          "hours": 2,
+          "label": "Suicide prevention, once",
+          "period": "lifetime",
+          "fact": "np.rn.topicMandates.oneTime"
+        },
+        {
+          "topic": "Pediatric Controlled Substance Ingestion",
+          "hours": 1,
+          "label": "Recognition and prevention of pediatric ingestion or inhalation of controlled substances, once every three years",
+          "period": {
+            "years": 3
+          },
+          "fact": "np.rn.topicMandates.pediatricIngestion"
+        }
+      ],
+      "unverified": [
+        "The research, publication, preceptorship and employment evaluation methods"
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "The APRN renewal requires current national certification and 5 pharmacology contact hours; the general hours are the RN license's.",
+        "cycleYears": {
+          "value": 1,
+          "facts": [
+            "np.rn.renewalCycleYears",
+            "np.aprn.renewal"
+          ],
+          "reason": "The APRN license lapses with the annual RN license."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertAtRenewal"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 5,
+          "measure": "pharmacology",
+          "label": "Pharmacology, each licensure period",
+          "fact": "np.aprn.pharmacologyHoursPerCycle"
+        },
+        {
+          "topic": "Pain Management",
+          "hours": 3,
+          "label": "Pain management or addiction disorders, 3 of the 5 pharmacology hours",
+          "fact": "np.prescribing.controlledSubstanceCe",
+          "condition": {
+            "field": "Holds a DEA registration",
+            "question": "Do you hold an active DEA registration?",
+            "description": "Applies to DEA registered prescribers."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative agreement (CAPA-NS, CAPA-CS)",
+        "conditional": true,
+        "text": "A written CAPA-NS with a Kentucky physician covers nonscheduled legend drugs until 4 years of prescribing; a CAPA-CS on the standardized form covers Schedule II to V until 4 years of controlled substance prescribing and a board review. The APRN notifies the board of each agreement.",
+        "facts": [
+          "np.practice.capaNs",
+          "np.practice.capaNsExemption",
+          "np.practice.capaCs",
+          "np.practice.capaCsExemption",
+          "np.practice.agreementFilingAndRenewal"
+        ]
+      }
+    }
+  }
+}

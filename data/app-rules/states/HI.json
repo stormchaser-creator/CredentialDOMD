@@ -1,0 +1,198 @@
+{
+  "state": "HI",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Hawaii Medical Board (DCCA Professional and Vocational Licensing)",
+      "url": "https://cca.hawaii.gov/pvl/boards/medical/physician-assistant-renewal-requirements/"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalDeadline",
+        "reason": "Renewal by January 31 of each even-numbered year"
+      },
+      "total": {
+        "value": 40,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAPA Category 1 CME"
+        ],
+        "fact": "pa.ce.categoryRules"
+      },
+      "totalUnverifiedAccepted": [
+        "AAFP Prescribed Credit",
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ]
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "Each supervising physician submits a signed supervision statement to the board, and the supervising physician's license must be renewed before the PA's. The board is notified within ten days when supervision ends; the PA and physician keep written guidelines for medical record review.",
+        "facts": [
+          "pa.practice.supervisionStatement",
+          "pa.practice.supervisingPhysicianRenewed",
+          "pa.practice.severanceNotice",
+          "pa.practice.recordReviewGuidelines"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Hawaii Board of Nursing (DCCA Professional and Vocational Licensing)",
+      "url": "https://cca.hawaii.gov/pvl/boards/nursing/"
+    },
+    "rn": {
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline",
+          "reason": "Licenses expire June 30 of every odd-numbered year."
+        },
+        "options": [
+          {
+            "text": "National certification or recertification related to your practice role",
+            "fact": "np.rn.nationalCertificationOption"
+          },
+          {
+            "text": "30 contact hours of continuing education",
+            "fact": "np.rn.ceHours30Option"
+          },
+          {
+            "text": "A board approved refresher course",
+            "fact": "np.rn.learningOptions.more"
+          },
+          {
+            "text": "At least two semester credits of post-licensure academic education related to nursing practice",
+            "fact": "np.rn.learningOptions.more"
+          },
+          {
+            "text": "Precepting a nursing student or new employee in an organized preceptorship of at least one hundred twenty hours",
+            "fact": "np.rn.learningOptions.more"
+          },
+          {
+            "text": "Principal or co-investigator on a board preapproved nursing research or evidence-based practice project",
+            "fact": "np.rn.learningOptions.more"
+          },
+          {
+            "text": "Authoring or coauthoring a peer reviewed nursing or health related article, book or chapter",
+            "fact": "np.rn.learningOptions.more"
+          },
+          {
+            "text": "Nursing education presentations totaling at least five contact hours of instruction",
+            "fact": "np.rn.learningOptions.more"
+          },
+          {
+            "text": "A board recognized nurse residency program, or a similar learning activity the board recognizes",
+            "fact": "np.rn.learningOptions.more"
+          }
+        ]
+      },
+      "unverified": [
+        "Nurse Licensure Compact membership"
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalDeadline"
+        }
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalDeadline"
+        },
+        "total": {
+          "value": 30,
+          "facts": [
+            "np.prescribing.ceHours",
+            "np.aprn.renewalPage"
+          ]
+        },
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "bodiesVerified": false,
+          "covers": [
+            "total"
+          ],
+          "fact": "np.prescribing.certificationInLieu",
+          "note": "CE earned for recertification by a recognized national certifying body within the biennium may be accepted in lieu."
+        },
+        "notes": [],
+        "exemption": {
+          "field": "Holds prescriptive authority",
+          "question": "Are you renewing prescriptive authority (do you hold prescriptive authority)?",
+          "text": "The 30 hours (22 in your practice specialty, 8 in pharmacology) are for APRNs renewing prescriptive authority.",
+          "whenAnswer": "No",
+          "perRenewal": false,
+          "topics": "all",
+          "facts": [
+            "np.prescribing.renewalCe"
+          ]
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired",
+        "condition": {
+          "field": "Holds prescriptive authority",
+          "question": "Do you hold prescriptive authority?",
+          "description": "Hawaii requires current national certification to renew prescriptive authority."
+        }
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 8,
+          "measure": "pharmacology",
+          "label": "Pharmacology including pharmacotherapeutics, 8 of the 30 hours",
+          "facts": [
+            "np.prescribing.ceHours",
+            "np.prescribing.split"
+          ],
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Hawaii's 30 hours and 8 pharmacology hours are for APRNs renewing prescriptive authority."
+          }
+        }
+      ],
+      "unverified": [
+        "National certification for APRNs without prescriptive authority whose license rests on certification rather than a graduate degree (HAR 16-89-87(a)(1))"
+      ]
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

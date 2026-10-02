@@ -1,0 +1,421 @@
+{
+ "state": "ND",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "North Dakota Board of Medicine",
+   "url": "https://www.ndbom.org"
+  },
+  "licence": {
+   "title": "Physician Assistant License",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 every other year (renewal opens October 1 of the expiry year); biennial since August 1, 2023",
+   "compactNote": "NDCC 43-17-02.1(1) recognises a PA Licensure Compact privilege under chapter 43-17.5; whether the compact is issuing privileges yet was not confirmed."
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "categoryRules": "No state CME hour count for PAs in NDAC 50-03-01; the state requirement is current NCCPA (or board-approved) certification, so the NCCPA CME and PANRE/PANRE-LA requirements are what the PA must meet",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [],
+   "controlledSubstanceCe": null
+  },
+  "practice": {
+   "agreementType": "none",
+   "agreementFilingAndRenewal": "No written agreement for PAs practicing at a licensed health care facility, a facility with a credentialing and privileging system, or a physician-owned facility or practice. A PA with fewer than 4,000 hours who practices outside those settings (board-approved practice) must execute a written collaborative agreement with a North Dakota physician, kept and provided to the Board on request. Independent practice outside those settings requires Board approval (rural underserved location plus periodic physician chart review).",
+   "notes": "PA must report to the Board within 10 days if NCCPA certification is lost; the licence then automatically expires. Practice location must be verified on renewal."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": "not yet verified",
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "None found in PA rules; DEA registration required to prescribe controlled substances (NDCC 43-17-02.1(4)(f))"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 2,
+    "cite": "ND Board of Medicine PA renewal page",
+    "url": "https://www.ndbom.org/practitioners/pa/current/renew-reactivate-instruct.asp",
+    "quote": "As of August 1, 2023, North Dakota Physician Assistant licenses expire every other year on Dec. 31.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalWindow",
+    "value": "opens October 1 of expiry year",
+    "cite": "ND Board of Medicine PA renewal page",
+    "url": "https://www.ndbom.org/practitioners/pa/current/renew-reactivate-instruct.asp",
+    "quote": "You can renew your physician assistant licensure beginning Oct. 1 of the year your license expires.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "NDAC 50-03-01-14",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/50-03-01.pdf",
+    "quote": "The physician assistant's license renewal application must be accompanied with evidence of current certification by the national commission on certification of physician assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaMaintainedDuringLicensure",
+    "value": true,
+    "cite": "NDAC 50-03-01-02(2)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/50-03-01.pdf",
+    "quote": "The physician assistant must maintain certification with the national commission on certification of physician assistants or other certifying entity approved by the board during the",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaLossReporting",
+    "value": "report within 10 days; licence automatically expires",
+    "cite": "NDAC 50-03-01-19",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/50-03-01.pdf",
+    "quote": "the physician assistant must report to the board within ten days if the individual no longer holds a valid certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "none (written agreement not required)",
+    "cite": "NDCC 43-17-02.1(3)",
+    "url": "https://www.ndlegis.gov/cencode/t43c17.pdf",
+    "quote": "A physician assistant is responsible for the care provided by that physician assistant and a written agreement relating to the items in this chapter is",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.settings",
+    "value": "licensed facility, credentialing and privileging facility, physician-owned practice, or board-approved",
+    "cite": "NDAC 50-03-01-03.2(1)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/50-03-01.pdf",
+    "quote": "Health care facility licensed by the department of health and human services",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.under4000Hours",
+    "value": "written collaborative agreement if outside listed settings",
+    "cite": "NDCC 43-17-02.1(6)",
+    "url": "https://www.ndlegis.gov/cencode/t43c17.pdf",
+    "quote": "a physician assistant with less than four thousand hours of practice approved by the board under subsection 5 shall execute a written collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "DEA registration required for controlled substances",
+    "cite": "NDCC 43-17-02.1(4)(f)",
+    "url": "https://www.ndlegis.gov/cencode/t43c17.pdf",
+    "quote": "If prescribing or dispensing a controlled substance, shall register with the federal drug enforcement administration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scheduleIItoV",
+    "value": true,
+    "cite": "NDCC 43-17-02.1(4)(c)",
+    "url": "https://www.ndlegis.gov/cencode/t43c17.pdf",
+    "quote": "May prescribe and dispense schedule II through V substances as designated by the federal drug enforcement agency and all legend drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationStatute",
+    "value": "statute requires practitioner registration to dispense",
+    "cite": "NDCC 19-03.1-17(3)",
+    "url": "https://www.ndlegis.gov/cencode/t19c03-1.pdf",
+    "quote": "Practitioners must be registered to dispense any controlled substances or to conduct research with controlled substances in schedules II through V",
+    "loaded": true,
+    "verified": false,
+    "reason": "Statute text confirmed (NDCC 19-03.1-16(1) and 19-03.1-17(3)), but no Board of Pharmacy rule, form or page implementing a practitioner registration was found (Title 61 NDAC has no registration chapter; nodakpharmacy.com lists none). Whether ND issues or waives it is unconfirmed."
+   },
+   {
+    "field": "practice.independentApproval",
+    "value": "outside listed settings: Board approval, rural underserved site, physician chart review",
+    "cite": "NDAC 50-03-01-03.2(2)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/50-03-01.pdf",
+    "quote": "the physician assistant may apply to the board for approval to practice independently with the following criteria",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.paCompactPrivilege",
+    "value": "PA may practise in ND under a PA Licensure Compact privilege (NDCC 43-17.5)",
+    "cite": "NDCC 43-17-02.1(1)",
+    "url": "https://www.ndlegis.gov/cencode/t43c17.pdf",
+    "quote": "shall possess an active North Dakota license for physician assistant practice or be privileged to practice in this state under chapter 43-17.5",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "North Dakota Board of Nursing",
+   "url": "https://www.ndbon.org"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Before December 31 of the second calendar year",
+   "ceHoursPerCycle": 12,
+   "practiceHours": "At least 400 nursing practice hours within the preceding 4 years",
+   "nlcCompactMember": true,
+   "topicMandates": [],
+   "ceNote": "12 contact hours in the preceding 2 years; no CE before the first renewal after licensure by examination (NDBON CE page); excess hours do not carry forward"
+  },
+  "aprn": {
+   "title": "APRN with role designation (for NPs: APRN, certified nurse practitioner; APRN-CNP)",
+   "separateLicenceOrCertificate": "Separate APRN licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Same period as the RN licence (December 31 of the second year)",
+   "ceHoursPerCycle": null,
+   "ceNote": "No APRN-specific CE hour count beyond the RN requirement; renewal requires current national certification (or a board-recognized competence maintenance program)",
+   "pharmacologyHoursPerCycle": 15,
+   "pharmacologyNote": "15 contact hours of pharmacotherapy every 2 years applies to APRNs holding prescriptive authority; these hours may also count toward the RN 12 hours; certificates must itemize pharmacology CE and UpToDate certificates do not count (NDBON CE page)",
+   "nationalCertificationRequired": true,
+   "topicMandates": [],
+   "renewalNote": "Renewal requires a current RN licence in North Dakota or a compact state, the APRN renewal application, fee, and current national certification (NDAC 54-05-03.1-06)."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Prescriptive authority is a separate application added to the APRN licence (initial: 30 contact hours pharmacotherapy within 3 years before application)",
+   "pharmacologyCeForPrescribers": 15,
+   "controlledSubstanceCe": null,
+   "stateCsRegistrationRequired": "not yet verified",
+   "notes": "Own DEA number required before prescribing controlled substances; PDMP review required for new controlled substance patients and every 6 months during treatment"
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "No physician collaboration agreement in NDAC 54-05-03.1; the rule on changes in physician collaboration for prescriptive authority was repealed effective October 1, 2011."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": 2,
+    "cite": "NDAC 54-02-05-02",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-02-05.pdf",
+    "quote": "Nursing licenses will be valid for two calendar years and will be subject to renewal before December thirty-first of the second year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": 12,
+    "cite": "NDAC 54-02-05-08(1)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-02-05.pdf",
+    "quote": "must meet or exceed twelve contact hours within the preceding two years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.practiceHours",
+    "value": "400 hours in 4 years",
+    "cite": "NDAC 54-02-05-05.1",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-02-05.pdf",
+    "quote": "Nursing practice for purposes of renewal must meet or exceed four hundred hours within the preceding four years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "NDCC 43-12.4-01",
+    "url": "https://www.ndlegis.gov/cencode/t43c12-4.pdf",
+    "quote": "CHAPTER 43-12.4 NURSE LICENSURE COMPACT",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.title",
+    "value": "APRN plus role designation (certified nurse practitioner)",
+    "cite": "NDAC 54-05-03.1-02",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "Each advanced practice registered nurse shall use the designation APRN and applicable role designation",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": "same period as RN licence",
+    "cite": "NDAC 54-05-03.1-06",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "The advanced practice registered nurse license is valid for the same period of time as the applicant's registered nurse license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "NDAC 54-05-03.1-06(3)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "Submit evidence of current national certification in the appropriate advanced practice registered nurse role and with at least one population focus",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.pharmacologyHoursPerCycle",
+    "value": 15,
+    "cite": "NDAC 54-05-03.1-11(5)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "Provide evidence of completion of fifteen contact hours of education during the previous two years in pharmacotherapy related to the scope of practice.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.pharmacologyCountsTowardRn",
+    "value": true,
+    "cite": "NDAC 54-05-03.1-11(5)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "These contact hours may fulfill the registered nurse renewal continuing education requirement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.initialPharmacology",
+    "value": "30 contact hours within 3 years before application",
+    "cite": "NDAC 54-05-03.1-09(4)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "Provide evidence of completion of thirty contact hours of education or equivalent in pharmacotherapy",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "own DEA number before controlled substance prescriptions",
+    "cite": "NDAC 54-05-03.1-10(3)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "Each licensee must apply for and receive a drug enforcement administration number before writing prescriptions for controlled substances.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pdmp",
+    "value": "PDMP review: new patients, every 6 months, early refills, suspected misuse",
+    "cite": "NDAC 54-05-03.1-10(4)(a)",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "Every six months during treatment of client with a controlled substance",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.collaborationRuleRepealed",
+    "value": true,
+    "cite": "NDAC 54-05-03.1-12",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "Change in physician collaboration regarding prescriptive authority. Repealed effective October 1, 2011.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationStatute",
+    "value": "statute requires practitioner registration to dispense",
+    "cite": "NDCC 19-03.1-17(3)",
+    "url": "https://www.ndlegis.gov/cencode/t19c03-1.pdf",
+    "quote": "Practitioners must be registered to dispense any controlled substances or to conduct research with controlled substances in schedules II through V",
+    "loaded": true,
+    "verified": false,
+    "reason": "Statute text confirmed (NDCC 19-03.1-16(1) and 19-03.1-17(3)), but no Board of Pharmacy rule, form or page implementing a practitioner registration was found (Title 61 NDAC has no registration chapter; nodakpharmacy.com lists none). Whether ND issues or waives it is unconfirmed."
+   },
+   {
+    "field": "aprn.rnOrCompact",
+    "value": "RN licence in ND or a compact state",
+    "cite": "NDAC 54-05-03.1-06",
+    "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+    "quote": "must possess a current license to practice as a registered nurse in North Dakota or in a compact state",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.pharmacologyBoardPage",
+    "value": "15 hours pharmacotherapy every 2 years for APRNs with prescriptive authority",
+    "cite": "NDBON Continuing Education for Renewal page",
+    "url": "https://ndbon.org/licensing/renewal/ce/",
+    "quote": "An APRN with Prescriptive Authority must complete 15 contact hours of education during the previous two (2) years in pharmacotherapy",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.pharmacologyItemized",
+    "value": "pharmacology hours must be itemized on certificates",
+    "cite": "NDBON Continuing Education for Renewal page",
+    "url": "https://ndbon.org/licensing/renewal/ce/",
+    "quote": "Certificates must itemize pharmacology CE.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.firstRenewalExempt",
+    "value": "no CE before first renewal after licensure by examination",
+    "cite": "NDBON Continuing Education for Renewal page",
+    "url": "https://ndbon.org/licensing/renewal/ce/",
+    "quote": "will not need to complete any contact hours of approved CE before that first renewal of a nursing license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.currentRenewalRound",
+    "value": "renewal open for licences expiring 12/31/2026",
+    "cite": "NDBON renewal notice",
+    "url": "https://ndbon.org/2026/10/renewal-2026/",
+    "quote": "Online renewal is now available for nurses with North Dakota licenses expiring 12/31/2026.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA licence cycle: the Board renewal page (updated 3/23/2026) says PA licences expire every other year on Dec. 31, but NDAC 50-03-01-13 still states fees 'per year' and 50-03-01-17 still says 'annual registration process'. The Board page is the newer source; which calendar years a given licence expires is not stated, so use the expiry date on the licence.",
+  "PA CE: NDAC 50-03-01 sets no state CME hour count; renewal requires current NCCPA (or board-approved) certification, so NCCPA's own CME and PANRE/PANRE-LA rules govern. acceptsNccpaCertificationInLieu=true means certification is the whole state requirement, not a substitute for a state hour count.",
+  "State CS registration (PA and NP): NDCC 19-03.1-16(1) requires anyone who dispenses to 'obtain annually a registration issued by the board', but no Board of Pharmacy practitioner registration rule, form or page was found. Show as not yet verified with https://www.nodakpharmacy.com.",
+  "NP: 'full' practice authority is inferred from NDAC 54-05-03.1 (no collaboration or supervision rule; 54-05-03.1-12 repealed 2011) and NDCC 43-12.1; no transition-to-practice hours found.",
+  "NP: ND enacted the APRN Licensure Compact (NDCC 43-12.5); whether it is operational was not confirmed.",
+  "PA: whether the PA Licensure Compact (NDCC 43-17.5) is issuing privileges yet was not confirmed.",
+  "PA and NP: no state topic mandate (opioid/pain, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide prevention, infection control, cultural competency, domestic violence) was found in NDAC 50-03-01, NDAC 54-02-05, NDAC 54-05-03.1, NDCC 43-17 or the NDBON CE page. The 1-hour nutrition and metabolic health CE in NDCC 43-17-27.1(2) applies to physicians only. Federal DEA MATE (one-time 8 hours) still applies to DEA registrants."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "corrections": [
+  "PA practice.settings: quote did not match the rule text as printed (list markers and a page break split it); replaced with a contiguous quote from NDAC 50-03-01-03.2(1)(a). Value unchanged.",
+  "PA: added the Board-approved independent practice pathway (NDAC 50-03-01-03.2(2)) as its own fact.",
+  "PA: added that NDCC 43-17-02.1(1) recognises a PA Licensure Compact privilege (chapter 43-17.5).",
+  "PA and NP state CS registration fact: set verified false with reason; statute quote is correct but no implementing Board of Pharmacy registration was found.",
+  "NP: loaded ndbon.org (researcher had not); its CE page confirms 12 RN hours and 15 pharmacotherapy hours for APRNs with prescriptive authority, adds that pharmacology must be itemized on certificates and UpToDate does not count, and that no CE is due before the first RN renewal after licensure by examination.",
+  "NP: added that the RN prerequisite for APRN renewal may be a compact-state RN licence (NDAC 54-05-03.1-06).",
+  "NP: NDBON notice confirms a renewal round for licences expiring 12/31/2026 is open now.",
+  "Quotes over 25 words trimmed to their first 25 words (still verbatim): ce.nccpaMaintainedDuringLicensure, practice.agreementType"
+ ]
+}

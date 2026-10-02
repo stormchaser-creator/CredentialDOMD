@@ -1,0 +1,383 @@
+{
+ "state": "NE",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Nebraska DHHS Licensure Unit, Board of Medicine and Surgery (Physician Assistant)",
+   "url": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "October 1 of odd-numbered years"
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "categoryRules": "Either 50 hours of Category 1 CME (ACCME, AOA or AAPA approved) earned in the 24 months before expiration (up to 25 hours may carry over), OR meet NCCPA re-registration requirements in those 24 months.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Prescribing opiates (includes 0.5 hour on the Nebraska PDMP)",
+     "hours": 3,
+     "period": "every cycle (biennially) through the 2027 PA renewal",
+     "appliesTo": "PAs who prescribe controlled substances; Neb. Rev. Stat. 38-145(6) terminates Jan 1, 2029, so the Oct 1, 2027 PA renewal is the last one it reaches (statute date; DHHS PA page gives no end date)"
+    }
+   ],
+   "controlledSubstanceCe": "3 hours opiate prescribing CE every 2 years (0.5 hour PDMP) for controlled substance prescribers, Neb. Rev. Stat. 38-145(6)."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Supervising physician must be party to a collaborative agreement with the PA, kept on file at the primary practice site and each practice site, produced to the board or DHHS on request. Not filed routinely; no renewal interval stated.",
+   "notes": "Supervision is continuous but does not require physical presence; a supervising physician may supervise no more than four PAs at a time (waiver possible). PA needs a supervising physician for each employer and each specialty area in a multispecialty practice. Nebraska enacted the PA Licensure Compact (LB 1215, signed April 2, 2024)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "3 hours opiate prescribing CE per biennial renewal (0.5 hour PDMP), Neb. Rev. Stat. 38-145(6)."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "October 1, odd-numbered years",
+    "cite": "DHHS PA licensing page (172 NAC 90)",
+    "url": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx",
+    "quote": "Physician Assistant licenses expire October 1 on odd-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "50 hours Category 1 (ACCME, AOA or AAPA) in 24 months before expiration",
+    "cite": "DHHS PA licensing page (172 NAC 90)",
+    "url": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx",
+    "quote": "Complete 50 hours of category 1 continuing education coursework approved by the Accreditation Council for Continuing Medical Education ( ACCME ), or the American Osteopathic",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.ce.carryOver",
+    "value": "Up to 25 hours may carry over to next period",
+    "cite": "DHHS PA licensing page (172 NAC 90)",
+    "url": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx",
+    "quote": "a licensee who has earned more than the 50 hours required for one renewal period may carry over up to 25 hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "DHHS PA licensing page (172 NAC 90)",
+    "url": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx",
+    "quote": "You must meet ONE of the following ... Meet the National Commission on Certification of Physician Assistants ( NCCPA ) re-registration requirements within the 24",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.ce.topicMandates.opiates",
+    "value": "3 hours biennially, 0.5 hour PDMP, for controlled substance prescribers; terminates Jan 1, 2029",
+    "cite": "Neb. Rev. Stat. 38-145(6)",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-145",
+    "quote": "who prescribes controlled substances shall include at least three hours of continuing education biennially regarding prescribing opiates",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.opiates.pdmp",
+    "value": "0.5 of the 3 hours on PDMP",
+    "cite": "Neb. Rev. Stat. 38-145(6)",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-145",
+    "quote": "One-half hour of the three hours of continuing education shall cover the prescription drug monitoring program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Collaborative agreement kept on file at practice sites, available on request",
+    "cite": "Neb. Rev. Stat. 38-2050(2)",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2050",
+    "quote": "shall keep the collaborative agreement on file at his or her primary practice site ... and shall make the collaborative agreement available to the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisionRatio",
+    "value": "Max 4 PAs per supervising physician (waivable)",
+    "cite": "Neb. Rev. Stat. 38-2050(4)",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2050",
+    "quote": "A supervising physician may supervise no more than four physician assistants at any one time.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "supervision",
+    "cite": "Neb. Rev. Stat. 38-2047(1)",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2047",
+    "quote": "are delegated by and provided under the supervision of a licensed physician who meets the requirements of section 38-2050",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "DHHS nursing controlled substance page (statewide statement)",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nursing-Controlled-Substance-Information.aspx",
+    "quote": "Nebraska does not issue a separate state-controlled substance registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.compact",
+    "value": "PA Licensure Compact enacted (LB 1215)",
+    "cite": "DHHS PA licensing page",
+    "url": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx",
+    "quote": "On 4.2.2024 Governor Pillen signed LB 1215, which enacted the Physician Assistant Comp",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.opiates.audience",
+    "value": "DHHS: applies to all professionals who prescribe controlled substances; 3 hours opioids incl. 0.5 hour PDMP",
+    "cite": "DHHS Controlled Substances Continuing Competency Requirement (linked from PA page)",
+    "url": "https://dhhs.ne.gov/licensure/Documents/ControlledSubstancesContCompReq.pdf",
+    "quote": "3 hours of the continuing education (CE) are required to be on the subject of opioids and .5 hours of the 3 required hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Nebraska DHHS Licensure Unit, Nebraska State Board of Nursing / APRN Board",
+   "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "October 31 of even-numbered years",
+   "ceHoursPerCycle": 20,
+   "ceNotes": "One of several continued competency options: 500 practice hours in 5 years AND 20 contact hours in 2 years; or a refresher course in 5 years; or current national nursing specialty certification; or a portfolio. New licensees within 24 months are waived.",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN-NP (Nurse Practitioner licence; uses title NP)",
+   "separateLicenceOrCertificate": "separate licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "October 31 of even-numbered years",
+   "ceHoursPerCycle": null,
+   "ceNotes": "No CE hour total for the APRN-NP licence. Renewal requires current national certification in the NP specialty and, if licensed more than five years, 2,080 NP practice hours in the previous five years (these hours also satisfy the RN practice-hour requirement under 38-2319(1)).",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Opiate prescribing (includes 0.5 hour PDMP)",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "NPs who prescribe controlled substances; 2020 through 2028 renewals"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "3 hours opiate prescribing CE per renewal (0.5 hour PDMP) for controlled substance prescribers, 2020 through 2028 renewals.",
+   "stateCsRegistrationRequired": false
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "transition-to-practice agreement (first 2,000 hours only)",
+   "transitionToPracticeHours": 2000,
+   "agreementFilingAndRenewal": "2,000 hours of initial practice under a formal written transition-to-practice agreement with a supervising provider (physician, osteopathic physician, or NP with 10,000 hours) in the same or related specialty. The agreement itself is not submitted to DHHS unless requested; DHHS requires an 'Attestation of Supervision' form only when the supervising provider is an NP. No ongoing agreement after the 2,000 hours. NPs licensed on or before Aug 30, 2015 with 2,000 physician-supervised hours are exempt."
+  },
+  "facts": [
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "October 31 of even-numbered years",
+    "cite": "DHHS Nurse Licensing Renewal and Continuing Education page",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+    "quote": "APRN licenses expire on October 31st of each even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalRequirements",
+    "value": "Current national certification; 2,080 NP practice hours in prior 5 years",
+    "cite": "Neb. Rev. Stat. 38-2319",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2319",
+    "quote": "Documentation of a minimum of two thousand eighty hours of practice as a nurse practitioner within the five years immediately preceding renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "Neb. Rev. Stat. 38-2319(2)",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2319",
+    "quote": "Proof of current certification in the specific nurse practitioner clinical specialty area by an approved certification program.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.opiates",
+    "value": "3 hours opiate CE (0.5 PDMP) for NP controlled substance prescribers, 2020 to 2028 renewals",
+    "cite": "Neb. Rev. Stat. 38-145(6); LB731 (2018)",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nursing-Controlled-Substance-Information.aspx",
+    "quote": "complete 3 hours of continuing education (CE) in opiate prescribing in order to qualify for license renewal beginning in 2020 and ending with the 2028",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "DHHS Nursing Controlled Substance Information page",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nursing-Controlled-Substance-Information.aspx",
+    "quote": "Nebraska does not issue a separate state-controlled substance registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "October 31 of even-numbered years",
+    "cite": "DHHS Nurse Licensing Renewal and Continuing Education page",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+    "quote": "RN licenses expire on October 31st of each even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "500 practice hours in 5 years AND 20 contact hours in 2 years (one of several options)",
+    "cite": "DHHS Nurse Licensing Renewal and Continuing Education page",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+    "quote": "Have practiced nursing for at least 500 hours during the past five years AND have completed at least 20 contact hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "DHHS Nurse License Applications page",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-License-Applications.aspx",
+    "quote": "The Enhanced Nurse Licensure Compact was implemented on January 19, 2018.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": 2000,
+    "cite": "Neb. Rev. Stat. 38-2314.01",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2314.01",
+    "quote": "Transition-to-practice agreement means a collaborative agreement for two thousand hours of initial practice between a nurse practitioner and a supervising provider",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.supervisingProvider",
+    "value": "Physician, osteopathic physician, or NP (NP needs 10,000 hours) in same or related specialty",
+    "cite": "Neb. Rev. Stat. 38-2322(1)(d), (3)(a)",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2322",
+    "quote": "Supervising provider means a physician, osteopathic physician, or nurse practitioner licensed and practicing in Nebraska and practicing in the same practice specialty",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.grandfather",
+    "value": "NPs licensed on or before Aug 30, 2015 with 2,000 supervised hours need no TTP agreement",
+    "cite": "Neb. Rev. Stat. 38-2322(2)",
+    "url": "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2322",
+    "quote": "equivalent of an initial two thousand hours of practice supervised by a physician or osteopathic physician shall be allowed to practice without a transition-to-practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "np.practice.agreementFiling",
+    "value": "TTP agreement kept, not filed (submitted only on request); attestation filed only when supervisor is an NP",
+    "cite": "DHHS Attestation of Supervision of a Nurse Practitioner by another Nurse Practitioner",
+    "url": "https://dhhs.ne.gov/licensure/Documents/TransitionToPracticeAgreement.pdf",
+    "quote": "The formal, written transition-to-practice agreement does not need to be submitted to DHHS unless requested.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.practiceHoursQualifier",
+    "value": "2,080-hour rule applies if licensed more than five years",
+    "cite": "DHHS Nurse Licensing Renewal and Continuing Education page",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+    "quote": "If licensed more than five years, at least 2,080 hours of practice as a NP within the previous five years immediately preceding renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceOptions",
+    "value": "Alternatives include current national nursing specialty certification",
+    "cite": "DHHS Nurse Licensing Renewal and Continuing Education page",
+    "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+    "quote": "Have obtained/maintained current certification in a nursing specialty granted by a nationally recognized certifying organization",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: the text of 172 NAC 90 was not loaded; PA renewal and CE facts come from the DHHS PA licensing page (the department's own page) and Neb. Rev. Stat. 38-145, both reloaded and confirmed by the verifier.",
+  "PA: 'no separate state controlled substance registration' is stated on the DHHS nursing controlled substance page as a general statement about Nebraska; the PA page has no equivalent sentence. Treated as statewide.",
+  "NP: Neb. Rev. Stat. 38-2317(1)(d) (amended 2017) lists 2,000 NP practice hours among licence application requirements while 38-2314.01/38-2322 describe a 2,000-hour transition-to-practice agreement for initial practice; how DHHS reconciles these for new graduates was not confirmed (172 NAC 98 not loaded).",
+  "Opiate CE end date for PAs: statute subsection terminates Jan 1, 2029 (so Oct 1, 2027 is the last PA renewal it reaches); DHHS has not stated this for PAs.",
+  "Missed-mandate sweep: no Nebraska statute or DHHS page loaded showed any other PA or NP topic mandate (implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide, infection control, cultural competency, domestic violence). Absence is from the pages loaded, not a statement by the board."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "corrections": [
+   "PA opiate CE: recorded that the statute subsection terminates Jan 1, 2029, so the last PA renewal it reaches is Oct 1, 2027 (PAs renew in odd years); DHHS PA page itself gives no end date.",
+   "PA: added the DHHS controlled substances continuing competency PDF (linked from the PA page) as a second primary source for the opiate CE.",
+   "NP: resolved the open question on filing. The transition-to-practice agreement is not submitted to DHHS unless requested; the Attestation of Supervision form is filed only when the supervising provider is an NP (DHHS form loaded).",
+   "NP: noted that the 2,080 NP practice hours also count toward RN renewal practice hours (38-2319(1))."
+  ],
+  "sourcesReloaded": [
+   "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx",
+   "https://nebraskalegislature.gov/laws/statutes.php?statute=38-145",
+   "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2047",
+   "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2050",
+   "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2317",
+   "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2319",
+   "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2314.01",
+   "https://nebraskalegislature.gov/laws/statutes.php?statute=38-2322",
+   "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+   "https://dhhs.ne.gov/licensure/Pages/Nursing-Controlled-Substance-Information.aspx",
+   "https://dhhs.ne.gov/licensure/Pages/Nurse-License-Applications.aspx",
+   "https://dhhs.ne.gov/licensure/Documents/TransitionToPracticeAgreement.pdf",
+   "https://dhhs.ne.gov/licensure/Documents/ControlledSubstancesContCompReq.pdf"
+  ]
+ }
+}

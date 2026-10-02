@@ -1,0 +1,453 @@
+{
+ "state": "UT",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Utah Division of Professional Licensing (DOPL), Physician Assistant Licensing Board",
+   "url": "https://commerce.utah.gov/dopl/physician-assistant/"
+  },
+  "licence": {
+   "title": "Physician Assistant licence (Utah controlled substance licence is a separate licence)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "May 31 of even years"
+  },
+  "ce": {
+   "hoursPerCycle": 40,
+   "categoryRules": "At least 40 CME hours per 2 year cycle, of which at least 34 Category 1 (ACCME standard; AAPA approved programs qualify). Up to 15% may come from documented volunteer service (4 volunteer hours = 1 CME hour). PAs specializing in mental health keep CAQ in psychiatry CME.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Suicide prevention video or DOPL online suicide prevention training",
+     "hours": 0.5,
+     "period": "every cycle",
+     "appliesTo": "all PAs (counts toward CE)"
+    },
+    {
+     "topic": "Controlled substance prescribing classes (FDA opioid REMS blueprint content, Utah resources, documentation, medical cannabis)",
+     "hours": 3.5,
+     "period": "every cycle",
+     "appliesTo": "holders of a Utah controlled substance licence who prescribe Schedule II or III opioids, hypnotics or psychostimulants"
+    },
+    {
+     "topic": "SBIRT training class (required once during Utah licensure; satisfies the 3.5 hour CS requirement for the period in which it is taken)",
+     "hours": 3.5,
+     "period": "one-time",
+     "appliesTo": "controlled substance prescribers, beginning with the licensing period that begins after January 1, 2024"
+    },
+    {
+     "topic": "DOPL online controlled substance database tutorial",
+     "hours": 0.5,
+     "period": "not yet verified for PAs",
+     "appliesTo": "controlled substance prescribers; waivable by attestation of database use (R156-37-402(3)(c)). The DOPL APRN with CS page requires it; the DOPL PA page lists only 3.5 hours."
+    },
+    {
+     "topic": "Medical cannabis recommending provider CE (Section 26-61a-106)",
+     "hours": null,
+     "period": "every cycle",
+     "appliesTo": "PAs who are recommending medical providers (R156-70a-304(2)(a)(iii))"
+    }
+   ],
+   "controlledSubstanceCe": "3.5 hours each cycle for CS prescribers (Utah Code 58-37-303, renumbered from 58-37-6.5 by 2026 Chapter 362). A 3.5 hour SBIRT class is required once during Utah licensure and satisfies the cycle in which it is taken. A 0.5 hour DOPL database tutorial appears on the APRN renewal page but not the PA page (not yet verified for PAs)."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Under 8,500 post-graduate clinical hours: practice under written practice level policies and procedures, provided to the board on request. First 4,000 hours: collaboration with a physician. 4,000 to 8,500 hours: written collaborative agreement with a physician or a PA with over 8,500 hours in the same specialty, kept at the practice location and given to the board on request. No filing or renewal interval stated. Over 8,500 hours: no statutory collaboration agreement. Changing to a specialty with under 4,000 hours requires 4,000 hours of collaboration.",
+   "notes": "Thresholds were amended by 2026 General Session Chapter 96 (effective May 6, 2026); 8,500 hours replaces the prior threshold. Track hours of post-graduate clinical experience as a credential field."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Utah controlled substance licence (renews with the PA licence) plus DEA registration for controlled substances.",
+   "ceForPrescribers": "3.5 hours controlled substance prescribing each cycle (or one-time SBIRT class in that cycle)."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "May 31 even years",
+    "cite": "Utah Admin. Code R156-1-308a, Table 1",
+    "url": "https://adminrules.utah.gov/public/rule/R156-1/Current%20Rules",
+    "quote": "Physician Assistant May 31 even years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "40 hours, at least 34 Category 1",
+    "cite": "Utah Admin. Code R156-70a-304(2)(a)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules",
+    "quote": "A physician assistant shall complete at least 40 CME hours during each two-year licensure cycle, that include: (i) at least 34 CME hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Current R156-70a is the version effective 2021-11-09 (adminrules API); statute 58-70a-304 unchanged since 2019."
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": "true",
+    "cite": "Utah Admin. Code R156-70a-304(2)(b)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules",
+    "quote": "A licensee's documentation to the Division of current NCCPA certification shall fulfill the requirements of Subsections (2)(a)(i) or (ii).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Rule text says NCCPA certification fulfils (2)(a)(i) (34 Category 1) or (ii) (psychiatry CAQ CME); the DOPL renewal page treats NCCPA certification as an alternative to the full 40 hours."
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": "false: NCCPA certification OR 40 CE hours",
+    "cite": "DOPL PA renewal page",
+    "url": "https://commerce.utah.gov/dopl/physician-assistant/renew-a-license/",
+    "quote": "One of the following: Maintain NCCPA Certification 40 CE credit hours as outlined in R156-70a-304",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.volunteerCredit",
+    "value": "up to 15% via volunteer service",
+    "cite": "Utah Admin. Code R156-70a-304(2)(c)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules",
+    "quote": "a physician assistant may fulfill up to 15% of their CME requirement by providing volunteer services",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.suicide",
+    "value": "suicide prevention video every cycle",
+    "cite": "Utah Code 58-70a-304",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter70A/58-70a-S304.html",
+    "quote": "view a suicide prevention video described in Section 58-1-601 and submit proof in the form required by the division",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Statute requires viewing a suicide prevention video with proof, no hour count. DOPL renewal page: complete one of three online trainings (0.5 credit each) that count toward the CE hours."
+   },
+   {
+    "field": "pa.ce.topicMandates.controlledSubstance",
+    "value": "3.5 hours per licensing period",
+    "cite": "Utah Code 58-37-303 (renumbered from 58-37-6.5 by 2026 General Session Chapter 362)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter37/58-37-S303.html",
+    "quote": "each controlled substance prescriber shall complete at least 3.5 continuing education hours per licensing period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.sbirt",
+    "value": "one-time 3.5 hour SBIRT class",
+    "cite": "Utah Code 58-37-303 (renumbered from 58-37-6.5 by 2026 General Session Chapter 362)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter37/58-37-S303.html",
+    "quote": "need only take the SBIRT-training class once during the controlled substance prescriber's licensure in the state",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.collaborationFirst4000",
+    "value": "collaboration with a physician for first 4,000 hours",
+    "cite": "Utah Code 58-70a-307(2) (amended 2026)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter70A/58-70a-S307.html",
+    "quote": "engage in collaboration with a physician for the first 4,000 hours of the physician assistant's post-graduate clinical practice experience.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.collaborativeAgreement",
+    "value": "written collaborative agreement between 4,000 and 8,500 hours",
+    "cite": "Utah Code 58-70a-307(3) (amended 2026)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter70A/58-70a-S307.html",
+    "quote": "more than 4,000 hours of practice experience and less than 8,500 hours of practice experience shall enter into a written collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFiling",
+    "value": "kept at practice location; provided to board on request",
+    "cite": "Utah Code 58-70a-307(3)(b)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter70A/58-70a-S307.html",
+    "quote": "be kept on file at the physician assistant's practice location; and be provided by the physician assistant to the board upon the board's request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": "true: Utah controlled substance licence plus DEA",
+    "cite": "Utah Code 58-70a-501",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter70A/58-70a-S501.html",
+    "quote": "if the physician assistant holds a Utah controlled substance license and a Drug Enforcement Administration registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.sbirtRequired",
+    "value": "SBIRT class is required (shall complete), once during Utah licensure",
+    "cite": "Utah Code 58-37-303(2)(b)(i)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter37/58-37-S303.html",
+    "quote": "each controlled substance prescriber shall complete at least 3.5 continuing education hours in an SBIRT-training class",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.csdTutorialWaiver",
+    "value": "1/2 hour database tutorial waived if prescriber attests to database use",
+    "cite": "Utah Admin. Code R156-37-402(3)(c)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-37/Current%20Rules",
+    "quote": "waive the required 1/2 hour of continuing education for the online tutorial and test relating to the controlled substance database",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.medicalCannabis",
+    "value": "recommending medical providers complete CE under 26-61a-106",
+    "cite": "Utah Admin. Code R156-70a-304(2)(a)(iii)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules",
+    "quote": "if the physician assistant is a recommending medical provider, continuing education required under Section 26-61a-106",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.csCeRenewalPage",
+    "value": "CS licence renews with PA licence; 3.5 CS CE hours",
+    "cite": "DOPL PA renewal page",
+    "url": "https://commerce.utah.gov/dopl/physician-assistant/renew-a-license/",
+    "quote": "Controlled Substance licenses renew at the same time as the main license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Utah Division of Professional Licensing (DOPL), Board of Nursing and Certified Nurse Midwives",
+   "url": "https://commerce.utah.gov/dopl/nursing/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "nlcCompactMember": true,
+   "ceNote": "RN renews January 31 of odd years. Continuing competency is one of: 400 practice hours; 200 practice hours plus 15 contact hours; or 30 contact hours, in the 2 years before renewal. Suicide prevention video each renewal.",
+   "topicMandates": [
+    {
+     "topic": "Suicide prevention video",
+     "hours": null,
+     "period": "every cycle",
+     "appliesTo": "all nurse licensees (58-31b-305)"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "APRN licence (Nurse Practitioner); Utah controlled substance licence separate",
+   "separateLicenceOrCertificate": "licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "renewalDeadline": "January 31 of even years",
+   "topicMandates": [
+    {
+     "topic": "Controlled substance prescribing classes",
+     "hours": 3.5,
+     "period": "every cycle",
+     "appliesTo": "APRNs holding a Utah controlled substance licence (Schedule II/III prescribers)"
+    },
+    {
+     "topic": "SBIRT training class (required once during Utah licensure; satisfies the 3.5 hour CS requirement for the period in which it is taken)",
+     "hours": 3.5,
+     "period": "one-time",
+     "appliesTo": "controlled substance prescribers, beginning with the licensing period that begins after January 1, 2024"
+    },
+    {
+     "topic": "Suicide prevention video or one DOPL online suicide prevention training (0.5 credit, counts toward CE)",
+     "hours": 0.5,
+     "period": "every cycle",
+     "appliesTo": "all APRNs"
+    },
+    {
+     "topic": "DOPL online controlled substance database tutorial",
+     "hours": 0.5,
+     "period": "every cycle",
+     "appliesTo": "APRNs holding a Utah controlled substance licence; waived if the prescriber attests to database use (R156-37-402(3)(c))"
+    }
+   ],
+   "note": "No separate APRN CE hour count: renewal requires current national certification in the specialty (or, if licensed before July 1, 1992, 30 CE hours and 400 practice hours). Psychiatric mental health APRNs who had not finished the clinical practice requirement at licensure must show progress or completion at renewal (58-31b-305(4)). 58-31b-305 was last amended by 2025 Chapter 392 and 58-31b-803 by 2026 Chapter 96; rule R156-31b is the January 2025 version and still cites 58-37-6.5."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Utah controlled substance licence (renews with APRN licence) plus DEA registration; no separate non controlled prescriptive authority registration found.",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "3.5 hours each cycle (statute); DOPL APRN renewal page lists 4 hours (3.5 plus 0.5 DOPL tutorial)",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None found: Utah Code 58-31b-803 (2026) lets a licensed APRN prescribe prescription drugs including Schedule II to V with no consultation or collaboration condition for NPs (limits apply only to CRNAs).",
+   "authorityNote": "'full' is a classification label; the 2026 statute text contains no collaboration or referral plan requirement for NP prescribing."
+  },
+  "facts": [
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "January 31 even years",
+    "cite": "Utah Admin. Code R156-1-308a, Table 1",
+    "url": "https://adminrules.utah.gov/public/rule/R156-1/Current%20Rules",
+    "quote": "Advanced Practice Registered Nurse January 31 even years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "January 31 odd years",
+    "cite": "Utah Admin. Code R156-1-308a, Table 1",
+    "url": "https://adminrules.utah.gov/public/rule/R156-1/Current%20Rules",
+    "quote": "Registered Nurse January 31 odd years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ce",
+    "value": "400 hours practice, or 200 hours plus 15 contact hours, or 30 contact hours",
+    "cite": "Utah Admin. Code R156-31b-303(3)(a)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules",
+    "quote": "licensed practice for not less than 200 hours and completion of 15 contact hours of approved continuing education; or (iii) completion of 30 contact hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "true",
+    "cite": "Utah Admin. Code R156-31b-303(3)(b)(i)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules",
+    "quote": "be currently certified or recertified in the licensee's specialty area of practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationStatute",
+    "value": "APRN renewal requires current certification",
+    "cite": "Utah Code 58-31b-305(3) (amended by 2025 General Session Chapter 392)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter31B/58-31b-S305.html",
+    "quote": "a person licensed as an advanced practice registered nurse shall be currently certified by a program approved by the division",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.suicide",
+    "value": "suicide prevention video at each renewal",
+    "cite": "Utah Code 58-31b-305(2)(c)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter31B/58-31b-S305.html",
+    "quote": "views a suicide prevention video described in Section 58-1-601 and submits proof in the form required by the division",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "comply with R156-37-402 and CS CE statute if authorized for CS",
+    "cite": "Utah Admin. Code R156-31b-303(3)(b)(ii)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules",
+    "quote": "if authorized to prescribe controlled substances, comply with Section R156-37-402 and Section 58-37-6.5.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Rule text still cites 58-37-6.5, now renumbered 58-37-303."
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCeHours",
+    "value": "3.5 hours per licensing period",
+    "cite": "Utah Code 58-37-303(3) (renumbered by 2026 Chapter 362)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter37/58-37-S303.html",
+    "quote": "each controlled substance prescriber shall complete at least 3.5 continuing education hours per licensing period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCeDoplPage",
+    "value": "DOPL APRN renewal page: 4 hours (3.5 plus 0.5 DOPL tutorial)",
+    "cite": "DOPL APRN with CS renewal page",
+    "url": "https://commerce.utah.gov/dopl/nursing/renew-a-license/advanced-practical-registered-nurse-with-controlled-substance/",
+    "quote": "Completed at least 4 hours of approved continuing education in controlled substance prescribing per license renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Re-loaded. The 0.5 hour is the DOPL online controlled substance database tutorial, waivable by attestation of database use under R156-37-402(3)(c)."
+   },
+   {
+    "field": "np.practice.prescriptiveAuthority",
+    "value": "APRN may prescribe including Schedule II to V; no collaboration condition for NPs",
+    "cite": "Utah Code 58-31b-803(1) (amended 2026)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter31B/58-31b-S803.html",
+    "quote": "a licensed advanced practice registered nurse may prescribe or administer a prescription drug including, a Schedule II-V controlled substance.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Effective 5/6/2026, amended by 2026 Chapter 96; only CRNA limits remain."
+   },
+   {
+    "field": "np.rn.nlc",
+    "value": "Utah has adopted Chapter 31e, Nurse Licensure Compact Revised",
+    "cite": "Utah Code 58-31b-308",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter31B/58-31b-S308.html",
+    "quote": "a person licensed to practice nursing by a jurisdiction that has joined the Nurse Licensure Compact - Revised to the extent permitted by Section 58-31e-102",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Utah enacted the Nurse Licensure Compact - Revised in Title 58 Chapter 31e (2017 Chapter 26)."
+   },
+   {
+    "field": "np.rn.nlcStatute",
+    "value": "Utah enacted the Nurse Licensure Compact - Revised",
+    "cite": "Utah Code 58-31e-101",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter31E/58-31e-S101.html",
+    "quote": "This chapter is known as the \"Nurse Licensure Compact - Revised.\"",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.csdTutorial",
+    "value": "0.5 hour DOPL CS database tutorial each renewal, waivable by attestation",
+    "cite": "Utah Admin. Code R156-37-402(3)(c)",
+    "url": "https://adminrules.utah.gov/public/rule/R156-37/Current%20Rules",
+    "quote": "waive the required 1/2 hour of continuing education for the online tutorial and test relating to the controlled substance database",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.sbirtRequired",
+    "value": "SBIRT class required once during Utah licensure",
+    "cite": "Utah Code 58-37-303(2)(b)",
+    "url": "https://le.utah.gov/xcode/Title58/Chapter37/58-37-S303.html",
+    "quote": "need only take the SBIRT-training class once during the controlled substance prescriber's licensure in the state",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: the 0.5 hour DOPL controlled substance database tutorial is required on the DOPL APRN with CS renewal page and referenced as 'required' in R156-37-402(3)(c), but the DOPL PA renewal page lists only 3.5 CS hours. Whether PAs owe the 0.5 hour is not confirmed; the statute section that creates the tutorial was not found in 58-37 or 58-37f-304.",
+  "PA and NP: DOPL pages and rules R156-37-402 and R156-31b-303 still cite 58-37-6.5; the statute was renumbered 58-37-303 by 2026 Chapter 362. DOPL may revise rules.",
+  "PA: R156-70a (effective 2021-11-09) predates the 2026 Chapter 96 collaboration changes; the CE section is unaffected but the board may amend it.",
+  "NP: the specific 58-37 section requiring a Utah controlled substance licence for APRNs was not quoted; it rests on R156-31b-303(3)(b)(ii) and the DOPL APRN with CS renewal page.",
+  "NP: 'full' practice authority is a classification label, not statutory wording; 58-31b-803 (eff. 5/6/2026) has no collaboration condition for NPs."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10"
+}

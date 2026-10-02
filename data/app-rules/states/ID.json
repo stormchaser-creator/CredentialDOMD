@@ -1,0 +1,117 @@
+{
+  "state": "ID",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Idaho State Board of Medicine (Physician Assistant Advisory Committee), Division of Occupational and Professional Licenses",
+      "url": "https://dopl.idaho.gov/paac/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "At renewal the PA attests to current NCCPA certification; the state sets no hour count.",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "Collaboration is set out in facility bylaws or procedures, or in a written collaborative practice agreement listing the parties, each PA's scope and any monitoring; it goes to the board only on request.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.agreementContents"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Topic mandates set by Idaho statute (Idaho Code Title 54 chapters 14 and 18 were not searched exhaustively)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Idaho Board of Nursing, Division of Occupational and Professional Licenses",
+      "url": "https://dopl.idaho.gov/bon/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlc"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "fact": "np.rn.ceHoursPerCycle",
+          "reason": "Renewal requires the application and fee only."
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "unverified": [
+        "Topic mandates set by Idaho statute (Idaho Code Title 54 chapters 14 and 18 were not searched exhaustively)"
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "Renewal requires a current RN license or privilege, current national certification and peer review; no contact hours are set.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        },
+        "notes": [
+          {
+            "text": "Each renewal requires evidence of participation in a peer review process the board accepts.",
+            "fact": "np.aprn.peerReview"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "unverified": [
+        "Topic mandates set by Idaho statute (Idaho Code Title 54 chapters 14 and 18 were not searched exhaustively)"
+      ]
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

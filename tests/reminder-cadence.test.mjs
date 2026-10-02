@@ -667,11 +667,12 @@ async function startPostgres() {
 
 // Production's shape for these columns (information_schema, 2026-09-29):
 // last_notified, snoozed_until and alerts_fingerprint are text; updated_at
-// timestamptz default now().
+// timestamptz default now(). degree_type is plain text (migration
+// 20260723_sync_reconciliation), read for the reminder line's board.
 const PROFILES = `
   create table public.profiles (id uuid primary key, name text, email text, access_status text not null default 'pending',
     notify_email boolean, reminder_lead_days integer, notify_freq_days integer, last_notified text, snoozed_until text,
-    alerts_fingerprint text, updated_at timestamptz default now());
+    alerts_fingerprint text, degree_type text, updated_at timestamptz default now());
 `;
 const OLD = '2026-09-01 00:00:00+00';
 const ROWS = [

@@ -1,0 +1,71 @@
+{
+ "state": "IL",
+ "facts": [
+  {
+   "field": "pa.topic.mandatedReporterHour",
+   "profession": "pa",
+   "value": "1 hour of mandated reporter training at renewal",
+   "cite": "IDFPR Continuing Education (325 ILCS 5/4)",
+   "url": "https://idfpr.illinois.gov/dpr/continuing-education.html",
+   "quote": "is required to report suspected abuse or neglect and complete 1 hour of mandated reporter training at time of renewal",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.topic.mandatedReporterInitial",
+   "profession": "pa",
+   "value": "Initial mandated reporter training within 3 months of first engagement",
+   "cite": "325 ILCS 5/4(j)",
+   "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/032500050K4.htm",
+   "quote": "must complete an initial mandated reporter training ... within 3 months of their date of engagement in a professional or official capacity",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.topic.mandatedReporterHour",
+   "profession": "np",
+   "value": "1 hour of mandated reporter training at renewal",
+   "cite": "IDFPR Continuing Education (325 ILCS 5/4)",
+   "url": "https://idfpr.illinois.gov/dpr/continuing-education.html",
+   "quote": "is required to report suspected abuse or neglect and complete 1 hour of mandated reporter training at time of renewal",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.topic.mandatedReporterInitial",
+   "profession": "np",
+   "value": "Initial mandated reporter training within 3 months of first engagement",
+   "cite": "325 ILCS 5/4(j)",
+   "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/032500050K4.htm",
+   "quote": "must complete an initial mandated reporter training ... within 3 months of their date of engagement in a professional or official capacity",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.topic.culturalCompetencyHour",
+   "profession": "np",
+   "value": "At least a one-hour cultural competency course",
+   "cite": "20 ILCS 2105/2105-370(b)",
+   "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/002021050K2105-370.htm",
+   "quote": "a health care professional who has continuing education requirements must complete at least a one-hour course in training on cultural competency",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.topic.dementiaHour",
+   "profession": "np",
+   "value": "At least a one-hour dementia course; adults age 26 or older",
+   "cite": "20 ILCS 2105/2105-365(b)",
+   "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/002021050K2105-365.htm",
+   "quote": "must complete at least a one-hour course in training on the diagnosis, treatment, and care of individuals with Alzheimer's disease and other dementias",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

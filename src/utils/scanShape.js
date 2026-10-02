@@ -64,3 +64,18 @@ export function scanShapeIssues(docType, edited, typeOptions) {
   }
   return out;
 }
+
+/**
+ * A scanned CME or CE entry as the cme table can hold it. The scanner reads
+ * an NP certificate's "including M pharmacology" into `pharmacologyHours`,
+ * which is not a column (an unknown key rejects the whole row), so it moves
+ * to customFields["Pharmacology Hours"], where the APRN and certification
+ * cards read it (DESIGN 3.7). Every other entry is returned as it came.
+ */
+export function cmeEntryFromScan(entry) {
+  if (!entry || typeof entry !== "object" || !Object.hasOwn(entry, "pharmacologyHours")) return entry;
+  const { pharmacologyHours, ...rest } = entry;
+  const n = parseFloat(pharmacologyHours);
+  if (!Number.isFinite(n) || n < 0) return rest;
+  return { ...rest, customFields: { ...(rest.customFields || {}), "Pharmacology Hours": String(n) } };
+}

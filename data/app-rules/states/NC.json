@@ -1,0 +1,257 @@
+{
+  "state": "NC",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "North Carolina Medical Board",
+      "url": "https://www.ncmedboard.org"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "ce.hoursPerCycle",
+        "reason": "At least 50 hours of CME every two years, on an annual license."
+      },
+      "total": {
+        "value": 50,
+        "fact": "ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)",
+          "State-Specific Required"
+        ],
+        "reason": "CME NCCPA recognizes as Category I, as the app names the NCCPA Category 1 sponsors. The North Carolina controlled substance hours count from the required 50 however they are logged.",
+        "facts": [
+          "ce.categoryRules",
+          "ce.topicMandates.controlledSubstances"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "notForTopics": [
+          "Controlled Substances"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "Completing the DEA MATE training satisfies the controlled substance hours for the two-year CME period in which it was completed.",
+          "fact": "ce.topicMandates.controlledSubstances.mate"
+        }
+      ],
+      "windowRule": "memberStart",
+      "window": {
+        "value": "birthday after license issuance",
+        "fact": "ce.periodStart",
+        "reason": "The two-year period starts on the birthday after the license was issued; the annual license expiration does not mark it, so the member sets CME Cycle Start to the current period's first day."
+      }
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 2,
+        "label": "Controlled substance prescribing practices, including chronic pain management, part of the 50 hours; not waived by NCCPA certification unless part of the certification activity",
+        "facts": [
+          "ce.topicMandates.controlledSubstances",
+          "ce.topicMandates.controlledSubstances.nccpaNotExempt"
+        ],
+        "condition": {
+          "field": "Prescribes controlled substances",
+          "question": "Do you prescribe controlled substances?",
+          "description": "Applies to clinicians who prescribe controlled substances."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "conditional": true,
+        "text": "A signed statement of supervisory arrangements is kept at every practice site, and the primary supervising physician and PA meet monthly for the first six months, then at least every six months. Since June 30, 2026 a PA with more than 4,000 PA hours and more than 1,000 in the specialty may apply for team-based status. A pain management practice is not a team-based setting, and a team-based PA in a perioperative setting stays physician supervised.",
+        "facts": [
+          "practice.agreementType",
+          "practice.meetings",
+          "practice.teamBased.hours",
+          "practice.teamBased.effectiveDate",
+          "practice.teamBased.application",
+          "practice.teamBased.painExcluded",
+          "practice.teamBased.perioperative"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "North Carolina Board of Nursing (NP approval jointly with the North Carolina Medical Board)",
+      "url": "https://www.ncbon.com"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        },
+        "options": [
+          {
+            "text": "National certification or recertification related to your practice role",
+            "fact": "rn.ceOption.nationalCertification"
+          },
+          {
+            "text": "30 contact hours of continuing education related to your practice",
+            "fact": "rn.ceHoursPerCycle"
+          },
+          {
+            "text": "A Board-approved refresher course",
+            "fact": "rn.ceOptions.more"
+          },
+          {
+            "text": "At least two semester hours of post-licensure academic education related to nursing practice",
+            "fact": "rn.ceOptions.more"
+          },
+          {
+            "text": "15 contact hours plus one of: a nursing project as principal or co-investigator, a published nursing article or chapter, educational presentations totaling at least five contact hours, or 640 hours of active practice in the previous two years",
+            "fact": "rn.ceOptions.more"
+          }
+        ],
+        "notes": [
+          {
+            "text": "Each renewal also needs a self-assessment of practice and a learning plan.",
+            "fact": "rn.selfAssessment"
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 1,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 50,
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "covers": [
+            "total"
+          ],
+          "fact": "aprn.ceNationalCertInLieu",
+          "bodiesFact": "aprn.nationalCredentialingBodies"
+        },
+        "notes": [
+          {
+            "text": "At least 20 of the 50 hours are within your national certification.",
+            "fact": "aprn.ceWithinCertification"
+          },
+          {
+            "text": "The 50-hour clock begins with the first renewal after initial approval to practice.",
+            "fact": "aprn.ceClockStart"
+          },
+          {
+            "text": "Completing the DEA MATE training satisfies the controlled substance hour for the two-year CE period in which it was completed.",
+            "fact": "prescribing.controlledSubstanceCe.mate"
+          }
+        ],
+        "windowRule": "memberStart",
+        "window": {
+          "value": "first renewal after initial approval",
+          "fact": "aprn.ceClockStart.lii",
+          "reason": "The two-year CE period starts with the first renewal after initial approval; the annual approval expiration does not mark it, so the member sets CME Cycle Start to the current period's first day."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 1,
+          "label": "At least one CE hour on controlled substance prescribing within the 12 months before you prescribe controlled substances",
+          "period": {
+            "years": 1,
+            "fromToday": true
+          },
+          "condition": {
+            "field": "Prescribes controlled substances",
+            "question": "Do you prescribe controlled substances?",
+            "description": "Applies to clinicians who prescribe controlled substances."
+          },
+          "facts": [
+            "prescribing.controlledSubstanceCe.beforePrescribing",
+            "prescribing.controlledSubstanceCe"
+          ]
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative practice agreement",
+        "text": "NPs practice under a collaborative practice agreement with a primary supervising physician, reviewed at least yearly with a dated signature sheet, with quality improvement meetings at least every six months (monthly for the first six months).",
+        "facts": [
+          "practice.supervision",
+          "practice.agreementReview",
+          "practice.qiMeetings"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

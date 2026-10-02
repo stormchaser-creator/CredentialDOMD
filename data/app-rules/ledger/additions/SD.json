@@ -1,0 +1,16 @@
+{
+ "state": "SD",
+ "facts": [
+  {
+   "field": "np.board.cnpPage",
+   "profession": "np",
+   "value": "SD Board of Nursing CNP practice page",
+   "cite": "South Dakota Board of Nursing, Certified Nurse Practitioner",
+   "url": "https://www.sdbon.org/Practice/CNP.asp",
+   "quote": "To practice without a collaborative agreement, a CNP must have on file with the Board office a Practice Verification Form",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

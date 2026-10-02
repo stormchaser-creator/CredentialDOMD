@@ -11,7 +11,7 @@ import {
 import { useAdministratorAccessStatus } from "../../hooks/useAdministratorAccessStatus.js";
 import { grantFileActivity, grantVisitCount, formatDay, formatMoment, localTimeZone } from "../../utils/administratorAccess.js";
 import {
-  ADMIN_ACCESS_POLICY, ADMIN_ACCESS_SECTIONS, ADMIN_ACCESS_DEFAULT_SECTIONS, ADMIN_ACCESS_NEVER_SHARED, viewCounts,
+  ADMIN_ACCESS_POLICY, ADMIN_ACCESS_SECTIONS, ADMIN_ACCESS_DEFAULT_SECTIONS, ADMIN_ACCESS_NEVER_SHARED, viewCounts, sectionHint,
 } from "../../../supabase/functions/_shared/credentialPortalView.mjs";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -207,7 +207,7 @@ export default function AdministratorAccessPage() {
   const label = { display: "block", color: T.text, fontSize: 13, fontWeight: 700 };
   const hint = { color: T.textMuted, fontSize: 12, margin: "2px 0 0" };
   const countText = key => { const c = counts?.[key]; return c ? `${c.records} record${c.records === 1 ? "" : "s"}${c.files ? `, ${c.files} file${c.files === 1 ? "" : "s"}` : ""}` : counts ? "Nothing to share yet" : ""; };
-  const sectionBox = (section, field = "sections", key = section.key, title = section.label, detail = field === "customCategories" && unsynced.has(key) ? "Not synced to your account yet, so it cannot be shared." : section.hint) => <label key={key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: `1px solid ${T.border}`, color: T.text, fontSize: 14 }}>
+  const sectionBox = (section, field = "sections", key = section.key, title = section.label, detail = field === "customCategories" && unsynced.has(key) ? "Not synced to your account yet, so it cannot be shared." : sectionHint(section, data?.settings?.degreeType)) => <label key={key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: `1px solid ${T.border}`, color: T.text, fontSize: 14 }}>
     <input type="checkbox" data-section={field === "sections" ? key : `custom:${key}`} checked={form[field].has(key)} disabled={busy || !!pending} onChange={() => toggle(field, key)} style={{ marginTop: 3 }} />
     <span style={{ flex: 1 }}>
       <span style={{ fontWeight: 600 }}>{title}</span>

@@ -1,0 +1,490 @@
+{
+ "state": "SC",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "South Carolina Board of Medical Examiners (LLR), advised by the Physician Assistant Committee",
+   "url": "https://llr.sc.gov/med/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 of odd-numbered years (current licence period ends December 31, 2027); late renewal allowed for one year after expiry, then reactivation"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "hoursNote": "South Carolina sets no state CME hour total for PAs. The renewal requirement is an active NCCPA certification (NCCPA's own rules then govern CME and PANRE). The only state hour mandate is 4 hours of controlled substance CE every two years for PAs with controlled substance prescriptive authority.",
+   "categoryRules": "None set by the state; follows NCCPA",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [
+    {
+     "topic": "Approved procedures of prescribing and monitoring Schedule II, III and IV controlled substances",
+     "hours": 4,
+     "period": "every cycle",
+     "appliesTo": "PAs with controlled substance prescriptive authority"
+    }
+   ],
+   "controlledSubstanceCe": "4 hours every two years on prescribing and monitoring Schedules II to IV (S.C. Code 40-47-965(B)(2)); plus federal DEA one-time 8 hour SUD training (MATE)"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Written scope of practice guidelines signed by all supervising physicians and the PA, on file at all practice sites, submitted to the board (PA may start 10 business days after submission while the board decides). Changes to supervising physicians or added acts are submitted to the board through the PA Scope of Practice Guidelines Portal. Guidelines record dates reviewed and amended; no fixed review interval is stated in the statute.",
+   "notes": "A PA with under two years continuous practice, or changing specialty, needs 60 days on site with the supervising physician before practising off site (waivable in writing). Bills to replace supervision (S.44, H.3579, S.669) were introduced in 2025 and did not advance past committee."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Prescribing is authorized through the scope of practice guidelines. Controlled substance prescriptive authority requires board approval with pharmacotherapeutics education, a South Carolina controlled substance registration (DPH, formerly DHEC) and a DEA registration. Schedule II narcotic: initial prescription limited to a five day supply. The SC controlled substance registration renews annually, due April 1 for PA-C registrants.",
+   "ceForPrescribers": "4 hours every two years on prescribing and monitoring Schedules II to IV"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalDeadline",
+    "value": "December 31, odd-numbered years; renewal every two years",
+    "cite": "SC BME Continuing Education Requirements for License Renewal (A),(B); S.C. Code 40-47-1010",
+    "url": "https://www.llr.sc.gov/med/PDF/Medical_CE_Reqs.pdf",
+    "quote": "License renewal occurs every two years in the odd-numbered years ... Physician Assistant-December 31",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalCycleYears",
+    "value": "biennial",
+    "cite": "S.C. Code 40-47-1010",
+    "url": "https://www.scstatehouse.gov/code/t40c047.php",
+    "quote": "A license issued pursuant to this chapter may be renewed biennially or as otherwise provided by the board and department",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": "true",
+    "cite": "SC BME Continuing Education Requirements for License Renewal",
+    "url": "https://www.llr.sc.gov/med/PDF/Medical_CE_Reqs.pdf",
+    "quote": "Physician Assistants must maintain an active NCCPA certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaRenewalDocument",
+    "value": "Renewal application requires a current copy of the NCCPA certificate",
+    "cite": "SC BME 2025-2027 PA Late Renewal Application",
+    "url": "https://llr.sc.gov/med/pdf/Renewal/2025-2027_Physician_Assistant_Late_Renewal_App.pdf",
+    "quote": "Current copy of NCCPA certificate from NCCPA website",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.controlledSubstances",
+    "value": "4 hours every two years, Schedules II to IV prescribing and monitoring, for PAs with CS prescriptive authority",
+    "cite": "S.C. Code 40-47-965(B)(2)",
+    "url": "https://www.scstatehouse.gov/code/t40c047.php",
+    "quote": "every two years, the PA shall provide documentation of four continuing education hours related to approved procedures of prescribing and monitoring controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Statute subsection is (B)(2); the board's CE summary PDF cites it as 40-47-965[B][3], which is the DEA subsection."
+   },
+   {
+    "field": "prescribing.csPrereqs",
+    "value": "Pharmacotherapeutics education before application and valid DEA registration",
+    "cite": "S.C. Code 40-47-965(B)(1),(3)",
+    "url": "https://www.scstatehouse.gov/code/t40c047.php",
+    "quote": "the PA must have a valid Drug Enforcement Administration (DEA) registration and prescribe in accordance with DEA rules",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "true; renewal form asks for SC DPH/DEA controlled substance registration",
+    "cite": "SC BME 2025-2027 PA Late Renewal Application; S.C. Code 44-53-290(a)",
+    "url": "https://llr.sc.gov/med/pdf/Renewal/2025-2027_Physician_Assistant_Late_Renewal_App.pdf",
+    "quote": "Do you have a South Carolina DPH/DEA Controlled Substance Registration?",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scheduleIILimit",
+    "value": "Schedule II narcotic initial prescription limited to five day supply",
+    "cite": "S.C. Code 40-47-965(A)(6)(c)",
+    "url": "https://www.scstatehouse.gov/code/t40c047.php",
+    "quote": "the authority to prescribe a Schedule II narcotic controlled substance is limited to an initial prescription not to exceed a five-day supply",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "supervision via written scope of practice guidelines",
+    "cite": "S.C. Code 40-47-960(A)",
+    "url": "https://www.scstatehouse.gov/code/t40c047.php",
+    "quote": "A PA practicing at all sites shall practice pursuant to written scope of practice guidelines signed by all supervisory physicians and the PA",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFiling",
+    "value": "Physician notifies the board with proposed guidelines; PA may begin 10 business days after submission",
+    "cite": "S.C. Code 40-47-938(A)",
+    "url": "https://www.scstatehouse.gov/code/t40c047.php",
+    "quote": "The PA may begin clinical practice with the named supervising physician and alternate physicians ten business days after the scope of practice guidelines have been",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.offsiteRule",
+    "value": "60 days on site before off site practice for PAs with under 2 years continuous practice or changing specialty",
+    "cite": "S.C. Code 40-47-955(C)",
+    "url": "https://www.scstatehouse.gov/code/t40c047.php",
+    "quote": "may not practice at a location off site from the supervising physician until the PA has sixty days clinical experience on-site",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pendingLegislation",
+    "value": "S.44, H.3579 (PAs) and S.669 (Team Based Health Care Act) never left committee in the 2025-2026 session",
+    "cite": "SC Legislature bill history pages",
+    "url": "https://www.scstatehouse.gov/sess126_2025-2026/bills/3579.htm",
+    "quote": "Referred to Committee on Medical, Military, Public and Municipal Affairs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-loaded 2026-10-01: H.3579, H.3580, S.44, S.45 and S.669 all show only referral to committee; none enacted."
+   },
+   {
+    "field": "ce.topicMandates.controlledSubstances.renewalForm",
+    "value": "Renewal application asks the PA to attest to the 4 hours",
+    "cite": "SC BME 2025-2027 PA Late Renewal Application",
+    "url": "https://llr.sc.gov/med/pdf/Renewal/2025-2027_Physician_Assistant_Late_Renewal_App.pdf",
+    "quote": "Have you completed the required 4 hours of continuing education in controlled",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.lateRenewal",
+    "value": "Licence expired December 31, 2025 if not renewed; late renewal through December 31, 2026; reactivation after that",
+    "cite": "SC BME 2025-2027 PA Late Renewal Application",
+    "url": "https://llr.sc.gov/med/pdf/Renewal/2025-2027_Physician_Assistant_Late_Renewal_App.pdf",
+    "quote": "After December 31, 2026, reactivation of license is required.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationInterval",
+    "value": "SC controlled substance registration (DPH) renewed annually; APRN and PA-C registrations must be renewed by April 1, no grace period (deadline table on the page lists APRN and PA-C under April 1)",
+    "cite": "S.C. Code Regs. 60-4 (registration section); SC DPH Drug Control Renewals page",
+    "url": "https://dph.sc.gov/professionals/healthcare-quality/drug-control-register-verify/drug-control-renewals",
+    "quote": "The registration of a registrant who fails to renew by April 1 or October 1, whichever is applicable, is expired.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationAnnual",
+    "value": "Practitioners must complete a CS registration application annually",
+    "cite": "S.C. Code Regs. 60-4",
+    "url": "https://dph.sc.gov/sites/scdph/files/Library/Regulations/R.60-4.pdf",
+    "quote": "Practitioners who issue prescriptions for controlled substances which are dispensed from non-governmental pharmacies or dispensaries must complete a controlled substances registration application annually",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "South Carolina State Board of Nursing (LLR)",
+   "url": "https://llr.sc.gov/nurse/aprn.aspx"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "All nursing licences expire April 30 of every even-numbered year (next April 30, 2028)",
+   "ceHoursPerCycle": 30,
+   "ceNote": "30 contact hours is one of FOUR alternatives, not a fixed requirement: 30 contact hours from a board recognized provider; OR maintained national certification; OR an academic nursing program; OR employer verification of competency. An NP who keeps national certification meets RN and APRN competency without the 30 hours. Records kept 4 years; produce within 5 business days of an audit request.",
+   "nlcCompactMember": true,
+   "topicMandates": [],
+   "ceAlternatives": [
+    "30 contact hours",
+    "national certification maintained",
+    "academic nursing program",
+    "employer competency verification"
+   ]
+  },
+  "aprn": {
+   "title": "APRN (NP, CNM, CNS, CRNA); nurse practitioner licensed as APRN-NP",
+   "separateLicenceOrCertificate": "Separate South Carolina APRN licence on top of the RN licence; a multistate RN privilege qualifies but an SC APRN licence is still required. Prescriptive authority is a separate board authorization with its own identification number.",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 30,
+   "ceNote": "Same continued competency alternatives as RN (national certification counts, and is required anyway for APRNs). NPs with prescriptive authority add 20 pharmacotherapeutics contact hours every two years (2 on controlled substances if they hold CS authority).",
+   "pharmacologyHoursPerCycle": 20,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Prescribing controlled substances (within the 20 pharmacotherapeutics hours)",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "NPs with controlled substance prescriptive authority"
+    }
+   ],
+   "ceAlternatives": [
+    "30 contact hours",
+    "national certification maintained",
+    "academic nursing program",
+    "employer competency verification"
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Yes. Prescriptive authority is a separate board application (initially 45 contact hours of pharmacotherapeutics within two years, 15 of them on controlled substances if prescribing Schedules II to V); valid two years, expiring with the APRN licence. Controlled substances also need the SC DPH controlled substance registration (annual, due April 1 for APRNs) and DEA.",
+   "pharmacologyCeForPrescribers": "20 contact hours of pharmacotherapeutics every two years",
+   "controlledSubstanceCe": "2 of the 20 pharmacotherapeutics hours on prescribing controlled substances, every two years; plus federal DEA one-time 8 hour SUD training (MATE)",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "practice agreement",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "Written practice agreement with a physician who is readily available for consultation. Reviewed, dated and signed at least annually; produced to the board within 72 hours of request; random board audit at least biennially. Notify the board within 15 business days of a change of practice setting or physician. The NP must also spend a portion of practice time in an underserved or rural area or serving an underserved population (40-33-34(C))."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalDeadline",
+    "value": "April 30 of every even-numbered year",
+    "cite": "SC Board of Nursing APRN page",
+    "url": "https://llr.sc.gov/nurse/aprn.aspx",
+    "quote": "all nursing licenses expire on April 30 of every even-numbered year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalCycleYears",
+    "value": "biennial",
+    "cite": "S.C. Code 40-33-38(A)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "A license issued pursuant to this chapter may be renewed biennially or as otherwise provided by the board in regulation",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "30 contact hours, or national certification, or academic program, or employer verification",
+    "cite": "S.C. Code 40-33-40(B)(1)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "completion of thirty contact hours from a continuing education provider recognized by the board; (b) maintenance of certification or recertification by a national certifying body",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceRecords",
+    "value": "Keep evidence 4 years; produce within 5 business days of audit request",
+    "cite": "S.C. Code 40-33-40(D)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "A licensee shall maintain all documented evidence of compliance for at least four years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": "true (enacted 2017)",
+    "cite": "S.C. Code 40-33-1300; SC BON APRN page",
+    "url": "https://llr.sc.gov/nurse/aprn.aspx",
+    "quote": "South Carolina is a member of the Nurse Licensure Compact (NLC)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "true; achieve and maintain",
+    "cite": "S.C. Code 40-33-34(A)(3)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "An advanced practice registered nurse must achieve and maintain national certification, as recognized by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.separateLicence",
+    "value": "SC APRN licence required even with multistate RN privilege",
+    "cite": "SC BON APRN page",
+    "url": "https://llr.sc.gov/nurse/aprn.aspx",
+    "quote": "A current APRN South Carolina license or temporary license is required to practice advanced nursing in this state",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pharmacologyCeForPrescribers",
+    "value": "20 hours pharmacotherapeutics every two years; 2 on controlled substances for CS prescribers",
+    "cite": "S.C. Code 40-33-34(E)(3)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "documentation of twenty hours acceptable to the board of continuing education contact hours every two years in pharmacotherapeutics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.controlledSubstanceCe",
+    "value": "2 of the 20 hours on prescribing controlled substances",
+    "cite": "S.C. Code 40-33-34(E)(3)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "For a NP, CNM, or CNS with controlled substance prescriptive authority, two of the twenty hours must be related to prescribing controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": "Initial 45 pharmacotherapeutics hours (15 controlled substances for Schedules II to V); authorization valid 2 years, expires with APRN licence",
+    "cite": "S.C. Code 40-33-34(E)(1)(d),(f),(2)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "Authorization for prescriptive authority is valid for two years unless terminated by the board for cause",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "true; Controlled Substance Registry through the state health agency, then DEA",
+    "cite": "SC BON APRN page; S.C. Code 44-53-290(a)",
+    "url": "https://llr.sc.gov/nurse/aprn.aspx",
+    "quote": "apply for the Controlled Substance Registry through SC DHEC. Apply for a Drug Enforcement Administration (DEA) license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "practice agreement with a physician readily available for consultation",
+    "cite": "S.C. Code 40-33-34(C)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "A licensed NP, CNM, or CNS performing medical acts must do so pursuant to a practice agreement with a physician who must be readily available",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "40-33-34 last amended 2024 Act No. 120, effective March 11, 2024; current text re-loaded 2026-10-01."
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Reviewed at least annually; 72 hour production; biennial random audit",
+    "cite": "S.C. Code 40-33-34(D)(3)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "must be reviewed at least annually, dated and signed by the nurse and physician, and made available to the board for review within seventy-two hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.changeNotice",
+    "value": "Notify board within 15 business days of practice or physician change",
+    "cite": "S.C. Code 40-33-34(D)(4)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "shall notify the board of the change within fifteen business days and provide verification of a practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scheduleIILimit",
+    "value": "Schedule II narcotic limited to five day supply without physician written agreement (hospice, palliative, long term care excepted)",
+    "cite": "S.C. Code 40-33-34(F)(1)(e)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "the prescription must not exceed a five-day supply",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pendingLegislation",
+    "value": "H.3580 / S.45 (APRN full practice after 2,000 hours) still in committee; not enacted",
+    "cite": "SC Legislature bill history page",
+    "url": "https://www.scstatehouse.gov/sess126_2025-2026/bills/3580.htm",
+    "quote": "Referred to Committee on Medical, Military, Public and Municipal Affairs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-loaded 2026-10-01: H.3579, H.3580, S.44, S.45 and S.669 all show only referral to committee; none enacted."
+   },
+   {
+    "field": "prescribing.stateCsRegistrationInterval",
+    "value": "SC controlled substance registration (DPH) renewed annually; APRN and PA-C registrations must be renewed by April 1, no grace period (deadline table on the page lists APRN and PA-C under April 1)",
+    "cite": "S.C. Code Regs. 60-4 (registration section); SC DPH Drug Control Renewals page",
+    "url": "https://dph.sc.gov/professionals/healthcare-quality/drug-control-register-verify/drug-control-renewals",
+    "quote": "The registration of a registrant who fails to renew by April 1 or October 1, whichever is applicable, is expired.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationAnnual",
+    "value": "Practitioners must complete a CS registration application annually",
+    "cite": "S.C. Code Regs. 60-4",
+    "url": "https://dph.sc.gov/sites/scdph/files/Library/Regulations/R.60-4.pdf",
+    "quote": "Practitioners who issue prescriptions for controlled substances which are dispensed from non-governmental pharmacies or dispensaries must complete a controlled substances registration application annually",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.underservedRequirement",
+    "value": "NP, CNM, CNS must spend a portion of time practicing in an underserved or rural area or serving an underserved population",
+    "cite": "S.C. Code 40-33-34(C)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "must spend a portion of his time practicing in an underserved or rural area or serving an underserved population",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scheduleIINonNarcoticLimit",
+    "value": "Schedule II non-narcotic prescriptions limited to a 30 day supply",
+    "cite": "S.C. Code 40-33-34(F)(1)(d)",
+    "url": "https://www.scstatehouse.gov/code/t40c033.php",
+    "quote": "provided, however, that each such prescription must not exceed a thirty-day supply",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalWindow2026",
+    "value": "2026 renewal opened February 1, 2026; next expiry April 30, 2028",
+    "cite": "SC Board of Nursing APRN page",
+    "url": "https://llr.sc.gov/nurse/aprn.aspx",
+    "quote": "Nursing license renewals open February 1, 2026. Please note that all nursing licenses expire on April 30 of every even-numbered year.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceAlternatives.boardPage",
+    "value": "Board page lists the four continued competency alternatives",
+    "cite": "SC Board of Nursing APRN page",
+    "url": "https://llr.sc.gov/nurse/aprn.aspx",
+    "quote": "Applicants must provide documentation of continued competency within the past two (2) years by meeting one of the following requirements",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "S.C. Code Regs. ch. 91 (Board of Nursing) not loaded; APRN renewal rules come from the statute and the board's APRN page.",
+  "Whether the APRN renewal form itself asks for proof of national certification was not confirmed from the form; the statute requires certification to be maintained.",
+  "'Restricted' practice authority is our classification of the statute (physician practice agreement required for medical acts); the statute does not use that word.",
+  "No SC rule found that accepts NCCPA CME in place of the 4 controlled substance hours; treat the 4 hours as separate."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verificationCorrections": [
+  "PA 4 hour controlled substance CE: confirmed at 40-47-965(B)(2); noted the board CE PDF mis-cites it as (B)[3]; added renewal form attestation fact.",
+  "SC controlled substance registration: resolved the researcher's unverified item; it renews annually, due April 1 for APRN and PA-C, no grace period (Reg 60-4; DPH Drug Control Renewals page).",
+  "RN/APRN 30 contact hours: clarified that 30 hours is one of four alternatives (national certification, academic program, employer verification); added ceAlternatives so the app does not show 30 hours as mandatory for certified NPs.",
+  "NP practice: added the statutory requirement to spend a portion of time in an underserved or rural area or population (40-33-34(C)).",
+  "NP prescribing: added Schedule II non-narcotic 30 day supply limit (40-33-34(F)(1)(d)).",
+  "Added PA late renewal window (through December 31, 2026, then reactivation) and the 2026 nursing renewal window; confirmed 40-33-34 current through 2024 Act 120.",
+  "Pending bills H.3579, H.3580, S.44, S.45, S.669 re-checked: still only referred to committee."
+ ]
+}

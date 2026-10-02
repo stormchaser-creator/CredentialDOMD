@@ -1,0 +1,204 @@
+{
+  "state": "TN",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Tennessee Board of Physician Assistants (formerly the Committee on Physician Assistants of the Board of Medical Examiners)",
+      "url": "https://www.tn.gov/health/licensure/pa.html"
+    },
+    "ce": {
+      "mode": "hours",
+      "windowRule": "memberStart",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 100,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 50,
+        "fact": "pa.ce.hoursPerCycle",
+        "label": "Category I",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1"
+        ],
+        "unverifiedAccepted": [
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ]
+      },
+      "notes": [
+        {
+          "text": "Programs must be approved by the AMA, AAPA or NCCPA.",
+          "fact": "pa.ce.acceptedSponsors"
+        },
+        {
+          "text": "NCCPA certified PAs report CE for their most recent NCCPA two-year period; others for the two-year period set by birth year.",
+          "facts": [
+            "pa.ce.proofPeriodNccpa",
+            "pa.ce.nccpaCertificationRequiredForRenewal"
+          ]
+        }
+      ],
+      "window": {
+        "value": "NCCPA period or birth-year period",
+        "facts": [
+          "pa.ce.proofPeriodNccpa",
+          "pa.ce.nccpaCertificationRequiredForRenewal"
+        ],
+        "reason": "An NCCPA certified PA counts the most recent NCCPA two-year period; others the two-year period set by birth year. Neither is the license expiration, so the member sets CME Cycle Start to that period's first day."
+      }
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 2,
+        "label": "Category I controlled substance prescribing, including the department's treatment guidelines, each renewal",
+        "fact": "pa.ce.topicMandates.controlledSubstance"
+      },
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 20,
+        "label": "Board approved course or courses on opioid addiction risks after notice of identification as a high risk prescriber",
+        "period": "lifetime",
+        "periodReason": "Due once, after the department's notice.",
+        "fact": "pa.ce.topicMandates.highRiskPrescriber",
+        "condition": {
+          "field": "Identified as a high risk prescriber",
+          "question": "Has the Department of Health notified you that you were identified as a high risk prescriber?",
+          "description": "Tennessee opioid addiction CE after a high risk prescriber notice."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A written protocol signed by the PA and supervising physician is kept at the practice location and reviewed at least every two years; the board is told of a change in primary supervising physician within 15 days.",
+        "facts": [
+          "pa.practice.protocol",
+          "pa.practice.notifyChange"
+        ]
+      }
+    },
+    "dated": [
+      {
+        "date": "2027-01-01",
+        "item": "Board target for the collaborative practice endorsement rules (6,000 postgraduate hours); recheck the Tennessee PA practice agreement"
+      }
+    ],
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalDeadline"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Tennessee Board of Nursing",
+      "url": "https://www.tn.gov/health/licensure/nurs.html"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlc"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline"
+        },
+        "options": [
+          {
+            "text": "At least two items from the board's competence list each renewal period: for example a satisfactory employer or peer evaluation, contract renewal, a written self-evaluation, specialty certification, or 10 contact hours of continuing education (one item)",
+            "facts": [
+              "np.rn.competenceItems",
+              "np.rn.competenceList",
+              "np.rn.ce"
+            ]
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewal"
+        }
+      },
+      "ce": {
+        "mode": "options",
+        "reason": "APRN competence at renewal is current national certification plus one additional item from the RN competence list.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewal"
+        },
+        "options": [
+          {
+            "text": "Current national certification, plus one more item from the RN competence list (for example 10 contact hours of continuing education, or a satisfactory employer evaluation)",
+            "facts": [
+              "np.aprn.extraCompetenceItem",
+              "np.rn.ce"
+            ]
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 2,
+          "label": "Controlled substance prescribing practices, each renewal period",
+          "fact": "np.aprn.topicMandates.controlledSubstance",
+          "condition": {
+            "field": "Holds a Certificate of Fitness",
+            "question": "Do you hold a Tennessee Certificate of Fitness to prescribe?",
+            "description": "Tennessee controlled substance CE for APRNs who prescribe."
+          }
+        },
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 20,
+          "label": "Board approved course or courses on opioid addiction risks after notice of identification as a high risk prescriber",
+          "period": "lifetime",
+          "periodReason": "Due once, after the department's notice.",
+          "fact": "np.aprn.topicMandates.highRiskPrescriber",
+          "condition": {
+            "field": "Identified as a high risk prescriber",
+            "question": "Has the Department of Health notified you that you were identified as a high risk prescriber?",
+            "description": "Tennessee opioid addiction CE after a high risk prescriber notice."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration (prescribing)",
+        "conditional": true,
+        "text": "A prescribing APRN has a collaborating physician and files a notice naming that physician and the formulary before prescribing. Protocols are reviewed and updated biennially, and the physician reviews at least 20% of charts every 30 days.",
+        "facts": [
+          "np.practice.collaboratingPhysician",
+          "np.prescribing.notice",
+          "np.practice.protocolReview",
+          "np.practice.chartReview"
+        ]
+      }
+    }
+  }
+}

@@ -29,6 +29,9 @@ import { emailRemindersOn, reminderLeadDays } from "./reminderPreferences.js";
 import { STATE_NAMES } from "../constants/states.js";
 import { CV_FILENAME_RE } from "./cvImport.js";
 import { normalizeSetupState, half } from "./setupStateShape.js";
+import { certBodyOf, certificationRolePending, isKnownDegree, isNationalCertification, isPhysicianDegree, isPracticeLicense, licenseKindOf, professionOf } from "../constants/professions.js";
+import { agreementFor } from "./ruleResolver.js";
+import { QUESTION_FIELDS } from "../constants/recordQuestions.js";
 
 export { SETUP_STATE_VERSION, EMPTY_SETUP_STATE, normalizeSetupState } from "./setupStateShape.js";
 const MS_PER_DAY = 86400000;
@@ -40,6 +43,13 @@ const MS_PER_DAY = 86400000;
  * both. Hardcoding the MD strings would mean a DO account never completes.
  */
 export const isMedicalLicense = (l) => /medical license/i.test(l?.type || "");
+/**
+ * The licence a profession practises under: a medical licence for MD, DO and
+ * a blank profession (exactly the test above), a PA licence for a PA, an APRN
+ * or RN licence for an NP (src/constants/professions.js).
+ */
+export const isHeldPracticeLicense = (l, degreeType) => isPracticeLicense(l, degreeType);
+const degreeOfData = (data) => data?.settings?.degreeType || "";
 export const isDea = (l) => /dea registration/i.test(l?.type || "");
 export const isCsr = (l) => /controlled substance/i.test(l?.type || "");
 export const isBoard = (l) => /board certification/i.test(l?.type || "");
@@ -52,7 +62,7 @@ export const isLifeSupport = (l) => /\b(bls|acls|atls|pals|nrp)\b/i.test(`${l?.t
  */
 export function datable(data) {
   return (data?.licenses || []).filter((l) =>
-    l && !isInactive(l) && !isNonExpiring(l, "licenses") && (isMedicalLicense(l) || isDea(l) || isCsr(l))
+    l && !isInactive(l) && !isNonExpiring(l, "licenses") && (isPracticeLicense(l, degreeOfData(data)) || isDea(l) || isCsr(l))
   );
 }
 
@@ -91,13 +101,57 @@ const hasDoc = (data, section, id) => linkedDocs(data, section, id).length > 0;
 const currentLicenses = (ctx) => ctx.licenses.filter((l) => !isInactive(l));
 /** The DEA registrations the DEA row and its drawer are about: never a historical or superseded one. */
 export const currentDeaRecords = (licenses) => (licenses || []).filter((l) => l && isDea(l) && !isInactive(l));
-const holdsMedicalLicense = (ctx) => currentLicenses(ctx).some(isMedicalLicense);
+const practice = (ctx) => (l) => isPracticeLicense(l, ctx.s.degreeType);
+/**
+ * The licence task is done when the profession's practice licence is held:
+ * a medical licence for MD, DO and blank (as before), a PA licence for a PA,
+ * and for an NP both an APRN licence and an RN licence (single state or
+ * multistate), since an NP holds both and each has its own board's rules.
+ */
+const holdsMedicalLicense = (ctx) => {
+  const held = currentLicenses(ctx);
+  if (professionOf(ctx.s.degreeType) === "np") {
+    return held.some((l) => licenseKindOf(l?.type) === "aprn") && held.some((l) => licenseKindOf(l?.type) === "rn");
+  }
+  return held.some(practice(ctx));
+};
 
 /** The two records every credentialing office asks for a copy of. */
-const proofRecords = (ctx) => ctx.licenses.filter((l) => !isInactive(l) && (isMedicalLicense(l) || isDea(l)));
+const proofRecords = (ctx) => ctx.licenses.filter((l) => !isInactive(l) && (practice(ctx)(l) || isDea(l)));
 const proofMissing = (ctx) => proofRecords(ctx).filter((l) => !hasDoc(ctx.data, "licenses", l.id));
 
-const boardRecords = (ctx) => currentLicenses(ctx).filter(isBoard);
+/**
+ * The certification row's records. Physicians: any board certification, as
+ * before. A PA or NP: their own national certification records (NCCPA; the
+ * NP certifiers), and only a PA-C or NP certification, never a CAQ or an RN
+ * specialty certificate from the same body.
+ */
+const appCertRecords = (ctx) => currentLicenses(ctx).filter((l) => certBodyOf(l?.type) && isNationalCertification(l, ctx.licenses));
+// A certifier's record whose role is not answered yet: on file, waiting on one question.
+const roleQuestionRecords = (ctx) => (isPhysicianOrBlank(ctx) ? [] : currentLicenses(ctx).filter((l) => certificationRolePending(l, ctx.licenses, ctx.s.degreeType)));
+const boardRecords = (ctx) => (isPhysicianOrBlank(ctx) ? currentLicenses(ctx).filter(isBoard) : appCertRecords(ctx));
+const isPhysicianOrBlank = (ctx) => !isKnownDegree(ctx.s.degreeType) || isPhysicianDegree(ctx.s.degreeType);
+const forProfession = (ctx, { physician, pa, np }) => {
+  const p = professionOf(ctx.s.degreeType);
+  return p === "pa" ? pa : p === "np" ? np : physician;
+};
+// The primary state's verified practice agreement facts, for a PA or an NP
+// (DESIGN 4.1, decision 14); null for physicians, blank, or no verified fact.
+const primaryAgreement = (ctx) => {
+  const p = professionOf(ctx.s.degreeType);
+  if ((p !== "pa" && p !== "np") || !ctx.s.primaryState) return null;
+  return agreementFor(ctx.s.primaryState, ctx.s.degreeType, p === "pa" ? "pa" : "aprn");
+};
+const agreementRecords = (ctx) => currentLicenses(ctx).filter((l) => licenseKindOf(l.type) === "agreement" && (!l.state || l.state === ctx.s.primaryState));
+// "No" on the primary practice licence's agreement question closes the row
+// where the state's agreement depends on the clinician (an experienced PA or
+// NP past the state's hours threshold is never told to file one).
+const answeredNoAgreement = (ctx) => {
+  const a = primaryAgreement(ctx);
+  if (!a?.conditional) return false;
+  return currentLicenses(ctx).some((l) => l.state === ctx.s.primaryState && isPracticeLicense(l, ctx.s.degreeType)
+    && licenseKindOf(l.type) !== "rn" && l.customFields?.[QUESTION_FIELDS.agreement] === "No");
+};
 const lifeSupportRecords = (ctx) => currentLicenses(ctx).filter((l) => isLifeSupport(l) && !!l.expirationDate);
 
 /** A government photo ID with its number on file. Loyalty cards are not IDs. */
@@ -119,6 +173,28 @@ const reachableReferences = (ctx) =>
 // EDUCATION_TYPES spells the degree two ways and the training three, so both
 // halves are substring tests rather than a list membership.
 const isDegreeRecord = (e) => /doctor of (osteopathic )?medicine|\(md\)|\(do\)/i.test(e?.type || "");
+// A PA's program degree and an NP's graduate nursing education
+// (credentialTypes.js EDUCATION_TYPES_PA / EDUCATION_TYPES_NP). No residency
+// is asked of either.
+// Many older PA programs granted a BS or a generic MS, so a record of any
+// type counts once its type, display name, institution or field of study
+// names the PA program ("Physician Assistant", "Physician Associate", "PA
+// program", "PA studies"). A pre-PA undergraduate major ("Pre-Physician
+// Assistant Studies", "Pre-PA studies", "Pre PA") names the program she was
+// preparing for, not one she completed, so those words are taken out before
+// the test. A string replace rather than a lookbehind, which older iPhone
+// Safari cannot parse.
+// iPhone smart punctuation types a curly apostrophe ("Physician’s
+// Assistant") and a CV import keeps a PDF's en dash or non breaking hyphen
+// ("Pre–PA"), and neither entry path folds them, so both are folded to the
+// straight apostrophe and the hyphen first (as snapOption.js does).
+const PA_PROGRAM_WORDS = /physician'?s? (?:assistant|associate)|\bpa (program|studies)\b/i;
+const PRE_PA_WORDS = /\bpre[- ]?(?:physician'?s? (?:assistant|associate)|pa\b)/gi;
+const foldPunctuation = (v) => String(v || "").replace(/[‘’ʼ′]/g, "'").replace(/[‐-―−]/g, "-");
+const withoutPrePa = (v) => foldPunctuation(v).replace(PRE_PA_WORDS, " ");
+const isPaProgramRecord = (e) => /physician'?s? (?:assistant|associate)|\((mpas|mspas|mms|mhs)\)|postgraduate pa program/i.test(withoutPrePa(e?.type))
+  || [e?.name, e?.institution, e?.fieldOfStudy].some((v) => PA_PROGRAM_WORDS.test(withoutPrePa(v)));
+const isNpEducationRecord = (e) => /\((msn|dnp)\)|post-graduate aprn certificate/i.test(e?.type || "");
 const isTrainingRecord = (e) => /residency|internship|fellowship/i.test(e?.type || "");
 const educationRecords = (ctx) => (ctx.data.education || []).filter(Boolean);
 
@@ -184,24 +260,30 @@ export const TASK_DEFS = [
     secs: 30,
     pro: false,
     label: "About you",
-    why: "Degree picks the MD or DO rule set. Primary state sets the CME clock.",
+    // MD and DO keep the words they had; everyone else is asked for a
+    // profession, since a blank member may be a PA or an NP.
+    why: ({ s }) => (isPhysicianDegree(s.degreeType)
+      ? "Degree picks the MD or DO rule set. Primary state sets the CME clock."
+      : "Your profession picks the rule set: MD, DO, PA or NP. Primary state sets the clock."),
     verb: "Fill in your details",
-    doneWhen: ({ s }) => !!s.name && (s.degreeType === "MD" || s.degreeType === "DO") && !!s.primaryState,
+    doneWhen: ({ s }) => !!s.name && isKnownDegree(s.degreeType) && !!s.primaryState,
     evidenceWhen: null,
-    cardLine: () => "Your degree and primary state decide which CME rules apply to you.",
-    nextPhrase: () => "your degree and primary state",
+    cardLine: ({ s }) => (isPhysicianDegree(s.degreeType)
+      ? "Your degree and primary state decide which CME rules apply to you."
+      : "Your profession and primary state decide which rules apply to you."),
+    nextPhrase: ({ s }) => (isPhysicianDegree(s.degreeType) ? "your degree and primary state" : "your profession and primary state"),
     doneClause: "your details",
     // Three fields complete this task, so three fields can un-complete it.
     // A cleared name used to be reported as a blank degree.
     regressionLine: ({ s }) => {
       if (!s.name) return "your name is blank";
-      if (!s.degreeType) return "your degree is blank";
+      if (!s.degreeType) return "your profession is blank";
       return "your primary state is blank";
     },
     pendingDetail: ({ s }) => {
       const missing = [];
       if (!s.name) missing.push("your name");
-      if (s.degreeType !== "MD" && s.degreeType !== "DO") missing.push("MD or DO");
+      if (!isKnownDegree(s.degreeType)) missing.push("your profession");
       if (!s.primaryState) missing.push("primary state");
       return `Still needed: ${missing.join(", ")}.`;
     },
@@ -219,10 +301,30 @@ export const TASK_DEFS = [
     cardLine: () => "No licenses on file yet. The federal registry probably already has yours.",
     nextPhrase: () => "the registry lookup that fills in your licenses",
     doneClause: "your licenses",
-    regressionLine: () => "no current medical license is on file",
-    pendingDetail: (ctx) => (ctx.licenses.some(isMedicalLicense)
-      ? "Only historical or superseded medical licenses are on file. Add the one you hold now."
-      : "No medical license on file yet."),
+    regressionLine: (ctx) => forProfession(ctx, {
+      physician: "no current medical license is on file",
+      pa: "no current physician assistant license is on file",
+      np: "no current APRN license and RN license are on file",
+    }),
+    pendingDetail: (ctx) => {
+      const p = professionOf(ctx.s.degreeType);
+      if (p === "np") {
+        const held = currentLicenses(ctx);
+        const aprn = held.some((l) => licenseKindOf(l?.type) === "aprn");
+        const rn = held.some((l) => licenseKindOf(l?.type) === "rn");
+        if (aprn && !rn) return "Your APRN license is on file. Add your RN license (single state or multistate) too.";
+        if (rn && !aprn) return "Your RN license is on file. Add your APRN license too.";
+        return "Add your APRN license and your RN license.";
+      }
+      if (p === "pa") {
+        return ctx.licenses.some(practice(ctx))
+          ? "Only historical or superseded physician assistant licenses are on file. Add the one you hold now."
+          : "No physician assistant license on file yet.";
+      }
+      return ctx.licenses.some(isMedicalLicense)
+        ? "Only historical or superseded medical licenses are on file. Add the one you hold now."
+        : "No medical license on file yet.";
+    },
   },
   {
     id: "dates",
@@ -386,22 +488,62 @@ export const TASK_DEFS = [
     secs: 45,
     pro: false,
     section: "licenses",
-    label: "Board certification",
+    // A PA's row is NCCPA certification and an NP's their national NP
+    // certification: done with a dated PA-C or NP certification record,
+    // since both expire. No specialty is asked of either.
+    label: (ctx) => forProfession(ctx, { physician: "Board certification", pa: "NCCPA certification", np: "National NP certification" }),
     // No expiration date is required here, ever. isNonExpiring reads
     // item.noExpiration and nothing in the app sets that field yet, so a
     // lifetime diplomate asked for a date would be stranded on this row.
-    why: "Your specialty drives which board rules apply, and the certificate is the first thing an application asks for.",
-    verb: "Add my board certification",
-    doneWhen: (ctx) => (ctx.s.specialties || []).length > 0 && boardRecords(ctx).length > 0,
+    why: (ctx) => forProfession(ctx, {
+      physician: "Your specialty drives which board rules apply, and the certificate is the first thing an application asks for.",
+      pa: "NCCPA certification renews on its own cycle, and the certificate is the first thing an application asks for.",
+      np: "Your national certification renews on its own cycle, and most states require it to be current.",
+    }),
+    verb: (ctx) => forProfession(ctx, { physician: "Add my board certification", pa: "Add my NCCPA certification", np: "Add my NP certification" }),
+    doneWhen: (ctx) => (isPhysicianOrBlank(ctx)
+      ? (ctx.s.specialties || []).length > 0 && boardRecords(ctx).length > 0
+      : boardRecords(ctx).some((l) => !!l.expirationDate)),
     evidenceWhen: (ctx) => boardRecords(ctx).some((l) => hasDoc(ctx.data, "licenses", l.id)),
-    nextPhrase: () => "your board certification",
+    nextPhrase: (ctx) => forProfession(ctx, { physician: "your board certification", pa: "your NCCPA certification", np: "your national NP certification" }),
     costLine: null,
-    doneClause: "your board certification",
-    cardLine: () => "No board certification on file.",
+    doneClause: (ctx) => forProfession(ctx, { physician: "your board certification", pa: "your NCCPA certification", np: "your national NP certification" }),
+    cardLine: (ctx) => (!boardRecords(ctx).length && roleQuestionRecords(ctx).length
+      ? "Certification on file. Answer what it is on the record."
+      : "No board certification on file."),
     pendingDetail: (ctx) => {
+      if (!boardRecords(ctx).length && roleQuestionRecords(ctx).length) return "On file. Answer what this certification is on the record.";
       if (!boardRecords(ctx).length) return "Nothing on file yet.";
+      if (!isPhysicianOrBlank(ctx)) return boardRecords(ctx).some((l) => !!l.expirationDate) ? "" : "On file, but with no expiration date.";
       return (ctx.s.specialties || []).length ? "" : "On file. Your specialty is still blank.";
     },
+  },
+  {
+    id: "agreement",
+    tier: 2,
+    secs: 45,
+    pro: false,
+    section: "licenses",
+    // Only for a PA or NP whose primary state has a verified agreement fact.
+    appliesWhen: (ctx) => !!primaryAgreement(ctx),
+    label: "Practice agreement",
+    why: (ctx) => {
+      const a = primaryAgreement(ctx);
+      if (!a) return "";
+      return a.conditional
+        ? `${a.stateName}: ${a.text} Whether you need one depends on you. If you do not practise under one, answer No on your license or tap Does not apply to me.`
+        : `${a.stateName}: ${a.text}`;
+    },
+    verb: "Add my practice agreement",
+    doneWhen: (ctx) => agreementRecords(ctx).length > 0 || answeredNoAgreement(ctx),
+    evidenceWhen: (ctx) => agreementRecords(ctx).some((l) => hasDoc(ctx.data, "licenses", l.id)),
+    nextPhrase: () => "your practice agreement",
+    costLine: null,
+    doneClause: "your practice agreement",
+    cardLine: (ctx) => (primaryAgreement(ctx)?.conditional
+      ? "Do you practise under a supervision, collaboration or practice agreement? Add it, or say it does not apply."
+      : "No practice agreement on file."),
+    pendingDetail: (ctx) => (primaryAgreement(ctx)?.conditional ? "Not answered yet." : "Nothing on file yet."),
   },
   {
     id: "lifeSupport",
@@ -409,7 +551,7 @@ export const TASK_DEFS = [
     secs: 45,
     pro: false,
     section: "licenses",
-    label: "BLS, ACLS or ATLS",
+    label: (ctx) => forProfession(ctx, { physician: "BLS, ACLS or ATLS", pa: "BLS, ACLS or PALS", np: "BLS, ACLS or PALS" }),
     why: "Every hospital application asks for a current card, and they lapse on a two-year clock.",
     verb: "Add my card",
     doneWhen: (ctx) => lifeSupportRecords(ctx).length > 0,
@@ -427,7 +569,7 @@ export const TASK_DEFS = [
     pro: false,
     variable: true,
     section: "cme",
-    label: "CME for the current cycle",
+    label: (ctx) => forProfession(ctx, { physician: "CME for the current cycle", pa: "CME for the current cycle", np: "CE for the current cycle" }),
     why: "The transcript from CE Broker or your state board imports every line at once.",
     verb: "Import my transcript",
     doneWhen: (ctx) => (ctx.data.cme || []).length > 0,
@@ -445,21 +587,40 @@ export const TASK_DEFS = [
     pro: false,
     variable: true,
     section: "education",
-    label: "Medical school and postgraduate training",
-    why: "Every application asks for both, and the dates have to match the certificates.",
+    label: (ctx) => forProfession(ctx, { physician: "Medical school and postgraduate training", pa: "PA program", np: "Nursing education" }),
+    why: (ctx) => forProfession(ctx, {
+      physician: "Every application asks for both, and the dates have to match the certificates.",
+      pa: "Every application asks for your PA program, and the dates have to match the diploma.",
+      np: "Every application asks for your graduate nursing education, and the dates have to match the diploma.",
+    }),
     verb: "Add my training",
     doneWhen: (ctx) => {
       const list = educationRecords(ctx);
-      return list.some(isDegreeRecord) && list.some(isTrainingRecord);
+      return forProfession(ctx, {
+        physician: list.some(isDegreeRecord) && list.some(isTrainingRecord),
+        pa: list.some(isPaProgramRecord),
+        np: list.some(isNpEducationRecord),
+      });
     },
     evidenceWhen: (ctx) => educationRecords(ctx).some((e) => hasDoc(ctx.data, "education", e.id)),
-    nextPhrase: (ctx) => (educationRecords(ctx).some(isDegreeRecord) ? "your residency or fellowship" : "your medical school"),
+    nextPhrase: (ctx) => forProfession(ctx, {
+      physician: educationRecords(ctx).some(isDegreeRecord) ? "your residency or fellowship" : "your medical school",
+      pa: "your PA program",
+      np: "your MSN, DNP or post-graduate APRN certificate",
+    }),
     costLine: null,
     doneClause: "your training history",
-    cardLine: () => "Medical school or postgraduate training is missing.",
+    cardLine: (ctx) => forProfession(ctx, {
+      physician: "Medical school or postgraduate training is missing.",
+      pa: "Your PA program is missing.",
+      np: "Your graduate nursing education is missing.",
+    }),
     pendingDetail: (ctx) => {
       const list = educationRecords(ctx);
       if (!list.length) return "Nothing on file yet.";
+      const p = professionOf(ctx.s.degreeType);
+      if (p === "pa") return "No PA program on file. A BS or MS from a PA program counts once its field of study says Physician Assistant.";
+      if (p === "np") return "No MSN, DNP or post-graduate APRN certificate on file.";
       if (!list.some(isDegreeRecord)) return "No medical school on file.";
       return "No residency, internship or fellowship on file.";
     },
@@ -716,12 +877,12 @@ function resolveTask(def, ctx, state) {
   return {
     id: def.id,
     tier: def.tier,
-    label: def.label,
-    why: def.why,
-    verb: def.verb,
+    label: call(def.label, ctx),
+    why: call(def.why, ctx),
+    verb: typeof def.verb === "function" ? def.verb(ctx) : def.verb,
     // What the drawer's "do it yourself" button says, when that is not the
     // same action as the card's verb.
-    addVerb: def.addVerb || def.verb,
+    addVerb: typeof (def.addVerb || def.verb) === "function" ? (def.addVerb || def.verb)(ctx) : def.addVerb || def.verb,
     pro: !!def.pro,
     // Locked is not a status: the row still resolves normally, it is simply
     // out of the denominator and out of the Next rotation while the account
@@ -739,14 +900,14 @@ function resolveTask(def, ctx, state) {
     declaredNa: def.declaredNa || null,
     skippedAt: stored?.s === "skipped" ? stored.at || null : null,
     naWhy: status === "na" && stored?.s === "na" ? stored.why || "" : "",
-    cardLine: def.cardLine ? def.cardLine(ctx) : def.why,
+    cardLine: def.cardLine ? def.cardLine(ctx) : call(def.why, ctx),
     regressionLine: def.regressionLine ? def.regressionLine(ctx) : null,
     // The re-engagement ladder's three vocabularies: a noun phrase for what
     // is next, a quantified sentence built only from their own records, and
     // a past-tense clause for the task that last closed.
     nextPhrase: call(def.nextPhrase, ctx),
     costLine: call(def.costLine, ctx),
-    doneClause: def.doneClause || null,
+    doneClause: call(def.doneClause, ctx) || null,
   };
 }
 
@@ -819,7 +980,9 @@ export function buildSetup(data, { isPro = false, isFreeBeta = false, hasSubscri
   // Pro rows are never dropped from the board, only locked: a free physician
   // should be able to see what a full packet contains. countTier and the
   // ranker both skip them, so a paywall can never be the page's next action.
-  const tasks = TASK_DEFS.map((def) => resolveTask(def, ctx, state));
+  // A row that applies only to some members (the PA or NP practice agreement)
+  // is left off the board for everyone else, so MD and DO boards are unchanged.
+  const tasks = TASK_DEFS.filter((def) => !def.appliesWhen || def.appliesWhen(ctx)).map((def) => resolveTask(def, ctx, state));
   const tier1 = tasks.filter((t) => t.tier === 1);
   const tier2 = tasks.filter((t) => t.tier === 2);
 
@@ -827,7 +990,7 @@ export function buildSetup(data, { isPro = false, isFreeBeta = false, hasSubscri
   // offers About you and nothing else until it is answered.
   // The CV is the exception: it is the step that ANSWERS the degree question,
   // so gating it behind the answer would make the first step unreachable.
-  const degreeUnset = s.degreeType !== "MD" && s.degreeType !== "DO";
+  const degreeUnset = !isKnownDegree(s.degreeType);
   const candidates = degreeUnset ? tasks.filter((t) => t.id === "identity" || t.id === "cv") : tasks;
   const open = openTasks(candidates, nowMs);
   const ranked = rankOpen(open, tasks);
@@ -1214,9 +1377,10 @@ export function firstRenderPatch(setup, { now = new Date() } = {}) {
 /* ─── What an admin can honestly say about someone else's setup ─── */
 
 /** The task id the board last closed, said as the row's own label. */
-function taskLabel(id) {
+function taskLabel(id, settings = {}) {
   const def = TASK_DEFS.find((d) => d.id === id);
-  return def ? def.label : "";
+  if (!def) return "";
+  return typeof def.label === "function" ? def.label({ s: settings || {}, licenses: [], data: {} }) : def.label;
 }
 
 /**

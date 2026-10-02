@@ -1,0 +1,118 @@
+{
+  "state": "MO",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Missouri State Board of Registration for the Healing Arts (Advisory Commission for Physician Assistants)",
+      "url": "https://pr.mo.gov/physicianassistants.asp"
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "A Missouri physician assistant is by statute a person with active NCCPA certification; no state CME hour count was found."
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative practice arrangement",
+        "text": "Before practicing, a PA informs the Board in writing of the collaborating physician. The written collaborative practice arrangement is reviewed at least annually, changes are reported within 15 days, and at least 10% of the PA's charts go to the collaborating physician every 14 days.",
+        "facts": [
+          "practice.agreementType",
+          "practice.boardNotice",
+          "practice.annualReview",
+          "practice.changeNotice",
+          "practice.statuteChartReview"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "How often the PA license renews (the statute says valid for two years and renewable annually; the board mails renewals every year)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Missouri State Board of Nursing",
+      "url": "https://pr.mo.gov/nursing.asp"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "unverified"
+      },
+      "unverified": [
+        "Whether RN renewal requires any continuing education (the renewal rule lists only the fee and workforce data)"
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "Renewal requires primary source evidence of recertification by an approved certifying body before the license expires; no state hour count for certified APRNs.",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "rn.renewalCycleYears",
+            "aprn.renewal"
+          ],
+          "reason": "APRN and RN licenses renew biennially in odd-numbered years."
+        },
+        "notes": [
+          {
+            "text": "APRNs approved as noncertified before January 1, 2010 instead need 800 practice hours and 60 contact hours every 2 years.",
+            "fact": "aprn.uncertifiedRenewal"
+          },
+          {
+            "text": "The APRN license expires on the earlier of the RN license expiration and your national certification expiration; renew the certification before it lapses.",
+            "fact": "aprn.expiresWithCertification"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative practice arrangement",
+        "text": "APRN practice requires a written collaborative practice arrangement with a physician, reviewed at least annually and not filed with the Board of Nursing. The collaborating physician reviews at least 10% of services every 14 days, and a new arrangement starts with one month of practice with the physician continuously present, with listed exceptions.",
+        "facts": [
+          "practice.annualReview",
+          "practice.notFiledWithBon",
+          "practice.chartReview",
+          "practice.transitionToPracticeHours",
+          "practice.statuteOneMonthExceptions"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

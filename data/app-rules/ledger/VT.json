@@ -1,0 +1,474 @@
+{
+ "state": "VT",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Vermont Board of Medical Practice (Department of Health)",
+   "url": "https://www.healthvermont.gov/systems/board-medical-practice"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "January 31 of even-numbered years"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "100 approved credit hours every two years, at least 50 Category 1; proof submitted with the renewal application (Board Rule 32.4.1, eff. 5/1/2024)",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaNote": "Rule 32.4.2: NCCPA certification or recertification during the two year period may be accepted in lieu of the 100 hours. The rule does not make current NCCPA certification a renewal condition. The Board's October 2021 PA renewal instructions asked for proof of current NCCPA certification; that document predates the 2024 rule.",
+   "topicMandates": [
+    {
+     "topic": "Controlled substances prescribing (abuse and diversion, safe use, storage and disposal, VPMS use, risk assessment, alternatives to opioids, tapering, State and federal law)",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "PAs who prescribe controlled substances; anyone holding a DEA number or with a pending DEA application is presumed to prescribe. Must be AMA PRA Category 1, AAPA Category 1, or Board designated."
+    }
+   ],
+   "controlledSubstanceCe": "2 hours each renewal for PAs who prescribe controlled substances (Board Rule 32.4.3, eff. 5/1/2024)."
+  },
+  "practice": {
+   "agreementType": "practice agreement",
+   "agreementFilingAndRenewal": "Written practice agreement with a participating physician, filed with the Board before practice (electronically allowed). Reviewed during the 90 days before submitting each renewal application; the review is documented in writing and signed by the PA and reviewing physician; a revised agreement is signed and submitted to the Board. A new agreement must reach the Board before practice with each new employer or practice setting beyond the agreement's limits.",
+   "notes": "No supervision ratio or co-signature; a physician must be reachable for consultation at all times. Practice agreement review date must be documented."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "2 hours controlled substance prescribing CME each renewal for PAs who hold or have applied for a DEA number (Rule 32.4.3). VPMS registration required for any Schedule II to IV prescriber."
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 2,
+    "cite": "26 V.S.A. § 1734b(a)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/031",
+    "quote": "Licenses shall be renewed every two years on payment of the required fee.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "January 31 of even-numbered years",
+    "cite": "Board of Medical Practice, Applications, Licensing & Fees page",
+    "url": "https://www.healthvermont.gov/systems/board-medical-practice/applications-licensing-and-fees",
+    "quote": "PA renewals occur January 31st of even years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "practice agreement",
+    "cite": "26 V.S.A. § 1735a(a)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/031",
+    "quote": "only if the physician assistant has entered into a written practice agreement as set forth in subsection (b) of this section.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFiling",
+    "value": "filed with the Board",
+    "cite": "26 V.S.A. § 1735a(f)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/031",
+    "quote": "The practice agreement shall be filed with the Board. The Board shall not request or require any modifications to the practice agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementRenewalReview",
+    "value": "reviewed at least at each licence renewal",
+    "cite": "26 V.S.A. § 1735a(d)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/031",
+    "quote": "at a minimum, at the time of the physician assistant’s license renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementReviewWindow",
+    "value": "within 90 days before renewal application",
+    "cite": "Board of Medical Practice Rule § 30.0 (eff. 5/1/2024)",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "must be reviewed, and if necessary updated, during the 90 days preceding submission of the physician assistant’s renewal application.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.newEmployer",
+    "value": "new agreement filed before practice with each new employer",
+    "cite": "Board of Medical Practice Rule § 31.4",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "A new practice agreement must be received by the Board before a physician assistant may practice after a change in employment.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "PA prescribing controlled substances must hold DEA registration",
+    "cite": "26 V.S.A. § 1735a(h)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/031",
+    "quote": "A physician assistant who prescribes controlled substances shall be registered with the federal Drug Enforcement Administration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.vpms",
+    "value": "VPMS registration required for Schedule II to IV prescribers",
+    "cite": "18 V.S.A. § 4289(b)(1)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/18/084A",
+    "quote": "Each health care provider who prescribes any Schedule II, III, or IV controlled substances shall register with the VPMS",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpa.2021Instructions",
+    "value": "Board renewal instructions dated Oct 31 2021 asked for proof of current NCCPA certification (superseded by Rule 32.4.2, eff. 5/1/2024)",
+    "cite": "Board of Medical Practice PA Renewal Instructions, Oct 31 2021",
+    "url": "https://healthvermont.gov/sites/default/files/documents/pdf/BMP-Renewals-PAInstructions-10292021.pdf",
+    "quote": "Proof of current NCCPA certification.",
+    "loaded": true,
+    "verified": false,
+    "reason": "Document is from 2021; the current rule (32.4.2) makes NCCPA certification an alternative to the 100 hours, not a renewal condition."
+   },
+   {
+    "field": "ce.controlledSubstanceCe",
+    "value": "2021 instructions: 2 hours for PAs with DEA (now confirmed by Rule 32.4.3)",
+    "cite": "Board of Medical Practice PA Renewal Instructions, Oct 31 2021",
+    "url": "https://healthvermont.gov/sites/default/files/documents/pdf/BMP-Renewals-PAInstructions-10292021.pdf",
+    "quote": "PAs who have a DEA must have 2 hours of qualifying CME on Controlled Substances Prescribing.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.controlledSubstanceCe.ruleScope",
+    "value": "Rule 24.1.6 covers physician licensees; PAs are covered separately by Rule 32.4.3",
+    "cite": "Board of Medical Practice Rule § 24.1.6",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "All physician licensees who are required to certify completion of CME and who prescribe controlled substances shall certify at the time of each renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.practiceCurrency",
+    "value": "practised within last 3 years or Board update of knowledge and skills",
+    "cite": "26 V.S.A. § 1734b(c)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/031",
+    "quote": "shall have practiced as a physician assistant within the last three years or have complied with the requirements for updating knowledge and skills",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": 100,
+    "cite": "Board of Medical Practice Rule 32.4.1 (eff. 5/1/2024)",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "all physician assistants shall complete a continuing medical education program of 100 approved credit hours every two years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "minimum 50 Category 1",
+    "cite": "Board of Medical Practice Rule 32.4.1",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "A minimum of 50 credit hours shall be from Category 1.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "Board of Medical Practice Rule 32.4.2",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "Certification or recertification by the NCCPA at any time during a 2 -year licensure period may be accepted in lieu of 100 hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topic.controlledSubstances",
+    "value": "2 hours each renewal for PAs who prescribe controlled substances",
+    "cite": "Board of Medical Practice Rule 32.4.3",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "All licensees who prescribe controlled substances shall certify at the time of each renewal that they have completed at least two hours of CME",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topic.controlledSubstances.dea",
+    "value": "DEA holders and pending applicants presumed to prescribe",
+    "cite": "Board of Medical Practice Rule 32.4.3",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "who holds a D.E.A. number to prescribe controlled substances, or who has submitted a pending application for one, is presumed to prescribe",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementReviewDocumented",
+    "value": "review documented in writing and signed; revised agreement submitted to Board",
+    "cite": "Board of Medical Practice Rule 31.3",
+    "url": "https://www.healthvermont.gov/sites/default/files/document/reg-board-medical-practice.pdf",
+    "quote": "The review must be documented in writing at the time that it is completed and signed by the physician assistant and reviewing physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalSchedule",
+    "value": "PA licences expire January 31 of even years",
+    "cite": "Board of Medical Practice, Applications, Licensing & Fees page",
+    "url": "https://www.healthvermont.gov/systems/board-medical-practice/applications-licensing-and-fees",
+    "quote": "Physician Assistants January 31st of Even Years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Vermont State Board of Nursing (Office of Professional Regulation, Secretary of State)",
+   "url": "https://sos.vermont.gov/nursing/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": "20 hours in two years is one of several alternatives: 400 practice hours in 2 years, OR 960 in 5 years, OR 20 CE hours in 2 years, OR current national certification",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN (role and population focus, e.g. nurse practitioner)",
+   "separateLicenceOrCertificate": "separate APRN licence (requires Vermont RN or multistate compact RN licence)",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "pharmacologyHoursPerCycle": null,
+   "practiceHoursPerCycle": "400 hours APRN practice in 2 years or 960 hours in 5 years",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Controlled substances: abuse and diversion, safe use, storage and disposal, VPMS, risk assessment, alternatives to opioids, tapering, law",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "APRNs with a DEA registration, a pending DEA application, or who dispense controlled substances"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "2 hours per licensing period for APRNs with DEA (2016 Act 173 Sec. 9, uncodified session law); not listed in the June 2026 APRN renewal instructions",
+   "stateCsRegistrationRequired": false,
+   "notes": "VPMS registration required for Schedule II to IV prescribers (18 V.S.A. § 4289(b)(1)); DEA registration is per state."
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "collaborative provider agreement during transition to practice only",
+   "transitionToPracticeHours": "24 months and 2,400 hours in the initial role and population focus; 12 months and 1,600 hours for each additional role and population focus",
+   "agreementFilingAndRenewal": "APRN keeps signed and dated copies; a current agreement must be presented at renewal if still in transition; Board notified (attestation form) when transition is complete."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": 2,
+    "cite": "Vermont Board of Nursing Administrative Rules 4-3 (eff. May 11, 2023)",
+    "url": "https://outside.vermont.gov/dept/sos/office_professional_regulation/professions/nursing/nursing_administrative_rules.pdf",
+    "quote": "Licenses are valid for fixed, two-year periods.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.continuedCompetency.practice",
+    "value": "400 hours in 2 years or 960 hours in 5 years",
+    "cite": "Board of Nursing Rule 4-8(a)(1)",
+    "url": "https://outside.vermont.gov/dept/sos/office_professional_regulation/professions/nursing/nursing_administrative_rules.pdf",
+    "quote": "Have practiced for a minimum of 50 days (400 hours) in the two years preceding application or 120 days (960 hours)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.continuedCompetency.ce",
+    "value": "20 hours CE in 2 years (alternative)",
+    "cite": "Board of Nursing Rule 4-8(a)(2)",
+    "url": "https://outside.vermont.gov/dept/sos/office_professional_regulation/professions/nursing/nursing_administrative_rules.pdf",
+    "quote": "Have completed 20 hours of qualifying continuing education in the two years immediately preceding the application; or",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.continuedCompetency.certification",
+    "value": "national certification (alternative)",
+    "cite": "Board of Nursing Rule 4-8(a)(3)",
+    "url": "https://outside.vermont.gov/dept/sos/office_professional_regulation/professions/nursing/nursing_administrative_rules.pdf",
+    "quote": "Hold a current nationally recognized certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "26 V.S.A. § 1647",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/028",
+    "quote": "This subchapter is the Vermont adoption of the Nurse Licensure Compact as amended by the National Council of State Boards of Nursing.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewal.requirements",
+    "value": "RN renewal + APRN practice hours + national certification + collaborative agreement if required",
+    "cite": "Board of Nursing Rule 4-8(d)",
+    "url": "https://outside.vermont.gov/dept/sos/office_professional_regulation/professions/nursing/nursing_administrative_rules.pdf",
+    "quote": "Have practiced in an APRN role for a minimum of 50 days (400 hours) in the two years preceding application",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "26 V.S.A. § 1614(2)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/028",
+    "quote": "possession of a current certification by a national APRN specialty certifying organization",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewal.instructions",
+    "value": "no general CE hour requirement listed for APRN renewal",
+    "cite": "OPR APRN Renewal Instructions, June 2026",
+    "url": "https://outside.vermont.gov/dept/sos/office_professional_regulation/professions/nursing/nursing_advanced_practice_registered_nurse_renewal_instructions.pdf",
+    "quote": "upload current certification by a national APRN certifying organization for each specialty area of practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPracticeHours",
+    "value": "24 months and 2,400 hours",
+    "cite": "26 V.S.A. § 1613(a)(1)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/028",
+    "quote": "An APRN with fewer than 24 months and 2,400 hours of licensed active advanced nursing practice in an initial role and population focus",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFiling",
+    "value": "APRN maintains signed and dated copies",
+    "cite": "26 V.S.A. § 1613(a)(2)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/028",
+    "quote": "An APRN shall have and maintain signed and dated copies of all required collaborative provider agreements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.solo",
+    "value": "solo practice permitted after transition; Board notified",
+    "cite": "26 V.S.A. § 1613(b)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/028",
+    "quote": "An APRN who satisfies the requirements to engage in solo practice pursuant to subsection (a) of this section shall notify the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.controlledSubstanceCe",
+    "value": "2 hours per licensing period for APRNs with DEA",
+    "cite": "2016 Acts and Resolves No. 173, Sec. 9(a)",
+    "url": "https://legislature.vermont.gov/Documents/2016/Docs/ACTS/ACT173/ACT173%20As%20Enacted.pdf",
+    "quote": "shall complete a total of at least two hours of continuing education for each licensing period beginning on or after July 1, 2016",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.vpms",
+    "value": "VPMS registration required",
+    "cite": "18 V.S.A. § 4289(b)(1)",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/18/084A",
+    "quote": "Each health care provider who prescribes any Schedule II, III, or IV controlled substances shall register with the VPMS",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "separate DEA registration per state",
+    "cite": "Vermont OPR Nursing FAQ",
+    "url": "https://sos.vermont.gov/nursing/nursing-faqs",
+    "quote": "The DEA requires that a practitioner obtain a separate DEA registration in each state.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalCycle.expiry",
+    "value": "expiration date printed on licence; expires at midnight on that date",
+    "cite": "Board of Nursing Rule 4-3 (eff. May 11, 2023)",
+    "url": "https://outside.vermont.gov/dept/sos/office_professional_regulation/professions/nursing/nursing_administrative_rules.pdf",
+    "quote": "Expiration dates are printed on licenses. A license expires if not renewed by midnight on the date of expiry.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcEffective",
+    "value": "Nurse Licensure Compact effective February 1, 2022",
+    "cite": "OPR Nursing page",
+    "url": "https://sos.vermont.gov/nursing/",
+    "quote": "The Vermont Nurse Licensure Compact became effective February 1, 2022.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewal.statute",
+    "value": "renewal needs practice requirement, national certification, collaborative agreement if in transition",
+    "cite": "26 V.S.A. § 1614",
+    "url": "https://legislature.vermont.gov/statutes/fullchapter/26/028",
+    "quote": "(3) a current collaborative provider agreement if required for transition to practice.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA hospice, palliative care or pain management 1 hour: Rule 24.1.5 and 26 V.S.A. § 1400(b) apply it to physician licensees; Rule 32.4.2 says PAs must also meet 'any applicable' CME set by law or rule, but nothing loaded applies 24.1.5 to PAs. Treat as not a PA requirement until the Board confirms.",
+  "PA current NCCPA certification at renewal: requested in the Board's October 2021 renewal instructions only; the 2024 rule makes NCCPA an alternative to the 100 hours. Whether the current online renewal still asks for NCCPA proof is not confirmed.",
+  "RN/APRN calendar expiry date: rule 4-3 says the date is printed on the licence; no primary page loaded states the calendar date.",
+  "APRN controlled substance CE: Act 173 (2016) Sec. 9 is uncodified session law and is not restated in the 2023 nursing rules or the June 2026 APRN renewal instructions; how OPR collects the attestation is unconfirmed (the requirement itself is confirmed).",
+  "No separate Vermont state controlled substance registration for individual prescribers was found (only DEA plus VPMS registration); absence not confirmed by an explicit primary statement."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verificationCorrections": [
+  "PA CME hours: researcher said no current primary source states a PA CME total. Board Rule 32.4.1 (eff. 5/1/2024, page 28 of the rule the researcher already cited) requires 100 approved credit hours every two years with at least 50 Category 1. hoursPerCycle set to 100, categoryRules filled.",
+  "PA NCCPA: researcher set nccpaCertificationRequiredForRenewal true from 2021 instructions. Rule 32.4.2 makes NCCPA certification or recertification an alternative accepted in lieu of the 100 hours. Set acceptsNccpaCertificationInLieu true and nccpaCertificationRequiredForRenewal false; the 2021 instruction fact is kept but marked superseded.",
+  "PA controlled substance CME: researcher marked it not yet verified and said the 2024 rule covers only physicians. Rule 32.4.3 'Required CME for PAs With D.E.A. Number' requires 2 hours each renewal (AMA PRA Category 1, AAPA Category 1 or Board designated). Now verified; appliesTo includes pending DEA applicants.",
+  "PA practice agreement: added Rule 31.3 (review documented in writing, signed by both; revised agreement submitted to the Board).",
+  "NP: all researcher facts re-loaded and confirmed (Rule 4-3, 4-8(a), 4-8(d), 26 V.S.A. §§ 1613, 1614, 1647, Act 173 Sec. 9, VPMS 18 V.S.A. § 4289(b)(1), OPR FAQ, June 2026 APRN instructions). Added rule 4-3 expiry wording, NLC effective date (Feb 1, 2022) and § 1614(3).",
+  "Checked the Department of Health opioid prescribing rule (eff. 4/1/2024): no CE requirement; no other topic mandate found for either profession.",
+  "Removed the PA CME hour item from unverified (now verified); hospice item kept with the reason."
+ ]
+}

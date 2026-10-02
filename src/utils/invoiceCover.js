@@ -1,6 +1,6 @@
 import { formatDate } from "./helpers.js";
 import { invoiceFileName } from "./invoiceEmail.js";
-import { oneDegree } from "./outgoingText.js";
+import { oneDegree, isPlaceholderSender } from "./outgoingText.js";
 
 // The one file name every invoice file carries ("Invoice INV-1 from Al Li,
 // DO.pdf"): Gmail on the iPhone takes it as the subject.
@@ -108,7 +108,7 @@ export const invoicePeriodLabel = (inv = {}) => (inv.kind === "expenses" ? "Expe
  */
 export const senderName = (inv = {}) => {
   const n = oneDegree(inv.physician);
-  return n === "Physician" ? "" : n;
+  return isPlaceholderSender(n) ? "" : n;
 };
 
 /** One subject line for every channel: share title, mailto subject. */
@@ -126,7 +126,7 @@ const isExpenses = (inv) => inv.kind === "expenses";
 const whereLine = (inv) => {
   const period = invoicePeriod(inv);
   if (isExpenses(inv)) return `reimbursable travel expenses${period ? ` incurred ${period}` : ""}`;
-  return `physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}`;
+  return `${inv.servicesPhrase || "physician services"} at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}`;
 };
 
 const itemizes = (inv, lead) => (isExpenses(inv)

@@ -1,4 +1,4 @@
-import { plainDashes, scrubSsn, withDegree, oneDegree } from "./outgoingText.js";
+import { plainDashes, scrubSsn, withDegree, oneDegree, isPlaceholderSender } from "./outgoingText.js";
 
 /**
  * The server-sent invoice email, as one pure module that BOTH sides run: the
@@ -266,7 +266,7 @@ function cutAtWord(text, max) {
  */
 export function invoiceFileName(inv = {}, ext = "pdf") {
   const who = oneDegree(inv?.physician);
-  const from = who && who !== "Physician" ? ` from ${who}` : "";
+  const from = who && !isPlaceholderSender(who) ? ` from ${who}` : "";
   const whole = plainDashes(`Invoice ${String(inv?.number ?? "").trim()}${from}`)
     // eslint-disable-next-line no-control-regex
     .replace(/[\\/:*?"<>|\u{0}-\u{1f}]/gu, " ")

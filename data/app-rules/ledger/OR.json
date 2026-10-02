@@ -1,0 +1,489 @@
+{
+ "state": "OR",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Oregon Medical Board",
+   "url": "https://www.oregon.gov/omb/"
+  },
+  "licence": {
+   "title": "Physician Associate (PA) licence (Oregon renamed physician assistants to physician associates)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 of each odd numbered year (next: Dec 31, 2027); Emeritus status renews every Dec 31; licence lapses if not renewed"
+  },
+  "ce": {
+   "hoursPerCycle": 60,
+   "cyclePeriod": "two year registration period (30 hours if licensed in the second year of the biennium); OMB states it as 30 hours per year",
+   "categoryRules": "AMA Category 1, AOA 1-A or 2-A, or AAPA Category 1 (pre-approved), relevant to current practice; Emeritus: 15 hours per year (AAPA Category 1 or 2)",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Pain management (Oregon Pain Management Commission one hour course)",
+     "hours": 1,
+     "period": "every 2 years (24 months)",
+     "appliesTo": "all OMB licensees except lapsed, teleradiology and telemonitoring licences; at initial licensure and every 24 months"
+    },
+    {
+     "topic": "Cultural competency",
+     "hours": 1,
+     "period": "every year (reported every other renewal)",
+     "appliesTo": "all practicing OMB licensees except residents and Volunteer Camp licensees; average 1 hour per year over the audit period (current period 2024 to 2027, audited at the Fall 2027 renewal)"
+    }
+   ],
+   "controlledSubstanceCe": "None beyond the pain management course"
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Written collaboration agreement signed by a physician or employer; kept at the PA's primary practice location and produced to the OMB on request (not filed with the board); reviewed and updated as part of the performance assessment; amended in writing for any change. PAs with fewer than 2,000 postgraduate clinical hours need a Specified Collaboration Plan in the agreement.",
+   "notes": "Collaborative practice model replaced supervision for all Oregon PAs by Jan 1, 2024 (HB 3036, 2021; HB 2584, 2023). Non compliance carries a $195 fine."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "No separate prescriptive registration; PAs may prescribe Schedules II to V. Schedule II requires current NCCPA certification. Dispensing needs separate OMB registration.",
+   "ceForPrescribers": "None found beyond the all-licensee pain management course"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "Dec 31 of odd numbered years",
+    "cite": "OAR 847-008-0005(1)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0005",
+    "quote": "must be satisfactorily complete on or before December 31 of each odd-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "OMB fee schedule eff. 7/2/2026",
+    "url": "https://www.oregon.gov/omb/Licensing/Documents/all-fees.pdf",
+    "quote": "Physician Associate (PA) TWO-YEAR REGISTRATION PERIOD Renewal Fees",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.lapse",
+    "value": "licence lapses Dec 31 if not renewed",
+    "cite": "OMB renew page",
+    "url": "https://www.oregon.gov/omb/licensing/pages/renew.aspx",
+    "quote": "A license not renewed by December 31 will lapse, and the licensee may not practice.",
+    "loaded": true,
+    "verified": true,
+    "note": "The same page shows \"2026 One-Year License Renewals\" (licences expiring Dec 31, 2026) for one year registrants; the standard PA biennium still ends Dec 31 of odd years per OAR 847-008-0005(1).",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "60 hours per 2 years or NCCPA recertification",
+    "cite": "OAR 847-008-0070(1)(b) (amended eff. 1-12-2026)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0070",
+    "quote": "60 hours of continuing medical education (CME) per two years relevant to the licensee's current medical practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "OAR 847-008-0070(1)(a)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0070",
+    "quote": "Ongoing participation in a program of recertification or maintenance of certification by ... the National Commission on Certification of Physician Assistants (NCCPA)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "AAPA Category 1 (pre-approved) or AMA/AOA Category 1",
+    "cite": "OAR 847-008-0070(1)(b)(D)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0070",
+    "quote": "American Academy of Physician Associates (AAPA) Category 1 (pre-approved)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerYearStatedByBoard",
+    "value": "30 hours/year (Active, Locum Tenens, Telemedicine Active)",
+    "cite": "OMB Continuing Education page",
+    "url": "https://www.oregon.gov/omb/topics-of-interest/pages/continuing-education.aspx",
+    "quote": "Physician Associate Status: Active, Locum Tenens, or Telemedicine Active 30 hours/year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.painManagement",
+    "value": "1 hour every 24 months",
+    "cite": "OAR 847-008-0075(1)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0075",
+    "quote": "must complete one-hour of continuing education in pain management at initial licensure and every 24 months",
+    "loaded": true,
+    "verified": true,
+    "note": "ORS 677.510(5) (loaded) says documentation every 36 months; OAR 847-008-0075(1) and the OMB CE page say every 24 months; the stricter rule is used.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.culturalCompetency",
+    "value": "minimum 1 hour per year (2 hours per 2 year registration period); reported and audited every other renewal (4 hours over a typical 4 year audit period)",
+    "cite": "OAR 847-008-0077(1)(a),(c),(4) (adopted eff. 7-1-2021)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0077",
+    "quote": "Complete a minimum of one continuing education hour per year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.culturalCompetencyAudit",
+    "value": "current audit period 2024 to 2027",
+    "cite": "OMB Continuing Education page",
+    "url": "https://www.oregon.gov/omb/topics-of-interest/pages/continuing-education.aspx",
+    "quote": "The current audit period for most licensees is 2024-2027 and will be audited during the Fall 2027 renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "collaboration agreement required to practise",
+    "cite": "ORS 677.510(2)(a); OAR 847-050-0082(1)",
+    "url": "https://www.oregonlegislature.gov/bills_laws/ors/ors677.html",
+    "quote": "A physician associate may not practice medicine unless the physician associate has entered into a collaboration agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFiling",
+    "value": "kept at primary practice location; to OMB on request",
+    "cite": "ORS 677.510(3)",
+    "url": "https://www.oregonlegislature.gov/bills_laws/ors/ors677.html",
+    "quote": "The collaboration agreement must be kept on file at the physician associates primary location of practice and made available to the Oregon Medical Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.newPaPlan",
+    "value": "plan required under 2,000 postgraduate hours",
+    "cite": "OAR 847-050-0082(2)(d)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-050-0082",
+    "quote": "If the physician associate has fewer than 2,000 hours of post-graduate clinical experience, a plan for consistent and quality collaboration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementReview",
+    "value": "reviewed as part of performance assessment",
+    "cite": "OAR 847-050-0082(4)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-050-0082",
+    "quote": "As part of the performance assessment in ORS 677.510(4), a collaboration agreement must be reviewed and, if applicable, updated.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.schedules",
+    "value": "Schedules II to V",
+    "cite": "ORS 677.511(1)",
+    "url": "https://www.oregonlegislature.gov/bills_laws/ors/ors677.html",
+    "quote": "A physician associate is authorized to write prescriptions, including prescriptions for controlled substances listed in Schedules II through V.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.scheduleIINccpa",
+    "value": "Schedule II requires current NCCPA certification",
+    "cite": "OAR 847-050-0041(3)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-050-0041",
+    "quote": "if the physician associate is currently certified by the National Commission for the Certification of Physician Assistants (NCCPA).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.transitionDate",
+    "value": "all PAs on collaborative practice by Jan 1, 2024",
+    "cite": "OMB collaborative practice page",
+    "url": "https://www.oregon.gov/omb/Licensing/Pages/SP-PA-Collaborative-Practice.aspx",
+    "quote": "By January 1, 2024, all Oregon licensed PAs transitioned to collaborative practice and collaboration agreements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.painManagement.statute",
+    "value": "statute: pain management documentation every 36 months (rule is stricter: 24 months)",
+    "cite": "ORS 677.510(5)",
+    "url": "https://www.oregonlegislature.gov/bills_laws/ors/ors677.html",
+    "quote": "A physician associate shall submit to the board every 36 months documentation of completion of: (a) A one-hour pain management education program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.encouragedNotRequired",
+    "value": "Suicide risk assessment and Alzheimer's disease CME count toward hours but are not required",
+    "cite": "OAR 847-008-0070(6)(b),(c); OMB CE page",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0070",
+    "quote": "Licensees practicing in primary care or geriatric care are encouraged to obtain the CME described here.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.dispensingScheduleLimit",
+    "value": "Dispensing registration with OMB optional; PAs may not dispense Schedule I or II (with ORS 677.515(5) exception)",
+    "cite": "ORS 677.511(2)",
+    "url": "https://www.oregonlegislature.gov/bills_laws/ors/ors677.html",
+    "quote": "a physician associate may not dispense controlled substances classified in Schedule I or II",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Oregon State Board of Nursing",
+   "url": "https://www.oregon.gov/osbn/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Licences issued from Jan 1, 2026 expire two years from issue date; existing licences keep their current (birthdate based) expiry; renewal due by 11:59 p.m. on the expiry date; up to 90 days late before reinstatement",
+   "ceHoursPerCycle": "0 general CE hours until Jan 1, 2028 (practice hour requirement removed Jan 1, 2026); from Jan 1, 2028: 20 hours per 2 years (pain and cultural competency hours count toward the 20)",
+   "nlcCompactMember": false,
+   "topicMandates": [
+    {
+     "topic": "Pain management (Oregon Pain Management Commission course)",
+     "hours": 1,
+     "period": "every 3 years",
+     "appliesTo": "all LPN, RN and APRN applicants: at initial licensure and every 36 months"
+    },
+    {
+     "topic": "Cultural competency",
+     "hours": 2,
+     "period": "every 4 years",
+     "appliesTo": "all licensees; rule text (amended eff. Sept 1, 2026) says every other renewal cycle; board fact sheet says in the past 48 months"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "APRN (Nurse Practitioner); Oregon titles e.g. APRN-FNP-C",
+   "separateLicenceOrCertificate": "separate APRN (Nurse Practitioner) licence; requires an RN licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": "0 hours if national certification is current (from Jan 1, 2028 all NPs must show primary source evidence of national certification); pain management and cultural competency still apply",
+   "pharmacologyHoursPerCycle": 0,
+   "nationalCertificationRequired": "Yes for NPs initially licensed after Jan 1, 2011 now; all NPs from Jan 1, 2028",
+   "topicMandates": [
+    {
+     "topic": "Pain management",
+     "hours": 1,
+     "period": "every 3 years",
+     "appliesTo": "all APRNs"
+    },
+    {
+     "topic": "Cultural competency",
+     "hours": 2,
+     "period": "every 4 years",
+     "appliesTo": "all APRNs"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Yes: prescriptive authority (and optional dispensing authority) applied for from OSBN; expires with the APRN licence; renewal requires an attestation that the Board's prescriptive and dispensing authority education video was reviewed",
+   "pharmacologyCeForPrescribers": "45 contact hours pharmacology at initial application only; no per cycle pharmacology hours found",
+   "controlledSubstanceCe": "None beyond the pain management course",
+   "stateCsRegistrationRequired": null
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "No collaboration or supervision agreement found in ORS chapter 678 or OAR 851-031 / 851-055"
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "OAR 851-031-0048(1)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0048",
+    "quote": "A nursing license is valid for two years from the date it is issued.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.expiryTransition",
+    "value": "existing expiry dates unchanged; new licences two years from issue",
+    "cite": "OSBN NPA Modernization FAQ Q1",
+    "url": "https://www.oregon.gov/osbn/Documents/Resource_NPA-Modernization_FAQs.pdf",
+    "quote": "New licenses and certificates issued after Jan. 1, 2026, will expire two years from the date the license was issued",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "20 hours per 2 years starting Jan 1, 2028",
+    "cite": "OAR 851-031-0008(3)(a)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0008",
+    "quote": "Starting January 1, 2028, all renewal applicants must complete the required CE hours ... LPN or RN applicants, 20 hours within the prior two years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.practiceHoursRemoved",
+    "value": "practice hours no longer required from Jan 1, 2026",
+    "cite": "OSBN Competency Requirements page",
+    "url": "https://www.oregon.gov/osbn/pages/competency-requirements.aspx",
+    "quote": "As of January 1, 2026, practice hours will no longer be required to assure competency for Oregon licensed nurses.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.painManagement",
+    "value": "1 hour at initial licensure and every 36 months",
+    "cite": "OAR 851-031-0008(1)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0008",
+    "quote": "one-hour pain management education program ... at initial or endorsement licensure and every 36 months thereafter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.culturalCompetency",
+    "value": "2 hours every other renewal cycle",
+    "cite": "OAR 851-031-0008(2) (amended eff. 9-1-2026)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0008",
+    "quote": "All applicants must complete two hours of cultural competency continuing education (CE) every other renewal cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": false,
+    "cite": "OSBN interpretive statement on APRN title",
+    "url": "https://www.oregon.gov/osbn/Documents/IS_APRN_title.pdf",
+    "quote": "Oregon is currently not a member of the nurse licensure compact (NLC).",
+    "loaded": true,
+    "verified": true,
+    "note": "OSBN statement adopted 9-21-2023; current ORS chapter 678 (2025 edition, loaded) contains no Nurse Licensure Compact provision, and the NCSBN map (secondary) does not list Oregon.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "NPs initially licensed after Jan 1, 2011",
+    "cite": "OAR 851-031-0048(2)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0048",
+    "quote": "NP applicants initially licensed after January 1, 2011 ... verification of current national certification congruent with license type and population focus",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertification2028",
+    "value": "all NPs from Jan 1, 2028",
+    "cite": "OAR 851-031-0008(3)(c)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0008",
+    "quote": "All Oregon Nurse Practioner (NP) and Certified Registered Nurse Anesthetist (CRNA) applicants must provide primary source evidence of national certification.",
+    "loaded": true,
+    "verified": true,
+    "note": "OSBN competency page says APRN applicants from 2028 need national certification OR 75 hours; the rule (amended eff. 9-1-2026) gives the 75 hour route only to CNSs; the rule is used for NPs.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": "national certification fulfils CE (from 2028)",
+    "cite": "OSBN renewal CE fact sheet",
+    "url": "https://www.oregon.gov/osbn/Documents/Resource_Renewal-CE_Fact_Sheet12-31-25.pdf",
+    "quote": "CRNA or NP applicants: Holding current national certification fulfills the continuing education requirement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.initialPharmacology",
+    "value": "45 contact hours pharmacology at application",
+    "cite": "OAR 851-031-0043(1)(c)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0043",
+    "quote": "Documentation of at least 45 contact hours of pharmacology education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.expiry",
+    "value": "prescriptive and dispensing authority expire with APRN licence",
+    "cite": "OAR 851-031-0043(4)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0043",
+    "quote": "Prescriptive and dispensing authority expires with the APRN license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.renewalCondition",
+    "value": "attest to reviewing Board education video",
+    "cite": "OAR 851-031-0043(5)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0043",
+    "quote": "attestation that the applicant reviewed the Board's prescriptive and dispensing authority education video.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.schedules",
+    "value": "OSBN may authorize Schedules II to V",
+    "cite": "ORS 678.390(1)",
+    "url": "https://www.oregonlegislature.gov/bills_laws/ors/ors678.html",
+    "quote": "may authorize a nurse practitioner or clinical nurse specialist to write prescriptions, including prescriptions for controlled substances listed in schedules II through V.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.divisionChange",
+    "value": "APRN licensure rules moved from Division 53 to Division 31 on Jan 1, 2026",
+    "cite": "OSBN Division 31/53 change advisory",
+    "url": "https://www.oregon.gov/osbn/Documents/Resource_Div31-53_ChangeAdvisory.pdf",
+    "quote": "APRN licensure requirements, prescriptive privilege and dispensing authority amended into Division 31.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceCountsTowardTotal",
+    "value": "pain management and cultural competency hours count toward the 20 hours (from 2028)",
+    "cite": "OAR 851-031-0008(5)",
+    "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=851-031-0008",
+    "quote": "The CE listed in sections (1) and (2) of this rule may be counted toward the applicant’s required number of CE hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA and NP: no Oregon state controlled substance registration for practitioners was confirmed or ruled out in a primary source (OAR 847-050-0041(4) refers only to the federal DEA number); stateCsRegistrationRequired left null.",
+  "PA: ORS 677.510(5) says pain management documentation every 36 months, OAR 847-008-0075 and the OMB CE page say every 24 months; the rule (24 months) is used.",
+  "NP: 'full' practice authority is derived from the absence of any supervision or collaboration requirement in ORS 678 and OAR 851-031; no OSBN sentence using the phrase was loaded.",
+  "NP: Oregon NLC non membership rests on an OSBN statement adopted Sept 2023 plus absence of any compact provision in current ORS chapter 678; no 2026 dated OSBN statement was loaded.",
+  "NP: OSBN competency page (2028: national certification or 75 hours for APRNs) conflicts with OAR 851-031-0008(3)(c)-(d) (NP must show national certification; 75 hours is the CNS route); the rule is used.",
+  "NP and PA: DEA MATE one-time 8 hours is federal, not researched as a state rule."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verificationCorrections": [
+  "OR PA cultural competency: researcher recorded 1 hour \"every cycle\"; OAR 847-008-0077(1)(a) requires a minimum of 1 hour PER YEAR (2 per 2 year registration period, 4 per 4 year audit period), reported every other renewal. Topic mandate corrected.",
+  "OR PA: 9 OMB rule facts re-sourced from the Cornell LII copy to the Secretary of State OARD official rule pages (loaded in a browser); current versions confirmed (847-008-0070 amended eff. 1-12-2026, 847-008-0005 and 847-050-0082/0041 amended eff. 10-10-2024). Values and quotes unchanged.",
+  "OR NP: OAR 851-031-0008, -0043, -0048 re-loaded as full official text (researcher had only a summarising fetch); every quote matches the rule as amended eff. 9-1-2026. Recorded conflict: OSBN competency page offers APRNs \"national certification or 75 hours\" from 2028 but the rule limits the 75 hour route to CNSs."
+ ]
+}

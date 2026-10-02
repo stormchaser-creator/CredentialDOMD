@@ -10,9 +10,10 @@ import ToggleRow from "../shared/ToggleRow";
 import Modal from "../shared/Modal";
 import PublicRecordReview from "../features/PublicRecordReview";
 import { EmailIcon, TextMsgIcon } from "../shared/Icons";
-import { STATES } from "../../constants/states";
+import { STATES, STATE_NAMES } from "../../constants/states";
 import { findProvidersByName, extractLicensesFromNPI } from "../../utils/npiLookup";
-import { splitName, mergeNpiLicenses, additionalStatesAfterImport, degreeFromCredential } from "../../utils/npiImport";
+import { splitName, mergeNpiLicenses, additionalStatesAfterImport } from "../../utils/npiImport";
+import { degreeAfterNppes, NUCC_PA_SPECIALTIES, NUCC_NP_SPECIALTIES, nuccSpecialtyId, isNuccSpecialtyId, professionOf } from "../../constants/professions";
 import { normalizeBirthday, formatBirthday } from "../../utils/cmePassport";
 import { generateId, downscalePhoto, avatarInitials } from "../../utils/helpers";
 import {
@@ -20,7 +21,8 @@ import {
   ABMS_SUBSPECIALTIES, AOA_SUBSPECIALTIES, UCNS_CERTS, ABPS_CERTS,
 } from "../../constants/boardRequirements";
 import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
-import { trackedStates } from "../../utils/compliance";
+import { CERTIFICATION_RULES } from "../../constants/certificationRules";
+import { trackedStates, cardsForStates, mainCardFor } from "../../utils/compliance";
 import { effectiveThemeName } from "../../constants/themes";
 import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, textAlert } from "../../utils/notifications";
 import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, describeAiBudget, useAnthropicAvailable } from "../../utils/aiClient";
@@ -40,6 +42,18 @@ import { emailRemindersOn, reminderLeadDays, REMINDER_LEAD_DAYS_RANGE } from "..
 // finds it on a phone (SETTINGS-014): switches, chips and small buttons.
 const TAP_MIN = 36;
 
+// The four professions the app models (src/constants/professions.js DEGREES,
+// pinned equal by tests/profession/pickers.test.mjs). Spelled out here so the
+// picker renders in the component harness without the module.
+const PROFESSION_OPTIONS = [
+  ["MD", "Doctor of Medicine"],
+  ["DO", "Doctor of Osteopathic Medicine"],
+  ["PA", "Physician Assistant"],
+  ["NP", "Nurse Practitioner"],
+];
+const KNOWN_PROFESSIONS = PROFESSION_OPTIONS.map(([d]) => d);
+const professionLabel = (d) => (PROFESSION_OPTIONS.find(([k]) => k === d) || [d, d])[1];
+
 function SettingsSection({ onUpgrade }) {
   const { data, addItem, updateSettings, theme: T, toggleTheme, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop,
     isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage, limitedLaunch, settingsRefusal, clearSettingsRefusal } = useApp();
@@ -47,6 +61,19 @@ function SettingsSection({ onUpgrade }) {
   const s = data.settings;
 
   const update = (k, v) => updateSettings({ [k]: v });
+  // Switching an already chosen profession asks first (DESIGN 1.8): it
+  // changes which state rules, licence types and categories apply.
+  const [pendingDegree, setPendingDegree] = useState(null);
+  const professionKnown = KNOWN_PROFESSIONS.includes(s.degreeType);
+  const appProfession = s.degreeType === "PA" || s.degreeType === "NP";
+  // MD to DO (or back) stays within the physician profession: one tap, as it
+  // always was. Only a change of profession (physician, PA, NP) asks.
+  const chooseDegree = (d) => {
+    if (d === s.degreeType) { setPendingDegree(null); return; }
+    if (professionKnown && professionOf(d) !== professionOf(s.degreeType)) { setPendingDegree(d); return; }
+    setPendingDegree(null);
+    update("degreeType", d);
+  };
   // Lead time: a draft while typing (it may sit empty), saved on blur or
   // Enter through the same 7..365 clamp send-reminders applies (NOTIFY-004).
   const [leadDraft, setLeadDraft] = useState(null);
@@ -158,8 +185,11 @@ function SettingsSection({ onUpgrade }) {
     if (result.firstName && result.lastName) {
       settingsUpdates.name = `${result.firstName} ${result.lastName}`;
     }
-    // NPPES returns "D.O.", "M.D.", "MD, PHD", "DO FACOS" and similar.
-    const degree = degreeFromCredential(result.credential);
+    // NPPES returns "D.O.", "M.D.", "MD, PHD", "DO FACOS", "PA-C", "FNP-BC"
+    // and the record's NUCC taxonomies. An MD or DO answer replaces a blank,
+    // MD or DO as before; a PA or NP answer fills a blank only, and nothing
+    // here ever replaces a chosen PA or NP (src/constants/professions.js).
+    const { degree } = degreeAfterNppes(data.settings.degreeType, { credential: result.credential, taxonomies: result.allTaxonomies }, { site: "settings" });
     if (degree) settingsUpdates.degreeType = degree;
     if (result.address?.state) {
       settingsUpdates.primaryState = result.address.state;
@@ -222,7 +252,7 @@ function SettingsSection({ onUpgrade }) {
   // here: removing one is re-added at once, so its row offers no ✕ and says
   // why instead. The primary goes only when another picked state can take
   // its place (Set Primary on another row moves it otherwise).
-  const licenceStates = new Set(trackedStates(null, [], data.licenses));
+  const licenceStates = new Set(trackedStates(null, [], data.licenses, s.degreeType));
   const removable = st => !licenceStates.has(st)
     && (st !== s.primaryState || (s.additionalStates || []).some(x => x !== st));
 
@@ -277,7 +307,7 @@ function SettingsSection({ onUpgrade }) {
         )}
       </div>}
 
-      <SignInMethodsCard theme={T} />
+      <SignInMethodsCard theme={T} profileName={appProfession ? "profile" : "physician profile"} />
 
       {/* Support access (ticket d45e857c): the member lets support view the
           account, read-only, for 24 hours, and sees every view logged. */}
@@ -285,7 +315,7 @@ function SettingsSection({ onUpgrade }) {
 
       {/* Profile */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 14 }}>Physician Profile</h3>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 14 }}>{appProfession ? "Profile" : "Physician Profile"}</h3>
         {/* Profile photo — shown as your avatar everywhere */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
           <div style={{
@@ -436,33 +466,56 @@ function SettingsSection({ onUpgrade }) {
                 : "That could not be read as a month and day."}
           </div>
         </Field>
-        <Field label="Degree" hint={s.degreeType
-          ? "Affects CME categories, board certification types, and requirements"
-          : "Choose one. Until you do, CME rules, license types, and your CV leave the degree blank rather than guessing."}>
-          {!s.degreeType && (
+        <Field label={professionKnown && !appProfession ? "Degree" : "Profession"} hint={professionKnown
+          ? (appProfession ? "Affects state rules, license types, CE categories and certification lists" : "Affects CME categories, board certification types, and requirements")
+          : "Choose one. Until you do, CME rules, license types, and your CV leave the profession blank rather than guessing."}>
+          {!professionKnown && (
             <div style={{ fontSize: 13, fontWeight: 600, color: T.warning, marginBottom: 6 }}>
-              MD or DO? Pick your degree so state CME rules and board lists match it.
+              Pick your profession so state rules, license types and certification lists match it.
             </div>
           )}
-          <div style={{ display: "flex", gap: 0, borderRadius: 10, overflow: "hidden", border: `1px solid ${s.degreeType ? T.inputBorder : T.warning}` }}>
-            {["MD", "DO"].map(d => (
-              <button key={d} onClick={() => update("degreeType", d)} style={{
-                flex: 1, padding: "12px 0", border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer",
+          <div role="group" aria-label="Profession" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, borderRadius: 10, overflow: "hidden", border: `1px solid ${professionKnown ? T.inputBorder : T.warning}`, backgroundColor: professionKnown ? T.inputBorder : T.warning }}>
+            {PROFESSION_OPTIONS.map(([d, full]) => (
+              <button key={d} aria-pressed={s.degreeType === d} onClick={() => chooseDegree(d)} style={{
+                minHeight: 52, padding: "10px 4px", border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer",
                 backgroundColor: s.degreeType === d ? T.accent : T.input,
                 color: s.degreeType === d ? "#fff" : T.textMuted,
                 transition: "all 0.15s",
               }}>
                 {d}
-                <div style={{ fontSize: 11, fontWeight: 500, marginTop: 2, opacity: 0.8 }}>
-                  {d === "MD" ? "Doctor of Medicine" : "Doctor of Osteopathic Medicine"}
-                </div>
+                <div style={{ fontSize: 11, fontWeight: 500, marginTop: 2, opacity: 0.8 }}>{full}</div>
               </button>
             ))}
           </div>
+          {pendingDegree && (
+            <div role="group" aria-label="Change profession" style={{ marginTop: 8, padding: "12px 14px", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 10 }}>
+              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5, marginBottom: 10 }}>
+                Switching to {professionLabel(pendingDegree)} ({pendingDegree}) changes which state rules, license types and {pendingDegree === "NP" ? "CE" : "CME"} categories apply. Your records stay as they are.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => { update("degreeType", pendingDegree); setPendingDegree(null); }} style={{
+                  flex: 1, minHeight: TAP_MIN + 8, borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}>Switch to {pendingDegree}</button>
+                <button onClick={() => setPendingDegree(null)} style={{
+                  flex: 1, minHeight: TAP_MIN + 8, borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}>Keep {s.degreeType}</button>
+              </div>
+            </div>
+          )}
         </Field>
-        <Field label="Board Specialties" hint="Select all boards you are certified in. CME tracking is based on these.">
-          <SpecialtyPicker selected={s.specialties || []} onChange={v => update("specialties", v)} degreeType={s.degreeType} iS={iS} T={T} />
-        </Field>
+        {appProfession ? (
+          // ABMS, AOA, UCNS and ABPS boards are physician boards; a PA or NP
+          // picks a NUCC specialty or population focus instead (DESIGN 1.4).
+          <Field label={s.degreeType === "NP" ? "Population focus" : "Specialty"} hint={s.degreeType === "NP"
+            ? "Shown on your CV and share text. Certification tracking comes from your certification records."
+            : "Shown on your CV and share text. NCCPA tracking comes from your NCCPA record."}>
+            <NuccSpecialtyPicker selected={s.specialties || []} onChange={v => update("specialties", v)} degreeType={s.degreeType} T={T} />
+          </Field>
+        ) : (
+          <Field label="Board Specialties" hint="Select all boards you are certified in. CME tracking is based on these.">
+            <SpecialtyPicker selected={s.specialties || []} onChange={v => update("specialties", v)} degreeType={s.degreeType} iS={iS} T={T} />
+          </Field>
+        )}
         <Field label="Residency Start (PGY 1)" hint="The July your residency began. Case Logs labels each year from it (PGY 1, PGY 2...). Leave it blank to see plain years such as 2019-20.">
           <select name="trainingStartYear" value={s.trainingStartYear ? String(s.trainingStartYear) : ""}
             onChange={e => update("trainingStartYear", e.target.value ? parseInt(e.target.value, 10) : null)}
@@ -500,7 +553,7 @@ function SettingsSection({ onUpgrade }) {
 
       {/* Email: the addresses inbound mail may be forwarded from. The
           "not registered" reply points a physician here by name. */}
-      <EmailBlock accountEmail={s.email || ""} verifiedEmail={s.verifiedEmail || ""} T={T} iS={iS} isDesktop={isDesktop} />
+      <EmailBlock accountEmail={s.email || ""} verifiedEmail={s.verifiedEmail || ""} T={T} iS={iS} isDesktop={isDesktop} profileHeading={appProfession ? "Profile" : "Physician Profile"} />
 
       {/* AI */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
@@ -575,7 +628,8 @@ function SettingsSection({ onUpgrade }) {
         <div style={{ fontSize: 13, color: T.textDim, marginBottom: 14 }}>Track CME requirements across all states where you hold a license.</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
           {allTrackedStates.map(st => {
-            const req = getStateReq(st, s.degreeType);
+            // A PA's or NP's own card kind for the state (an NP's RN-only state reads the RN rule).
+            const req = getStateReq(st, s.degreeType, appProfession ? mainCardFor(data, st)?.kind : undefined);
             const isPrimary = st === s.primaryState;
             return (
               <div key={st} style={{
@@ -589,10 +643,14 @@ function SettingsSection({ onUpgrade }) {
                     {isPrimary && <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", padding: "1px 6px", borderRadius: 4, backgroundColor: T.accent, color: "#fff" }}>Primary</span>}
                   </div>
                   <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
-                    {s.degreeType || !hasSeparateBoards(st) ? `${req.hours} hrs / ${req.cycle}-yr cycle` : "Separate MD and DO boards. Set your degree above to see hours."}
+                    {/* No profession chosen: the physician figure is provisional
+                        and the row asks for the profession (DESIGN D-1). */}
+                    {appProfession ? appRuleSummary(req) : s.degreeType ? `${req.hours} hrs / ${req.cycle}-yr cycle` : !hasSeparateBoards(st) ? `Physician rule, provisional: ${req.hours} hrs / ${req.cycle}-yr cycle. Choose your profession above to see your own rules.` : "Choose your profession above to see this state's rules."}
                   </div>
                   {licenceStates.has(st) && <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
-                    Tracked because you hold a {st} medical license. Mark that license historical to stop tracking.
+                    {appProfession
+                      ? `Tracked because you hold a ${STATE_NAMES[st] || st} ${s.degreeType === "PA" ? "physician assistant" : "APRN or RN"} license. Mark that license historical to stop tracking.`
+                      : `Tracked because you hold a ${st} medical license. Mark that license historical to stop tracking.`}
                   </div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
@@ -883,20 +941,22 @@ function SettingsSection({ onUpgrade }) {
 
       {/* CME Requirements */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, boxShadow: T.shadow1 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 10 }}>CME Requirements{s.degreeType ? ` (${s.degreeType})` : ""}</h3>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 10 }}>{s.degreeType === "NP" ? "CE" : "CME"} Requirements{s.degreeType ? ` (${s.degreeType})` : ""}</h3>
 
-        {!s.degreeType && (
+        {/* A blank member may be a PA or an NP: never offer only MD or DO,
+            or a PA clearing the warning becomes an MD with physician rules. */}
+        {!professionKnown && (
           <div style={{ padding: "12px 14px", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 10, marginBottom: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.warning, marginBottom: 4 }}>Which degree do you hold?</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.warning, marginBottom: 4 }}>Which profession?</div>
             <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>
-              Several states run separate MD and DO boards with different hour and category rules. Pick yours and this section fills in.
+              Pick yours and this section fills in.
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {["MD", "DO"].map(d => (
-                <button key={d} onClick={() => update("degreeType", d)} style={{
-                  flex: 1, padding: "10px 0", borderRadius: 10, border: "none",
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {PROFESSION_OPTIONS.map(([d, full]) => (
+                <button key={d} onClick={() => update("degreeType", d)} aria-label={`I am ${d === "MD" || d === "NP" ? "an" : "a"} ${d} (${full})`} style={{
+                  minHeight: TAP_MIN + 8, padding: "10px 0", borderRadius: 10, border: "none",
                   backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
-                }}>{d === "MD" ? "I am an MD" : "I am a DO"}</button>
+                }}>{d === "MD" || d === "NP" ? `I am an ${d}` : `I am a ${d}`}</button>
               ))}
             </div>
           </div>
@@ -921,7 +981,9 @@ function SettingsSection({ onUpgrade }) {
           <div style={{ fontSize: 12, color: T.textMuted }}>{MATE_ACT.note}</div>
         </div>
 
-        {s.degreeType && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {appProfession && <AppRequirements cards={cardsForStates(data, allTrackedStates)} degreeType={s.degreeType} primaryState={s.primaryState} T={T} />}
+
+        {s.degreeType && !appProfession && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {allTrackedStates.map(st => {
             const stEntry = getStateEntry(st, s.degreeType);
             const noCME = stEntry.total === 0;
@@ -979,6 +1041,66 @@ function SettingsSection({ onUpgrade }) {
           onClose={() => setPublicOpen(false)}
         />
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * A PA's or NP's rule summary: hours only when the rule data has them
+ * verified, otherwise what the rule is or that it is not yet verified. Never
+ * "null hrs" and never a physician number (getStateReq returns the PA or NP
+ * rule set for them).
+ */
+function appRuleSummary(req) {
+  // The same hint as cmePresentation.boardLinkHint: never promise a link that is not shown.
+  const unverified = `Rules not yet verified. ${req?.boardUrl ? "The board link has them" : "The app has no verified board link for them yet"}.`;
+  if (!req || req.ceMode === "unverified") return unverified;
+  if (req.ceMode === "certification") return "Keep national certification current";
+  if (req.ceMode === "options") return "The board offers several CE options";
+  if (req.ceMode === "none") return "No general CE hour requirement";
+  return req.hours != null && req.cycle ? `${req.hours} ${req.unit || "hrs"} / ${req.cycle}-yr cycle` : unverified;
+}
+
+/** The CE Requirements card for a PA or NP: their certifier and each state's own rules. */
+function AppRequirements({ cards, degreeType, primaryState, T }) {
+  // One row per card the member actually has (compliance.js cardsForStates):
+  // an NP's RN-only state lists the RN rule, not an APRN licence they do not hold.
+  const NOUN = { pa: "physician assistant license", aprn: "APRN license", rn: "RN license" };
+  const nccpa = degreeType === "PA" ? CERTIFICATION_RULES.NCCPA : null;
+  const link = { display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: TAP_MIN, boxSizing: "border-box" };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+      {nccpa && (
+        <div style={{ padding: "10px 12px", backgroundColor: T.accentGlow, border: `1px solid ${T.accent}`, borderRadius: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.accent, marginBottom: 2 }}>NCCPA certification</div>
+          <div style={{ fontSize: 13, color: T.textMuted }}>
+            {nccpa.total && nccpa.cycleYears ? `${nccpa.total} CME credits every ${nccpa.cycleYears} years, at least ${nccpa.cat1Min} Category 1.` : "Not yet verified."} {nccpa.exam || ""}
+          </div>
+          {nccpa.url && <a href={nccpa.url} target="_blank" rel="noopener noreferrer" style={link}>NCCPA CME rules</a>}
+        </div>
+      )}
+      {degreeType === "NP" && (
+        <div style={{ fontSize: 12.5, color: T.textMuted }}>Your national certification renewal is tracked from your certification record (AANPCB, ANCC, PNCB, NCC or AACN).</div>
+      )}
+      {cards.map(({ st, kind }) => {
+        const noun = NOUN[kind] || "license";
+        const req = getStateReq(st, degreeType, kind);
+        return (
+          <div key={`${st}:${kind}`} style={{ padding: "14px 16px", backgroundColor: T.input, borderRadius: 12, border: `1px solid ${T.inputBorder}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{STATE_NAMES[st] || st} {noun}</span>
+              {st === primaryState && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, backgroundColor: T.accent, color: "#fff", fontWeight: 700 }}>PRIMARY</span>}
+            </div>
+            <div style={{ fontSize: 13, color: T.textMuted }}>{appRuleSummary(req)}</div>
+            {(req.unverified || []).length > 0 && req.ceMode !== "unverified" && (
+              <div style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>Not yet verified: {req.unverified.map(u => u.item).join("; ")}.</div>
+            )}
+            {req.boardUrl
+              ? <a href={req.boardUrl} target="_blank" rel="noopener noreferrer" style={link}>{req.board || "Board website"}</a>
+              : <div style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>{req.board ? `${req.board}. ` : ""}Board link not yet verified.</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1046,6 +1168,39 @@ function buildBoardList(degreeType) {
   if (abps.length) sections.push({ label: "ABPS Certifications", items: abps });
 
   return sections;
+}
+
+/**
+ * NUCC 26.1 specializations for a PA (Medical, Surgical) or an NP (population
+ * focus). Stored as NUCC:<code>:<Display Name>, so the CV and share text,
+ * which print the last segment, read the name and never the code.
+ */
+function NuccSpecialtyPicker({ selected, onChange, degreeType, T }) {
+  const options = degreeType === "NP" ? NUCC_NP_SPECIALTIES : NUCC_PA_SPECIALTIES;
+  const toggle = (id) => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
+  const others = selected.filter(id => !isNuccSpecialtyId(id));
+  return (
+    <div>
+      <div role="group" aria-label={degreeType === "NP" ? "Population focus" : "Specialty"} style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {options.map(([code, name]) => {
+          const id = nuccSpecialtyId(code);
+          const on = selected.includes(id);
+          return (
+            <button key={code} aria-pressed={on} onClick={() => toggle(id)} style={{
+              minHeight: TAP_MIN, padding: "6px 12px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer",
+              border: `1px solid ${on ? T.accent : T.inputBorder}`, backgroundColor: on ? T.accentGlow : T.input, color: on ? T.accent : T.textMuted,
+            }}>{name}</button>
+          );
+        })}
+      </div>
+      {others.length > 0 && (
+        <div style={{ fontSize: 12, color: T.textDim, marginTop: 6 }}>
+          Also on file: {others.map(id => String(id).split(":").pop()).join(", ")}.{" "}
+          <button onClick={() => onChange(selected.filter(isNuccSpecialtyId))} style={{ border: "none", background: "transparent", color: T.accent, fontWeight: 700, cursor: "pointer", padding: "8px 4px", minHeight: TAP_MIN, fontSize: 12 }}>Remove</button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SpecialtyPicker({ selected, onChange, degreeType, iS, T }) {
@@ -1207,7 +1362,7 @@ function SpecialtyPicker({ selected, onChange, degreeType, iS, T }) {
  * sentence is what shows, because it is the one that knows whether another
  * account already holds the address.
  */
-function EmailBlock({ accountEmail, verifiedEmail, T, iS, isDesktop }) {
+function EmailBlock({ accountEmail, verifiedEmail, T, iS, isDesktop, profileHeading = "Physician Profile" }) {
   const { rows, loading, error, busyId, add, resend, remove } = useForwardingAddresses();
   const [draft, setDraft] = useState("");
   const [note, setNote] = useState(null);          // { ok: bool, text }
@@ -1340,7 +1495,7 @@ function EmailBlock({ accountEmail, verifiedEmail, T, iS, isDesktop }) {
     const wait = r ? resendBlockedReason(r, now) : null;
     const confirmedLine = "Confirmed from that mailbox. Forwarded mail from it reaches this account.";
     const providerLine = isAccount
-      ? "Verified by your sign-in provider, so forwarded mail from it already reaches this account. Change the address itself in Physician Profile above."
+      ? `Verified by your sign-in provider, so forwarded mail from it already reaches this account. Change the address itself in ${profileHeading} above.`
       : "Verified by your sign-in provider, so forwarded mail from it already reaches this account. Change it where you sign in, not here.";
     // A pending link on an address the provider has already verified is not
     // what makes it work, so say so rather than leaving a Waiting-shaped
@@ -1349,11 +1504,11 @@ function EmailBlock({ accountEmail, verifiedEmail, T, iS, isDesktop }) {
       ? " The link sent to it is still open, but it is not what makes this address work."
       : "";
     let line;
-    if (isAccount && !email) line = "Set your email in Physician Profile above so forwarded mail can reach you.";
+    if (isAccount && !email) line = `Set your email in ${profileHeading} above so forwarded mail can reach you.`;
     else if (providerVerified && !r?.verified_at) line = providerLine + providerWithPending;
-    else if (confirmed) line = isAccount ? `${confirmedLine} Change the address itself in Physician Profile above.` : confirmedLine;
+    else if (confirmed) line = isAccount ? `${confirmedLine} Change the address itself in ${profileHeading} above.` : confirmedLine;
     else if (r) line = pendingLine(r, now);
-    else line = "Not confirmed yet, so mail forwarded from it does not reach your account. Confirm it here, the same way as any other address. Change the address itself in Physician Profile above.";
+    else line = `Not confirmed yet, so mail forwarded from it does not reach your account. Confirm it here, the same way as any other address. Change the address itself in ${profileHeading} above.`;
     return (
       <div key={isAccount ? "account" : r.id}
         style={isAccount ? rowBox({ backgroundColor: T.accentGlow, borderColor: T.accent }) : rowBox()}>

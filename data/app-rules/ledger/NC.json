@@ -1,0 +1,533 @@
+{
+ "state": "NC",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "North Carolina Medical Board",
+   "url": "https://www.ncmedboard.org"
+  },
+  "licence": {
+   "title": "Physician Assistant License",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annually, no later than 30 days after the PA's birthday",
+   "compactNote": "G.S. 90-9.3(a1) and Article 18J (PA Licensure Compact) are effective April 1, 2026, but NCMB states the compact is not yet operational; the traditional licence remains the pathway."
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "cycleYears": 2,
+   "cyclePeriodNote": "Two-year CME period begins on the PA's birthday following issuance of the licence; licence itself renews annually",
+   "categoryRules": "All 50 hours must be NCCPA-recognized Category I CME",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Controlled substance prescribing practices, including chronic pain management",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "PAs who prescribe controlled substances; counts within the 50 hours; NOT waived by NCCPA certification unless part of the certification activity; MATE training satisfies it for the two-year period in which it was completed"
+    }
+   ],
+   "controlledSubstanceCe": "2 hours every 2-year CME period for controlled substance prescribers (21 NCAC 32S .0216(b))",
+   "optionalTopicsThatQualify": "Interprofessional, cultural competency and implicit bias courses count toward the 50 hours if NCCPA approved (optional, not a mandate)"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Signed supervisory arrangement statement kept at all practice sites (not filed; available to Board on request); Intent to Practice form filed with the Board; supervising physician meetings monthly for first 6 months of a new arrangement, then at least every 6 months, with signed written records. Team-based PAs (more than 4,000 hours as a PA plus more than 1,000 hours in the specialty, practicing in a team-based setting) apply to NCMB for team-based status and are not required to file an Intent to Practice.",
+   "notes": "Team-based practice (G.S. 90-9.3A, S.L. 2025-37 Part VI) took effect on the earlier of NCMB permanent rules or June 30, 2026, so it is in effect by 2026-10. Team-based PAs in perioperative settings remain physician supervised. Pain management practices are excluded from team-based settings."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "2 hours controlled substance prescribing CME per 2-year period (within the 50); DEA registration required to prescribe controlled substances; written prescribing instructions from the supervising physician at each site (non team-based)"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 1,
+    "cite": "21 NCAC 32S .0204(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0204.pdf",
+    "quote": "A physician assistant shall renew his or her license each year no later than 30 days after his or her birthday",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": 50,
+    "cite": "21 NCAC 32S .0216(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0216.pdf",
+    "quote": "A physician assistant shall complete at least 50 hours of Continuing Medical Education (CME) every two years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "NCCPA Category I",
+    "cite": "21 NCAC 32S .0216(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0216.pdf",
+    "quote": "The CME shall be recognized by the National Commission on Certification of Physician Assistants (NCCPA) as Category I CME.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "21 NCAC 32S .0216(c)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0216.pdf",
+    "quote": "A physician assistant who possesses a current certification with the NCCPA shall be deemed in compliance with the requirement of Paragraph (a)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.controlledSubstances",
+    "value": {
+     "hours": 2,
+     "appliesTo": "controlled substance prescribers"
+    },
+    "cite": "21 NCAC 32S .0216(b)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0216.pdf",
+    "quote": "A physician assistant who prescribes controlled substances shall complete at least two hours of CME, from the required 50 hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.controlledSubstances.nccpaNotExempt",
+    "value": true,
+    "cite": "21 NCAC 32S .0216(c)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0216.pdf",
+    "quote": "shall not be exempt from the controlled substance prescribing CME requirement of Paragraph (b) of this Rule",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.controlledSubstances.mate",
+    "value": "MATE training satisfies it for the 2-year period completed",
+    "cite": "21 NCAC 32S .0216(c)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0216.pdf",
+    "quote": "shall be deemed in compliance with the controlled substance prescribing requirements of this Rule for the two-year CME period in which the MATE training was",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": false,
+    "cite": "G.S. 90-9.3(a)(2)",
+    "url": "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_90/GS_90-9.3.html",
+    "quote": "The applicant has a current or previous certification issued by the National Commission on Certification of Physician Assistants or its successor.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "supervision (supervisory arrangement)",
+    "cite": "21 NCAC 32S .0213(d)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0213.pdf",
+    "quote": "Each supervising physician and physician assistant shall sign a statement ... that describes the supervisory arrangements in all settings.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.meetings",
+    "value": "monthly for first 6 months, then every 6 months",
+    "cite": "21 NCAC 32S .0213(e)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0213.pdf",
+    "quote": "shall meet monthly for the first six months ... Thereafter, the primary supervising physician and the physician assistant shall meet at least once every six",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.teamBased.hours",
+    "value": "more than 4,000 PA hours and more than 1,000 hours in the specialty",
+    "cite": "G.S. 90-9.3A(a)(2)",
+    "url": "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_90/GS_90-9.3A.html",
+    "quote": "Have more than 4,000 hours of clinical practice experience as a licensed physician assistant and more than 1,000 hours of clinical practice experience within the",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.teamBased.effectiveDate",
+    "value": "earlier of NCMB rules or June 30, 2026",
+    "cite": "S.L. 2025-37 s. 6.3",
+    "url": "https://www.ncleg.gov/EnactedLegislation/SessionLaws/PDF/2025-2026/SL2025-37.pdf",
+    "quote": "Section 6.1 of this act becomes effective when the North Carolina Medical Board adopts the permanent rules required under Section 6.2 of this act or",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.teamBased.noIntentToPractice",
+    "value": true,
+    "cite": "NCMB Healthcare Workforce Reforms page",
+    "url": "https://www.ncmedboard.org/landing-page/healthcare-workforce-reforms",
+    "quote": "Approved team-based physicians assistants are not required to file an intent to practice with NCMB",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "DEA registration required for controlled substances",
+    "cite": "21 NCAC 32S .0212(4)(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0212.pdf",
+    "quote": "the physician assistant must have a valid Drug Enforcement Administration (DEA) registration and prescribe in accordance with DEA rules",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "G.S. 90-101(c)(6)",
+    "url": "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_90/GS_90-101.html",
+    "quote": "The following persons shall not be required to register ... A practitioner, as defined in G.S. 90-87(22)a., who is required to be licensed in North",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.optionalTopicsThatQualify",
+    "value": "cultural competency and implicit bias courses qualify (not required)",
+    "cite": "21 NCAC 32S .0216(d)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0216.pdf",
+    "quote": "courses pertaining to cultural competency or implicit bias training shall qualify for any CME hours required under this Rule",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.controlledSubstances.certificationActivityException",
+    "value": "CS CME may be met inside NCCPA certification activity",
+    "cite": "21 NCAC 32S .0216(c)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2032%20-%20north%20carolina%20medical%20board/subchapter%20s/21%20ncac%2032s%20.0216.pdf",
+    "quote": "A physician assistant shall complete the required two hours of controlled substance CME unless the CME is a component part of their certification activity.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.teamBased.application",
+    "value": "PA must apply to NCMB for team-based status",
+    "cite": "NCMB Healthcare Workforce Reforms page",
+    "url": "https://www.ncmedboard.org/landing-page/healthcare-workforce-reforms",
+    "quote": "Physician assistants must apply to NCMB for team-based status.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.teamBased.perioperative",
+    "value": "team-based PAs in perioperative settings stay physician supervised",
+    "cite": "G.S. 90-9.3A(c)",
+    "url": "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_90/GS_90-9.3A.html",
+    "quote": "a team-based physician assistant practicing in a perioperative setting, including the provision of surgical or anesthesia-related services, shall be supervised by a physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.teamBased.painExcluded",
+    "value": "pain management practices are not team-based settings",
+    "cite": "G.S. 90-1.1(4d)c",
+    "url": "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_90/GS_90-1.1.html",
+    "quote": "the term \"team-based setting\" or \"team-based practice\" shall not include a medical practice that specializes in pain management.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.paCompact",
+    "value": "PA Licensure Compact enacted (Article 18J, effective April 1, 2026); NCMB says not yet operational",
+    "cite": "G.S. 90-9.3(a1); NCMB reforms page",
+    "url": "https://www.ncmedboard.org/landing-page/healthcare-workforce-reforms",
+    "quote": "The PA Compact is not yet operational",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "North Carolina Board of Nursing (NP approval jointly with the North Carolina Medical Board)",
+   "url": "https://www.ncbon.com"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Last day of birth month, biennially",
+   "ceHoursPerCycle": 30,
+   "ceNote": "Continuing competence: attest to ONE learning option per cycle; options include national certification, 30 contact hours, or 15 contact hours plus a project/publication/presentation/640 practice hours. Each renewal also requires a self-assessment of practice and a learning plan; keep proof 3 years (21 NCAC 36 .0232(a),(d))",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "NP (Nurse Practitioner approval to practice)",
+   "separateLicenceOrCertificate": "Approval to practice (registered with both boards), not a separate licence",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Last day of the NP's birth month, annually",
+   "ceHoursPerCycle": 50,
+   "ceCycleYears": 2,
+   "ceNote": "At least 20 of the 50 hours must be within the NP's national certification and approved by a national credentialing body or ACCME; current national certification is deemed compliance; the 50 hour clock starts with the first renewal after initial approval; CE records kept 5 years",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Controlled substance prescribing (prescribing practices, chronic pain, abuse/misuse recognition, or non-opioid alternatives)",
+     "hours": 1,
+     "period": "every 12 months (within the preceding 12 months before prescribing)",
+     "appliesTo": "NPs who prescribe controlled substances; MATE training satisfies it for the two-year CE period completed"
+    }
+   ],
+   "renewalNote": "Renewal requires a current NC RN licence or a multistate privilege to practice, current national NP certification, CE attestation, fee and application (21 NCAC 36 .0806(a))."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "1 hour within the preceding 12 months before prescribing controlled substances (21 NCAC 36 .0807(b))",
+   "stateCsRegistrationRequired": false,
+   "notes": "Own DEA number required; primary supervising physician must hold equal or greater DEA schedules; prescribable drugs listed in the collaborative practice agreement"
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "collaborative practice agreement with a primary supervising physician",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "Signed by NP and primary supervising physician, kept at each practice site, reviewed at least yearly with a dated signature sheet; QI meetings at least every 6 months (monthly for the first 6 months); records retained 5 years. S.L. 2025-37 did not change NP supervision."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": 2,
+    "cite": "21 NCAC 36 .0201(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0201.pdf",
+    "quote": "Each registered nurse or licensed practical nurse shall biennially renew their license with the Board no later than the last day of the applicant's birth",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "21 NCAC 36 .0232(b)(2)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0232.pdf",
+    "quote": "30 contact hours of continuing education activities related to the nurse's practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceOption.nationalCertification",
+    "value": true,
+    "cite": "21 NCAC 36 .0232(b)(1)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0232.pdf",
+    "quote": "national certification or re-certification related to the nurse's practice role by a national credentialing body recognized by the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "G.S. Chapter 90, Article 9G (G.S. 90-171.95 et seq.)",
+    "url": "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/ByChapter/Chapter_90.html",
+    "quote": "Article 9G. Nurse Licensure Compact.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": 1,
+    "cite": "21 NCAC 36 .0806(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0806.pdf",
+    "quote": "shall annually renew each approval to practice with the Board no later than the last day of the nurse practitioner's birth month",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "21 NCAC 36 .0806(a)(2)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0806.pdf",
+    "quote": "Maintaining certification as a nurse practitioner by a national credentialing body",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceHoursPerCycle",
+    "value": 50,
+    "cite": "21 NCAC 36 .0807(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0807.pdf",
+    "quote": "the nurse practitioner shall earn 50 contact hours of continuing education activity every two years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceWithinCertification",
+    "value": 20,
+    "cite": "21 NCAC 36 .0807(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0807.pdf",
+    "quote": "A minimum of 20 hours of the required 50 hours must be within the nurse practitioner's national certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceNationalCertInLieu",
+    "value": true,
+    "cite": "21 NCAC 36 .0807(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0807.pdf",
+    "quote": "A nurse practitioner who possesses a current national certification by a national credentialing body shall be deemed in compliance",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.controlledSubstanceCe",
+    "value": {
+     "hours": 1,
+     "window": "preceding 12 months"
+    },
+    "cite": "21 NCAC 36 .0807(b)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0807.pdf",
+    "quote": "nurse practitioners shall have completed a minimum of one CE hour within the preceding 12 months",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.controlledSubstanceCe.mate",
+    "value": "MATE satisfies it for that two-year CE period",
+    "cite": "21 NCAC 36 .0807(c)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0807.pdf",
+    "quote": "shall be deemed in compliance with the controlled substance prescribing requirements of this Rule for the two-year CE period in which the MATE training was",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "own DEA number; supervising physician schedules equal or greater",
+    "cite": "21 NCAC 36 .0809(b)(2)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0809.pdf",
+    "quote": "the nurse practitioner has an assigned DEA number that is entered on each prescription for a controlled substance",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "G.S. 90-101(c)(6)",
+    "url": "https://www.ncleg.gov/EnactedLegislation/Statutes/HTML/BySection/Chapter_90/GS_90-101.html",
+    "quote": "A practitioner, as defined in G.S. 90-87(22)a., who is required to be licensed in North Carolina by his respective licensing board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementReview",
+    "value": "reviewed at least yearly",
+    "cite": "21 NCAC 36 .0810(2)(b)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0810.pdf",
+    "quote": "shall be reviewed at least yearly. This review shall be acknowledged by a dated signature sheet",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.qiMeetings",
+    "value": "at least every 6 months; monthly first 6 months",
+    "cite": "21 NCAC 36 .0810(4)(c),(5)(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0810.pdf",
+    "quote": "scheduled meetings between the primary supervising physician and the nurse practitioner for a minimum of every six months",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.supervision",
+    "value": "physician supervision and collaboration",
+    "cite": "21 NCAC 36 .0802",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0802.pdf",
+    "quote": "with physician supervision and collaboration as described in Rule .0810 of this Section",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.rnOrCompactPrivilege",
+    "value": "NC RN licence or multistate privilege satisfies the RN prerequisite",
+    "cite": "21 NCAC 36 .0806(a)(1)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0806.pdf",
+    "quote": "Maintaining current North Carolina RN licensure or privilege to practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceClockStart",
+    "value": "50-hour CE clock begins with first renewal after initial approval",
+    "cite": "21 NCAC 36 .0807(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0807.pdf",
+    "quote": "50 contact hours of continuing education activity every two years, beginning with the first renewal after initial approval to practice has been granted",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceRecordRetention",
+    "value": "keep CE documentation 5 years",
+    "cite": "21 NCAC 36 .0807(d)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0807.pdf",
+    "quote": "Documentation of all CE completed within the previous five years shall be maintained by the nurse practitioner",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.selfAssessment",
+    "value": "self-assessment and learning plan each renewal",
+    "cite": "21 NCAC 36 .0232(a)",
+    "url": "http://reports.oah.state.nc.us/ncac/title%2021%20-%20occupational%20licensing%20boards%20and%20commissions/chapter%2036%20-%20nursing/21%20ncac%2036%20.0232.pdf",
+    "quote": "complete a self-assessment of practice, including professional responsibility, knowledge based practice, legal and ethical practice, and collaborating with others",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA and NP state CS registration: G.S. 90-101(c)(6) exempts a 'practitioner' under G.S. 90-87(22)a, defined as a physician, dentist, optometrist, veterinarian, scientific investigator 'or other person licensed, registered or otherwise permitted' to dispense or administer controlled substances. PAs and NPs fit that general wording but are not named; value false is kept as a reading of the statute.",
+  "NP: ncbon.com still returns HTTP 403 to curl and WebFetch (re-tested 2026-10), so Board of Nursing web pages were not cross-checked; all NP values rest on 21 NCAC 36 rule text loaded from OAH.",
+  "NP: 'restricted' is the AANP label; primary rules confirm physician supervision and a collaborative practice agreement (21 NCAC 36 .0802, .0810), not the label.",
+  "PA: NCMB has not codified team-based rules in 21 NCAC 32S as of the 2026-10 OAH index; the team-based application form and hour documentation standard are not yet confirmed.",
+  "PA and NP: no state topic mandate beyond controlled substance CE was found for opioid/pain, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide prevention, infection control, cultural competency or domestic violence in 21 NCAC 32S, 21 NCAC 36 Section .0800 or the NCMB controlled substance CME page; a search result describing a 1-hour human trafficking course every six years referred to another state's law, not North Carolina.",
+  "Federal: the DEA one-time 8-hour MATE training applies to every DEA registrant nationally; in NC it also satisfies the state controlled substance CE for the CE period in which it is completed (PA .0216(c), NP .0807(c))."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "corrections": [
+  "PA: added 21 NCAC 32S .0216(d): cultural competency and implicit bias (and interprofessional) courses qualify toward the 50 hours when NCCPA approved; optional, not a mandate.",
+  "PA: recorded the .0216(c) exception as its own fact: an NCCPA-certified PA meets the 2-hour controlled substance CME inside certification activity only if that CME was part of the certification activity.",
+  "PA: added that team-based status requires an application to NCMB (NCMB page), that perioperative team-based PAs remain physician supervised (G.S. 90-9.3A(c)), and that pain management practices are excluded (G.S. 90-1.1(4d)c), each with its own primary quote.",
+  "PA: added PA Licensure Compact note: G.S. 90-9.3(a1)/Article 18J effective April 1, 2026, NCMB says the compact is not yet operational.",
+  "PA: the OAH 21 NCAC 32S rule index (loaded 2026-10) lists no team-based practice rule, so NCMB has not yet codified team-based rules; the statute is in force through the S.L. 2025-37 s.6.3 June 30, 2026 backstop (moved from unverified to confirmed).",
+  "NP: added that the RN prerequisite for NP renewal may be met by a multistate (compact) privilege, not only an NC RN licence (21 NCAC 36 .0806(a)(1)).",
+  "NP: added that the 50-hour CE period starts at the first renewal after initial approval and that CE records are kept 5 years (21 NCAC 36 .0807(a),(d)).",
+  "NP/RN: added the continuing competence self-assessment and learning plan required at every RN renewal and the 3-year proof retention (21 NCAC 36 .0232(a),(d)).",
+  "NP: confirmed against S.L. 2025-37 Part VI text that the 2025 reforms do not change NP supervision or collaborative practice agreements (only PA team-based practice and incidental NP references).",
+  "Quotes over 25 words trimmed to their first 25 words (still verbatim): ce.topicMandates.controlledSubstances.mate, practice.meetings, practice.teamBased.hours, practice.teamBased.effectiveDate, prescribing.stateCsRegistrationRequired, rn.renewalCycleYears, prescribing.controlledSubstanceCe.mate"
+ ]
+}

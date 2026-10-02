@@ -1,0 +1,17 @@
+{
+ "state": "OR",
+ "facts": [
+  {
+   "field": "pa.ce.secondYearAndBodies",
+   "profession": "pa",
+   "value": "60 hours per two years, or 30 if licensed in the second year; AMA Category 1, AOA 1-A or 2-A, APMA sponsors, AAPA Category 1",
+   "cite": "OAR 847-008-0070(1)(b)",
+   "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0070",
+   "quote": "60 hours of continuing medical education (CME) per two years ... or 30 hours of CME if licensed during the second year of the biennium",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  }
+ ]
+}

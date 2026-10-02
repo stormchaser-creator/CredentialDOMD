@@ -1,0 +1,238 @@
+{
+  "state": "NJ",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "New Jersey State Board of Medical Examiners, Physician Assistant Advisory Committee",
+      "url": "https://www.njconsumeraffairs.gov/pa"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 50,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AMA PRA Category 1",
+          "AAPA Category 1 CME",
+          "AAFP Prescribed Credit",
+          "AOA Category 1-A"
+        ],
+        "fact": "pa.ce.hoursPerCycle",
+        "reason": "Category I courses approved by the AMA, AAPA, AAFP, AOA or ACCME, as the app names them."
+      },
+      "totalUnverifiedAccepted": [
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "notes": [
+        {
+          "text": "Fifteen credits may carry over only if earned in the last six months of the preceding biennial period.",
+          "fact": "pa.ce.carryover"
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 1,
+        "label": "Prescription opioid drugs, one of the 50 credits, every biennial period",
+        "fact": "pa.ce.topicMandates.opioid"
+      },
+      {
+        "topic": "Implicit Bias",
+        "hours": 1,
+        "label": "Explicit and implicit bias in perinatal care, one of the 50 credits, from the first renewal after May 5, 2026",
+        "expiringOnOrAfter": "2026-05-06",
+        "facts": [
+          "pa.ce.topicMandates.perinatalBias",
+          "pa.ce.topicMandates.perinatalBias.statute"
+        ],
+        "condition": {
+          "field": "Provides perinatal care",
+          "question": "Do you provide perinatal treatment and care to pregnant persons?",
+          "description": "New Jersey's perinatal bias CE for clinicians who provide perinatal care."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A PA practices only under physician supervision, with a written delegation agreement signed and dated annually, kept at the practice site and provided to the PA Advisory Committee.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementRenewal",
+          "pa.practice.agreementFiling"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.cdsRegistration"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "New Jersey Board of Nursing",
+      "url": "https://www.njconsumeraffairs.gov/nur"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "Up to 15 extra hours carry into the next biennial period.",
+            "fact": "np.rn.ceCarryover"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 1,
+          "label": "Prescription opioid drugs, part of the 30 hours",
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        {
+          "topic": "Implicit Bias",
+          "hours": 1,
+          "label": "Explicit and implicit bias in perinatal care, each biennial renewal",
+          "fact": "np.rn.topicMandates.perinatalBias",
+          "condition": {
+            "field": "Provides perinatal care",
+            "question": "Do you provide perinatal treatment and care to pregnant persons?",
+            "description": "New Jersey's perinatal bias CE for clinicians who provide perinatal care."
+          }
+        }
+      ],
+      "unverified": [
+        "When the Board of Nursing starts requiring the perinatal bias hour (N.J.A.C. 13:37-5.3 has not been amended to list it)"
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "APN renewal requires the RN license's CE and the national certifying agency's CE; no separate APN hour total is set.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        },
+        "notes": [
+          {
+            "text": "APNs certified before June 16, 2008 need not show national certification.",
+            "fact": "np.aprn.nationalCertificationGrandfather"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "End-of-Life Care",
+          "hours": 2,
+          "label": "End-of-life care, each certification period",
+          "fact": "np.aprn.topicMandates.endOfLife"
+        },
+        {
+          "topic": "Pharmacology",
+          "hours": 10,
+          "measure": "pharmacology",
+          "label": "Pharmacology, each biennial period, for APNs practicing without a joint protocol",
+          "fact": "np.aprn.pharmacologyHoursPerCycle",
+          "condition": {
+            "field": "Practices without a joint protocol",
+            "question": "Do you practice without a joint protocol under the 2026 law?",
+            "description": "New Jersey's pharmacology hours for APNs practicing without a joint protocol."
+          }
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": null,
+          "status": "unverified",
+          "unverifiedItem": "How often APNs prescribing under joint protocols repeat the controlled substance pharmacology hours",
+          "condition": {
+            "field": "Prescribes controlled substances under a joint protocol",
+            "question": "Do you prescribe controlled substances under a joint protocol?",
+            "description": "New Jersey controlled substance pharmacology hours for APNs with joint protocols."
+          }
+        },
+        {
+          "topic": "Pharmacology",
+          "status": "unverified",
+          "hours": null,
+          "measure": "pharmacology",
+          "fact": "np.prescribing.noProtocolCsPharmacology",
+          "unverifiedItem": "For APNs ordering without a joint protocol: 14 contact hours of pharmacology related to controlled substances (8 beyond the initial certification hours); when they are due is not stated",
+          "condition": {
+            "field": "Practices without a joint protocol",
+            "question": "Do you practice without a joint protocol under the 2026 law?",
+            "description": "New Jersey's pharmacology hours for APNs practicing without a joint protocol."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "joint protocols",
+        "conditional": true,
+        "text": "APNs prescribe under joint protocols with a collaborating physician, reviewed, updated and signed at least annually. Since March 30, 2026 an APN with more than 5,000 hours in a qualifying population focus who provides primary or behavioral health care may practice without a joint protocol. That exemption does not cover general obstetrics or elective aesthetic or cosmetic services.",
+        "facts": [
+          "np.practice.jointProtocolAnnual",
+          "np.practice.transitionToPracticeHours",
+          "np.practice.independentScope",
+          "np.practice.lawDate",
+          "np.practice.noProtocolExclusions"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

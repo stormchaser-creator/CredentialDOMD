@@ -1,0 +1,208 @@
+{
+  "state": "MS",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Mississippi State Board of Medical Licensure",
+      "url": "https://www.msbml.ms.gov/licensure/pa-renewal"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "windowRule": "fixed",
+      "cycleYears": {
+        "value": 2,
+        "fact": "ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 100,
+        "fact": "ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 50,
+        "fact": "ce.hoursPerCycle",
+        "label": "Category 1 (ACCME, AAPA, AMA or AOA)",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A"
+        ],
+        "unverifiedAccepted": [
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "ce.nccpaSatisfiesWhole"
+      },
+      "notes": [
+        {
+          "text": "The CME cycle is fixed: two years starting July 1 of each even-numbered year (the current cycle runs July 1, 2026 to June 30, 2028), while the license renews every year. Set CME Cycle Start to the cycle's first day.",
+          "facts": [
+            "ce.cycleStart",
+            "ce.currentCycle"
+          ]
+        }
+      ],
+      "window": {
+        "value": "2022-07-01",
+        "anchor": "2022-07-01",
+        "facts": [
+          "ce.period",
+          "ce.currentCycle"
+        ],
+        "reason": "Rule 1.9 fixes two-year periods from July 1, 2022 (July 1 of each even-numbered year); the period holding the renewal date is counted."
+      }
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 5,
+        "label": "Prescribing of medications with an emphasis on controlled substances, Category 1, part of the 50 Category 1 hours",
+        "facts": [
+          "ce.topicMandates[controlled substances]",
+          "ce.topicMandates[controlled substances].category"
+        ],
+        "condition": {
+          "field": "Holds controlled substance prescriptive authority",
+          "question": "Are you authorized to prescribe controlled substances?",
+          "description": "Applies to clinicians with controlled substance prescriptive authority."
+        },
+        "notCoveredByCertification": true
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "PAs practice under a protocol agreed with the supervising physician and report the supervisor to the Board through MELS before practice. The supervising physician reviews 10% or 20 charts a month, whichever is less, and they meet face to face once a quarter. A new graduate, or a PA on an initial Mississippi license, has the supervising physician on site for 120 days or 960 hours.",
+        "facts": [
+          "practice.agreementType",
+          "practice.filing",
+          "practice.chartReview",
+          "practice.quarterlyMeeting",
+          "practice.newGraduateOnSite"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Whether current NCCPA certification, or the one-time DEA 8-hour training, satisfies the 5 controlled substance prescribing hours",
+      "Whether the board's exemption for initial licensure during the cycle applies to PAs (the cited exemption is in the physician rule)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Mississippi Board of Nursing",
+      "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalDeadline"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "fact": "rn.ceHoursPerCycle",
+          "reason": "The nursing CE rule was repealed in February 2020."
+        },
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "rn.renewalDeadline",
+            "aprn.renewalCycleYears"
+          ],
+          "reason": "RN and APRN licenses renew together every two years, expiring December 31 of even-numbered years."
+        },
+        "notes": [
+          {
+            "text": "An RN out of practice for more than five years completes at least 20 contact hours in the 2 years before renewal.",
+            "fact": "rn.outOfPracticeCe"
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "Renewing national certification satisfies the general CE requirement; the 5 controlled substance hours are separate.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        },
+        "notes": [
+          {
+            "text": "Graduates within 2 years are exempt from the controlled substance hours for the first renewal only.",
+            "fact": "aprn.csCeNewGradExemption"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 5,
+          "label": "Continuing education directly related to controlled substances, each state certification period, for every APRN",
+          "facts": [
+            "aprn.topicMandates[controlled substances]",
+            "aprn.csCeAppliesToAll",
+            "aprn.csCeWindow"
+          ]
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "Every APRN practices in a collaborative relationship with a Mississippi physician under a formal collaborative agreement approved for each practice site before work begins and updated at each renewal. New APRNs complete 2,000 monitored practice hours with under a year of prior RN experience, or 1,000 with a year or more.",
+        "facts": [
+          "practice.agreementType",
+          "practice.siteAndCollaboratorFiling",
+          "practice.agreementFilingAndRenewal",
+          "practice.transitionToPracticeHours",
+          "practice.transitionToPracticeHours.2000"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

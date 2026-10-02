@@ -1,0 +1,384 @@
+{
+ "state": "NH",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "New Hampshire Board of Medicine (via the Office of Professional Licensure and Certification); PAs are titled Physician Associates under RSA 328-D",
+   "url": "https://www.oplc.nh.gov/applications-physician-associate"
+  },
+  "licence": {
+   "title": "Physician Associate (P.A.) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "2 years from date of issuance (RSA 310:8, II); renewal must be filed on or before expiration"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "Either maintain NCCPA certification, OR 100 hours approved CME per renewal period with at least 40 Category 1 and no more than 60 Category 2. Approved activities: AAPA Category 1, AMA PRA Category 1, AOA 1-A, AAFP Prescribed, or board approved. Tracked in CE Broker.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [],
+   "controlledSubstanceCe": "No PA specific opioid or controlled substance CE found in Med 613.01 (the 3 hour PDMP registrant rule in Med 402.01 applies to physicians)."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Written collaboration agreement with a NH licensed physician in a similar area of medicine required only for PAs with fewer than 8,000 post graduate clinical hours who practice without at least one NH physician in the group, practice or health system. Kept on file at the practice, provided to the board on request, updated as necessary; not filed with the board.",
+   "notes": "Until Jan 1, 2027, a PA with more than 8,000 hours practicing in a setting with no NH physician must obtain a board waiver of the collaboration agreement requirement; that waiver paragraph drops out of the version effective Jan 1, 2027. New Hampshire adopted the Physician Associate Licensure Compact (RSA 328-D:18-a)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "None for PAs. Med 613.01 (eff 10-2-25) has no opioid CE; RSA 318-B:40, the former prescriber competency statute, reads '[Omitted.]'. PAs who prescribe Schedule II-IV must register with the NH PDMP (RSA 126-A:91, II) and with DEA (RSA 328-D:3-b, XVI)."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": "Biennial renewal",
+    "cite": "RSA 328-D:5",
+    "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-5.htm",
+    "quote": "Every person licensed to practice under this chapter shall apply to the office for biennial renewal of license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "Valid 2 years from issuance; renew on or before expiration",
+    "cite": "RSA 310:8, II-III",
+    "url": "https://gc.nh.gov/rsa/html/XXX/310/310-8.htm",
+    "quote": "Licenses issued by the office shall be valid for 2 years from the date of issuance",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "NCCPA certification OR 100 hours (40 Cat 1, max 60 Cat 2) per renewal period",
+    "cite": "Med 613.01(a) (eff 10-2-25)",
+    "url": "https://www.gc.nh.gov/rules/state_agencies/med100-600.html",
+    "quote": "Obtaining not less than 100 credit hours of approved continuing medical education (CME) activity ... of which 40 credit hours shall be category 1 CME",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "Med 613.01(a)(1)",
+    "url": "https://www.gc.nh.gov/rules/state_agencies/med100-600.html",
+    "quote": "Maintaining national certification through the National Commission on Certification of Physician Assistants (NCCPA) or its successor organization",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.approvedActivities",
+    "value": "AAPA Cat 1, AMA PRA Cat 1, AOA 1-A, AAFP Prescribed, board approved",
+    "cite": "RSA 328-D:1, I-a",
+    "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-1.htm",
+    "quote": "certified for American Academy of Physician Assistants (AAPA) Category 1 credit, American Medical Association (AMA) Category 1 PRA credit",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.tracking",
+    "value": "CE tracked in CE Broker per Med 613",
+    "cite": "OPLC Physician Assistant Renewal Checklist",
+    "url": "https://www.oplc.nh.gov/sites/g/files/ehbemt441/files/inline-documents/pa-renewal-checklist-v3.pdf",
+    "quote": "Track your continuing education in CE Broker in accordance with Med 613",
+    "loaded": true,
+    "verified": false,
+    "reason": "OPLC site returns HTTP 403 to the verifier; the checklist could not be reloaded. Med 613.01(b) (loaded) only requires proof of certification or CME with the renewal application and does not name CE Broker."
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "Collaboration agreement if under 8,000 hours and no NH physician in the group, practice or health system",
+    "cite": "RSA 328-D:3-b, I",
+    "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-3-b.htm",
+    "quote": "physician associates with fewer than 8,000 hours of post-graduate clinical practice hours practicing without at least one licensed New Hampshire physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Kept on file at the practice; available to board on request; updated as necessary",
+    "cite": "RSA 328-D:3-b, III and V",
+    "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-3-b.htm",
+    "quote": "The collaboration agreement shall be kept on file at the practice and made available to the board upon request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.waiver",
+    "value": "PAs over 8,000 hours need a board waiver to practice without a NH physician in the setting (paragraph effective until Jan 1, 2027)",
+    "cite": "RSA 328-D:3-b, I(b)",
+    "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-3-b.htm",
+    "quote": "shall apply to the board of medicine for a waiver of the collaboration agreement requirement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.renewalQuestions",
+    "value": "Renewal asks DEA number and PDMP registration status",
+    "cite": "Med 608.01(b)(2)",
+    "url": "https://www.gc.nh.gov/rules/state_agencies/med100-600.html",
+    "quote": "Whether or not the applicant has registered with the Controlled Drug Health and Safety Program also known as the N.H. Prescription Drug Monitoring Program.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.compact",
+    "value": "Physician Associate Licensure Compact adopted",
+    "cite": "RSA 328-D:18-a",
+    "url": "https://gc.nh.gov/rsa/html/NHTOC/NHTOC-XXX-328-D.htm",
+    "quote": "Section: 328-D:18-a Physician Associate Licensure Compact Adopted.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.pdmpRegistration",
+    "value": "PDMP registration required for Schedule II-IV prescribers (a registration with the program, not a CS licence)",
+    "cite": "RSA 126-A:91, II",
+    "url": "https://gc.nh.gov/rsa/html/X/126-A/126-A-91.htm",
+    "quote": "All prescribers and dispensers authorized to prescribe or dispense schedule II-IV controlled substances within the state shall be required to register with the program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.dea",
+    "value": "PAs who prescribe or dispense CS register with DEA and any applicable state CS authority",
+    "cite": "RSA 328-D:3-b, XVI",
+    "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-3-b.htm",
+    "quote": "Physician associates who prescribe and/or dispense controlled substances shall register with the United States Drug Enforcement Administration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "RSA 318-B:3 (licences only for manufacturers and wholesalers); RSA 318-B table of contents",
+    "url": "https://gc.nh.gov/rsa/html/NHTOC/NHTOC-XXX-318-B.htm",
+    "quote": "Section: 318-B:3 Licensing of Manufacturers and Wholesalers Required.",
+    "loaded": true,
+    "verified": false,
+    "reason": "Inferred: the NH Controlled Drug Act licenses only manufacturers and wholesalers and has no practitioner registration section; no page states in words that NH issues no practitioner CS registration."
+   },
+   {
+    "field": "pa.ce.opioidCeNone",
+    "value": "Former prescriber competency statute omitted",
+    "cite": "RSA 318-B:40",
+    "url": "https://gc.nh.gov/rsa/html/XXX/318-B/318-B-40.htm",
+    "quote": "318-B:40 Competency Requirements. [Omitted.]",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "New Hampshire Board of Nursing (via the Office of Professional Licensure and Certification)",
+   "url": "https://www.oplc.nh.gov/board-nursing-laws-and-rules"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Midnight on the licensee's birthday in the renewal year",
+   "ceHoursPerCycle": 30,
+   "ceNotes": "Current national certification may be used to fulfil the RN CE requirement (Nur 403.01(a)).",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse)",
+   "separateLicenceOrCertificate": "separate licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Midnight on the licensee's birthday in the renewal year",
+   "ceHoursPerCycle": 30,
+   "ceNotes": "30 APRN contact hours in addition to the 30 RN hours (60 total), at least 20 specialty specific and 5 pharmacology, within 2 years before application. National certification may count as 30 of the 60 hours (Nur 401.03(b)).",
+   "pharmacologyHoursPerCycle": 5,
+   "nationalCertificationRequired": "true if licensed after September 1984 (Nur 401.03(a)(2)); lifetime certificate holders must document continuing participation in the certification process (Nur 401.03(a)(3))",
+   "topicMandates": []
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": 5,
+   "controlledSubstanceCe": "No APRN opioid or controlled substance CE hour requirement in RSA 326-B:31 or Nur 401.03/403.01. APRNs prescribing Schedule II-IV must register with the NH PDMP (RSA 126-A:91, II).",
+   "stateCsRegistrationRequired": false
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None required; APRNs hold plenary prescriptive authority under RSA 326-B:11, III."
+  },
+  "facts": [
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "30 hours every 2 years",
+    "cite": "RSA 326-B:31, II",
+    "url": "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-31.htm",
+    "quote": "An LPN or an RN shall complete 30 hours of continuing education every 2 years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": "Additional 30 hours every 2 years: 20 specialty, 5 pharmacology",
+    "cite": "RSA 326-B:31, III",
+    "url": "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-31.htm",
+    "quote": "shall complete 30 hours of continuing education every 2 years, 20 hours of which shall be specific to the specialty",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": 5,
+    "cite": "Nur 403.01(d)",
+    "url": "https://www.gc.nh.gov/rules/state_agencies/nur100-800.html",
+    "quote": "At least 20 of the 30 hours shall be specific to the specialty practice area, and 5 hours shall be education in pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "Current national certification required at renewal if licensed after September 1984; lifetime certificate holders document continuing participation",
+    "cite": "Nur 401.03(a)(2)",
+    "url": "https://www.gc.nh.gov/rules/state_agencies/nur100-800.html",
+    "quote": "Document current national certification if licensed after September 1984",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.certCountsTowardCe",
+    "value": "National certification may count as 30 of 60 hours",
+    "cite": "Nur 401.03(b)",
+    "url": "https://www.gc.nh.gov/rules/state_agencies/nur100-800.html",
+    "quote": "may be counted as 30 of the 60 contact hours required",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "Midnight on the licensee's birthday in the renewal year",
+    "cite": "Nur 401.01(a)(1)",
+    "url": "https://www.gc.nh.gov/rules/state_agencies/nur100-800.html",
+    "quote": "By midnight on the applicants date of birth in the renewal year submit a completed renewal application",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "RSA 310:8, II (amended 2025) makes OPLC licences valid 2 years from issuance and says those terms supersede conflicting board terms; the Board of Nursing rule still states the birthday deadline. Treat the birthday date as the Board's rule; OPLC's own page could not be loaded (HTTP 403)."
+   },
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "RSA 326-B:22, I",
+    "url": "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-22.htm",
+    "quote": "All license renewals shall be issued every 2 years in accordance with RSA 310:8.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "Nur 401.01(b)",
+    "url": "https://www.gc.nh.gov/rules/state_agencies/nur100-800.html",
+    "quote": "all applicants for renewal of license as an RN or LPN shall comply with the Nurse Licensure Compact (NLC) Model Rules",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "full (plenary prescriptive authority, no agreement requirement found)",
+    "cite": "RSA 326-B:11, III",
+    "url": "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-11.htm",
+    "quote": "An APRN shall have plenary authority to possess, compound, prescribe, administer, and dispense and distribute to clients controlled and non-controlled drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.initialCertification",
+    "value": "Board recognized national certification required for initial licence",
+    "cite": "RSA 326-B:18, I(c)",
+    "url": "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-18.htm",
+    "quote": "Be currently certified by a board-recognized national certifying body in the specialty for which the applicant was educated",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.pdmpRegistration",
+    "value": "PDMP registration required for Schedule II-IV prescribers",
+    "cite": "RSA 126-A:91, II",
+    "url": "https://gc.nh.gov/rsa/html/X/126-A/126-A-91.htm",
+    "quote": "Practitioners who prescribe but do not dispense schedule II-IV controlled substances shall register with the program as a prescriber",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember.statute",
+    "value": "Nurse Licensure Compact enacted in statute",
+    "cite": "RSA 326-B:46",
+    "url": "https://gc.nh.gov/rsa/html/NHTOC/NHTOC-XXX-326-B.htm",
+    "quote": "Section: 326-B:46 Nurse Licensure Compact.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: the 'CE Broker' tracking instruction and the Board's 12/04/2024 CE waiver order are on OPLC pages that return HTTP 403 to scripts and could not be reloaded; Med 613.01 (eff 10-2-25) supersedes the interim rule the order relates to.",
+  "PA and NP: 'no separate state controlled substance registration' is an inference from RSA 318-B (licences only for manufacturers and wholesalers); PDMP registration under RSA 126-A:91 is required for Schedule II-IV prescribers.",
+  "PA renewal date: RSA 310:8, II sets validity at 2 years from issuance; whether OPLC aligns PA renewals to birthdays was not confirmed.",
+  "NP renewal date: Nur 401.01(a)(1) says by midnight on the birthday in the renewal year; RSA 310:8, II (amended 2025) says 2 years from issuance and supersedes conflicting terms. Not reconciled from an OPLC page.",
+  "NP: how OPLC applies the overlap between Nur 401.03(b) (national certification counts as 30 of 60 hours) and Nur 403.01(a) (national certification may satisfy the RN 30 hours) was not confirmed.",
+  "NP: 'full' practice authority is derived from RSA 326-B:11, III (plenary prescriptive authority) and the absence of any collaboration requirement in RSA 326-B; no board page using the word 'full' was loaded.",
+  "NP: pending Board of Nursing rulemaking (Notice 2026-68, Nur 400, proposal dated 3/26/2026) reported by the researcher was not reloaded by the verifier; recheck before shipping.",
+  "Missed-mandate sweep: RSA 328-D, RSA 326-B, Med 100-600 and Nur 100-800 were searched; no PA or APRN topic mandate (opioid, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide, infection control, cultural competency, domestic violence) was found."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "corrections": [
+   "PA: 'CE tracked in CE Broker' could not be reloaded (OPLC returns 403); marked verified:false. Med 613.01(b) itself only requires proof with the renewal application.",
+   "PA prescribing: stateCsRegistrationRequired changed from 'not confirmed' to false, flagged verified:false as an inference (RSA 318-B licenses only manufacturers and wholesalers). Added PDMP registration for Schedule II-IV prescribers (RSA 126-A:91, II) and DEA registration (RSA 328-D:3-b, XVI).",
+   "PA: confirmed no PA opioid CE. RSA 318-B:40 reads '[Omitted.]'; Med 402.01(o) (physicians) still cites it, so the physician rule may be stale, but that is outside PA scope.",
+   "NP: nationalCertificationRequired refined from plain true to 'if licensed after September 1984', plus the lifetime-certificate rule (Nur 401.03(a)(2)-(3)).",
+   "NP renewal deadline: kept the birthday rule (Nur 401.01(a)(1)) but recorded that RSA 310:8, II (amended 2025) sets validity at 2 years from issuance and supersedes conflicting terms.",
+   "NP: added RSA 326-B:46 as statutory support for NLC membership."
+  ],
+  "sourcesReloaded": [
+   "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-5.htm",
+   "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-1.htm",
+   "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-3-b.htm",
+   "https://gc.nh.gov/rsa/html/XXX/310/310-8.htm",
+   "https://gc.nh.gov/rsa/html/NHTOC/NHTOC-XXX-328-D.htm",
+   "https://www.gc.nh.gov/rules/state_agencies/med100-600.html",
+   "https://gc.nh.gov/rsa/html/XXX/318-B/318-B-40.htm",
+   "https://gc.nh.gov/rsa/html/XXX/318-B/318-B-41.htm",
+   "https://gc.nh.gov/rsa/html/NHTOC/NHTOC-XXX-318-B.htm",
+   "https://gc.nh.gov/rsa/html/X/126-A/126-A-91.htm",
+   "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-31.htm",
+   "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-11.htm",
+   "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-18.htm",
+   "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-22.htm",
+   "https://gc.nh.gov/rsa/html/NHTOC/NHTOC-XXX-326-B.htm",
+   "https://www.gc.nh.gov/rules/state_agencies/nur100-800.html"
+  ]
+ }
+}

@@ -1,0 +1,408 @@
+{
+ "state": "IA",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Iowa Board of Physician Associates (Department of Inspections, Appeals, and Licensing)",
+   "url": "https://dial.iowa.gov/licenses/health-professions/physician-associates"
+  },
+  "licence": {
+   "title": "Physician Associate (PA) license (Iowa rules renamed 'physician assistant' to 'physician associate'; Iowa Code ch. 148C text still says physician assistant)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "September 30 at the end of the licensee's biennium (biennium runs October 1 to September 30 two years later); 30-day grace period with late fee. A licence issued within six months of the renewal date is not renewed until the following renewal date two years later (481 IAC 780.8(2))."
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "Minimum 50 hours Category I (AAPA, AMA, AOA, AAFP or ACCME-accredited); remaining 50 hours Category I or II as accepted by NCCPA. Excess hours carry over up to 50 percent of the requirement, maximum 50 hours. One hour = at least 50 minutes. First renewal after initial licensure: no CE required.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "CDC guideline for prescribing opioids for chronic pain",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "PAs who prescribed opioids to a patient during the renewal cycle (counts toward the 100 hours)"
+    },
+    {
+     "topic": "Mandatory reporter training: child abuse and/or dependent adult abuse identification and reporting (Iowa HHS curriculum)",
+     "hours": null,
+     "period": "every 3 years",
+     "appliesTo": "PAs who examine, attend, counsel or treat children (child abuse) or adults (dependent adult abuse) in Iowa; attested on renewal"
+    }
+   ],
+   "controlledSubstanceCe": "2 hours on CDC opioid prescribing guideline per biennium if the PA prescribed opioids during the cycle"
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "No written agreement filed for most PAs: collaboration is determined at the practice level. Physician supervision is required only for a PA in an independent practice arrangement (PA-owned professional corporation or PLLC) who has fewer than 2 years of prior supervised or collaborative practice; that PA notifies the board of each supervising physician on jointly approved board forms before beginning practice and reports any change.",
+   "notes": "Iowa Code 148C.1 and 148C.3(2); 481 IAC 780.5 and 780.7. Board may audit CE and mandatory reporter compliance."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "2 hours CDC opioid guideline per biennium if opioids prescribed; PMP check required before prescribing an opioid (481 IAC 781.4(3)); DEA registration required to prescribe or dispense controlled substances; Schedule II depressants allowed."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "481 IAC 780.8(1)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.780.pdf",
+    "quote": "The license renewal period for a license to practice will begin on October 1 and end on September 30 two years later.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 100,
+    "cite": "481 IAC 782.2(1)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.782.pdf",
+    "quote": "Each biennium, each licensee will be required to complete a minimum of 100 hours of continuing education approved by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "50 hours Category I minimum",
+    "cite": "481 IAC 782.3(2)(a)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.782.pdf",
+    "quote": "The licensee will complete a minimum of 50 hours of credit designated as Category I",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules.remainder",
+    "value": "remaining 50 hours Category I or II as accepted by NCCPA",
+    "cite": "481 IAC 782.3(2)(b)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.782.pdf",
+    "quote": "For the remaining 50 hours of required continuing medical education (CME), Category I or Category II credit, as accepted by the National Commission",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "481 IAC 782.3(2)(c)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.782.pdf",
+    "quote": "Licensees who maintain certification by the NCCPA may show proof of meeting the board’s CME requirements by providing proof of current certification by the NCCPA",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.firstRenewalExempt",
+    "value": true,
+    "cite": "481 IAC 782.2(2)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.782.pdf",
+    "quote": "Those persons licensed for the first time will not be required to complete continuing education as a prerequisite for the first renewal of their licenses.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.opioid",
+    "value": "2 hours CDC opioid guideline per renewal cycle if prescribed opioids",
+    "cite": "481 IAC 782.3(2)(d)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.782.pdf",
+    "quote": "A licensee who has prescribed opioids to a patient during the renewal cycle will complete a minimum of two hours of continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.mandatoryReporter",
+    "value": "child and dependent adult abuse training within previous 3 years, attested at renewal",
+    "cite": "481 IAC 780.8(4)(a),(b)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.780.pdf",
+    "quote": "completion of training in child abuse identification and reporting as required by Iowa Code section 232.69(3)“b” in the previous three years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "collaboration determined at practice level",
+    "cite": "Iowa Code 148C.4(3)",
+    "url": "https://www.legis.iowa.gov/docs/code/148C.pdf",
+    "quote": "The degree of collaboration between a physician assistant and the appropriate member of a health care team shall be determined at the practice level",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisionWhenRequired",
+    "value": "supervision only in independent practice with < 2 years prior practice",
+    "cite": "481 IAC 780.5(1)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.780.pdf",
+    "quote": "A physician associate is required to be supervised by a physician when the physician associate is practicing in an independent practice arrangement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "notify board of supervising physician on board forms before practice",
+    "cite": "481 IAC 780.5(2)(a)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.780.pdf",
+    "quote": "A physician associate will use the jointly approved board forms to notify the board of the identity of the physician associate’s supervising physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.dea",
+    "value": "DEA registration required for controlled substances",
+    "cite": "481 IAC 781.1(1)(c)(3)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.781.pdf",
+    "quote": "If a physician associate prescribes or dispenses controlled substances, the physician associate must register with the federal Drug Enforcement Administration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "Iowa Code 124.302(1)",
+    "url": "https://www.legis.iowa.gov/docs/code/124.302.pdf",
+    "quote": "shall obtain and maintain a registration issued by the board in accordance with the board’s rules.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.pmpCheck",
+    "value": "PMP review before prescribing an opioid",
+    "cite": "481 IAC 781.4(3)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.781.pdf",
+    "quote": "Prior to prescribing an opioid, a physician associate will review the patient’s information contained in the prescription monitoring program database",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired.dispenseDefinition",
+    "value": "Iowa CSA 'dispense' includes prescribing, so a PA who prescribes controlled substances needs the Iowa CSA registration under 124.302",
+    "cite": "Iowa Code 124.101(9)",
+    "url": "https://www.legis.iowa.gov/docs/code/124.101.pdf",
+    "quote": "“Dispense” means to deliver a controlled substance to an ultimate user ... pursuant to the lawful order of a practitioner, including the prescribing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.collaboratorEligibility",
+    "value": "during the 2-year supervised/collaborative period a non-physician collaborator must have 5+ years in practice and no discipline",
+    "cite": "481 IAC 780.7(5)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.780.pdf",
+    "quote": "the other health care provider ... shall be a provider who has been in practice for a minimum of five years and is not subject",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Iowa Board of Nursing (Department of Inspections, Appeals, and Licensing)",
+   "url": "https://dial.iowa.gov/licenses/health-professions/nursing-professional-midwifery"
+  },
+  "rn": {
+   "renewalCycleYears": 3,
+   "renewalDeadline": "15th day of the licensee's birth month in the renewal year; renewal opens 60 days before expiration; late renewal with late fee until the 15th day of the month after expiration, after which the licence is inactive (481 IAC 617.8(3)-(5)).",
+   "ceHoursPerCycle": 36,
+   "nlcCompactMember": true,
+   "ceNotes": "Current national certification or recertification counts as 36 contact hours. Up to 18 excess hours may carry over.",
+   "topicMandates": [
+    {
+     "topic": "Mandatory reporter training: child abuse and/or dependent adult abuse identification and reporting (Iowa HHS curriculum)",
+     "hours": null,
+     "period": "every 3 years",
+     "appliesTo": "Nurses who regularly examine, attend, counsel or treat children (child abuse training) or adults (dependent adult abuse training) in Iowa; training within the previous three years, attested on renewal; documentation kept three years"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "ARNP (Advanced Registered Nurse Practitioner); NP role is 'certified nurse practitioner' with a population focus",
+   "separateLicenceOrCertificate": "separate ARNP license (one application per population focus)",
+   "renewalCycleYears": 3,
+   "renewalNotes": "ARNP license expires on the same date as the RN license; renew from 60 days before to 30 days after expiration",
+   "ceHoursPerCycle": 36,
+   "ceNotes": "No separate ARNP contact hour count found in 481 IAC 621; the 36 RN contact hours apply (621.6(3) counts opioid hours toward 'the 36 contact hours required for license renewal').",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "CDC guideline for prescribing opioids for chronic pain",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "ARNPs who prescribed opioids to a patient during the renewal cycle (counts toward 36 hours)"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "2 contact hours CDC opioid guideline every 3-year renewal if opioids prescribed",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None. Collaboration in Iowa ARNP rules means joint management with a physician 'as needed'; no agreement is filed."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 3,
+    "cite": "481 IAC 617.8(2)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.617.pdf",
+    "quote": "it will be placed on a three-year renewal cycle. License expiration is on the fifteenth day of the licensee’s birth month.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 36,
+    "cite": "481 IAC 619.2(1)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.619.pdf",
+    "quote": "License renewal requires the verifiable completion of 36 contact hours or 3.6 CEUs of credit or an exemption within the renewal period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nationalCertificationCounts",
+    "value": "national certification = 36 contact hours",
+    "cite": "481 IAC 619.2(3)(h)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.619.pdf",
+    "quote": "The national certification or recertification is recognized as 36 contact hours of continuing education.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "481 IAC 617.1 (definitions); Iowa Code ch. 152E",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.617.pdf",
+    "quote": "“Nurse licensure compact” means the agreement between party states, as set forth in Iowa Code",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.mandatoryReporter",
+    "value": "child and dependent adult abuse training within previous 3 years",
+    "cite": "481 IAC 617.8(3)(d)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.617.pdf",
+    "quote": "completion of training in child abuse identification and reporting as required by Iowa Code section 232.69(3)“b” in the previous three years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewal",
+    "value": "ARNP expiration equals RN expiration",
+    "cite": "481 IAC 621.3(5)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.621.pdf",
+    "quote": "The expiration date assigned to a renewed ARNP license is the same as the expiration date of the licensee’s license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "481 IAC 621.4(2)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.621.pdf",
+    "quote": "An ARNP must maintain current certification with a national professional certification organization at all times while the ARNP license is active.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "full",
+    "cite": "481 IAC 621.4(4)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.621.pdf",
+    "quote": "An ARNP has the authority to practice to the full extent of the ARNP’s license, education, and experience in the ARNP’s respective population foci.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.opioid",
+    "value": "2 contact hours CDC opioid guideline per renewal if prescribed opioids",
+    "cite": "481 IAC 621.6(3)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.621.pdf",
+    "quote": "An ARNP who has prescribed opioids to a patient during the renewal cycle is required to complete a minimum of two contact hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "481 IAC 621.6(1)(e)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.621.pdf",
+    "quote": "Maintain an active Drug Enforcement Administration (DEA) registration and an active controlled substances Act (CSA) registration to dispense, prescribe, or administer controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.lateRenewal",
+    "value": "late renewal allowed until the 15th of the month after expiration",
+    "cite": "481 IAC 617.8(4)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.617.pdf",
+    "quote": "submit the late fee before the fifteenth day of the month following the expiration date.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalWindow",
+    "value": "ARNP renewal from 60 days before to 30 days after expiration",
+    "cite": "481 IAC 621.3(5)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.621.pdf",
+    "quote": "An ARNP license may be renewed beginning 60 days prior to the license expiration date and ending 30 days after the expiration date.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.pmpCheck",
+    "value": "PMP review before prescribing or dispensing an opioid",
+    "cite": "481 IAC 621.7(1)",
+    "url": "https://www.legis.iowa.gov/docs/iac/chapter/481.621.pdf",
+    "quote": "Prior to the prescribing or dispensing of an opioid by an ARNP, the ARNP or the ARNP’s",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "Iowa Code 148C (2026 Code PDF, printed December 2025) still says 'physician assistant'; 481 IAC 780 to 782 (IAC 9/30/26) say 'physician associate' and 'board of physician associates'. The session law behind the title change was not loaded.",
+  "Iowa ARNP rules (481 IAC 621) state no separate pharmacology hour requirement and no transition-to-practice hours; this is an absence in the rule, not an affirmative statement.",
+  "Mandatory reporter training has no hour count in the PA or nursing rules (curriculum set by Iowa HHS); hours left null.",
+  "The ARNP CE total (36 contact hours) is inferred from 621.6(3), which counts opioid hours toward 'the 36 contact hours required for license renewal'; 481 IAC 621 has no separate ARNP hour rule."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verifiedBy": "verifier-2026-10",
+ "verificationNotes": "All IA facts re-loaded 2026-10-01 from legis.iowa.gov (IAC supplement dated 9/30/26; Iowa Code 2026). Every value and quote matched.",
+ "corrections": [
+  "IA PA renewalDeadline: added 481 IAC 780.8(2) (licence issued within six months of the renewal date first renews two years later).",
+  "IA PA stateCsRegistrationRequired: researcher's open question resolved. Loaded Iowa Code 124.101(9); 'dispense' expressly includes prescribing, so 124.302 registration applies to prescribing PAs. Fact added; item removed from unverified.",
+  "IA PA practice: added 481 IAC 780.7(5) (collaborating non-physician provider must have 5 years in practice and no discipline during the two-year period).",
+  "IA RN renewalDeadline: added the late window (to the 15th of the following month, then inactive) from 481 IAC 617.8(4)-(5); researcher listed only the opening date.",
+  "IA RN mandatory reporter appliesTo: rule says 'regularly examines, attends, counsels or treats'; wording tightened."
+ ]
+}

@@ -3,6 +3,7 @@ import { probeNetwork } from "../../utils/offlineSession";
 import { LIMITED_LAUNCH_ACCESS_ENABLED } from "../../utils/limitedLaunchAccess.js";
 import { useApp } from "../../context/AppContext";
 import { TAP_MIN } from "./actionButton";
+import { reloadPage } from "../../utils/pageLeave.js";
 
 // Persistent while the offline session is active. When connectivity comes
 // back (online event, periodic probe, or the Retry button) it flips to
@@ -27,7 +28,7 @@ export default function OfflineBanner({ limitedLaunch = LIMITED_LAUNCH_ACCESS_EN
       const busy = (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable))
         || !!document.querySelector('[role="dialog"]');
       if (busy) return; // banner shows "Back online" with a tap-to-reload button
-      setTimeout(() => window.location.reload(), 1200);
+      setTimeout(() => reloadPage(), 1200);
     } else {
       setPhase("offline");
     }
@@ -59,7 +60,7 @@ export default function OfflineBanner({ limitedLaunch = LIMITED_LAUNCH_ACCESS_EN
       </span>
       {back && (
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => reloadPage()}
           style={{ border: "none", borderRadius: 8, padding: "6px 12px", minHeight: isDesktop ? undefined : TAP_MIN, backgroundColor: "#10b981", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
         >Reload now</button>
       )}

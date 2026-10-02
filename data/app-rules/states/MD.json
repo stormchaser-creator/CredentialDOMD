@@ -1,0 +1,232 @@
+{
+  "state": "MD",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Maryland Board of Physicians",
+      "url": "https://www.mbp.state.md.us"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 50,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AAFP Prescribed Credit"
+        ],
+        "facts": [
+          "pa.ce.categoryRules",
+          "pa.ce.topicMandates[pharmacology]",
+          "pa.ce.categoryIDefinition"
+        ],
+        "reason": "At least 8 Category 1 pharmacology hours plus at least 42 Category I hours: all 50 are Category I."
+      },
+      "totalUnverifiedAccepted": [
+        "AOA Category 1-A",
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "At the first renewal after initial licensure or reinstatement only the 8 pharmacology hours are required.",
+          "facts": [
+            "pa.ce.firstRenewal",
+            "pa.ce.topicMandates[pharmacology]"
+          ]
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Pharmacology",
+        "hours": 8,
+        "measure": "pharmacology",
+        "label": "Category 1 pharmacology, in the two years before expiration",
+        "fact": "pa.ce.topicMandates[pharmacology]"
+      },
+      {
+        "topic": "Implicit Bias",
+        "hours": 0,
+        "label": "Approved implicit bias and structural racism training, attested at the first renewal after April 1, 2026",
+        "period": "lifetime",
+        "facts": [
+          "pa.ce.topicMandates[implicitBias]",
+          "pa.ce.implicitBias (statute text)"
+        ]
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": 2,
+        "label": "Prescribing or dispensing controlled dangerous substances, once, for Maryland CDS registration",
+        "period": "lifetime",
+        "fact": "pa.ce.controlledSubstanceCe",
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Maryland CDS registration?",
+          "description": "Applies to holders of the state controlled substance registration."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "Before practicing, a PA executes a collaboration agreement with one or more patient care team physicians and notifies the Board; the agreement is kept at the primary practice location, is not submitted to the Board, and remains valid until terminated.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.agreementFilingAndRenewal#2",
+          "pa.practice.agreementFilingAndRenewal#3"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Maryland Board of Nursing",
+      "url": "https://health.maryland.gov/mbon/Pages/default.aspx"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears",
+          "reason": "Licenses renew biennially."
+        },
+        "options": [
+          {
+            "text": "30 continuing education units in the 2 years before the renewal application",
+            "fact": "np.rn.ceHoursPerCycle"
+          },
+          {
+            "text": "1,000 hours of active nursing practice in the 5 years before the renewal application",
+            "fact": "np.rn.practiceAlternative"
+          },
+          {
+            "text": "A diploma or degree from a Board-approved nursing education program within the 5 years before the renewal application",
+            "fact": "np.rn.degreeAlternative"
+          }
+        ],
+        "notes": [
+          {
+            "text": "CEUs are not carried forward into the next renewal period.",
+            "fact": "np.rn.ceNote"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Implicit Bias",
+          "hours": 0,
+          "label": "Approved implicit bias and structural racism training, attested at the first renewal after April 1, 2026",
+          "period": "lifetime",
+          "facts": [
+            "np.aprn.topicMandates[implicitBias]",
+            "np.topic.implicitBias.timing"
+          ]
+        }
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "Renewal requires documentation of every current national certification that was the basis of Maryland certification; no NP contact hours are set.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears",
+          "reason": "Renewed biennially, expiring with the RN license."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Implicit Bias",
+          "hours": 0,
+          "label": "Approved implicit bias and structural racism training, attested at the first renewal after April 1, 2026",
+          "period": "lifetime",
+          "facts": [
+            "np.aprn.topicMandates[implicitBias]",
+            "np.topic.implicitBias.timing"
+          ]
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 2,
+          "label": "Prescribing or dispensing controlled dangerous substances, once, for Maryland CDS registration",
+          "period": "lifetime",
+          "fact": "np.prescribing.controlledSubstanceCe",
+          "condition": {
+            "field": "Holds a state controlled substance registration",
+            "question": "Do you hold a Maryland CDS registration?",
+            "description": "Applies to holders of the state controlled substance registration."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "mentor",
+        "conditional": true,
+        "text": "A new NP who has never been certified by a board of nursing names a designated mentor, available for advice, consultation and collaboration for 18 months. No collaborative agreement is required.",
+        "facts": [
+          "np.practice.transition",
+          "np.practice.transition (mentor definition)"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

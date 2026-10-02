@@ -1,0 +1,401 @@
+{
+  "state": "TX",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Texas Physician Assistant Board (administered by the Texas Medical Board)",
+      "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 40,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 20,
+        "fact": "pa.ce.categoryRules",
+        "label": "formal Category I from an AAPA approved sponsor",
+        "accepted": [
+          "AAPA Category 1 CME"
+        ],
+        "unverifiedAccepted": [
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "notForTopics": [
+          "Human Trafficking",
+          "Opioid Prescribing"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "Up to 80 excess hours carry forward one renewal period.",
+          "fact": "pa.ce.carryForward"
+        },
+        {
+          "text": "CE tracking in CE Broker is mandatory for all TMB licensees from September 1, 2026.",
+          "fact": "pa.ce.ceBrokerTracking"
+        },
+        {
+          "text": "NCCPA certification does not cover the human trafficking or opioid CE.",
+          "fact": "pa.ce.nccpaExclusions"
+        }
+      ],
+      "exemption": {
+        "field": "Initial Texas PA registration cycle under 24 months",
+        "question": "Is this your first renewal, after an initial registration cycle shorter than 24 months?",
+        "text": "If your initial registration cycle is less than 24 months, no CE is due before your first renewal.",
+        "fact": "pa.ce.initialCycleExempt",
+        "topics": "all"
+      }
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Human Trafficking",
+        "hours": 0,
+        "label": "Human trafficking prevention course approved by Texas HHSC, each renewal",
+        "fact": "pa.ce.topicMandates.humanTrafficking",
+        "condition": {
+          "field": "Provides direct patient care",
+          "question": "Do you provide direct patient care?",
+          "description": "Texas requires the HHSC approved course for clinicians in direct patient care."
+        }
+      },
+      {
+        "topic": "Opioid Prescribing",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "How often the pain management and opioid prescribing CE is due (statute: annually; board chart: each renewal)",
+        "condition": {
+          "field": "Texas PA: agreement authorizes opioids or PMP access",
+          "question": "Does your prescriptive authority agreement authorize opioids, or do you have PMP access?",
+          "description": "Applies to Texas PAs with opioid authority or PMP access."
+        }
+      },
+      {
+        "topic": "Forensic Evidence Collection",
+        "hours": 2,
+        "label": "Forensic evidence collection, for licenses expiring on or after February 28, 2027",
+        "expiringOnOrAfter": "2027-02-28",
+        "fact": "pa.ce.topicMandates.forensic",
+        "condition": {
+          "field": "Treats patients in an emergency room",
+          "question": "Do you treat patients in an emergency room setting?",
+          "description": "Texas emergency room CE."
+        }
+      },
+      {
+        "topic": "Nutrition",
+        "hours": 1,
+        "label": "Nutrition and metabolic health, each renewal, for licenses expiring on or after May 30, 2027",
+        "expiringOnOrAfter": "2027-05-30",
+        "fact": "pa.ce.topicMandates.nutrition"
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "The supervising physician is registered with the board before practice, with changes within 30 days. A prescriptive authority agreement is reviewed, signed and dated every year.",
+        "facts": [
+          "pa.practice.registrationChange",
+          "pa.practice.paaAnnualReview"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Length of the HHSC human trafficking course"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Texas Board of Nursing",
+      "url": "https://www.bon.texas.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlc"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 20,
+          "fact": "np.rn.ce"
+        },
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "bodiesVerified": false,
+          "covers": [
+            "total"
+          ],
+          "fact": "np.rn.ce",
+          "note": "Texas accepts a board approved national nursing certification; which certifications the board approves is not yet verified."
+        }
+      },
+      "topics": [
+        {
+          "topic": "Jurisprudence and Ethics",
+          "hours": 2,
+          "label": "Nursing jurisprudence and nursing ethics, before the end of every third two-year licensing period",
+          "period": {
+            "years": 6
+          },
+          "periodReason": "Every third two-year licensing period is every six years.",
+          "acceptedCategories": [
+            "Accredited Nursing CE"
+          ],
+          "fact": "np.rn.topicMandates.jurisprudence"
+        },
+        {
+          "topic": "Human Trafficking",
+          "hours": 0,
+          "label": "Human trafficking prevention course approved by Texas HHSC, each licensing period",
+          "fact": "np.rn.topicMandates.humanTrafficking",
+          "condition": {
+            "field": "Provides direct patient care",
+            "question": "Do you provide direct patient care?",
+            "description": "Texas requires the HHSC approved course for clinicians in direct patient care."
+          }
+        },
+        {
+          "topic": "Geriatric Medicine",
+          "hours": 2,
+          "label": "Older adult or geriatric populations, every licensing period (a board-approved geriatric certification also meets it; APRNs may use Category I CME)",
+          "condition": {
+            "field": "Practice includes older adults",
+            "question": "Does your practice include older adult or geriatric patients?",
+            "description": "Texas older adult CE."
+          },
+          "facts": [
+            "np.rn.topicMandates.olderAdult",
+            "np.rn.olderAdultAlternatives"
+          ]
+        },
+        {
+          "topic": "Forensic Evidence Collection",
+          "hours": 2,
+          "label": "Forensic evidence collection, once, within two years of starting emergency room employment (a board-approved forensic certification also meets it; APRNs may use TMB approved CME)",
+          "period": "lifetime",
+          "condition": {
+            "field": "Treats patients in an emergency room",
+            "question": "Do you treat patients in an emergency room setting?",
+            "description": "Texas emergency room CE."
+          },
+          "facts": [
+            "np.rn.topicMandates.forensic",
+            "np.rn.forensicAlternatives"
+          ]
+        },
+        {
+          "topic": "Forensic Evidence Collection",
+          "hours": 0,
+          "label": "Basic forensic evidence collection training before performing a forensic examination on a sexual assault survivor",
+          "period": "lifetime",
+          "fact": "np.rn.topicMandates.forensicExaminer",
+          "condition": {
+            "field": "Performs sexual assault forensic examinations",
+            "question": "Do you perform forensic examinations on sexual assault survivors?",
+            "description": "Texas training before these examinations."
+          }
+        },
+        {
+          "topic": "Nutrition",
+          "hours": null,
+          "status": "unverified",
+          "unverifiedItem": "Nutrition and metabolic health CE hours and start date for nurses"
+        }
+      ]
+    },
+    "aprn": {
+      "license": {
+        "title": "APRN license (nurse practitioner role and population focus)",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.aprn.ce",
+            "np.rn.renewalCycleYears"
+          ],
+          "reason": "APRN hours fall in the same two-year licensing period as the RN license and are not additional."
+        },
+        "total": {
+          "value": 20,
+          "fact": "np.aprn.ce"
+        },
+        "satisfiesRn": {
+          "value": true,
+          "fact": "np.aprn.ce"
+        },
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "bodiesVerified": false,
+          "covers": [
+            "total"
+          ],
+          "fact": "np.aprn.ce",
+          "note": "Texas accepts national certification in place of the APRN hours; which certifying bodies the board approves is not yet verified."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "condition": {
+          "field": "Completed APRN education on or after January 1, 1996, or licensed on certification",
+          "question": "Did you complete your APRN program on or after January 1, 1996, or were you licensed as an APRN based on national certification?",
+          "description": "Texas requires current national certification of these APRNs at renewal."
+        },
+        "facts": [
+          "np.aprn.nationalCertificationRequired",
+          "np.aprn.certificationApplies"
+        ]
+      },
+      "practiceHours": {
+        "hours": 400,
+        "years": 2,
+        "fact": "np.aprn.practiceHours"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 5,
+          "measure": "pharmacology",
+          "additional": true,
+          "notCoveredByCertification": true,
+          "label": "Pharmacotherapeutics, 5 additional contact hours every licensing period",
+          "fact": "np.aprn.pharmacologyHoursPerCycle",
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          }
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 3,
+          "additional": true,
+          "label": "Prescribing controlled substances, 3 additional contact hours every licensing period",
+          "fact": "np.prescribing.controlledSubstanceCe",
+          "condition": {
+            "field": "Prescribes controlled substances",
+            "question": "Do you prescribe controlled substances?",
+            "description": "Applies to clinicians who prescribe controlled substances."
+          }
+        },
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 4,
+          "label": "Safe and effective pain management and opioid prescribing, 2 hours a year (4 a licensing period), part of the 20",
+          "facts": [
+            "np.aprn.topicMandates.opioid",
+            "np.aprn.ce"
+          ],
+          "condition": {
+            "field": "Texas APRN: agreement authorizes opioids",
+            "question": "Does your prescriptive authority agreement authorize opioids?",
+            "description": "Texas APRNs whose prescriptive authority agreement authorizes opioids."
+          }
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 2,
+          "label": "Approved procedures of prescribing and monitoring controlled substances, 2 hours, once: by September 1, 2021 if licensed before September 1, 2020, or within 1 year of initial licensure if licensed after (a course separate from the 3 controlled substance hours)",
+          "period": "lifetime",
+          "periodReason": "A one-time requirement.",
+          "condition": {
+            "field": "Authorized to access the Texas PMP",
+            "question": "Are you authorized to receive information from the Texas Prescription Monitoring Program?",
+            "description": "Texas one-time PMP CE."
+          },
+          "facts": [
+            "np.aprn.topicMandates.pmp",
+            "np.aprn.topicMandates.pmpBefore2020",
+            "np.aprn.topicMandates.pmpAfter2020",
+            "np.prescribing.controlledSubstanceCe"
+          ],
+          "separate": true
+        }
+      ],
+      "unverified": [
+        "Whether the controlled substance CE appears in the adopted rule text (the board page cites it; the rule text did not load)"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "prescriptive authority agreement",
+        "conditional": true,
+        "text": "The prescriptive authority agreement is reviewed at least every year, dated and signed, with quality assurance meetings at least monthly.",
+        "facts": [
+          "np.practice.paaAnnualReview",
+          "np.practice.paaMeetings"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@ import CvImportReview from "./CvImportReview";
 import { canFillFromPublicRecord } from "../../utils/publicRecord";
 import { emailRemindersOn, reminderLeadDays } from "../../utils/reminderPreferences";
 import { emailProblem } from "../../utils/contactFormat";
+import { isAdvancedPractice, isKnownDegree, licenseKindOf, professionOf, DEGREE_LABELS } from "../../constants/professions";
 import CMEImport from "./CMEImport";
 import EmailPacketModal from "./EmailPacketModal";
 import { KeptPanel, KeptPanelSlot } from "../shared/KeptPanel";
@@ -114,6 +115,16 @@ export function IdentityDrawer() {
   const [draft, setDraft] = useState(null);
   const name = draft ?? s.name ?? "";
   const signInName = String(user?.fullName || "").trim();
+  // Switching an already chosen profession asks first, as Settings does
+  // (DESIGN 1.8): it changes which state rules, license types and CME
+  // categories apply. MD to DO (or back) and a first choice stay one tap.
+  const [pendingDegree, setPendingDegree] = useState(null);
+  const chooseDegree = (d) => {
+    if (d === s.degreeType) { setPendingDegree(null); return; }
+    if (isKnownDegree(s.degreeType) && professionOf(d) !== professionOf(s.degreeType)) { setPendingDegree(d); return; }
+    setPendingDegree(null);
+    updateSettings({ degreeType: d });
+  };
   const commitName = (value) => {
     const next = String(value ?? "").trim();
     setDraft(null);
@@ -147,11 +158,27 @@ export function IdentityDrawer() {
           fontSize: 16, fontWeight: 700, cursor: "pointer", textAlign: "left",
         }}>Use {signInName}</button>
       )}
-      <label id="setup-degree-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Degree</label>
-      <div role="group" aria-labelledby="setup-degree-label" style={{ display: "flex", gap: 8, margin: "4px 0 12px" }}>
-        {chip("MD", s.degreeType === "MD", () => updateSettings({ degreeType: "MD" }))}
-        {chip("DO", s.degreeType === "DO", () => updateSettings({ degreeType: "DO" }))}
+      <label id="setup-degree-label" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Profession</label>
+      {/* Four professions, two by two at phone width (src/constants/professions.js
+          DEGREES; tests/profession/pickers.test.mjs pins the list). */}
+      <div role="group" aria-labelledby="setup-degree-label" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "4px 0 12px" }}>
+        {[["MD", "MD"], ["DO", "DO"], ["PA", "PA"], ["NP", "NP"]].map(([d, label]) => chip(label, s.degreeType === d, () => chooseDegree(d)))}
       </div>
+      {pendingDegree && (
+        <div role="group" aria-label="Change profession" style={{ margin: "-4px 0 12px", padding: "12px 14px", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 10 }}>
+          <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5, marginBottom: 10 }}>
+            Switching to {DEGREE_LABELS[pendingDegree] || pendingDegree} ({pendingDegree}) changes which state rules, license types and {pendingDegree === "NP" ? "CE" : "CME"} categories apply. Your records stay as they are.
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => { updateSettings({ degreeType: pendingDegree }); setPendingDegree(null); }} style={{
+              flex: 1, minHeight: 44, borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+            }}>Switch to {pendingDegree}</button>
+            <button onClick={() => setPendingDegree(null)} style={{
+              flex: 1, minHeight: 44, borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+            }}>Keep {s.degreeType}</button>
+          </div>
+        </div>
+      )}
       <label htmlFor="setup-primary-state" style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Primary state of practice</label>
       <select
         id="setup-primary-state"
@@ -175,8 +202,14 @@ function LicensesDrawer({ onAddByHand }) {
   // running. Never blocking: a locum legitimately practises before
   // licensure lands.
   const primary = s.primaryState;
+  const deg = s.degreeType;
+  const appProfession = deg === "PA" || deg === "NP";
+  // A PA's licence is read by licenseKindOf, the one test that folds a
+  // curly apostrophe; MD, DO and NP keep their tests unchanged.
+  const practiceType = deg === "NP" ? /\b(aprn|arnp|crnp|apn|nurse practitioner|rn)\b.*licen[sc]e|^rn license/i : /medical license/i;
+  const isPractice = (type) => (deg === "PA" ? licenseKindOf(type) === "pa" : practiceType.test(type || ""));
   const hasPrimary = !primary || (data.licenses || []).some(
-    (l) => l.state === primary && /medical license/i.test(l.type || "")
+    (l) => l.state === primary && isPractice(l.type)
   );
   const stateName = primary ? (STATE_NAMES?.[primary] || primary) : "";
 
@@ -197,7 +230,7 @@ function LicensesDrawer({ onAddByHand }) {
 
       {!hasPrimary && (
         <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`, fontSize: 13, color: T.text, lineHeight: 1.5 }}>
-          You have no medical license on file for {stateName}, and {stateName} is the state whose CME clock is running. Add it, or change your primary state in About you.
+          You have no {deg === "PA" ? "physician assistant" : deg === "NP" ? "APRN or RN" : "medical"} license on file for {stateName}, and {stateName} is the state whose {appProfession && deg === "NP" ? "CE" : "CME"} clock is running. Add it, or change your primary state in About you.
         </div>
       )}
 
@@ -410,7 +443,7 @@ const RUN_NOUNS = {
   travelDocs: ["documents", "document"],
 };
 
-function PacketDrawer({ task, onOpenSection }) {
+export function PacketDrawer({ task, onOpenSection }) {
   const { data, theme: T } = useApp();
   const [running, setRunning] = useState(false);
   // Three of these rows are about records the public registers already hold
@@ -469,7 +502,8 @@ function PacketDrawer({ task, onOpenSection }) {
           color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
         }}>{task.addVerb}</button>
       )}
-      {task.id === "boards" && !(data.settings?.specialties || []).length && (
+      {/* A PA's or NP's specialty sets no board rules: never ask it here. */}
+      {task.id === "boards" && !isAdvancedPractice(data.settings?.degreeType) && !(data.settings?.specialties || []).length && (
         <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginTop: 10 }}>
           Your specialty is still blank. It sets which board rules apply to you, and it lives in Settings under your profile.
         </div>

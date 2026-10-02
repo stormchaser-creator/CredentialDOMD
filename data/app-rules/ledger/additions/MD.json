@@ -1,0 +1,49 @@
+{
+ "state": "MD",
+ "facts": [
+  {
+   "field": "np.rn.degreeAlternative",
+   "profession": "np",
+   "value": "Diploma or degree from a Board-approved nursing program within 5 years",
+   "cite": "COMAR 10.27.01.13G(1)(b)",
+   "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.01.13",
+   "quote": "Satisfactory completion of all requirements for a diploma or degree from a Board-approved nursing education program within the 5 years immediately preceding",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.categoryIDefinition",
+   "profession": "pa",
+   "value": "Category I accredited by AAPA, AAFP, ACCME, MedChi or equivalent",
+   "cite": "COMAR 10.32.03.02B(6)",
+   "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.02",
+   "quote": "accredited by the American Academy of Physician Assistants, the American Academy of Family Physicians, the Accreditation Council on Continuing Medical Education",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.board.page",
+   "profession": "np",
+   "value": "Maryland Board of Nursing home page",
+   "cite": "Maryland Department of Health, Board of Nursing",
+   "url": "https://health.maryland.gov/mbon/Pages/default.aspx",
+   "quote": "Maryland Department of Health Board of Nursing",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.topic.implicitBias.timing",
+   "profession": "np",
+   "value": "Attestation applies only at the first renewal after April 1, 2026",
+   "cite": "Md. Code, Health Occ. 1-225(c)",
+   "url": "https://mgaleg.maryland.gov/mgawebsite/Laws/StatuteText?article=gho&section=1-225&enactments=false",
+   "quote": "shall apply only to an applicant’s first license or certificate renewal after April 1, 2026",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

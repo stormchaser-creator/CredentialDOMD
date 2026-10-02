@@ -1,0 +1,420 @@
+{
+ "state": "AZ",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Arizona Regulatory Board of Physician Assistants",
+   "url": "https://www.azpa.gov/"
+  },
+  "licence": {
+   "title": "Physician Assistant regular license",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Every other year on or before the licensee's birthday; late fee after 30 days; license expires 90 days after the birthday"
+  },
+  "ce": {
+   "hoursPerCycle": 40,
+   "categoryRules": "Category I CME approved by AAPA, AMA, AOA or another accreditor acceptable to the board; prorated hours in the first biennial period.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Opioid-related, substance use disorder-related or addiction-related CE",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "By statute, Schedule II prescribers with a DEA registration (counts within the 40 hours); the PA board's renewal page applies it to all renewing PAs."
+    }
+   ],
+   "controlledSubstanceCe": "3 hours opioid, substance use disorder or addiction CE each renewal cycle for DEA registered Schedule II prescribers."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Under 8,000 board-certified clinical practice hours: signed supervision agreement kept on file at the PA's main practice location and produced to the board on request (not filed with the board). With 8,000 hours certified by the board: no supervision agreement; the PA practises with a collaborating physician or entity and collaborates, consults or refers as the setting's policies require.",
+   "notes": "A supervising physician may supervise no more than six PAs working at the same time. The 8,000 hour certification is issued by the board on documentation."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Board approval plus DEA registration is required for Schedule II and III; Schedule IV and V need DEA registration. No separate state controlled substance registration found.",
+   "ceForPrescribers": "3 hours opioid or substance use disorder CE each renewal for DEA registered Schedule II prescribers.",
+   "pdmpNote": "CSPMP (Board of Pharmacy) access is tied to a DEA registration with an Arizona address; a utilization report is required before prescribing Schedule II to IV opioids or benzodiazepines (A.R.S. 36-2606). Not a separate controlled substance licence."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycle",
+    "value": "every other year on birthday",
+    "cite": "A.R.S. 32-2523(A)",
+    "url": "https://www.azleg.gov/ars/32/02523.htm",
+    "quote": "each holder of a regular license shall renew the license every other year on or before the licensee's birthday",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 40,
+    "cite": "A.R.S. 32-2523(A)",
+    "url": "https://www.azleg.gov/ars/32/02523.htm",
+    "quote": "forty hours of category I continuing medical education approved by the American academy of physician assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.biennialRule",
+    "value": "40 hours per biennial license period",
+    "cite": "Ariz. Admin. Code R4-17-205(A)",
+    "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-17-205",
+    "quote": "renewal of a license is conditioned on the licensee completing 40 hours of category I continuing medical education during each biennial license period.",
+    "loaded": true,
+    "verified": true,
+    "note": "Rule text read from Cornell LII's reproduction of the Arizona Administrative Code; apps.azsos.gov returned HTTP 403 on 2026-10-01. Re-loaded and matched by the verifier.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "A.R.S. 32-2523(F)",
+    "url": "https://www.azleg.gov/ars/32/02523.htm",
+    "quote": "deemed satisfied if, at the time of renewal, the licensee holds a certification in good standing from a certifying body approved by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Statute says 'a certifying body approved by the board'; the board's approval of NCCPA by name was not loaded. 32-2523(A) also exempts nationally certified PAs from the 10% CME audit."
+   },
+   {
+    "field": "pa.ce.topicMandates.opioid",
+    "value": "3 hours each renewal cycle",
+    "cite": "A.R.S. 32-3248.02",
+    "url": "https://www.azleg.gov/ars/32/03248-02.htm",
+    "quote": "shall complete a minimum of three hours of opioid-related, substance use disorder-related or addiction-related continuing education each license renewal cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "The PA board's renewal page says all renewing PAs complete the 3 hours within the 40; the statute limits it to Schedule II prescribers with a DEA registration."
+   },
+   {
+    "field": "pa.practice.supervisionAgreement",
+    "value": "required under 8,000 certified hours",
+    "cite": "A.R.S. 32-2531(C)",
+    "url": "https://www.azleg.gov/ars/32/02531.htm",
+    "quote": "A physician assistant who has less than eight thousand hours of clinical practice certified by the board shall work in accordance with a supervision agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFiling",
+    "value": "kept on file at practice, not filed with board",
+    "cite": "A.R.S. 32-2531(C)",
+    "url": "https://www.azleg.gov/ars/32/02531.htm",
+    "quote": "The supervision agreement must be kept on file at the main location of the physician assistant's practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.after8000",
+    "value": "collaboration, no supervision agreement",
+    "cite": "A.R.S. 32-2531(B)",
+    "url": "https://www.azleg.gov/ars/32/02531.htm",
+    "quote": "is not required to practice pursuant to a supervision agreement but shall continue to collaborate with, consult with or refer to",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.8000certification",
+    "value": "board certifies 8,000 hours on documentation",
+    "cite": "A.R.S. 32-2536(A)",
+    "url": "https://www.azleg.gov/ars/32/02536.htm",
+    "quote": "shall provide the board with documentation of having completed at least eight thousand hours of clinical practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.scheduleIIandIII",
+    "value": "board approval and DEA registration",
+    "cite": "A.R.S. 32-2532(A)(1)",
+    "url": "https://www.azleg.gov/ars/32/02532.htm",
+    "quote": "without board approval and United States drug enforcement administration registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.cspmpQuery",
+    "value": "must obtain a 12 month CSPMP utilization report before prescribing Schedule II to IV opioid or benzodiazepine",
+    "cite": "A.R.S. 36-2606(E)",
+    "url": "https://www.azleg.gov/ars/36/02606.htm",
+    "quote": "before prescribing an opioid analgesic or benzodiazepine controlled substance listed in schedule II, III or IV for a patient, shall obtain a patient utilization report",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.boardOpioidPage",
+    "value": "board states 3 hours within the 40 for all renewing PAs",
+    "cite": "Arizona Regulatory Board of Physician Assistants, Renewal Opioid CME",
+    "url": "https://www.azpa.gov/Licensure/Licensure/pa-renewal-opioid-cme",
+    "quote": "All Physician Assistants renewing their licenses are required to complete (3) three hours of CME as part of the 40 hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisionRatio",
+    "value": "no more than six PAs working at the same time per supervising physician",
+    "cite": "A.R.S. 32-2533(C)",
+    "url": "https://www.azleg.gov/ars/32/02533.htm",
+    "quote": "A supervising physician shall not supervise more than six physician assistants who work at the same time.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Arizona State Board of Nursing",
+   "url": "https://www.azbn.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 4,
+   "renewalDeadline": "Every four years on or before April 1 (late fee after May 1; license expires if not renewed by August 1)",
+   "ceHoursPerCycle": 0,
+   "ceNote": "No CE hours; renewal requires 960 hours of nursing practice in the previous five years (or a qualifying post-licensure degree or certificate).",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "RNP (Registered Nurse Practitioner) advanced practice certificate",
+   "separateLicenceOrCertificate": "Certificate issued by the Board; prescribing and dispensing (P&D) authority applied for with certification",
+   "renewalCycleYears": 4,
+   "renewalNote": "Certificates issued after July 1, 2004 expire with the RN license or when national certification expires, whichever is first. Renewed on a separate application after the RN licence is renewed (board renewal page).",
+   "ceHoursPerCycle": 0,
+   "ceNote": "No state CE hours; renewal requires current national certification and 960 hours of APRN practice in the previous five years.",
+   "pharmacologyHoursPerCycle": 0,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Opioid-related, substance use disorder-related or addiction-related CE",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "DEA registered prescribers authorized for Schedule II"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "pharmacologyCeForPrescribers": "45 contact hours of pharmacology or clinical management of drug therapy within 3 years before the P&D application (one-time).",
+   "controlledSubstanceCe": "3 hours opioid, substance use disorder or addiction CE each license renewal cycle for DEA registered Schedule II prescribers.",
+   "stateCsRegistrationRequired": false,
+   "stateCsNote": "No separate state controlled substance registration found in the rules or statutes loaded; DEA registration is federal.",
+   "pdmpNote": "CSPMP (Board of Pharmacy) access is tied to a DEA registration with an Arizona address; a utilization report is required before prescribing Schedule II to IV opioids or benzodiazepines (A.R.S. 36-2606). Not a separate controlled substance licence."
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None found. RNPs make independent decisions and must consult or refer when a condition is beyond their knowledge and experience."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycle",
+    "value": "every four years by April 1",
+    "cite": "A.R.S. 32-1642(A)",
+    "url": "https://www.azleg.gov/ars/32/01642.htm",
+    "quote": "a registered and practical nurse licensee shall renew the license every four years on or before April 1.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.practiceRequirement",
+    "value": "960 hours in 5 years",
+    "cite": "Ariz. Admin. Code R4-19-312(B)",
+    "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-312",
+    "quote": "practiced nursing at the applicable level of licensure for a minimum of 960 hours in the five years before the date",
+    "loaded": true,
+    "verified": true,
+    "note": "Rule text read from Cornell LII's reproduction of the Arizona Administrative Code; apps.azsos.gov returned HTTP 403 on 2026-10-01. Re-loaded and matched by the verifier.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "A.R.S. 32-1660",
+    "url": "https://www.azleg.gov/ars/32/01660.htm",
+    "quote": "The nurse licensure compact is adopted and enacted into law as follows",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.expiry",
+    "value": "expires with RN license or national certification",
+    "cite": "Ariz. Admin. Code R4-19-506(A)",
+    "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-506",
+    "quote": "An advanced practice certificate issued after July 1, 2004, expires when the certificate holder's RN license expires, or when national certification expires, whichever occurs first.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Rule text read from Cornell LII's reproduction of the Arizona Administrative Code; apps.azsos.gov returned HTTP 403 on 2026-10-01. Re-loaded and matched by the verifier."
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "A.R.S. 32-1601(23)(c)",
+    "url": "https://www.azleg.gov/ars/32/01601.htm",
+    "quote": "holds national certification as a nurse practitioner from a national certifying body that is recognized by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Statute applies to RNPs certified after July 1, 2004; R4-19-506(B) requires proof at each renewal."
+   },
+   {
+    "field": "np.aprn.renewalEvidence",
+    "value": "evidence of national certification at renewal",
+    "cite": "Ariz. Admin. Code R4-19-506(B)",
+    "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-506",
+    "quote": "shall provide evidence of current national certification or recertification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Rule text read from Cornell LII's reproduction of the Arizona Administrative Code; apps.azsos.gov returned HTTP 403 on 2026-10-01. Re-loaded and matched by the verifier."
+   },
+   {
+    "field": "np.aprn.practiceRequirement",
+    "value": "960 APRN hours in 5 years",
+    "cite": "Ariz. Admin. Code R4-19-506(A)(2)",
+    "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-506",
+    "quote": "Practiced for a minimum of 960 hours within the past five years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Rule text read from Cornell LII's reproduction of the Arizona Administrative Code; apps.azsos.gov returned HTTP 403 on 2026-10-01. Re-loaded and matched by the verifier."
+   },
+   {
+    "field": "np.prescribing.initialPharmacology",
+    "value": "45 contact hours within 3 years before application",
+    "cite": "Ariz. Admin. Code R4-19-511(A)(4)",
+    "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-511",
+    "quote": "Submits evidence of a minimum of 45 contact hours of education within the three years immediately preceding the application",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Rule text read from Cornell LII's reproduction of the Arizona Administrative Code; apps.azsos.gov returned HTTP 403 on 2026-10-01. Re-loaded and matched by the verifier."
+   },
+   {
+    "field": "np.aprn.topicMandates.opioid",
+    "value": "3 hours each renewal cycle",
+    "cite": "A.R.S. 32-3248.02",
+    "url": "https://www.azleg.gov/ars/32/03248-02.htm",
+    "quote": "shall complete a minimum of three hours of opioid-related, substance use disorder-related or addiction-related continuing education each license renewal cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "full",
+    "cite": "A.R.S. 32-1601(23)(d)(iv)",
+    "url": "https://www.azleg.gov/ars/32/01601.htm",
+    "quote": "Making independent decisions in solving complex patient care problems.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.boardRenewalPage",
+    "value": "RN renews by April 1 every 4 years; 960 hours in 5 years or listed alternatives",
+    "cite": "Arizona State Board of Nursing, Renew your License",
+    "url": "https://azbn.gov/licenses-and-certifications/renew-your-license",
+    "quote": "RNs/LPNs are required to renew their licenses by April 1, every 4 years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.aprilFirstSince2021",
+    "value": "April 1 deadline in force at least since the Board's 2021 notice",
+    "cite": "AZBN Notice to Nurses and Employers, March 8, 2021",
+    "url": "https://azbn.gov/news/notice-nurses-and-employers-licensure-renewal",
+    "quote": "a nurse is to renew their license before April 1 in the year in which their license expires",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.boardRenewalPage",
+    "value": "separate APRN renewal after RN; 960 APRN hours in 5 years; active national certification; DEA holders 3 hours opioid CE",
+    "cite": "Arizona State Board of Nursing, Renew your License",
+    "url": "https://azbn.gov/licenses-and-certifications/renew-your-license",
+    "quote": "APRNs who hold an active DEA license, MUST have completed a minimum of three hours of opioid-related, substance use disorder-related or addiction-related continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.reentryPharmacology",
+    "value": "if 960 hours not met: 45 h advanced pharmacology + 45 h role/population CE + precepted practice",
+    "cite": "Ariz. Admin. Code R4-19-506(C)",
+    "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-506",
+    "quote": "45 contact hours of advanced pharmacology and 45 contact hours in a subject or subjects related to the role and population focus",
+    "note": "Cornell LII reproduction; apps.azsos.gov returned HTTP 403.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.cspmpQuery",
+    "value": "must obtain a 12 month CSPMP utilization report before prescribing Schedule II to IV opioid or benzodiazepine",
+    "cite": "A.R.S. 36-2606(E)",
+    "url": "https://www.azleg.gov/ars/36/02606.htm",
+    "quote": "before prescribing an opioid analgesic or benzodiazepine controlled substance listed in schedule II, III or IV for a patient, shall obtain a patient utilization report",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "Arizona Administrative Code rules (R4-17-205, R4-19-312, R4-19-506, R4-19-511) were read from Cornell LII's reproduction because apps.azsos.gov returned HTTP 403; statutes were loaded from azleg.gov and board pages from azpa.gov and azbn.gov.",
+  "PA: A.R.S. 32-2523(F) deems the 40 hour CME met by certification from 'a certifying body approved by the board'; the board's naming of NCCPA was not loaded. Whether a nationally certified PA must still document the 3 opioid hours separately is not confirmed.",
+  "NP: 'full' practice authority rests on the statutory definition (independent decisions) and the absence of any collaboration or transition requirement in the statutes, rules and board pages loaded.",
+  "NP and PA: absence of a separate Arizona controlled substance registration is inferred; only DEA, board authority (PA Schedule II and III) and CSPMP access are named.",
+  "No other topic mandates (implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide, infection control, cultural competency, domestic violence) were found for PAs or NPs in the statutes, rules and board pages loaded; the federal one-time 8 hour MATE training is federal."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "NP: cites for national certification and practice authority corrected to A.R.S. 32-1601(23)(c) and (23)(d)(iv); the definition of registered nurse practitioner is paragraph 23.",
+   "NP: azbn.gov pages loaded through a browser: confirm RN renewal by April 1 every 4 years (in force since at least the Board's March 2021 notice), separate APRN renewal, 960 APRN hours in 5 years, national certification, and 3 hour opioid CE for DEA holders. Removed the researcher's 'phase-in not confirmed' and 'opioid reporting not confirmed' caveats.",
+   "NP: added the R4-19-506(C) re-entry rule (45 h advanced pharmacology plus 45 h role CE plus precepted hours) for APRNs short of 960 hours.",
+   "PA and NP: added the CSPMP (Arizona PDMP) access and mandatory query rule (A.R.S. 36-2606), which the researcher omitted; still no separate state controlled substance registration.",
+   "PA: the board's own opioid CME page states the 3 hours apply to ALL renewing PAs, broader than the statute's DEA/Schedule II scope; appliesTo updated to show both.",
+   "PA: added a fact for the six-PA supervision limit (A.R.S. 32-2533(C)), stated in notes without a source."
+  ],
+  "sourcesLoaded": [
+   "https://www.azleg.gov/ars/32/02523.htm",
+   "https://www.azleg.gov/ars/32/03248-02.htm",
+   "https://www.azleg.gov/ars/32/02531.htm",
+   "https://www.azleg.gov/ars/32/02532.htm",
+   "https://www.azleg.gov/ars/32/02533.htm",
+   "https://www.azleg.gov/ars/32/02536.htm",
+   "https://www.azleg.gov/ars/32/01642.htm",
+   "https://www.azleg.gov/ars/32/01601.htm",
+   "https://www.azleg.gov/ars/32/01660.htm",
+   "https://www.azleg.gov/ars/36/02606.htm",
+   "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-17-205",
+   "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-506",
+   "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-511",
+   "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-312",
+   "https://www.azpa.gov/Licensure/Licensure/pa-renewal-opioid-cme",
+   "https://azbn.gov/licenses-and-certifications/renew-your-license",
+   "https://azbn.gov/news/notice-nurses-and-employers-licensure-renewal"
+  ]
+ }
+}

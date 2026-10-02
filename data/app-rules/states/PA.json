@@ -1,0 +1,234 @@
+{
+  "state": "PA",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Pennsylvania State Board of Medicine (PAs supervised by MDs); State Board of Osteopathic Medicine licenses PAs supervised by DOs",
+      "url": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/medicine"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Renewal requires CME as required by NCCPA and current national certification; the state counts NCCPA's own cycle.",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears",
+        "reason": "PAs register biennially."
+      },
+      "notes": [
+        {
+          "text": "The board's licensure snapshot lists 100 hours when renewing, which follow NCCPA's two-year cycle.",
+          "fact": "pa.ce.hoursPerCycle"
+        },
+        {
+          "text": "PAs are exempt from CME for the biennial period in which they were first licensed.",
+          "fact": "pa.ce.firstRenewalExemption"
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": true,
+      "facts": [
+        "pa.ce.nccpaCertificationRequiredForRenewal",
+        "pa.ce.nccpaRequiredBoardSheet"
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Child Abuse Recognition",
+        "hours": 2,
+        "label": "Approved child abuse recognition and reporting training, each renewal",
+        "fact": "pa.ce.topicMandates.childAbuse"
+      },
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 2,
+        "label": "Pain management, identifying addiction, or prescribing or dispensing opioids, each renewal",
+        "fact": "pa.ce.topicMandates.opioid",
+        "condition": {
+          "field": "Holds or uses a DEA registration",
+          "question": "Do you prescribe under your own or another's DEA registration?",
+          "description": "Pennsylvania opioid education for clinicians who hold or use a DEA registration."
+        }
+      },
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 4,
+        "label": "Initial opioid education within 1 year of licensure: pain management or addiction, and prescribing or dispensing opioids",
+        "period": "lifetime",
+        "periodReason": "Required once, within 1 year of licensure.",
+        "fact": "pa.ce.topicMandates.initialOpioid",
+        "condition": {
+          "field": "Licensed as a PA within the past year and uses a DEA registration",
+          "question": "Were you licensed as a Pennsylvania PA within the past year, and do you prescribe under your own or another's DEA registration?",
+          "description": "Pennsylvania's initial opioid education is due within 1 year of licensure or prescriptive authority approval."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A written agreement with the primary supervising physician, naming at least one substitute, is filed with the Board and takes effect on submission. For the first 12 months the supervising physician countersigns all patient records within 10 days.",
+        "facts": [
+          "pa.practice.agreementFiling",
+          "pa.practice.substitute",
+          "pa.practice.countersignature"
+        ]
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Pennsylvania State Board of Nursing",
+      "url": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/nursing"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.ceHoursPerCycle",
+          "reason": "The biennial renewal period."
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "No CE is required at the first renewal after initial Pennsylvania licensure, except the child abuse hours.",
+            "fact": "np.rn.firstRenewalExemption"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Child Abuse Recognition",
+          "hours": 2,
+          "label": "Child abuse recognition and reporting, 2 of the 30 hours",
+          "fact": "np.rn.topicMandates.childAbuse"
+        },
+        {
+          "topic": "Organ and Tissue Donation",
+          "status": "unverified",
+          "hours": null,
+          "unverifiedItem": "When the 2 organ and tissue donation hours are due: one time within 5 years of the first renewal on or after May 1, 2026 (or of initial licensure); the rule does not say they repeat"
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.licenseCycle",
+          "reason": "The RN license renews each biennial period."
+        }
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "Current national certification is shown at renewal if the CRNP was certified by the Board after February 7, 2005.",
+            "fact": "np.aprn.nationalCertificationRequired"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Child Abuse Recognition",
+          "hours": 2,
+          "label": "Child abuse recognition and reporting, 2 of the 30 hours",
+          "fact": "np.aprn.childAbuse"
+        },
+        {
+          "topic": "Pharmacology",
+          "hours": 16,
+          "measure": "pharmacology",
+          "label": "Board approved pharmacology, 16 of the 30 hours, when renewing prescriptive authority",
+          "facts": [
+            "np.aprn.pharmacologyHoursPerCycle",
+            "np.aprn.pharmacologyWithinThirty"
+          ],
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          }
+        },
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 2,
+          "label": "Pain management, identifying addiction, or prescribing or dispensing opioids, each renewal",
+          "fact": "np.aprn.controlledSubstanceCe",
+          "condition": {
+            "field": "Holds or uses a DEA registration",
+            "question": "Do you prescribe under your own or another's DEA registration?",
+            "description": "Pennsylvania opioid education for clinicians who hold or use a DEA registration."
+          }
+        },
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 4,
+          "label": "Initial opioid education within 1 year of prescriptive authority approval",
+          "period": "lifetime",
+          "periodReason": "Required once, within 1 year of prescriptive authority approval.",
+          "fact": "np.prescribing.initialOpioid",
+          "condition": {
+            "field": "Prescriptive authority approved within the past year and uses a DEA registration",
+            "question": "Was your prescriptive authority approved within the past year, and do you prescribe under your own or another's DEA registration?",
+            "description": "Pennsylvania's initial opioid education is due within 1 year of licensure or prescriptive authority approval."
+          }
+        },
+        {
+          "topic": "Organ and Tissue Donation",
+          "status": "unverified",
+          "hours": null,
+          "unverifiedItem": "When the 2 organ and tissue donation hours are due: within 5 years of certification renewal from May 1, 2026; the rule does not say they repeat"
+        }
+      ],
+      "unverified": [
+        "Whether the CRNP hours also satisfy the RN license's hours",
+        "Whether the 16 pharmacology hours are part of the 30 (the board snapshot) or in addition to them (the rule's wording)"
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.aprn.renewal",
+            "np.rn.licenseCycle"
+          ],
+          "reason": "The CRNP certification expires with the biennial RN license."
+        }
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "A CRNP practices in collaboration with a Pennsylvania licensed physician. The prescriptive authority collaborative agreement is kept at the primary practice location with a copy filed with the Bureau of Professional and Occupational Affairs, and is reviewed and updated at least every 2 years or whenever it changes.",
+        "facts": [
+          "np.practice.collaboration",
+          "np.practice.agreementFiling",
+          "np.practice.agreementReview"
+        ]
+      }
+    }
+  }
+}

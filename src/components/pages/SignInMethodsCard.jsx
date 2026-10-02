@@ -4,7 +4,7 @@ import { SMS_SIGN_IN_ENABLED, openAccountSecurity } from "../../utils/signInMeth
 
 // Password and sign-in email for every signed-in member (AUTH-012). The
 // text-message paragraph appears only when SMS sign-in is switched on.
-export default function SignInMethodsCard({ theme: T }) {
+export default function SignInMethodsCard({ theme: T, profileName = "physician profile" }) {
   const clerk = useClerk();
   const { isLoaded, isSignedIn, user } = useUser();
   const [error, setError] = useState("");
@@ -25,7 +25,7 @@ export default function SignInMethodsCard({ theme: T }) {
         : verifiedPhones.length
           ? "Your verified mobile number is reserved for two-step verification. Keep using your existing sign-in method; manage sign-in methods to review your options."
           : "Add and verify your mobile number to use a text-message code when signing in. Email sign-in stays available."}
-      {" "}The contact phone in your physician profile does not enable text-message sign-in.
+      {" "}The contact phone in your {profileName} does not enable text-message sign-in.
     </p>}
     <p style={paragraph}>
       Change your password or the email you sign in with here. For a new sign-in email: add the address, enter the code sent to it, make it primary, then remove the old one.

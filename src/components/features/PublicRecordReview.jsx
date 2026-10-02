@@ -11,7 +11,7 @@ import {
   leadNote, needsLabel, evidenceLine, replacesLine, joinWords,
   countSelected, countPreviewHidden, PREVIEW_ROWS, buildSavePlan, savedSummary,
   retrySources, failedSourceNames, mergeEnvelopes,
-  FOCUS_COPY, focusSectionKey, splitGroups, countPickable,
+  focusCopyFor, focusSectionKey, splitGroups, countPickable,
 } from "../../utils/publicRecord";
 
 /**
@@ -56,7 +56,7 @@ import {
 function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
   const { data, addItem, updateSettings, theme: T, isDesktop, isPro } = useApp();
   const focus = focusSectionKey(focusSection);
-  const focusCopy = focus ? FOCUS_COPY[focus] : null;
+  const focusCopy = focus ? focusCopyFor(focus, data.settings?.degreeType) : null;
   // Stable identity: the dedupe memo and the lookup callback both take it.
   const s = useMemo(() => data.settings || {}, [data.settings]);
 
@@ -473,7 +473,7 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
   // number the physician cannot see the parts of.
   const headShown = focus ? focusGroups.flatMap((g) => g.findings) : findings;
   const headOnFile = headShown.filter((f) => f.alreadyOnFile).length;
-  const headNoun = focus && focusCopy ? focusCopy.title.toLowerCase() : `NPI ${npi}`;
+  const headNoun = focus && focusCopy ? focusCopy.noun || focusCopy.title.toLowerCase() : `NPI ${npi}`;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={card}>

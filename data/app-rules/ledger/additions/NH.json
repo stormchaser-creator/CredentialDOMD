@@ -1,0 +1,73 @@
+{
+ "state": "NH",
+ "facts": [
+  {
+   "field": "np.aprn.ceStatute",
+   "profession": "np",
+   "value": "APRN: 30 hours every 2 years in addition to the RN hours, 20 specialty and 5 pharmacology",
+   "cite": "RSA 326-B:31, III",
+   "url": "https://gc.nh.gov/rsa/html/XXX/326-B/326-B-31.htm",
+   "quote": "An APRN, in addition to the continuing education requirements to renew or reinstate a license as an RN, shall complete 30 hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.practice.waiverUntil2027",
+   "profession": "pa",
+   "value": "Waiver paragraph effective until January 1, 2027",
+   "cite": "RSA 328-D:3-b, I",
+   "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-3-b.htm",
+   "quote": "[Paragraph I effective until January 1, 2027 ... with more than 8,000 post-graduate clinical practice hours who intends to practice medicine",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.approvedActivities.review",
+   "profession": "pa",
+   "value": "Approved CME: AAPA Category 1, AMA Category 1 PRA, AOA Category 1-A, AAFP Prescribed, or board-approved",
+   "cite": "RSA 328-D:1, I-a",
+   "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-1.htm",
+   "quote": "American Academy of Physician Assistants (AAPA) Category 1 credit, American Medical Association (AMA) Category 1 PRA credit, American Osteopathic Association (AOA) Category 1-A credit",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.licence.title",
+   "profession": "pa",
+   "value": "Physician associate",
+   "cite": "RSA 328-D:1, III",
+   "url": "https://gc.nh.gov/rsa/html/XXX/328-D/328-D-1.htm",
+   "quote": "\"Physician associate\" or \"P.A.\" means a person qualified both by academic and practical training to provide patient services and licensed under this chapter",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.board.page",
+   "profession": "pa",
+   "value": "Applications for Physician Associate (renewal)",
+   "cite": "NH OPLC, Applications for Physician Associate",
+   "url": "https://www.oplc.nh.gov/applications-physician-associate",
+   "quote": "Welcome to Physician Associate Application Resources",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "np.board.page",
+   "profession": "np",
+   "value": "Board of Nursing Laws and Rules",
+   "cite": "NH OPLC, Board of Nursing Laws and Rules",
+   "url": "https://www.oplc.nh.gov/board-nursing-laws-and-rules",
+   "quote": "Laws and Administrative Rules governing Licensed Nursing Professionals",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  }
+ ]
+}

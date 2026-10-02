@@ -17,6 +17,14 @@
  * must work when everything else is broken.
  */
 
+// The sender labels an invoice gets when Settings has no name
+// (invoiceArgs.js physicianLabel): "Physician" for an MD or DO, "Clinician"
+// for a PA, an NP or a member with no profession chosen. A placeholder is
+// never a sender's name: a subject, a file name or a signature that hides
+// one hides both.
+export const PLACEHOLDER_SENDERS = Object.freeze(["Physician", "Clinician"]);
+export const isPlaceholderSender = (name) => PLACEHOLDER_SENDERS.includes(String(name ?? "").trim());
+
 const DASHES = "\\-\u{2010}-\u{2015}";
 // Three digit groups split by a space, dot or dash: 123-45-6789, 123 45 6789,
 // 123.45.6789. A phone number (3-3-4) and a date (4-2-2) do not match.
@@ -72,6 +80,22 @@ function tailIsDegree(sep, word, degree) {
   return sep.startsWith(",") || bare(word) === bare(degree) || !/^[A-Z]?[a-z]+$/.test(word);
 }
 
+// The credentials a PA or an NP signs with in place of the bare degree the
+// app stores ("PA-C" for PA; "FNP-BC", "NP-C", "APRN" for NP). A name that
+// already ends in one is not given the stored degree again: "Pat Example,
+// PA-C" stays as typed, never "Pat Example, PA-C, PA". "DNP" is a doctorate,
+// not the NP credential, so it is not one of them. MD and DO match only
+// themselves, so physician names read exactly as before. Compared in capitals
+// with dots removed ("P.A.-C." reads "PA-C").
+const SIGNED_AS = Object.freeze({
+  PA: /^R?-?PA-?C$/,
+  NP: /^(?!DNP$)(?:[A-Z]+-)?[A-Z]*NP(?:-[A-Z]{1,3})?$|^APRN(?:-[A-Z]{1,4})?$|^(?:ARNP|CRNP|CNP)$/,
+});
+function signsAs(word, degree) {
+  const re = SIGNED_AS[String(degree ?? "").replace(/\./g, "").toUpperCase()];
+  return !!re && re.test(String(word ?? "").replace(/\./g, "").toUpperCase());
+}
+
 /**
  * "Jordan Rivera, DO" from a name and a degree, without printing the degree
  * twice when the name already ends with it ("Jordan Rivera, DO" or "Jordan
@@ -88,7 +112,7 @@ export function withDegree(name, degree) {
   if (!d) return n;
   const key = (s) => s.replace(/\./g, "").toLowerCase();
   const m = n.match(/(,\s*|\s)([^\s,]+)$/);
-  return m && key(m[2]) === key(d) && tailIsDegree(m[1], m[2], d) ? n : `${n}, ${d}`;
+  return m && (key(m[2]) === key(d) || signsAs(m[2], d)) && tailIsDegree(m[1], m[2], d) ? n : `${n}, ${d}`;
 }
 
 /**
@@ -110,5 +134,7 @@ export function oneDegree(name) {
   const prev = m[1].match(/(,\s*|\s)([A-Za-z][A-Za-z.-]{0,9})$/);
   if (!prev) return n;
   const key = (s) => s.replace(/\./g, "").toLowerCase();
-  return key(prev[2]) === key(m[2]) && tailIsDegree(prev[1], prev[2], m[2]) ? m[1] : n;
+  // "Pat Example, PA-C, PA": a PA or NP credential typed with the name, then
+  // the stored degree appended, reads once as typed.
+  return (key(prev[2]) === key(m[2]) || signsAs(prev[2], m[2])) && tailIsDegree(prev[1], prev[2], m[2]) ? m[1] : n;
 }

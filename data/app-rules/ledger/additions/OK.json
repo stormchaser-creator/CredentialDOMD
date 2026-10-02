@@ -1,0 +1,49 @@
+{
+ "state": "OK",
+ "facts": [
+  {
+   "field": "np.rn.competenceOptions",
+   "profession": "np",
+   "value": "RN renewal: one of 520 work hours, 24 contact hours, current specialty certification, a refresher course, or six semester credits, in the two years before expiry",
+   "cite": "OAC 485:10-7-3(d)",
+   "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+   "quote": "Verify employment in a position that requires a nursing license ... at least 520 work hours ... Verify current certification in a nursing specialty area",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.prescribing.independentCeRule",
+   "profession": "np",
+   "value": "Independent prescriptive authority: 40 hours of Category I CME in the two years before renewal",
+   "cite": "OAC 485:10-16-6(2)(C)",
+   "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+   "quote": "granted independent prescriptive authority by the Board, documentation approved by the Board verifying a minimum of forty (40) hours of Category I continuing medical education",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.calendarYear",
+   "profession": "pa",
+   "value": "At least 20 Category I hours during the preceding calendar year",
+   "cite": "OAC 435:15-3-17(a); 59 O.S. 519.8",
+   "url": "https://www.okmedicalboard.org/physician_assistants",
+   "quote": "certify that he /she has completed at least twenty (20) hours of Category I Continuing Medical Education (CME) hours during the preceding calendar year",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.deficiencyRule",
+   "profession": "pa",
+   "value": "Short by December 31 of the previous calendar year: 40 Category I hours",
+   "cite": "OAC 435:15-3-17(d)",
+   "url": "https://www.okmedicalboard.org/physician_assistants",
+   "quote": "requirements for continuing education by December31 of the previous calendar year shall be required to obtain forty (40) hours of Category I CME",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

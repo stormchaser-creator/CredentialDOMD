@@ -1,0 +1,213 @@
+{
+  "state": "NE",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Nebraska DHHS Licensure Unit, Board of Medicine and Surgery (Physician Assistant)",
+      "url": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 50,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAPA Category 1 CME"
+        ],
+        "fact": "pa.ce.hoursPerCycle",
+        "reason": "Category 1 approved by ACCME, AOA or AAPA, as the app names them."
+      },
+      "totalUnverifiedAccepted": [
+        "AAFP Prescribed Credit",
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "Up to 25 hours over the 50 may carry over to the next period.",
+          "fact": "pa.ce.carryOver"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 3,
+        "label": "Prescribing opiates, including half an hour on the prescription drug monitoring program, biennially (the statute ends January 1, 2029)",
+        "expiringBefore": "2029-01-01",
+        "facts": [
+          "pa.ce.topicMandates.opiates",
+          "pa.ce.topicMandates.opiates.pdmp"
+        ],
+        "condition": {
+          "field": "Prescribes controlled substances",
+          "question": "Do you prescribe controlled substances?",
+          "description": "Applies to clinicians who prescribe controlled substances."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A PA practices under the supervision of a physician who is party to a collaborative agreement with the PA, kept at each practice site and given to the board on request.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFilingAndRenewal"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalDeadline",
+        "reason": "PA licenses expire October 1 of odd-numbered years: every two years."
+      }
+    },
+    "unverified": [
+      "Whether PAs need a state controlled substance registration (the statement that Nebraska issues none is on the nursing page)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Nebraska DHHS Licensure Unit, Nebraska State Board of Nursing / APRN Board",
+      "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline",
+          "reason": "RN licenses expire October 31 of each even-numbered year."
+        },
+        "options": [
+          {
+            "text": "At least 500 hours of nursing practice in the past five years and at least 20 contact hours in the past two years",
+            "fact": "np.rn.ceHoursPerCycle"
+          },
+          {
+            "text": "Current certification in a nursing specialty from a nationally recognized certifying organization",
+            "fact": "np.rn.ceOptions"
+          },
+          {
+            "text": "Graduated from a nursing program more than two but less than five years ago, and at least 20 contact hours in the past two years",
+            "fact": "np.rn.graduationRoutes"
+          },
+          {
+            "text": "Graduated from a nursing program within the last two years",
+            "fact": "np.rn.graduationRoutes"
+          },
+          {
+            "text": "An approved refresher course within the last five years",
+            "fact": "np.rn.refresherPortfolio"
+          },
+          {
+            "text": "A continuing competency portfolio with current goals and evidence of activities toward them",
+            "fact": "np.rn.refresherPortfolio"
+          }
+        ],
+        "exemption": {
+          "field": "Received the RN license within the past 24 months",
+          "question": "Did you receive this RN license within the past 24 months?",
+          "text": "A nurse who received the license within the past 24 months needs no continuing education for this renewal.",
+          "fact": "np.rn.newLicenseWaiver",
+          "topics": "all"
+        }
+      },
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline",
+          "reason": "RN licenses expire October 31 of each even-numbered year: every two years."
+        }
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "Renewal requires current national certification in the NP specialty and practice hours; no APRN contact hours are set.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalDeadline",
+          "reason": "APRN licenses expire October 31 of each even-numbered year."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "practiceHours": {
+        "hours": 2080,
+        "years": 5,
+        "label": "If licensed more than five years: at least 2,080 hours of NP practice in the five years before renewal",
+        "fact": "np.aprn.practiceHoursQualifier"
+      },
+      "topics": [
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 3,
+          "label": "Opiate prescribing, including half an hour on the prescription drug monitoring program, for renewals through 2028",
+          "expiringBefore": "2029-01-01",
+          "fact": "np.aprn.topicMandates.opiates",
+          "condition": {
+            "field": "Prescribes controlled substances",
+            "question": "Do you prescribe controlled substances?",
+            "description": "Applies to clinicians who prescribe controlled substances."
+          }
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalDeadline",
+          "reason": "APRN licenses expire October 31 of each even-numbered year: every two years."
+        }
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "transition-to-practice agreement",
+        "conditional": true,
+        "text": "A new NP practices the first 2,000 hours under a written transition-to-practice agreement with a supervising physician or experienced NP in the same or a related specialty; the agreement goes to DHHS only on request.",
+        "facts": [
+          "np.practice.transitionToPracticeHours",
+          "np.practice.supervisingProvider",
+          "np.practice.agreementFiling"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

@@ -1,0 +1,511 @@
+{
+ "state": "OK",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Oklahoma State Board of Medical Licensure and Supervision (Physician Assistant Advisory Committee)",
+   "url": "https://www.okmedicalboard.org/physician_assistants"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "March 31 each year (licence year April 1 to March 31); late renewal with late fee April 1 to May 31; after May 31 treated as a new application"
+  },
+  "ce": {
+   "hoursPerCycle": 20,
+   "cyclePeriod": "calendar year preceding renewal",
+   "categoryRules": "20 hours Category I CME per calendar year; Category I hours sponsored or approved by state and national associations accepted automatically; deficient licensees must obtain 40 hours Category I the next calendar year",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Substance abuse",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all PAs (each calendar year, Category I)"
+    },
+    {
+     "topic": "Pain management or opioid use or addiction (statutory)",
+     "hours": 1,
+     "period": "every cycle (each calendar year)",
+     "appliesTo": "all PAs; 59 O.S. § 519.8(A). Separate from the rule's 1 hour substance abuse; whether one opioid addiction hour satisfies both is not stated."
+    }
+   ],
+   "controlledSubstanceCe": "Each calendar year: 1 hour Category I on substance abuse (OAC 435:15-3-17(b)) and, by statute, 1 hour on pain management or opioid use/addiction (59 O.S. § 519.8(A)); both within the 20 hours. Whether a single opioid addiction hour satisfies both is not stated.",
+   "firstRenewalExemption": "exempt from reporting CME until one year after initial licensure"
+  },
+  "practice": {
+   "agreementType": "practice agreement",
+   "agreementFilingAndRenewal": "Form 5 practice agreement with each delegating physician filed with the Medical Board within 10 business days of execution and of every change (delegating physician, practice address, method of supervision); no filing fee; no fixed renewal date. Optional once the PA has 6,240 verified postgraduate clinical hours (Form 6) and practices independently.",
+   "independentPracticeHours": 6240,
+   "notes": "HB 2584 (2025), effective Aug 29, 2025. Independent PAs must carry malpractice cover of $1,000,000 per occurrence / $3,000,000 aggregate. Delegating physician limited to six supervised PAs/APRNs with exceptions (OAC 435:10-13-2). An annual jurisprudence item and other renewal changes are in rules adopted Sept 24, 2026 with anticipated effective date summer 2027 (not yet in force)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "stateCsRegistrationName": "Oklahoma Bureau of Narcotics and Dangerous Drugs Control (OBNDD) registration (63 O.S. § 2-302)",
+   "separateAuthorityRegistration": "No separate board prescriptive registration; Schedule II only under a current Form 5 practice agreement listing prescribing scope, tied to each practice address. Independent PAs (no practice agreement) may prescribe Schedules III to V only.",
+   "ceForPrescribers": "Each calendar year: 1 hour Category I on substance abuse (OAC 435:15-3-17(b)) and, by statute, 1 hour on pain management or opioid use/addiction (59 O.S. § 519.8(A)); both within the 20 hours. Whether a single opioid addiction hour satisfies both is not stated."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 1,
+    "cite": "59 O.S. § 519.8(A)",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=95800",
+    "quote": "Licenses issued to physician assistants shall be renewed annually on a date determined by the State Board of Medical Licensure and Supervision.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "March 31",
+    "cite": "OAC 435:15-3-1(b)(5) (current text shown in 2027 rule filing redline)",
+    "url": "https://www.okmedicalboard.org/physician_assistants/download/2492/PA+Reg.+Text+Adopted+by+Board+incl.+Public+Comment+Incorporated_09.2026+Eff.+2027.pdf",
+    "quote": "An application for renewal shall be submitted not later than March 31 of each calendar year.",
+    "loaded": true,
+    "verified": true,
+    "note": "Same text in the LII copy of current OAC 435:15-3-1(b)(5)(C) and in the 2027 redline (relettered only, wording unchanged).",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.lateWindow",
+    "value": "April 1 to May 31 with late fee; after May 31 initial application",
+    "cite": "OAC 435:15-3-1(b)(5)",
+    "url": "https://www.okmedicalboard.org/physician_assistants/download/2492/PA+Reg.+Text+Adopted+by+Board+incl.+Public+Comment+Incorporated_09.2026+Eff.+2027.pdf",
+    "quote": "A renewal application submitted between April 1 and May 31 must be accompanied by the late fee",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "20 Category I per calendar year",
+    "cite": "OAC 435:15-3-17(a) (amended eff. 7-25-25, quoted on board CE tab)",
+    "url": "https://www.okmedicalboard.org/physician_assistants",
+    "quote": "has completed at least twenty (20) hours of Category I Continuing Medical Education (CME) hours during the preceding calendar year.",
+    "loaded": true,
+    "verified": true,
+    "note": "Statute 59 O.S. § 519.8(A) also requires 20 hours in the preceding calendar year.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.substanceAbuse",
+    "value": "1 hour Category I each calendar year",
+    "cite": "OAC 435:15-3-17(b) (amended eff. 7-25-25)",
+    "url": "https://www.okmedicalboard.org/physician_assistants",
+    "quote": "At least one (1) hour of Category I CME shall be earned each calendar year concerning the topic of substance abuse.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.deficiencyPenalty",
+    "value": "40 hours Category I following year",
+    "cite": "OAC 435:15-3-17(d)",
+    "url": "https://www.okmedicalboard.org/physician_assistants",
+    "quote": "shall be required to obtain forty (40) hours of Category I CME.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.firstRenewalExemption",
+    "value": "exempt until one year after licensure",
+    "cite": "OAC 435:15-3-17(e)",
+    "url": "https://www.okmedicalboard.org/physician_assistants",
+    "quote": "Applicants initially licensed as a physician assistant will be exempt from reporting CME hours until one year after licensure.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": false,
+    "cite": "OAC 435:15-3-1(a)(3),(a)(7): PANCE pass at licensure; renewal condition lists only CME",
+    "url": "https://www.okmedicalboard.org/physician_assistants/download/2492/PA+Reg.+Text+Adopted+by+Board+incl.+Public+Comment+Incorporated_09.2026+Eff.+2027.pdf",
+    "quote": "For a renewal application, has met the continuing medical education requirements pursuant to 435:15-3-17.",
+    "loaded": true,
+    "verified": false,
+    "verifiedBy": "verifier-2026-10",
+    "unverifiedReason": "Inferred from absence: 59 O.S. § 519.8 and OAC 435:15-3-17 list only CME for renewal; no board or statute sentence says NCCPA is or is not required. (a)(7) wording comes from the 2027 redline, where underlining is not visible in the extracted text, so it may be new text not yet in force."
+   },
+   {
+    "field": "pa.practice.independentPracticeHours",
+    "value": 6240,
+    "cite": "59 O.S. § 519.6(B) (HB 2584, 2025); board HB 2584 FAQ Q1",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=552734",
+    "quote": "A physician assistant with six thousand two hundred forty (6,240) or more hours of postgraduate clinical practice experience who has reported those hours to the",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "file Form 5 within 10 business days of execution and of each change",
+    "cite": "59 O.S. § 519.6(C)(1); board FAQ Q21",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=552734",
+    "quote": "All practice agreements and any amendments shall be filed with the State Board of Medical Licensure and Supervision within ten (10) business days of being",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.practice.agreementRequiredBelowHours",
+    "value": "PAs without 6,240 verified hours must practice under a filed practice agreement",
+    "cite": "59 O.S. § 519.6; board FAQ Q7",
+    "url": "https://www.okmedicalboard.org/physician_assistants/download/2441/PA_HB2584_FAQ.pdf",
+    "quote": "You are required to practice under supervision of a delegating physician and have a practice agreement on file with the Oklahoma Medical Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.scheduleII",
+    "value": "Schedules II to V only for PAs practising under a practice agreement on file; Schedule II orders must be on a written protocol set by the delegating physician; PA may not prescribe a schedule the delegating physician is not registered for",
+    "cite": "59 O.S. § 519.6(E); board FAQ Q8, Q11",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=552734",
+    "quote": "prescriptions and orders for Schedule II drugs written by such physician assistant shall be included on a written protocol determined by the delegating physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.independentSchedules",
+    "value": "Schedules III to V",
+    "cite": "59 O.S. § 519.6(D)",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=552734",
+    "quote": "may prescribe medical supplies, services, and drugs, including controlled medications in Schedules III through V pursuant to Section 2-312 of Title 63",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": "OBNDD registration required for every person who prescribes controlled dangerous substances in Oklahoma (PAs included)",
+    "cite": "63 O.S. § 2-302(A); OAC 435:15-5-10 (LII copy, 2016 text); board FAQ Q20",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=438449",
+    "quote": "Every person who ... prescribes ... any controlled dangerous substance within or into this state shall obtain a registration issued by the Director of the",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.supervisingPhysicianLimit",
+    "value": "6 PAs/APRNs, with exceptions",
+    "cite": "OAC 435:10-13-2(a)(5) (amended eff. 9-1-26)",
+    "url": "https://www.okmedicalboard.org/physician_assistants/download/578/EFFECTIVE+RULES-MD+Rules_Eff._09.01.2026.pdf",
+    "quote": "No physician shall supervise more than a total of six (6) physician assistants and/or advanced practice registered nurses regarding their prescriptive authority.",
+    "loaded": true,
+    "verified": true,
+    "note": "The PDF at this URL is OAC Title 435 chapters 1 to 12 (Medical Board MD rules), not chapter 15 as the board link label says. Exceptions in (a)(6) to (a)(8).",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.painOrOpioid",
+    "value": "At least 1 hour on pain management OR 1 hour on opioid use or addiction within the 20 annual hours",
+    "cite": "59 O.S. § 519.8(A) (Laws 2019 SB 848; 2020 SB 1915)",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=95800",
+    "quote": "education shall include not less than one (1) hour of education in pain management or one (1) hour of education in opioid use or addiction.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.prescribing.deaAndObnddBeforeCs",
+    "value": "PA must be currently registered with DEA and OBNDD to prescribe a controlled substance",
+    "cite": "OAC 435:15-5-10(2) (LII copy; amended 8-26-2016; 2025 amendments not reflected on LII)",
+    "url": "https://www.law.cornell.edu/regulations/oklahoma/OAC-435-15-5-10",
+    "quote": "the physician assistant must be currently registered with the federal Drug Enforcement Administration and the Oklahoma Bureau of Narcotics and Dangerous Drugs.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Oklahoma Board of Nursing",
+   "url": "https://oklahoma.gov/nursing.html"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "last day of birth month in even numbered years",
+   "ceHoursPerCycle": "24 contact hours is one of several options: 520 work hours, 24 contact hours of CE, current nursing specialty certification, Board approved refresher course, or 6 academic semester credit hours, within the 2 years before expiry",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN-CNP (Advanced Practice Registered Nurse, Certified Nurse Practitioner)",
+   "separateLicenceOrCertificate": "separate APRN licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "concurrent with the RN renewal (even numbered years, end of birth month)",
+   "ceHoursPerCycle": null,
+   "ceNote": "No APRN specific CE hour total; national certification must be current and maintained. CE hours below attach to prescriptive authority.",
+   "pharmacologyHoursPerCycle": "15 contact hours (or 1 academic credit hour) pharmacotherapeutics per 2 years for supervised prescriptive authority; independent prescriptive authority instead needs 40 hours Category I CME per 2 years",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Pain management OR opioid use or addiction",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "APRNs renewing prescriptive authority who hold a federal DEA registration"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Yes: Prescriptive Authority Recognition from the Board of Nursing, separate for each APRN role/specialty certification, renewed with the RN and APRN licence. Independent Prescriptive Authority (HB 2298, eff. Nov 1, 2025) is a separate initial application after 6,240 supervised prescribing hours.",
+   "pharmacologyCeForPrescribers": "15 contact hours pharmacotherapeutics in the 2 years before renewal (supervised prescriptive authority); not required at the first renewal within 24 months of initial approval. Independent prescriptive authority: 40 hours Category I CME in 2 years.",
+   "controlledSubstanceCe": "2 hours pain management or opioid use/addiction per renewal if holding a DEA registration",
+   "stateCsRegistrationRequired": true,
+   "stateCsRegistrationName": "OBNDD registration plus DEA before prescribing Schedules III to V (APRNs may not prescribe Schedule II; 30 day supply limit)"
+  },
+  "practice": {
+   "authority": "reduced",
+   "authorityNote": "Classification is derived: physician supervision is required only for prescriptive authority until independent prescriptive authority is granted (6,240 hours).",
+   "agreementType": "supervision",
+   "transitionToPracticeHours": 6240,
+   "agreementFilingAndRenewal": "Agreement for Physician Supervising Advanced Practice Prescriptive Authority (notarized) on file with the Board of Nursing for every supervising physician; at each renewal a signed supervising physician statement on availability is required (not needed if one was filed within 90 days before expiry). Medical Board rule: supervision agreement filed within 30 calendar days of any supervision change. Not required once independent prescriptive authority is granted. Board of Nursing rule: changes to the supervising physician written statement filed within 30 days of the change (OAC 485:10-16-5(b))."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "last day of birth month, even years",
+    "cite": "Board of Nursing licensure instructions",
+    "url": "https://oklahoma.gov/content/dam/ok/en/nursing/documents/universalRNLPNUS.pdf",
+    "quote": "Registered Nurse licenses expire the last day of the licensee’s birth month in even-numbered years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "one option of several, incl. 24 contact hours or 520 work hours in 2 years",
+    "cite": "OAC 485:10-7-3(d)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "Verify the completion of at least twentyfour (24) contact hours of continuing education applicable to nursing practice; or",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "Board multistate licensure instructions (Form RS-51)",
+    "url": "https://oklahoma.gov/content/dam/ok/en/nursing/documents/endorseMSLused.pdf",
+    "quote": "the nurse can then engage in nursing practice in any of the Enhanced Nurse Licensure Compact states without having to obtain additional licenses.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "OAC 485:10-15-5(a)(1)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "be concurrent with the two-year licensure renewal for Registered Nurse.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "OAC 485:10-15-5(a)(2)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "include a statement that the nurse's national certification is current and that certification will be maintained during the period of licensure renewal.",
+    "loaded": true,
+    "verified": true,
+    "note": "Text is present in the Board PDF (two column layout puts it on a later page; pdftotext raw mode recovers it). LII copy is stale (history ends 2012) but agrees.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.certificationLapse",
+    "value": "licence placed on inactive status",
+    "cite": "OAC 485:10-15-4(b)(3)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "The license for which the national certification has expired will be placed on inactive status.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.pharmacologyCeForPrescribers",
+    "value": "15 contact hours pharmacotherapeutics per 2 years (supervised)",
+    "cite": "OAC 485:10-16-6(2)(B)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "documentation approved by the Board verifying a minimum of fifteen (15) contact hours, or one academic credit hour of education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.firstRenewalExemption",
+    "value": "not required within 24 months of initial approval",
+    "cite": "OAC 485:10-16-6(2)(B)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "This documentation requirement does not apply to individuals renewing within twenty-four (24) months of initial prescriptive authori[ty approval]",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.independentCe",
+    "value": "40 hours Category I CME per 2 years",
+    "cite": "OAC 485:10-16-6(2)(C)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "a minimum of forty (40) hours of Category I continuing medical education hours within the two-year period immediately preceding",
+    "loaded": true,
+    "verified": true,
+    "note": "59 O.S. § 567.4c (loaded from OSCN) sets the 6,240 hours and concurrent renewal but does not contain the 40 hour figure; the rule does.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "2 hours pain management or opioid use/addiction per renewal if DEA registered",
+    "cite": "OAC 485:10-16-6(2)(D)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "verifying two (2) hours of education in pain management or two (2) hours of education in opioid use or addiction",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": 6240,
+    "cite": "59 O.S. § 567.4c(A) (HB 2298, eff. Nov 1, 2025)",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=552545",
+    "quote": "who has completed a minimum of six thousand two hundred forty (6,240) clinical practice hours with prescriptive authority supervised by a physician may apply",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.independentAgreement",
+    "value": "no supervising physician once independent authority granted",
+    "cite": "HB 2298 FAQ general note",
+    "url": "https://oklahoma.gov/content/dam/ok/en/nursing/documents/hb2298%20faq.pdf",
+    "quote": "will no longer be required to have a supervising physician or submit a supervising physician agreement to the Board of Nursing.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFilingAndRenewal",
+    "value": "supervising physician statement at renewal for non independent prescribers",
+    "cite": "OAC 485:10-16-6(2)(E)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "a written statement signed by the physician supervising prescriptive authority that includes a method of assuring availability of the supervising physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.medicalBoardFiling",
+    "value": "filed within 30 days of supervision changes",
+    "cite": "OAC 435:10-13-3(c)",
+    "url": "https://www.okmedicalboard.org/physician_assistants/download/578/EFFECTIVE+RULES-MD+Rules_Eff._09.01.2026.pdf",
+    "quote": "The Agreement shall be filed with the Board on the form prescribed by the Board within thirty (30) calendar days of any supervision changes",
+    "loaded": true,
+    "verified": true,
+    "note": "OAC 435:10-13-3 (Medical Board rule binding allopathic supervising physicians), eff. 9-1-26; PDF is OAC Title 435 chs 1 to 12.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": "DEA and OBNDD before prescribing Schedules III to V; no Schedule I or II",
+    "cite": "Form RS-07 supervised prescriptive authority instructions",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/pa-4.pdf",
+    "quote": "will comply with state and Federal Drug Enforcement Administration (DEA) and Oklahoma Bureau of Narcotics and Dangerous Drug (OBNDD) requirements prior to prescribing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.renewalConcurrent",
+    "value": "prescriptive authority renewed with RN and APRN licence",
+    "cite": "Form RS-07",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/pa-4.pdf",
+    "quote": "Prescriptive authority must be renewed and remain active concurrently with Registered Nurse and Oklahoma Advanced Practice Registered Nurse licensure.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "even years, end of birth month (stated for multistate RN holders)",
+    "cite": "APRN endorsement instructions",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/aprnendorse.pdf",
+    "quote": "Advanced practice licensure must be renewed concurrently with the Oklahoma Registered Nurse renewal in even-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.bonFilingOfChanges",
+    "value": "Changes to the written supervising physician statement filed with the Board of Nursing within 30 days; supervising physician on file required before prescribing unless independent prescriptive authority",
+    "cite": "OAC 485:10-16-5(b) (amended eff. 7-11-26)",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "Changes to the written statement between the Advanced Practice Registered Nurse and supervising physician shall be filed with the Board within thirty (30) days of",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "np.prescribing.scheduleLimit",
+    "value": "Schedules III to V only, max 30 day supply; independent prescriptive authority does not add Schedule II",
+    "cite": "OAC 485:10-16-5(c); HB 2298 FAQ Q9",
+    "url": "https://www.oklahoma.gov/content/dam/ok/en/nursing/documents/485rulesunofficialagencycopy26.pdf",
+    "quote": "No more than a 30-day supply for Schedule III-V drugs shall be prescribed by the Advanced Practice Registered Nurse with prescriptive authority.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationStatute",
+    "value": "OBNDD registration required for anyone prescribing controlled dangerous substances",
+    "cite": "63 O.S. § 2-302(A)",
+    "url": "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=438449",
+    "quote": "shall obtain a registration issued by the Director of the Oklahoma State Bureau of Narcotics and Dangerous Drugs Control",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.initialPharmacology",
+    "value": "Initial (independent) prescriptive authority application: 45 contact hours Category B pharmacotherapeutics or 3 academic credit hours within 3 years before application (initial only, not per cycle)",
+    "cite": "HB 2298 FAQ Q5 (Board of Nursing)",
+    "url": "https://oklahoma.gov/content/dam/ok/en/nursing/documents/hb2298%20faq.pdf",
+    "quote": "forty-five (45) contact hours of “Category B” continuing education hours or three (3) academic credit hours of education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: NCCPA certification is not listed among Oklahoma renewal conditions (59 O.S. § 519.8, OAC 435:15-3-17); nccpaCertificationRequiredForRenewal=false is an inference from absence, not an explicit statement.",
+  "PA: Effective chapter 15 rule text (eff. 9-1-26) was not loaded: the board's link labelled chapter 15 serves OAC 435 chapters 1 to 12. Chapter 15 text was confirmed through the board's CE tab (435:15-3-17 as amended 7-25-25), the LII copy (pre 2025 versions) and the 2027 redline.",
+  "PA: Rules adopted Sept 24, 2026 (anticipated effective summer 2027; jurisprudence exam at renewal) are not in force and not modelled.",
+  "PA: Whether one hour on opioid addiction satisfies both the statutory pain/opioid hour (59 O.S. § 519.8) and the rule's substance abuse hour (435:15-3-17(b)) is not stated.",
+  "PA: Current (2025 amended) text of OAC 435:15-5-10 was not loaded; the DEA plus OBNDD registration sentence comes from the 2016 LII copy, and 63 O.S. § 2-302 independently requires OBNDD registration.",
+  "NP: 'reduced' authority label is derived (supervision applies only to prescriptive authority until independent prescriptive authority is granted).",
+  "NP: No Oklahoma RN topic mandate found in OAC 485:10-7-3 (absence, not an explicit statement).",
+  "NP and PA: DEA MATE one-time 8 hours is federal, not a state rule; not modelled here."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verificationCorrections": [
+  "OK PA nccpaCertificationRequiredForRenewal: researcher marked verified true; it is an inference from absence (and the quoted (a)(7) line is from the not yet effective 2027 redline), so set verified false with reason. Value false retained.",
+  "OK PA independentPracticeHours: statute 59 O.S. § 519.6(B) now loaded from OSCN (researcher said statute was blocked); fact re-sourced to the statute.",
+  "OK PA OBNDD: researcher had only indirect FAQ support; confirmed in statute 63 O.S. § 2-302(A) (loaded from OSCN) and in OAC 435:15-5-10(2) (LII copy) which requires DEA and OBNDD registration before a PA prescribes a controlled substance.",
+  "OK PA MISSED MANDATE: 59 O.S. § 519.8(A) requires at least 1 hour of pain management OR opioid use/addiction education within the annual 20 hours (board CE tab quotes § 519.8 but truncates this sentence). Added topic mandate and fact; controlledSubstanceCe / ceForPrescribers no longer say \"no separate prescriber CE\".",
+  "OK NP 485:10-15-5(a)(2): researcher said the Board's PDF drops this paragraph and used LII; the paragraph IS in the Board PDF (effective July 11, 2026 copy). Fact re-sourced to the Board PDF.",
+  "OK NP independentCe cite: removed 59 O.S. § 567.4c as a source for 40 Category I hours; the statute (loaded) does not state an hour figure. Rule OAC 485:10-16-6(2)(C) is the source.",
+  "OK NP added: OAC 485:10-16-5(b) 30 day Board of Nursing filing of supervision statement changes; 485:10-16-5(c) Schedule III to V 30 day supply cap; 63 O.S. § 2-302 OBNDD statute; initial 45 hour pharmacotherapeutics requirement (initial only)."
+ ]
+}

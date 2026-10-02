@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import ComplianceBar from "./ComplianceBar";
 import { TAP_MIN, inlineLinkTap } from "./actionButton";
 import { cat1BucketLabel, cat1Breakdown, cat1RouteNote } from "../../constants/creditEquivalence";
+import { STATE_NAMES } from "../../constants/states";
 
 /**
  * The Category 1 minimum, shown as its own requirement rather than a second
@@ -66,6 +67,15 @@ function Cat1Bucket({ comp, entries, degreeType, onFindCme }) {
           {notCounted.map(r => `${r.hours} hrs ${r.category} (${r.reason})`).join(", ")}.
           {!comp.noGeneralReq && comp.totalRequired > 0 &&
             ` Those ${Math.round(strayHours * 100) / 100} hours still count toward the ${comp.totalRequired}-hour total above.`}
+        </div>
+      )}
+
+      {/* A PA's or NP's state card: the Category 1 types the rule data does
+          not yet verify for this state are named, never counted. */}
+      {comp.profession && (comp.cat1Unverified || []).length > 0 && (
+        <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5, marginTop: 5 }}>
+          <span style={{ fontWeight: 700, color: T.text }}>Not yet verified for {STATE_NAMES[comp.state] || comp.state}:</span>{" "}
+          {comp.cat1Unverified.join(", ")}.
         </div>
       )}
 

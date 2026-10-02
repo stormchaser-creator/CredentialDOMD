@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { settleOutcome } from '../helpers/settle-outcome.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { loadScreens, mount, child, nodes, textOf, find, pinClock } from '../harness/component-harness.mjs';
@@ -29,7 +30,8 @@ const S = await loadScreens([
 ].join(' '));
 const { WorkLog, DutyLog, Expenses, InvoiceEmailModal } = S;
 
-const settle = async (n = 80) => { for (let i = 0; i < n; i++) await new Promise(r => setImmediate(r)); };
+// Bounded wait for the outcome, not a fixed number of turns (tests/helpers/settle-outcome.mjs).
+const settle = (n = 80) => settleOutcome(n);
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 const btn = (m, pred, what) => find(m.render(), n => n.type === 'button' && pred(textOf(n)), what);
 const shown = (m) => nodes(m.render()).filter(n => typeof n === 'object').map(textOf).join('\n');

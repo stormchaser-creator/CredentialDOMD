@@ -1,0 +1,172 @@
+{
+  "state": "VA",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Virginia Board of Medicine (Department of Health Professions)",
+      "url": "https://www.dhp.virginia.gov/Boards/Medicine/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewal"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Renewal verifies compliance with NCCPA CME standards, and a PA whose NCCPA certification lapses is not considered licensed.",
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewal"
+      }
+    },
+    "certificationRequired": {
+      "value": true,
+      "facts": [
+        "ce.nccpaCertificationRequiredForRenewal",
+        "ce.nccpaCertificationRequiredForRenewal.board"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "practice agreement",
+        "conditional": true,
+        "text": "A PA practices on a patient care team under a written or electronic practice agreement, kept by the PA, given to the Board on request and revised whenever it changes. PAs employed by a hospital, state facility or FQHC may practice under the facility's credentialing and privileging instead.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFiling",
+          "practice.agreementRevision",
+          "practice.facilityException"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether the 2026 law allowing PAs to practice without a practice agreement has taken effect"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Virginia Board of Nursing and Committee of the Joint Boards of Nursing and Medicine (Department of Health Professions)",
+      "url": "https://www.dhp.virginia.gov/Boards/Nursing/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewal"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewal"
+        },
+        "options": [
+          {
+            "text": "Hold an active Virginia nurse practitioner license: meet the NP renewal requirements instead",
+            "fact": "rn.ce.npExemption"
+          },
+          {
+            "text": "30 contact hours of workshops, seminars, conferences or courses relevant to nursing practice",
+            "fact": "rn.ce.option30"
+          },
+          {
+            "text": "15 contact hours plus 640 hours of active practice as a nurse",
+            "fact": "rn.ce.option15plus640"
+          },
+          {
+            "text": "Current specialty certification by a national certifying organization",
+            "fact": "rn.ce.otherOptions"
+          },
+          {
+            "text": "At least three credit hours of post-licensure academic education relevant to nursing practice",
+            "fact": "rn.ce.otherOptions"
+          },
+          {
+            "text": "A board-approved refresher course in nursing",
+            "fact": "rn.ce.otherOptions"
+          },
+          {
+            "text": "A nursing-related evidence-based practice project or research study, or a publication as author or co-author",
+            "fact": "rn.ce.otherOptions.teaching"
+          },
+          {
+            "text": "Teaching or developing a nursing course of at least three semester hours of college credit, or nursing continuing education courses (up to 30 contact hours)",
+            "facts": [
+              "rn.ce.otherOptions.teaching",
+              "rn.ce.otherOptions"
+            ]
+          }
+        ],
+        "exemption": {
+          "field": "First Virginia RN renewal after initial licensure",
+          "question": "Is this the first renewal after your initial Virginia licensure by examination or endorsement?",
+          "text": "No continued competency activity is due at the first renewal after initial licensure by examination or endorsement.",
+          "fact": "rn.ce.firstRenewalExempt",
+          "topics": "all"
+        }
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "Renewal requires current professional certification in the specialty; no APRN hour total is set.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears",
+          "reason": "Biennially, with the Virginia RN license."
+        },
+        "notes": [
+          {
+            "text": "NPs licensed before May 8, 2002 may instead complete 40 hours of CE in their specialty.",
+            "fact": "aprn.ce.pre2002"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 8,
+          "measure": "pharmacology",
+          "label": "Pharmacology or pharmacotherapeutics, each biennium",
+          "fact": "prescribing.pharmacologyCe",
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "practice agreement",
+        "conditional": true,
+        "text": "Until authorized for autonomous practice an NP practices under a written or electronic practice agreement with a patient care team physician, revised whenever it changes. After the equivalent of three years of full time clinical experience (1,800 hours a year) the NP may qualify for autonomous practice by fee and attestation.",
+        "facts": [
+          "practice.agreement",
+          "practice.agreementRevision",
+          "practice.transitionToPracticeHours",
+          "practice.fullTimeDefinition",
+          "practice.autonomousAttestation"
+        ]
+      }
+    }
+  }
+}

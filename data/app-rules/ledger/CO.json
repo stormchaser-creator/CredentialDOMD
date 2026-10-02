@@ -1,0 +1,410 @@
+{
+ "state": "CO",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Colorado Medical Board (Division of Professions and Occupations, DORA)",
+   "url": "https://dpo.colorado.gov/Medical"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "All PA licences expire January 31 of even-numbered years"
+  },
+  "ce": {
+   "hoursPerCycle": 0,
+   "categoryRules": "No general CME hour requirement for active PA renewal: Rule 1.33 (30 hours) is titled and written for physicians, and the board's August 2026 draft amendment states it does not apply to physician assistant licensees. 100 hours CME (25 Category I in the past 12 months) plus NCCPA is one option only for reinstatement, reactivation or credential portability (Rule 1.9).",
+   "acceptsNccpaCertificationInLieu": null,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Substance use prevention / opioid prescriber competency (C.R.S. 12-30-114(1)(a) topics)",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all PAs unless exempt",
+     "status": "repeal pending: statute struck by SB 26-138; rules must be repealed by July 1, 2027; Medical Board draft marks Rule 1.29 [Repealed]",
+     "verified": false
+    }
+   ],
+   "controlledSubstanceCe": "Rule 1.29 (2 hours substance use prevention per renewal period) is still in the CCR but its statute was struck by SB 26-138 and the board has proposed repealing it; treat as not verified"
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Written collaborative agreement signed by physician (or physician group) and PA, kept at the PA's main practice location and produced to the board on request (not filed). It takes the form of a supervisory agreement for PAs with fewer than 5,000 practice hours, PAs changing practice area with fewer than 3,000 hours in the new area, and PAs in Level I or II trauma center emergency departments (indefinitely). Periodic performance evaluations at the statutory minimum frequency.",
+   "notes": "Collaborative agreements required for all PAs since August 7, 2023. A physician may hold supervisory-form agreements with no more than 8 PAs. First 160 practice hours of collaboration in person or through technology under a supervisory agreement. Supervisory-form agreements require a performance evaluation after 6 and 12 months with the employer, then as determined by the collaborating physician (Rule 1.15(F)(6)(h))."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "No separate state prescriptive certificate; PA may prescribe any drug or controlled substance subject to chart and prescription format rules; DEA registration required before any controlled substance prescription",
+   "ceForPrescribers": "Rule 1.29 (2 hours substance use prevention per renewal period) is still in the CCR but its statute was struck by SB 26-138 and the board has proposed repealing it; treat as not verified"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "Expire January 31 of even-numbered years",
+    "cite": "DPO Colorado Physician Assistant Licensing Requirements page",
+    "url": "https://dpo.colorado.gov/Medical/PALicensingRequirements",
+    "quote": "All Physician Assistant licenses expire on January 31 of even-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.substanceUse",
+    "value": "At least 2 cumulative hours per renewal period",
+    "cite": "3 CCR 713-1, Rule 1.29(C)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "Every physician and physician assistant is required to complete at least two cumulative hours of training per renewal period",
+    "loaded": true,
+    "verified": false,
+    "status": "repeal pending",
+    "reason": "Statutory basis removed: SB 26-138 (approved June 2, 2026) struck C.R.S. 12-30-114(1)-(2) and requires every regulator to repeal these opioid competency training rules on or before July 1, 2027. The rule text is still in the current CCR version, so it is not confirmed as enforced or as repealed today."
+   },
+   {
+    "field": "pa.ce.generalCme",
+    "value": "30-hour biennial CME rule applies to physicians only",
+    "cite": "3 CCR 713-1, Rule 1.33(C)(2) (effective 04/30/2026)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "a licensed physician must complete 30 credit hours of approved Continuing Medical Education (CME) during each biennial renewal cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.reactivationOption",
+    "value": "Reinstatement/reactivation/endorsement option: NCCPA + 100 hours CME in 2 years incl. 25 Category I in past 12 months + written collaboration plan",
+    "cite": "3 CCR 713-1, Rule 1.9(C)(2)(c)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "proof of 100 hours of continuing medical education within the past two years, including twenty-five hours of category I continuing medical education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "Collaborative agreement required for all PAs as of August 7, 2023",
+    "cite": "3 CCR 713-1, Rule 1.15(C)(1)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "The requirements for a Collaborative Agreement applies to all collaborating physicians and physician assistants as of August 7, 2023.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Agreement kept on file at primary practice location and available to the board on request",
+    "cite": "3 CCR 713-1, Rule 1.15(C)(2)(c)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "A physician assistant must keep on file their Collaborative Agreement at their primary location of practice and make it available to the Board upon request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisoryThreshold",
+    "value": "Supervisory agreement if fewer than 5,000 practice hours, or fewer than 3,000 hours in a new practice area",
+    "cite": "3 CCR 713-1, Rule 1.15(E)(1)(d)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "Collaborative Agreements for physician assistants with fewer than five thousand practice hours, or for physician assistants changing practice areas with fewer than three thousand hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.traumaEd",
+    "value": "Level I or II trauma center ED: supervisory agreement indefinitely",
+    "cite": "3 CCR 713-1, Rule 1.15(F)(5)(c)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "whose agreements will remain supervisory agreements indefinitely",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.dea",
+    "value": "No controlled substance prescription without DEA registration",
+    "cite": "3 CCR 713-1, Rule 1.15(D)(1)(a)(3)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "may not issue a prescription order for any controlled substance unless the physician assistant has received a registration from the United States Drug Enforcement Administration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.substanceUse.statuteStruck",
+    "value": "SB 26-138 struck C.R.S. 12-30-114(1)-(2) (training rule mandate covering physicians, PAs and APRNs with prescriptive authority) and orders regulators to repeal those rules by July 1, 2027",
+    "cite": "SB 26-138, Section 2 (C.R.S. 12-30-114(3)); approved June 2, 2026",
+    "url": "https://drive.google.com/file/d/1syJCQqFgAAu3iHD6s7zuzXxBsPLQfo_k/view",
+    "quote": "EACH REGULATOR THAT ADOPTED RULES PURSUANT TO THIS SECTION ... SHALL REPEAL THE RULES ON OR BEFORE JULY 1, 2027.",
+    "loaded": true,
+    "note": "Scanned PDF linked from the Colorado Medical Board homepage; read by OCR and page image (strikethrough confirmed visually).",
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "pa.ce.substanceUse.boardRepeal",
+    "value": "Medical Board permanent rulemaking hearing August 27, 2026 to repeal Rule 1.29 as required by SB 26-138; adoption and effective date not yet shown in the CCR (current version effective 07/15/2026)",
+    "cite": "Colorado Medical Board homepage, Public Notices",
+    "url": "https://dpo.colorado.gov/Medical",
+    "quote": "to repeal the substance use disorder continuing education requirements of Rule 1.29, as required by Colorado Senate Bill 26-138",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "pa.ce.generalCme.draftExclusion",
+    "value": "Proposed Rule 1.33 amendment states the 30-hour CME requirement does not apply to PA licensees (proposed text, consistent with current rule written for physicians)",
+    "cite": "Colorado Medical Board draft rules for August 27, 2026 hearing, Rule 1.33(B)",
+    "url": "https://docs.google.com/document/d/1EYFIN3sj3YO_h3hO2dUgYTEMVUDW7Ov0/edit",
+    "quote": "The continuing education requirement does not apply to: administrative physician licenses, physician assistant licensees",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "pa.practice.performanceEvaluation",
+    "value": "Supervisory-form agreements: evaluation after 6 months and 12 months with the employer, then as determined by the physician or group",
+    "cite": "3 CCR 713-1, Rule 1.15(F)(6)(h)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "worked with the employer for six (6) months, again after the physician assistant has worked with the employer for twelve (12) months",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "pa.practice.supervisoryLimit",
+    "value": "A physician may hold supervisory-form agreements with no more than 8 PAs",
+    "cite": "3 CCR 713-1, Rule 1.15(F)(3)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "No physician shall enter a collaborating agreement that takes the form of a supervisory agreement for more than eight (8) specific, individual physician assistants.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "pa.practice.first160Hours",
+    "value": "Collaboration during the first 160 practice hours in person or through technology",
+    "cite": "3 CCR 713-1, Rule 1.15(F)(6)(f)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12607&fileName=3%20CCR%20713-1",
+    "quote": "collaboration during the first one hundred sixty (160) practice hours be completed in person or through technology",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Colorado State Board of Nursing (Division of Professions and Occupations, DORA)",
+   "url": "https://dpo.colorado.gov/Nursing"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Current RN cycle expires 9/30/26, renewable through 11/30/26 (60-day grace period per Rule 1.1 and C.R.S. 12-20-202(1)(e))",
+   "ceHoursPerCycle": 0,
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN on the Advanced Practice Registry (APR), role NP; prescriptive authority designated RXN-P (provisional) or RXN (full)",
+   "separateLicenceOrCertificate": "Registration on the Advanced Practice Registry (not a separate licence); separate Provisional or Full Prescriptive Authority",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 0,
+   "pharmacologyHoursPerCycle": 0,
+   "nationalCertificationRequired": "Required for APR inclusion; APRNs with prescriptive authority must obtain and maintain national certification (Rule 1.15(E)(1)); reinstatement or reactivation requires proof certification was maintained. An explicit renewal-time check for APR registration alone was not found.",
+   "topicMandates": [
+    {
+     "topic": "Substance use prevention (C.R.S. 12-30-114(1)(a) topics)",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "APRNs with prescriptive authority unless exempt",
+     "status": "repeal pending: statute struck by SB 26-138; Nursing Board must repeal Rule 1.23 by July 1, 2027",
+     "verified": false
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Provisional Prescriptive Authority (RXN-P), then Full Prescriptive Authority (RXN) after a 750-hour mentorship completed within 3 years; renewed with the RN licence",
+   "pharmacologyCeForPrescribers": "None recurring found; initial requirement is 3 semester (4 quarter) graduate hours each in pharmacology, pathophysiology and physical assessment",
+   "controlledSubstanceCe": "Rule 1.23 (2 hours per renewal period) still in the CCR but its statute was struck by SB 26-138; treat as not verified",
+   "stateCsRegistrationRequired": null
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none for practice; written Mentorship Agreement during provisional prescriptive authority (retained 3 years after completion, not filed)",
+   "transitionToPracticeHours": 750,
+   "agreementFilingAndRenewal": "Before the mentorship begins the RXN-P submits documentation describing the proposed mentorship; the signed Mentorship Agreement is retained by the RXN and mentor for 3 years after completion; full prescriptive authority application within 3 years of provisional authority or the provisional authority expires",
+   "liabilityInsurance": "APRNs in independent practice must carry professional liability insurance of at least $500,000 per claim and $1,500,000 aggregate per year, with listed exemptions"
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "RN, APN and RXN licences expire 9/30/26, renewable through 11/30/26",
+    "cite": "DPO Colorado Nursing homepage",
+    "url": "https://dpo.colorado.gov/Nursing",
+    "quote": "RN, APN and RXN Renewal is now open. Licenses expire on 9/30/26 and can be renewed through 11/30/26.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "No CE for active RN renewal; 20 contact hours per 2 years lapsed is one competency option for reinstatement after 2 to 5 years",
+    "cite": "3 CCR 716-1, Rule 1.1(G)(7)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "may accept proof of competency through 20 contact hours of continuing education for each two years without an active license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": "Colorado board rule implements the enhanced NLC",
+    "cite": "3 CCR 716-1, Rule 1.19(C)(5)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "Compact: The Nurse Licensure Compact that became effective on July 20, 2017 and was implemented on January 19, 2018.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewal",
+    "value": "APR registration renews with the Colorado RN licence; compact-licensed nurses renew APR every two years",
+    "cite": "3 CCR 716-1, Rule 1.14(H)(1)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "Renewal of an APRN's registration on the APR is required at the time of the APRN's Colorado professional nurse license renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertification",
+    "value": "NP must meet certification standards of a board-approved national certifying body for APR inclusion",
+    "cite": "3 CCR 716-1, Rule 1.14(D)(4)(b)(3)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "A NP must meet the standards for education and certification established by a national certifying body approved by the Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.substanceUse",
+    "value": "At least 2 hours per renewal period for APRNs with prescriptive authority",
+    "cite": "3 CCR 716-1, Rule 1.23(C)(1)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "is required to complete at least two hours of training per renewal period",
+    "loaded": true,
+    "verified": false,
+    "status": "repeal pending",
+    "reason": "Statutory basis removed: SB 26-138 (approved June 2, 2026) struck C.R.S. 12-30-114(1)-(2) and requires every regulator to repeal these opioid competency training rules on or before July 1, 2027. The rule text is still in the current CCR version, so it is not confirmed as enforced or as repealed today."
+   },
+   {
+    "field": "np.prescribing.renewal",
+    "value": "Provisional or full prescriptive authority renews with the RN licence",
+    "cite": "3 CCR 716-1, Rule 1.15(L)(1)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "Renewal of Provisional or Full Prescriptive Authority is required at the time of the RXN's professional nurse license renewal in Colorado.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": "750-hour mentorship within 3 years of provisional prescriptive authority",
+    "cite": "3 CCR 716-1, Rule 1.15(G)(1)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "To obtain Full Prescriptive Authority, the RXN-P must complete 750 hours of experience in a Mentorship.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.provisionalPrerequisites",
+    "value": "Provisional authority needs national certification and 3 years combined clinical experience as RN and/or APRN",
+    "cite": "3 CCR 716-1, Rule 1.15(B)(3)-(4)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "Completion of at least three years of combined clinical work experience as a professional nurse and/or as an APRN.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.mentorshipAgreementRetention",
+    "value": "Mentorship Agreement retained 3 years after completion",
+    "cite": "3 CCR 716-1, Rule 1.15(G)(3)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "The Mentorship Agreement shall be retained for a period of three years by the RXN and the Mentor(s) following completion of the Mentorship",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertification.maintain",
+    "value": "APRNs with prescriptive authority must obtain and maintain national certification",
+    "cite": "3 CCR 716-1, Rule 1.15(E)(1)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "an APRN applying for prescriptive authority must obtain and maintain national certification from a recognized Certifying Body.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.rn.gracePeriod",
+    "value": "60-day grace period after expiry before the licence is expired",
+    "cite": "3 CCR 716-1, Rule 1.1 (citing C.R.S. 12-20-202(1)(e))",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "A licensee who does not renew his or her license within the sixty day grace period",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.practice.liabilityInsurance",
+    "value": "Independent-practice APRNs carry liability insurance of at least $500,000 per claim / $1,500,000 annual aggregate",
+    "cite": "3 CCR 716-1, Rule 1.14(E)(1); C.R.S. 12-255-113(1)",
+    "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+    "quote": "professional liability insurance in an amount not less than five hundred thousand dollars per claim",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.aprn.substanceUse.statuteStruck",
+    "value": "SB 26-138 struck the APRN-with-prescriptive-authority training mandate in C.R.S. 12-30-114(2)(e); Nursing Board must repeal Rule 1.23 by July 1, 2027",
+    "cite": "SB 26-138, Section 2",
+    "url": "https://drive.google.com/file/d/1syJCQqFgAAu3iHD6s7zuzXxBsPLQfo_k/view",
+    "quote": "An advanced practice registered nurse or certified midwife with prescriptive authority",
+    "loaded": true,
+    "note": "Quoted words are struck through in the enrolled bill (confirmed on the page image).",
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   }
+  ]
+ },
+ "unverified": [
+  "Substance use prevention training (PA Rule 1.29, APRN Rule 1.23, 2 hours per renewal): statute struck by SB 26-138 and repeal required by July 1, 2027; the rules remain in the current CCR (713-1 eff. 07/15/2026; 716-1 eff. 03/17/2026). Whether the board still enforces it at the 2026 RN/APRN renewal and when the Medical Board repeal takes effect was not confirmed.",
+  "SB 26-138 effective date: the act says 90 days after adjournment (sine die date not loaded); exact date not confirmed.",
+  "PA: absence of general CME rests on Rule 1.33 being written for physicians and the August 2026 draft excluding PA licensees; C.R.S. 12-240-130.5 itself was not loaded.",
+  "PA: NCCPA not required for active renewal (only for reinstatement/reactivation under Rule 1.9); recorded false on that absence. acceptsNccpaCertificationInLieu left null (no hour requirement to substitute for).",
+  "RN renewal cycle of 2 years: confirmed only indirectly (APR and prescriptive authority for compact nurses renew every two years; DPO shows 9/30/26 expiry). The statute or rule setting the RN cycle length was not loaded.",
+  "NP: national certification as a condition of each APR registration renewal (separate from prescriptive authority) not found in Rule 1.14(H).",
+  "State controlled substance registration for PA and NP: none found in 3 CCR 713-1 or 716-1; Colorado PDMP registration rules not checked. Left null.",
+  "Practice authority label 'full' is our reading of 3 CCR 716-1 (no collaborative or supervisory agreement for practice; mentorship only for full prescriptive authority)."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedOn": "2026-10-01",
+  "corrections": [
+   "MAJOR: the 2-hour substance use prevention training (PA Rule 1.29; APRN Rule 1.23) is no longer statutorily required. SB 26-138 (approved June 2, 2026) struck C.R.S. 12-30-114(1)-(2) and orders regulators to repeal these rules by July 1, 2027. The Medical Board held a repeal hearing August 27, 2026 (draft marks Rule 1.29 [Repealed]). Both topic mandates now verified:false with status 'repeal pending'.",
+   "pa.ce.hoursPerCycle changed from 2 to 0: Colorado has no general PA CME hour requirement; the only per-cycle item was the 2-hour training now being repealed.",
+   "PA general CME: strengthened with the Medical Board's August 2026 draft Rule 1.33, which says the CME requirement does not apply to PA licensees (proposed text).",
+   "Resolved PA performance evaluation frequency: supervisory-form agreements need evaluations after 6 and 12 months with the employer, then as determined (Rule 1.15(F)(6)(h)). The researcher pointed to the statute; the rule gives the frequency.",
+   "Added confirmed PA facts: 8-PA cap on supervisory agreements (1.15(F)(3)); first 160 hours in person or through technology (1.15(F)(6)(f)).",
+   "NP national certification: Rule 1.15(E)(1) requires prescribers to obtain AND MAINTAIN national certification, so it is an ongoing requirement for RXN-P/RXN. Researcher said only initial.",
+   "Added missed NP requirement: professional liability insurance for independent-practice APRNs ($500,000 per claim / $1,500,000 aggregate; Rule 1.14(E), C.R.S. 12-255-113).",
+   "Added NP 60-day renewal grace period from rule text (Rule 1.1, citing C.R.S. 12-20-202(1)(e)).",
+   "Confirmed current rule versions: 3 CCR 713-1 current version effective 07/15/2026 (CCR rule info page); 3 CCR 716-1 latest amendments effective 03/17/2026.",
+   "Missed-mandate sweep: no other PA or NP topic mandate (implicit bias, human trafficking, child abuse, suicide, dementia, cultural competency, etc.) found in 3 CCR 713-1 or 716-1."
+  ]
+ }
+}

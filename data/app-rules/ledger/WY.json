@@ -1,0 +1,476 @@
+{
+ "state": "WY",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Wyoming Board of Medicine (with a physician assistant advisory council)",
+   "url": "https://wyomedboard.wyo.gov/physician-assistants"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA)",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annual; all PA licences expire December 31 each year (first renewal: licences issued Jan 1 to Aug 31 renew that December 31; issued Sept 1 to Dec 31 renew December 31 of the following year). Late renewal with surcharge allowed through March 31."
+  },
+  "ce": {
+   "hoursPerCycle": 60,
+   "ceWindowYears": 3,
+   "categoryRules": "At least 60 CME hours (or continued NCCPA maintenance of certification including 60 credits) during the preceding three calendar years, verified at each annual renewal. No category split stated in Ch. 5 Sec. 21. Volunteer clinical service (emeritus) or board consultant service can count.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaNote": "Exempt from the CME requirement if certified or recertified by NCCPA within the past three years as of the renewal date; also exempt during the first three years of Wyoming licensure.",
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaRenewalNote": "Initial licence requires passing the NCCPA (or board approved) exam and being currently certified (W.S. 33-26-504(b)(iii)); the renewal rule allows a non NCCPA CME route, and the renewal form asks NCCPA status. No rule loaded makes current NCCPA certification a renewal condition.",
+   "topicMandates": [
+    {
+     "topic": "Responsible prescribing of controlled substances or treatment of substance abuse disorders",
+     "hours": 1,
+     "period": "every 2 years",
+     "appliesTo": "PAs registered with the Wyoming Board of Pharmacy to prescribe controlled substances",
+     "source": "W.S. 33-26-202(b)(xiv); WY BOM PA renewal application Section V",
+     "note": "The 2026 renewal form asks whether the hour was completed 'since January 1, 2023', a window longer than the stated two years."
+    }
+   ],
+   "controlledSubstanceCe": "At least 1 hour in the preceding two years on responsible controlled substance prescribing or substance abuse disorder treatment, for PAs holding a Wyoming Board of Pharmacy controlled substance registration (attested on the annual renewal application)."
+  },
+  "practice": {
+   "agreementType": "none",
+   "agreementFilingAndRenewal": "No supervision or collaboration agreement is filed for a PA who has passed the NCCPA (or board approved) exam; board approved supervision agreements for such PAs were deemed terminated January 1, 2022. The degree of collaboration is set at the practice level (employer, group, hospital credentialing). A supervision plan filed with the board is required only for a temporary licensee who has not yet passed the certification exam (supervisor: physician or PA with at least 5 years' licensed experience); changes require a revised plan.",
+   "notes": "PA may fulfil physician signature requirements except as limited by W.S. 33-26-510(c)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Wyoming Controlled Substance Registration from the Wyoming Board of Pharmacy is required to prescribe controlled substances and must be obtained before applying for DEA registration; renewed every two years (expires June 30; statute: on or before July 1). PAs may prescribe Schedules II to V, not Schedule I.",
+   "ceForPrescribers": "1 hour every 2 years for PAs holding a Board of Pharmacy controlled substance registration (see topicMandates)."
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": "1 (annual), expires December 31",
+    "cite": "W.S. 33-26-506(a)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "All licenses other than temporary licenses expire annually on December 31.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "Renew by December 31 each calendar year; grace to March 31",
+    "cite": "WY BOM Rules Ch. 5 Sec. 11(a)",
+    "url": "https://drive.google.com/file/d/14mwGBBbKaU2hf9NXZHKRV7bWQTtxgdrR/view",
+    "quote": "after first-time license renewal, all physician assistant licenses shall be renewed not later than December 31st of each calendar year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.gracePeriod",
+    "value": "Late renewal with surcharge through March 31",
+    "cite": "WY BOM Rules Ch. 5 Sec. 11(a)(ii)",
+    "url": "https://drive.google.com/file/d/14mwGBBbKaU2hf9NXZHKRV7bWQTtxgdrR/view",
+    "quote": "may submit an application, the requisite renewal fee, and the license renewal grace period surcharge no later than March 31st.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "60 hours in the preceding three calendar years",
+    "cite": "WY BOM Rules Ch. 5 Sec. 21(a)(ii)",
+    "url": "https://drive.google.com/file/d/14mwGBBbKaU2hf9NXZHKRV7bWQTtxgdrR/view",
+    "quote": "Completion of not less than 60 hours of continuing medical education credits during the preceding three calendar years;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": "Exempt if NCCPA certified or recertified within past 3 years",
+    "cite": "WY BOM Rules Ch. 5 Sec. 21(b)(i)",
+    "url": "https://drive.google.com/file/d/14mwGBBbKaU2hf9NXZHKRV7bWQTtxgdrR/view",
+    "quote": "A physician assistant who has been certified or recertified by the NCCPA within the past three years as of the renewal date;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.newLicenseeExemption",
+    "value": "Exempt if Wyoming licence held less than 3 years",
+    "cite": "WY BOM Rules Ch. 5 Sec. 21(b)(ii)",
+    "url": "https://drive.google.com/file/d/14mwGBBbKaU2hf9NXZHKRV7bWQTtxgdrR/view",
+    "quote": "A physician assistant who has held a Wyoming physician assistant license less than three years as of the renewal date;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.ruleUnchanged2025",
+    "value": "2025 rulemaking left Ch. 5 Sec. 21 text the same (fee and reference changes only)",
+    "cite": "WY BOM Notice of Intent ARR25-018P, Ch. 5 Sec. 21",
+    "url": "https://wyoleg.gov/arules/2012/rules/ARR25-018P.pdf",
+    "quote": "Continued participation in the NCCPA maintenance of certificate process, including completion of not less than 60 continuing medical education credits",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[0]",
+    "value": "1 hour CS prescribing or SUD treatment in preceding 2 years for Board of Pharmacy CS registrants",
+    "cite": "WY BOM 2026 PA renewal application, Section V",
+    "url": "https://drive.google.com/file/d/1VvXb7dh4Rjbx8oGFi5kTsxUyHP5E9mIN/view",
+    "quote": "must verify satisfactory completion of at least one (1) hour of CME related to the responsible prescribing of controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.initialNccpa",
+    "value": "Initial licence: passed NCCPA (or approved) exam and currently certified",
+    "cite": "W.S. 33-26-504(b)(iii)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "Has satisfactorily completed a certification examination administered by NCCPA or other national certifying agency",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "Collaboration determined at the practice level",
+    "cite": "W.S. 33-26-502(b)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "The degree of collaboration shall be determined at the practice level, which may include decisions made by the employer, group, hospital service",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Supervision agreements for certified PAs deemed terminated January 1, 2022",
+    "cite": "WY BOM Rules Ch. 5 Sec. 20(g)",
+    "url": "https://drive.google.com/file/d/14mwGBBbKaU2hf9NXZHKRV7bWQTtxgdrR/view",
+    "quote": "Effective January 1, 2022, any board-approved supervision agreement between a supervising physician and a physician assistant who has passed the NCCPA",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.schedules",
+    "value": "Schedules II to V; not Schedule I",
+    "cite": "W.S. 33-26-510(c)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "A physician assistant may prescribe schedule II, III, IV or V drugs as defined by W.S. 35-7-1015 through 35-7-1022.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "Wyoming CS registration required for all practitioners who prescribe CS",
+    "cite": "WY Board of Pharmacy CS registration page",
+    "url": "https://pharmacyboard.wyo.gov/licensing/controlled-substance-reg",
+    "quote": "A Wyoming Controlled Substance Registration is required for all practitioners who prescribe controlled substances in Wyoming.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csRegistrationRenewal",
+    "value": "Biennial, expires June 30",
+    "cite": "WY Board of Pharmacy CS registration page",
+    "url": "https://pharmacyboard.wyo.gov/licensing/controlled-substance-reg",
+    "quote": "A Wyoming Controlled Substance Registration expires on June 30 and is renewed biennially (every two years).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Quote confirmed by reading the loaded page; the source text has OCR or spacing artifacts so the quote is normalized."
+   },
+   {
+    "field": "prescribing.csRegistrationStatute",
+    "value": "Registration every two years on or before July 1",
+    "cite": "W.S. 35-7-1024(a)",
+    "url": "https://wyoleg.gov/statutes/compress/title35.pdf",
+    "quote": "must obtain every two (2) years, on or before July 1, a registration issued by the board in accordance with its rules.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[0] (statute)",
+    "value": "Board of Medicine licensees registered with the Board of Pharmacy to dispense CS: 1 hour every 2 years",
+    "cite": "W.S. 33-26-202(b)(xiv)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "one (1) hour of continuing education related to the responsible prescribing of controlled substances or the treatment of substance abuse disorders every two (2) years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Statute is in the Medical Practice Act duties of the board; the board applies it to PAs on the PA renewal application.",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "practice.supervisionPlan",
+    "value": "Supervised (not yet certified) PAs keep a current board approved supervision plan; changes need a revised plan",
+    "cite": "WY BOM Rules Ch. 5 Sec. 20(a),(c)",
+    "url": "https://drive.google.com/file/d/14mwGBBbKaU2hf9NXZHKRV7bWQTtxgdrR/view",
+    "quote": "shall maintain on file with the Board a current supervision plan approved pursuant to section 8(h) of this chapter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.temporaryLicenseSupervisor",
+    "value": "Temporary licensee supervisor: PA with at least 5 years licensed experience or a physician, board approved",
+    "cite": "W.S. 33-26-504(c)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "supervised by a physician assistant with not less than five (5) years of licensed experience who is approved by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.lapsedReactivation",
+    "value": "Reactivating a lapsed licence needs 60 CME hours in the preceding 3 years unless exempt",
+    "cite": "WY BOM Rules Ch. 5 Sec. 11(b)(ii)",
+    "url": "https://drive.google.com/file/d/14mwGBBbKaU2hf9NXZHKRV7bWQTtxgdrR/view",
+    "quote": "proof of completion of not less than sixty (60) hours of qualified continuing medical education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Wyoming State Board of Nursing (WSBN)",
+   "url": "https://wsbn.wyo.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 of every even year (renewal cycle January 1 odd year to December 31 even year)",
+   "ceHoursPerCycle": 40,
+   "ncl": true,
+   "ceNote": "Continuing competency, one of these in the past two years: 400 hours active nursing practice; pass NCLEX; board accepted refresher course; complete a nursing degree beyond the basic education; or 40 hours of continuing education. CE is only one option. ceHoursPerCycle (40) applies only if the nurse chooses the CE option; it is not a fixed requirement.",
+   "topicMandates": [],
+   "notes": "Wyoming APRN and RN licences are separate; an APRN who also holds an active Wyoming RN licence only needs to meet the APRN competency requirement.",
+   "ceRequired": false
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse); licence issued by WSBN",
+   "separateLicenceOrCertificate": "Separate APRN licence. Wyoming does not require APRNs to also hold a Wyoming RN licence (needed only if the national certifier requires it).",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 of every even year",
+   "ceHoursPerCycle": 3,
+   "pharmacologyHoursPerCycle": 0,
+   "ceNote": "Competency at renewal is current national certification in the role and population focus plus 3 hours CE on responsible prescribing of controlled substances or treatment of substance abuse disorders. APRNs recognized before January 1, 1999 who are not nationally certified instead submit 40 CE hours and 400 APRN practice hours in the last two years. Advanced pharmacology evidence is an initial licensure item only.",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Responsible prescribing of controlled substances or treatment of substance abuse disorders",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "APRNs (statute: licensees with prescriptive authority; board rule: each APRN at renewal)"
+    }
+   ],
+   "compactNote": "Wyoming has adopted the APRN Compact, but WSBN states it will be implemented only when 7 states have enacted it; no multistate APRN licence is available."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "No separate nursing prescriptive authority registration: prescribing (except Schedule I) is part of the APRN licence definition.",
+   "pharmacologyCeForPrescribers": "None beyond national certification maintenance",
+   "controlledSubstanceCe": "3 hours every two years on responsible controlled substance prescribing or substance abuse disorder treatment",
+   "stateCsRegistrationRequired": true,
+   "csNote": "Wyoming Board of Pharmacy Controlled Substance Registration required to prescribe controlled substances and before DEA registration; biennial, expires June 30."
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None. Supervision or collaboration agreements are not required by Wyoming law."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": "Biennial",
+    "cite": "W.S. 33-21-129(a)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "Licenses or certificates issued under this act shall be renewed biennially according to a schedule established by board rules and regulations.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalDeadline",
+    "value": "December 31 of the renewal (even) year",
+    "cite": "WSBN Rules Ch. 2 Sec. 9(a) (eff. 12/17/2025)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "All licenses and certificates expire on December 31st of the renewal year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalCycle",
+    "value": "January 1 odd year to December 31 even year",
+    "cite": "WSBN Rules Ch. 2 Sec. 2(x)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "which is from January 1st of every odd year to December 31st of every even year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "40 CE hours is one of five competency options",
+    "cite": "WSBN Rules Ch. 2 Sec. 14(d)(i)(E)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "Submit evidence of forty (40) hours of continuing education.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.competencyPractice",
+    "value": "400 practice hours alternative",
+    "cite": "WSBN Rules Ch. 2 Sec. 14(d)(i)(A)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "Four hundred (400) hours of active nursing practice; or",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ncl",
+    "value": "Wyoming has enacted the Nurse Licensure Compact",
+    "cite": "W.S. 33-21-202",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "The Nurse Licensure Compact is enacted into law and entered into on behalf of this state",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "Current national certification is the APRN competency for renewal",
+    "cite": "WSBN Rules Ch. 2 Sec. 14(c)(i)(A)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "Current national certification as an APRN in the recognized role and population focus area; or",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.topicMandates[0]",
+    "value": "3 hours CS prescribing or SUD treatment",
+    "cite": "WSBN Rules Ch. 2 Sec. 14(c)(i)(C)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "An APRN shall also submit evidence of three (3) hours of continuing education related to the responsible prescribing of controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.topicMandates[0] (statute)",
+    "value": "3 hours every two years for licensees with prescriptive authority",
+    "cite": "W.S. 33-21-129(e)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "For licensees who have prescriptive authority the board shall require three (3) hours of continuing education related to the responsible prescribing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.separateLicence",
+    "value": "APRN and RN licences are separate",
+    "cite": "WSBN Rules Ch. 2 Sec. 3(a)(iii)(B)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "Because APRN licenses and RN licenses are separate under the Nurse Practice Act",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.rnLicenceNotRequired",
+    "value": "No additional RN licence required",
+    "cite": "WSBN Practice page",
+    "url": "https://wsbn.wyo.gov/practice",
+    "quote": "Wyoming does not require APRNs to hold an additional RN license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority",
+    "value": "Full; no supervision or collaboration agreement",
+    "cite": "WSBN Practice page",
+    "url": "https://wsbn.wyo.gov/practice",
+    "quote": "supervision or collaboration agreements with any other provider is not required by Wyoming law.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": "Prescribing (not Schedule I) is part of the APRN definition",
+    "cite": "W.S. 33-21-120(a)(i)(A)",
+    "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+    "quote": "May prescribe, administer, dispense or provide nonprescriptive and prescriptive medications including prepackaged medications, except schedule I drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "Wyoming CS registration required; biennial, expires June 30",
+    "cite": "WY Board of Pharmacy CS registration page",
+    "url": "https://pharmacyboard.wyo.gov/licensing/controlled-substance-reg",
+    "quote": "A practitioner must obtain a Wyoming Controlled Substance Registration to apply for a federal DEA registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.compact",
+    "value": "APRN Compact adopted but not implemented until 7 states enact",
+    "cite": "WSBN APRN Compact page",
+    "url": "https://wsbn.wyo.gov/aprn-compact",
+    "quote": "The APRN Compact will be implemented when 7 states have enacted the legislation.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.rnLicenceOnlyApprnCompetency",
+    "value": "APRN holding an active WY RN licence meets only the APRN competency",
+    "cite": "WSBN Rules Ch. 2 Sec. 14(a)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "An APRN who holds an active Wyoming RN license shall only be required to meet",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.pre1999Route",
+    "value": "APRNs recognized before 1999 without national certification: 40 CE hours plus 400 APRN practice hours in 2 years",
+    "cite": "WSBN Rules Ch. 2 Sec. 14(c)(i)(B)",
+    "url": "https://drive.google.com/file/d/1LgXrM7pK_pGxFz7gxhu_pUOtTIKKucNI/view",
+    "quote": "If recognized as an APRN in the State prior to January 1, 1999",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: the Board of Medicine rules were read from the board's posted copy (Drive PDF) and the 2025 Notice of Intent ARR25-018P; whether the 2025 amendments were finally adopted, and the official current text at rules.wyo.gov, were not loaded. Ch. 5 Sec. 11, 20 and 21 read the same in both.",
+  "PA: no CME category split (AAPA Category 1 minimum) is stated in Ch. 5 Sec. 21.",
+  "PA: whether current NCCPA certification is a condition of renewal is not stated; statute ties 'currently certified' to the licence grant (33-26-504(b)(iii)), while the CME rule allows a non NCCPA route and the renewal form only asks NCCPA status.",
+  "PA: W.S. 33-26-202(b)(xiv) says 'registered with the board of pharmacy to dispense'; the renewal form applies it to PAs registered 'to prescribe'. Wyoming CS registration covers prescribing, so these coincide in practice.",
+  "NP: the WSBN rule requires the 3 controlled substance hours of each APRN, while W.S. 33-21-129(e) applies it to licensees with prescriptive authority; prescribing is part of every Wyoming APRN licence (33-21-120(a)(i)(A)), so these coincide.",
+  "No other WY topic mandate (implicit bias, human trafficking, child abuse, ethics, HIV, end of life, dementia, suicide prevention, infection control, domestic violence) was found in BOM Ch. 5, WSBN Ch. 2 or Title 33 for PAs or nurses."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "verifierCorrections": [
+  "PA: the 1 hour controlled substance CME is created by statute W.S. 33-26-202(b)(xiv) (researcher listed its source as not located); added the fact and removed that item from unverified. Also noted the renewal form window (\"since January 1, 2023\" for the 2026 renewal).",
+  "PA: added facts for the supervision plan rule (Ch. 5 Sec. 20(a),(c)), the temporary licence supervisor qualification (W.S. 33-26-504(c)) and the 60 hour reactivation rule (Ch. 5 Sec. 11(b)(ii)).",
+  "NP: APRN Compact status confirmed on the WSBN page (not implemented until 7 states enact); removed from unverified and added aprn.compactNote.",
+  "NP RN: added ceRequired false and a note that the 40 hours is only one of five competency options (Ch. 2 Sec. 14(d)), so the app must not demand 40 hours. Added facts for Sec. 14(a) (APRN with WY RN meets only APRN competency) and the pre 1999 route (Sec. 14(c)(i)(B))."
+ ]
+}

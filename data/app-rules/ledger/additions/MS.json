@@ -1,0 +1,38 @@
+{
+ "state": "MS",
+ "facts": [
+  {
+   "field": "ce.period",
+   "profession": "pa",
+   "value": "Two-year CME period beginning July 1, 2022 and every two years after",
+   "cite": "30 Miss. Admin. Code Pt. 2615 R. 1.9",
+   "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+   "quote": "For the purposes of this regulation, the two-year period begins July 1, 2022, and every two years thereafter",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "practice.transitionToPracticeHours.2000",
+   "profession": "np",
+   "value": "2,000 monitored hours with under a year of RN experience; 1,000 with a year or more",
+   "cite": "30 Miss. Admin. Code Pt. 2840 R. 1.3",
+   "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+   "quote": "must complete two- thousand (2,000) monitored practice hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "rn.outOfPracticeCe",
+   "profession": "np",
+   "value": "RNs out of practice more than five years complete 20 contact hours in the prior 2 years",
+   "cite": "Mississippi Board of Nursing FAQ",
+   "url": "https://www.msbn.ms.gov/faqs",
+   "quote": "if the nurse has been out of practice for greater than five (5) years. The RN shall complete a minimum of twenty (20) contact hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

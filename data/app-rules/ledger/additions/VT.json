@@ -1,0 +1,27 @@
+{
+ "state": "VT",
+ "facts": [
+  {
+   "field": "aprn.renewal.practiceFull",
+   "profession": "np",
+   "value": "APRN practice: 400 hours in two years or 960 hours in five years",
+   "cite": "Vermont Board of Nursing Rule 4-8(d)(2)",
+   "url": "https://outside.vermont.gov/dept/sos/office_professional_regulation/professions/nursing/nursing_administrative_rules.pdf",
+   "quote": "practiced in an APRN role for a minimum of 50 days (400 hours) in the two years preceding application or 120 days (960 hours)",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "prescribing.controlledSubstanceCe.audience",
+   "profession": "np",
+   "value": "APRNs with a DEA number, a pending DEA application, or who dispense controlled substances",
+   "cite": "Act 173 (2016) Sec. 9(a)",
+   "url": "https://legislature.vermont.gov/Documents/2016/Docs/ACTS/ACT173/ACT173%20As%20Enacted.pdf",
+   "quote": "with a registration number from the U.S. Drug Enforcement Administration (DEA), who have a pending application for a DEA number, or who dispense controlled substances",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

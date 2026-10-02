@@ -1,0 +1,49 @@
+{
+ "state": "IN",
+ "facts": [
+  {
+   "field": "np.aprn.certificationInLieuIpla",
+   "profession": "np",
+   "value": "IPLA audit page: national certification may be submitted in lieu of the 30 contact hours",
+   "cite": "IPLA Nursing Licensing Information (APRN audit)",
+   "url": "https://www.in.gov/pla/professions/nursing-home/nursing-licensing-information",
+   "quote": "In lieu of the (30) contact hours, you may submit proof of your National Certification",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.nccpaCertificationRequiredForRenewal.lii",
+   "profession": "pa",
+   "value": "Evidence of current NCCPA certification at renewal",
+   "cite": "844 IAC 2.2-2-3(d)(1)(A) (LII copy)",
+   "url": "https://www.law.cornell.edu/regulations/indiana/844-IAC-2.2-2-3",
+   "quote": "Evidence of current NCCPA certification",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.practice.agreementOnlyForPrescribing.lii",
+   "profession": "np",
+   "value": "No written practice agreement unless the NP seeks prescriptive authority",
+   "cite": "848 IAC 5-2-1 (LII copy)",
+   "url": "https://www.law.cornell.edu/regulations/indiana/848-IAC-5-2-1",
+   "quote": "No written practice agreement shall be necessary unless the advanced practice nurse seeks prescriptive authority",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.practice.agreementFilingAndRenewal.lii",
+   "profession": "np",
+   "value": "Current signed and dated agreement with each renewal",
+   "cite": "848 IAC 5-1-3(e)(2) (LII copy)",
+   "url": "https://www.law.cornell.edu/regulations/indiana/848-IAC-5-1-3",
+   "quote": "A current signed and dated written collaborative practice agreement",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

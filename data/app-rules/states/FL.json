@@ -1,0 +1,311 @@
+{
+  "state": "FL",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Florida Board of Medicine (Council on Physician Assistants)",
+      "url": "https://flboardofmedicine.gov/physician-assistant-renewal/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 100,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 50,
+        "label": "Category I approved by AAPA, ACCME, AMA, AOA or AAFP",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit"
+        ],
+        "unverifiedAccepted": [
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ],
+        "facts": [
+          "pa.ce.categoryIBodies",
+          "pa.ce.categoryIBodies2"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "pa.ce.nccpaInLieuStatute"
+      },
+      "notes": [
+        {
+          "text": "PAs with prescriptive privileges complete at least 10 hours in the specialty area of the supervising physician each renewal, 3 of them on safe and effective prescribing of controlled substances.",
+          "fact": "pa.ce.prescriberHours"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Medical Errors Prevention",
+        "hours": 2,
+        "label": "Prevention of medical errors",
+        "fact": "pa.ce.topicMandates.medicalErrors"
+      },
+      {
+        "topic": "Domestic Violence",
+        "hours": 2,
+        "label": "Domestic violence, every third biennial renewal",
+        "period": {
+          "years": 6
+        },
+        "periodReason": "Every third biennial renewal period; the card counts a course in the last six years, which a course in the wrong biennium can also meet.",
+        "fact": "pa.ce.topicMandates.domesticViolence"
+      },
+      {
+        "topic": "HIV/AIDS",
+        "hours": 1,
+        "label": "HIV/AIDS, Category I, at the first renewal",
+        "period": "lifetime",
+        "fact": "pa.ce.topicMandates.hivAids",
+        "condition": {
+          "field": "First renewal of this license",
+          "question": "Is this your first renewal of this license?",
+          "description": "Some boards require a course at the first renewal only."
+        }
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": 3,
+        "label": "Safe and effective prescribing of controlled substances, 3 of the 10 prescriber hours",
+        "fact": "pa.ce.controlledSubstanceCe",
+        "condition": {
+          "field": "Holds prescriptive authority",
+          "question": "Do you hold prescriptive authority?",
+          "description": "Applies to clinicians who prescribe."
+        }
+      },
+      {
+        "topic": "Human Trafficking",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "Whether the one hour human trafficking course applies to PAs licensed after January 1, 2021"
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "The supervising physician notifies the Department on its form before delegating prescriptive authority to a PA.",
+        "facts": [
+          "pa.practice.prescribingDelegationNotice"
+        ]
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Florida Board of Nursing",
+      "url": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.ceHoursPerCycle",
+          "reason": "Each biennium"
+        },
+        "total": {
+          "value": 24,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "bodiesVerified": false,
+          "covers": [
+            "total"
+          ],
+          "fact": "np.rn.certificationExemption",
+          "note": "Nurses certified by an NCCA or ABSNC accredited specialty program are exempt from the general CE; which certifications qualify is not yet verified."
+        },
+        "notes": [
+          {
+            "text": "A registered Autonomous APRN is not required to renew the Florida RN license; renewing it is optional.",
+            "fact": "np.aprn.autonomousRnOptional"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Medical Errors Prevention",
+          "hours": 2,
+          "label": "Prevention of medical errors",
+          "fact": "np.rn.topicMandates"
+        },
+        {
+          "topic": "Jurisprudence and Ethics",
+          "hours": 2,
+          "label": "Florida laws and rules",
+          "fact": "np.rn.topicMandates"
+        },
+        {
+          "topic": "Impairment in the Workplace",
+          "hours": 2,
+          "label": "Recognizing impairment in the workplace, every other biennium",
+          "period": {
+            "years": 4
+          },
+          "periodReason": "The rule names every other biennium; the card counts a course in the last four years, which a course in the wrong biennium can also meet.",
+          "fact": "np.rn.topicMandates"
+        },
+        {
+          "topic": "Human Trafficking",
+          "hours": 2,
+          "label": "Human trafficking, every biennial renewal",
+          "facts": [
+            "np.rn.humanTrafficking",
+            "np.rn.topicMandates"
+          ]
+        },
+        {
+          "topic": "Domestic Violence",
+          "hours": 2,
+          "label": "Domestic violence, every third biennium",
+          "period": {
+            "years": 6
+          },
+          "periodReason": "The rule names every third biennium; the card counts a course in the last six years, which a course in the wrong biennium can also meet.",
+          "fact": "np.rn.topicMandates"
+        },
+        {
+          "topic": "HIV/AIDS",
+          "hours": 1,
+          "label": "HIV/AIDS, 1 hour, in the first biennium only",
+          "period": "lifetime",
+          "facts": [
+            "np.rn.hivAids.hours",
+            "np.rn.topicMandates",
+            "np.rn.hivAidsStatute"
+          ],
+          "condition": {
+            "field": "First renewal of this license",
+            "question": "Is this your first renewal of this license?",
+            "description": "Some boards require a course at the first renewal only."
+          }
+        }
+      ],
+      "unverified": [
+        "Whether the domestic violence hours count inside the general hours or are additional"
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.ceHoursPerCycle",
+          "reason": "Each biennium"
+        },
+        "total": {
+          "value": 24,
+          "facts": [
+            "np.aprn.ceAsRnCe",
+            "np.rn.ceHoursPerCycle"
+          ],
+          "reason": "The RN license's contact hours satisfy both the RN and APRN licenses."
+        },
+        "satisfiesRn": {
+          "value": true,
+          "fact": "np.aprn.ceAsRnCe"
+        },
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "bodiesVerified": false,
+          "covers": [
+            "total"
+          ],
+          "fact": "np.rn.certificationExemption",
+          "note": "Certification by an NCCA or ABSNC accredited specialty program exempts the general CE but not the controlled substance course; which certifications qualify is not yet verified."
+        },
+        "notes": [
+          {
+            "text": "Up to 50% of the CE may be continuing medical education.",
+            "fact": "np.aprn.ceAsRnCe"
+          },
+          {
+            "text": "APRNs who were required to be nationally certified at original licensure submit current national certification at renewal.",
+            "fact": "np.aprn.nationalCertificationRequired"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 3,
+          "additional": true,
+          "label": "Safe and effective prescription of controlled substances, every biennium",
+          "fact": "np.aprn.controlledSubstanceCe"
+        },
+        {
+          "topic": "Autonomous APRN CE",
+          "hours": 10,
+          "additional": true,
+          "label": "Graduate level CE approved by the board for autonomous registration, in addition to the other hours",
+          "facts": [
+            "np.aprn.autonomousCe",
+            "np.aprn.autonomousRenewalCe"
+          ],
+          "condition": {
+            "field": "Registered as a Florida Autonomous APRN",
+            "question": "Are you registered as a Florida Autonomous APRN?",
+            "description": "Applies to registered autonomous APRNs."
+          }
+        }
+      ],
+      "unverified": [
+        "Whether an Autonomous APRN's base CE is the general hours or the statute's larger figure"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "supervisory protocol",
+        "conditional": true,
+        "text": "APRNs practice within a supervisory protocol kept on site at each practice location; the physician files notice within 30 days of entering or ending it. An APRN with 3,000 clinical practice hours in the prior 5 years may register as an Autonomous APRN for primary care.",
+        "facts": [
+          "np.practice.protocol",
+          "np.practice.protocolNotice",
+          "np.practice.transitionToPracticeHours",
+          "np.practice.autonomousScope"
+        ]
+      }
+    }
+  }
+}

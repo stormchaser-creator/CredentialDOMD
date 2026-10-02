@@ -1,0 +1,27 @@
+{
+ "state": "PA",
+ "facts": [
+  {
+   "field": "np.aprn.childAbuse",
+   "profession": "np",
+   "value": "CRNP renewal: 30 hours including at least 2 of child abuse recognition and reporting",
+   "cite": "49 Pa. Code 21.331(c)(2)",
+   "url": "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter21/s21.331.html",
+   "quote": "Verify completion of a minimum of 30 hours of Board-approved continuing education ... including at least 2 hours of approved training in child abuse recognition",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.licenseCycle",
+   "profession": "np",
+   "value": "30 hours during the biennial renewal period",
+   "cite": "49 Pa. Code 21.131(a)",
+   "url": "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter21/s21.131.html",
+   "quote": "A registered nurse seeking licensure renewal shall complete 30 hours of continuing education approved by the Board during the biennial renewal period",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -150,7 +150,9 @@ test('a DO in Arizona is linked to azdo.gov, and an unknown degree in California
   assert.doesNotMatch(az, /md-renewal-application/);
   const ca = render(licence('CA', { expirationDate: day(10) }), null, { defaultExpanded: true });
   assert.match(ca, /Osteopathic board/);
-  assert.match(ca, /Set MD or DO in Profile/);
+  // D-1: a blank member may be a PA or an NP, so the prompt names no degree.
+  assert.match(ca, /Choose your profession in Profile/);
+  assert.doesNotMatch(ca, /Set MD or DO/);
 });
 
 test('nothing in the renewal box uses an em dash', () => {

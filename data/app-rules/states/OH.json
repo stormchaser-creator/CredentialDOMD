@@ -1,0 +1,205 @@
+{
+  "state": "OH",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "State Medical Board of Ohio",
+      "url": "https://med.ohio.gov"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 100,
+        "fact": "ce.hoursPerCycle.rule"
+      },
+      "notes": [
+        {
+          "text": "Courses acceptable for maintaining NCCPA certification satisfy the CME requirement.",
+          "fact": "ce.nccpaCoursesSatisfy"
+        },
+        {
+          "text": "A license first issued partway through the period owes 50, 25 or 0 hours.",
+          "fact": "ce.proration"
+        },
+        {
+          "text": "Prescribers of opioid analgesics or benzodiazepines certify their OARRS access at renewal.",
+          "fact": "prescribing.oarrsCertification"
+        },
+        {
+          "text": "At the first prescriber renewal after the five hundred supervised hours, the pharmacology hours are six, three or none, depending on when those hours were completed.",
+          "fact": "ce.pharmacologyFirstRenewal"
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Pharmacology",
+        "hours": 12,
+        "measure": "pharmacology",
+        "additional": true,
+        "label": "Category I pharmacology every two years, in addition to the 100 hours",
+        "facts": [
+          "ce.topicMandates.pharmacology",
+          "ce.pharmacologyAdditional",
+          "ce.topicMandates.pharmacology.category",
+          "ce.hoursPerCycle.rule"
+        ],
+        "condition": {
+          "field": "Holds an Ohio prescriber number",
+          "question": "Do you hold a valid Ohio prescriber number?",
+          "description": "Ohio pharmacology hours for PAs with physician-delegated prescriptive authority."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A written supervision agreement is signed before supervision begins and each party keeps a copy; it is not filed with the Board and does not expire. The supervising physician reviews selected records at least twice in the PA's first year of practice, then at least once a year.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementRetention",
+          "practice.agreementNotFiled",
+          "practice.qualityAssurance"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether Ohio requires a state controlled substance registration for prescribing PAs"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Ohio Board of Nursing",
+      "url": "https://nursing.ohio.gov"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 24,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "exemption": {
+          "field": "First Ohio renewal after licensure by examination",
+          "question": "Is this your first renewal after licensure by examination in Ohio?",
+          "text": "No continuing education is due at the first renewal after licensure by examination.",
+          "fact": "rn.firstRenewalExam",
+          "topics": "all"
+        },
+        "notes": [
+          {
+            "text": "A nurse licensed by endorsement in Ohio for one year or less completes 12 contact hours.",
+            "fact": "rn.endorsementTwelve"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Jurisprudence and Ethics",
+          "hours": 1,
+          "label": "Category A: Ohio nursing law and rules, each renewal",
+          "fact": "rn.topicMandates.ohioLaw"
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewal",
+          "reason": "Renewed in odd-numbered years: every two years."
+        }
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 24,
+          "facts": [
+            "aprn.ceHoursPerCycle",
+            "aprn.ceAdditionalToRn"
+          ]
+        },
+        "notes": [
+          {
+            "text": "The APRN hours are in addition to the RN license's hours.",
+            "fact": "aprn.ceAdditionalToRn"
+          },
+          {
+            "text": "No APRN contact hours are required for the first renewal after the APRN license is issued.",
+            "fact": "aprn.firstRenewalExempt"
+          },
+          {
+            "text": "Each renewal lists your current collaborating physicians and podiatrists.",
+            "fact": "aprn.renewalCollaboratorList"
+          },
+          {
+            "text": "CE earned in your area of practice to obtain or keep national certification may count toward both the RN and APRN renewal hours.",
+            "fact": "aprn.certificationCeDualUse"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 12,
+          "measure": "pharmacology",
+          "label": "Advanced pharmacology from an accredited institution recognized by the board, part of the APRN hours",
+          "fact": "aprn.pharmacologyHoursPerCycle"
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewal",
+          "reason": "Renewed in odd-numbered years: every two years."
+        }
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "standard care arrangement",
+        "text": "An APRN practices under a standard care arrangement with each collaborating physician or podiatrist, without prior Board approval. Collaborators are reported to the Board within thirty days of starting practice and of any change, and a collaborating physician reviews random charts, including prescribing, at least annually.",
+        "facts": [
+          "practice.agreementType",
+          "practice.noPriorApproval",
+          "practice.collaboratorNotice",
+          "practice.annualChartReview"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether Ohio requires a state controlled substance registration for prescribing NPs"
+    ]
+  }
+}

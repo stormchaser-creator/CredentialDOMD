@@ -20,11 +20,15 @@ import { supabase, downloadDocumentBlob } from "../../lib/supabase";
 import Modal from "../shared/Modal";
 import { TAP_MIN, dismissButtonStyle } from "../shared/actionButton";
 import EmailPacketModal from "./EmailPacketModal";
-import { BASE_KEYS, largeGetJSON, largeSetJSON, mergeLargeList, onLargeStoreMerged, rereadLargeStore } from "../../utils/storageScope";
+import { BASE_KEYS, largeGetJSON, largeSetJSON, lsGet, lsSet, mergeLargeList, onLargeStoreMerged, rereadLargeStore } from "../../utils/storageScope";
+import { trackedStates } from "../../utils/compliance";
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
+import { isKnownDegree } from "../../constants/professions.js";
+import { alertWriteRefused } from "../../utils/limitedLaunchAccess.js";
+import ProfessionPicker from "./ProfessionPicker";
 
 // Transcript and archives live on-device under the signed-in user's own key
 // (storageScope), so another account on the same device never sees them.
@@ -66,7 +70,7 @@ const slimForArchive = (msgs) =>
  * credentialer. onClearRequest lets the app drop it on New chat.
  */
 function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest }) {
-  const { data, addItem, editItem, deleteItem, allTrackedStates, userIdRef, navigate, theme: T, isDesktop } = useApp();
+  const { data, addItem, editItem, deleteItem, updateSettings, allTrackedStates, userIdRef, navigate, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
   // The Opus badge says what answers: Claude only when "Vera answers with"
   // is Claude Opus AND Opus is reachable (own key, or the shared one), as
@@ -98,12 +102,29 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   const [showArchives, setShowArchives] = useState(false);
   const [viewArchive, setViewArchive] = useState(null);
   const [attachment, setAttachment] = useState(null); // {dataUrl?|text?, name, kind}
+  // A member with no profession is asked it (MD, DO, PA or NP, the one-tap
+  // choice Home shows) before Vera answers her first question: the rules
+  // Vera reads all follow it. Her question waits here ({ msgId, text,
+  // attachment }) and is answered as soon as she chooses, never asked twice.
+  // "Not now" (professionDeferred): Vera answers what needs no rule, and a
+  // reply that needs one shows the choice again (askProfession). It is kept
+  // on this device for her account (BASE_KEYS.veraProfessionLater), so
+  // leaving Vera, or iOS reloading the app, does not ask again before her
+  // next question.
+  const [professionWait, setProfessionWait] = useState(null);
+  const [professionDeferred, setProfessionDeferred] = useState(() => {
+    try { return lsGet(BASE_KEYS.veraProfessionLater) === "1"; } catch { return false; }
+  });
   const [listening, setListening] = useState(false);
   const fileRef = useRef(null);
   const recRef = useRef(null);
   const bottomRef = useRef(null);
   const taRef = useRef(null);
   const failedMapRef = useRef(new Map()); // msgId -> {text, attachment} for every failed send
+  // msgId -> the file her question carried, for a question whose reply asked
+  // for the profession (askProfession): choosing re-sends it with that file,
+  // as the question that waited under the picker is re-sent with its own.
+  const askedAttachRef = useRef(new Map());
   const savedAttachRef = useRef(new Set()); // msgIds whose file already went to Files
   // Cards whose Approve is still running ("msgId:idx"). The ref is the guard
   // (a second tap lands before any re-render); the state disables the button.
@@ -189,8 +210,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     }, ...a]);
     setMsgs([]);
     setErr(null);
+    setProfessionWait(null);
     lastAttachRef.current = null;
     failedMapRef.current.clear();
+    askedAttachRef.current.clear();
     // A new conversation is not about the request the last one answered.
     onClearRequest?.();
     return true;
@@ -236,7 +259,12 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     }).then(() => {}, () => {});
   }, [userIdRef]);
 
-  const send = useCallback(async (textOverride, retryOf = null) => {
+  // opts.degree: the profession just chosen, which the settings on screen do
+  // not carry yet; opts.deferred: the member said "Not now" to the choice;
+  // opts.replaces: the reply that asked for the profession.
+  const send = useCallback(async (textOverride, retryOf = null, opts = {}) => {
+    // One question waits for the profession at a time.
+    if (professionWait && !opts.degree && !opts.deferred) return;
     // retryOf = a previously-failed message to re-send in place (its text and
     // attachment were kept in failedRef, so a long paste never has to be redone).
     // With no new attachment, the last document rides along invisibly so the
@@ -257,17 +285,34 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       const existing = msgs.find(x => x.id === retryOf.msgId);
       userMsg = { ...(existing || { id: retryOf.msgId || generateId(), role: "user", text: text || `(sent ${explicitAtt?.name})`, attachName: explicitAtt?.name }), failed: false };
       // Move it to the end of the thread so its reply lands right under it.
-      setMsgs(m => [...m.filter(x => x.id !== userMsg.id), userMsg]);
+      // opts.replaces: the reply that asked for the profession, which this
+      // answer takes the place of.
+      setMsgs(m => [...m.filter(x => x.id !== userMsg.id && x.id !== opts.replaces), userMsg]);
     } else {
       userMsg = { id: generateId(), role: "user", text: text || `(sent ${explicitAtt?.name})`, attachName: explicitAtt?.name };
       setMsgs(m => [...m, userMsg]);
       setInput("");
       setAttachment(null);
     }
+    const degree = opts.degree || data.settings?.degreeType;
+    // The file this question carried, kept for a re-send once she chooses.
+    const askedAtt = explicitAtt || (retryAtt?.implicit ? retryAtt : null);
+    if (!isKnownDegree(degree) && !professionDeferred && !opts.deferred) {
+      setProfessionWait({ msgId: userMsg.id, text, attachment: askedAtt });
+      return;
+    }
     setBusy(true);
     try {
-      const history = buildAssistantHistory([...msgs.filter(x => x.id !== userMsg.id), userMsg]);
-      const snapshot = buildSnapshot(data, allTrackedStates);
+      const history = buildAssistantHistory([...msgs.filter(x => x.id !== userMsg.id && x.id !== opts.replaces), userMsg]);
+      // The profession she just chose is not on screen yet, and neither are
+      // the states it tracks: allTrackedStates was worked out for a blank
+      // profession, which counts only medical licences. They are worked out
+      // here for her choice, so her own PA, APRN or RN licence state is in
+      // the answer to the question she was waiting on.
+      const chosenSettings = opts.degree ? { ...data.settings, degreeType: opts.degree } : null;
+      const snapshot = chosenSettings
+        ? buildSnapshot({ ...data, settings: chosenSettings }, trackedStates(chosenSettings.primaryState, chosenSettings.additionalStates, data.licenses, opts.degree))
+        : buildSnapshot(data, allTrackedStates);
       // The whole settings object, not just the two keys: assistant.js reads
       // settings.assistantModel to decide whether Vera thinks on Opus. Handing
       // it apiKey/anthropicKey alone made it build a settings stand-in that had
@@ -336,6 +381,13 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         }
       }
       const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions, sourceEvidence: result.sourceEvidence };
+      // Her answer needs a rule and she has no profession: the one-tap
+      // choice shows under this reply, and her question is answered once
+      // she picks (chooseProfession).
+      if (result.needsProfession && !isKnownDegree(degree)) {
+        modelMsg.askProfession = true;
+        if (askedAtt) askedAttachRef.current.set(userMsg.id, askedAtt);
+      }
       // Keep the file with the proposal so Approve can save it to Files too —
       // only for documents the user just attached, never the implicit re-send.
       const sourceUrl = explicitAtt?.dataUrl || explicitAtt?.fileDataUrl;
@@ -361,7 +413,60 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       setErr(e2.message);
     }
     setBusy(false);
-  }, [input, attachment, msgs, data, allTrackedStates, logToCloud, requestContext]);
+  }, [input, attachment, msgs, data, allTrackedStates, logToCloud, requestContext, professionWait, professionDeferred]);
+
+  // The member picks her profession: it is saved to her profile, then the
+  // question that waited for it is answered with that profession's rules.
+  // From a reply that asked for it (askProfession), that reply makes way for
+  // the answer. Refused (read-only, or membership being re-checked): nothing
+  // is sent and the choice stays on screen.
+  const chooseProfession = useCallback((d, askedBy = null) => {
+    if (updateSettings({ degreeType: d }) === false) { alertWriteRefused({ scope: "credential" }); return; }
+    if (askedBy) {
+      const at = msgs.findIndex(x => x.id === askedBy);
+      const question = msgs.slice(0, at).reverse().find(x => x.role === "user");
+      if (question) {
+        const kept = askedAttachRef.current.get(question.id) || null;
+        askedAttachRef.current.delete(question.id);
+        // An Approve under the reply that asked already put this file in
+        // Files (the flag is kept with the saved chat, so it survives a
+        // remount): Vera still reads it, but as a follow-up copy, so an
+        // Approve on her answer never saves it a second time.
+        const inFiles = msgs[at]?.sourceAttachSaved || savedAttachRef.current.has(askedBy);
+        // Her question carried a file this screen no longer has (she left
+        // Vera, or the app reloaded: files are never persisted). Re-sending
+        // without it would answer "add this" with no document, so her choice
+        // stays saved and nothing is sent. A file already in Files is never
+        // asked for again (attaching it again would save a second copy);
+        // otherwise she is asked to attach it again, as Try again does for a
+        // failed send whose file did not survive. A draft she is typing is
+        // never replaced: her question goes back only into an empty composer.
+        if (question.attachName && !kept) {
+          if (inFiles) {
+            setErr(`Your license type is saved, and ${question.attachName} is already in your Files, so there is no need to attach it again. Ask what you still need and Vera answers for your license.`);
+            return;
+          }
+          setErr(`Your license type is saved. Re-attach ${question.attachName} first (the file isn't kept once you leave Vera or the app closes), then send again.`);
+          const restored = question.text.startsWith("(sent ") ? "" : question.text;
+          setInput(cur => (cur.trim() ? cur : restored));
+          return;
+        }
+        const attachment = kept && inFiles ? { ...kept, implicit: true } : kept;
+        send(null, { msgId: question.id, text: question.text, attachment }, { degree: d, replaces: askedBy });
+      }
+      return;
+    }
+    const waited = professionWait;
+    setProfessionWait(null);
+    if (waited) send(null, { msgId: waited.msgId, text: waited.text, attachment: waited.attachment }, { degree: d });
+  }, [updateSettings, msgs, professionWait, send]);
+  const deferProfession = useCallback(() => {
+    const waited = professionWait;
+    setProfessionWait(null);
+    setProfessionDeferred(true);
+    try { lsSet(BASE_KEYS.veraProfessionLater, "1"); } catch { /* storage unavailable: kept for this visit */ }
+    if (waited) send(null, { msgId: waited.msgId, text: waited.text, attachment: waited.attachment }, { deferred: true });
+  }, [professionWait, send]);
 
   // Home search hands Vera a first question; ask it once, then clear the seed.
   const seededRef = useRef(null);
@@ -1024,6 +1129,16 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
               {m.text}
               {m.role === "model" && <VeraSourceReceipt evidence={m.sourceEvidence} isDesktop={isDesktop} />}
             </div>
+            {m.askProfession && !busy && m.id === msgs.at(-1)?.id && !isKnownDegree(data.settings?.degreeType) && (
+              <div style={{ marginTop: 6, padding: "12px 14px", borderRadius: 14, border: `1px solid ${T.border}`, backgroundColor: T.card }}>
+                <ProfessionPicker
+                  id={`vera-profession-${m.id}`}
+                  why="Your answer is saved to your profile, and Vera answers with your profession's rules."
+                  onChoose={(d) => chooseProfession(d, m.id)}
+                  theme={T}
+                />
+              </div>
+            )}
             {m.failed && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
                 <span style={{ fontSize: 12, color: T.danger, fontWeight: 600 }}>Not sent</span>
@@ -1179,6 +1294,17 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
             ))}
           </div>
         ))}
+        {professionWait && (
+          <div style={{ alignSelf: "flex-start", maxWidth: "88%", padding: "12px 14px", borderRadius: 14, border: `1px solid ${T.border}`, backgroundColor: T.card }}>
+            <ProfessionPicker
+              id="vera-profession"
+              why="Vera answers with your profession's rules, and your answer is saved to your profile."
+              onChoose={(d) => chooseProfession(d)}
+              onDismiss={deferProfession}
+              theme={T}
+            />
+          </div>
+        )}
         {busy && <div style={{ fontSize: 13, color: T.textMuted, padding: "4px 2px" }}>Thinking…</div>}
         {err && <div style={{ fontSize: 13, fontWeight: 600, color: T.danger }}>{err}</div>}
         <div ref={bottomRef} />
@@ -1214,9 +1340,9 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
             rows={1}
             style={{ ...iS, resize: "none", minHeight: 46, flex: 1, overflowY: "auto", lineHeight: 1.45, overscrollBehavior: "contain" }}
           />
-          <button aria-label="Send" onClick={() => send()} disabled={busy || (!input.trim() && !attachment)} style={{
+          <button aria-label="Send" onClick={() => send()} disabled={busy || !!professionWait || (!input.trim() && !attachment)} style={{
             padding: "12px 16px", borderRadius: 12, border: "none", flexShrink: 0, minWidth: TAP_MIN, minHeight: TAP_MIN,
-            background: busy || (!input.trim() && !attachment) ? T.border : "linear-gradient(135deg, #10b981, #059669)",
+            background: busy || professionWait || (!input.trim() && !attachment) ? T.border : "linear-gradient(135deg, #10b981, #059669)",
             color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer",
           }}>{busy ? "…" : "Send"}</button>
         </div>

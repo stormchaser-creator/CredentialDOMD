@@ -1,0 +1,149 @@
+{
+  "state": "MN",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Minnesota Board of Medical Practice",
+      "url": "https://mn.gov/boards/medical-practice/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "ce.hoursPerCycle",
+        "reason": "50 contact hours within the two years before each annual renewal"
+      },
+      "total": {
+        "value": 50,
+        "fact": "ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit"
+        ],
+        "fact": "ce.categoryRules",
+        "reason": "Continuing education equivalent to Category 1 credit, as the app names Category 1 credit."
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu"
+      },
+      "totalUnverifiedAccepted": [
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "practice agreement",
+        "text": "PAs practice under a practice agreement reviewed annually by a licensed physician in the same facility; a record of the review is kept at the practice. New licensees first practice 2,080 hours under a collaborative agreement.",
+        "facts": [
+          "practice.agreementType",
+          "practice.annualReview",
+          "practice.reviewRecord",
+          "practice.transitionHours"
+        ]
+      }
+    },
+    "unverified": [
+      "Fetal alcohol syndrome education for PAs with primary responsibility for diagnosing and treating it (Minn. Stat. 214.12 subd. 3; the board rule was not loaded)",
+      "Whether the PA Licensure Compact is operational for Minnesota PAs"
+    ],
+    "certificationRequired": {
+      "value": false,
+      "fact": "ce.acceptsNccpaCertificationInLieu",
+      "reason": "NCCPA certification is an alternative to the 50 hours, not a requirement."
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Minnesota Board of Nursing",
+      "url": "https://mn.gov/boards/nursing/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": false,
+        "fact": "rn.nlcCompact"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 24,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "Current certification from a national professional nursing organization documents the CE learning objectives.",
+            "fact": "aprn.certificationAsCeEvidence"
+          },
+          {
+            "text": "The hours are one contact hour for each month of registration: 24 in a 24-month period, and in the first registration period (six to 29 months) one per month of that period.",
+            "facts": [
+              "rn.ceRatio",
+              "rn.initialPeriod",
+              "rn.ceHoursPerCycle"
+            ]
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN renewal requires current national certification; the contact hours are the RN registration's.",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "rn.renewalCycleYears",
+            "rn.renewalDeadline"
+          ],
+          "reason": "Advanced practice registration follows the same 24-month registration period."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "unverified": [
+        "Fetal alcohol syndrome education for APRNs with primary responsibility for diagnosing and treating it (Minn. Stat. 214.12 subd. 3; the board rule was not loaded)"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative agreement",
+        "conditional": true,
+        "text": "An NP first practices at least 2,080 hours under a collaborative agreement; since August 1, 2026 that must last at least three years with an APRN collaborator, who may be a physician or an APRN with at least three years of APRN practice. An NP whose first 2,080 hours are in services other than primary care or mental health completes them in a setting where APRNs and physicians work together.",
+        "facts": [
+          "practice.transitionToPracticeHours",
+          "practice.collaborator2026",
+          "practice.collaborator2026Effective",
+          "practice.specialtySetting2026"
+        ]
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { ABMS_MOC, AOA_OCC, AOA_NATIONAL } from "../constants/boardRequirements.js";
+import { certBodyOf, isAdvancedPractice, isNuccSpecialtyId } from "../constants/professions.js";
 
 /**
  * Board continuing-certification compliance — computes standing for every
@@ -39,7 +40,9 @@ export function computeBoardCompliance(data) {
   // must produce the parent board's full requirement card — a neurosurgeon
   // shouldn't have to know to pick "Surgery".
   const seen = new Set();
-  const resolved = (data.settings.specialties || []).map(id => {
+  // NUCC specialties (a PA's or NP's specialty or population focus) are not
+  // boards and never produce a board card.
+  const resolved = (data.settings.specialties || []).filter(id => !isNuccSpecialtyId(id)).map(id => {
     const [kind, code, ...rest] = String(id).split(":");
     const subName = rest.join(":");
     // ABMS subspecialties explicitly follow their primary board. AOA
@@ -177,6 +180,10 @@ export function boardIdsFromLicenses(licenses) {
   for (const l of licenses || []) {
     const type = l.type || "";
     if (!/board certification/i.test(type)) continue;
+    // An NCCPA or NP certification record is never name-scanned against the
+    // physician boards: "PA-C, CAQ Emergency Medicine" must not demand ABEM
+    // MOC hours. Its own card comes from certCompliance.js.
+    if (certBodyOf(type)) continue;
     const text = `${l.name || ""} ${l.notes || ""}`.toLowerCase().replace(/&/g, "and");
     if (!text.trim()) continue;
     const isAOA = /\(AOA\)/i.test(type);
@@ -206,8 +213,13 @@ export function effectiveBoardSpecialties(data) {
   return [...new Set([...picked, ...implied])];
 }
 
-/** computeBoardCompliance over effectiveBoardSpecialties: what every screen shows. */
+/**
+ * computeBoardCompliance over effectiveBoardSpecialties: what every screen
+ * shows. Physician boards never apply to a PA or NP; their national
+ * certification cards come from certCompliance.js.
+ */
 export function boardComplianceFor(data) {
+  if (isAdvancedPractice(data?.settings?.degreeType)) return [];
   return computeBoardCompliance({ ...data, settings: { ...(data?.settings || {}), specialties: effectiveBoardSpecialties(data) } });
 }
 

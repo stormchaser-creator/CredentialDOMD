@@ -20,6 +20,8 @@ import { withCvImported } from "../../utils/setupTasks";
 import { commitSetupState } from "./setup/useSetupState";
 import { storedDataUrl } from "../../utils/storedBytes";
 import { downloadDocumentFile } from "../../lib/supabase";
+import { isKnownDegree } from "../../constants/professions.js";
+import ProfessionPicker from "./ProfessionPicker";
 
 /**
  * Start from your CV.
@@ -37,6 +39,12 @@ import { downloadDocumentFile } from "../../lib/supabase";
  * One thing it adds: a "tick all" per group. Thirty rows is thirty taps
  * otherwise, and that is how a physician gives up halfway and ends with half
  * a record.
+ *
+ * A member who has not chosen a profession is asked it (MD, DO, PA or NP,
+ * the one-tap choice Home shows) before anything is read: the licence and
+ * education types the reader offers follow it. The CV she picked waits, and
+ * is read with that profession's lists as soon as she chooses; the choice is
+ * saved to her profile. "Not now" reads nothing.
  */
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -56,6 +64,10 @@ function CvImportReview({ source = null, onSaved, onClose }) {
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [saved, setSaved] = useState(null);
+  // The CV waiting on the profession ({ file } or { doc }), and whether the
+  // member said "Not now" to it.
+  const [waiting, setWaiting] = useState(null);
+  const [declined, setDeclined] = useState(false);
 
   const findings = useMemo(
     () => markPlanLocks(markAlreadyOnFile(raw ? cvFindings(raw, { data, settings: s }) : [], data, s), { isPro }),
@@ -73,7 +85,18 @@ function CvImportReview({ source = null, onSaved, onClose }) {
     [data.documents],
   );
 
-  const read = useCallback(async ({ dataUrl, name, mime, file }) => {
+  // Nothing is read for a member with no profession: the CV waits for her
+  // choice (chooseProfession reads it with the profession she picks).
+  const ask = useCallback((job, name) => {
+    setError("");
+    setWarning("");
+    setDeclined(false);
+    setFileName(name || "");
+    setWaiting(job);
+  }, []);
+
+  const read = useCallback(async ({ dataUrl, name, mime, file }, degree = deg) => {
+    if (!isKnownDegree(degree)) { ask({ file: { dataUrl, name, mime, file } }, name); return; }
     setPhase("reading");
     setError("");
     setWarning("");
@@ -90,11 +113,11 @@ function CvImportReview({ source = null, onSaved, onClose }) {
           return;
         }
         if (screen) setWarning(phiWarningText(screen));
-        reply = await analyzeCvText(text, deg, apiKey);
+        reply = await analyzeCvText(text, degree, apiKey);
       } else if (mime === "application/pdf" || String(dataUrl).startsWith("data:application/pdf")) {
-        reply = await analyzeCvPdf(dataUrl, deg, apiKey);
+        reply = await analyzeCvPdf(dataUrl, degree, apiKey);
       } else {
-        reply = await analyzeCvImage(dataUrl, deg, apiKey);
+        reply = await analyzeCvImage(dataUrl, degree, apiKey);
       }
       const screen = screenDocument(`${name}\n${JSON.stringify(reply)}`);
       if (screen?.level === "clinical") {
@@ -110,11 +133,12 @@ function CvImportReview({ source = null, onSaved, onClose }) {
       setError(err?.message || "The CV could not be read. Try again.");
       setPhase("start");
     }
-  }, [deg, apiKey]);
+  }, [deg, apiKey, ask]);
 
   // A file already in Files: its bytes may still be in Storage only (after a
   // reload they come back one document at a time), so they are fetched first.
-  const readStored = useCallback(async (d) => {
+  const readStored = useCallback(async (d, degree = deg) => {
+    if (!isKnownDegree(degree)) { ask({ doc: d }, d.name); return; }
     setPhase("reading");
     setError("");
     setWarning("");
@@ -127,8 +151,20 @@ function CvImportReview({ source = null, onSaved, onClose }) {
       setPhase("start");
       return;
     }
-    await read({ dataUrl: got.dataUrl, name: d.name, mime: d.type || "" });
-  }, [read]);
+    await read({ dataUrl: got.dataUrl, name: d.name, mime: d.type || "" }, degree);
+  }, [read, deg, ask]);
+
+  // The member's choice is saved to her profile, then the CV she picked is
+  // read with that profession's lists. Refused (read-only, or membership
+  // being re-checked): nothing is read and the choice stays on screen.
+  const chooseProfession = useCallback((d) => {
+    const job = waiting;
+    if (updateSettings({ degreeType: d }) === false) { alertWriteRefused({ scope: "credential" }); return; }
+    setWaiting(null);
+    if (job?.doc) readStored(job.doc, d);
+    else if (job?.file) read(job.file, d);
+  }, [waiting, updateSettings, read, readStored]);
+  const notNow = useCallback(() => { setWaiting(null); setDeclined(true); }, []);
 
 
   const pickFile = useCallback(async (e) => {
@@ -351,6 +387,14 @@ function CvImportReview({ source = null, onSaved, onClose }) {
             <div style={{ fontSize: 14, fontWeight: 700, color: T.accent }}>
               Reading {fileName || "your CV"}. This takes a few seconds.
             </div>
+          ) : waiting ? (
+            <ProfessionPicker
+              id="cv-profession"
+              why={`It sets the license and training types ${fileName || "your CV"} is read with, and it is saved to your profile.`}
+              onChoose={chooseProfession}
+              onDismiss={notNow}
+              theme={T}
+            />
           ) : (
             <>
               {/* Opened from the "this looks like your CV" offer, the file is
@@ -388,6 +432,15 @@ function CvImportReview({ source = null, onSaved, onClose }) {
             </>
           )}
         </div>
+        {declined && (
+          <div style={{
+            fontSize: 13, color: T.text, backgroundColor: T.infoDim,
+            borderRadius: 10, padding: "10px 12px", lineHeight: 1.45,
+          }}>
+            {fileName || "Your CV"} was not read. The reader needs your license type (MD, DO, PA or NP)
+            to read your licenses and training right. Choose the file again when you are ready to say which.
+          </div>
+        )}
         {error && errorBox(error)}
         {onClose && phase === "start" && <button onClick={onClose} style={secondaryBtn}>Close</button>}
       </div>

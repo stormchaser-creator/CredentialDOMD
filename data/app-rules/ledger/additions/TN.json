@@ -1,0 +1,27 @@
+{
+ "state": "TN",
+ "facts": [
+  {
+   "field": "np.aprn.extraCompetenceItem",
+   "profession": "np",
+   "value": "APRN renewal: national certification plus one more item from the RN competence list",
+   "cite": "Tenn. Comp. R. & Regs. 1000-01-.18(2)(b)",
+   "url": "https://publications.tnsosfiles.com/rules/1000/1000-01.20260408.pdf",
+   "quote": "Advanced Practice Registered Nurses: 1. Evidence of initial or continuing national certification ... One (1) additional item from the Registered Nurse proof of competence list",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.competenceList",
+   "profession": "np",
+   "value": "Fourteen items, including employer or peer evaluation, contract renewal, self-evaluation, specialty certification, goal plan, volunteer work, teaching, and retaking NCLEX",
+   "cite": "Tenn. Comp. R. & Regs. 1000-01-.18(2)(a)",
+   "url": "https://publications.tnsosfiles.com/rules/1000/1000-01.20260408.pdf",
+   "quote": "1. A satisfactory employer evaluation. 2. A satisfactory peer evaluation. 3. Evidence of contract renewal, re-appointment, or continuing contract",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

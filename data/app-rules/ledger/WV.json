@@ -1,0 +1,580 @@
+{
+ "state": "WV",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "West Virginia Board of Medicine (PAs collaborating with osteopathic physicians may instead be licensed by the WV Board of Osteopathic Medicine)",
+   "url": "https://wvbom.wv.gov/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA; PA-C only while NCCPA certified)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Biennial; all PA licences renew before April 1 of every odd year (expire March 31 of odd years; last cycle closed March 31, 2025, next March 31, 2027). No grace period for practice after expiration."
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "100 hours per two year reporting period. Category I or II from AMA, AAPA or AAFP; Category II capped at 50 hours (board page: minimum 50 Category I). Alternatives: passing an NCCPA recertification exam in the period, or a PA master's degree within one year of initial licence expiry (each worth 100 hours, or 97 if the 3 hour controlled substance course is mandatory). The board's CME page also says the 3 hour controlled substance course can be used for 3 of the 50 Category I hours.",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaNote": "Holding NCCPA certification alone does not satisfy CME. Only PASSING an NCCPA recertification examination during the reporting period substitutes for the 100 hours, and it never substitutes for the 3 hour controlled substance course.",
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaRenewalNote": "Current NCCPA certification (or a licence from a state not requiring it) is required for initial licensure under W. Va. Code 30-3E-4(b)(5); at renewal the PA only reports NCCPA status, and a PA whose certification lapsed may renew using the designation PA.",
+   "topicMandates": [
+    {
+     "topic": "Risk Assessment and Responsible Prescribing of Controlled Substances (drug diversion, best practice prescribing, opioid antagonist training), board approved course",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "PAs who prescribed, administered or dispensed any controlled substance under a WV licence during the reporting period; counts toward the 100 hours"
+    },
+    {
+     "topic": "Same 3 hour board approved controlled substance course within one year of initial licensure",
+     "hours": 3,
+     "period": "one-time",
+     "appliesTo": "Newly licensed PAs who prescribe, administer or dispense controlled substances under a WV licence"
+    }
+   ],
+   "controlledSubstanceCe": "3 hours board approved course every biennial reporting period for anyone who prescribed, administered or dispensed a controlled substance under a WV licence (11 CSR 1B 14.4); waived for those who did not. The DEA 8 hour MATE training counts only if that course is on the board approved list."
+  },
+  "practice": {
+   "agreementType": "practice notification",
+   "agreementFilingAndRenewal": "PA may not practise independently and practises in collaboration with physicians under a practice notification filed jointly by the PA and a health care facility with the board ($100 fee), activated only on the board's written notice. It terminates automatically if the licence expires, the PA leaves the listed facility, or loses credentials there; the PA must notify the board in writing within 10 days of a termination. No periodic renewal of the notification is stated; the PA attests at licence renewal to practising within it.",
+   "notes": "Practice agreements authorized before June 1, 2021 ended by June 1, 2022 (W. Va. Code 30-3E-9). Prescriptive authority comes with an active practice notification; no Schedule I; Schedule II narcotics limited to a 3 day supply."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "No separate state controlled substance registration for prescribing. Registration with the WV Controlled Substances Monitoring Program (Board of Pharmacy) is required for practitioners who prescribe or dispense Schedule II to V, within 30 days of a new licence. Office based administering or dispensing of controlled substances (including samples) requires a board Controlled Substance Dispensing Practitioner Registration, renewed with the licence.",
+   "ceForPrescribers": "3 hour board approved controlled substance course each biennium (see topicMandates).",
+   "stateCsRegistrationNote": "Not yet verified. W. Va. Code 60A-3-302(a) requires an annual registration from the Board of Pharmacy 'or the appropriate department, board, or agency' for anyone who dispenses a controlled substance, and 60A-1-101 defines dispense to include prescribing. The Board of Pharmacy permit page cites an exemption in 15 CSR 2-3.2 that was not loaded. The WV Board of Osteopathic Medicine issues a Controlled Substance License to DOs. Whether a WV PA needs a state CS registration to prescribe is therefore unconfirmed; the board's renewal FAQ names only CSMP registration and the office dispensing registration."
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": "2 (biennial)",
+    "cite": "11 CSR 1B 14.1",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "minimum of 100 hours of continuing education satisfactory to the Board during the preceding two-year period is required for the biennial renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "Before April 1 of every odd year",
+    "cite": "11 CSR 1B 5.2",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "regardless of the date the license was first issued, shall occur prior to April 1 of every odd year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline (2025 cycle)",
+    "value": "Expired 11:59 pm EDT March 31, 2025 unless renewed",
+    "cite": "WVBOM 2025 PA renewal FAQ",
+    "url": "https://wvbom.wv.gov/2025PARenewalFAQ.asp",
+    "quote": "Effective at 11:59 pm Eastern Daylight Time (EDT) on March 31, 2025, all current licenses for physician assistants will expire unless successfully renewed",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "100",
+    "cite": "11 CSR 1B 14.1",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "Successful completion of a minimum of 100 hours of continuing education satisfactory to the Board during the preceding two-year period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "Category II capped at 50 hours",
+    "cite": "11 CSR 1B 14.2.2",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "A maximum of 50 hours of continuing medical education credit may be awarded for this category of activity.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "Minimum 50 hours Category I",
+    "cite": "WVBOM PA CME page",
+    "url": "https://wvbom.wv.gov/PACME2018.asp",
+    "quote": "A minimum of 50 hours of CME must be Category I.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaRecertExam",
+    "value": "Passing an NCCPA recertification exam in the period earns up to 100 hours (97 if the CS course is mandatory)",
+    "cite": "11 CSR 1B 14.2.4",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "Passing a recertification examination by the NCCPA during the reporting period. A maximum of 100 hours of continuing medical education credit may be awarded",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": "No; lapsed NCCPA PAs may renew as PA",
+    "cite": "WVBOM 2025 PA renewal FAQ",
+    "url": "https://wvbom.wv.gov/2025PARenewalFAQ.asp",
+    "quote": "If you are not NCCPA-certified, you may submit an application to renew your license, but you will need to use the professional designation PA",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.initialNccpa",
+    "value": "Current NCCPA certification required for initial licence (or licence from a state not requiring it)",
+    "cite": "W. Va. Code 30-3E-4(b)(5)",
+    "url": "https://code.wvlegislature.gov/30-3E-4/",
+    "quote": "Has a current certification from the National Commission on Certification of Physician Assistants or has a current license in good standing from a state",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[0]",
+    "value": "3 hour controlled substance course every reporting period for CS prescribers",
+    "cite": "11 CSR 1B 14.4",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "This is a biennial requirement that must be satisfied during each reporting period, and may be used to satisfy three hours of continuing education requirements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[1]",
+    "value": "3 hour course within one year of initial licensure",
+    "cite": "11 CSR 1B 14.3",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "the licensee shall complete three hours of training in a Board-approved course on Risk Assessment and Responsible Prescribing of Controlled Substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "Collaboration under a practice notification filed with the board",
+    "cite": "11 CSR 1B 11.1",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "the physician assistant and a health care facility shall file a practice notification with the Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.noIndependentPractice",
+    "value": "PA may not practise independently",
+    "cite": "11 CSR 1B 8.1",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "A physician assistant may not practice independently.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Notify board within 10 days of termination",
+    "cite": "W. Va. Code 30-3E-10a(c)",
+    "url": "https://code.wvlegislature.gov/30-3E-10a/",
+    "quote": "A physician assistant shall notify the board, in writing, within 10 days of the termination of a practice notification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scheduleII",
+    "value": "Up to a 3 day supply of a Schedule II narcotic; no Schedule I",
+    "cite": "11 CSR 1B 12.3",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "A physician assistant may prescribe up to a three-day supply of a Schedule II narcotic medication.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csmp",
+    "value": "CSMP registration required for Schedule II to V prescribers within 30 days of a new licence",
+    "cite": "W. Va. Code 60A-9-5a(a)",
+    "url": "https://code.wvlegislature.gov/60A-9-5a/",
+    "quote": "who prescribe or dispense Schedule II, III, IV or V controlled substances shall register with the West Virginia Controlled Substances Monitoring Program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dispensingRegistration",
+    "value": "Office based administering or dispensing of CS requires a board dispensing registration",
+    "cite": "WVBOM 2025 PA renewal FAQ",
+    "url": "https://wvbom.wv.gov/2025PARenewalFAQ.asp",
+    "quote": "Physician assistants who administer or dispense controlled substances (including free samples) in an office-based setting must be registered with the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[0] (counts as Category I)",
+    "value": "The 3 hour course can count toward the 50 Category I hours",
+    "cite": "WVBOM PA CME page",
+    "url": "https://wvbom.wv.gov/PACME2018.asp",
+    "quote": "can be used for 3 of the 50 Category I CME hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationInLieu (board FAQ)",
+    "value": "NCCPA certification does not exempt from CME",
+    "cite": "WVBOM 2025 PA renewal FAQ",
+    "url": "https://wvbom.wv.gov/2025PARenewalFAQ.asp",
+    "quote": "NCCPA certification does not exempt you from meeting this obligation.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates (statute)",
+    "value": "Drug diversion, best practice CS prescribing and opioid antagonist training for PAs who prescribe, administer or dispense CS; within 1 year of initial licence",
+    "cite": "W. Va. Code 30-1-7a(b)",
+    "url": "https://code.wvlegislature.gov/30-1-7a/",
+    "quote": "shall complete drug diversion training, best-practice prescribing of controlled substances training, and training on prescribing and administering an opioid antagonist",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal (fee)",
+    "value": "Practice notification fee $100",
+    "cite": "11 CSR 1B 11.2",
+    "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+    "quote": "The fee for the submission of a practice notification shall be one hundred dollars ($100)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.noIndependentPractice (statute)",
+    "value": "PA may not practise independent of a collaborating physician",
+    "cite": "W. Va. Code 30-3E-9(a)",
+    "url": "https://code.wvlegislature.gov/30-3E-9/",
+    "quote": "A physician assistant may not practice independent of a collaborating physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "Statute requires annual registration for anyone who dispenses; whether a prescriber-only PA/APRN must register is unconfirmed",
+    "cite": "W. Va. Code 60A-3-302(a); 60A-1-101(i)",
+    "url": "https://code.wvlegislature.gov/60A-3-302/",
+    "quote": "must obtain annually a registration issued by the state Board of Pharmacy or the appropriate department, board, or agency",
+    "loaded": true,
+    "verified": false,
+    "verifierNote": "Statute loaded, but the Board of Pharmacy rule exemption (15 CSR 2-3.2) was not loaded, so the researcher value false is withdrawn and set to null."
+   },
+   {
+    "field": "osteopathic.ce",
+    "value": "24 CSR 2 (2019 emergency amendment): 100 hours, minimum 50 Category 1, AOA accepted",
+    "cite": "24 CSR 2 13.1 (emergency amendment filed 7/31/2019)",
+    "url": "https://www.wvbdosteo.org/www/download_resource.asp?id=192",
+    "quote": "a minimum of 50 hours of Category 1, satisfactory to the Board during the preceding two-year period",
+    "loaded": true,
+    "verified": false,
+    "verifierNote": "Board posted copy is a 2019 emergency rule read by OCR; the current final 24 CSR 2 was not loaded."
+   }
+  ],
+  "osteopathicBoardNote": "PAs licensed by the WV Board of Osteopathic Medicine (24 CSR 2): the only rule text the board links is a 2019 emergency amendment. It shows 100 hours per 2 years with at least 50 Category 1 written into the rule, AOA credit accepted, no NCCPA recertification exam pathway listed, and the 3 hour drug diversion course required also of anyone practising under an active practice notification. The current legislative rule was not loaded, so these differences are not yet verified."
+ },
+ "np": {
+  "board": {
+   "name": "West Virginia Board of Registered Nurses (WV RN Board)",
+   "url": "https://wvrnboard.wv.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "June 30 of each even numbered year",
+   "ceHoursPerCycle": 12,
+   "ncl": true,
+   "nclNote": "WV has enacted the Nurse Licensure Compact (W. Va. Code 30-7F).",
+   "topicMandates": [
+    {
+     "topic": "Drug diversion training, best practice prescribing of controlled substances and opioid antagonist training",
+     "hours": 3,
+     "period": "one-time",
+     "appliesTo": "Newly licensed RNs/APRNs who prescribe, administer or dispense a controlled substance; within 1 year of initial licence (waiver available if none)"
+    }
+   ],
+   "notes": "A nurse first licensed in WV during a reporting period is exempt from CE for that period (19 CSR 11 3.2.1). 12 of the APRN's 24 hours may count toward the RN 12."
+  },
+  "aprn": {
+   "title": "APRN plus designated role title (e.g. Nurse Practitioner); licence issued by the WV RN Board",
+   "separateLicenceOrCertificate": "Separate APRN licence (on top of WV RN licence or NLC multistate privilege), plus separate prescriptive authority",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Renewal period runs July 1 of an odd year to June 30 of the next odd year (expires June 30, odd years)",
+   "ceHoursPerCycle": 24,
+   "pharmacologyHoursPerCycle": 12,
+   "ceSplit": "24 contact hours per cycle: 12 in pharmacotherapeutics and 12 in clinical management of patients",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Drug diversion, best practice prescribing of controlled substances and opioid antagonist training",
+     "hours": 3,
+     "period": "one-time",
+     "appliesTo": "APRNs who prescribe, administer or dispense controlled substances; within 1 year of initial licensure"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Yes. Limited prescriptive authority is a separate board authorization (identification number), renewed biennially; initial eligibility needs 45 contact hours in pharmacology and clinical management of drug therapy, 15 of them within the 2 years immediately before entering the prerequisite collaborative relationship (W. Va. Code 30-7-15b(a)(3)).",
+   "pharmacologyCeForPrescribers": "8 contact hours of board approved pharmacology in the 2 years before renewal of prescriptive authority; may be part of the APRN licence's 12 pharmacotherapeutics hours.",
+   "controlledSubstanceCe": "3 hours drug diversion/best practice prescribing/opioid antagonist within 1 year of initial licensure (one-time per the board page and W. Va. Code 30-1-7a). No Schedule I; Schedule II narcotics limited to a 3 day supply.",
+   "stateCsRegistrationRequired": null,
+   "csNote": "No separate WV CS registration for prescribing is NOT confirmed (see the PA note: 60A-3-302 and the unloaded 15 CSR 2-3.2 exemption). Confirmed: DEA registration numbers are filed with the RN Board (19 CSR 8 3.8) and CSMP registration is required for Schedule II to V prescribers (W. Va. Code 60A-9-5a(a))."
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "collaboration (prescribing only, first 3 years)",
+   "transitionToPracticeHours": null,
+   "transitionNote": "Transition is time based, not hours: a written collaborative agreement with a physician is required for prescriptive authority until the APRN has practised at least 3 years in a documented collaborative relationship with prescriptive authority, then may apply to prescribe without one.",
+   "agreementFilingAndRenewal": "Verification of the written collaborative agreement is filed with the RN Board, which forwards it to the Board of Medicine or Osteopathic Medicine. If the agreement dissolves with no other current agreement, the APRN must stop prescribing immediately and has 60 days to file a new verified agreement before a reinstatement application is required."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": "2; expires June 30 of each even numbered year",
+    "cite": "19 CSR 3 8.1",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=57169&Format=PDF",
+    "quote": "Each license issued by the board expires on June 30 of each even numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Quote confirmed by reading the loaded page; the source text has OCR or spacing artifacts so the quote is normalized."
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "12 contact hours every renewal period",
+    "cite": "19 CSR 11 3.1.1",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=56092&Format=PDF",
+    "quote": "shall complete twelve (12) contact hours of continuing education, as approved by this rule, every renewal period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates[0]",
+    "value": "3 contact hours within 1 year of initial licence",
+    "cite": "WV RN Board CE page",
+    "url": "https://wvrnboard.wv.gov/education/continuing-education",
+    "quote": "Require 3 contact hours of CE on safe prescribing and drug diversion, completed within 1 year of receiving your initial license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates[0] (statute)",
+    "value": "Drug diversion/best practice/opioid antagonist training within one year of initial licence if CS prescribed, administered or dispensed",
+    "cite": "W. Va. Code 30-1-7a(b)",
+    "url": "https://code.wvlegislature.gov/30-1-7a/",
+    "quote": "shall complete the continuing education requirements set forth in this section within one year of receiving his or her initial license from that board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ncl",
+    "value": "WV is a Nurse Licensure Compact party state",
+    "cite": "W. Va. Code 30-7F-3(a)",
+    "url": "https://code.wvlegislature.gov/30-7F-3/",
+    "quote": "A multistate license to practice registered or licensed practical/vocational nursing issued by a home state",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceHoursPerCycle",
+    "value": "24 contact hours: 12 pharmacotherapeutics, 12 clinical management",
+    "cite": "19 CSR 7 6.1.b",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=57183&Format=PDF",
+    "quote": "Evidence of completion of a minimum of 24 contact hours obtained within the most recent licensure renewal cycle; 12 hours in pharmacotherapeutics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Quote confirmed by reading the loaded page; the source text has OCR or spacing artifacts so the quote is normalized."
+   },
+   {
+    "field": "aprn.renewalCycle",
+    "value": "July 1 odd year to June 30 next odd year",
+    "cite": "WV RN Board CE page",
+    "url": "https://wvrnboard.wv.gov/education/continuing-education",
+    "quote": "The APRN license renewal period runs from July 1 of an odd year to June 30 of the next odd year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "Yes, must be maintained",
+    "cite": "19 CSR 7 12.1",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=57183&Format=PDF",
+    "quote": "An APRN shall maintain current certification or recertification from a national organization.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Quote confirmed by reading the loaded page; the source text has OCR or spacing artifacts so the quote is normalized."
+   },
+   {
+    "field": "prescribing.pharmacologyCeForPrescribers",
+    "value": "8 contact hours pharmacology in the 2 years before renewal of prescriptive authority",
+    "cite": "19 CSR 8 4.3",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=56091&Format=PDF",
+    "quote": "complete during the 2 years prior to renewal a minimum of 8 contact hours of pharmacology education that has been approved by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Quote confirmed by reading the loaded page; the source text has OCR or spacing artifacts so the quote is normalized."
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": "Prescriptive authority renewed biennially",
+    "cite": "19 CSR 8 4.4",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=56091&Format=PDF",
+    "quote": "The board shall renew prescriptive authority for advanced practice registered nurses biennially on a date determined by the Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transition",
+    "value": "3 years documented collaborative relationship before prescribing without an agreement",
+    "cite": "W. Va. Code 30-7-15b(e)(1)",
+    "url": "https://code.wvlegislature.gov/30-7-15b/",
+    "quote": "Has practiced at least three years in a duly-documented collaborative relationship with granted prescriptive authority",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Verification of collaborative agreement filed with the RN Board",
+    "cite": "W. Va. Code 30-7-15b(d)",
+    "url": "https://code.wvlegislature.gov/30-7-15b/",
+    "quote": "Verification of a collaborative agreement shall be filed with the board by the advanced practice registered nurse",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "60 days to file a new verified agreement after dissolution",
+    "cite": "19 CSR 8 6.11",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=56091&Format=PDF",
+    "quote": "the advanced practice registered nurse shall have 60 days to provide the board a verified current collaborative agreement to reinstate the prescribing privilege",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scheduleII",
+    "value": "No Schedule I; Schedule II narcotics limited to 3 day supply",
+    "cite": "W. Va. Code 30-7-15a(b)",
+    "url": "https://code.wvlegislature.gov/30-7-15a/",
+    "quote": "An advanced practice registered nurse may prescribe up to a three-day supply of a Schedule II narcotic",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority",
+    "value": "APRN defined as providing care independently (full label is the common classification)",
+    "cite": "19 CSR 7 2.1",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=57183&Format=PDF",
+    "quote": "a registered nurse who has acquired advanced clinical knowledge and skills preparing him or her to independently provide direct and indirect care to patients",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "APRN files DEA registrations with the board",
+    "cite": "19 CSR 8 3.8",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=56091&Format=PDF",
+    "quote": "shall immediately file any and all of his or her Drug Enforcement Agency registrations and numbers with the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "Statute requires annual registration for anyone who dispenses; whether a prescriber-only PA/APRN must register is unconfirmed",
+    "cite": "W. Va. Code 60A-3-302(a); 60A-1-101(i)",
+    "url": "https://code.wvlegislature.gov/60A-3-302/",
+    "quote": "must obtain annually a registration issued by the state Board of Pharmacy or the appropriate department, board, or agency",
+    "loaded": true,
+    "verified": false,
+    "verifierNote": "Statute loaded, but the Board of Pharmacy rule exemption (15 CSR 2-3.2) was not loaded, so the researcher value false is withdrawn and set to null."
+   },
+   {
+    "field": "prescribing.initialPharmacology",
+    "value": "45 contact hours pharmacology and clinical management of drug therapy; 15 within 2 years before entering the prerequisite collaborative relationship",
+    "cite": "W. Va. Code 30-7-15b(a)(3)",
+    "url": "https://code.wvlegislature.gov/30-7-15b/",
+    "quote": "fifteen hours of which shall have been completed within the two-year period immediately prior to entering into a prerequisite collaborative relationship",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceHoursPerCycle (board page)",
+    "value": "24 hours: 12 pharmacotherapeutics, 12 clinical management",
+    "cite": "WV RN Board CE page",
+    "url": "https://wvrnboard.wv.gov/education/continuing-education",
+    "quote": "Each APRN must complete 24 contact hours of CE every two years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.firstPeriodExempt",
+    "value": "RN first licensed in WV during a reporting period is exempt for that period",
+    "cite": "19 CSR 11 3.2.1",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=56092&Format=PDF",
+    "quote": "is exempt from the continuing education requirements for the entire reporting period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.rnOverlap",
+    "value": "12 of the APRN 24 hours may count toward the RN 12",
+    "cite": "19 CSR 7 6.1.b",
+    "url": "https://apps.sos.wv.gov/adlaw/csr/readfile.aspx?DocId=57183&Format=PDF",
+    "quote": "12 hours may count toward the continuing education requirement for the registered nurse license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: rules for PAs licensed by the WV Board of Osteopathic Medicine were checked only against a 2019 emergency amendment of 24 CSR 2 (board posted, read by OCR); the current final rule was not loaded. It differs from 11 CSR 1B (50 Category 1 minimum in rule text, AOA credit, no NCCPA exam pathway listed).",
+  "PA and NP: whether a separate state controlled substance registration is needed to prescribe is unconfirmed (W. Va. Code 60A-3-302 versus the unloaded 15 CSR 2-3.2 exemption); value set to null.",
+  "NP: the 'full' practice label is a classification; primary sources confirm collaboration is tied only to prescriptive authority (3 year transition, W. Va. Code 30-7-15b(e)) and that APRNs 'independently provide' care (19 CSR 7 2.1). No statute was loaded expressly saying non prescribing APRN practice needs no agreement.",
+  "NP: the APRN renewal period (July 1 odd year to June 30 next odd year) is from the RN Board CE page, not rule text.",
+  "NP: 19 CSR 7 15.2 refers to an APRN 'practice notification'; no APRN practice notification filing rule was found, so it is not modelled.",
+  "WV nursing rules 19 CSR 3, 7, 8 and 11 are scanned PDFs read by OCR; quotes were checked by eye and normalized for OCR typos.",
+  "No other WV topic mandate (implicit bias, human trafficking, child abuse, ethics, HIV, end of life, dementia, suicide prevention, infection control, domestic violence) was found in 11 CSR 1B, 19 CSR 7, 19 CSR 8, 19 CSR 11 or W. Va. Code 30-1-7a; the DEA MATE 8 hours is federal and not a WV state mandate."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "verifierCorrections": [
+  "PA and NP prescribing.stateCsRegistrationRequired changed from false to null (not yet verified): W. Va. Code 60A-3-302(a) requires an annual Board of Pharmacy (or appropriate board) registration for anyone who dispenses, and 60A-1-101 defines dispense to include prescribing; the exemption the Board of Pharmacy cites (15 CSR 2-3.2) was not loaded.",
+  "NP prescribing.separateAuthorityRegistration: the 15 of 45 initial pharmacology hours fall within 2 years before entering the prerequisite collaborative relationship (W. Va. Code 30-7-15b(a)(3)), not 'within 2 years before application'.",
+  "PA: added osteopathicBoardNote and an unverified fact from the 2019 24 CSR 2 emergency rule (100 hours with a 50 hour Category 1 minimum in rule text, AOA credit, no NCCPA exam pathway, CS course also tied to an active practice notification); current final rule not loaded.",
+  "PA: added facts confirming the 3 hour CS course counts toward the 50 Category I hours (board CME page), that NCCPA certification does not exempt CME (2025 FAQ), the statutory source of the CS training (30-1-7a(b)), the $100 practice notification fee (11 CSR 1B 11.2) and the statutory bar on independent practice (30-3E-9(a)).",
+  "NP: added facts for DEA filing with the board (19 CSR 8 3.8), the RN first period exemption (19 CSR 11 3.2.1), the 12 hour APRN/RN overlap (19 CSR 7 6.1.b) and the board CE page 24 hour statement."
+ ]
+}

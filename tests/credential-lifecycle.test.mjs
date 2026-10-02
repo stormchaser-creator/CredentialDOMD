@@ -387,7 +387,8 @@ test('a historical or superseded licence adds no state to CME tracking, the ring
   const ring = standingScore({ items: d.licenses, stateComps, leadDays: 90 });
   assert.equal(ring.needsAction.some(n => n.item.id === 'cme:TX'), false, 'no CME shortfall for a state no longer held');
   const ctx = readFileSync(new URL('../src/context/AppContext.jsx', import.meta.url), 'utf8');
-  assert.match(ctx, /trackedStates\(data\.settings\.primaryState, data\.settings\.additionalStates, data\.licenses\)/, 'the app, the Home cards and Vera read this list');
+  // The profession picks the practice licence (a medical licence for MD, DO and blank).
+  assert.match(ctx, /trackedStates\(data\.settings\.primaryState, data\.settings\.additionalStates, data\.licenses, data\.settings\.degreeType\)/, 'the app, the Home cards and Vera read this list');
 });
 
 test('a lone historical or superseded medical licence leaves "Your licenses" and "Expiration dates" open', () => {

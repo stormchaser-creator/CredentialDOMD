@@ -14,8 +14,10 @@ export function accessGateStatus({ enabled, initializationError, identityWaiting
   if (initializationError) return { lines: String(initializationError).split("\n").filter(Boolean), action: "reload" };
   // The identity check had no answer (a weak signal), and this device holds
   // no membership answer to open the records on: it is asked again on its
-  // own (AppContext identity retry), so this is a wait, not a failure.
-  if (identityWaiting) return { lines: ["The connection is too weak to confirm your account right now. Trying again on its own."], action: "reload" };
+  // own (AppContext identity retry), so this is a wait, not a failure, and
+  // there is nothing to tap. A Reload button under "Trying again on its own"
+  // said the opposite (lab, release goal2).
+  if (identityWaiting) return { lines: ["The connection is too weak to confirm your account right now. Trying again on its own."], action: null };
   if (!enabled) return { lines: ["Checking your invitation…"], action: null };
   if (error) return { lines: [String(error)], action: profileReady ? "refresh" : "reload" };
   if (!profileReady) return { lines: ["Your account setup could not finish. Reload to try again."], action: "reload" };

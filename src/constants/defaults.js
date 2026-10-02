@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS = {
   // device only and deliberately has no default here: LOCAL_ONLY_SETTINGS
   // (above; lib/supabase.js) carries it across a cloud load, and a default would
   // make the merged value defined and lose it. Readers coerce undefined to "".
-  degreeType: "", // unset until the physician chooses MD or DO; never assume
+  degreeType: "", // unset until the member chooses MD, DO, PA or NP; never assume
   specialties: [],
   email: "",
   phone: "",

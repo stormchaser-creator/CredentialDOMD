@@ -1,9 +1,12 @@
 /**
  * Public-record normalizer: raw register JSON in, proposed findings out.
  *
- * Pure. No fetch, no Deno, no imports, so scripts/public-record.test.mjs can
- * load this file in plain node (type stripping) against the fixtures in
- * scripts/fixtures/public-record/ captured from the live registers.
+ * Pure. No fetch, no Deno, so scripts/public-record.test.mjs can load this
+ * file in plain node (type stripping) against the fixtures in
+ * scripts/fixtures/public-record/ captured from the live registers. Its one
+ * import is the app's own profession rules (src/constants/professions.js,
+ * copied by scripts/sync-shared-app-modules.mjs), so the registry is read the
+ * same way here as in the app's NPI import.
  *
  * Two honesty rules are enforced here rather than left to the UI:
  *
@@ -21,6 +24,14 @@
  * Nothing here writes anything. Findings are proposals; the client saves only
  * what the physician accepts, one item at a time.
  */
+
+import {
+  degreeFromCredential as appDegreeFromCredential,
+  licenseTypeFor as appLicenseTypeFor,
+  licenseTypeForNppesRow,
+  nppesProfession,
+  professionFromTaxonomy,
+} from "../_shared/app/constants/professions.js";
 
 export type Confidence = "record" | "lead";
 
@@ -132,18 +143,25 @@ export function oneLineAddress(parts: {
 
 /** MD or DO from a registry credential string. Whole tokens only. */
 export function degreeFromCredential(credential: unknown): string {
-  const cred = clean(credential).toUpperCase().replace(/\./g, "");
-  if (/\bDO\b/.test(cred)) return "DO";
-  if (/\bMD\b/.test(cred)) return "MD";
-  return "";
+  return appDegreeFromCredential(clean(credential));
 }
 
 /** The license type the app files a state medical license under, by degree. */
 export function licenseTypeFor(degree: string): string {
-  return String(degree || "").toUpperCase() === "DO"
-    ? "State Medical License (DO)"
-    : "State Medical License";
+  return appLicenseTypeFor(degree);
 }
+
+const PROFESSION_NAMES: Record<string, string> = { PA: "Physician Assistant", NP: "Nurse Practitioner" };
+const LICENSE_NOUNS: Record<string, string> = {
+  "State Physician Assistant License": "physician assistant license",
+  "APRN License (NP)": "APRN license",
+  "RN License": "RN license",
+};
+// An NP's RN and APRN rows with one number are two licences (professions.js).
+const nursingKind = (code: unknown): string => {
+  const k = professionFromTaxonomy(clean(code));
+  return k === "rn" ? "rn" : k === "np" ? "aprn" : "";
+};
 
 /** Same license however the number was typed: "35.123456" = "35123456". */
 export function licenseKey(state: unknown, number: unknown): string {
@@ -176,7 +194,15 @@ export function normalizeNppes(raw: any, ctx: NormalizeContext): Finding[] {
   const out: Finding[] = [];
   const source = src("nppes", npiProfileUrl(clean(result.number) || ctx.npi), ctx);
   const basic = result.basic || {};
-  const degree = degreeFromCredential(basic.credential);
+  const rows = arr(result.taxonomies);
+  // MD or DO from the credential exactly as before; PA or NP from the NUCC
+  // taxonomy or the credential. An MD or DO credential on a PA or NP record
+  // is a conflict: no degree, and a finding says so (professions.js).
+  const reading = nppesProfession({
+    credential: clean(basic.credential),
+    taxonomies: rows.map((t) => ({ code: clean(t?.code), isPrimary: t?.primary === true })),
+  });
+  const degree = reading.degree;
 
   const first = titleCase(basic.first_name);
   const last = titleCase(basic.last_name);
@@ -195,7 +221,35 @@ export function normalizeNppes(raw: any, ctx: NormalizeContext): Finding[] {
     });
   }
 
-  if (degree) {
+  if (reading.conflict) {
+    out.push({
+      id: "nppes:profile:degreeConflict",
+      section: "settings",
+      kind: "profileDegreeConflict",
+      label: "Profession: the registry record disagrees with itself",
+      detail: `The registry lists the credential "${clean(basic.credential)}" with the taxonomy ${reading.conflict.taxonomy}. Choose your profession in Profile & settings; nothing is filled in from this record.`,
+      fields: {},
+      needs: ["degreeType"],
+      source,
+      confidence: "lead",
+    });
+  }
+
+  if (degree === "PA" || degree === "NP") {
+    out.push({
+      id: "nppes:profile:degree",
+      section: "settings",
+      kind: "profileDegree",
+      label: `Profession: ${PROFESSION_NAMES[degree]}`,
+      detail: reading.source === "credential"
+        ? `The registry lists the credential "${clean(basic.credential)}". Your profession sets which license types, CE categories and state rules the app uses.`
+        : "The registry files this NPI under a " + PROFESSION_NAMES[degree].toLowerCase() + " taxonomy. Your profession sets which license types, CE categories and state rules the app uses.",
+      fields: { degreeType: degree },
+      needs: [],
+      source,
+      confidence: "record",
+    });
+  } else if (degree) {
     out.push({
       id: "nppes:profile:degree",
       section: "settings",
@@ -238,29 +292,36 @@ export function normalizeNppes(raw: any, ctx: NormalizeContext): Finding[] {
     }
   }
 
-  const rows = arr(result.taxonomies);
   const ordered = [...rows.filter((t) => t?.primary), ...rows.filter((t) => !t?.primary)];
   const seen = new Map<string, Finding>();
   for (const t of ordered) {
     const licenseNumber = clean(t?.license);
     const state = clean(t?.state).toUpperCase();
     if (!licenseNumber || !state) continue;
-    const key = licenseKey(state, licenseNumber);
+    const nurse = nursingKind(t?.code);
+    const key = nurse ? `${licenseKey(state, licenseNumber)}|${nurse}` : licenseKey(state, licenseNumber);
     if (seen.has(key)) continue;
     const desc = clean(t?.desc);
-    // With no MD or DO in the credential there is no license type this app
-    // offers for certain: the DO list has no plain "State Medical License",
-    // so the type is left for the physician to pick rather than guessed.
-    const type = degree ? licenseTypeFor(degree) : "";
+    // MD and DO: the medical licence exactly as before. A PA or NP record, or
+    // a row the NUCC taxonomy shows is a PA, APRN or RN licence, is typed by
+    // its taxonomy (professions.js licenseTypeForNppesRow). With no profession
+    // and no such taxonomy there is no license type this app offers for
+    // certain: the DO list has no plain "State Medical License", so the type
+    // is left for the physician to pick rather than guessed.
+    const typed = licenseTypeForNppesRow({ state, taxonomyCode: clean(t?.code), description: desc }, degree);
+    const taxonomyTyped = !!professionFromTaxonomy(clean(t?.code)) && professionFromTaxonomy(clean(t?.code)) !== "physician";
+    const type = degree || taxonomyTyped ? typed.type : "";
+    const name = type ? typed.name : `${state} Medical License`;
+    const noun = LICENSE_NOUNS[type] || (type === "Other" ? "license" : "medical license");
     seen.set(key, {
       id: `nppes:license:${key}`,
       section: "licenses",
       kind: "stateLicense",
-      label: `${state} medical license ${licenseNumber}`,
+      label: `${state} ${noun} ${licenseNumber}`,
       detail: "The NPI registry carries this license number under your taxonomy record. It does not carry the issue or expiration date, so add the expiration date from your license before you save it.",
       fields: {
         ...(type ? { type } : {}),
-        name: `${state} Medical License`,
+        name,
         licenseNumber,
         state,
         notes: `Imported from NPPES NPI Registry${desc ? ` (${desc})` : ""}`,
@@ -292,20 +353,24 @@ export function normalizeCmsClinician(raw: any, ctx: NormalizeContext): Finding[
   const gradYear = clean(first.grd_yr).replace(/\D/g, "");
   const medSchRaw = clean(first.med_sch);
   const medSch = MED_SCH_BLANKS.has(medSchRaw.toUpperCase()) ? "" : titleCase(medSchRaw);
-  const degree = degreeFromCredential(first.cred);
+  const degree = nppesProfession({ credential: clean(first.cred), taxonomies: [] }).degree;
+  // A PA's or NP's school is a PA program or a nursing program, never a
+  // medical school, and Medicare does not say which degree it granted.
+  const program = degree === "PA" ? "PA program" : degree === "NP" ? "Nursing program" : "";
   if (gradYear || medSch) {
     const fields: Record<string, string> = {};
     if (degree === "DO") fields.type = "Doctor of Osteopathic Medicine (DO)";
     else if (degree === "MD") fields.type = "Doctor of Medicine (MD)";
     if (medSch) {
       fields.institution = medSch;
-      fields.name = `${degree || "Medical"} Diploma, ${medSch}`;
+      fields.name = program ? `${program}, ${medSch}` : `${degree || "Medical"} Diploma, ${medSch}`;
     }
     // Medicare states a year, not a date, and the form wants a date. Keep the
     // stated year in notes so accepting the row does not throw away the one
     // fact the register actually gave.
     if (gradYear) fields.notes = `Medicare lists the graduation year as ${gradYear}.`;
     const needs: string[] = [];
+    if (program) needs.push("type");
     if (!medSch) needs.push("institution");
     needs.push("graduationDate");
     out.push({
@@ -314,7 +379,7 @@ export function normalizeCmsClinician(raw: any, ctx: NormalizeContext): Finding[
       kind: "medicalSchool",
       label: medSch
         ? `${medSch}${gradYear ? `, class of ${gradYear}` : ""}`
-        : `Medical school, class of ${gradYear}`,
+        : `${program || "Medical school"}, class of ${gradYear}`,
       detail: [
         gradYear ? `Medicare lists your graduation year as ${gradYear}.` : "",
         medSch ? "" : "Medicare files the school as \"OTHER\", which is a bucket and not a school name, so it is left blank here. Add the school yourself.",

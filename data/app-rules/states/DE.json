@@ -1,0 +1,245 @@
+{
+  "state": "DE",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Delaware Board of Medical Licensure and Discipline, with the Regulatory Council for Physician Associates (Division of Professional Regulation)",
+      "url": "https://dpr.delaware.gov/boards/medicalpractice/renewal/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 100,
+        "fact": "ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 50,
+        "label": "Category 1",
+        "accepted": [
+          "AMA PRA Category 1",
+          "AOA Category 1-A"
+        ],
+        "unverifiedAccepted": [
+          "AAPA Category 1 CME",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ],
+        "facts": [
+          "ce.hoursPerCycle",
+          "ce.boardCategories"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "First renewal: licensed less than a year, no CME; licensed one to two years, 50 hours.",
+          "fact": "ce.firstRenewalProration"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 2,
+        "label": "Controlled substance prescribing practices, chronic pain treatment or related topics, every two years; attested at each CSR renewal, which runs on its own two-year cycle",
+        "fact": "ce.controlledSubstanceCe",
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Delaware controlled substance registration (CSR)?",
+          "description": "Applies to holders of the state controlled substance registration."
+        }
+      },
+      {
+        "topic": "Jurisprudence and Ethics",
+        "hours": 1,
+        "label": "The Division of Professional Regulation's own one hour course on Delaware controlled substance law, regulation and programs (the only approved course), once in the first year of registration",
+        "period": "lifetime",
+        "facts": [
+          "ce.topicMandates[CSR mandatory course]",
+          "prescribing.csrMandatoryCourseTiming"
+        ],
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Delaware controlled substance registration (CSR)?",
+          "description": "Applies to holders of the state controlled substance registration."
+        }
+      },
+      {
+        "topic": "Child Abuse Recognition",
+        "alsoTopics": [
+          "Domestic Violence"
+        ],
+        "hours": 1,
+        "label": "Recognizing and reporting child sexual and physical abuse, exploitation and domestic violence, at least 1 hour, before every renewal",
+        "facts": [
+          "ce.topicMandates.childAbuseTraining.hours",
+          "ce.topicMandates.childAbuseTraining",
+          "ce.topicMandates.childAbuseTraining.every"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "A PA may not perform any medical act without a written collaborative agreement, kept at the primary practice location. Once the 2026 act is implemented (one year after its May 12, 2026 enactment at the latest), a PA with more than 6,000 postgraduate clinical practice hours may apply to practice without one.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal",
+          "practice.independentPractice",
+          "practice.independentPractice.implementation"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Delaware Board of Nursing (Division of Professional Regulation)",
+      "url": "https://dpr.delaware.gov/boards/nursing/renewal/"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "rn.ceHoursPerCycle",
+            "aprn.renewalCycleYears"
+          ],
+          "reason": "Each biennium; RN licenses renew in odd years."
+        },
+        "total": {
+          "value": 30,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "National certification or recertification awarded during the biennium counts as 20 contact hours.",
+            "fact": "rn.certificationCredit"
+          },
+          {
+            "text": "Nurses licensed by examination within the biennium are exempt for that biennium.",
+            "fact": "rn.firstBienniumExempt"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Substance Use Disorders",
+          "hours": 3,
+          "label": "Substance abuse, part of the 30 hours",
+          "facts": [
+            "rn.topicMandates[substance abuse]",
+            "rn.ceHoursPerCycle"
+          ]
+        },
+        {
+          "topic": "Domestic Violence",
+          "hours": 1,
+          "label": "Recognizing and responding to suspected abuse, exploitation, trafficking or domestic violence of vulnerable persons, or reporting duties",
+          "fact": "rn.topicMandates[abuse recognition]"
+        }
+      ],
+      "practiceHours": {
+        "hours": 400,
+        "years": 2,
+        "label": "At least 1,000 practice hours in the past 5 years, or 400 in the past 2 years",
+        "fact": "rn.practiceHoursBoardPage"
+      },
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalDeadline",
+          "reason": "RN licenses expire on February 28, May 31 or September 30 of odd years: every two years."
+        }
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN renewal requires meeting the certifying agency's recertification requirements and practice hours; no APRN CE hours are set.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "practiceHours": {
+        "hours": 600,
+        "years": 2,
+        "label": "At least 1,500 practice hours in the past 5 years, or 600 in the past 2 years",
+        "fact": "aprn.practiceHoursForRenewal"
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 2,
+          "label": "Controlled substance prescribing practices, chronic pain treatment or related topics, every two years; attested at each CSR renewal, which runs on its own two-year cycle",
+          "fact": "prescribing.controlledSubstanceCe",
+          "condition": {
+            "field": "Holds a state controlled substance registration",
+            "question": "Do you hold a Delaware controlled substance registration (CSR)?",
+            "description": "Applies to holders of the state controlled substance registration."
+          }
+        },
+        {
+          "topic": "Jurisprudence and Ethics",
+          "hours": 1,
+          "label": "The Division of Professional Regulation's own one hour course on Delaware controlled substance law, regulation and programs (the only approved course), once in the first year of registration",
+          "period": "lifetime",
+          "fact": "prescribing.csrMandatoryCourseTiming",
+          "condition": {
+            "field": "Holds a state controlled substance registration",
+            "question": "Do you hold a Delaware controlled substance registration (CSR)?",
+            "description": "Applies to holders of the state controlled substance registration."
+          }
+        }
+      ]
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

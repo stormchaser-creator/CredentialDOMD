@@ -1,0 +1,71 @@
+{
+ "state": "TX",
+ "facts": [
+  {
+   "field": "np.aprn.topicMandates.pmpAfter2020",
+   "profession": "np",
+   "value": "Licensed after September 1, 2020 with PMP access: 2 hours within 1 year of initial licensure",
+   "cite": "22 TAC 216.3(c)(6); BON CE page",
+   "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+   "quote": "APRN licensed after September 1, 2020, and authorized to receive information from the PMP must complete 2 hours ... no later than 1 year after",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.olderAdultAlternatives",
+   "profession": "np",
+   "value": "Board-approved geriatric certification may fulfill it; APRNs may use Category I CME",
+   "cite": "BON CE page (22 TAC 216.3(h))",
+   "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+   "quote": "Board-approved certification related to older adult or geriatric populations may be used to fulfill this requirement. APRNs may use Category I CME",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.forensicAlternatives",
+   "profession": "np",
+   "value": "Board-approved forensic certification may fulfill it; APRNs may use TMB approved CME",
+   "cite": "BON CE page",
+   "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+   "quote": "certification related to forensic evidence collection may be used ... CME in forensic evidence collection that is approved by the Texas Medical Board",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.aprn.certificationApplies",
+   "profession": "np",
+   "value": "Certification requirement applies to APRNs who completed their program on or after January 1, 1996, or were licensed on national certification",
+   "cite": "22 TAC 221.8(a)(2)",
+   "url": "https://www.law.cornell.edu/regulations/texas/22-Tex-Admin-Code-SS-221-8",
+   "quote": "This requirement shall apply to APRNs who: (A) completed an APRN education program on or after January 1, 1996; or (B) were licensed",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.initialCycleExempt",
+   "profession": "pa",
+   "value": "Initial registration cycle under 24 months: no CE before the first renewal",
+   "cite": "TMB, Continuing Education Requirements for Physician Assistants",
+   "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant/continuing-education-requirements-for-physician-assistants",
+   "quote": "If your INITIAL registration cycle is less than 24 months, you are not required to complete CE prior to your first renewal",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.aprn.topicMandates.pmpBefore2020",
+   "profession": "np",
+   "value": "Licensed before September 1, 2020 with PMP access: 2 hours by September 1, 2021",
+   "cite": "22 TAC 216.3(c)(6); BON CE page",
+   "url": "https://www.bon.texas.gov/education_continuing_education.asp.html",
+   "quote": "APRN licensed prior to September 1, 2020 ... must complete 2 hours ... no later than September 1, 2021",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

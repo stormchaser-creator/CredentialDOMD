@@ -199,8 +199,12 @@ test("the packet blurb lists the files and never mentions the clipboard", () => 
   assert.match(letter, /\n  1\. CA license\n  2\. DEA certificate\n/);
   assert.match(letter, /\nSent via CredentialDOMD \u{b7} Sep 25, 2026$/u);
   // With no name the title named "Physician" while the body said "the physician".
+  // D-1: with no profession chosen the packet, which goes to a third party,
+  // names none ("the clinician"); MD and DO keep "the physician".
   assert.equal(bundleShareText({}, [{ name: "One" }]).title, "Credential packet (1 document)");
-  assert.match(bundleShareText({}, [{ name: "One" }]).blurb, /credential packet for the physician, 1 document/);
+  assert.match(bundleShareText({}, [{ name: "One" }]).blurb, /credential packet for the clinician, 1 document/);
+  assert.equal(bundleShareText({ degreeType: "MD" }, [{ name: "One" }]).title, "Credential packet (1 document)");
+  assert.match(bundleShareText({ degreeType: "MD" }, [{ name: "One" }]).blurb, /credential packet for the physician, 1 document/);
 });
 test("the packet blurb keeps each file-derived name's own case", () => {
   const { blurb } = bundleShareText(settings, [{ label: "DEA Registration" }, { name: "cv.pdf" }, { name: "eCFMG certificate.pdf" }, { name: "board_cert.pdf" }, { label: "Board letter." }]);

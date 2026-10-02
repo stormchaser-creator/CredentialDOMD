@@ -1,0 +1,194 @@
+{
+  "state": "MI",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Michigan Task Force on Physician's Assistants (LARA Bureau of Professional Licensing)",
+      "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 3,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "none",
+      "none": {
+        "value": true,
+        "facts": [
+          "ce.hoursPerCycle",
+          "ce.renewalRule"
+        ]
+      },
+      "cycleYears": {
+        "value": 3,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "topics": [
+      {
+        "topic": "Implicit Bias",
+        "hours": 3,
+        "reason": "At least 1 hour for each year of the 3-year license cycle",
+        "label": "Implicit bias training, at least 1 hour for each year of the license cycle, every renewal",
+        "facts": [
+          "ce.topicMandates.implicitBias",
+          "ce.topicMandates.implicitBiasGuide",
+          "licence.renewalCycleYears"
+        ]
+      },
+      {
+        "topic": "Human Trafficking",
+        "hours": 0,
+        "label": "One time training in identifying victims of human trafficking",
+        "period": "lifetime",
+        "fact": "ce.topicMandates.humanTrafficking"
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "Whether the opioids and controlled substances awareness training is repeated at each controlled substance license renewal",
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Michigan controlled substance license?",
+          "description": "Applies to holders of the state controlled substance license."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "practice agreement",
+        "text": "A PA practices only under a practice agreement with a participating physician, which either party may end with at least 30 days' written notice.",
+        "facts": [
+          "practice.agreementType",
+          "practice.termination"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "ce.renewalRule"
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Michigan Board of Nursing (LARA Bureau of Professional Licensing)",
+      "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": false,
+        "fact": "rn.nlcCompact"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 25,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "exemption": {
+          "field": "Licensed for the full two years before this expiration",
+          "question": "Have you held this Michigan RN license for the whole two years before this expiration date?",
+          "text": "The 25 hours apply to a nurse licensed for the full two years before the expiration date.",
+          "fact": "rn.ceFirstCycle",
+          "whenAnswer": "No",
+          "topics": "all"
+        }
+      },
+      "topics": [
+        {
+          "topic": "Pain Management",
+          "hours": 2,
+          "label": "Pain and symptom management, 2 of the 25 hours, each renewal period",
+          "fact": "rn.topicMandates.pain"
+        },
+        {
+          "topic": "Implicit Bias",
+          "hours": 2,
+          "reason": "At least 1 hour for each year of the 2-year license cycle",
+          "label": "Implicit bias training, at least 1 hour for each year of the license cycle",
+          "facts": [
+            "rn.topicMandates.implicitBias",
+            "rn.renewalCycleYears"
+          ]
+        },
+        {
+          "topic": "Human Trafficking",
+          "hours": 0,
+          "label": "One time training in identifying victims of human trafficking",
+          "period": "lifetime",
+          "fact": "rn.topicMandates.humanTrafficking"
+        }
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "The NP specialty certification renews on the RN schedule on proof of national certification maintained within the 2 years before renewal; the contact hours are the RN license's.",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "aprn.renewalSchedule",
+            "rn.renewalCycleYears"
+          ],
+          "reason": "Specialty certification renews on the two-year RN license schedule."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "condition": {
+            "field": "Prescribes controlled substances as a physician's delegatee",
+            "question": "Do you prescribe Schedule 2 to 5 controlled substances under a physician's delegation?",
+            "description": "Michigan training for delegated controlled substance prescribing."
+          },
+          "status": "unverified",
+          "hours": null,
+          "unverifiedItem": "How often the opioids and controlled substances awareness training is due for a delegatee (the rule says one time during the current license cycle; the nursing rule calls it a 1-time training)"
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "physician delegation (controlled substances)",
+        "conditional": true,
+        "text": "No agreement is needed for nonscheduled prescribing. Schedule 2 to 5 prescribing is a physician delegated act under a written authorization, reviewed and updated annually and kept at the physician's primary place of practice.",
+        "facts": [
+          "prescribing.scope",
+          "practice.delegationAgreementRule",
+          "practice.delegationAnnualReview",
+          "practice.delegationKept"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

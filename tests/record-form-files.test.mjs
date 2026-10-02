@@ -20,6 +20,7 @@ import * as helpers from '../src/utils/helpers.js';
 import * as credentialTypes from '../src/constants/credentialTypes.js';
 import * as documentBytes from '../src/utils/documentBytes.js';
 import { mountComponent } from './component-harness.mjs';
+import { settleOutcome } from './helpers/settle-outcome.mjs';
 
 const MB = 1024 * 1024;
 const pdf = (name, bytes) => new File([new Uint8Array(bytes)], name, { type: 'application/pdf' });
@@ -260,7 +261,9 @@ test('SYNC-013: an expense refuses a receipt over 10 MB before reading it, and k
     click(m, '+ Expense');
     const upload = nodes(m.render()).find(n => n.type === 'input' && n.props.type === 'file' && n.props.multiple);
     upload.props.onChange({ target: { files: [pdf('scan-18mb.pdf', 18 * MB), pdf('at-limit.pdf', 10 * MB), new File([new Uint8Array([1, 2, 3])], 'synthetic-receipt.jpg', { type: 'image/jpeg' })], value: '' } });
-    for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r));
+    // Each receipt is read from a real File (another thread), one after the
+    // other: wait for the reads, bounded, not a fixed number of turns.
+    await settleOutcome(20);
     const page = textOf(m.render());
     assert.ok(page.includes(BIG), page);
     assert.deepEqual(read, ['at-limit.pdf', 'synthetic-receipt.jpg'], 'the large receipt was never read');

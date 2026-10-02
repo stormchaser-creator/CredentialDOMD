@@ -1,0 +1,16 @@
+{
+ "state": "NV",
+ "facts": [
+  {
+   "field": "pa.ce.scopeMinimum",
+   "profession": "pa",
+   "value": "20 hours within scope of practice or specialty",
+   "cite": "NSBME CME Requirements Summary",
+   "url": "https://medboard.nv.gov/uploadedFiles/mednvgov/content/Licensees/CME_Requirements_MDs_PAs_AAs.pdf",
+   "quote": "For all active Physician, Physician Assistant & Anesthesiologist Assistant licensees ... within scope of ... practice/specialty",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

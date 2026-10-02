@@ -12,6 +12,8 @@ import * as paused from '../src/utils/pausedApplicationRecords.js';
 import * as guard from '../src/utils/spreadsheetGuard.js';
 import * as dictationErrors from '../src/utils/dictationErrors.js';
 import * as shareHandoff from '../src/utils/shareHandoff.js';
+import * as professions from '../src/constants/professions.js';
+import * as compliance from '../src/utils/compliance.js';
 import { mountComponent, settle } from './component-harness.mjs';
 
 export function recorder() {
@@ -29,9 +31,11 @@ export const baseData = over => ({
 /**
  * turn(args) answers each model call with { reply, actions }. `saved` seeds
  * the on-device transcript. `modules` replaces any module by its last path
- * segment. Returns the harness plus helpers to type, send and find buttons.
+ * segment. `device` is this account's small on-device store (lsGet/lsSet);
+ * pass the same object to a second mount to stand in for leaving Vera and
+ * coming back. Returns the harness plus helpers to type, send and find buttons.
  */
-export async function mountVera({ rec = recorder(), data = {}, props = {}, turn = async () => ({ reply: 'OK', actions: [] }), saved = [], modules = {}, app = {}, globals = {} } = {}) {
+export async function mountVera({ rec = recorder(), data = {}, props = {}, turn = async () => ({ reply: 'OK', actions: [] }), saved = [], modules = {}, app = {}, globals = {}, device = {} } = {}) {
   const store = { chat: saved, archives: [] };
   const turns = [];
   const ui = await mountComponent('src/components/features/AssistantSection.jsx', {
@@ -42,12 +46,15 @@ export async function mountVera({ rec = recorder(), data = {}, props = {}, turn 
     },
     props,
     modules: {
-      helpers, customCategories, shareText, docLabel, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors, shareHandoff,
+      helpers, customCategories, shareText, docLabel, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors, shareHandoff, professions, compliance,
       referenceDraft,
       assistant: { assistantTurn: async (args) => { turns.push(args); return turn(args); }, buildSnapshot: () => ({}), splitFields: sectionFields.splitFields },
       // The transcript and archives are the IndexedDB-backed stores, read and
       // written through largeGetJSON/largeSetJSON (storageScope.js).
-      storageScope: { BASE_KEYS: { chat: 'chat', archives: 'archives' }, largeGetJSON: k => store[k], largeSetJSON: (k, v) => { store[k] = v; } },
+      storageScope: {
+        BASE_KEYS: { chat: 'chat', archives: 'archives', veraProfessionLater: 'veraProfessionLater' }, largeGetJSON: k => store[k], largeSetJSON: (k, v) => { store[k] = v; },
+        lsGet: k => device[k] ?? null, lsSet: (k, v) => { device[k] = v; return true; },
+      },
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },
       officeText: { isOfficeFile: f => /\.(docx?|xlsx?|csv|txt|rtf)$/i.test(f?.name || ''), UPLOAD_ACCEPT: '*', extractOfficeText: async () => '' },
       ...modules,
@@ -70,5 +77,5 @@ export async function mountVera({ rec = recorder(), data = {}, props = {}, turn 
     ui.render();
   };
   const node = name => ui.nodes().find(n => typeof n.type === 'function' && n.type.name === name);
-  return { ...ui, rec, store, turns, buttons, button, ask, node };
+  return { ...ui, rec, store, device, turns, buttons, button, ask, node };
 }

@@ -2,6 +2,8 @@ import { buildCredentialText, formatDate, normalizeMultilineNote, plainDashes, s
 import { TEXT_RULE } from "./invoiceCover.js";
 import { scrubSsn, withDegree } from "./outgoingText.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
+import { professionCopy } from "../constants/professionCopy.js";
+import { isAdvancedPractice } from "../constants/professions.js";
 
 /**
  * Outgoing text that is not an invoice, in one pure module: the letters and
@@ -57,6 +59,14 @@ const listItem = (name) => {
   return !t || /[.!?)]$/.test(t) ? t : `${t}.`;
 };
 
+// The no-name fallback on outgoing text: "Physician" for MD and DO, as
+// always; "Clinician" for a PA, an NP or no profession chosen yet (the text
+// goes to a third party and never asserts a profession not chosen). The
+// noun ("the physician", "the physician assistant", "the nurse
+// practitioner", "the clinician") follows the same rule.
+const memberFallback = (settings = {}) => professionCopy(settings?.degreeType, { audience: "third-party" }).fallbackName;
+const memberNoun = (settings = {}) => professionCopy(settings?.degreeType, { audience: "third-party" }).noun;
+
 const asSentence = (line) => {
   const t = String(line ?? "").trim().replace(/[,;:]+$/, "");
   if (!t) return "";
@@ -87,7 +97,7 @@ export function credentialLetter(item, section, settings = {}, { note = "", atta
   }
   const credText = buildCredentialText(item, section, s, { footer: false });
   const intro = own
-    || `Please find the credential verification for ${physicianName(s, "the physician")} below${attached ? ", with supporting documentation attached" : ""}.`;
+    || `Please find the credential verification for ${physicianName(s, `the ${memberNoun(s)}`)} below${attached ? ", with supporting documentation attached" : ""}.`;
   return [greets ? null : "To whom it may concern,", intro, credText, ...close, ...stamp].filter(Boolean).join("\n\n");
 }
 
@@ -141,7 +151,7 @@ export function credentialSharePayload({ files = [], subject, blurb, letter, tex
  * docLabel.js), never a camera's "image.jpg".
  */
 export function bundleShareText(settings = {}, docs = [], date = new Date()) {
-  const who = physicianName(settings || {}, "the physician");
+  const who = physicianName(settings || {}, `the ${memberNoun(settings || {})}`);
   const npi = settings?.npi ? ` (NPI ${settings.npi})` : "";
   const count = `${docs.length} document${docs.length === 1 ? "" : "s"}`;
   const names = docs.map((d) => String(d?.label || d?.name || "document").replace(/\.[a-z0-9]{2,5}$/i, ""));
@@ -161,7 +171,8 @@ export function bundleShareText(settings = {}, docs = [], date = new Date()) {
     + names.map((n, i) => `${i + 1}. ${listItem(n)}`).join(" ")
     + `${BREAK}${BREAK}Please reach out with any questions.${BREAK}${BREAK}${signOffLine(settings)}`;
   // File names are typed by people and can carry an SSN ("W-9 123-45-6789.pdf").
-  // With no name the title names nobody; the body says "the physician".
+  // With no name the title names nobody; the body says "the physician" (MD,
+  // DO) or the chosen profession's noun ("the clinician" when none is chosen).
   const titled = physicianName(settings || {}, "");
   return { title: scrubSsn(`Credential packet${titled ? `: ${titled}` : ""} (${count})`), letter: scrubSsn(letter), blurb: scrubSsn(blurb) };
 }
@@ -273,7 +284,7 @@ export function referencesSubject(settings = {}, count = 0) {
 
 /** Share title for several peer references sent at once. */
 export function referencesShareTitle(settings, count) {
-  return `Peer references: ${physicianName(settings || {}, "Physician")} (${count})`;
+  return `Peer references: ${physicianName(settings || {}, memberFallback(settings || {}))} (${count})`;
 }
 
 /**
@@ -332,6 +343,10 @@ const DOCTOR_DEGREE = /^(?:MD|DO|MBBS|MBCHB|PHD|DDS|DMD|DPM|DC|OD|PSYD|DNP|PHARM
  */
 export function peerHeadsUp(settings = {}, peer = {}) {
   if (!String(settings?.name || "").trim()) return null;
+  // A PA or NP is never "Dr.", and their reference's profession is unknown,
+  // so a PA's or NP's letter greets the reference by full name (DESIGN 5.3).
+  // MD, DO and blank keep the letter they had.
+  const app = isAdvancedPractice(settings?.degreeType);
   const userName = String(settings.name).trim();
   const userFull = withDegree(userName, settings?.degreeType);
   // "Jane Smith, MD" -> "Smith", "Smith" -> "Smith", "Jane Smith" -> "Smith",
@@ -350,7 +365,7 @@ export function peerHeadsUp(settings = {}, peer = {}) {
   const nonDoctor = letters.length > 0 && !letters.some((d) => DOCTOR_DEGREE.test(d))
     && letters.some((d) => /^(?:RN|NP|PA|PA-C|APRN|FNP|CRNA|BSN|MSN|CNM|LPN|CNS)$/.test(d));
   const fullName = [...String(peer?.name || "").split(",")[0].trim().split(/\s+/)].filter((t) => !popped.includes(t)).join(" ");
-  const salutation = !peer?.name ? "Dear Colleague," : nonDoctor ? `Dear ${fullName},` : `Dear Dr. ${lastName},`;
+  const salutation = !peer?.name ? "Dear Colleague," : nonDoctor || app ? `Dear ${fullName || "Colleague"},` : `Dear Dr. ${lastName},`;
   return {
     emailSubject: `Upcoming Reference Request from ${userFull}`,
     emailBody: [

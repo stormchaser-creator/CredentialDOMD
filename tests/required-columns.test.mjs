@@ -65,7 +65,8 @@ test('SYNC-002: Licenses, Privileges and Insurance require a Type', () => {
 });
 
 test('CRED-018, CRED-019, CRED-020: Education Type, Position Type and case Category are required in their forms', () => {
-  assert.match(appSource, /\{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES, required: true \}/);
+  // The list follows the profession (getEducationTypes: EDUCATION_TYPES for MD, DO and blank).
+  assert.match(appSource, /\{ key: "type", label: "Type", type: "select", options: getEducationTypes\(data\.settings\.degreeType\), required: true \}/);
   assert.match(appSource, /\{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES, required: true \}/);
   assert.match(appSource, /\{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES, groups: CASE_CATEGORY_GROUPS, required: true \}/);
 });

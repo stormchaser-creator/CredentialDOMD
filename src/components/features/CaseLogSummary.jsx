@@ -2,6 +2,7 @@ import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { withDegree } from "../../utils/outgoingText";
 import { summarizeByYear, buildCaseLogCsv, buildCaseLogPdf, shareCaseLogFile, caseLogCsvName, academicYearOf, pgyLabelOf, yearLabel, careerSpanLabel, academicYearSpanLabel, filterLastMonths, caseWRVU } from "../../utils/caseLogReport";
+import { professionCopy } from "../../constants/professionCopy";
 
 /**
  * The career ledger above the case list. The medicine year runs
@@ -28,7 +29,7 @@ function CaseLogSummary({ cases, year, onYear }) {
           ...last12Cases.reduce((s, c) => ({ cases: s.cases + 1, wRVU: s.wRVU + caseWRVU(c) }), { cases: 0, wRVU: 0 }) }
       : { label: pgyLabelOf(year, startYear), detail: academicYearSpanLabel(year),
           ...(years.find(y => y.year === year) || { cases: 0, wRVU: 0 }) };
-  const physician = data.settings.name ? withDegree(data.settings.name, data.settings.degreeType) : "Physician";
+  const physician = data.settings.name ? withDegree(data.settings.name, data.settings.degreeType) : professionCopy(data.settings.degreeType, { audience: "third-party" }).fallbackName;
 
   const report = async (kind) => {
     if (selected.length === 0) { flash("No cases in that range."); return; }

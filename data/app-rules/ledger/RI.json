@@ -1,0 +1,528 @@
+{
+ "state": "RI",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Rhode Island Board of Licensure for Physician Assistants (RI Department of Health)",
+   "url": "https://health.ri.gov/licensing/physician-assistant"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Licence expires June 30 of every odd-numbered year; renewal application due on or before June 1 of the odd-numbered year"
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "hoursPerYear": 25,
+   "hoursNote": "25 hours of approved CME annually (R.I. Gen. Laws 5-54-22; board page restates it), so 50 across the two year licence. The statute sets the annual accumulation period as October 1 to September 30, while regulation 24.8(B) sets July 1 to June 30 and 24.8(A) omits the period word ('every years'). Which annual window RIDOH audits against is not yet verified; the hour total (25 per year) is confirmed.",
+   "categoryRules": "Approved CME means a program approved by AAPA, ACCME/AMA, AAFP, AOA, or another board approved program (5-54-2(3)). No Category 1 minimum split is stated.",
+   "acceptsNccpaCertificationInLieu": null,
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaNote": "NCCPA exam is required for initial licensure; maintenance of NCCPA certification is listed only as something the board may require for reactivation after 2+ years out of practice (24.6(E)). Not a renewal requirement in the regulation.",
+   "topicMandates": [
+    {
+     "topic": "Best practices in opioid prescribing (appropriate prescribing for pain, pharmacology, adverse events, dependence, tolerance, SUD, alternatives)",
+     "hours": 8,
+     "period": "one-time",
+     "appliesTo": "Any practitioner who prescribes a Schedule II opioid; due before renewal of the controlled substance registration or two years, whichever is longer. Category 1 CME or equivalent. The rule exempts practitioners who completed DATA 2000 waiver training and hold an active DEA 'X' designation (the X waiver no longer exists federally, so the exemption covers only those who already qualified)."
+    },
+    {
+     "topic": "ER/LA opioid analgesic REMS compliant education",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "Practitioners prescribing long-acting or extended-release opioids"
+    }
+   ],
+   "controlledSubstanceCe": "8 hours one-time Category 1 (or equivalent) opioid prescribing training for any practitioner prescribing Schedule II opioids (216-RICR-20-20-4.4(P)); plus federal DEA one-time 8 hour SUD training (MATE)."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "No written agreement filed with the board. PAs practice in collaboration with physicians; the degree of collaboration is determined by the practice (physician employer, group, hospital credentialing). A physician must be accessible at all times for consultation.",
+   "notes": "RI enacted the PA Licensure Compact; the board page says it is not currently operational."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "RI Controlled Substances Registration (Board of Pharmacy, RIDOH) plus DEA registration; PDMP registration is a condition of initial and renewed CS registration. Interval: statute 21-28-3.02(a) says 'obtain annually', regulation 4.5(A) says at intervals not to exceed two years; the actual RIDOH renewal cycle is not yet verified.",
+   "ceForPrescribers": "8 hours one-time opioid prescribing CME for Schedule II opioid prescribers; ER/LA opioid REMS education for long-acting opioid prescribers"
+  },
+  "facts": [
+   {
+    "field": "ce.hoursPerYear",
+    "value": "25 hours approved CME annually",
+    "cite": "R.I. Gen. Laws § 5-54-22",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-54/5-54-22.htm",
+    "quote": "shall be required to have satisfactorily completed twenty-five (25) hours of approved continuing medical education annually",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerYear",
+    "value": "Board page restates 25 hours annually",
+    "cite": "RIDOH Physician Assistant licensing page",
+    "url": "https://health.ri.gov/licensing/physician-assistant",
+    "quote": "required to have satisfactorily completed twenty-five (25) hours of approved continuing medical education annually",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.period",
+    "value": "Regulation: accumulation July 1 to June 30; 24.8(A) text omits the period length ('every years'). Conflicts with the statute's October 1 to September 30 window.",
+    "cite": "216-RICR-40-05-24.8(A)-(B)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-24",
+    "quote": "twenty-five (25) hours of approved continuing medical education every years. B. The period for accumulation ... first (1st) day of July",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalCycleYears",
+    "value": "2; expires June 30 of odd-numbered years, file by June 1",
+    "cite": "216-RICR-40-05-24.6(A)-(B); R.I. Gen. Laws § 5-54-11",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-24",
+    "quote": "shall expire on the thirtieth (30th) day of June of every odd-numbered year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "Approved CME = AAPA, ACCME/AMA, AAFP, AOA or board approved",
+    "cite": "R.I. Gen. Laws § 5-54-2(3)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-54/5-54-2.htm",
+    "quote": "a program for continuing education approved by the American Academy of Physician Assistants (AAPA) or the Accreditation Council for Continuing Medical Education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.audit",
+    "value": "Keep documentation 4 years; random audit",
+    "cite": "216-RICR-40-05-24.8(C)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-24",
+    "quote": "shall be retained by the licensee for a minimum of four (4) years and is subject to random audit by the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": "false; NCCPA maintenance only listed as a possible reactivation condition",
+    "cite": "216-RICR-40-05-24.6(E)(2)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-24",
+    "quote": "Evidence of maintenance of certification from the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "collaboration, degree determined by the practice",
+    "cite": "R.I. Gen. Laws § 5-54-2(5), § 5-54-8(a)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-54/5-54-2.htm",
+    "quote": "The degree of collaboration shall be determined by the practice ... A physician must be accessible at all times for consultation",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "true; RI CS registration from Board of Pharmacy plus federal registration",
+    "cite": "216-RICR-40-05-24.7.1(E)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-24",
+    "quote": "he or she must obtain a Rhode Island registration for prescribing controlled substances from the Board of Pharmacy, as well as a Federal registration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csRegistrationInterval",
+    "value": "Registration at intervals not to exceed 2 years; PDMP registration a condition",
+    "cite": "216-RICR-20-20-4.5(A)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "must obtain a registration, issued by the Director, at intervals not to exceed two (2) years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.opioid",
+    "value": "8 hours one-time for Schedule II opioid prescribers",
+    "cite": "216-RICR-20-20-4.4(P)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "Any practitioner who prescribes a Schedule II opioid is required to successfully complete eight (8) hours of Category 1 Continuing Medical Education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.opioid.timing",
+    "value": "One-time; before CS registration renewal or 2 years, whichever is longer",
+    "cite": "216-RICR-20-20-4.4(P)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "This specific training requirement is required only once and must be completed before renewal of controlled substance registration or two (2) years, whichever is longer",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practitionerDefinition",
+    "value": "CS regulation 'practitioner' includes PAs and APRNs",
+    "cite": "216-RICR-20-20-4.3",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "a physician assistant licensed pursuant to R.I. Gen. Laws Chapter 5-54; an Advanced Practice Registered Nurse (APRN)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.period.statute",
+    "value": "Statute: annual accumulation period October 1 to September 30",
+    "cite": "R.I. Gen. Laws § 5-54-22",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-54/5-54-22.htm",
+    "quote": "The annual period for accumulation of continuing-education hours commences on the first day of October and runs through the last day of September",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalCycleYears.statute",
+    "value": "Statute: certificate expires June 30, renewed every other year, filed by June 1 (odd year comes from the regulation)",
+    "cite": "R.I. Gen. Laws § 5-54-11(b)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-54/5-54-11.htm",
+    "quote": "grant a renewal certificate effective July 1st and expiring June 30th two years hence",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.opioid.exemption",
+    "value": "DATA 2000 waiver training qualifies; holders of active X designation exempt",
+    "cite": "216-RICR-20-20-4.4(P)(2)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "the Drug Addiction Treatment Act of 2000 (DATA 2000) waiver training course qualifies for the above requirement",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.erlaREMS",
+    "value": "Practitioners prescribing long-acting/extended-release opioids must complete FDA ER/LA opioid REMS compliant education (one-time; no hour count stated)",
+    "cite": "216-RICR-20-20-4.4(N)(1)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "All practitioners prescribing long-acting and extended-release opioids shall have completed an educational program compliant with the Extended Release/Long Acting Opioid Analgesic Risk Evaluation and Mitigation",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csRegistrationInterval.statute",
+    "value": "Statute says CS registration is obtained annually (conflicts with regulation's up to 2 years)",
+    "cite": "R.I. Gen. Laws § 21-28-3.02(a)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE21/21-28/21-28-3.02.htm",
+    "quote": "must obtain annually a registration issued by the director of health in accordance with his or her rules",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pdmpRegistration",
+    "value": "PDMP registration is a condition of initial or renewed CS registration",
+    "cite": "216-RICR-20-20-4.5(A)(6); R.I. Gen. Laws § 21-28-3.02(c)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "All practitioners shall, as a condition of the initial registration or renewal of the practitioner's authority to prescribe controlled substances, register with the PDMP",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.alzheimersNotApplicable",
+    "value": "The one-time Alzheimer's training statute names physicians (ch. 5-37) and nurses (ch. 5-34) only; PAs (ch. 5-54) are not listed",
+    "cite": "R.I. Gen. Laws § 23-1.7-5(a)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE23/23-1.7/23-1.7-5.htm",
+    "quote": "All physicians licensed pursuant to chapter 37 of title 5, and nurses licensed pursuant to chapter 34 of title 5",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.paCompact",
+    "value": "PA Licensure Compact passed in RI but not operational",
+    "cite": "RIDOH Physician Assistant licensing page",
+    "url": "https://health.ri.gov/licensing/physician-assistant",
+    "quote": "While this legislation has passed in RI, the compact is not currently operational.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Rhode Island Board of Nurse Registration and Nursing Education (RI Department of Health)",
+   "url": "https://health.ri.gov/licensing/nurses"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Expires March 1 of every other year following original licensure; renewal application before February 15",
+   "ceHoursPerCycle": 10,
+   "nlcCompactMember": true,
+   "nlcNote": "Rejoined the NLC January 1, 2024 (board page). The statute (ch. 5-34.3) still marks its compact sections 'Expires January 1, 2027'. As of 2026-10-01 no extension was found; if none is enacted, RI multistate licensure ends January 1, 2027. Not yet verified either way.",
+   "topicMandates": [
+    {
+     "topic": "Substance abuse",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "All nurses renewing (2 of the 10 hours); stated on the board page, not found in the regulation text"
+    },
+    {
+     "topic": "Alzheimer's disease and cognitive impairment (diagnosis, treatment, care)",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "All nurses licensed under chapter 5-34 (includes APRNs); statutory deadline October 1, 2023"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "APRN-CNP (Advanced Practice Registered Nurse, Certified Nurse Practitioner)",
+   "separateLicenceOrCertificate": "Separate APRN licence issued by the Board of Nursing; requires a current RN licence or multistate privilege",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 10,
+   "ceNote": "The regulation sets 10 hours per two years for every licence renewed under the Act; no separate APRN hour total is stated.",
+   "pharmacologyHoursPerCycle": null,
+   "pharmacologyNote": "No pharmacology hour requirement appears in the current regulation (216-RICR-40-05-3) or statute. Vendor pages citing 30 pharmacology hours every 6 years could not be confirmed in a primary source.",
+   "nationalCertificationRequired": true,
+   "nationalCertificationNote": "Current national certification verified at renewal; exception for nurse practitioners without prescriptive privileges licensed as of June 17, 2013.",
+   "topicMandates": [
+    {
+     "topic": "Best practices in opioid prescribing",
+     "hours": 8,
+     "period": "one-time",
+     "appliesTo": "APRNs who prescribe Schedule II opioids (216-RICR-20-20-4.4(P)); DATA 2000 waiver training qualifies and active X designation holders are exempt (4.4(P)(2))"
+    },
+    {
+     "topic": "ER/LA opioid analgesic REMS compliant education",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "APRNs prescribing long-acting or extended-release opioids (216-RICR-20-20-4.4(N)(1))"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "No separate state prescriptive authority certificate; prescriptive authority comes with the APRN licence. Controlled substances require RI CS registration (Board of Pharmacy) with PDMP registration, and DEA registration. CS registration interval: statute says annually, regulation says not to exceed two years; not yet verified which RIDOH applies.",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "8 hours one-time opioid prescribing CE for Schedule II opioid prescribers; ER/LA opioid REMS education for long-acting opioid prescribers; federal one-time 8 hour DEA SUD training",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None. APRNs are licensed independent practitioners."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": "2; expires March 1 every other year",
+    "cite": "R.I. Gen. Laws § 5-34-19(a); 216-RICR-40-05-3.4(A)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-34/5-34-19.htm",
+    "quote": "shall expire on the first day of March of every other year following the date of license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalDeadline",
+    "value": "File renewal before February 15",
+    "cite": "216-RICR-40-05-3.4(B)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-3",
+    "quote": "before the fifteenth (15th) day of February of that year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "10 hours in the preceding two years",
+    "cite": "R.I. Gen. Laws § 5-34-19(b); 216-RICR-40-05-3.5(A)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-34/5-34-19.htm",
+    "quote": "in the preceding two (2) years the practitioner has completed the ten (10) required continuing education hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.substanceAbuse",
+    "value": "2 of the 10 hours on substance abuse",
+    "cite": "RIDOH Nurses licensing page",
+    "url": "https://health.ri.gov/licensing/nurses",
+    "quote": "must complete 10 continuing education hours during every two year licensing cycle, two of those hours must be about substance abuse",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Board page is a primary source and states it; the rule (216-RICR-40-05-3.5) and statute (5-34-19) texts do not contain it."
+   },
+   {
+    "field": "rn.topicMandates.alzheimers",
+    "value": "1 hour one-time on cognitive impairment/Alzheimer's, by Oct 1, 2023",
+    "cite": "R.I. Gen. Laws § 23-1.7-5(a)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE23/23-1.7/23-1.7-5.htm",
+    "quote": "complete a one-time course of training consisting of a minimum of one hour of instruction on the diagnosis, treatment, and care of patients with cognitive",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": "true from January 1, 2024",
+    "cite": "RIDOH Nurses licensing page; R.I. Gen. Laws ch. 5-34.3",
+    "url": "https://health.ri.gov/licensing/nurses",
+    "quote": "Effective January 1, 2024, Rhode Island has rejoined the Nurse Licensure Compac",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcSunset",
+    "value": "Compact sections carry 'Expires January 1, 2027'",
+    "cite": "R.I. Gen. Laws § 5-34.3-12",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-34.3/5-34.3-12.htm",
+    "quote": "Effective date, withdrawal and amendment. [Expires January 1, 2027]",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Re-loaded 2026-10-01: every operative section of ch. 5-34.3 still carries '[Expires January 1, 2027]'. No 2025 or 2026 extension found on the statute site or in searches."
+   },
+   {
+    "field": "aprn.title",
+    "value": "APRN plus role, CNP for certified nurse practitioner",
+    "cite": "216-RICR-40-05-3.3.1(A)(2)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-3",
+    "quote": "The abbreviation for the APRN designation ... will be APRN, plus the role title (i.e., CRNA, CNS, and CNP)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "true; verified at renewal",
+    "cite": "216-RICR-40-05-3.4(B)(1)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-3",
+    "quote": "Evidence of current national certification, or recertification as applicable, as an Advanced Practice Registered Nurse shall be verified at renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.separateLicence",
+    "value": "APRN licence requires a current RN licence or privilege and national certification",
+    "cite": "R.I. Gen. Laws § 5-34-45(a)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-34/5-34-45.htm",
+    "quote": "Hold a current RN license or privilege to practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority",
+    "value": "full; licensed independent practitioners",
+    "cite": "R.I. Gen. Laws § 5-34-44",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-34/5-34-44.htm",
+    "quote": "APRNs are licensed, independent practitioners within standards established or recognized by the board of nursing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "true; Board of Pharmacy and DEA",
+    "cite": "216-RICR-40-05-3.7(A)(3)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-3",
+    "quote": "shall be required to register for such privileges with the Board of Pharmacy, Rhode Island Department of Health, and the Registration Unit of the federal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.cnpScope",
+    "value": "CNP may prescribe legend drugs and Schedules II to V",
+    "cite": "R.I. Gen. Laws § 5-34-49(d)",
+    "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-34/5-34-49.htm",
+    "quote": "Prescription of legend medications and prescription of controlled substances from Schedules II, III, IV, and V",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.controlledSubstanceCe",
+    "value": "8 hours one-time for Schedule II opioid prescribers (practitioner includes APRN)",
+    "cite": "216-RICR-20-20-4.4(P); 4.3 definition",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "Any practitioner who prescribes a Schedule II opioid is required to successfully complete eight (8) hours of Category 1 Continuing Medical Education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.erlaREMS",
+    "value": "Practitioners prescribing long-acting/extended-release opioids must complete FDA ER/LA opioid REMS compliant education (one-time; no hour count stated)",
+    "cite": "216-RICR-20-20-4.4(N)(1)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "All practitioners prescribing long-acting and extended-release opioids shall have completed an educational program compliant with the Extended Release/Long Acting Opioid Analgesic Risk Evaluation and Mitigation",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pdmpRegistration",
+    "value": "PDMP registration is a condition of initial or renewed CS registration",
+    "cite": "216-RICR-20-20-4.5(A)(6); R.I. Gen. Laws § 21-28-3.02(c)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+    "quote": "All practitioners shall, as a condition of the initial registration or renewal of the practitioner's authority to prescribe controlled substances, register with the PDMP",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.alzheimers.boardPage",
+    "value": "Board page: one hour per career on Alzheimer's disease, effective August 1, 2019",
+    "cite": "RIDOH Nurses licensing page",
+    "url": "https://health.ri.gov/licensing/nurses",
+    "quote": "Effective August 1, 2019, every nurse has to complete one hour (per career) of CEU training regarding Alzheimer's disease.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceProviders",
+    "value": "CE accepted from ANCC or its local chapter, recognized nursing organizations, board approved nursing schools, or board approved agencies; attestation at renewal; keep records 4 years",
+    "cite": "216-RICR-40-05-3.5(B)-(D)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-3",
+    "quote": "These documents shall be retained by each licensee for no less than four (4) years and are subject to random audit by the Department.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.certificationLapseNotice",
+    "value": "APRN must notify the board within 5 business days of a lapse or failure to renew national certification",
+    "cite": "216-RICR-40-05-3.9 (notification provisions)",
+    "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-3",
+    "quote": "shall notify the Board, in writing, within five (5) business days of failure to renew or other lapse of any national certification",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA CME accumulation window: statute 5-54-22 says October 1 to September 30, regulation 24.8(B) says July 1 to June 30. The 25 hours per year total is confirmed; which window RIDOH audits is not.",
+  "Controlled substance registration interval: statute 21-28-3.02(a) says annually, regulation 216-RICR-20-20-4.5(A) says not to exceed two years; actual RIDOH cycle not confirmed.",
+  "Nurse Licensure Compact: statute still shows the January 1, 2027 sunset on 2026-10-01; no extension found, and none confirmed absent.",
+  "RN 2 hours substance abuse per cycle: stated on the RIDOH Nurses page (primary), but not in 216-RICR-40-05-3 or 5-34-19; statutory basis not located.",
+  "APRN pharmacology CE: none in current regulation or statute; vendor claims of 30 hours per 6 years remain unconfirmed and should not be shown.",
+  "PA: whether current NCCPA certification is accepted in lieu of the 25 hours is not stated anywhere loaded; treat as not accepted until confirmed.",
+  "Whether the single 10 hour requirement satisfies both the RN and APRN licence renewals or applies to each licence separately is not stated."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verificationCorrections": [
+  "PA CME: added the statutory accumulation window (5-54-22: October 1 to September 30), which conflicts with regulation 24.8(B) (July 1 to June 30); 25 hours per year confirmed, audit window marked not yet verified.",
+  "PA licence: added 5-54-11(b) statute fact; the odd-numbered year comes only from regulation 24.6.",
+  "CS registration interval: statute 21-28-3.02(a) says annually, regulation 4.5(A) says not to exceed two years; researcher reported only the regulation. Both recorded, cycle marked not yet verified.",
+  "Added PDMP registration as a condition of CS registration (4.5(A)(6), 21-28-3.02(c)) for PA and APRN.",
+  "Opioid 8 hour one-time rule: added the DATA 2000 / X designation exemption (4.4(P)(2)).",
+  "ER/LA opioid REMS education: researcher listed it without a fact; added primary cite 216-RICR-20-20-4.4(N)(1) and added it to the APRN mandates too.",
+  "Alzheimer one-time hour: confirmed it does not apply to PAs (statute names physicians and nurses only); added board page fact (one hour per career, effective August 1, 2019) for nurses.",
+  "NLC: re-loaded statute on 2026-10-01; sunset January 1, 2027 still in text, no extension found; note strengthened (multistate licensure would end in 3 months absent an extension).",
+  "Added PA Licensure Compact not operational (board page), RN CE provider and 4 year record rules (3.5), and APRN 5 business day certification lapse notice (3.9).",
+  "RIDOH board pages blocked curl (403); re-loaded them in a browser and confirmed the 25 hour, 10 hour, 2 hour substance abuse and NLC statements."
+ ]
+}

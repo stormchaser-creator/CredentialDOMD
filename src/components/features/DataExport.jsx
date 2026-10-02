@@ -9,6 +9,7 @@ import { mergeIdentityRestore, SECTION as IDENTITY_SECTION } from "../../utils/p
 import BackupPanel from "./BackupPanel";
 import { plainLabel, isCurrentJob } from "../../utils/helpers";
 import { lifecycleSummary } from "../../utils/lifecycle";
+import { professionCopy } from "../../constants/professionCopy";
 
 // What a vault restore says: how many notes it put back, or why none.
 function vaultRestoreMessage(result) {
@@ -259,7 +260,7 @@ function DataExport() {
 
     lines.push(div);
     lines.push(`CREDENTIALMD - CREDENTIAL SUMMARY`);
-    lines.push(`${data.settings.name || "Physician"}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}`);
+    lines.push(`${data.settings.name || professionCopy(data.settings.degreeType, { audience: "third-party" }).fallbackName}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}`);
     if (data.settings.npi) lines.push(`NPI: ${data.settings.npi}`);
     lines.push(`Generated: ${new Date().toLocaleDateString()}`);
     lines.push(div, "");

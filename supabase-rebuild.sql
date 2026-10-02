@@ -39,7 +39,7 @@ CREATE TABLE profiles (
   email TEXT,
   name TEXT,
   npi TEXT,
-  degree_type TEXT DEFAULT 'DO' CHECK(degree_type IN ('MD', 'DO')),
+  degree_type TEXT CHECK (degree_type IS NULL OR degree_type IN ('', 'MD', 'DO', 'PA', 'NP')),
   primary_state TEXT,
   phone TEXT,
   specialties JSONB DEFAULT '[]',

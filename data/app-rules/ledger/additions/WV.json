@@ -1,0 +1,27 @@
+{
+ "state": "WV",
+ "facts": [
+  {
+   "field": "ce.onlyListedCategories",
+   "profession": "pa",
+   "value": "No other types or categories of CE are satisfactory for PAs",
+   "cite": "11 CSR 1B 14.2",
+   "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+   "quote": "There are no other types or categories of continuing education activity for physician assistants satisfactory to the Board",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.mastersPathway",
+   "profession": "pa",
+   "value": "A PA master's degree within one year of the initial license expiring: up to 100 hours (97 with the controlled substance course)",
+   "cite": "11 CSR 1B 14.2.3",
+   "url": "https://wvbom.wv.gov/download_resource.asp?id=523",
+   "quote": "Obtaining a master’s degree from an accredited program of instruction for physician assistants within one year of the expiration of an initial license",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

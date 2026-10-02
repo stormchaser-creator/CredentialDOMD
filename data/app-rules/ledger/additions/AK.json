@@ -1,0 +1,71 @@
+{
+ "state": "AK",
+ "facts": [
+  {
+   "field": "np.rn.professionalActivities",
+   "profession": "np",
+   "value": "30 hours of uncompensated professional activities (RN, on or after December 1, 2020)",
+   "cite": "12 AAC 44.620(a)(6)",
+   "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+   "quote": "for a registered nurse license, on or after December 1, 2020, completion of at least 30 hours of participation in uncompensated professional activities",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.ceSponsors",
+   "profession": "np",
+   "value": "At least 20 of the 30 contact hours from listed accreditors or approved sponsors; no more than 10 in-service",
+   "cite": "12 AAC 44.610(a)(1), (2)",
+   "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+   "quote": "the applicant shall earn at least 20 of the contact hours in a continuing education program ... no more than 10 of the contact hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.alternativeMethods",
+   "profession": "np",
+   "value": "Refresher course, six academic credits toward a nursing degree or certificate, or passing the NCLEX",
+   "cite": "12 AAC 44.640",
+   "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+   "quote": "completed a nursing refresher course approved by the board ... at least six academic credits ... successfully completed the National Council Licensing Examination",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.newLicensee",
+   "profession": "np",
+   "value": "First licensed in the second year of the period: comply before the second renewal",
+   "cite": "12 AAC 44.650(b)",
+   "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+   "quote": "A licensee who receives his or her original license in the second year of the renewal period must comply ... before the second license renewal",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.aprn.prescriptiveRenewalCe",
+   "profession": "np",
+   "value": "Prescriptive authority renewal: certification showing the certifying body's mandated CE",
+   "cite": "12 AAC 44.470(2)(B)",
+   "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+   "quote": "seeking to renew prescriptive authority ... holds a current national certification that indicates completion of the continuing education mandated by that body",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.licence.title",
+   "profession": "pa",
+   "value": "Physician Associate",
+   "cite": "State Medical Board, SB 89 FAQ",
+   "url": "https://www.commerce.alaska.gov/web/Portals/5/pub/SB_89_FAQs.pdf",
+   "quote": "The Alaska Legislature simply updated the official PA title from “Physician Assistant” to “Physician Associate” in Alaska law with the passage of House Bill 195",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

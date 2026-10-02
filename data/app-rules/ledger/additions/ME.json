@@ -1,0 +1,38 @@
+{
+ "state": "ME",
+ "facts": [
+  {
+   "field": "np.aprn.nonPrescriberPharmacology",
+   "profession": "np",
+   "value": "Non-prescribing NPs submit 15 contact hours of pharmacology every two years at renewal",
+   "cite": "Maine Board of Nursing, APRN FAQs",
+   "url": "https://www.maine.gov/boardofnursing/licensure/advanced-practice-registered-nurse-aprn-faqs",
+   "quote": "If an NP or CNM does not prescribe they must submit documentation of 15 contact hours of continuing education in pharmacology every two years",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.practice.transitionEmployment",
+   "profession": "np",
+   "value": "Alternatively employed by a clinic or hospital with a physician medical director",
+   "cite": "32 MRSA 2102(2-A)",
+   "url": "https://legislature.maine.gov/legis/statutes/32/title32sec2102.html",
+   "quote": "or must be employed by a clinic or hospital that has a medical director who is a licensed physician",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.firstPeriodProration",
+   "profession": "pa",
+   "value": "CME prorated during the first licensure period",
+   "cite": "02-373 CMR ch. 2 (Board of Licensure in Medicine)",
+   "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/373c002%20-%20JUL%202025.docx",
+   "quote": "CME will be prorated during the first licensure period",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -1,0 +1,444 @@
+{
+ "state": "AR",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Arkansas State Medical Board",
+   "url": "https://www.armedicalboard.org/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annually, on or before the last day of the licensee's birth month; no grace period"
+  },
+  "ce": {
+   "hoursPerCycle": 20,
+   "categoryRules": "20 credit hours of continuing medical education per year; the rule names no Category 1 minimum and no AAPA category split for PAs",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Prescribing of opioids and benzodiazepines",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all PAs (counts within the 20 hours)"
+    },
+    {
+     "topic": "Pain management",
+     "hours": 5,
+     "period": "not stated in rule (rule says 'must complete at least five'; read as a standing condition of the hydrocodone authority)",
+     "appliesTo": "PAs authorized to prescribe Schedule II hydrocodone combination products"
+    }
+   ],
+   "controlledSubstanceCe": "1 hour per year on prescribing opioids and benzodiazepines (all PAs); 5 hours pain management for PAs authorized for Schedule II hydrocodone combination products"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Delegation agreement (board form) must be accepted by the board before licensure; the written supervision agreement must be signed by physician and PA and updated annually; a copy is kept at the practice location; changes or additions of supervising physicians are reported to the board within 10 calendar days",
+   "notes": "Statute defines the PA as a dependent professional working under physician supervision and a delegation agreement. Schedule II limited to opioids for 5 days or less and stimulants initiated by a physician who saw the patient within 6 months, plus hydrocodone combination products if delegated."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "No separate state certificate; prescriptive authority (legend and Schedule II to V) is delegated in the delegation agreement and the request is approved by the board. DEA registration required to prescribe controlled substances.",
+   "ceForPrescribers": "1 hour per year opioids and benzodiazepines; 5 hours pain management if authorized for Schedule II hydrocodone combination products"
+  },
+  "facts": [
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "20 credit hours per year",
+    "cite": "17 CAR § 140-1809(a)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=173&subChapterID=216&partID=1045&subPartID=5597&sectionID=36305",
+    "quote": "shall complete twenty (20) credit hours per year of continuing medical education.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.opioidsBenzodiazepines",
+    "value": "1 hour per year, included in the 20",
+    "cite": "17 CAR § 140-1809(g)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=173&subChapterID=216&partID=1045&subPartID=5597&sectionID=36305",
+    "quote": "Each year, each physician assistant shall obtain at least one (1) hour of CME credit specifically regarding the prescribing of opioids and benzodiazepines.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.painManagement",
+    "value": "5 hours pain management for PAs authorized to prescribe Schedule II hydrocodone combination products",
+    "cite": "17 CAR § 140-1809(f)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=173&subChapterID=216&partID=1045&subPartID=5597&sectionID=36305",
+    "quote": "must complete at least five (5) continuing education hours in the area of pain management.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Rule states no period (annual vs one-time); period unconfirmed."
+   },
+   {
+    "field": "pa.ce.recordRetention",
+    "value": "Keep CME records at least 3 years from end of reporting period; random audit possible",
+    "cite": "17 CAR § 140-1809(c)(2), (d)(2)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=173&subChapterID=216&partID=1045&subPartID=5597&sectionID=36305",
+    "quote": "must be maintained by the licensee for at least three (3) years from the end of the reporting period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "Annual renewal by last day of birth month, no grace period",
+    "cite": "ASMB PA application packet (Rev. 4/28/2026), License Renewal",
+    "url": "https://www.armedicalboard.org/Professionals/pdf/PA_AppPack.pdf",
+    "quote": "must be renewed annually on or before the last day of your birth month. There is no grace period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Written agreement signed by physician and PA, updated annually",
+    "cite": "Ark. Code Ann. § 17-105-110(2)(C)",
+    "url": "https://www.armedicalboard.org/Professionals/pdf/mpa.pdf",
+    "quote": "The agreement shall be signed by the physician and the physician assistant and updated annually.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.delegationAgreementAcceptance",
+    "value": "Board must accept the delegation agreement before licensure; copy kept at practice location",
+    "cite": "17 CAR § 140-1804(a)(3), (c)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=173&subChapterID=216&partID=1045&subPartID=5597&sectionID=36300",
+    "quote": "Said delegation agreement must be accepted by the board prior to licensure of the physician assistant.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.notification",
+    "value": "Report changes in supervising physicians within 10 calendar days",
+    "cite": "Ark. Code Ann. § 17-105-111",
+    "url": "https://www.armedicalboard.org/Professionals/pdf/mpa.pdf",
+    "quote": "A physician assistant shall notify the Arkansas State Medical Board of any changes or additions in supervising physicians within ten (10) calendar days.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.separateAuthorityRegistration",
+    "value": "Prescribing authority stated in the delegation agreement and approved by the board",
+    "cite": "17 CAR § 140-1805(a)(1)(B)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=173&subChapterID=216&partID=1045&subPartID=5597&sectionID=36301",
+    "quote": "Said authorization must be stated in the delegation agreement and the request approved by the Arkansas State Medical Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.dea",
+    "value": "PAs who prescribe controlled substances register with DEA (mid-level practitioner)",
+    "cite": "Ark. Code Ann. § 17-105-108(d)",
+    "url": "https://www.armedicalboard.org/Professionals/pdf/mpa.pdf",
+    "quote": "Physician assistants who prescribe controlled substances shall register with the United States Drug Enforcement Administration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.scheduleII",
+    "value": "Schedule II only for opioids 5 days or less, or stimulants initiated by a physician who saw the patient within 6 months",
+    "cite": "Ark. Code Ann. § 17-105-108(a)(2)",
+    "url": "https://www.armedicalboard.org/Professionals/pdf/mpa.pdf",
+    "quote": "An opioid, if the prescription is only for a five-day period or less",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaAtRenewal",
+    "value": "NCCPA is an initial licensure condition only (pass PANCE); the renewal statute lists fee, forms and board requirements, and no rule requires current NCCPA at renewal",
+    "cite": "Ark. Code Ann. 17-105-102(b)(3); 17-105-105 (MPA compilation Revised 8/19/2025)",
+    "url": "https://www.armedicalboard.org/Professionals/pdf/mpa.pdf",
+    "quote": "has passed the Physician Assistant National Certifying Examination administered by the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "pa.ce.currency",
+    "value": "17 CAR 140-1809 is current (Code of Arkansas Rules page updated 10/1/2026); the board's pending Subpart 18 rulemaking (markup PDF Feb 2026) leaves 140-1809 unchanged",
+    "cite": "17 CAR 140-1809; ASMB proposed rulemaking markup, 17 CAR pt.140 subpt.18",
+    "url": "https://armedicalboard.adh.arkansas.gov/doc/17%20CAR%20pt.140%20subpt.18-Markup.pdf",
+    "quote": "A physician assistant who holds an active license to practice in the State of Arkansas shall complete twenty (20) credit hours per year",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Arkansas State Board of Nursing (ASBN)",
+   "url": "https://healthy.arkansas.gov/boards-commissions/boards/nursing-arkansas-state-board/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 15,
+   "ceAlternatives": "One per renewal period: 15 practice-focused contact hours, OR national certification or recertification during the renewal period, OR an academic course in nursing or a related field (board page: at least one college credit hour, grade C or better)",
+   "nlcCompactMember": true,
+   "topicMandates": [],
+   "renewalDeadline": "Staggered biennial birth date system; exact expiry day (for example last day of birth month) not confirmed in a primary source"
+  },
+  "aprn": {
+   "title": "APRN (Certified Nurse Practitioner role, with population focus)",
+   "separateLicenceOrCertificate": "Separate APRN licence; separate Certificate of Prescriptive Authority; optional Full Independent Practice Authority certificate",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": "No separate APRN hour count; CE submitted to the national certifying body for recertification is accepted as meeting the statutory requirement",
+   "pharmacologyHoursPerCycle": 5,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Maintaining professional boundaries, and Arkansas APRN prescribing rules and laws",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "APRNs with prescriptive authority (2 of the 5 pharmacotherapeutics hours)"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Certificate of Prescriptive Authority from ASBN (3 graduate credit hour or 45 contact hour pharmacology course, 300 hour prescribing preceptorship, collaborative practice agreement unless full practice authority)",
+   "pharmacologyCeForPrescribers": "5 contact hours pharmacotherapeutics in the area of certification each biennium before renewal",
+   "controlledSubstanceCe": "2 of the 5 hours on professional boundaries and Arkansas prescribing rules and laws; no separate controlled substance hour mandate found",
+   "stateCsRegistrationRequired": null
+  },
+  "practice": {
+   "authority": "reduced",
+   "agreementType": "collaborative practice agreement (for prescriptive authority) unless granted full independent practice authority",
+   "transitionToPracticeHours": 6240,
+   "agreementFilingAndRenewal": "Collaborative practice agreement submitted with the prescriptive authority application; evidence of a current agreement is a prerequisite to every APRN renewal for prescribers without full practice authority; notify board within 7 days of termination; protocols reviewed at least annually; full independent practice authority certificate renews every 3 years"
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": "Biennial",
+    "cite": "17 CAR § 121-801(a)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=85&subChapterID=110&partID=1073&subPartID=6359&sectionID=41439",
+    "quote": "Each person licensed under the provisions of the Nurse Practice Act shall renew biennially.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "15 practice-focused contact hours, or certification/recertification, or an academic course, each renewal period",
+    "cite": "17 CAR § 121-704(a)(1)(A)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=85&subChapterID=110&partID=1073&subPartID=6358&sectionID=41432",
+    "quote": "Fifteen (15) practice-focused contact hours from a nationally recognized or state continuing education approval body recognized by the Arkansas State Board of Nursing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": "Yes, implemented January 19, 2018; APRNs are not licensed under the NLC",
+    "cite": "ASBN Compact page (read via WebFetch; curl 403)",
+    "url": "https://healthy.arkansas.gov/boards-commissions/boards/nursing-arkansas-state-board/compact/",
+    "quote": "The official implementation date for the new NLC was January 19, 2018.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewal",
+    "value": "APRN renewal coincides with RN renewal; requires current national certification",
+    "cite": "17 CAR § 123-207(a), (b)(2)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=85&subChapterID=110&partID=1158&subPartID=6325&sectionID=41299",
+    "quote": "Documentation of current national certification in the appropriate APRN specialty through a maintenance program of a board-approved certifying body",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ce",
+    "value": "Certifying body recertification CE accepted as meeting the statutory CE requirement",
+    "cite": "17 CAR § 123-207(f)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=85&subChapterID=110&partID=1158&subPartID=6325&sectionID=41299",
+    "quote": "Continuing education submitted to the certifying body to meet the qualifications for recertification shall be accepted as meeting the statutory requirement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": "5 contact hours pharmacotherapeutics each biennium for prescribers",
+    "cite": "17 CAR § 123-207(h)(1)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=85&subChapterID=110&partID=1158&subPartID=6325&sectionID=41299",
+    "quote": "APRNs with prescriptive authority shall complete five (5) contact hours of pharmacotherapeutics continuing education in the APRN's area of certification each biennium",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates",
+    "value": "2 of the 5 hours: professional boundaries and Arkansas APRN prescribing rules and laws",
+    "cite": "17 CAR § 123-207(h)(2)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=85&subChapterID=110&partID=1158&subPartID=6325&sectionID=41299",
+    "quote": "Two (2) of the five (5) hours must contain information related to: (A) Maintaining professional boundaries",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFilingAndRenewal",
+    "value": "Current collaborative practice agreement is a prerequisite to renewal for prescribers without full practice authority",
+    "cite": "17 CAR § 123-207(c)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=85&subChapterID=110&partID=1158&subPartID=6325&sectionID=41299",
+    "quote": "shall submit evidence of a current collaborative practice agreement as a prerequisite to license renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.fullIndependentPracticeRenewal",
+    "value": "Full independent practice authority certificate renews every 3 years",
+    "cite": "17 CAR § 123-207(d)",
+    "url": "https://codeofarrules.arkansas.gov/Rules/Rule?levelType=section&titleID=17&chapterID=85&subChapterID=110&partID=1158&subPartID=6325&sectionID=41299",
+    "quote": "shall apply for renewal of the full independent practice authority certificate every three (3) years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": "6,240 hours of practice under a board-required physician agreement (or prescribing in another state) to qualify for full independent practice authority",
+    "cite": "17 CAR § 123-702(a)(3) (ASBN Part 123 final rule PDF dated 07/21/2026)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "Completed a minimum of six thousand two hundred forty (6,240) hours of practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.separateAuthorityRegistration",
+    "value": "Initial prescriptive authority requires pharmacology course, 300 hour preceptorship and a collaborative practice agreement unless exempt",
+    "cite": "17 CAR § 123-601(3)-(5) (ASBN Part 123 PDF)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "a minimum of three hundred (300) clock hours preceptorial experience in the prescription of drugs, medicines, and therapeutic devices",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.reactivation",
+    "value": "Inactive prescriptive authority: extra 5 pharmacotherapeutics hours per 12 months not prescribing, plus the 5 renewal hours",
+    "cite": "17 CAR § 123-610(a) (ASBN Part 123 PDF)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "for each twelve (12) months of nonprescribing activity in addition to the five (5) contact hours required for APRN license renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.terminationNotice",
+    "value": "Notify board in writing within 7 days after a collaborative practice agreement ends",
+    "cite": "17 CAR § 123-604(c)(12)(A) (ASBN Part 123 PDF)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "shall notify the board in writing within seven (7) days following termination of the collaborative practice agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "Staggered biennial birth date system; first licence valid 3 to 27 months",
+    "cite": "ASBN Renewal of Arkansas License page (read via WebFetch; curl 403)",
+    "url": "https://healthy.arkansas.gov/boards-commissions/boards/nursing-arkansas-state-board/renewal-of-arkansas-license/",
+    "quote": "The ASBN renews licenses on a staggered biennial birth date system.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.rn.ceBoardPage",
+    "value": "Board CE page: 15 contact hours OR current national certification OR one college credit hour course (C or better); APRN prescribers add 5 pharmacotherapeutics hours each renewal",
+    "cite": "ASBN Continuing Education page (read via WebFetch; curl 403)",
+    "url": "https://healthy.arkansas.gov/boards-commissions/boards/nursing-arkansas-state-board/education/continuing-education/",
+    "quote": "advanced practice registered nurses with prescriptive authority must complete an additional five contact hours of pharmacotherapeutics",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.aprn.renewal.currency",
+    "value": "17 CAR 123-207 text is identical in the ASBN Part 123 final rule PDF stamped 07/21/2026",
+    "cite": "17 CAR 123-207 (Part 123 final rule PDF)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "APRNs with prescriptive authority shall complete five (5) contact hours of pharmacotherapeutics continuing education in the APRN's area of certification each biennium",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.prescribing.lapse",
+    "value": "Prescriptive authority lapses if the APRN licence is not renewed, national certification expires, or no current collaborative practice agreement (if required) is on file",
+    "cite": "17 CAR 123-608(a)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "The national certification upon which licensure is based expires",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.practice.protocolReview",
+    "value": "Prescribing protocols required under a collaborative practice agreement; reviewed at least annually",
+    "cite": "17 CAR 123-603(a), (c)(2)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "Date the protocol was adopted or last reviewed, which shall be at least annually.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.prescribing.deaFiling",
+    "value": "APRN files DEA registration number with ASBN on receipt",
+    "cite": "17 CAR 123-604(c)(10)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "The APRN shall file his or her Drug Enforcement Administration registration number with the Arkansas State Board of Nursing upon receipt",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.prescribing.scheduleIILimits",
+    "value": "Except hydrocodone combination products, Schedule II opioids limited to 5 days; Schedule II stimulants only if physician initiated and saw patient within 6 months",
+    "cite": "17 CAR 123-604(c)(7)-(8)",
+    "url": "https://healthy.arkansas.gov/wp-content/uploads/ASBN.7.28.2026.Final_.17CARpt.123.AdvPracRegNur.pdf",
+    "quote": "the APRN shall not prescribe Schedule II opioids for more than a five-day period.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   }
+  ]
+ },
+ "unverified": [
+  "PA and NP state controlled substance registration: no Arkansas state CS registration requirement appears in 17 CAR 140 Subpart 18, Ark. Code 17-105, or ASBN Part 123 (only DEA, and for APRNs filing the DEA number with ASBN). Absence only; left null.",
+  "PA NCCPA at renewal: false rests on absence (17-105-105 and 140-1809 say nothing); no source says it explicitly.",
+  "PA 5-hour pain management (17 CAR 140-1809(f)) for hydrocodone combination prescribers: period (annual vs one-time) not stated in the rule.",
+  "RN expiry day: ASBN says staggered biennial birth date system; the exact day (secondary sources say last day of birth month) was not found in a primary source.",
+  "ASBN pages on healthy.arkansas.gov return 403 to curl; renewal, CE and compact pages were read through WebFetch only.",
+  "Practice authority label 'reduced' is our reading of 17 CAR 123-207(c), 123-601(5) and 123-702 (collaborative practice agreement required for prescriptive authority until 6,240 hours and a full independent practice certificate)."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedOn": "2026-10-01",
+  "corrections": [
+   "pa.licence.renewalDeadline cite: PA application packet revision is Rev. 4/28/2026, not 6/12/2026 (text and quote unchanged).",
+   "Added np.rn.renewalDeadline (staggered biennial birth date system) from the ASBN renewal page; exact expiry day still unconfirmed.",
+   "np.rn.ceAlternatives: board page specifies the academic option as at least one college credit hour with grade C or better; pharmacotherapeutics hours are in addition to the RN option.",
+   "np.rn.nlcCompactMember cite corrected to say the ASBN compact page was read via WebFetch (curl blocked).",
+   "Added facts: 123-207 unchanged in the 07/21/2026 Part 123 final rule; prescriptive authority lapses if national certification expires or the CPA is missing (123-608); protocols reviewed at least annually (123-603); DEA number filed with ASBN (123-604(c)(10)); Schedule II limits (123-604(c)(7)-(8)).",
+   "Added PA facts: NCCPA only an initial licensure condition (17-105-102(b)(3), 17-105-105); 140-1809 current and unchanged by the pending Feb 2026 Subpart 18 rulemaking.",
+   "Missed-mandate sweep (opioid, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, dementia, suicide, infection control, cultural competency, domestic violence): none found for AR PAs beyond the 1-hour opioid/benzodiazepine and 5-hour pain management rules, or for AR APRNs beyond the 2 professional boundaries/prescribing law hours. 17 CAR 140-1810 requires PAs to follow the HIV/HBV/HCV rule (practice standard, not CE)."
+  ]
+ }
+}

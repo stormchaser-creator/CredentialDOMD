@@ -85,7 +85,9 @@ test('production wiring gates both editors and preserves the exact local collect
   const linkPass = context.indexOf('reconcileDocumentLinks(merged, COLLECTION_KEYS, pausedApplicationLinks(merged))');
   assert.ok(linkPass > 0, 'the link pass must still receive the paused application links');
   assert.ok(preserve < linkPass);
-  assert.ok(preserve < context.indexOf('saveData(merged, authUserId)'));
+  const cacheSave = context.indexOf('saveData(merged, authUserId');
+  assert.ok(cacheSave > 0, 'the load still saves the device copy');
+  assert.ok(preserve < cacheSave);
   const registry = database.match(/const TABLE_MAP = \{[\s\S]*?\n\};/)[0];
   assert.doesNotMatch(registry, /answerBank|identityVault/);
 });

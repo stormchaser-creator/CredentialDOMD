@@ -79,12 +79,18 @@ function RenewalInfo({ item, defaultExpanded = false, alertable = true }) {
               <a href={view.guide} target="_blank" rel="noopener noreferrer" onClick={stop} style={linkStyle(false)}>Steps, fees and pitfalls</a>
             )}
           </div>
+          {view.boardOnly && view.boardUrl && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <a href={view.boardUrl} target="_blank" rel="noopener noreferrer" onClick={stop} style={linkStyle(true)}>{view.board || "Board website"}</a>
+            </div>
+          )}
+          {view.boardOnly && <div style={note}>{view.board && !view.boardUrl ? `Board: ${view.board}. ` : ""}{view.caption}</div>}
           {view.unknownDORoute && (
             <div style={note}>The osteopathic renewal route for this state is not on file. The state guide has the steps.</div>
           )}
-          {view.board && view.portalLabel === "Renew online" && <div style={note}>Board: {view.board}</div>}
+          {!view.boardOnly && view.board && view.portalLabel === "Renew online" && <div style={note}>Board: {view.board}</div>}
           {view.alternativeBoard && (
-            <div style={note}>A DO licence here renews through {view.alternativeBoard.name}. Set MD or DO in Profile and this box shows only yours.</div>
+            <div style={note}>A DO licence here renews through {view.alternativeBoard.name}. Choose your profession in Profile and this box shows only yours.</div>
           )}
           {view.cycleFull && <div style={note}>Cycle: {view.cycleFull}</div>}
           {view.due && <div style={note}>Due: {view.due}</div>}

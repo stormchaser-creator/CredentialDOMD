@@ -1,0 +1,129 @@
+{
+  "state": "CO",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Colorado Medical Board (Division of Professions and Occupations, DORA)",
+      "url": "https://dpo.colorado.gov/Medical"
+    },
+    "ce": {
+      "mode": "unverified",
+      "reason": "Rule 1.33 is written for physicians, but its attestation clause names \"the licensee or applicant\"; the exclusion of PAs exists only in a proposed amendment (hearing August 27, 2026) that is not adopted, and C.R.S. 12-240-130.5 was not loaded."
+    },
+    "topics": [
+      {
+        "topic": "Substance Use Disorders",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "Whether the substance use prevention training still applies at renewal (its statute was struck and the rule must be repealed by July 1, 2027)"
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "Every PA has a written collaborative agreement, kept at the primary practice location and given to the board on request. Under 5,000 practice hours, or under 3,000 hours in a new practice area, it takes the form of a supervisory agreement.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.supervisoryThreshold"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether the 30-hour CME rule (3 CCR 713-1 Rule 1.33) applies to PAs: the board's clarifying amendment is proposed, not adopted"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Colorado State Board of Nursing (Division of Professions and Occupations, DORA)",
+      "url": "https://dpo.colorado.gov/Nursing"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "fact": "np.rn.ceHoursPerCycle",
+          "reason": "No CE for active RN renewal; contact hours are one competency option only for reinstatement."
+        },
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.rn.renewalDeadline",
+            "np.aprn.renewal"
+          ],
+          "reason": "APR registration renews with the RN license and compact-licensed nurses renew it every two years; the current RN licenses expire 9/30/26."
+        }
+      },
+      "unverified": [
+        "How often a single state RN license renews (the board states only the current expiration date)"
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewal"
+        }
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "facts": [
+            "np.aprn.renewal",
+            "np.rn.ceHoursPerCycle"
+          ],
+          "reason": "APR registration renews with the RN license, which has no CE for active renewal; no APRN CE hours are set."
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewal",
+          "reason": "APR registration renews with the RN license, every two years."
+        }
+      },
+      "topics": [
+        {
+          "topic": "Substance Use Disorders",
+          "hours": null,
+          "status": "unverified",
+          "unverifiedItem": "Whether the substance use prevention training still applies at renewal (its statute was struck and the rule must be repealed by July 1, 2027)",
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to nurse practitioners who prescribe."
+          }
+        }
+      ],
+      "unverified": [
+        "Whether national certification is checked at each APR registration renewal for APRNs without prescriptive authority"
+      ],
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertification.maintain",
+        "condition": {
+          "field": "Holds prescriptive authority",
+          "question": "Do you hold prescriptive authority?",
+          "description": "Colorado APRNs with prescriptive authority must obtain and maintain national certification."
+        }
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "mentorship agreement",
+        "conditional": true,
+        "text": "No practice agreement is required. Provisional prescriptive authority (RXN-P) becomes full after a 750 hour mentorship under a written Mentorship Agreement, completed within three years after provisional authority is granted and kept for three years after completion.",
+        "facts": [
+          "np.practice.transitionToPracticeHours",
+          "np.practice.mentorshipAgreementRetention",
+          "np.practice.mentorshipDeadline"
+        ]
+      }
+    }
+  }
+}

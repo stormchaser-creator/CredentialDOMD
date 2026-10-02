@@ -1,0 +1,424 @@
+{
+ "state": "HI",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Hawaii Medical Board (DCCA Professional and Vocational Licensing)",
+   "url": "https://cca.hawaii.gov/pvl/boards/medical/physician-assistant-renewal-requirements/"
+  },
+  "licence": {
+   "title": "Physician Assistant licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "January 31 of each even-numbered year"
+  },
+  "ce": {
+   "hoursPerCycle": 40,
+   "categoryRules": "40 credit hours of AMA Category 1, AOA Category 1A, or AAPA Category 1 CME per biennium (random audit).",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [],
+   "controlledSubstanceCe": "None found for PAs in the sources loaded.",
+   "acceptsNccpaCertificationInLieuNote": "HRS 453-5.3(k) requires forty credit hours of AMA Category 1, AOA 1A or AAPA Category 1 CME with no certification alternative, and NCCPA certification is separately required for renewal (HAR 16-85-48). Inference from statute text; no board statement either way."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Each supervising physician submits a signed statement of supervision (form AMD-03) to the board; supervising physician must also be renewed before the PA licence renews; board notified within ten days of severance of supervision or employment. PA and supervising physician keep written medical record review guidelines in the office; record review percentages set by statute for PAs with under one year of practice.",
+   "notes": "HAR 16-85-49 (last amended 12/22/97, current DCCA compilation) still says a physician may supervise no more than two PAs, PAs may not prescribe Schedule II (inpatient hospital orders excepted), and records are reviewed within seven working days; HRS 453-5.3 was amended in 2019 and 2022 and now sets the record review schedule, so the 1997 limits may be superseded. Show the statute's record review rules; treat the 1997 limits as not yet verified."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Prescribing is delegated by the supervising physician; PA delegated Schedule III to V must register with DEA; Hawaii controlled substance registration under HRS 329-32 applies to every person who prescribes controlled substances in the State.",
+   "ceForPrescribers": "None found"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "January 31, even years",
+    "cite": "HRS 453-5.3(j)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0453/HRS_0453-0005_0003.htm",
+    "quote": "shall apply for renewal with the board no later than January 31 of each even-numbered year and pay a renewal fee.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 40,
+    "cite": "HRS 453-5.3(k)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0453/HRS_0453-0005_0003.htm",
+    "quote": "a physician assistant shall be in compliance with continuing medical education requirements by obtaining forty credit hours in:",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "AMA Cat 1 / AOA 1A / AAPA Cat 1",
+    "cite": "HRS 453-5.3(k)(3)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0453/HRS_0453-0005_0003.htm",
+    "quote": "A category 1 continuing medical education program accredited by the American Academy of Physician Assistants.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "HAR 16-85-48",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/har_85-c2-1-1.pdf",
+    "quote": "To be eligible for renewal of physician assistant certification, the physician assistant shall maintain national certification by the NCCPA.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaProofAtRenewal",
+    "value": "proof of current NCCPA certification with renewal",
+    "cite": "Hawaii Medical Board PA renewal page",
+    "url": "https://cca.hawaii.gov/pvl/boards/medical/physician-assistant-renewal-requirements/",
+    "quote": "Proof of current NCCPA certification must be submitted with your hardcopy renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisingPhysicianRenewed",
+    "value": true,
+    "cite": "Hawaii Medical Board PA renewal page",
+    "url": "https://cca.hawaii.gov/pvl/boards/medical/physician-assistant-renewal-requirements/",
+    "quote": "Physician assistant's Supervising Physician must also be renewed before license will be renewed.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisionStatement",
+    "value": "supervising physician statement",
+    "cite": "HAR 16-85-49(a)(2)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/har_85-c2-1-1.pdf",
+    "quote": "Submit a statement that the supervising physician will direct and exercise supervision over any subordinate physician assistant",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.severanceNotice",
+    "value": "10 days",
+    "cite": "HAR 16-85-49(b)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/har_85-c2-1-1.pdf",
+    "quote": "shall notify the board within ten days of severance of supervision or employment of the physician assistant.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.recordReviewGuidelines",
+    "value": "written guidelines for medical record review",
+    "cite": "HRS 453-5.3(g)(1)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0453/HRS_0453-0005_0003.htm",
+    "quote": "Each physician assistant and supervising physician ... shall establish written guidelines for the review of medical records",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "pa.prescribing.dea",
+    "value": "DEA registration for Schedule III to V",
+    "cite": "HAR 16-85-49(a)(8)(B)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/har_85-c2-1-1.pdf",
+    "quote": "A physician assistant who has been delegated the authority to prescribe Schedule III through V medications shall register with the Drug Enforcement Administration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Rule text dates from 1997 (HAR 16-85-49(a)(8)); DEA registration for controlled substance prescribing is confirmed, the Schedule III-V limit may be outdated."
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "HRS 329-32(a)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol06_Ch0321-0344/HRS0329/HRS_0329-0032.htm",
+    "quote": "shall obtain a registration issued by the department of law enforcement in accordance with the department's rules.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "HRS 329-32 lists versions effective until Dec 31, 2023 (department of public safety) and from Jan 1, 2024 (department of law enforcement); the 2024 version applies. A separate registration is needed at each principal place of practice where controlled substances are administered, dispensed or stocked (329-32(e)).",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "pa.ce.noCertificationAlternative",
+    "value": false,
+    "cite": "HRS 453-5.3(k)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0453/HRS_0453-0005_0003.htm",
+    "quote": "a physician assistant shall be in compliance with continuing medical education requirements by obtaining forty credit hours in:",
+    "note": "Inference: the statute lists only CME programs; no in-lieu clause.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "pa.practice.recordReviewNewPa",
+    "value": "first 6 months 50%, next 6 months 25% within 30 days; after 1 year monthly 30 minute audit",
+    "cite": "HRS 453-5.3(g)(2)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0453/HRS_0453-0005_0003.htm",
+    "quote": "For the first six months of supervision, review fifty per cent of the medical records within thirty days of the patient visit",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Hawaii Board of Nursing (DCCA Professional and Vocational Licensing)",
+   "url": "https://cca.hawaii.gov/pvl/boards/nursing/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "ceNote": "Continuing competency: complete one learning activity option per biennium; 30 contact hours of CE is one option, national certification or recertification related to the practice role is another.",
+   "nlcCompactMember": false,
+   "renewalDeadline": "June 30 of each odd-numbered year",
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse) licence, with optional prescriptive authority",
+   "separateLicenceOrCertificate": "separate APRN licence (requires current Hawaii RN licence); prescriptive authority is a separate privilege renewed with it",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 30,
+   "ceNote": "30 contact hours applies to APRNs renewing prescriptive authority (22 practice specialty + 8 pharmacology); continuing education used for national recertification in the biennium may be accepted in lieu. APRNs without prescriptive authority meet RN continuing competency (national certification qualifies).",
+   "pharmacologyHoursPerCycle": 8,
+   "nationalCertificationRequired": true,
+   "topicMandates": [],
+   "nationalCertificationNote": "Conditional for the APRN licence: proof of current certification at renewal is required only from APRNs licensed initially by national certification (no graduate degree in a board recognized specialty) (HAR 16-89-87(a)(1); board APRN renewal page); APRNs licensed before October 1, 2009 on a master's degree may renew (HRS 457-8.5(b)). Every APRN renewing prescriptive authority must hold current national certification (HAR 16-89-123(a)(1))."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Yes: APRN prescriptive authority granted by the Board of Nursing, expires June 30 of odd-numbered years with the APRN licence; Hawaii controlled substance registration (HRS 329-32) plus DEA for controlled substances.",
+   "pharmacologyCeForPrescribers": "8 of 30 contact hours each biennium in pharmacology including pharmacotherapeutics",
+   "controlledSubstanceCe": "None separate found",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "No physician collaboration or supervision agreement found in HRS 457; APRN consults or refers as appropriate."
+  },
+  "facts": [
+   {
+    "field": "np.rn.continuingCompetency",
+    "value": "one learning activity option; 30 contact hours is one option",
+    "cite": "HRS 457-9.3",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0457/HRS_0457-0009_0003.htm",
+    "quote": "The successful completion of one of the following shall meet the learning activity options requirements for continuing competency:",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.rn.ceHours30Option",
+    "value": 30,
+    "cite": "HRS 457-9.3(2)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0457/HRS_0457-0009_0003.htm",
+    "quote": "Thirty contact hours of continuing education activities;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.rn.nationalCertificationOption",
+    "value": true,
+    "cite": "HRS 457-9.3(1)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0457/HRS_0457-0009_0003.htm",
+    "quote": "National certification or recertification related to the nurse's practice role;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "June 30, odd years",
+    "cite": "2025 Nursing Renewal Requirements and FAQs (Board of Nursing)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/01/2025-NURSING-RENEWAL-REQUIREMENTS-AND-FAQS-final.pdf",
+    "quote": "the license will expire on June 30th of every odd-numbered year and is subject to renewal requirements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "June 30, odd years",
+    "cite": "HAR 16-89-87(a) (compilation of September 6, 2018)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/HAR-89-C.pdf",
+    "quote": "All licenses for advanced practice registered nurses shall expire on June 30 of every odd-numbered year and shall be renewed biennially.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "required by statute for new licences; at renewal, proof required from certification-based licensees and from all with prescriptive authority",
+    "cite": "HRS 457-8.5(a)(6)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0457/HRS_0457-0008_0005.htm",
+    "quote": "Maintained continued competencies through recertification in role and population-focused competencies through a national certification program recognized by the board;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.prescribing.ceHours",
+    "value": "30 hours incl. 8 pharmacology",
+    "cite": "HAR 16-89-123(a)(2) (compilation of September 6, 2018)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/HAR-89-C.pdf",
+    "quote": "thirty contact hours of appropriate continuing education ... eight contact hours of which shall be in pharmacology, including pharmacotherapeutics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.certificationInLieu",
+    "value": "recertification CE accepted in lieu",
+    "cite": "HAR 16-89-123(a)(2) (compilation of September 6, 2018)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/HAR-89-C.pdf",
+    "quote": "continuing education required for recertification by a recognized national certifying body, earned within the current renewal biennium, may be accepted in lieu",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.split",
+    "value": "22 specialty + 8 pharmacology",
+    "cite": "2025 Nursing Renewal Requirements and FAQs (Board of Nursing)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/01/2025-NURSING-RENEWAL-REQUIREMENTS-AND-FAQS-final.pdf",
+    "quote": "you must complete a total of 30 hours of CE of which 8 are in pharmacology and 22 hours in your practice specialty.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.separateAuthority",
+    "value": "prescriptive authority expires June 30 odd years",
+    "cite": "HAR 16-89-123(a) (compilation of September 6, 2018)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/HAR-89-C.pdf",
+    "quote": "Prescriptive authority for each APRN shall expire on June 30 of every odd-numbered year and shall be renewed biennially.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstances",
+    "value": "APRN may prescribe controlled substances under ch. 329",
+    "cite": "HRS 457-8.6(c)(1)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0457/HRS_0457-0008_0006.htm",
+    "quote": "Prescribe and administer over the counter drugs, legend drugs, and controlled substances pursuant to this chapter and to chapter 329",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "HRS 329-32(a)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol06_Ch0321-0344/HRS0329/HRS_0329-0032.htm",
+    "quote": "shall obtain a registration issued by the department of law enforcement in accordance with the department's rules.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "HRS 329-32 lists versions effective until Dec 31, 2023 (department of public safety) and from Jan 1, 2024 (department of law enforcement); the 2024 version applies. A separate registration is needed at each principal place of practice where controlled substances are administered, dispensed or stocked (329-32(e)).",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "full (no physician agreement in statute)",
+    "cite": "HRS 457-2.7(a)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0457/HRS_0457-0002_0007.htm",
+    "quote": "includes but is not limited to advanced assessment; telehealth; and the diagnosis, prescription, selection, and administration of therapeutic measures",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.prescribing.attestationAndAudit",
+    "value": "attest under oath to 30 hours (22 specialty + 8 pharmacology) and current certification; random audit, 60 days to document",
+    "cite": "HAR 16-89-123(a) (2018 compilation)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/HAR-89-C.pdf",
+    "quote": "thirty hours of continuing education, of which twenty two hours shall be in the APRN’s practice specialty and eight hours in pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.certificationAtRenewalConditional",
+    "value": "certification proof only if no graduate-level degree in specialty",
+    "cite": "HAR 16-89-87(a)(1) (2018 compilation)",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/HAR-89-C.pdf",
+    "quote": "Evidence of current national certification if the advanced practice registered nurse does not hold a graduate-level degree in clinical nursing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalPage",
+    "value": "degree-based APRNs submit application and fees; certification-based also proof of certification; prescribers add 30 hours with 8 pharmacology",
+    "cite": "Board of Nursing APRN renewal requirements page",
+    "url": "https://cca.hawaii.gov/pvl/boards/nursing/advanced-practice-registered-nurse-aprn-renewal-requirements/",
+    "quote": "Proof of completion of at least 30 hours of continuing education of which at least 8 hours shall be in pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.grandfather2009",
+    "value": "pre-October 2009 master’s-based APRNs may renew",
+    "cite": "HRS 457-8.5(b)",
+    "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0457/HRS_0457-0008_0005.htm",
+    "quote": "Any person licensed as an advanced practice registered nurse prior to October 1, 2009, whose license was granted based on a master's degree in nursing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": false,
+    "cite": "secondary: web search summaries (no Hawaii primary source loaded)",
+    "url": "https://nurse.org/articles/enhanced-compact-multi-state-license-eNLC/",
+    "quote": "",
+    "loaded": false,
+    "verified": false,
+    "reason": "No primary source loaded; secondary sources say Hawaii introduced NLC bills but has not enacted the compact."
+   }
+  ]
+ },
+ "unverified": [
+  "Hawaii Nurse Licensure Compact: no Hawaii primary source loaded; secondary search results (2026) say Hawaii has introduced but not enacted the NLC. nlcCompactMember=false is verified:false.",
+  "Practice authority 'full': HRS 457-2.7 and 457-8.6 contain no physician collaboration or supervision requirement; the word 'full' is a classification, not statutory.",
+  "HAR 16-85 Subchapter 6 PA rules (1997): two-PA limit, no Schedule II outside inpatient orders, seven working day chart review may be superseded by 2019/2022 amendments to HRS 453-5.3. Not shown as current requirements.",
+  "PA acceptsNccpaCertificationInLieu=false is an inference from HRS 453-5.3(k); no board statement either way.",
+  "No Hawaii topic mandates (opioid, pain, implicit bias, etc.) for PAs, RNs or APRNs were found in HRS 453, HRS 457, HAR 16-85, HAR 16-89 or the board renewal pages; absence is not affirmatively stated by a primary source.",
+  "Federal DEA MATE 8 hour one-time training is federal, not Hawaii law; not loaded in this verification."
+ ],
+ "verification": {
+  "by": "verifier-2026-10",
+  "date": "2026-10-01",
+  "corrections": [
+   "HAR 16-89: researcher used the superseded 2013 compilation (files.hawaii.gov). The board's statute and rules page links the September 6, 2018 compilation (HAR-89-C.pdf), where 16-89-87 is 'Renewal of APRN license' (not 'recognition'). Updated URLs and the renewal quote.",
+   "Prescriptive authority CE: current rule (2018) itself states the 22 specialty + 8 pharmacology split and an attestation under oath with random audit (60 days to document); researcher sourced the split only from the FAQ.",
+   "np.aprn.nationalCertificationRequired: researcher stated it as unconditional. At APRN licence renewal only certification-based licensees must show certification (HAR 16-89-87(a)(1), board APRN page), with pre-2009 master's-based licensees grandfathered (HRS 457-8.5(b)); certification is required for everyone renewing prescriptive authority (16-89-123(a)(1)).",
+   "pa.ce.acceptsNccpaCertificationInLieu: null -> false (inference from HRS 453-5.3(k), which requires 40 Category 1 hours with no alternative; NCCPA is a separate renewal condition under HAR 16-85-48). Marked as inference.",
+   "Added the statutory medical record review schedule (HRS 453-5.3(g)(2)) as a fact; researcher mentioned it only in prose."
+  ],
+  "loadMethod": "capitol.hawaii.gov statutes blocked by Cloudflare for curl; loaded in a browser session and checked by eye. DCCA pages and PDFs loaded by curl."
+ }
+}

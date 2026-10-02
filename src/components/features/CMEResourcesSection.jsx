@@ -4,7 +4,10 @@ import { useApp } from "../../context/AppContext";
 import { SearchIcon, ExternalLinkIcon, GraduationIcon, CheckIcon } from "../shared/Icons";
 import { CME_PROVIDERS } from "../../constants/cmeProviders";
 import { providerAoaLine } from "../../constants/creditEquivalence";
-import { complianceFor } from "../../utils/compliance";
+import { complianceFor, complianceListFor, cardsForStates } from "../../utils/compliance";
+import { appCardTitle } from "../../utils/cmePresentation";
+import { appProviderLine } from "../../utils/appCreditNotes";
+import { isAdvancedPractice } from "../../constants/professions";
 import { topicSources } from "../../utils/cmeTopicSources";
 import { compareProviders } from "../../utils/cmeProviderSort.js";
 import { TAP_MIN } from "../shared/actionButton";
@@ -32,6 +35,12 @@ function CMEResourcesSection({ initialTopicFilter }) {
   // Compute user's unmet CME topics
   const unmetTopics = useMemo(() => {
     const topics = new Set();
+    // A PA's or NP's every licence card (an NP's RN topics too).
+    if (isAdvancedPractice(data.settings.degreeType)) {
+      const tracked = new Set(allTrackedStates);
+      for (const { st, comp } of complianceListFor(data)) if (tracked.has(st)) comp.topicResults.filter(t => !t.met).forEach(t => topics.add(t.topic));
+      return [...topics];
+    }
     allTrackedStates.forEach(st => {
       const comp = complianceFor(data, st);
       comp.topicResults.filter(t => !t.met).forEach(t => topics.add(t.topic));
@@ -40,23 +49,23 @@ function CMEResourcesSection({ initialTopicFilter }) {
   }, [allTrackedStates, data]);
 
   // All unique required topics across user's states
+  // Each card is read with its own licence kind (cardsForStates): an NP's
+  // RN-only state is asked its RN topics, never the APRN default's.
   const allRequiredTopics = useMemo(() => {
     const topics = new Set();
-    allTrackedStates.forEach(st => {
-      const comp = complianceFor(data, st);
+    cardsForStates(data, allTrackedStates).forEach(({ comp }) => {
       comp.topicResults.forEach(t => topics.add(t.topic));
     });
     return [...topics].sort();
   }, [allTrackedStates, data]);
 
-  // Per-state compliance gaps for personalized header
+  // Per-card compliance gaps for personalized header
   const perStateGaps = useMemo(() => {
-    return allTrackedStates.map(st => {
-      const comp = complianceFor(data, st);
-      const unmet = comp.topicResults.filter(t => !t.met);
-      const hoursGap = comp.noGeneralReq ? 0 : Math.max(0, comp.totalRequired - comp.totalEarned);
+    return cardsForStates(data, allTrackedStates).map(({ st, key, comp }) => {
+      const unmet = comp.topicResults.filter(t => t.met === false);
+      const hoursGap = comp.noGeneralReq || comp.totalRequired == null ? 0 : Math.max(0, comp.totalRequired - comp.totalEarned);
       const cat1Gap = comp.cat1Required > 0 ? Math.max(0, comp.cat1Required - comp.cat1Earned) : 0;
-      return { state: st, unmet, hoursGap, cat1Gap, fullyCompliant: comp.fullyCompliant, assessmentStatus: comp.assessmentStatus, comp };
+      return { state: st, key, label: comp.profession ? appCardTitle(comp) : st, unmet, hoursGap, cat1Gap, fullyCompliant: comp.fullyCompliant, assessmentStatus: comp.assessmentStatus, comp };
     });
   }, [allTrackedStates, data]);
 
@@ -230,7 +239,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
         </div>
       )}
 
-      {perStateGaps.filter(g => g.comp.applicabilityUnknown).map(g => <ConditionalCmeTopics key={g.state} comp={g.comp} />)}
+      {perStateGaps.filter(g => g.comp.applicabilityUnknown).map(g => <ConditionalCmeTopics key={g.key} comp={g.comp} />)}
       {/* Personalized compliance gap summary */}
       {viewMode === "forYou" && !isFullyCompliant && perStateGaps.filter(g => g.assessmentStatus === "needs-hours").length > 0 && (
         <div style={{ backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 12, padding: "12px 16px", marginBottom: 14 }}>
@@ -238,8 +247,8 @@ function CMEResourcesSection({ initialTopicFilter }) {
             Gaps in {perStateGaps.filter(g => g.assessmentStatus === "needs-hours").length} state{perStateGaps.filter(g => g.assessmentStatus === "needs-hours").length > 1 ? "s" : ""}
           </div>
           {perStateGaps.filter(g => g.assessmentStatus === "needs-hours").map(g => (
-            <div key={g.state} style={{ fontSize: 13, color: T.textMuted, marginBottom: 4, lineHeight: 1.4 }}>
-              <span style={{ fontWeight: 700, color: T.text }}>{g.state}:</span>
+            <div key={g.key} style={{ fontSize: 13, color: T.textMuted, marginBottom: 4, lineHeight: 1.4 }}>
+              <span style={{ fontWeight: 700, color: T.text }}>{g.label}:</span>
               {g.hoursGap > 0 && <span> {g.hoursGap} general hrs needed.</span>}
               {g.cat1Gap > 0 && <span> {g.cat1Gap} Cat 1 hrs needed.</span>}
               {g.unmet.length > 0 && (
@@ -399,6 +408,15 @@ const ProviderCard = memo(function ProviderCard({ provider, T, unmetTopics, degr
               equivalence table, not from a per-provider string, so it cannot
               drift provider by provider. `aoaNote` adds only what is specific
               to this product. */}
+          {(degreeType === "PA" || degreeType === "NP") && (() => {
+            const line = appProviderLine(provider.accreditation, degreeType);
+            if (!line) return null;
+            return (
+              <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 4, lineHeight: 1.5, padding: "6px 8px", borderRadius: 8, backgroundColor: T.accentGlow }}>
+                <strong style={{ color: T.accent }}>For {degreeType === "PA" ? "a PA" : "an NP"}:</strong> {line}
+              </div>
+            );
+          })()}
           {degreeType === "DO" && (() => {
             const line = providerAoaLine(provider);
             if (!line && !provider.aoaNote) return null;

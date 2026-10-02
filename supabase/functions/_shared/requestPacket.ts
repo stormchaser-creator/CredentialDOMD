@@ -35,6 +35,7 @@
  * on every machine.
  */
 
+
 export const PROPOSAL_VERSION = 2;
 
 export type AskStatus = "found" | "missing" | "report";
@@ -44,6 +45,8 @@ export interface Classified {
   state: string | null;
   all: boolean;
   focus: string | null;
+  // Set only for a PA or NP member (the PA and NP request rules below).
+  profession?: string;
 }
 
 /** One document on file, as the matcher sees it. Strings or null throughout. */
@@ -648,6 +651,15 @@ function contentWords(s: string): string[] {
   return low(s).replace(/[^a-z0-9#'\s-]/g, " ").split(/\s+/).filter((w) => w && !GENERIC_WORDS.has(w));
 }
 
+// The member's degree while parseAsks reads one email (buildProposal passes
+// it), so a compound split reads each part the way the proposal will: a
+// PA's "practice agreement and your NCCPA certificate" is two asks, as a
+// physician's "BLS card and board certificate" always was. Unset (every
+// other caller, and MD or DO, whose asks classify the same with or without
+// it), the split reads exactly as before. A signature line is still read
+// without it, so "Pat Example, PA-C" under a message stays a name.
+let askDegree: string | undefined;
+
 /**
  * One kind per part, or null when any part cannot stand on its own: nothing
  * but generic words ("titer" in "Hep B surface antibody and titer"), or a
@@ -657,7 +669,7 @@ function compoundKinds(parts: string[]): string[] | null {
   const kinds: string[] = [];
   for (const p of parts) {
     if (!p || !contentWords(p).length) return null;
-    const kind = classifyAsk(p).kind;
+    const kind = classifyAsk(p, { degreeType: askDegree }).kind;
     if (kind === "unknown") return null;
     kinds.push(kind);
   }
@@ -713,7 +725,7 @@ function parenthesisedKinds(ask: string): string[] | null {
   if (inner.length < 2) return null;
   const kinds = compoundKinds(inner);
   if (!kinds || new Set(kinds).size < 2) return null;
-  const outside = classifyAsk(`${m[1]} ${m[3]}`.trim()).kind;
+  const outside = classifyAsk(`${m[1]} ${m[3]}`.trim(), { degreeType: askDegree }).kind;
   if (outside !== "unknown" && outside !== "immunizations" && !kinds.includes(outside)) return null;
   return inner;
 }
@@ -749,7 +761,7 @@ function splitCompound(ask: string): string[] {
       if (!b) continue;
       // The nearest part that is not itself a state and names a kind and a state: the next one first, as in "Colorado and North Dakota licenses".
       const order = [...cleaned.keys()].filter((j) => j !== i && !bare[j]).sort((a, c) => (a > i ? a - i : i - a + 0.5) - (c > i ? c - i : i - c + 0.5));
-      const j = order.find((k) => classifyAsk(cleaned[k]).kind !== "unknown" && stateSpan(cleaned[k]));
+      const j = order.find((k) => classifyAsk(cleaned[k], { degreeType: askDegree }).kind !== "unknown" && stateSpan(cleaned[k]));
       if (j === undefined) return [ask];
       const sp = stateSpan(cleaned[j]) as StateSpan;
       borrowed[i] = `${cleaned[j].slice(0, sp.start)}${b.text}${cleaned[j].slice(sp.end)}`.replace(/\s+/g, " ").trim();
@@ -805,7 +817,17 @@ function cleanSubject(subject: unknown): string {
  * in ("Can you please send me a copy of your board certificate."). With
  * nothing at all, the subject does.
  */
-export function parseAsks(text: unknown, subject: unknown = ""): string[] {
+export function parseAsks(text: unknown, subject: unknown = "", opts: { degreeType?: string | null } = {}): string[] {
+  const prev = askDegree;
+  askDegree = (opts && opts.degreeType) || undefined;
+  try {
+    return readAsks(text, subject);
+  } finally {
+    askDegree = prev;
+  }
+}
+
+function readAsks(text: unknown, subject: unknown): string[] {
   const all = String(text ?? "").replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").split("\n");
   let end = all.length;
   for (let i = 0; i < all.length; i++) {
@@ -1018,6 +1040,90 @@ const FOCUS_RULES: FocusRule[] = [
   { key: "hbsab", ask: /\bhep(?:atitis)?\.?\s*-?\s*b\s+surface\b|\bhbs\s?ab\b/, text: /surface|hbs\s?ab/ },
 ];
 
+// ─── A PA or NP member's requests (DESIGN 4.15, 1.9) ─────────────────────────
+// Read only when the member's profession is PA or NP: an MD's or DO's request
+// is matched exactly as before. The kinds below are not in KINDS (the list a
+// model reading may name), so a model can never send one on one tap. This
+// block is the same in src/utils/requestPacket.js and
+// supabase/functions/_shared/requestPacket.ts (this file imports nothing).
+
+const isAppDegree = (d: unknown): boolean => d === "PA" || d === "NP";
+
+// Kinds only a PA or NP request produces. They are not in requestPacket's
+// KINDS (the list a model reading may name), so a model can never send one
+// on one tap; the rules name them and the item goes to Review if the model
+// read it otherwise.
+const APP_KIND_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  practice_agreement: "practice agreement",
+  prescriptive_authority: "prescriptive authority",
+  rn_license: "RN license",
+  aprn_license: "APRN license",
+});
+const APP_STATE_KINDS: readonly string[] = Object.freeze(["practice_agreement", "prescriptive_authority", "rn_license", "aprn_license"]);
+
+// First match wins, specific before general, on the cleaned lowercase ask.
+const AGREEMENT_RE = /\b(?:practice|collaborat\w*|supervis\w*|delegation|prescriptive authority|transition to practice|mentorship)\s+(?:agreements?|protocols?|arrangements?|plans?)\b|\bstandardi[sz]ed procedures\b|\bstandard care arrangement\b|\bjoint protocols?\b|\bsupervising physician (?:agreement|letter)\b|\bcollaborating physician (?:agreement|letter)\b/;
+const PRESCRIPTIVE_RE = /\bprescriptive authority\b|\bprescrib\w* (?:authority|privileges|certificate|license|number)\b|\bfurnishing (?:number|license|certificate)\b/;
+const CERT_RE = /\bnccpa\b|\bpa-?c\b|\baanpc?b?\b|\bnpcb\b|\bancc\b|\bpncb\b|\bncc\b|\baacn\b|\bnational (?:np |nurse practitioner )?certification\b|\bnp certification\b|\b(?:fnp|agnp|agacnp|pmhnp|pnp|cpnp|whnp|nnp|enp)(?:-(?:c|bc|pc|ac))?\b/;
+const EXAM_RE = /\bpance\b|\bpanre\b|\bnclex\b/;
+const DIPLOMA_RE = /\bpa (?:program|school|degree|diploma)\b|\bphysician assistant (?:program|school|degree|diploma)\b|\b(?:mpas|mspas|msn|dnp)\b|\bnursing (?:degree|diploma|school)\b|\bnp program\b|\bnurse practitioner (?:program|degree|diploma)\b|\bmaster'?s (?:degree|diploma)\b/;
+const APRN_RE = /\b(?:aprn|apn|arnp|crnp)\b|\bnurse practitioner (?:licen[sc]e|certificate|license|recognition|registration)\b|\bnp licen[sc]e\b|\badvanced practice (?:registered )?nurs\w*/;
+const RN_RE = /\brn\b(?:\s+(?:licen[sc]e|compact|multistate))?|\bregistered nurse\b|\bnursing licen[sc]e\b|\bmultistate licen[sc]e\b|\bnurse licensure compact\b/;
+const PA_LICENSE_RE = /\bpa licen[sc]e\b|\bphysician (?:assistant|associate)(?:'s)? licen[sc]e\b|\blicensed physician assistant\b/;
+
+/** The kind a PA's or NP's ask names before the physician rules run, or null. */
+function appKindOf(t: string, degreeType: unknown): string | null {
+  const s = String(t || "");
+  if (AGREEMENT_RE.test(s)) return "practice_agreement";
+  if (PRESCRIPTIVE_RE.test(s)) return "prescriptive_authority";
+  // "PA-C license" is the state licence held by a certified PA, not the NCCPA
+  // certificate: a licence word with no certification word decides it.
+  if (degreeType === "PA" && /\bpa-?c\b/.test(s) && /licen[sc]e/.test(s) && !/\bnccpa\b|certif/.test(s)) return "state_license";
+  if (CERT_RE.test(s)) return "board_cert";
+  if (EXAM_RE.test(s)) return "usmle";
+  if (DIPLOMA_RE.test(s)) return "diploma";
+  if (degreeType === "NP") {
+    if (APRN_RE.test(s)) return "aprn_license";
+    if (RN_RE.test(s) && /licen[sc]e|compact|multistate|registered nurse|\brn\b/.test(s)) return "rn_license";
+  }
+  if (degreeType === "PA" && PA_LICENSE_RE.test(s)) return "state_license";
+  return null;
+}
+
+/**
+ * The state an ask names, for a PA member: the bare uppercase "PA" in "PA
+ * license" is the profession, not Pennsylvania, unless "Pennsylvania" is
+ * written. A member who holds a Pennsylvania licence is then offered every
+ * PA licence, that one included (DESIGN 1.9).
+ */
+function appStateOf(state: string | null, raw: unknown, degreeType: unknown): string | null {
+  if (degreeType === "PA" && (state === "PA" || state == null) && /\bPA(?:-?C)?\b/.test(String(raw || "")) && !/pennsylvania/i.test(String(raw || ""))) {
+    // The profession token is not the only code: "Copy of your TX PA
+    // license", "PA license (TX)" and "NM PA-C license" name Texas and New
+    // Mexico. Read the ask again without it.
+    return stateIn(String(raw || "").replace(/\bPA(?:-?C)?\b/g, " "));
+  }
+  return state;
+}
+
+/**
+ * The licence-section and education records that can answer a kind for a PA
+ * or NP, or null to use the physician rule. `where(section, re, not)` is the
+ * caller's filter over its catalogue.
+ */
+function appCandidates(kind: string, where: (s: string, re: RegExp, not?: RegExp) => CatalogueEntry[]): CatalogueEntry[] | null {
+  switch (kind) {
+    case "state_license": return where("licenses", /medical licen[sc]e|state licen[sc]e|physician licen[sc]e|osteopathic licen[sc]e|physician assistant licen[sc]e|physician associate licen[sc]e|\baprn\b|\brn licen[sc]e|registered nurse|nurse practitioner/, /\bdea\b|controlled|driver|board|fluoroscop/);
+    case "aprn_license": return where("licenses", /\baprn\b|\bapn\b|\barnp\b|\bcrnp\b|nurse practitioner/, /\bdea\b|controlled|board/);
+    case "rn_license": return where("licenses", /\brn licen[sc]e|registered nurse/, /\baprn\b|\bdea\b|controlled|board/);
+    case "practice_agreement": return where("licenses", /practice agreement|collaborat|supervis|protocol|standardi[sz]ed procedures|standard care/);
+    case "prescriptive_authority": return where("licenses", /prescriptive authority|furnish/, /agreement/);
+    case "usmle": return where("licenses", /usmle|comlex|nbme|nbome|pance|panre|nclex/);
+    case "diploma": return where("education", /diploma|master|doctor of nursing|\b(?:msn|dnp|mpas|mspas|mms|mhs)\b|physician assistant|nursing|aprn certificate/, /residency|fellowship|high school|bachelor|associate degree/);
+    default: return null;
+  }
+}
+
 // First match wins, so the specific goes before the general: "driver's
 // license" is a photo ID before it is a licence, "MMR titer" is MMR before it
 // is a titer, "DEA controlled substance registration" is the DEA, not a CSR.
@@ -1078,19 +1184,32 @@ const KIND_RULES: KindRule[] = [
  * certificate"), else null. The text is cleaned first, so "Copy of your
  * current DEA" and "DEA" answer the same.
  */
-export function classifyAsk(ask: unknown): Classified {
+export function classifyAsk(ask: unknown, opts: { degreeType?: string | null } = {}): Classified {
   const raw = String(ask ?? "");
   const cleaned = cleanAsk(raw) || raw.trim();
   const t = low(cleaned)
     .replace(/[^\w\s#/&'+.-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const state = stateIn(cleaned) || stateIn(raw);
+  const degreeType = (opts && opts.degreeType) || undefined;
+  const app = isAppDegree(degreeType);
+  // For a PA, "PA license" is the profession, not Pennsylvania (DESIGN 1.9).
+  const state = app ? appStateOf(stateIn(cleaned) || stateIn(raw), raw, degreeType) : stateIn(cleaned) || stateIn(raw);
   // An ask for prior or past records wants the whole history, so it is
   // answered like "all": historical and superseded documents included.
   const all = /\b(?:all|every|each)\b/.test(t) || HISTORY_ASK_RE.test(t);
   const focusRule = FOCUS_RULES.find((f) => f.ask.test(t));
   const focus = focusRule ? focusRule.key : null;
+  // A PA's or NP's own documents (NCCPA, PANCE, practice agreement, RN and
+  // APRN licences) are read before the physician rules; MD and DO asks never
+  // reach this, so they classify exactly as before.
+  if (app) {
+    const appKind = appKindOf(t, degreeType);
+    for (const r of appKind ? [] : KIND_RULES) {
+      if (r.re.test(t) && !(r.not && r.not.test(t))) return { kind: r.kind, state, all, focus, profession: degreeType };
+    }
+    return { kind: appKind || "unknown", state, all, focus, profession: degreeType };
+  }
   for (const r of KIND_RULES) {
     if (r.re.test(t) && !(r.not && r.not.test(t))) return { kind: r.kind, state, all, focus };
   }
@@ -1238,7 +1357,7 @@ const STATE_KINDS = new Set(["state_license", "dea", "csr", "privileges"]);
 const textOf = (e: CatalogueEntry): string => `${low(e.recType)} ${low(e.name)}`;
 
 /** The entries that could answer a kind, before ranking. */
-function candidates(kind: string, entries: CatalogueEntry[]): CatalogueEntry[] {
+function candidates(kind: string, entries: CatalogueEntry[], profession?: string): CatalogueEntry[] {
   const sec = (s: string): CatalogueEntry[] => entries.filter((e) => e.section === s);
   const where = (s: string, re: RegExp, not?: RegExp): CatalogueEntry[] =>
     sec(s).filter((e) => re.test(textOf(e)) && !(not && not.test(textOf(e))));
@@ -1246,6 +1365,10 @@ function candidates(kind: string, entries: CatalogueEntry[]): CatalogueEntry[] {
   const healthCat = (catRe: RegExp, re: RegExp): CatalogueEntry[] =>
     sec("healthRecords").filter((e) => catRe.test(low(e.category)) || re.test(textOf(e)));
   const firstOf = (...groups: CatalogueEntry[][]): CatalogueEntry[] => groups.find((g) => g.length) || [];
+  if (isAppDegree(profession)) {
+    const own = appCandidates(kind, where);
+    if (own) return own;
+  }
   switch (kind) {
     case "board_cert": return where("licenses", /board[- ]?cert/);
     case "dea": return where("licenses", /\bdea\b/);
@@ -1320,8 +1443,8 @@ export function matchAsk(
   const kind = c.kind || "unknown";
   const entries = (Array.isArray(catalogue) ? catalogue : []).filter((e) => e && e.id !== undefined && e.id !== null);
   const today = isoDay(now === undefined || now === null ? new Date() : now) || new Date().toISOString().slice(0, 10);
-  let list = candidates(kind, entries);
-  if (c.state && STATE_KINDS.has(kind)) list = list.filter((e) => e.state === c.state);
+  let list = candidates(kind, entries, c.profession);
+  if (c.state && (STATE_KINDS.has(kind) || APP_STATE_KINDS.includes(kind))) list = list.filter((e) => e.state === c.state);
   list = rank(list, today).filter((e) => !NEVER_SECTIONS.has(e.section) && (e.section !== "cme" || kind === "cme"));
   if (c.all || SERIES_KINDS.has(kind)) return list;
   // A single pick is the record in force. A superseded temporary licence or a
@@ -1509,14 +1632,15 @@ export function buildProposal(
   const body = req.body !== undefined && req.body !== null ? req.body : (req.body_text !== undefined ? req.body_text : "");
   const fromName = req.fromName !== undefined ? req.fromName : req.from_name;
   const model = readingAsks(reading);
-  const asks = model ? model.map((a) => a.ask) : parseAsks(body, req.subject);
+  const degreeType = pick(physician || {}, "degree", "degree_type", "degreeType");
+  const asks = model ? model.map((a) => a.ask) : parseAsks(body, req.subject, { degreeType });
   const confidence = model ? readingConfidence(reading) : "keyword";
   const today = isoDay(now === undefined || now === null ? new Date() : now) || new Date().toISOString().slice(0, 10);
   const items: ProposalItem[] = [];
   const docIds: string[] = [];
   const missing: string[] = [];
   asks.forEach((ask, n) => {
-    const c = classifyAsk(ask);
+    const c = classifyAsk(ask, { degreeType });
     // A model reading names the kind itself, but the quote is the email's own
     // words and the rules read them too. Where both name a kind and the two
     // differ, the words win and the item is no longer certain: "Could you
@@ -1578,7 +1702,7 @@ const KIND_NAMES: Record<string, string> = {
 /** A kind as the physician reads it ("coi_malpractice" is "malpractice certificate"). */
 export function kindName(kind: unknown): string {
   const k = String(kind ?? "");
-  return KIND_NAMES[k] || k.replace(/_/g, " ");
+  return KIND_NAMES[k] || APP_KIND_NAMES[k] || k.replace(/_/g, " ");
 }
 
 // ─── A model's reading, and when one tap may send ────────────────────────────

@@ -63,7 +63,8 @@ try {
   });
   test('unknown MD/DO cannot become green all-clear or asserted MD gap', () => {
     const comp = ca({}, '');
-    assert.match(cmeAssessmentLabel(comp), /Confirm MD or DO.*provisional/);
+    // D-1 (DESIGN 1.3): a blank profession is asked for, not only MD or DO.
+    assert.match(cmeAssessmentLabel(comp), /Choose your profession in Profile & settings.*provisional/);
     assert.deepEqual(cmeReviewSummary([{ st: 'CA', comp }]), { records: [], confirmation: ['CA'] });
   });
   test('dashboard actions open the affected state questions, missing degree, and missing license separately', () => {
@@ -82,7 +83,8 @@ try {
     assert.deepEqual(before, original, 'opening the questions never answers them');
 
     const [degree] = renderActions([{ st: 'CA', comp: ca({}, ''), lic: license }]);
-    assert.match(degree.props.children.join(''), /choose MD or DO in Profile/);
+    // D-1: the blank member may be a PA or an NP, so the action asks for the profession.
+    assert.match(degree.props.children.join(''), /choose your profession in Profile/);
     degree.props.onClick();
     const [missingLicense] = renderActions([{ st: 'CA', comp: ca(), lic: null }]);
     assert.match(missingLicense.props.children.join(''), /medical license/);

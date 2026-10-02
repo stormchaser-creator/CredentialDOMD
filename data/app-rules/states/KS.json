@@ -1,0 +1,190 @@
+{
+  "state": "KS",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Kansas State Board of Healing Arts",
+      "url": "https://www.ksbha.ks.gov/professions/physician-assistant-p-a"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "options",
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "options": [
+        {
+          "text": "Each year: at least 50 hours in the preceding year, at least 20 of them Category I and at least 1 Category III",
+          "facts": [
+            "pa.ce.hoursPerCycle",
+            "pa.ce.topicMandates.categoryIII"
+          ]
+        },
+        {
+          "text": "Every two years: at least 100 hours in the preceding two years, at least 40 of them Category I and at least 2 Category III",
+          "facts": [
+            "pa.ce.twoYearOption"
+          ]
+        },
+        {
+          "text": "Equivalent hours, in number and category, verified by a national, state or local organization with standards at least as stringent as the board's",
+          "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+        }
+      ],
+      "exemption": {
+        "field": "Initially licensed within a year of this renewal",
+        "question": "Were you first licensed as a Kansas PA within one year of this renewal date?",
+        "text": "A PA first licensed within one year of a renewal date is exempt from the continuing education for that first renewal.",
+        "fact": "pa.ce.firstRenewalExempt",
+        "topics": "all"
+      }
+    },
+    "topics": [
+      {
+        "topic": "Pain Management",
+        "hours": 1,
+        "label": "Category III: acute or chronic pain management, appropriate opioid prescribing, or use of prescription drug monitoring programs, at least 1 hour a year",
+        "period": {
+          "years": 1
+        },
+        "facts": [
+          "pa.ce.topicMandates.categoryIII",
+          "pa.ce.categoryIIIContent"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "conditional": true,
+        "text": "Before practicing, the PA files an active practice request signed with the responsible physician; amendments go to the board within 10 days and the physician reviews the form at least annually. From January 1, 2027, a PA attesting to 4,000 or more postgraduate clinical hours, with no disciplinary action on the license, may practice in collaboration with a physician; under 4,000 hours, under physician supervision with a written practice agreement.",
+        "facts": [
+          "pa.practice.activePracticeRequest",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.annualReview",
+          "pa.practice.upcoming.collaboration",
+          "pa.practice.upcoming.supervisionUnder4000",
+          "pa.practice.upcoming.effectiveDate",
+          "pa.practice.upcoming.collaborationDiscipline"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Whether the board accepts current NCCPA certification as equivalent hours",
+      "Whether PAs practicing in collaboration from January 1, 2027 stay exempt from Kansas Board of Pharmacy controlled substance registration",
+      "The form, filing and review interval of the HB 2702 practice agreement (implementing regulations not loaded)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Kansas State Board of Nursing",
+      "url": "https://ksbn.kansas.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "totalAccepted": {
+          "value": [
+            "Accredited Nursing CE"
+          ],
+          "fact": "np.rn.ceHoursPerCycle",
+          "reason": "Approved continuing nursing education (CNE)."
+        },
+        "totalUnverifiedAccepted": [
+          "AMA PRA Category 1",
+          "AAPA Category 1 CME",
+          "Joint Accreditation CE"
+        ],
+        "notes": [
+          {
+            "text": "No CE for the first renewal of a license that expires within 30 months after the licensure exam, or within 9 months after reinstatement or endorsement.",
+            "fact": "np.rn.firstRenewalExempt"
+          },
+          {
+            "text": "Contact hours over the 30 are not carried to the next renewal period.",
+            "fact": "np.rn.noCarryover"
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears",
+          "reason": "Renewed on the same biennial cycle as the RN license."
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "totalAccepted": {
+          "value": [
+            "Accredited Nursing CE"
+          ],
+          "fact": "np.aprn.ceHoursPerCycle",
+          "reason": "Approved continuing nursing education (CNE) related to the APRN role."
+        },
+        "totalUnverifiedAccepted": [
+          "AMA PRA Category 1",
+          "AAPA Category 1 CME",
+          "Joint Accreditation CE"
+        ],
+        "satisfiesRn": {
+          "value": true,
+          "fact": "np.aprn.ceCountsForRn"
+        },
+        "notes": [
+          {
+            "text": "Contact hours over the 30 are not carried to the next renewal period.",
+            "fact": "np.aprn.noCarryover"
+          }
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

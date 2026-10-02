@@ -1,0 +1,49 @@
+{
+ "state": "CT",
+ "facts": [
+  {
+   "field": "rn.nlcStatute",
+   "profession": "np",
+   "value": "Connecticut is in the Nurse Licensure Compact from October 1, 2025 until January 1, 2028",
+   "cite": "Conn. Gen. Stat. 20-99b",
+   "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+   "quote": "On and after October 1, 2025, until January 1, 2028, the Nurse Licensure Compact is hereby enacted into law",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "rn.topicMandates.audience",
+   "profession": "np",
+   "value": "Applies to RNs actively practicing in Connecticut",
+   "cite": "Conn. Gen. Stat. 20-94e(b)",
+   "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+   "quote": "a registered nurse licensed pursuant to this chapter who is actively practicing in this state",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "aprn.topicMandates.infectious",
+   "profession": "np",
+   "value": "Infectious diseases including AIDS and HIV, at least one contact hour",
+   "cite": "Conn. Gen. Stat. 20-94d(b)(4)(A)",
+   "url": "https://www.cga.ct.gov/current/pub/chap_378.htm",
+   "quote": "at least one contact hour of training ... (A) Infectious diseases, including, but not limited to, acquired immune deficiency syndrome and human immunodeficiency virus",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.topicMandates.mentalHealthProviders",
+   "profession": "pa",
+   "value": "Mental health training administered by AAPA, a hospital or licensed health care institution, or a regionally accredited institution of higher education",
+   "cite": "Conn. Gen. Stat. 20-12j(b)(4)",
+   "url": "https://www.cga.ct.gov/current/pub/chap_370.htm",
+   "quote": "suicide prevention training administered by the American Academy of Physician Associates ... a hospital or other licensed health care institution or a regionally accredited institution",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

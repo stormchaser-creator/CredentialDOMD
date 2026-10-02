@@ -1,0 +1,448 @@
+{
+ "state": "MD",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Maryland Board of Physicians",
+   "url": "https://www.mbp.state.md.us"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA, PA-C)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "June 30 of odd-numbered years; no grace period"
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "categoryRules": "All 50 hours Category I: at least 8 Category 1 hours on pharmacology plus at least 42 further Category I hours, earned in the 2 years before licence expiration. First renewal after initial licensure or reinstatement: only the 8 pharmacology hours. Keep documentation 6 years; civil penalty up to $100 per missing hour.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Pharmacology (Category 1)",
+     "hours": 8,
+     "period": "every cycle",
+     "appliesTo": "All PAs, including first renewal"
+    },
+    {
+     "topic": "Implicit bias and structural racism training (program approved by the Cultural and Linguistic Health Care Professional Competency Program)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "All health occupations licensees; attestation at first renewal after 2026-04-01"
+    },
+    {
+     "topic": "Prescribing or dispensing controlled dangerous substances",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "Maryland CDS registrants, before first CDS registration or first CDS renewal on or after 2018-10-01"
+    }
+   ],
+   "controlledSubstanceCe": "2 hours one-time for Maryland CDS registration (OCSA)"
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Since 2024-10-01 (PA Modernization Act): execute a collaboration agreement with one or more Maryland-licensed patient care team physicians, notify the Board through the Practitioner Profile before practising; the agreement is kept at the primary practice location (not submitted, not board-approved, no fee), separate agreement per employer, valid until terminated; retain records 5 years after termination. Pre-October 2024 delegation agreements remain valid as collaboration agreements.",
+   "notes": "Advanced duties need board approval unless performed in an exempt facility, previously approved, or the PA has over 7,000 clinical practice hours. A patient care team physician may collaborate with no more than 8 PAs at a time outside hospitals, correctional facilities, detention centers and public health facilities."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": false,
+   "separateAuthorityNote": "Prescriptive authority (including CDS) is delegated in the collaboration agreement with attestations (NCCPA exam passed within 2 years or 8 Category I pharmacology hours within 2 years; bachelor's degree or equivalent, or 2 years PA experience). No separate board registration. CDS needs a Maryland CDS registration (OCSA, 3-year application) plus DEA, and PDMP registration before a new or renewal CDS registration.",
+   "ceForPrescribers": "8 Category 1 pharmacology hours every cycle (all PAs); 2 hours CDS one-time for OCSA registration"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "COMAR 10.32.03.10A(2)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.10",
+    "quote": "may renew the license every 2 years on the date specified by the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "06/30 odd years",
+    "cite": "MBP Allied Health renewals page",
+    "url": "https://www.mbp.state.md.us/licensure_ahrenewals.aspx",
+    "quote": "Physician Assistants C 06/30 odd years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 50,
+    "cite": "COMAR 10.32.03.10D(1)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.10",
+    "quote": "a physician assistant shall complete at least 50 hours of continuing education consisting of",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[pharmacology]",
+    "value": 8,
+    "cite": "COMAR 10.32.03.10D(1)(a)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.10",
+    "quote": "At least 8 hours of Category 1 education on pharmacology topics earned during the 2-year period preceding",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.firstRenewal",
+    "value": "8 pharmacology hours only",
+    "cite": "COMAR 10.32.03.10D(2)(b)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.10",
+    "quote": "Is not required to complete any other hours of Category I continuing education prior to the expiration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "COMAR 10.32.03.10D(3)(c)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.10",
+    "quote": "Proof of maintenance of certification by the National Commission on Certification of Physician Assistants may be used to document compliance",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[implicitBias]",
+    "value": "one-time, first renewal after 2026-04-01",
+    "cite": "Health Occ. §1-225",
+    "url": "https://mgaleg.maryland.gov/mgawebsite/Laws/StatuteText?article=gho&section=1-225&enactments=false",
+    "quote": "shall apply only to an applicant’s first license or certificate renewal after April 1, 2026.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.controlledSubstanceCe",
+    "value": "2 hours one-time",
+    "cite": "OCSA CDS CE FAQ (HB 1452, 2018)",
+    "url": "https://health.maryland.gov/ocsa/Documents/CME%20Outreach%20FAQ.pdf",
+    "quote": "This is a one-time requirement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "collaboration",
+    "cite": "Health Occ. §15-302(a)",
+    "url": "https://mgaleg.maryland.gov/mgawebsite/Laws/StatuteText?article=gho&section=15-302&enactments=false",
+    "quote": "A physician assistant may practice as a physician assistant only after providing notice to the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "kept on site, notice only",
+    "cite": "COMAR 10.32.03.06A",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.06",
+    "quote": "Notify the Board in a manner approved by the Board of the executed collaboration agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "not submitted",
+    "cite": "MBP PA FAQ",
+    "url": "https://www.mbp.state.md.us/licensure_ahapp_pa.aspx",
+    "quote": "Collaboration agreements do not need to be submitted to the Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "valid until terminated",
+    "cite": "MBP PA FAQ",
+    "url": "https://www.mbp.state.md.us/licensure_ahapp_pa.aspx",
+    "quote": "remains valid until the agreement is terminated.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.separateAuthorityRegistration",
+    "value": "delegated in collaboration agreement",
+    "cite": "COMAR 10.32.03.09A(5)(b)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.09",
+    "quote": "Completed 8 Category I hours of pharmacology education within the previous 2 years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "8 pharmacology + 42 Category I",
+    "cite": "COMAR 10.32.03.10D(1)(b)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.32.03.10",
+    "quote": "at least 42 hours of Category I continuing education earned during the 2-year period preceding",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "MBON Mandatory PDMP Registration for CDS Prescribers",
+    "url": "https://health.maryland.gov/mbon/pages/mandatory-pdmp-registration-for-cds-prescribers.aspx",
+    "quote": "This applies to physicians, physician assistants, nurses, dentists, podiatrists and veterinarians.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.notes",
+    "value": "max 8 PAs per patient care team physician outside listed facilities",
+    "cite": "Health Occ. §15-302(d)(1)",
+    "url": "https://mgaleg.maryland.gov/mgawebsite/Laws/StatuteText?article=gho&section=15-302&enactments=false",
+    "quote": "may not delegate medical acts under a collaboration agreement to more than eight physician assistants at any one time",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.legacyAgreements",
+    "value": "delegation agreements treated as collaboration agreements",
+    "cite": "MBP PA FAQ",
+    "url": "https://www.mbp.state.md.us/licensure_ahapp_pa.aspx",
+    "quote": "All active delegation agreements will remain active and be treated the same as a collaboration agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.implicitBias (statute text)",
+    "value": "attestation at renewal",
+    "cite": "Health Occ. §1-225(a)",
+    "url": "https://mgaleg.maryland.gov/mgawebsite/Laws/StatuteText?article=gho&section=1-225&enactments=false",
+    "quote": "shall attest in the application that the applicant has completed an implicit bias and structural racism training program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Maryland Board of Nursing",
+   "url": "https://mbon.maryland.gov"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "28th day of birth month; odd birth year renews in odd years, even in even years",
+   "ceHoursPerCycle": 30,
+   "ceNote": "Active renewal needs one of: 1,000 hours of active nursing practice in the prior 5 years, OR a Board-approved nursing diploma/degree in the prior 5 years, OR 30 CEUs in the prior 2 years. CEUs do not carry forward.",
+   "nlcCompactMember": true,
+   "topicMandates": [
+    {
+     "topic": "Implicit bias and structural racism training (program approved by the Cultural and Linguistic Health Care Professional Competency Program)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "All health occupations licensees; attestation at first renewal after 2026-04-01"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "Certified Nurse Practitioner (CRNP)",
+   "separateLicenceOrCertificate": "Board of Nursing certification as a nurse practitioner, noted on the RN licence, one per area of specialization",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "ceNote": "No NP-specific contact-hour count in COMAR 10.27.07; renewal requires documentation of every current national certification that was the basis of Maryland certification.",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Implicit bias and structural racism training (program approved by the Cultural and Linguistic Health Care Professional Competency Program)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "All health occupations licensees; attestation at first renewal after 2026-04-01"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "separateAuthorityNote": "Prescribing drugs is within NP scope under COMAR 10.27.07.03A(11); no separate prescriptive authority credential found. CDS needs a Maryland CDS registration (OCSA) plus DEA, and PDMP registration before a new or renewal CDS registration.",
+   "pharmacologyCeForPrescribers": "None found in Maryland rule",
+   "controlledSubstanceCe": "2 hours one-time for Maryland CDS registration (OCSA)",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "transitionNote": "A new NP (never certified by any Board of Nursing) identifies a designated mentor (Maryland NP or physician with 3 or more years experience) for 18 months; this is a mentor relationship, not an hours count.",
+   "agreementFilingAndRenewal": "No collaborative or supervisory agreement; mentor identified at application for first-time NPs."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "COMAR 10.27.01.13B",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.01.13",
+    "quote": "The Board shall renew licenses biennially according to the following schedule",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "28th of birth month",
+    "cite": "COMAR 10.27.01.13B(1)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.01.13",
+    "quote": "shall always renew in an odd-numbered year not later than the 28th day of the licensee’s birth month",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "COMAR 10.27.01.13G(1)(c)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.01.13",
+    "quote": "Completion of 30 continuing education units (CEUs) within the 2 years immediately preceding the date of the renewal application.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.practiceAlternative",
+    "value": "1,000 hours in 5 years",
+    "cite": "COMAR 10.27.01.13G(1)(a)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.01.13",
+    "quote": "1,000 hours of active nursing practice within the 5 years immediately preceding the date of the renewal application",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "Health Occ. §8-7A-01",
+    "url": "https://mgaleg.maryland.gov/mgawebsite/Laws/StatuteText?article=gho&section=8-7A-01&enactments=false",
+    "quote": "The Nurse Licensure Compact is hereby enacted and entered into with all other jurisdictions that legally join in the Compact",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "COMAR 10.27.07.04B",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.07.04",
+    "quote": "the nurse practitioner may renew the certification biennially",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.expiry",
+    "value": "with RN licence",
+    "cite": "COMAR 10.27.07.04A",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.07.04",
+    "quote": "A certification as a nurse practitioner expires at the same time as the nurse practitioner's registered nursing license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "COMAR 10.27.07.04B(2)(a)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.07.04",
+    "quote": "Documentation of every current national certification as a nurse practitioner from a national certifying body recognized by the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transition",
+    "value": "18-month mentor",
+    "cite": "COMAR 10.27.07.02B(7)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.07.02",
+    "quote": "identify a designated mentor for 18 months as defined in Regulation .01 of this chapter",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "full",
+    "cite": "COMAR 10.27.07.03A",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.07.03",
+    "quote": "A nurse practitioner may independently perform the following functions",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates[implicitBias]",
+    "value": "one-time",
+    "cite": "Health Occ. §1-225(a),(c)",
+    "url": "https://mgaleg.maryland.gov/mgawebsite/Laws/StatuteText?article=gho&section=1-225&enactments=false",
+    "quote": "an applicant for the renewal of a license or certificate issued by a health occupations board under this article shall attest",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "2 hours one-time",
+    "cite": "OCSA CDS CE FAQ",
+    "url": "https://health.maryland.gov/ocsa/Documents/CME%20Outreach%20FAQ.pdf",
+    "quote": "Authorized Providers are Required to Complete 2 Hours of Continuing Education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "MBON Mandatory PDMP Registration for CDS Prescribers",
+    "url": "https://health.maryland.gov/mbon/pages/mandatory-pdmp-registration-for-cds-prescribers.aspx",
+    "quote": "practitioners authorized to prescribe Controlled Dangerous Substances (CDS) in Maryland must be registered with the Prescription Drug Monitoring Program (PDMP)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceNote",
+    "value": "CEUs not carried forward; keep 6 years",
+    "cite": "COMAR 10.27.01.13H(4)(b),(6)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.01.13",
+    "quote": "CEUs may not be carried forward into the next renewal period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transition (mentor definition)",
+    "value": "mentor with 3+ years, 18 months",
+    "cite": "COMAR 10.27.07.01B(7)",
+    "url": "https://regs.maryland.gov/us/md/exec/comar/10.27.07.01",
+    "quote": "Will be available for advice, consultation, and collaboration, as needed, for 18 months",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA and NP CDS registration: confirmed by the Board of Nursing PDMP page (applies to physician assistants and nurses); Criminal Law §5-301 and COMAR 10.19 were not loaded.",
+  "Implicit bias training: Health Occ. §1-225 sets no hour count; the approved program length was not loaded.",
+  "NP practice authority label 'full' is the conventional classification; COMAR 10.27.07.03A says NPs independently perform listed functions including prescribing; the word 'full' is not in the rule.",
+  "NP CE beyond national certification: none appear in COMAR 10.27.07; national certifying bodies' own CE numbers were not loaded.",
+  "Maryland Board of Nursing renewal page (mbon.maryland.gov) for RN/NP was not loaded; RN and NP facts come from COMAR and the Annotated Code.",
+  "No other Maryland topic mandates (opioid, human trafficking, etc.) found for PAs or NPs in COMAR 10.32.03.10 or 10.27.07; not exhaustively checked against every statute."
+ ],
+ "verifiedAt": "2026-10"
+}

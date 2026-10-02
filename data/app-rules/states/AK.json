@@ -1,0 +1,150 @@
+{
+  "state": "AK",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Alaska State Medical Board",
+      "url": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard.aspx"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "title": {
+        "value": "Physician associate license",
+        "fact": "pa.licence.title"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Renewal requires meeting NCCPA's CME and recertification requirements and current NCCPA certification; the state sets no separate hour total.",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Opioid Prescribing",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "Whether the pain management and opioid use and addiction CE applies at each PA renewal"
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "Since September 16, 2026 a PA attests to a written collaborative agreement at licensure and renewal and gives it to the board on request; PAs at listed facility types or with board authorization may practice without one.",
+        "facts": [
+          "pa.practice.sb89Attestation",
+          "pa.practice.sb89Exemption",
+          "pa.practice.sb89EffectiveDate"
+        ]
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Alaska Board of Nursing",
+      "url": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/BoardofNursing.aspx"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycle"
+        }
+      },
+      "nlc": {
+        "value": false,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycle"
+        },
+        "options": [
+          {
+            "text": "Two of the three methods: at least 30 contact hours of continuing education (at least 20 from ANCC, ACCME, ACPE, a nurse practitioner or nurse anesthetist certifying body or a board approved sponsor; no more than 10 of in-service education), at least 30 hours of uncompensated professional activities, at least 320 hours of nursing practice",
+            "facts": [
+              "np.rn.continuingCompetency",
+              "np.rn.ceHours",
+              "np.rn.ceSponsors",
+              "np.rn.professionalActivities",
+              "np.rn.employmentHours"
+            ]
+          },
+          {
+            "text": "Instead of the methods: a board approved nursing refresher course",
+            "fact": "np.rn.alternativeCompetency"
+          },
+          {
+            "text": "Instead of the methods: at least six academic credits toward a nursing degree or certificate beyond the original license",
+            "fact": "np.rn.alternativeMethods"
+          },
+          {
+            "text": "Instead of the methods: passing the NCLEX",
+            "fact": "np.rn.alternativeMethods"
+          }
+        ],
+        "notes": [
+          {
+            "text": "A nurse first licensed in the second year of the renewal period first meets these requirements before the second renewal.",
+            "fact": "np.rn.newLicensee"
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "Renewal requires current national certification in each role and population focus; the board's own contact hours apply only where the certifying body has no CE requirement.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycle"
+        },
+        "notes": [
+          {
+            "text": "To renew prescriptive authority, your national certification must show the continuing education that certifying body mandates.",
+            "fact": "np.aprn.prescriptiveRenewalCe"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 2,
+          "label": "Pain management and opioid use and addiction, each licensing cycle",
+          "fact": "np.aprn.topicMandates.opioid",
+          "condition": {
+            "field": "Holds a DEA registration and controlled substance authority",
+            "question": "Do you hold a DEA registration and controlled substance prescriptive authority?",
+            "description": "Applies to APRNs who prescribe controlled substances."
+          }
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycle"
+        }
+      },
+      "unverified": [
+        "Whether the board's own contact hour requirement applies at renewal where the certifying body sets no CE (the rule that states it covers initial licensure)"
+      ]
+    }
+  }
+}

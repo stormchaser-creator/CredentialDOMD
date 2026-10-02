@@ -1,0 +1,419 @@
+{
+ "state": "NY",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "New York State Education Department, Office of the Professions (State Board for Medicine)",
+   "url": "https://www.op.nysed.gov/professions/physician-assistants"
+  },
+  "licence": {
+   "title": "Physician Assistant (licence and triennial registration)",
+   "renewalCycleYears": 3,
+   "renewalDeadline": "End of the three-year registration period shown on the registration certificate"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "categoryRules": "No state CME hour requirement found; statute ties renewal only to CE the Commissioner of Health may establish. Mandated trainings below apply.",
+   "acceptsNccpaCertificationInLieu": null,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Infection control and barrier precautions (PHL 239)",
+     "hours": null,
+     "period": "every 4 years",
+     "appliesTo": "all PAs, at initial licensure/registration and every four years"
+    },
+    {
+     "topic": "Pain management, palliative care and addiction (PHL 3309-a)",
+     "hours": 3,
+     "period": "every 3 years",
+     "appliesTo": "prescribers with a DEA registration"
+    }
+   ],
+   "controlledSubstanceCe": "3 hours pain management, palliative care and addiction every 3 years for DEA registrants"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "No written agreement filing rule found; supervision continuous, physical presence not required; up to six PAs per physician in private practice (statute)",
+   "notes": "PA performs medical services only under physician supervision within the supervising physician's scope (Education Law 6542). Statute sets 6 PAs per physician in private practice (no limit in hospitals); the NYSED PA FAQ still says four and is out of date."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "3 hours every 3 years (PHL 3309-a) for DEA registrants"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 3,
+    "cite": "Education Law 6541",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/laws-rules-regulations/article-131b",
+    "quote": "Renewal periods shall be triennial and the renewal fee shall be forty-five dollars.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.registrationFee",
+    "value": "First registration is three years",
+    "cite": "NYSED PA licence requirements page",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/license-requirements",
+    "quote": "$45 First Three-Year Registration Fee",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.basis",
+    "value": "Only CE established by the Commissioner of Health",
+    "cite": "Education Law 6541",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/laws-rules-regulations/article-131b",
+    "quote": "evidence of satisfactory completion of such continuing education requirements as may be established by the commissioner of health pursuant to section thirty-seven hundred one",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.infectionControl",
+    "value": "Every four years",
+    "cite": "Public Health Law 239; NYSED infection control page",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/mandated-training-related-infection-control",
+    "quote": "All physicians, physician assistants, and specialist assistants must complete course work or training in accordance with Section 239 of the Public Health Law",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Same page: 'at the time of their initial licensure/registration and every four years thereafter'"
+   },
+   {
+    "field": "pa.ce.topicMandates.prescriberEducation",
+    "value": "3 hours every 3 years for DEA registrants",
+    "cite": "Public Health Law 3309-a(3)",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/nysdoh-mandatory-prescriber-education",
+    "quote": "required to complete at least three (3) hours of course work or training in pain management, palliative care, and addiction",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Same page: 'by July 1, 2017, and once every three (3) years thereafter'; applies to prescribers with a DEA registration"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "supervision",
+    "cite": "Education Law 6542(1)",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/laws-rules-regulations/article-131b",
+    "quote": "a physician assistant may perform medical services, but only when under the supervision of a physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.ratio",
+    "value": "6 PAs per physician in private practice",
+    "cite": "Education Law 6542(3)",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/laws-rules-regulations/article-131b",
+    "quote": "No physician shall employ or supervise more than six physician assistants in such physician's private practice at one time.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.nccpa.initialExam",
+    "value": "PANCE required for licensure",
+    "cite": "NYSED PA licence requirements page",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/license-requirements",
+    "quote": "You must pass the Physician Assistant National Certifying Examination (PANCE)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": false,
+    "cite": "Education Law 6541(3)",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/laws-rules-regulations/article-131b",
+    "quote": "together with evidence of satisfactory completion of such continuing education requirements as may be established by the commissioner of health",
+    "note": "The only renewal condition the statute names is CE set by the Commissioner of Health. NCCPA appears only as the licensing exam (PANCE).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.childAbuse",
+    "value": "Not applicable to PAs: NYSED's list of professions needing the one-time 2-hour child abuse coursework leaves out PAs",
+    "cite": "Education Law 6507(3)(a); NYSED child abuse training page",
+    "url": "https://www.op.nysed.gov/professions/registered-professional-nursing/mandated-training/mandated-training-related-child-abuse",
+    "quote": "This requirement applies to: Chiropractors, Dental Hygienists, Dentists, Optometrists, Physicians, Podiatrists, Psychologists, and Registered Nurses",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.ratioFaqConflict",
+    "value": "NYSED PA FAQ still says four PAs per physician; the statute says six",
+    "cite": "NYSED PA FAQ",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/faq",
+    "quote": "a physician cannot employ or supervise more than four Physician Assistants in his or her private practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "New York State Education Department, Office of the Professions (State Board for Nursing)",
+   "url": "https://www.op.nysed.gov/professions/nurse-practitioners"
+  },
+  "rn": {
+   "renewalCycleYears": 3,
+   "ceHoursPerCycle": null,
+   "nlcCompactMember": false,
+   "renewalDeadline": "End of the three-year registration period; NYSED mails notices five months before expiry",
+   "topicMandates": [
+    {
+     "topic": "Infection control and barrier precautions (Education Law 6505-b)",
+     "hours": null,
+     "period": "every 4 years",
+     "appliesTo": "all RNs"
+    },
+    {
+     "topic": "Identification and reporting of child abuse and maltreatment",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "RNs and NPs at initial licensure unless exempt or trained in a NYS program"
+    },
+    {
+     "topic": "Updated mandated reporter curriculum (intellectual and developmental disabilities content, Chapter 25 of the Laws of 2024)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "mandated reporters (RNs, and so NPs), including those already trained; complete the updated curriculum by November 17, 2026. Anyone trained between 11/1/2022 and 8/31/2025 may take a 15-minute addendum."
+    },
+    {
+     "topic": "Baccalaureate in nursing within 10 years of initial licence",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "RNs first licensed after June 18, 2020 who are not exempt under 8 NYCRR 64.1 (NPs with a graduate nursing degree already meet it)"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "NP (Nurse Practitioner certificate with triennial registration, by specialty)",
+   "separateLicenceOrCertificate": "certificate",
+   "renewalCycleYears": 3,
+   "ceHoursPerCycle": null,
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": false,
+   "topicMandates": [
+    {
+     "topic": "Pharmacology (3 semester hours or equivalent)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "NP certification"
+    },
+    {
+     "topic": "Pain management, palliative care and addiction (PHL 3309-a)",
+     "hours": 3,
+     "period": "every 3 years",
+     "appliesTo": "NPs with a DEA registration"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": "None per cycle found; one-time 3 semester hour pharmacology for certification",
+   "controlledSubstanceCe": "3 hours every 3 years for DEA registrants (PHL 3309-a)",
+   "stateCsRegistrationRequired": null
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "collaboration (written practice agreement and protocols) until 3,600 hours; none after, through July 1, 2030",
+   "transitionToPracticeHours": 3600,
+   "agreementFilingAndRenewal": "Before 3,600 hours: written practice agreement with a collaborating physician and written protocols, kept at the practice setting for NYSED inspection; physician chart review at least every 3 months; names posted. After 3,600 hours no collaboration requirement under the version effective until July 1, 2030; from July 1, 2030 the statute text switches to collaborative relationships documented on an attestation form and protocols filed within 90 days"
+  },
+  "facts": [
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": 3,
+    "cite": "NYSED NP FAQ q.41",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/faqs",
+    "quote": "Every three years you must renew your NP registration and your RN registration with NYSED to continue practicing as an NP.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.registrationCoterminous",
+    "value": "NP registration coterminous with RN registration",
+    "cite": "Education Law 6910",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/laws-rules-regulations/article-139",
+    "quote": "Registration under this section shall be coterminous with the nurse practitioner's registration as a professional nurse.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "Not required to renew; one of the routes to initial certification",
+    "cite": "NYSED NP certification requirements",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/certification-requirements",
+    "quote": "You are currently NP certified by an acceptable national certifying organization.",
+    "loaded": true,
+    "verified": false,
+    "verifiedBy": "verifier-2026-10",
+    "unverifiedReason": "No primary source says national certification is required, or not required, for NP registration renewal. Education Law 6910 and the NYSED NP pages loaded name only the triennial registration fee and the RN registration. The cited page covers only initial certification (national certification is one of two pathways). Value false is an inference."
+   },
+   {
+    "field": "np.aprn.pharmacologyInitial",
+    "value": "3 semester hours pharmacology (one-time)",
+    "cite": "8 NYCRR 64.4",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/laws-rules-regulations/part-64",
+    "quote": "completion of not less than three semester hours or the equivalent in pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": 3600,
+    "cite": "Education Law 6902(3); NYSED NP practice requirements",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/professional-practice/practice-requirements",
+    "quote": "written practice protocols and a written practice agreement with a collaborating physician unless and until the NP has completed 3,600 hours of experience",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "No collaboration requirement after 3,600 hours, effective until July 1, 2030",
+    "cite": "Education Law 6902(3)(a-1) (NB Effective until July 1, 2030)",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/laws-rules-regulations/article-139",
+    "quote": "practicing for more than three thousand six hundred hours shall not be required to comply with the requirements ... relating to collaboration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.chartReview",
+    "value": "Collaborating physician review at least every 3 months",
+    "cite": "Education Law 6902(3)(a)",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/laws-rules-regulations/article-139",
+    "quote": "patient records review by the collaborating physician in a timely fashion but in no event less often than every three months",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFiling",
+    "value": "Agreement kept at practice site for NYSED inspection",
+    "cite": "NYSED NP practice requirements",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/professional-practice/practice-requirements",
+    "quote": "A copy of the collaborative practice agreement must be kept at the NP's practice setting(s) and made available for inspection",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.infectionControl",
+    "value": "Every four years",
+    "cite": "Education Law 6505-b; NYSED infection control page",
+    "url": "https://www.op.nysed.gov/professions/physician-assistants/mandated-training-related-infection-control",
+    "quote": "registered nurses must complete course work or training appropriate to their practice regarding infection control and barrier precautions",
+    "loaded": true,
+    "verified": true,
+    "note": "Same page: 'every four years according to Section 6505-b of the Education Law'",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.childAbuse",
+    "value": "2 hours, one-time",
+    "cite": "Education Law 6507(3)(a); NYSED child abuse training page",
+    "url": "https://www.op.nysed.gov/professions/registered-professional-nursing/mandated-training/mandated-training-related-child-abuse",
+    "quote": "two hours of coursework or training regarding the identification and reporting of child abuse and maltreatment. This is a one-time requirement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.mandatedReporterUpdate",
+    "value": "Updated curriculum due November 17, 2026",
+    "cite": "Social Services Law 413 (Chapter 25 of the Laws of 2024)",
+    "url": "https://www.op.nysed.gov/professions/registered-professional-nursing/mandated-training/mandated-training-related-child-abuse",
+    "quote": "mandated reporters, including those who have previously undergone the current training, complete the updated training curriculum by November 17, 2026",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "3 hours every 3 years for DEA registrants",
+    "cite": "Public Health Law 3309-a(3)",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/mandatory-prescriber-education-nurse",
+    "quote": "at least three (3) hours of course work or training in pain management, palliative care, and addiction",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": false,
+    "cite": "NYSED NP FAQ q.3; S3916/A4524 (2025-2026) still in committee",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/faqs",
+    "quote": "No. New York State is not a Nursing Licensure Compact State.",
+    "loaded": true,
+    "verified": true,
+    "note": "S3916 (NLC plus APRN Compact) was referred to Senate Higher Education on January 7, 2026 and not passed (nysenate.gov via WebFetch)",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.bsnIn10",
+    "value": "BSN within 10 years of initial RN licence, for RNs first licensed after June 18, 2020 (with listed exemptions)",
+    "cite": "8 NYCRR 64.1",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/laws-rules-regulations/part-64",
+    "quote": "shall attain a baccalaureate or higher degree in nursing within 10 years after being issued a registered professional nurse license",
+    "loaded": true,
+    "verified": true,
+    "note": "Exempt: anyone licensed on or before June 18, 2020, and students enrolled in qualifying programs by then. Not relevant to NPs who already hold a graduate nursing degree.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.mandatedReporterAddendum",
+    "value": "Those trained between 11/1/2022 and 8/31/2025 may complete a 15 minute addendum",
+    "cite": "Social Services Law 413 (Chapter 25 of the Laws of 2024); NYSED child abuse page",
+    "url": "https://www.op.nysed.gov/professions/registered-professional-nursing/mandated-training/mandated-training-related-child-abuse",
+    "quote": "if you have completed Mandated Reporter Training between 11/1/2022 and 8/31/2025, you may complete a short (15 minute) addendum",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.post2030",
+    "value": "From July 1, 2030 NPs over 3,600 hours keep collaborative relationships documented on a NYSED attestation form instead of the current exemption",
+    "cite": "Education Law 6902(3)(a-1) (NB Effective July 1, 2030)",
+    "url": "https://www.op.nysed.gov/professions/nurse-practitioners/laws-rules-regulations/article-139",
+    "quote": "the nurse practitioner shall complete and maintain a form, created by the department, to which the nurse practitioner shall attest",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "NY state controlled substance registration for PAs and NPs: no primary source was loaded confirming or denying a separate practitioner registration (the DOH Bureau of Narcotic Enforcement site returned 403/404). Left null.",
+  "NP registration renewal and national certification: no primary statement either way (see the fact's unverifiedReason).",
+  "NY RN general contact hours: none appear in Education Law 6505-b/6507 or on the NYSED RN mandated training pages. No page states outright that no hours are required.",
+  "Whether PAs must complete the updated mandated reporter curriculum by November 17, 2026: PAs are not on NYSED's Education Law 6507 child abuse list, and Social Services Law 413's list of mandated reporters was not loaded.",
+  "The NYSED PA FAQ (four PAs) conflicts with Education Law 6542(3) as posted by NYSED (six PAs). Use the statute.",
+  "No 2025 or 2026 New York law changing PA supervision was confirmed. The web search budget ran out before a targeted search, and Article 131-B as posted by NYSED shows no pending change.",
+  "Checked NYSED PA and NP pages and found no mandate on implicit bias, human trafficking, HIV (beyond infection control), Alzheimer, suicide prevention, cultural competency, domestic violence or end of life for PAs or NPs."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "NY PA: re-quoted the infection control and prescriber education facts word for word. The earlier quotes used ellipses, which loses context.",
+   "NY PA: confirmed NCCPA is not a renewal condition from the text of Education Law 6541(3) itself, replacing the inference. Confirmed PAs are NOT on NYSED's list for the one-time child abuse coursework.",
+   "NY NP: NLC non-membership now cited to NYSED's own statement in NP FAQ q.3 ('not a Nursing Licensure Compact State'), not just to a bill's committee status.",
+   "NY NP: nationalCertificationRequired=false downgraded to verified:false. No primary source states the renewal rule either way; the cited page covers only initial certification.",
+   "NY RN: added the BS in 10 scope (RNs licensed after June 18, 2020, with exemptions) and the 15-minute addendum option for the November 17, 2026 mandated reporter update."
+  ]
+ }
+}

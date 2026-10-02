@@ -1,0 +1,61 @@
+{
+ "state": "MN",
+ "facts": [
+  {
+   "field": "np.board.page",
+   "profession": "np",
+   "value": "Minnesota Board of Nursing home page",
+   "cite": "Minnesota Board of Nursing",
+   "url": "https://mn.gov/boards/nursing/",
+   "quote": "Renew Your License",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "rn.ceRatio",
+   "profession": "np",
+   "value": "At least one contact hour per month of registration",
+   "cite": "Minn. R. 6310.2800 subp. 3",
+   "url": "https://www.revisor.mn.gov/rules/6310.2800/",
+   "quote": "A registered nurse shall participate in the ratio of at least one contact hour of acceptable continuing education for each month of registration",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "rn.initialPeriod",
+   "profession": "np",
+   "value": "Initial registration period of six to 29 full calendar months",
+   "cite": "Minn. R. 6310.2600 subp. 15",
+   "url": "https://www.revisor.mn.gov/rules/6310.2600/",
+   "quote": "The initial registration period following licensure, endorsement, or reregistration is from six to 29 full calendar months",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.fetalAlcoholSyndrome",
+   "profession": "pa",
+   "value": "Board of Medical Practice licensees who diagnose and treat fetal alcohol syndrome receive education on it",
+   "cite": "Minn. Stat. 214.12 subd. 3",
+   "url": "https://www.revisor.mn.gov/statutes/cite/214.12",
+   "quote": "The Board of Medical Practice ... shall require by rule that ... licensees who have primary responsibility for diagnosing and treating fetal alcohol syndrome",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.board.url",
+   "profession": "pa",
+   "value": "Minnesota Board of Medical Practice",
+   "cite": "Minnesota Board of Medical Practice home page",
+   "url": "https://mn.gov/boards/medical-practice/",
+   "quote": "Minnesota Board of Medical Practice",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -1,0 +1,439 @@
+{
+  "state": "IL",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Illinois Department of Financial and Professional Regulation (IDFPR), Illinois State Medical Board",
+      "url": "https://idfpr.illinois.gov/profs/physicianassistant.html"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 50,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 25,
+        "fact": "pa.ce.categoryRules",
+        "label": "Category 1 as determined by NCCPA",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ]
+      },
+      "notes": [
+        {
+          "text": "The first renewal of an Illinois license is exempt from the CE hours.",
+          "fact": "pa.ce.firstRenewalExempt"
+        },
+        {
+          "text": "Every mandated reporter completes initial mandated reporter training within 3 months of first starting work in that capacity.",
+          "fact": "pa.topic.mandatedReporterInitial"
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Sexual Harassment Prevention",
+        "hours": 1,
+        "label": "Sexual harassment prevention, each renewal cycle",
+        "fact": "pa.ce.sexualHarassmentHours"
+      },
+      {
+        "topic": "Implicit Bias",
+        "hours": 1,
+        "label": "Implicit bias awareness, each renewal period",
+        "fact": "pa.ce.implicitBias"
+      },
+      {
+        "topic": "Cultural Competency",
+        "hours": 1,
+        "label": "Cultural competency, before the first renewal that requires CE, then within every three renewal periods",
+        "period": {
+          "years": 6
+        },
+        "periodReason": "Mandated topics are completed within 3 renewal periods (six years); IDFPR states these courses as once every six years.",
+        "facts": [
+          "pa.ce.culturalCompetency",
+          "pa.ce.mandatedTopicWindow"
+        ]
+      },
+      {
+        "topic": "Geriatric Medicine",
+        "hours": 1,
+        "label": "Alzheimer's disease and other dementias, before the first renewal that requires CE, then once every six years",
+        "period": {
+          "years": 6
+        },
+        "facts": [
+          "pa.ce.dementia",
+          "pa.ce.dementiaCadence"
+        ],
+        "condition": {
+          "field": "Sees adults age 26 or older",
+          "question": "Do you have direct patient interaction with adults age 26 or older?",
+          "description": "Illinois dementia training applies to clinicians who see adults."
+        }
+      },
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 1,
+        "label": "Safe opioid prescribing practices, 1 hour during each pre-renewal period",
+        "fact": "pa.ce.opioid",
+        "condition": {
+          "field": "Licensed to prescribe controlled substances in Illinois",
+          "question": "Are you licensed to prescribe controlled substances in Illinois?",
+          "description": "Illinois' safe opioid prescribing hour applies to every prescriber licensed to prescribe controlled substances."
+        },
+        "alsoTopics": [
+          "Controlled Substances"
+        ]
+      },
+      {
+        "topic": "Pharmacology",
+        "hours": 5,
+        "measure": "pharmacology",
+        "label": "Pharmacology, every year, when Schedule II controlled substances are delegated",
+        "period": {
+          "years": 1
+        },
+        "fact": "pa.prescribing.scheduleIIPharmacologyCe",
+        "condition": {
+          "field": "Delegated Schedule II controlled substances",
+          "question": "Have you been delegated authority to prescribe Schedule II controlled substances?",
+          "description": "Illinois annual pharmacology hours for Schedule II delegation."
+        }
+      },
+      {
+        "topic": "Child Abuse Recognition",
+        "hours": 1,
+        "label": "Mandated reporter training, 1 hour, at least every six years if you work with children (those who do not may attest at each renewal instead)",
+        "period": {
+          "years": 6
+        },
+        "facts": [
+          "pa.topic.mandatedReporterHour",
+          "pa.ce.mandatedReporter",
+          "pa.ce.mandatedReporterAttestOnly"
+        ],
+        "condition": {
+          "field": "Works with children",
+          "question": "Do you work with children in your professional capacity?",
+          "description": "Illinois mandated reporter training for medical personnel who work with children."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "A written collaborative agreement is required, except as Section 7.7 of the Act provides; a signed copy is available to IDFPR on request, and the collaborating physician provides consultation at least once a month.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.consultationFrequency"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalDeadline",
+        "reason": "Licenses expire March 1 of each even-numbered year: every two years."
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Illinois Department of Financial and Professional Regulation (IDFPR), Board of Nursing",
+      "url": "https://idfpr.illinois.gov/profs/nursing.html"
+    },
+    "rn": {
+      "nlc": {
+        "value": false,
+        "fact": "np.rn.nlc"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 20,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "Every mandated reporter completes initial mandated reporter training within 3 months of first starting work in that capacity.",
+            "fact": "np.topic.mandatedReporterInitial"
+          }
+        ],
+        "exemption": {
+          "field": "First Illinois RN license renewal",
+          "question": "Is this the first renewal of this Illinois RN license?",
+          "text": "The first renewal of an Illinois license is exempt from the CE requirements.",
+          "fact": "np.aprn.firstRenewalExempt",
+          "topics": "all"
+        }
+      },
+      "topics": [
+        {
+          "topic": "Sexual Harassment Prevention",
+          "hours": 1,
+          "label": "Sexual harassment prevention, each renewal cycle",
+          "fact": "np.topic.sexualHarassmentHours"
+        },
+        {
+          "topic": "Implicit Bias",
+          "hours": 1,
+          "label": "Implicit bias awareness, each renewal period",
+          "fact": "np.topic.implicitBias"
+        },
+        {
+          "topic": "Cultural Competency",
+          "hours": 1,
+          "label": "Cultural competency, at least 1 hour, before the first renewal that requires CE, then once every six years",
+          "period": {
+            "years": 6
+          },
+          "facts": [
+            "np.topic.culturalCompetencyHour",
+            "np.topic.dementiaCulturalCadence"
+          ]
+        },
+        {
+          "topic": "Geriatric Medicine",
+          "hours": 1,
+          "label": "Alzheimer's disease and other dementias, at least 1 hour, before the first renewal that requires CE, then once every six years",
+          "period": {
+            "years": 6
+          },
+          "condition": {
+            "field": "Sees adults age 26 or older",
+            "question": "Do you have direct patient interaction with adults age 26 or older?",
+            "description": "Illinois dementia training applies to clinicians who see adults."
+          },
+          "facts": [
+            "np.topic.dementiaHour",
+            "np.topic.dementiaCulturalCadence"
+          ]
+        },
+        {
+          "topic": "Child Abuse Recognition",
+          "hours": 1,
+          "label": "Mandated reporter training, 1 hour, at least every six years if you work with children (those who do not may attest at each renewal instead)",
+          "period": {
+            "years": 6
+          },
+          "condition": {
+            "field": "Works with children",
+            "question": "Do you work with children in your professional capacity?",
+            "description": "Illinois mandated reporter training for medical personnel who work with children."
+          },
+          "facts": [
+            "np.topic.mandatedReporterHour",
+            "np.topic.mandatedReporter"
+          ]
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline",
+          "reason": "Licenses expire May 31 of each even-numbered year: every two years."
+        }
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 80,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "satisfiesRn": {
+          "value": true,
+          "fact": "np.aprn.satisfiesRnCe"
+        },
+        "notes": [
+          {
+            "text": "At least 50 of the 80 hours come from CE programs; up to 30 may come from presentations, quality improvement projects, publications, research or precepting.",
+            "facts": [
+              "np.aprn.ceSplit",
+              "np.aprn.ceHoursPerCycle"
+            ]
+          },
+          {
+            "text": "Passing a recertification exam in your specialty counts as 60 CE hours.",
+            "fact": "np.aprn.recertExamCredit"
+          },
+          {
+            "text": "The first renewal of an Illinois license is exempt from the CE hours.",
+            "fact": "np.aprn.firstRenewalExempt"
+          },
+          {
+            "text": "Every mandated reporter completes initial mandated reporter training within 3 months of first starting work in that capacity.",
+            "fact": "np.topic.mandatedReporterInitial"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 20,
+          "measure": "pharmacology",
+          "label": "Pharmacotherapeutics, part of the 80 hours",
+          "facts": [
+            "np.aprn.pharmacologyHoursPerCycle",
+            "np.aprn.ceHoursPerCycle"
+          ]
+        },
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 10,
+          "label": "Opioid prescribing or substance abuse education, within the 20 pharmacotherapeutics hours",
+          "fact": "np.aprn.pharmacologyHoursPerCycle"
+        },
+        {
+          "topic": "Sexual Harassment Prevention",
+          "hours": 1,
+          "label": "Sexual harassment prevention, each renewal cycle",
+          "fact": "np.topic.sexualHarassmentHours"
+        },
+        {
+          "topic": "Implicit Bias",
+          "hours": 1,
+          "label": "Implicit bias awareness, each renewal period",
+          "fact": "np.topic.implicitBias"
+        },
+        {
+          "topic": "Cultural Competency",
+          "hours": 1,
+          "label": "Cultural competency, at least 1 hour, before the first renewal that requires CE, then once every six years",
+          "period": {
+            "years": 6
+          },
+          "facts": [
+            "np.topic.culturalCompetencyHour",
+            "np.topic.dementiaCulturalCadence"
+          ]
+        },
+        {
+          "topic": "Geriatric Medicine",
+          "hours": 1,
+          "label": "Alzheimer's disease and other dementias, at least 1 hour, before the first renewal that requires CE, then once every six years",
+          "period": {
+            "years": 6
+          },
+          "condition": {
+            "field": "Sees adults age 26 or older",
+            "question": "Do you have direct patient interaction with adults age 26 or older?",
+            "description": "Illinois dementia training applies to clinicians who see adults."
+          },
+          "facts": [
+            "np.topic.dementiaHour",
+            "np.topic.dementiaCulturalCadence"
+          ]
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 1,
+          "label": "Safe opioid prescribing practices, 1 hour during each pre-renewal period",
+          "fact": "np.prescribing.opioidCe",
+          "condition": {
+            "field": "Licensed to prescribe controlled substances in Illinois",
+            "question": "Are you licensed to prescribe controlled substances in Illinois?",
+            "description": "Illinois' safe opioid prescribing hour applies to every prescriber licensed to prescribe controlled substances."
+          },
+          "alsoTopics": [
+            "Opioid Prescribing"
+          ]
+        },
+        {
+          "topic": "Pharmacology",
+          "hours": 5,
+          "measure": "pharmacology",
+          "label": "Pharmacology, every year, when Schedule II controlled substances are delegated",
+          "period": {
+            "years": 1
+          },
+          "fact": "np.prescribing.scheduleIIPharmacologyCe",
+          "condition": {
+            "field": "Delegated Schedule II controlled substances",
+            "question": "Have you been delegated authority to prescribe Schedule II controlled substances?",
+            "description": "Illinois annual pharmacology hours for Schedule II delegation."
+          }
+        },
+        {
+          "topic": "Child Abuse Recognition",
+          "hours": 1,
+          "label": "Mandated reporter training, 1 hour, at least every six years if you work with children (those who do not may attest at each renewal instead)",
+          "period": {
+            "years": 6
+          },
+          "condition": {
+            "field": "Works with children",
+            "question": "Do you work with children in your professional capacity?",
+            "description": "Illinois mandated reporter training for medical personnel who work with children."
+          },
+          "facts": [
+            "np.topic.mandatedReporterHour",
+            "np.topic.mandatedReporter"
+          ]
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalDeadline",
+          "reason": "Licenses expire May 31 of each even-numbered year: every two years."
+        }
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "A written collaborative agreement is required until full practice authority and is available to IDFPR on request. Full practice authority follows 4,000 clinical hours and 250 hours of CE or training after national certification.",
+        "facts": [
+          "np.practice.agreementType",
+          "np.practice.agreementFilingAndRenewal",
+          "np.practice.transitionToPracticeHours"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

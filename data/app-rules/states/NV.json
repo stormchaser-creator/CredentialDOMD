@@ -1,0 +1,293 @@
+{
+  "state": "NV",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Nevada State Board of Medical Examiners (PAs supervised by MDs; PAs supervised by DOs are licensed by the Nevada State Board of Osteopathic Medicine under NRS 633)",
+      "url": "https://medboard.nv.gov/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 40,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1"
+        ],
+        "facts": [
+          "pa.ce.categoryRules",
+          "pa.ce.topicMandates.ethics.paForm"
+        ]
+      },
+      "totalUnverifiedAccepted": [
+        "AOA Category 1-A",
+        "AAFP Prescribed Credit",
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "notes": [
+        {
+          "text": "First licensed later in the biennium: 30, 20 or 10 hours, by six-month block.",
+          "fact": "pa.ce.hoursPerCycle"
+        },
+        {
+          "text": "The controlled substance and SBIRT hours count toward the total.",
+          "fact": "pa.ce.mandatesCountTowardTotal"
+        },
+        {
+          "text": "The board's CME summary also asks for at least 20 hours within your scope of practice or specialty (the rule itself does not state this).",
+          "fact": "pa.ce.scopeMinimum"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Ethics",
+        "hours": 2,
+        "label": "Ethics, pain management or addiction care, each biennium",
+        "facts": [
+          "pa.ce.topicMandates.ethics",
+          "pa.ce.topicMandates.ethics.paForm"
+        ]
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": 2,
+        "label": "Substance use disorders, misuse of controlled substances or opioid prescribing, each licensure period",
+        "fact": "pa.ce.topicMandates.controlledSubstances",
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Are you registered with the Nevada Board of Pharmacy to dispense controlled substances?",
+          "description": "Applies to holders of the state controlled substance registration."
+        }
+      },
+      {
+        "topic": "Substance Use Disorders",
+        "hours": 2,
+        "label": "Screening, brief intervention and referral to treatment (SBIRT), within 2 years after initial licensure",
+        "period": "lifetime",
+        "fact": "pa.ce.topicMandates.sbirt"
+      },
+      {
+        "topic": "Suicide Prevention",
+        "hours": 2,
+        "label": "Suicide detection, intervention and prevention, within 2 years of initial licensure and every 4 years after",
+        "period": {
+          "years": 4
+        },
+        "facts": [
+          "pa.ce.topicMandates.suicide",
+          "pa.ce.topicMandates.suicide.paForm"
+        ]
+      },
+      {
+        "topic": "Cultural Competency",
+        "hours": 2,
+        "label": "Cultural competency and diversity, equity and inclusion, biennially",
+        "fact": "pa.ce.topicMandates.culturalCompetency",
+        "condition": {
+          "field": "Supervised by a psychiatrist",
+          "question": "Is your supervising physician a psychiatrist?",
+          "description": "Nevada's cultural competency hours for PAs supervised by a psychiatrist."
+        }
+      },
+      {
+        "topic": "HIV/AIDS",
+        "hours": 2,
+        "label": "Stigma, discrimination and unrecognized bias toward persons with or at high risk of HIV, within 2 years of starting",
+        "period": "lifetime",
+        "periodReason": "Required once, within 2 years of starting emergency or primary care.",
+        "fact": "pa.ce.topicMandates.hivStigma",
+        "condition": {
+          "field": "Provides emergency or primary care",
+          "question": "Do you provide emergency services in a hospital or primary care?",
+          "description": "Nevada's HIV stigma training for emergency and primary care."
+        }
+      },
+      {
+        "topic": "Terrorism and Weapons of Mass Destruction",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "Whether the one time course on the medical consequences of terrorism is still enforced for PAs"
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "Before providing services the PA files a board form, signed with the supervising physician, naming the practice location and physician. The supervising physician spends part of a day at least monthly where the PA practices.",
+        "facts": [
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.onsite"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Whether current NCCPA certification is checked at each renewal",
+      "Whether the hours within your scope of practice are required (they appear on the board's summary, not in NAC 630.350)",
+      "The renewal rules for PAs licensed by the Nevada State Board of Osteopathic Medicine (NRS 633), which this card does not cover"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Nevada State Board of Nursing",
+      "url": "https://nevadanursingboard.org/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline"
+        }
+      },
+      "nlc": {
+        "value": false,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.rn.ceHoursPerCycle"
+        }
+      },
+      "topics": [
+        {
+          "topic": "Terrorism and Weapons of Mass Destruction",
+          "hours": 4,
+          "label": "Medical consequences of an act of terrorism involving weapons of mass destruction, within 2 years after initial licensure",
+          "period": "lifetime",
+          "periodReason": "Required once, within 2 years after initial licensure.",
+          "fact": "np.rn.topicMandates.bioterrorism"
+        },
+        {
+          "topic": "Cultural Competency",
+          "hours": 4,
+          "label": "Cultural competency and diversity, equity and inclusion, biennially",
+          "fact": "np.rn.topicMandates.culturalCompetency"
+        },
+        {
+          "topic": "HIV/AIDS",
+          "hours": 2,
+          "label": "Stigma, discrimination and unrecognized bias toward persons with or at high risk of HIV, within 2 years of starting",
+          "period": "lifetime",
+          "periodReason": "Required once, within 2 years of starting emergency or primary care.",
+          "fact": "np.rn.topicMandates.hivStigma",
+          "condition": {
+            "field": "Provides emergency or primary care",
+            "question": "Do you provide emergency services in a hospital or primary care?",
+            "description": "Nevada's HIV stigma training for emergency and primary care."
+          }
+        }
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.aprn.renewalDeadline",
+            "np.rn.renewalDeadline"
+          ],
+          "reason": "The APRN license expires with the RN license, biennially on the birthday."
+        },
+        "total": {
+          "value": 45,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "The 45 hours relate to your role or population of focus and may include the RN license's continuing education.",
+            "fact": "np.aprn.ceHoursPerCycle"
+          },
+          {
+            "text": "APRNs who completed their program on or after July 1, 2014 show current national certification at renewal.",
+            "fact": "np.aprn.nationalCertificationRequired"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 2,
+          "label": "Misuse and abuse of controlled substances, opioid prescribing or addiction, part of the 45 hours",
+          "facts": [
+            "np.aprn.topicMandates.controlledSubstances",
+            "np.aprn.ceHoursPerCycle"
+          ],
+          "condition": {
+            "field": "Prescribes controlled substances",
+            "question": "Do you prescribe or dispense controlled substances?",
+            "description": "Applies to clinicians who prescribe controlled substances."
+          }
+        },
+        {
+          "topic": "Suicide Prevention",
+          "hours": 2,
+          "label": "Evidence-based suicide prevention and awareness, within 2 years of initial licensure and every 4 years after",
+          "period": {
+            "years": 4
+          },
+          "fact": "np.aprn.topicMandates.suicide"
+        },
+        {
+          "topic": "Substance Use Disorders",
+          "hours": 2,
+          "label": "Screening, brief intervention and referral to treatment (SBIRT), within 2 years after initial licensure",
+          "period": "lifetime",
+          "periodReason": "Required once, within 2 years after initial licensure.",
+          "fact": "np.aprn.topicMandates.sbirt"
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.aprn.renewalDeadline",
+            "np.rn.renewalDeadline"
+          ],
+          "reason": "The APRN license expires with the RN license, biennially on the birthday."
+        }
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "Schedule II protocol",
+        "conditional": true,
+        "text": "No standing agreement is required. Before 2 years or 2,000 hours of clinical experience, Schedule II prescribing needs a protocol approved by a collaborating physician.",
+        "facts": [
+          "np.practice.scheduleII"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

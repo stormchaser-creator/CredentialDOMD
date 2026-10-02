@@ -6,6 +6,7 @@ import { supabase, downloadDocumentBlob } from "../../lib/supabase";
 import { membershipRenewalCopy, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 import RefundSection from "./RefundSection.jsx";
+import { reloadPage } from "../../utils/pageLeave.js";
 
 function CancellationPage() {
   const { data, theme: T, userIdRef, navigate, hasSubscription, isFreeBeta, limitedLaunch, manage } = useApp();
@@ -67,7 +68,7 @@ function CancellationPage() {
       }
       // Clear local cancellation state
       navigate("more", null);
-      window.location.reload();
+      reloadPage();
     } catch (err) {
       setError("Reactivation failed: " + (err.message || "Unknown error"));
     } finally {

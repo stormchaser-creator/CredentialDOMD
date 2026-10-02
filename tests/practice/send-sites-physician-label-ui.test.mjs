@@ -123,7 +123,7 @@ test('no invoice screen builds the physician by hand any more', () => {
   for (const f of ['WorkLog', 'DutyLog', 'Expenses']) {
     const src = readFileSync(new URL(`../../src/components/features/locum/${f}.jsx`, import.meta.url), 'utf8');
     assert.doesNotMatch(src, /s\.name \? `\$\{s\.name\}\$\{s\.degreeType/, f);
-    assert.match(src, /physicianLabel\(s\)/, f);
+    assert.match(src, /physicianLabel\(s\)|invoiceSenderFields\(s\)/, f);
     assert.match(src, /email: s\.email, phone: s\.phone/, f);
   }
 });

@@ -26,6 +26,7 @@
 // Pure: plain node tests and the edge-function copies mirror it.
 
 import { isInherentlyNonExpiringLicense } from "../constants/credentialTypes.js";
+import { certBodyOf, mayNotExpire } from "../constants/professions.js";
 
 export const LIFECYCLE_SECTIONS = Object.freeze(["licenses", "privileges", "insurance"]);
 export const LIFECYCLE_STATUSES = Object.freeze(["active", "provisional", "pending_confirmation", "superseded", "historical"]);
@@ -70,7 +71,12 @@ export function isAlertable(item) {
 
 /** Personal coverage (health, dental, vision, disability, life) has no credentialing expiration to chase. */
 export const PERSONAL_COVERAGE_RE = /health insurance|dental|vision|life insurance|disability/i;
-const isBoardCertType = (type) => /board certification/i.test(type || "");
+// A lifetime diplomate's board certificate may be marked as not expiring;
+// NCCPA and the NP certifications always expire (src/constants/professions.js).
+const isBoardCertType = (type) => /board certification/i.test(type || "") && !certBodyOf(type);
+// A practice agreement or prescriptive authority record may have no end date
+// either (Ohio PA agreements); the member says so with "does not expire".
+const mayBeMarkedNonExpiring = (type) => isBoardCertType(type) || mayNotExpire(type);
 
 /**
  * Whether "date not yet known" is a question this record can have at all.
@@ -82,7 +88,7 @@ const isBoardCertType = (type) => /board certification/i.test(type || "");
  */
 export function dateUnknownApplies(sectionKey, item) {
   const type = String(item?.type || "");
-  if (sectionKey === "licenses") return !isInherentlyNonExpiringLicense(type) && !(item?.noExpiration === true && isBoardCertType(type));
+  if (sectionKey === "licenses") return !isInherentlyNonExpiringLicense(type) && !(item?.noExpiration === true && mayBeMarkedNonExpiring(type));
   if (sectionKey === "insurance") return !PERSONAL_COVERAGE_RE.test(type);
   return true;
 }
@@ -160,7 +166,7 @@ export function normalizeLifecycle(sectionKey, item, previous = null) {
   if (has("noExpiration")) {
     const type = String(out.type || "");
     out.noExpiration = out.noExpiration === true
-      && (sectionKey !== "licenses" || isInherentlyNonExpiringLicense(type) || isBoardCertType(type));
+      && (sectionKey !== "licenses" || isInherentlyNonExpiringLicense(type) || mayBeMarkedNonExpiring(type));
   }
   if (out.dateUnknown === true) {
     const date = typeof out.expirationDate === "string" ? out.expirationDate.trim() : out.expirationDate;

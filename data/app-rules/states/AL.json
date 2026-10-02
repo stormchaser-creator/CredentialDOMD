@@ -1,0 +1,253 @@
+{
+  "state": "AL",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Alabama Board of Medical Examiners",
+      "url": "https://www.albme.gov/licensing/pa-aa/license-registration"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "windowRule": "fixed",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.hoursPerCycle",
+        "reason": "50 hours every two calendar years, certified at each annual renewal"
+      },
+      "total": {
+        "value": 50,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AMA PRA Category 1",
+          "AAPA Category 1 CME",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit"
+        ],
+        "facts": [
+          "pa.ce.hoursPerCycle",
+          "pa.ce.categoryRules",
+          "pa.ce.equivalents.aoa",
+          "pa.ce.equivalents.aafp"
+        ]
+      },
+      "totalUnverifiedAccepted": [],
+      "window": {
+        "value": "2025-01-01",
+        "anchor": "2025-01-01",
+        "fact": "pa.ce.period",
+        "reason": "Two calendar years counted from January 1, 2025 (2025 and 2026, then 2027 and 2028), certified at each annual renewal; the period holding the renewal date is counted."
+      },
+      "notes": [
+        {
+          "text": "Also equivalent to Category 1: programs the Board designates, ACOG Cognate credits, and nationally recognized advanced life support courses (up to 2 Category 1 credits each; basic life support does not count).",
+          "fact": "pa.ce.equivalents.other"
+        },
+        {
+          "text": "No hours are due for the calendar year of initial Alabama licensure, or for a calendar year of military deployment.",
+          "fact": "pa.ce.exemptions"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Ethics",
+        "hours": 0,
+        "label": "Board designated professional boundaries course, once (every actively licensed PA by December 31, 2025; a new licensee within 12 months of the license issue date)",
+        "period": "lifetime",
+        "facts": [
+          "pa.ce.topicMandates.professionalBoundaries.existing",
+          "pa.ce.topicMandates.professionalBoundaries.new"
+        ]
+      },
+      {
+        "topic": "Jurisprudence and Ethics",
+        "hours": 0,
+        "label": "Board prescribed CE on the Alabama rules and statutes for supervised practice, within 48 months before or 12 months after each registration to a physician",
+        "period": {
+          "years": 5
+        },
+        "periodReason": "Due within 48 months before or 12 months after each registration to a physician; counted over the five years before this renewal for a PA registered in the last 12 months.",
+        "facts": [
+          "pa.ce.topicMandates.supervisedPracticeCe",
+          "pa.ce.supervisedPracticeWindow"
+        ],
+        "condition": {
+          "field": "Registered to a physician in the last 12 months",
+          "question": "Did you register to a new supervising physician in the last 12 months?",
+          "description": "Alabama PAs take the Board prescribed supervised practice course within 48 months before or 12 months after each registration to a physician."
+        }
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": 4,
+        "label": "Controlled substance prescribing, AMA PRA Category 1 or equivalent, every two years to renew a QACSC",
+        "period": {
+          "years": 2
+        },
+        "fact": "pa.prescribing.qacscRenewalCe",
+        "condition": {
+          "field": "Holds an Alabama QACSC",
+          "question": "Do you hold a Qualified Alabama Controlled Substances Certificate (QACSC)?",
+          "description": "Alabama PAs and CRNPs renewing a QACSC."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "Registration to a supervising physician is filed with the Board; there is no independent practice. The supervising physician completes quarterly quality assurance.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFiling",
+          "pa.practice.qualityAssurance"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Whether current NCCPA certification is required to renew (the rule cited covers initial licensure; the renewal form only asks)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Alabama Board of Nursing (collaboration jointly with the Alabama Board of Medical Examiners)",
+      "url": "https://www.abn.alabama.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycle.singleState"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycle.singleState"
+        },
+        "total": {
+          "value": 24,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "First renewal: the 4 Board-provided hours plus one contact hour for each calendar month left in the earning period, up to 24.",
+            "fact": "np.rn.firstRenewalProration"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Jurisprudence and Ethics",
+          "hours": 4,
+          "label": "Board provided CE on the statutory and administrative frameworks for nursing regulation (first renewal only)",
+          "period": "lifetime",
+          "fact": "np.rn.topicMandates.firstRenewal",
+          "condition": {
+            "field": "First renewal of this license",
+            "question": "Is this your first renewal of this license?",
+            "description": "Some boards require a course at the first renewal only."
+          }
+        }
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "The CRNP approval renews with the RN license on proof of current national certification and six pharmacology contact hours; the general hours are the RN license's.",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.rn.renewalCycle.singleState",
+            "np.practice.agreementRenewal"
+          ],
+          "reason": "The approval is renewed with the two-year RN license."
+        },
+        "notes": [
+          {
+            "text": "If one year or less remained in the license period at initial approval, the pharmacology hours are not required at the first advanced practice renewal.",
+            "fact": "np.aprn.firstRenewalPharmacology"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 6,
+          "measure": "pharmacology",
+          "label": "Pharmacology specific to prescriptive practice in the approved collaborative practice area, at every CRNP renewal",
+          "facts": [
+            "np.aprn.pharmacologyRenewal",
+            "np.aprn.pharmacologyHoursPerCycle"
+          ]
+        },
+        {
+          "topic": "Jurisprudence and Ethics",
+          "hours": 0,
+          "label": "Board of Nursing prescribed CE on Alabama collaborative practice rules and statutes, within 48 months before or 12 months after collaborative practice begins",
+          "period": {
+            "years": 5
+          },
+          "periodReason": "Due within 48 months before or 12 months after each commencement of collaborative practice; counted over the five years before this renewal for a CRNP whose collaboration began in the last 12 months.",
+          "facts": [
+            "np.aprn.topicMandates.collaborativePracticeCe",
+            "np.aprn.collaborativePracticeWindow"
+          ],
+          "condition": {
+            "field": "Began a collaborative practice in the last 12 months",
+            "question": "Did a new collaborative practice begin in the last 12 months?",
+            "description": "Alabama CRNPs take the Board prescribed collaborative practice course within 48 months before or 12 months after collaborative practice begins."
+          }
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 4,
+          "label": "Controlled substance prescribing, AMA PRA Category 1 or equivalent, every two years to renew a QACSC",
+          "period": {
+            "years": 2
+          },
+          "fact": "np.prescribing.qacscRenewalCe",
+          "condition": {
+            "field": "Holds an Alabama QACSC",
+            "question": "Do you hold a Qualified Alabama Controlled Substances Certificate (QACSC)?",
+            "description": "Alabama PAs and CRNPs renewing a QACSC."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "Collaborative practice is approved jointly by the Board of Nursing and the Board of Medical Examiners; the physician files a commencement form with the BME. Approval continues at each RN renewal on verification of continued collaboration.",
+        "facts": [
+          "np.practice.agreementFiling",
+          "np.practice.agreementRenewal"
+        ]
+      }
+    }
+  }
+}

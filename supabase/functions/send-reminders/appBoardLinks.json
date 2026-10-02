@@ -1,0 +1,512 @@
+{
+ "AK": {
+  "pa": {
+   "board": "Alaska State Medical Board",
+   "url": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard.aspx"
+  },
+  "np": {
+   "board": "Alaska Board of Nursing",
+   "url": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/BoardofNursing.aspx"
+  }
+ },
+ "AL": {
+  "pa": {
+   "board": "Alabama Board of Medical Examiners",
+   "url": "https://www.albme.gov/licensing/pa-aa/license-registration"
+  },
+  "np": {
+   "board": "Alabama Board of Nursing (collaboration jointly with the Alabama Board of Medical Examiners)",
+   "url": "https://www.abn.alabama.gov/"
+  }
+ },
+ "AR": {
+  "pa": {
+   "board": "Arkansas State Medical Board",
+   "url": "https://www.armedicalboard.org/"
+  },
+  "np": {
+   "board": "Arkansas State Board of Nursing (ASBN)",
+   "url": "https://healthy.arkansas.gov/boards-commissions/boards/nursing-arkansas-state-board/"
+  }
+ },
+ "AZ": {
+  "pa": {
+   "board": "Arizona Regulatory Board of Physician Assistants",
+   "url": "https://www.azpa.gov/"
+  },
+  "np": {
+   "board": "Arizona State Board of Nursing",
+   "url": "https://www.azbn.gov/"
+  }
+ },
+ "CA": {
+  "pa": {
+   "board": "Physician Assistant Board of California (PAB)",
+   "url": "https://www.pab.ca.gov/"
+  },
+  "np": {
+   "board": "California Board of Registered Nursing (BRN)",
+   "url": "https://www.rn.ca.gov/"
+  }
+ },
+ "CO": {
+  "pa": {
+   "board": "Colorado Medical Board (Division of Professions and Occupations, DORA)",
+   "url": "https://dpo.colorado.gov/Medical"
+  },
+  "np": {
+   "board": "Colorado State Board of Nursing (Division of Professions and Occupations, DORA)",
+   "url": "https://dpo.colorado.gov/Nursing"
+  }
+ },
+ "CT": {
+  "pa": {
+   "board": "Connecticut Department of Public Health (licensing) with the Connecticut Medical Examining Board (discipline)",
+   "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician-assistant/physician-assistant-licensure"
+  },
+  "np": {
+   "board": "Connecticut Department of Public Health with the Connecticut State Board of Examiners for Nursing",
+   "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/aprn/advanced-practice-registered-nurse-licensure"
+  }
+ },
+ "DC": {
+  "pa": {
+   "board": "District of Columbia Board of Medicine (DC Health)",
+   "url": "https://dchealth.dc.gov/bomed"
+  },
+  "np": {
+   "board": "District of Columbia Board of Nursing (DC Health)",
+   "url": "https://dchealth.dc.gov/bon"
+  }
+ },
+ "DE": {
+  "pa": {
+   "board": "Delaware Board of Medical Licensure and Discipline, with the Regulatory Council for Physician Associates (Division of Professional Regulation)",
+   "url": "https://dpr.delaware.gov/boards/medicalpractice/renewal/"
+  },
+  "np": {
+   "board": "Delaware Board of Nursing (Division of Professional Regulation)",
+   "url": "https://dpr.delaware.gov/boards/nursing/renewal/"
+  }
+ },
+ "FL": {
+  "pa": {
+   "board": "Florida Board of Medicine (Council on Physician Assistants)",
+   "url": "https://flboardofmedicine.gov/physician-assistant-renewal/"
+  },
+  "np": {
+   "board": "Florida Board of Nursing",
+   "url": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/"
+  }
+ },
+ "GA": {
+  "pa": {
+   "board": "Georgia Composite Medical Board",
+   "url": "https://medicalboard.georgia.gov/"
+  },
+  "np": {
+   "board": "Georgia Board of Nursing",
+   "url": "https://sos.ga.gov/page/nursing-renewal-information"
+  }
+ },
+ "HI": {
+  "pa": {
+   "board": "Hawaii Medical Board (DCCA Professional and Vocational Licensing)",
+   "url": "https://cca.hawaii.gov/pvl/boards/medical/physician-assistant-renewal-requirements/"
+  },
+  "np": {
+   "board": "Hawaii Board of Nursing (DCCA Professional and Vocational Licensing)",
+   "url": "https://cca.hawaii.gov/pvl/boards/nursing/"
+  }
+ },
+ "IA": {
+  "pa": {
+   "board": "Iowa Board of Physician Associates (Department of Inspections, Appeals, and Licensing)",
+   "url": "https://dial.iowa.gov/licenses/health-professions/physician-associates"
+  },
+  "np": {
+   "board": "Iowa Board of Nursing (Department of Inspections, Appeals, and Licensing)",
+   "url": "https://dial.iowa.gov/licenses/health-professions/nursing-professional-midwifery"
+  }
+ },
+ "ID": {
+  "pa": {
+   "board": "Idaho State Board of Medicine (Physician Assistant Advisory Committee), Division of Occupational and Professional Licenses",
+   "url": "https://dopl.idaho.gov/paac/"
+  },
+  "np": {
+   "board": "Idaho Board of Nursing, Division of Occupational and Professional Licenses",
+   "url": "https://dopl.idaho.gov/bon/"
+  }
+ },
+ "IL": {
+  "pa": {
+   "board": "Illinois Department of Financial and Professional Regulation (IDFPR), Illinois State Medical Board",
+   "url": "https://idfpr.illinois.gov/profs/physicianassistant.html"
+  },
+  "np": {
+   "board": "Illinois Department of Financial and Professional Regulation (IDFPR), Board of Nursing",
+   "url": "https://idfpr.illinois.gov/profs/nursing.html"
+  }
+ },
+ "IN": {
+  "pa": {
+   "board": "Indiana Physician Assistant Committee and Medical Licensing Board of Indiana, Indiana Professional Licensing Agency",
+   "url": "https://www.in.gov/pla/professions/physician-assistant-home/"
+  },
+  "np": {
+   "board": "Indiana State Board of Nursing, Indiana Professional Licensing Agency",
+   "url": "https://www.in.gov/pla/professions/nursing-home/"
+  }
+ },
+ "KS": {
+  "pa": {
+   "board": "Kansas State Board of Healing Arts",
+   "url": "https://www.ksbha.ks.gov/professions/physician-assistant-p-a"
+  },
+  "np": {
+   "board": "Kansas State Board of Nursing",
+   "url": "https://ksbn.kansas.gov/"
+  }
+ },
+ "KY": {
+  "pa": {
+   "board": "Kentucky Board of Medical Licensure",
+   "url": "https://kbml.ky.gov/ah/Pages/Physician-Assistant.aspx"
+  },
+  "np": {
+   "board": "Kentucky Board of Nursing",
+   "url": "https://kbn.ky.gov/"
+  }
+ },
+ "LA": {
+  "pa": {
+   "board": "Louisiana State Board of Medical Examiners (LSBME)",
+   "url": "https://www.lsbme.la.gov/"
+  },
+  "np": {
+   "board": "Louisiana State Board of Nursing (LSBN)",
+   "url": "https://www.lsbn.state.la.us/"
+  }
+ },
+ "MA": {
+  "pa": {
+   "board": "Massachusetts Board of Registration of Physician Assistants",
+   "url": "https://www.mass.gov/how-to/renew-your-physician-assistant-license"
+  },
+  "np": {
+   "board": "Massachusetts Board of Registration in Nursing",
+   "url": "https://www.mass.gov/how-to/renew-your-nursing-license"
+  }
+ },
+ "MD": {
+  "pa": {
+   "board": "Maryland Board of Physicians",
+   "url": "https://www.mbp.state.md.us/"
+  },
+  "np": {
+   "board": "Maryland Board of Nursing",
+   "url": "https://health.maryland.gov/mbon/Pages/default.aspx"
+  }
+ },
+ "ME": {
+  "pa": {
+   "board": "Maine Board of Licensure in Medicine (or Maine Board of Osteopathic Licensure; PA may be licensed by either)",
+   "url": "https://www.maine.gov/md/licensure/pa-license"
+  },
+  "np": {
+   "board": "Maine State Board of Nursing",
+   "url": "https://www.maine.gov/boardofnursing/"
+  }
+ },
+ "MI": {
+  "pa": {
+   "board": "Michigan Task Force on Physician's Assistants (LARA Bureau of Professional Licensing)",
+   "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs"
+  },
+  "np": {
+   "board": "Michigan Board of Nursing (LARA Bureau of Professional Licensing)",
+   "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs"
+  }
+ },
+ "MN": {
+  "pa": {
+   "board": "Minnesota Board of Medical Practice",
+   "url": "https://mn.gov/boards/medical-practice/"
+  },
+  "np": {
+   "board": "Minnesota Board of Nursing",
+   "url": "https://mn.gov/boards/nursing/"
+  }
+ },
+ "MO": {
+  "pa": {
+   "board": "Missouri State Board of Registration for the Healing Arts (Advisory Commission for Physician Assistants)",
+   "url": "https://pr.mo.gov/physicianassistants.asp"
+  },
+  "np": {
+   "board": "Missouri State Board of Nursing",
+   "url": "https://pr.mo.gov/nursing.asp"
+  }
+ },
+ "MS": {
+  "pa": {
+   "board": "Mississippi State Board of Medical Licensure",
+   "url": "https://www.msbml.ms.gov/licensure/pa-renewal"
+  },
+  "np": {
+   "board": "Mississippi Board of Nursing",
+   "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse"
+  }
+ },
+ "MT": {
+  "pa": {
+   "board": "Montana Board of Medical Examiners",
+   "url": "https://boards.bsd.dli.mt.gov/medical-examiners/license-information/physician-assistant"
+  },
+  "np": {
+   "board": "Montana Board of Nursing",
+   "url": "https://boards.bsd.dli.mt.gov/nursing/license-information/aprn"
+  }
+ },
+ "NC": {
+  "pa": {
+   "board": "North Carolina Medical Board",
+   "url": "https://www.ncmedboard.org/"
+  },
+  "np": {
+   "board": "North Carolina Board of Nursing (NP approval jointly with the North Carolina Medical Board)",
+   "url": "https://www.ncbon.com/"
+  }
+ },
+ "ND": {
+  "pa": {
+   "board": "North Dakota Board of Medicine",
+   "url": "https://www.ndbom.org/"
+  },
+  "np": {
+   "board": "North Dakota Board of Nursing",
+   "url": "https://www.ndbon.org/"
+  }
+ },
+ "NE": {
+  "pa": {
+   "board": "Nebraska DHHS Licensure Unit, Board of Medicine and Surgery (Physician Assistant)",
+   "url": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx"
+  },
+  "np": {
+   "board": "Nebraska DHHS Licensure Unit, Nebraska State Board of Nursing / APRN Board",
+   "url": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx"
+  }
+ },
+ "NH": {
+  "pa": {
+   "board": "New Hampshire Board of Medicine (via the Office of Professional Licensure and Certification); PAs are titled Physician Associates under RSA 328-D",
+   "url": "https://www.oplc.nh.gov/applications-physician-associate"
+  },
+  "np": {
+   "board": "New Hampshire Board of Nursing (via the Office of Professional Licensure and Certification)",
+   "url": "https://www.oplc.nh.gov/board-nursing-laws-and-rules"
+  }
+ },
+ "NJ": {
+  "pa": {
+   "board": "New Jersey State Board of Medical Examiners, Physician Assistant Advisory Committee",
+   "url": "https://www.njconsumeraffairs.gov/pa"
+  },
+  "np": {
+   "board": "New Jersey Board of Nursing",
+   "url": "https://www.njconsumeraffairs.gov/nur"
+  }
+ },
+ "NM": {
+  "pa": {
+   "board": "New Mexico Medical Board",
+   "url": "https://www.nmmb.state.nm.us/"
+  },
+  "np": {
+   "board": "New Mexico Board of Nursing",
+   "url": "https://www.bon.nm.gov/"
+  }
+ },
+ "NV": {
+  "pa": {
+   "board": "Nevada State Board of Medical Examiners (PAs supervised by MDs; PAs supervised by DOs are licensed by the Nevada State Board of Osteopathic Medicine under NRS 633)",
+   "url": "https://medboard.nv.gov/"
+  },
+  "np": {
+   "board": "Nevada State Board of Nursing",
+   "url": "https://nevadanursingboard.org/"
+  }
+ },
+ "NY": {
+  "pa": {
+   "board": "New York State Education Department, Office of the Professions (State Board for Medicine)",
+   "url": "https://www.op.nysed.gov/professions/physician-assistants"
+  },
+  "np": {
+   "board": "New York State Education Department, Office of the Professions (State Board for Nursing)",
+   "url": "https://www.op.nysed.gov/professions/nurse-practitioners"
+  }
+ },
+ "OH": {
+  "pa": {
+   "board": "State Medical Board of Ohio",
+   "url": "https://med.ohio.gov/"
+  },
+  "np": {
+   "board": "Ohio Board of Nursing",
+   "url": "https://nursing.ohio.gov/"
+  }
+ },
+ "OK": {
+  "pa": {
+   "board": "Oklahoma State Board of Medical Licensure and Supervision (Physician Assistant Advisory Committee)",
+   "url": "https://www.okmedicalboard.org/physician_assistants"
+  },
+  "np": {
+   "board": "Oklahoma Board of Nursing",
+   "url": "https://oklahoma.gov/nursing.html"
+  }
+ },
+ "OR": {
+  "pa": {
+   "board": "Oregon Medical Board",
+   "url": "https://www.oregon.gov/omb/"
+  },
+  "np": {
+   "board": "Oregon State Board of Nursing",
+   "url": "https://www.oregon.gov/osbn/"
+  }
+ },
+ "PA": {
+  "pa": {
+   "board": "Pennsylvania State Board of Medicine (PAs supervised by MDs); State Board of Osteopathic Medicine licenses PAs supervised by DOs",
+   "url": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/medicine"
+  },
+  "np": {
+   "board": "Pennsylvania State Board of Nursing",
+   "url": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/nursing"
+  }
+ },
+ "RI": {
+  "pa": {
+   "board": "Rhode Island Board of Licensure for Physician Assistants (RI Department of Health)",
+   "url": "https://health.ri.gov/licensing/physician-assistant"
+  },
+  "np": {
+   "board": "Rhode Island Board of Nurse Registration and Nursing Education (RI Department of Health)",
+   "url": "https://health.ri.gov/licensing/nurses"
+  }
+ },
+ "SC": {
+  "pa": {
+   "board": "South Carolina Board of Medical Examiners (LLR), advised by the Physician Assistant Committee",
+   "url": "https://llr.sc.gov/med/"
+  },
+  "np": {
+   "board": "South Carolina State Board of Nursing (LLR)",
+   "url": "https://llr.sc.gov/nurse/aprn.aspx"
+  }
+ },
+ "SD": {
+  "pa": {
+   "board": "South Dakota Board of Medical and Osteopathic Examiners (SDBMOE), with a Physician Assistant Council",
+   "url": "https://sdbmoe.gov/professions-physician-assistant-pa/"
+  },
+  "np": {
+   "board": "South Dakota Board of Nursing (CNP practice also governed by SDCL 36-9A)",
+   "url": "https://www.sdbon.org/"
+  }
+ },
+ "TN": {
+  "pa": {
+   "board": "Tennessee Board of Physician Assistants (formerly the Committee on Physician Assistants of the Board of Medical Examiners)",
+   "url": "https://www.tn.gov/health/licensure/pa.html"
+  },
+  "np": {
+   "board": "Tennessee Board of Nursing",
+   "url": "https://www.tn.gov/health/licensure/nurs.html"
+  }
+ },
+ "TX": {
+  "pa": {
+   "board": "Texas Physician Assistant Board (administered by the Texas Medical Board)",
+   "url": "https://www.tmb.texas.gov/apply-renew/physician-assistant"
+  },
+  "np": {
+   "board": "Texas Board of Nursing",
+   "url": "https://www.bon.texas.gov/"
+  }
+ },
+ "UT": {
+  "pa": {
+   "board": "Utah Division of Professional Licensing (DOPL), Physician Assistant Licensing Board",
+   "url": "https://commerce.utah.gov/dopl/physician-assistant/"
+  },
+  "np": {
+   "board": "Utah Division of Professional Licensing (DOPL), Board of Nursing and Certified Nurse Midwives",
+   "url": "https://commerce.utah.gov/dopl/nursing/"
+  }
+ },
+ "VA": {
+  "pa": {
+   "board": "Virginia Board of Medicine (Department of Health Professions)",
+   "url": "https://www.dhp.virginia.gov/Boards/Medicine/"
+  },
+  "np": {
+   "board": "Virginia Board of Nursing and Committee of the Joint Boards of Nursing and Medicine (Department of Health Professions)",
+   "url": "https://www.dhp.virginia.gov/Boards/Nursing/"
+  }
+ },
+ "VT": {
+  "pa": {
+   "board": "Vermont Board of Medical Practice (Department of Health)",
+   "url": "https://www.healthvermont.gov/systems/board-medical-practice"
+  },
+  "np": {
+   "board": "Vermont State Board of Nursing (Office of Professional Regulation, Secretary of State)",
+   "url": "https://sos.vermont.gov/nursing/"
+  }
+ },
+ "WA": {
+  "pa": {
+   "board": "Washington Medical Commission",
+   "url": "https://wmc.wa.gov/"
+  },
+  "np": {
+   "board": "Washington State Board of Nursing (formerly Nursing Care Quality Assurance Commission)",
+   "url": "https://nursing.wa.gov/"
+  }
+ },
+ "WI": {
+  "pa": {
+   "board": "Wisconsin Physician Assistant Affiliated Credentialing Board (attached to the Medical Examining Board; administered by DSPS)",
+   "url": "https://dsps.wi.gov/a-z-professions-list/physician-assistant-pa/"
+  },
+  "np": {
+   "board": "Wisconsin Board of Nursing (administered by DSPS)",
+   "url": "https://dsps.wi.gov/a-z-professions-list/advanced-practice-registered-nurse-aprn/"
+  }
+ },
+ "WV": {
+  "pa": {
+   "board": "West Virginia Board of Medicine (PAs collaborating with osteopathic physicians may instead be licensed by the WV Board of Osteopathic Medicine)",
+   "url": "https://wvbom.wv.gov/"
+  },
+  "np": {
+   "board": "West Virginia Board of Registered Nurses (WV RN Board)",
+   "url": "https://wvrnboard.wv.gov/"
+  }
+ },
+ "WY": {
+  "pa": {
+   "board": "Wyoming Board of Medicine (with a physician assistant advisory council)",
+   "url": "https://wyomedboard.wyo.gov/physician-assistants"
+  },
+  "np": {
+   "board": "Wyoming State Board of Nursing (WSBN)",
+   "url": "https://wsbn.wyo.gov/"
+  }
+ }
+}

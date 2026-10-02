@@ -1,7 +1,7 @@
 import { CREDENTIAL_PORTAL_POLICY, digest, token, otp, normalizePortalEmail, safeInlineMime } from './credentialPortalCrypto.mjs';
 import {
   ADMIN_ACCESS_POLICY, ownerAllowed, normalizeStandingInput, normalizeScopeInput, ownedDocumentPath, physicianDisplayName,
-  standingInvitationEmail, standingCodeEmail, shapeView, shapeGrant, flatDocuments,
+  standingInvitationEmail, standingCodeEmail, shapeView, shapeGrant, flatDocuments, documentInvitationText,
 } from './credentialPortalView.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -272,7 +272,11 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
           snapshots.push({ id, name: d.name, mimeType: d.mime_type || 'application/octet-stream', sizeBytes: bytes.byteLength, storagePath: d.storage_path, digest: await digest(bytes) });
         }
         const id = crypto.randomUUID(), mailId = crypto.randomUUID(), inviteToken = token();
-        const encrypted = await deps.crypto.seal(mailId, { to: email, subject: 'Private credential document invitation', text: `A physician has invited you to access selected credential documents privately.\n\nOpen ${origin}/credential-access/#invite=${inviteToken}\n\nThe link expires in 7 days and can be verified once. You must receive a fresh code at this exact email address. Do not forward the link. No documents are attached.\n\nIf you did not expect this invitation, ignore it.` });
+        // The owner's own profession names them ("A physician assistant has
+        // invited you"); MD and DO read exactly as before.
+        let inviter = null;
+        try { inviter = deps.store.ownerProfile ? await deps.store.ownerProfile(identity.profileId) : null; } catch { inviter = null; }
+        const encrypted = await deps.crypto.seal(mailId, { to: email, subject: 'Private credential document invitation', text: documentInvitationText({ degreeType: inviter?.degree_type, link: `${origin}/credential-access/#invite=${inviteToken}` }) });
         const created = await deps.store.createInvite({ id, owner: identity.profileId, subject: identity.subject, email, request: input.requestId, fingerprint, tokenDigest: await digest(inviteToken), documents: snapshots, mailId, encrypted });
         if (created?.state === 'limited') fail(429, 'invitation_limit');
         if (created?.state === 'conflict') fail(409, 'request_conflict');

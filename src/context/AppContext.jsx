@@ -8,7 +8,9 @@ import { THEMES, themeNameOf, nextThemeName } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { useBillingReturn } from "../hooks/useBillingReturn.js";
 import { loadData, saveData, readCachedData, clearLocalData, onCacheFullChange, cacheStaleReason, deviceOnlySaveBlocked, retryOfflineSave,
-  adoptOfflineCopyRead, deviceOnlyForLoad, offlineCopyUnchangedSinceKnown, deviceOnlyUnsavedState, onDeviceOnlyUnsavedChange } from "../utils/storage";
+  adoptOfflineCopyRead, deviceOnlyForLoad, offlineCopyUnchangedSinceKnown, deviceOnlyUnsavedState, onDeviceOnlyUnsavedChange,
+  setCacheWritePending, spillOfflineSave, offlineCopyMayBeBehind } from "../utils/storage";
+import { onPageLeave } from "../utils/pageLeave.js";
 import { setActiveUserId, getActiveUserId, setStorageFullReporter, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, adoptLegacyStorage, hasLegacyStorage, lsGet, lsGetJSON, lsSetJSON, scopedKey, BASE_KEYS, WIPE_SEEN_KEY, LOCAL_FENCE_KEY, localFence, adoptLocalFence, localCopyCurrent, pendingOpCount, awaitingAccessOpCount, accessRefusedOpCount, deviceOnlyRecordCounts, retireContinuityRecovery, offlineCopyUnread, markOfflineCopyRead, probeOfflineFile } from "../utils/storageScope";
 import { repairStoredIds } from "../utils/idRepair.js";
 import { accountDataDeletedAt, honorAccountDataDeletion, sameDeletionStamp } from "../utils/dataDeletion.js";
@@ -160,6 +162,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // address } when the address is on another account. Shown by the field.
   const [settingsRefusal, setSettingsRefusal] = useState(null);
   const [loadedFrom, setLoadedFrom] = useState(null); // "cloud" | "local"
+  // Loaded from this device's copy while that copy may lack a change made on
+  // this device (a save that never landed before the page was left,
+  // storage.js offlineCopyMayBeBehind): the screens then never say a section
+  // holds no saved records. Only for a "local" load.
+  const [deviceCopyBehind, setDeviceCopyBehind] = useState(false);
   const userIdRef = useRef(null);
   // Clerk id the in-memory `data` was loaded for. The on-device cache is
   // written under this id only, so a stale timer can never file one
@@ -1026,13 +1033,17 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           dataRef.current = merged;
           setData(merged);
           setLoadedFrom("cloud");
+          if (typeof setDeviceCopyBehind === "function") setDeviceCopyBehind(false);
           setLoaded(true);
           // (Guarded: tests run this function alone, without the module's imports.)
           if (typeof clearServerBilled === "function") clearServerBilled(readBegan);
 
           // Cache on-device under this account's key
           cachedRecordsRef.current = merged;
-          saveData(merged, authUserId).catch(() => {});
+          // Once it lands, the copy holds what reached the account: a change
+          // another page of this device made before this read began and never
+          // stored no longer makes it "behind" (storage.js offlineCopyMayBeBehind).
+          saveData(merged, authUserId, { loadBegan: readBegan }).catch(() => {});
 
           // Background: reconcile document FILES with cloud storage.
           //  - file on this device but not in the cloud → upload it
@@ -1240,6 +1251,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const localRead = { current, trustMemory: () => memoryIsNewer(authUserId, begun) };
     let d = await loadData(authUserId, localRead);
     if (!current()) return;
+    // Read as the copy is: a page left before its last save landed (and too
+    // large, or blocked, to be put in localStorage then) left it marked.
+    // (Guarded: tests run this function alone, without the module's imports.)
+    const behind = !!authUserId && typeof offlineCopyMayBeBehind === "function" && offlineCopyMayBeBehind(authUserId);
     if (d._userId) {
       userIdRef.current = d._userId;
       delete d._userId;
@@ -1266,6 +1281,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     dataRef.current = d;
     setData(d);
     setLoadedFrom("local");
+    if (typeof setDeviceCopyBehind === "function") setDeviceCopyBehind(behind);
     setLoaded(true);
   }
 
@@ -1374,18 +1390,56 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     }
   }, [clerkSignOut, user?.id, offlineMode]);
 
-  // Persist the offline copy on change (debounced backup; IndexedDB, with
-  // localStorage as the fallback, utils/storage.js saveData), under the key of
-  // the account the data was loaded for.
+  // Persist the offline copy on change (IndexedDB, with localStorage as the
+  // fallback, utils/storage.js saveData), under the key of the account the
+  // data was loaded for. The first change after a quiet spell is written on
+  // the next turn of the event loop, and changes that follow within 300 ms
+  // go out together in one trailing write.
+  //
+  // A record added and the page reloaded at once (or iOS discarding the app)
+  // was missing from the device copy, and a weak-signal launch then showed
+  // "No saved records in this section" (lab, release goal2). Two causes:
+  // every change waited 300 ms, and a reload inside that window cleared the
+  // timer with the page; and a save handed over in time still goes through
+  // several IndexedDB steps (the purge check, the open, a read and a put in
+  // one transaction) that never run once the page is torn down. An IndexedDB
+  // write begun in pagehide never lands either (storageScope.js
+  // spillOfflineText, measured in WebKit and Chromium). So when the page is
+  // left (beforeunload, pagehide, hidden, a reload the app asks for, below)
+  // the trailing write is handed over at once and the save still under way
+  // is put into localStorage synchronously, which the next launch reads
+  // first. Where that cannot be done (a copy too large for localStorage, or
+  // another tab wrote since), the copy stays marked behind and the launch
+  // that reads it says so (deviceCopyBehind).
   const saveTimer = useRef(null);
   const cacheWriteGeneration = useRef(0);
+  const pendingCacheWrite = useRef(null);
+  const lastCacheWriteAt = useRef(0);
+  // (Guarded: tests run these effects alone, without the module's imports.)
+  const markPending = (owner, pending, how) => { if (typeof setCacheWritePending === "function") setCacheWritePending(owner, pending, how); };
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded) {
+      if (pendingCacheWrite.current) markPending(pendingCacheWrite.current.owner, false);
+      pendingCacheWrite.current = null;
+      return;
+    }
     clearTimeout(saveTimer.current);
     const owner = dataOwnerRef.current;
     const generation = dataLoadGeneration.current;
     const cacheGeneration = cacheWriteGeneration.current;
-    saveTimer.current = setTimeout(() => {
+    const before = pendingCacheWrite.current;
+    if (before && before.owner !== owner) markPending(before.owner, false);
+    // Already handed to saveData (the load that put them on screen saved
+    // them): nothing is owed, and the copy is current once that save lands.
+    if (data === cachedRecordsRef.current) {
+      pendingCacheWrite.current = null;
+      if (owner) markPending(owner, false, { current: true });
+      return undefined;
+    }
+    const write = () => {
+      if (pendingCacheWrite.current === write) pendingCacheWrite.current = null;
+      lastCacheWriteAt.current = Date.now();
+      if (owner) markPending(owner, false);
       if (!owner || dataOwnerRef.current !== owner || getActiveUserId() !== owner
         || dataLoadGeneration.current !== generation
         || cacheWriteGeneration.current !== cacheGeneration) return;
@@ -1398,9 +1452,40 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       const loadedUnder = loadedDeletionRef.current?.owner === owner ? loadedDeletionRef.current : null;
       if (sameDeletionStamp(loadedUnder?.stamp ?? null, lsGet(WIPE_SEEN_KEY, owner))
         && localCopyCurrent(owner, loadedUnder ? loadedUnder.fence ?? null : undefined)) { cachedRecordsRef.current = data; saveData(data, owner); }
-    }, 300);
+    };
+    write.owner = owner;
+    // Checked when the write runs, not now: an account switch, a newer load
+    // or a purge in between stops it (the guards above).
+    const quiet = !before && Date.now() - lastCacheWriteAt.current >= 300;
+    pendingCacheWrite.current = write;
+    if (owner) markPending(owner, true);
+    saveTimer.current = setTimeout(write, quiet ? 0 : 300);
     return () => clearTimeout(saveTimer.current);
   }, [data, loaded]);
+  // The page is being left, or put in the background: the trailing write is
+  // handed over now, and the save under way is put into localStorage, where
+  // it survives the page (storage.js spillOfflineSave). Nothing waits.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") return undefined;
+    const flush = () => {
+      const write = pendingCacheWrite.current;
+      if (write) { clearTimeout(saveTimer.current); write(); }
+      const owner = dataOwnerRef.current;
+      if (owner && getActiveUserId() === owner && typeof spillOfflineSave === "function") spillOfflineSave(owner);
+    };
+    const onVisibility = () => { if (typeof document !== "undefined" && document.visibilityState === "hidden") flush(); };
+    window.addEventListener("beforeunload", flush);
+    window.addEventListener("pagehide", flush);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
+    // A reload the app asks for (utils/pageLeave.js reloadPage) flushes first.
+    const offLeave = typeof onPageLeave === "function" ? onPageLeave(flush) : () => {};
+    return () => {
+      offLeave();
+      window.removeEventListener("beforeunload", flush);
+      window.removeEventListener("pagehide", flush);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   // ─── Subscription ─────────────────────────────────────────
   const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout: sbCheckout, manage: sbManage, setMockPlan, isDevMode, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly } = useSubscription(user ?? null, { profileReady: !offlineMode && profileOwner === user?.id });
@@ -1805,11 +1890,12 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return true;
   }, [guardedSetData, refuseUnsavableDeviceOnly]);
 
-  // Tracked states: Settings picks plus every state where a medical license
-  // is held (src/utils/compliance.js trackedStates).
+  // Tracked states: Settings picks plus every state where the profession's
+  // practice licence is held (a medical licence for MD, DO and blank; a PA,
+  // APRN or RN licence for a PA or NP; src/utils/compliance.js trackedStates).
   const allTrackedStates = useMemo(
-    () => trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses),
-    [data.settings.primaryState, data.settings.additionalStates, data.licenses],
+    () => trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses, data.settings.degreeType),
+    [data.settings.primaryState, data.settings.additionalStates, data.licenses, data.settings.degreeType],
   );
 
   // record = { sec, id } opens that record's editor after the section renders
@@ -1899,7 +1985,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     recordsLoadIssue: recordsLoadIssue?.accountId === user?.id ? recordsLoadIssue : null, theme, themeName, isDark, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItem: deleteItemFn, toggleFavorite,
     settingsRefusal: settingsRefusal?.accountId === user?.id ? settingsRefusal : null, clearSettingsRefusal,
-    allTrackedStates, navigate, userIdRef, syncIssues: syncState.issues, pendingWrites: syncState.pending, awaitingAccessWrites: syncState.awaitingAccess, accessRefusedWrites: syncState.accessRefused, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked,
+    allTrackedStates, navigate, userIdRef, syncIssues: syncState.issues, pendingWrites: syncState.pending, awaitingAccessWrites: syncState.awaitingAccess, accessRefusedWrites: syncState.accessRefused, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, deviceCopyBehind: loadedFrom === "local" && deviceCopyBehind,
     // Auth
     user, authChecked, offlineMode,
     signOut: handleSignOut,
@@ -1907,7 +1993,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
     isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null, identityWaiting: identityWaiting?.accountId === user?.id, billingReturn },
     identityWaiting: identityWaiting?.accountId === user?.id ? identityWaiting : null, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly,
-  }), [guardedSetData, requestDocumentBytes, releaseDocumentBytes, documentBytes, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, identityWaiting, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [guardedSetData, requestDocumentBytes, releaseDocumentBytes, documentBytes, beginAccountDeletion, resetAfterAccountDeletion, reopenAfterAccountDeletion, holdAfterUnconfirmedDeletion, profileIssue, identityWaiting, recordsLoadIssue, settingsRefusal, clearSettingsRefusal, isLifetime, limitedLaunch, billingReturn, canWriteCredential, canWritePractice, credentialReadOnly, practiceReadOnly, data, loaded, loadedFrom, deviceCopyBehind, theme, themeName, isDark, toggleTheme, isDesktop, updateSection, updateSettings, addItem, canAddItem, confirmCanAddItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, syncState, offlineCopyStale, deviceOnlyUnsaved, deviceOnlyBlocked, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

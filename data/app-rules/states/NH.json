@@ -1,0 +1,179 @@
+{
+  "state": "NH",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "New Hampshire Board of Medicine (via the Office of Professional Licensure and Certification); PAs are titled Physician Associates under RSA 328-D",
+      "url": "https://www.oplc.nh.gov/applications-physician-associate"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "title": {
+        "value": "Physician associate license",
+        "fact": "pa.licence.title"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 100,
+        "fact": "pa.ce.categoryRules"
+      },
+      "categoryMin": {
+        "value": 40,
+        "label": "Category 1",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit"
+        ],
+        "unverifiedAccepted": [
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ],
+        "facts": [
+          "pa.ce.categoryRules",
+          "pa.ce.approvedActivities.review"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "No more than 60 of the 100 hours may be Category 2.",
+          "fact": "pa.ce.categoryRules"
+        }
+      ],
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "Category 2 CME"
+        ],
+        "facts": [
+          "pa.ce.approvedActivities.review",
+          "pa.ce.categoryRules"
+        ],
+        "reason": "The approved activities RSA 328-D:1, I-a lists, plus the Category 2 hours Med 613.01 allows within the 100."
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "A written collaboration agreement is needed only for PAs with fewer than 8,000 post-graduate clinical practice hours who practice without a New Hampshire physician in the group, practice or health system; it is kept at the practice and given to the board on request. Until January 1, 2027, a PA with more than 8,000 hours who practices without a New Hampshire physician in the group needs a board waiver.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.waiver",
+          "pa.practice.waiverUntil2027"
+        ]
+      }
+    },
+    "dated": [
+      {
+        "date": "2027-01-01",
+        "item": "The PA collaboration waiver paragraph (RSA 328-D:3-b, I) is replaced"
+      }
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "New Hampshire Board of Nursing (via the Office of Professional Licensure and Certification)",
+      "url": "https://www.oplc.nh.gov/board-nursing-laws-and-rules"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.rn.ceHoursPerCycle"
+        }
+      },
+      "unverified": [
+        "Which of the contact hours national certification may count toward under Nur 401.03(b): the RN license's or the APRN license's"
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.aprn.ceStatute"
+        },
+        "notes": [
+          {
+            "text": "At least 20 of the 30 APRN hours are specific to your specialty, in addition to the RN license's 30.",
+            "fact": "np.aprn.ceStatute"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired",
+        "condition": {
+          "field": "Licensed as an APRN after September 1984",
+          "question": "Were you first licensed as an APRN after September 1984?",
+          "description": "New Hampshire requires current national certification at renewal of APRNs licensed after September 1984."
+        }
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 5,
+          "measure": "pharmacology",
+          "label": "Pharmacology, part of the 30 APRN hours",
+          "facts": [
+            "np.aprn.ceStatute",
+            "np.aprn.pharmacologyHoursPerCycle"
+          ]
+        }
+      ],
+      "unverified": [
+        "Which of the contact hours national certification may count toward under Nur 401.03(b): the RN license's or the APRN license's"
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      }
+    }
+  }
+}

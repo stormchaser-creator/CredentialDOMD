@@ -1,0 +1,178 @@
+{
+  "state": "WY",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Wyoming Board of Medicine (with a physician assistant advisory council)",
+      "url": "https://wyomedboard.wyo.gov/physician-assistants"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "windowRule": "calendarYears",
+      "cycleYears": {
+        "value": 3,
+        "fact": "ce.hoursPerCycle",
+        "reason": "60 hours during the preceding three calendar years, checked at each annual renewal"
+      },
+      "total": {
+        "value": 60,
+        "fact": "ce.hoursPerCycle"
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu",
+        "note": "Exempt if certified or recertified by NCCPA within the three years before the renewal date."
+      },
+      "notes": [],
+      "window": {
+        "value": "preceding three calendar years",
+        "fact": "ce.hoursPerCycle",
+        "preceding": true,
+        "reason": "The 60 hours count over the three calendar years before the year of each annual renewal."
+      },
+      "exemption": {
+        "field": "Held a Wyoming PA license less than three years",
+        "question": "Have you held your Wyoming PA license for less than three years as of this renewal?",
+        "text": "A PA who has held a Wyoming license less than three years is exempt from the 60 hours.",
+        "facts": [
+          "ce.newLicenseeExemption",
+          "ce.hoursPerCycle"
+        ]
+      }
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 1,
+        "label": "Responsible prescribing of controlled substances or treatment of substance abuse disorders, every two years",
+        "period": {
+          "years": 2
+        },
+        "facts": [
+          "ce.topicMandates[0]",
+          "ce.topicMandates[0] (statute)"
+        ],
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Wyoming Board of Pharmacy controlled substance registration?",
+          "description": "Applies to holders of the state controlled substance registration."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision plan (temporary licensees)",
+        "conditional": true,
+        "text": "No supervision or collaboration agreement is filed for a PA who passed the NCCPA exam; the degree of collaboration is set at the practice level. A temporary licensee who has not yet passed the exam keeps a board approved supervision plan on file.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal",
+          "practice.supervisionPlan"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Wyoming State Board of Nursing (WSBN)",
+      "url": "https://wsbn.wyo.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.ncl"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        },
+        "options": [
+          {
+            "text": "Hold an active Wyoming APRN license: meet the APRN competency requirement instead",
+            "fact": "aprn.rnLicenceOnlyApprnCompetency"
+          },
+          {
+            "text": "400 hours of active nursing practice in the past two years",
+            "fact": "rn.competencyPractice"
+          },
+          {
+            "text": "40 hours of continuing education",
+            "fact": "rn.ceHoursPerCycle"
+          }
+        ]
+      },
+      "unverified": [
+        "The NCLEX, refresher course and nursing degree competency options"
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN competency at renewal is current national certification in the role and population focus plus the controlled substance hours.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        },
+        "notes": [
+          {
+            "text": "APRNs recognized before January 1, 1999 without national certification instead submit 40 CE hours and 400 APRN practice hours in the last two years.",
+            "fact": "aprn.pre1999Route"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 3,
+          "label": "Responsible prescribing of controlled substances or treatment of substance abuse disorders, each renewal",
+          "facts": [
+            "aprn.topicMandates[0]",
+            "aprn.topicMandates[0] (statute)"
+          ]
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

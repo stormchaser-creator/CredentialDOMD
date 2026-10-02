@@ -59,7 +59,7 @@ function NotificationCenter({ open, onClose }) {
               <div style={{ fontSize: 13, color: T.text }}>
                 {alerts.expired.length > 0 && <span style={{ fontWeight: 600 }}>{alerts.expired.length} expired &middot; </span>}
                 {alerts.soon.length > 0 && <span>{alerts.soon.length} expiring within {reminderLeadDays(s.reminderLeadDays)} days &middot; </span>}
-                {alerts.cmeIssues.length > 0 && <span>{alerts.cmeIssues.length} state{alerts.cmeIssues.length > 1 ? "s" : ""} with CME gaps</span>}
+                {alerts.cmeIssues.length > 0 && <span>{alerts.cmeIssues.length} {alerts.cmeIssues.some(ci => ci.label) ? "license" : "state"}{alerts.cmeIssues.length > 1 ? "s" : ""} with {data.settings.degreeType === "NP" ? "CE" : "CME"} gaps</span>}
               </div>
             </div>
 
@@ -109,10 +109,10 @@ function NotificationCenter({ open, onClose }) {
             {/* CME gaps */}
             {alerts.cmeIssues.length > 0 && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, textTransform: "uppercase", marginBottom: 6 }}>CME Compliance Gaps</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, textTransform: "uppercase", marginBottom: 6 }}>{data.settings.degreeType === "NP" ? "CE" : "CME"} Compliance Gaps</div>
                 {alerts.cmeIssues.map((ci, i) => (
                   <div key={i} style={{ padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, marginBottom: 4, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>{ci.state}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>{ci.label ?? ci.state}</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
                       {ci.issues.map((issue, j) => (
                         <span key={j} style={{ fontSize: 11, padding: "2px 6px", borderRadius: 6, backgroundColor: T.warningDim, color: T.warning, fontWeight: 600 }}>{issue}</span>

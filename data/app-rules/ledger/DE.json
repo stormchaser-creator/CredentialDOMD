@@ -1,0 +1,490 @@
+{
+ "state": "DE",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Delaware Board of Medical Licensure and Discipline, with the Regulatory Council for Physician Associates (Division of Professional Regulation)",
+   "url": "https://dpr.delaware.gov/boards/medicalpractice/renewal/"
+  },
+  "licence": {
+   "title": "Physician Associate / Physician Assistant (PA) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "March 31 of odd-numbered years"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "100 hours CME per 2 year cycle, of which 50 hours Category 1",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaNote": "Current NCCPA certification is deemed to meet the 100 hour requirement; holding it is not itself a renewal condition (it can be imposed on re-entry licences).",
+   "topicMandates": [
+    {
+     "topic": "Controlled substance prescribing practices, chronic pain treatment, or other topics related to prescribing controlled substances",
+     "hours": 2,
+     "period": "every 2 years",
+     "appliesTo": "holders of a Delaware controlled substance registration (CSR)"
+    },
+    {
+     "topic": "Delaware Office of Controlled Substances mandatory course (safe prescribing, pain treatment, opioid use disorder)",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "practitioners applying for a Delaware CSR (attested on the CSR application per DPR); regulation 3.1.2 requires completion within the first year of obtaining registration; not CE and not countable toward the 2 hours"
+    }
+   ],
+   "controlledSubstanceCe": "2 hours every 2 years for CSR holders (attested at CSR renewal); one-time 1 hour two part DPR course attested on the CSR application (regulation: within the first year of registration)",
+   "firstRenewalProration": "First renewal: licensed under 1 year, no CME; licensed 1 to 2 years, 50 hours (DPR CE page)",
+   "boardPageConflict": "The DPR PA CE page says \"50 hours of Category I and 50 hours of Category 2\" and dates the cycle \"April 1 and March 31 even-numbered years\"; regulation 13.2.2 requires 50 Category 1 within 100 (rest unrestricted) and the DPR renewal page and licence expiry are March 31 of odd years. Use the regulation."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Written collaborative agreement created by the PA and physician team or facility, kept on file at the PA's primary practice location and produced to the Board or Council on request; not filed with the Board. No renewal interval set in statute.",
+   "notes": "HB 325 (85 Del. Laws c. 253, signed May 12, 2026) lets PAs with more than 6,000 postgraduate clinical practice hours apply to the Regulatory Council for independent practice authority. It is implemented on the earlier of May 12, 2027 or Board approval of the Council's enabling regulations, so as of 2026-10 a collaborative agreement is still required unless those regulations have been approved. A collaborating physician may collaborate with no more than 4 PAs at a time."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": false,
+   "prescriptiveAuthorityNote": "PA prescriptive authority and practice authority are subject to biennial renewal with the Regulatory Council (renews with the licence; no separate registration identified).",
+   "ceForPrescribers": "2 hours controlled substance related CE every 2 years for CSR holders",
+   "csrRenewalDeadline": "June 30 of odd-numbered years"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 2,
+    "cite": "24 DE Admin Code 1700-13.2.1",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1700",
+    "quote": "Physician assistants must renew their license on a biennial basis by payment of appropriate fees",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "March 31 of odd-numbered years",
+    "cite": "DPR Board of Medical Licensure renewal page",
+    "url": "https://dpr.delaware.gov/boards/medicalpractice/renewal/",
+    "quote": "(MD, DO, PA, Other) licenses expire on March 31 of odd-numbered years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "100 hours, 50 Category 1, per 2 year cycle; NCCPA certification deemed compliant",
+    "cite": "24 DE Admin Code 1700-13.2.2",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1700",
+    "quote": "100 hours of Continuing Medical Education (CME), 50 hours of Category 1 during every 2 year cycle",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "24 DE Admin Code 1700-13.2.2",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1700",
+    "quote": "A licensee who submits proof of holding current certification from the NCCPA shall be deemed to have met this requirement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "collaboration",
+    "cite": "24 Del. C. § 1772(f)",
+    "url": "https://delcode.delaware.gov/title24/c017/sc06/index.html",
+    "quote": "a physician associate may not perform any medical act without a collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "kept on file at primary location, available on request",
+    "cite": "24 Del. C. § 1771(b)",
+    "url": "https://delcode.delaware.gov/title24/c017/sc06/index.html",
+    "quote": "must be kept on file at the primary location where the physician associate provides care",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.independentPractice",
+    "value": "more than 6,000 postgraduate clinical practice hours, by application to the Council",
+    "cite": "24 Del. C. § 1772(j)",
+    "url": "https://delcode.delaware.gov/title24/c017/sc06/index.html",
+    "quote": "with more than 6,000 postgraduate clinical practice hours who intends to practice without a collaborative agreement must apply to the Regulatory Council",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.independentPractice.implementation",
+    "value": "earlier of one year from enactment (May 12, 2026) or Board approval of enabling regulations",
+    "cite": "85 Del. Laws c. 253 (HB 325) § 23",
+    "url": "https://legis.delaware.gov/SessionLaws?volume=85&chapter=253",
+    "quote": "is to be implemented the earlier of the following: (1) One year from the date of the Act's enactment.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.prescriptiveAuthorityRenewal",
+    "value": "biennial with Regulatory Council",
+    "cite": "24 Del. C. § 1773(a)(2)e",
+    "url": "https://delcode.delaware.gov/title24/c017/sc06/index.html",
+    "quote": "prescriptive authority and authority to practice as a physician associate are subject to biennial renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "24 DE Admin Code 1700-13.3.1.5.2; 16 Del. C. § 4732(a)",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1700",
+    "quote": "PAs must register biennially with the Secretary of the Department of Health and Social Services in accordance with 16 Del.C. §4732(a)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.controlledSubstanceCe",
+    "value": "2 hours every 2 years for all CSR practitioners",
+    "cite": "24 DE Admin Code Uniform Controlled Substances Act Regulations 3.1.3",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/Uniform",
+    "quote": "All practitioners must attest to completion of two hours of continuing education biennially in the areas of controlled substance prescribing practices",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[CSR mandatory course]",
+    "value": "one-time 1 hour, two-part course before first CSR; not CE",
+    "cite": "DPR Office of Controlled Substances Mandatory Course page",
+    "url": "https://dpr.delaware.gov/boards/controlledsubstances/mandatory_course/",
+    "quote": "must complete a mandatory ONE -hour, two-part course pertaining to safe prescribing and distributing of controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csrMandatoryCourseTiming",
+    "value": "New registrants: 1 hour course within the first year of registration (regulation); DPR asks for attestation on the application",
+    "cite": "24 DE Admin Code Uniform Controlled Substances Act Regulations 3.1.2",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/Uniform",
+    "quote": "must attest to completion of a one hour education course on Delaware law, regulation and programs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csrExpiry",
+    "value": "Delaware CSR expires June 30 of odd-numbered years; renew every 2 years",
+    "cite": "DPR Controlled Substances Renewal page",
+    "url": "https://dpr.delaware.gov/boards/controlledsubstances/renewal/",
+    "quote": "Controlled Substance registrations expire on June 30 of odd years (e.g., 2019).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.firstRenewalProration",
+    "value": "first renewal: <1 year none; 1 to 2 years 50 hours",
+    "cite": "DPR Board of Medical Licensure Continuing Education and Audit Information page",
+    "url": "https://dpr.delaware.gov/boards/medicalpractice/continuing-education-and-audit-information/",
+    "quote": "more than one year, but less than two years – you are required to complete 50 hours of approved CME",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Board page only; not stated in regulation 13.2.2."
+   },
+   {
+    "field": "practice.collaboratorCap",
+    "value": "A physician may collaborate with no more than 4 PAs at one time (per shift), Board exemption possible",
+    "cite": "24 DE Admin Code 1700-13.1.1.7.2",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1700",
+    "quote": "No collaborating physician may collaborate with more than 4 physician assistants at any 1 given time",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.independentPractice.minimum",
+    "value": "under 6,000 postgraduate hours cannot practise independently",
+    "cite": "24 Del. C. § 1772(e)",
+    "url": "https://delcode.delaware.gov/title24/c017/sc06/index.html",
+    "quote": "Nothing in this chapter may be construed to authorize a physician associate with less than 6,000 hours of postgraduate clinical practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Delaware Board of Nursing (Division of Professional Regulation)",
+   "url": "https://dpr.delaware.gov/boards/nursing/renewal/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "February 28, May 31 or September 30 of odd-numbered years (depends on original issue date; new licences September 30)",
+   "ceHoursPerCycle": 30,
+   "nlcCompactMember": true,
+   "practiceHoursForRenewal": "1,000 hours in past 5 years or 400 hours in past 2 years",
+   "topicMandates": [
+    {
+     "topic": "Substance abuse",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "all RNs (within the 30)"
+    },
+    {
+     "topic": "Recognition of and response to suspected or known sexual abuse, physical abuse, exploitation, trafficking or domestic violence of vulnerable persons (children, elders, persons with disabilities), or reporting obligations including child abuse or neglect reporting",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all RNs (within the 30)"
+    }
+   ],
+   "ceExemptions": "Licensed by examination within the biennium: exempt for that biennium (1900-9.2.6.1). Endorsed or reinstated mid biennium: 15 hours (incl. 3 substance abuse) if more than a full calendar year remains.",
+   "certificationCredit": "National certification or recertification awarded during the biennium counts as 20 contact hours (1900-9.3.3, 9.2.1.2.6)"
+  },
+  "aprn": {
+   "title": "APRN (role designation C.N.P. for nurse practitioners)",
+   "separateLicenceOrCertificate": "separate APRN licence; requires a Delaware RN licence or a compact multistate RN privilege",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Same date as the Delaware RN licence; September 30 of odd years if no Delaware RN licence",
+   "ceHoursPerCycle": null,
+   "ceNote": "No APRN-specific CE hours in regulation for renewal; the APRN must meet the national certifying agency's recertification requirements and the RN CE (30 hours if Delaware RN). Practice hours: 1,500 in 5 years or 600 in 2 years in the role and population focus.",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [],
+   "aprnCompact": "Delaware enacted the APRN Compact (24 Del.C. ch. 19B) but the chapter is marked effective only upon fulfillment of the contingency in 83 Del. Laws c. 110 s. 2; not operational for tracking."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "prescriptiveAuthorityNote": "Prescriptive authority is granted with the APRN licence and renews with it.",
+   "pharmacologyCeForPrescribers": "none found for renewal (pharmacotherapeutics hours apply only to reinstatement after 2+ years out of practice)",
+   "controlledSubstanceCe": "2 hours every 2 years for Delaware CSR holders; one-time 1 hour two part DPR course attested on the CSR application (regulation: within the first year of registration)",
+   "stateCsRegistrationRequired": true,
+   "csrRenewalDeadline": "June 30 of odd-numbered years"
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None. Full practice and prescriptive authority are granted on issuance of the APRN licence; the collaborative agreement section (§ 1936) is repealed."
+  },
+  "facts": [
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "30 contact hours per biennium incl 3 substance abuse and 1 abuse recognition",
+    "cite": "24 DE Admin Code 1900-9.2.1.1",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "During each biennium, each Registered Nurse must earn 30 contact hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates[substance abuse]",
+    "value": "3 hours per biennium",
+    "cite": "24 DE Admin Code 1900-9.2.1.1",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "At least 3 of these contact hours must be in the area of substance abuse",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalDeadline",
+    "value": "Feb 28, May 31 or Sep 30 of odd years",
+    "cite": "DPR Board of Nursing renewal page",
+    "url": "https://dpr.delaware.gov/boards/nursing/renewal/",
+    "quote": "Registered Nurse (RN) licenses expire on February 28, May 31, or September 30 of odd years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "24 DE Admin Code 1900-14.0; 24 Del. C. § 1902 (Chapter 19A)",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "The Board hereby incorporates by reference the enhanced Nurse Licensure Compact rules and regulations",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "24 Del. C. § 1918(a)",
+    "url": "https://delcode.delaware.gov/title24/c019/index.html",
+    "quote": "licensure or prescriptive authority is subject to biennial renewal coinciding with RN license renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalDeadline",
+    "value": "same as RN; Sep 30 odd years without DE RN",
+    "cite": "DPR Board of Nursing renewal page",
+    "url": "https://dpr.delaware.gov/boards/nursing/renewal/",
+    "quote": "Your Advanced Practice Registered Nurse (APRN) license expires on the same date as your Delaware RN license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "24 DE Admin Code 1900-8.12.1",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "To maintain licensure, the Advanced Practice Registered Nurse must meet the requirements for recertification as established by the certifying agency.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.practiceHoursForRenewal",
+    "value": "1,500 hours in 5 years or 600 in 2 years",
+    "cite": "24 DE Admin Code 1900-8.12.2",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "must have practiced a minimum of 1500 hours in the past 5 years or no less than 600 hours in the past 2 years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority",
+    "value": "full, on licensure",
+    "cite": "24 Del. C. § 1935(a)(1)",
+    "url": "https://delcode.delaware.gov/title24/c019/index.html",
+    "quote": "The board of nursing grants full-practice and prescriptive authority upon the issuance of an APRN license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "24 DE Admin Code 1900-8.14.4.3; 16 Del. C. § 4732(a)",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "APRNs must register biennially with the Office of Narcotics and Dangerous Drugs in accordance with 16 Del.C. §4732(a).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.renewal",
+    "value": "prescriptive authority renews with APRN licence",
+    "cite": "24 DE Admin Code 1900-8.14.9.2",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "Prescriptive authority will renew with APRN licensure renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.controlledSubstanceCe",
+    "value": "2 hours every 2 years for CSR holders",
+    "cite": "24 DE Admin Code Uniform Controlled Substances Act Regulations 3.1.3",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/Uniform",
+    "quote": "All practitioners must attest to completion of two hours of continuing education biennially",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csrMandatoryCourseTiming",
+    "value": "New registrants: 1 hour course within the first year of registration (regulation); DPR asks for attestation on the application",
+    "cite": "24 DE Admin Code Uniform Controlled Substances Act Regulations 3.1.2",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/Uniform",
+    "quote": "must attest to completion of a one hour education course on Delaware law, regulation and programs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.csrExpiry",
+    "value": "Delaware CSR expires June 30 of odd-numbered years; renew every 2 years",
+    "cite": "DPR Controlled Substances Renewal page",
+    "url": "https://dpr.delaware.gov/boards/controlledsubstances/renewal/",
+    "quote": "Controlled Substance registrations expire on June 30 of odd years (e.g., 2019).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.firstBienniumExempt",
+    "value": "RNs licensed by examination are exempt for that biennium",
+    "cite": "24 DE Admin Code 1900-9.2.6.1",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "Those persons licensed by examination within a biennial renewal period are exempt from continuing education requirements for that biennium.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.certificationCredit",
+    "value": "NP national certification or recertification in the biennium = 20 RN contact hours",
+    "cite": "24 DE Admin Code 1900-9.3.3",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "National certification or recertification equals 20 contact hours awarded during the biennium.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates[abuse recognition]",
+    "value": "1 hour per biennium within the 30",
+    "cite": "24 DE Admin Code 1900-9.2.1.1",
+    "url": "https://regulations.delaware.gov/AdminCode/title24/1900",
+    "quote": "at least one hour on the recognition of and response to suspected or known sexual abuse, physical abuse, exploitation, trafficking, or domestic violence",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.aprnCompact",
+    "value": "enacted, not yet effective (contingent)",
+    "cite": "24 Del. C. ch. 19B",
+    "url": "https://delcode.delaware.gov/title24/c019b/index.html",
+    "quote": "The State hereby enters into the Advanced Practice Registered Nurse Compact (Compact) as set forth in this chapter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Section headings read \"Effective upon fulfillment of 83 Del. Laws, c. 110, § 2\"."
+   },
+   {
+    "field": "practice.collaborativeAgreementRepealed",
+    "value": "§ 1936 collaborative agreements repealed effective Aug. 4, 2021",
+    "cite": "24 Del. C. § 1936",
+    "url": "https://delcode.delaware.gov/title24/c019/index.html",
+    "quote": "Collaborative agreements [Repealed].",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "Whether the Board has approved the Regulatory Council's enabling regulations for PA independent practice authority (HB 325) before 2026-10: the current 1700 regulation loaded has no independent practice provisions, so the latest implementation date is May 12, 2027.",
+  "The 1700 regulation still uses \"supervising physician\" in PA prescriptive authority (13.3.1.1, 13.3.1.2) while the statute uses collaboration; the statute controls.",
+  "No APRN specific CE or pharmacology hour requirement for renewal exists in 24 DE Admin Code 1900-8.12 (only national recertification and 1,500/600 practice hours); pharmacotherapeutics hours apply only to reinstatement after 2 or more years out of practice (8.12.7.2, 8.12.7.3)."
+ ],
+ "sourceNote": "regulations.delaware.gov is a script rendered site; regulation text was loaded through the site's own API (POST https://regulations.delaware.gov/api/AdminCode/regulation, regulationUrl=/AdminCode/title24/<n>) which returns the current codified HTML.",
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "corrections": [
+  "DE PA and APRN: corrected the CSR mandatory 1 hour course timing. Regulation 3.1.2 says new registrants complete it within the first year of registration; DPR asks for an attestation on the CSR application. It is not CE.",
+  "DE PA and APRN: confirmed the Delaware CSR expires June 30 of odd-numbered years (DPR CSR renewal page), resolving the researcher's open item.",
+  "DE PA: added the first renewal proration (under 1 year licensed: none; 1 to 2 years: 50 hours) from the DPR CE page.",
+  "DE PA: flagged that the DPR CE page misstates the split (50 Cat 1 + 50 Cat 2) and the cycle years (even); regulation 13.2.2 (50 of 100 Category 1) and the odd-year March 31 expiry control.",
+  "DE RN: added the first biennium exemption for exam licensees (9.2.6.1) and that an NP's national certification or recertification earned in the biennium counts as 20 of the 30 RN hours (9.3.3).",
+  "DE RN: the 1 hour abuse topic now cites the regulation and spells out its scope (sexual/physical abuse, exploitation, trafficking, domestic violence, child abuse reporting).",
+  "DE APRN: added that Delaware enacted the APRN Compact (ch. 19B) but it is contingent and not in effect; no multistate APRN licence to track.",
+  "DE PA: added primary cites for the 4 PA collaboration cap (1700-13.1.1.7.2) and the 6,000 hour floor (1772(e)); confirmed HB 325 s.23 implementation clause and that HB 325 made no CE change."
+ ]
+}

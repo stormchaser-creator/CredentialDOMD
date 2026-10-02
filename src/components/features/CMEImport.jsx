@@ -199,6 +199,10 @@ function CMEImport({ open, onClose }) {
   const includedHours = included.reduce((s, r) => s + (parseFloat(r.hours) || 0), 0);
   const dupCount = rows.filter(r => r.duplicate).length;
   const assumedCount = included.filter(r => r.categoryAssumed).length;
+  // A PA's Category 1 row with no sponsor named would count toward a state's
+  // AAPA minimum as if confirmed (the assumption is not stored), so it is
+  // held until the member picks the credit type (DESIGN 8.2 step 5).
+  const heldForSponsor = deg === "PA" ? assumedCount : 0;
 
   // addItem returns false when it refuses a write (membership being
   // re-checked, read-only access), and a refusal applies to every row, so the
@@ -206,6 +210,7 @@ function CMEImport({ open, onClose }) {
   // the rest stay to add again. The done screen used to count every row as
   // added and clear the list, so refused rows were lost from the import.
   const saveBatch = useCallback(() => {
+    if (heldForSponsor > 0) return;
     const saved = new Set();
     let refused = false;
     for (const r of included) {
@@ -222,7 +227,7 @@ function CMEImport({ open, onClose }) {
     setError("");
     setDone({ count: saved.size, skipped: rows.length - saved.size });
     setStep("done");
-  }, [included, rows.length, addItem]);
+  }, [included, rows.length, addItem, heldForSponsor]);
 
   const small = { fontSize: 12.5, padding: "7px 9px", borderRadius: 8, border: `1px solid ${T.inputBorder}`, backgroundColor: T.card, color: T.text, boxSizing: "border-box", width: "100%" };
   const badge = (txt, color, bg) => <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", color, backgroundColor: bg, padding: "2px 6px", borderRadius: 6, whiteSpace: "nowrap" }}>{txt}</span>;
@@ -322,7 +327,7 @@ function CMEImport({ open, onClose }) {
             ))}
           </div>
           <div style={{ fontSize: 12, color: T.textDim, marginTop: 8 }}>
-            {(table.length - (headerIndex + 1))} data row{table.length - (headerIndex + 1) === 1 ? "" : "s"}. Credit types are mapped to your degree's categories ({deg === "DO" ? "AOA and AMA" : "AMA PRA and MOC"}); topics are guessed from the title and subject text and shown for you to adjust.
+            {(table.length - (headerIndex + 1))} data row{table.length - (headerIndex + 1) === 1 ? "" : "s"}. Credit types are mapped to your {deg === "PA" || deg === "NP" ? "profession's" : "degree's"} categories ({deg === "DO" ? "AOA and AMA" : deg === "PA" ? "AAPA, AMA PRA and Category 2" : deg === "NP" ? "accredited nursing CE and AMA PRA" : "AMA PRA and MOC"}); topics are guessed from the title and subject text and shown for you to adjust.
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={() => { setStep("pick"); setError(""); }} style={secondaryBtn}>Back</button>
@@ -341,7 +346,9 @@ function CMEImport({ open, onClose }) {
           </div>
           <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8, lineHeight: 1.45 }}>
             {dupCount > 0 && `${dupCount} already in your log (same date, title and hours) and unticked. `}
-            {assumedCount > 0 && `${assumedCount} selected row${assumedCount === 1 ? " has" : "s have"} a credit type the source did not state; set to AMA PRA Category 1, change if needed. `}
+            {assumedCount > 0 && (deg === "PA"
+              ? `${assumedCount} selected row${assumedCount === 1 ? " has" : "s have"} a credit type the source did not state. Pick each one's credit type (the sponsor on the certificate) before adding. `
+              : `${assumedCount} selected row${assumedCount === 1 ? " has" : "s have"} a credit type the source did not state; set to ${deg === "NP" ? "Accredited Nursing CE" : "AMA PRA Category 1"}, change if needed. `)}
             Edit any field before adding.
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: "52vh", overflowY: "auto", paddingRight: 2 }}>
@@ -357,9 +364,17 @@ function CMEImport({ open, onClose }) {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 6, marginTop: 6 }}>
                       <input type="date" aria-label="Date" value={r.date} onChange={e => setRow(r.key, { date: e.target.value })} style={small} />
                       <input aria-label="Provider" value={r.provider} onChange={e => setRow(r.key, { provider: e.target.value })} placeholder="Provider" style={small} />
-                      <select aria-label="Credit type" value={r.category} onChange={e => setRow(r.key, { category: e.target.value, categoryAssumed: false })} style={{ ...small, appearance: "auto", borderColor: r.categoryAssumed ? T.warning : T.inputBorder }}>
+                      {/* A PA's held row shows "Pick the credit type" rather than the
+                          assumed value: a select fires no change for the option it
+                          already shows (iOS Safari and desktop alike), so tapping the
+                          assumed type itself never released the row. Every real
+                          choice, the assumed one included, now does. */}
+                      <select aria-label="Credit type" value={deg === "PA" && r.categoryAssumed ? "" : r.category} onChange={e => { if (e.target.value) setRow(r.key, { category: e.target.value, categoryAssumed: false }); }} style={{ ...small, appearance: "auto", borderColor: r.categoryAssumed ? T.warning : T.inputBorder }}>
                         {/* No blank choice: cme.category is NOT NULL, and a blank
-                            credit type made the cloud reject the row. */}
+                            credit type made the cloud reject the row. The PA
+                            prompt is disabled and never saved: the row is held
+                            until a type is picked. */}
+                        {deg === "PA" && r.categoryAssumed && <option value="" disabled>Pick the credit type</option>}
                         {categories.map(c => <option key={c} value={c}>{c}</option>)}
                         {r.category && !categories.includes(r.category) && <option value={r.category}>{r.category}</option>}
                       </select>
@@ -394,8 +409,8 @@ function CMEImport({ open, onClose }) {
           {error && <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={() => { setStep(table ? "map" : "pick"); setError(""); }} style={secondaryBtn}>{table ? "Columns" : "Back"}</button>
-            <button onClick={saveBatch} disabled={!included.length} style={{ ...primaryBtn(included.length > 0), flex: 1 }}>
-              Add {included.length} to CME log{includedHours ? `, ${includedHours} hours` : ""}
+            <button onClick={saveBatch} disabled={!included.length || heldForSponsor > 0} style={{ ...primaryBtn(included.length > 0 && !heldForSponsor), flex: 1 }}>
+              {heldForSponsor > 0 ? `Pick ${heldForSponsor} credit type${heldForSponsor === 1 ? "" : "s"} first` : <>Add {included.length} to {deg === "NP" ? "CE" : "CME"} log{includedHours ? `, ${includedHours} hours` : ""}</>}
             </button>
           </div>
         </>

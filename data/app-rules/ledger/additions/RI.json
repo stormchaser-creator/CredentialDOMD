@@ -1,0 +1,49 @@
+{
+ "state": "RI",
+ "facts": [
+  {
+   "field": "aprn.ceHours",
+   "profession": "np",
+   "value": "Every license renewed under Part 3 (RN and APRN): 10 continuing education hours in the preceding two years",
+   "cite": "216-RICR-40-05-3.5(A)",
+   "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-3",
+   "quote": "seeking renewal of a license under the provisions of the Act and this Part ... completed the ten (10) required continuing education hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "aprn.opioidEquivalent",
+   "profession": "np",
+   "value": "Category 1 CME or equivalent CE; DATA 2000 waiver training with an X designation exempts",
+   "cite": "216-RICR-20-20-4.4(P)",
+   "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+   "quote": "Category 1 Continuing Medical Education (or equivalent in Continuing Education Units/Continuing Education) ... DATA 2000 waiver training course ... “X” designation are exempt",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.opioidExemption",
+   "profession": "pa",
+   "value": "DATA 2000 waiver training with an X designation exempts from the 8 hours",
+   "cite": "216-RICR-20-20-4.4(P)(2)",
+   "url": "https://rules.sos.ri.gov/regulations/part/216-20-20-4",
+   "quote": "Practitioners who have completed the DATA 2000 waiver training course and have an active Drug Enforcement Certificate with an “X” designation are exempt",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.newLicenseeExempt",
+   "profession": "pa",
+   "value": "PAs initially licensed after the July 1 renewal date are exempt until the next renewal cycle",
+   "cite": "216-RICR-40-05-24.8(E)",
+   "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-24",
+   "quote": "Physician assistants initially licensed after the July 1st renewal date shall be exempt ... until the date of the next renewal cycle",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

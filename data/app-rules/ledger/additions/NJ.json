@@ -1,0 +1,51 @@
+{
+ "state": "NJ",
+ "facts": [
+  {
+   "field": "np.board.page",
+   "profession": "np",
+   "value": "New Jersey Board of Nursing home page",
+   "cite": "New Jersey Board of Nursing",
+   "url": "https://www.njconsumeraffairs.gov/nur",
+   "quote": "New Jersey Board of Nursing",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "pa.board.page",
+   "profession": "pa",
+   "value": "Physician Assistant Advisory Committee home page",
+   "cite": "New Jersey State Board of Medical Examiners, Physician Assistant Advisory Committee",
+   "url": "https://www.njconsumeraffairs.gov/pa",
+   "quote": "Physician Assistant Advisory Committee",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "np.prescribing.noProtocolCsPharmacology",
+   "profession": "np",
+   "value": "APNs ordering without a joint protocol: 14 contact hours of controlled substance pharmacology, 8 in addition to initial certification hours",
+   "cite": "N.J.S.A. 45:11-49 as amended by P.L.2026, c.6",
+   "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+   "quote": "the advanced practice nurse shall have completed 14 contact hours of continuing professional education in pharmacology related to controlled substances",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.practice.noProtocolExclusions",
+   "profession": "np",
+   "value": "No general obstetrics and no elective aesthetic or cosmetic services without a joint protocol",
+   "cite": "N.J.S.A. 45:11-49 as amended by P.L.2026, c.6",
+   "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+   "quote": "not providing health care services in the area of general obstetrics; (d) the advanced practice nurse is not providing elective aesthetic or cosmetic services",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

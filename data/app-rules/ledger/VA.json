@@ -1,0 +1,469 @@
+{
+ "state": "VA",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Virginia Board of Medicine (Department of Health Professions)",
+   "url": "https://www.dhp.virginia.gov/Boards/Medicine/"
+  },
+  "licence": {
+   "title": "Physician Assistant licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Birth month of each odd-numbered year"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "categoryRules": "Board adopts NCCPA CME standards (licensee verifies compliance with NCCPA standards at renewal); no separate Virginia hour count",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [],
+   "controlledSubstanceCe": null
+  },
+  "practice": {
+   "agreementType": "practice agreement",
+   "agreementFilingAndRenewal": "Written or electronic practice agreement with one or more patient care team physicians or podiatrists before practice; kept by the PA and provided to the Board on request (not filed); revised whenever collaboration, authorization or scope changes; prescriptive authority needs an addendum if not in the original agreement.",
+   "notes": "Exceptions: PAs employed by a hospital, state facility, or FQHC may practice under facility credentialing and privileging instead of a practice agreement. Practice without a practice agreement after 3 years full time (1,800 hours/year) with physician attestation is enacted (§ 54.1-2952.01) but has a contingent effective date tied to Board of Medicine regulations (Acts 2026, c. 418, cl. 3)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "Prescriptive authority requires Board approval criteria (35 hours pharmacology) and must be written into the practice agreement; Board FAQ says the request is part of the practice agreement",
+   "ceForPrescribers": null,
+   "notes": "PMP registration required for prescribers of covered substances (Va. Code § 54.1-2522.1 A)."
+  },
+  "facts": [
+   {
+    "field": "licence.renewal",
+    "value": "biennial, odd-numbered years, birth month",
+    "cite": "18VAC85-50-56 A",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter50/section56/",
+    "quote": "shall biennially renew the license in each odd-numbered year in the licensee's birth month",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "NCCPA CME standards",
+    "cite": "18VAC85-50-56 A 2",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter50/section56/",
+    "quote": "Verifying compliance with continuing medical education standards established by the NCCPA.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "18VAC85-50-56 B",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter50/section56/",
+    "quote": "No physician assistant who allows an NCCPA certification to lapse shall be considered licensed by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal.board",
+    "value": "active licence requires current NCCPA",
+    "cite": "Board of Medicine PA FAQ #8",
+    "url": "https://www.dhp.virginia.gov/Boards/Medicine/AbouttheBoard/RegulatedProfessions/PhysicianAssistant/",
+    "quote": "Current NCCPA certification is required for an active license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "practice agreement with patient care team physician or podiatrist",
+    "cite": "Va. Code § 54.1-2951.1 C",
+    "url": "https://law.lis.virginia.gov/vacode/title54.1/chapter29/section54.1-2951.1/",
+    "quote": "every physician assistant shall practice as part of a patient care team and shall provide care in accordance with a written or electronic practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFiling",
+    "value": "maintained by PA, provided on request",
+    "cite": "Va. Code § 54.1-2951.1 D",
+    "url": "https://law.lis.virginia.gov/vacode/title54.1/chapter29/section54.1-2951.1/",
+    "quote": "evidence of a practice agreement shall be maintained by the physician assistant and provided to the Board upon request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementRevision",
+    "value": "revised at time of any change",
+    "cite": "18VAC85-50-101 E",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter50/section101/",
+    "quote": "a revised practice agreement shall be entered into at the time of the change.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.ratio",
+    "value": "up to 6 PAs per patient care team physician or podiatrist",
+    "cite": "Va. Code § 54.1-2952 A",
+    "url": "https://law.lis.virginia.gov/vacode/title54.1/chapter29/section54.1-2952/",
+    "quote": "No patient care team physician or patient care team podiatrist shall be allowed to collaborate or consult with more than six physician assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.withoutAgreement.status",
+    "value": "enacted with contingent effective date (Acts 2026, c. 418, cl. 3); the current version of § 54.1-2951.1 C still requires a practice agreement",
+    "cite": "Va. Code § 54.1-2952.01 (heading)",
+    "url": "https://law.lis.virginia.gov/vacode/title54.1/chapter29/section54.1-2952.01/",
+    "quote": "(For contingent effective date, see Acts 2026, c. 418, cl. 3) Physician assistants; authorization to practice without a practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.withoutAgreement.hours",
+    "value": "3 years full time, 1,800 hours per year",
+    "cite": "Va. Code § 54.1-2952.01 A",
+    "url": "https://law.lis.virginia.gov/vacode/title54.1/chapter29/section54.1-2952.01/",
+    "quote": "\"Full-time clinical experience\" means 1,800 hours per year of clinical experience.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pharmacologyTraining",
+    "value": "35 hours pharmacology (to qualify, not per cycle)",
+    "cite": "18VAC85-50-130 3",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter50/section130/",
+    "quote": "Submit evidence of successful completion of a minimum of 35 hours of acceptable training to the board in pharmacology.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.inAgreement",
+    "value": "schedules and categories listed in practice agreement",
+    "cite": "18VAC85-50-101 C",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter50/section101/",
+    "quote": "the written practice agreement shall include those schedules and categories of drugs and devices that are within the scope of practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.opioidRules",
+    "value": "Board opioid and buprenorphine prescribing regulations apply to PAs",
+    "cite": "18VAC85-21-10 A",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter21/section10/",
+    "quote": "This chapter shall apply to doctors of medicine, osteopathic medicine, and podiatry and to physician assistants.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pmpRegistration",
+    "value": "PMP registration required for prescribers of covered substances",
+    "cite": "Va. Code § 54.1-2522.1 A",
+    "url": "https://law.lis.virginia.gov/vacode/title54.1/chapter25.2/section54.1-2522.1/",
+    "quote": "shall be registered with the Prescription Monitoring Program by the Department of Health Professions.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.boardFaq",
+    "value": "pharmacology training 35 hours; prescriptive authority request is part of the practice agreement",
+    "cite": "Board of Medicine PA FAQ #5",
+    "url": "https://www.dhp.virginia.gov/Boards/Medicine/AbouttheBoard/RegulatedProfessions/PhysicianAssistant/",
+    "quote": "The board requires successful completion of a minimum of 35 hours of acceptable training in pharmacology.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.facilityException",
+    "value": "hospital, state facility or FQHC employees may practice under credentialing and privileging arrangement",
+    "cite": "18VAC85-50-101 G",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter50/section101/",
+    "quote": "may practice without a written or electronic practice agreement consistent with the requirements contained in § 54.1-2951.1 E",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Virginia Board of Nursing and Committee of the Joint Boards of Nursing and Medicine (Department of Health Professions)",
+   "url": "https://www.dhp.virginia.gov/Boards/Nursing/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": "One of nine options, e.g. 30 contact hours, or 15 contact hours plus 640 practice hours, or national specialty certification. RNs who also hold an active NP licence meet only the APRN requirements.",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "Licensed advanced practice registered nurse (nurse practitioner categories, e.g. family nurse practitioner (02))",
+   "separateLicenceOrCertificate": "separate APRN licence issued by the Boards of Nursing and Medicine",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": "No separate hour count: current national certification required (licensed on or after May 8, 2002). Licensed before May 8, 2002: certification OR 40 hours CE in specialty.",
+   "pharmacologyHoursPerCycle": 8,
+   "nationalCertificationRequired": true,
+   "topicMandates": []
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "pharmacologyCeForPrescribers": "8 hours pharmacology or pharmacotherapeutics each biennium",
+   "controlledSubstanceCe": null,
+   "stateCsRegistrationRequired": null,
+   "notes": "PMP registration required for prescribers of covered substances (Va. Code § 54.1-2522.1 A). Practice agreement may cap a physician at 6 prescribing APRNs (18VAC90-40-90 D)."
+  },
+  "practice": {
+   "authority": "full after transition to practice",
+   "agreementType": "practice agreement with a patient care team physician until autonomous practice is authorized",
+   "transitionToPracticeHours": "Equivalent of 3 years full time clinical experience at 1,800 hours per year (5,400 hours), with physician attestation, for autonomous practice",
+   "agreementFilingAndRenewal": "Written or electronic practice agreement maintained by the APRN; revised and kept whenever patient care team physician, prescribing authorization or scope changes. Autonomous practice designation by attestation and fee.",
+   "notes": "Researcher labelled this 'reduced'. Under 18VAC90-30-86 and -120 an NP (other than CNM, CRNA, CNS) practises under a practice agreement only until the equivalent of 3 years full time (1,800 hours per year); after Board authorization by fee and attestation the NP practises and prescribes without a practice agreement. Same shape as Vermont's transition to practice, so labelled the same way."
+  },
+  "facts": [
+   {
+    "field": "rn.renewal",
+    "value": "biennial, birth month, even or odd year matching birth year",
+    "cite": "18VAC90-19-150 A",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section150/",
+    "quote": "Licensees born in even-numbered years shall renew their licenses by the last day of the birth month in even-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ce.option30",
+    "value": "30 contact hours",
+    "cite": "18VAC90-19-160 A 9",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section160/",
+    "quote": "Thirty contact hours of workshops, seminars, conferences, or courses relevant to the practice of nursing.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ce.option15plus640",
+    "value": "15 contact hours plus 640 practice hours",
+    "cite": "18VAC90-19-160 A 8",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section160/",
+    "quote": "Fifteen contact hours of workshops, seminars, conferences, or courses relevant to the practice of nursing and 640 hours of active practice as a nurse",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ce.npExemption",
+    "value": "RN who holds active NP licence meets only APRN rules",
+    "cite": "18VAC90-19-160 C 2",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section160/",
+    "quote": "Registered nurses who also hold an active license as a nurse practitioner shall only meet the requirements of 18VAC90-30-105",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "18VAC90-19-80 A",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section80/",
+    "quote": "To be issued a license with a multistate licensure privilege by the board or to change the primary state of residency",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.title",
+    "value": "licensed APRN categories",
+    "cite": "18VAC90-30-70 A",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section70/",
+    "quote": "The boards shall license advanced practice registered nurses consistent with their specialty education and certification in the following categories",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "18VAC90-30-100 A 1",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section100/",
+    "quote": "Biennially at the same time the license to practice as a registered nurse in Virginia is renewed",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "18VAC90-30-105 A",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section105/",
+    "quote": "shall hold current professional certification in the area of specialty practice from one of the certifying agencies designated in 18VAC90-30-90",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ce.pre2002",
+    "value": "40 hours CE alternative for licensed before May 8, 2002",
+    "cite": "18VAC90-30-105 B 2",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section105/",
+    "quote": "Complete at least 40 hours of continuing education in the area of specialty practice approved by one of the certifying agencies",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pharmacologyCe",
+    "value": 8,
+    "cite": "18VAC90-40-55 B",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter40/section55/",
+    "quote": "shall obtain a total of eight hours of continuing education in pharmacology or pharmacotherapeutics for each biennium",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthority",
+    "value": true,
+    "cite": "18VAC90-40-30 B",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter40/section30/",
+    "quote": "The boards shall approve prescriptive authority for applicants who meet the qualifications set forth in 18VAC90-40-40 .",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.initialPharmacology",
+    "value": "one of: certification, graduate pharmacology within 5 years, practice plus CE, or 30 hours pharmacology",
+    "cite": "18VAC90-40-40 2 d",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter40/section40/",
+    "quote": "Thirty contact hours of education in pharmacology or pharmacotherapeutics acceptable to the boards taken within five years prior to submission of the application.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreement",
+    "value": "practice agreement with patient care team physician unless autonomous",
+    "cite": "18VAC90-30-120 C",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section120/",
+    "quote": "shall practice in accordance with a written or electronic practice agreement as defined in 18VAC90-30-10 or in accordance with 18VAC90-30-86 .",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPracticeHours",
+    "value": "3 years full time",
+    "cite": "18VAC90-30-86 A",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section86/",
+    "quote": "may qualify for autonomous practice by completion of the equivalent of three years of full-time clinical experience to qualify for autonomous practice.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.fullTimeDefinition",
+    "value": "1,800 hours per year",
+    "cite": "18VAC90-30-86 A 1",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section86/",
+    "quote": "Full-time clinical experience shall be defined as 1,800 hours per year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementRevision",
+    "value": "revise and maintain on change",
+    "cite": "18VAC90-40-90 B",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter40/section90/",
+    "quote": "the advanced practice registered nurse shall revise the practice agreement and maintain the revised agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ce.npPrescriber",
+    "value": "RN who is also an NP meets only APRN rule and, if prescribing, 18VAC90-40-55",
+    "cite": "18VAC90-19-160 C 2",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section160/",
+    "quote": "and, for those with prescriptive authority, 18VAC90-40-55 .",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalMultistate",
+    "value": "multistate RN holders renew APRN by last day of birth month, even or odd year by birth year",
+    "cite": "18VAC90-30-100 A 2",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section100/",
+    "quote": "a licensee born in even-numbered years shall renew his license by the last day of the birth month in even-numbered years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.autonomousAttestation",
+    "value": "autonomous practice by fee and attestation signed with patient care team physician",
+    "cite": "18VAC90-30-86 B",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter30/section86/",
+    "quote": "Qualification for authorization for autonomous practice shall be determined upon submission of a fee as specified in 18VAC90-30-50 and an attestation",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.ratio",
+    "value": "a physician may serve as patient care team physician to at most 6 APRNs with prescriptive authority",
+    "cite": "18VAC90-40-90 D",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter40/section90/",
+    "quote": "a physician shall not serve as a patient care team physician to more than six advanced practice registered nurses with prescriptive authority",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.autonomousNoAgreement",
+    "value": "autonomous NPs prescribe without a practice agreement",
+    "cite": "18VAC90-40-90 E 3",
+    "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter40/section90/",
+    "quote": "has met the qualifications for autonomous practice as set forth in 18VAC90-30-86 may prescribe without a practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pmpRegistration",
+    "value": "PMP registration required for prescribers of covered substances",
+    "cite": "Va. Code § 54.1-2522.1 A",
+    "url": "https://law.lis.virginia.gov/vacode/title54.1/chapter25.2/section54.1-2522.1/",
+    "quote": "shall be registered with the Prescription Monitoring Program by the Department of Health Professions.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA CME hour count: Virginia defers to NCCPA standards (18VAC85-50-56 A 2); the NCCPA numbers (100 hours per 2 years, 50 Category 1, PANRE every 10 years) belong to the NCCPA record and are not restated as a Virginia rule.",
+  "PA practice without a practice agreement (Va. Code § 54.1-2952.01): enacted by Acts 2026, c. 418 with a contingent effective date. The clause 3 text could not be loaded (LIS acts pages are script rendered) and whether the contingency has occurred as of 2026-10 is unconfirmed. Until confirmed, show the practice agreement as required.",
+  "PA prescriptive authority as a separate approval: 18VAC85-50-130 still speaks of an applicant for prescriptive authority, while the Board FAQ says the request is part of the practice agreement. Whether a distinct authorization is issued today is unconfirmed.",
+  "No PA or APRN controlled substance, opioid or other topic CE mandate appears in the full text of 18VAC85-50-56, 18VAC90-30-105, 18VAC90-40-55 or 18VAC90-19-160 (all loaded 2026-10-01); 18VAC85-21 (opioid prescribing rules, applies to PAs) was not read section by section for CE.",
+  "Virginia state controlled substance registration for individual practitioners: not researched to a primary source; DEA and PMP registration apply."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verificationCorrections": [
+  "All 27 researcher facts re-loaded from law.lis.virginia.gov and dhp.virginia.gov on 2026-10-01; values and quotes match.",
+  "NP practice authority: researcher labelled Virginia 'reduced'. The regulations allow autonomous practice and prescribing without a practice agreement after the equivalent of 3 years full time (18VAC90-30-86, 18VAC90-40-90 E 3). Relabelled 'full after transition to practice' with a note, matching how Vermont's transition period is labelled.",
+  "PA § 54.1-2951.1: the page shows two versions; the quoted practice agreement text appears in both the current version and the contingent version, so the fact stands. Status fact value clarified that the current version still requires a practice agreement.",
+  "Added PMP registration for both professions (Va. Code § 54.1-2522.1 A); researcher had none.",
+  "Added: Board FAQ 35 hour pharmacology statement, 18VAC85-50-101 G facility exception, 18VAC90-19-160 C 2 prescriber cross reference, 18VAC90-30-100 A 2 multistate renewal timing, 18VAC90-30-86 B attestation, 18VAC90-40-90 D six APRN cap, 18VAC90-40-90 E 3 autonomous prescribing.",
+  "Topic mandates: read the full CE sections for both professions; none found, so topicMandates stay empty. Unverified list rewritten to state exactly what was and was not read."
+ ]
+}

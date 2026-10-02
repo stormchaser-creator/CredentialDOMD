@@ -1,0 +1,16 @@
+{
+ "state": "CO",
+ "facts": [
+  {
+   "field": "np.practice.mentorshipDeadline",
+   "profession": "np",
+   "value": "Mentorship completed within three years after provisional prescriptive authority",
+   "cite": "3 CCR 716-1 Rule 1.15(G)(1)",
+   "url": "https://www.sos.state.co.us/CCR/GenerateRulePdf.do?ruleVersionId=12453&fileName=3%20CCR%20716-1",
+   "quote": "The Mentorship must be completed within three years after Provisional Prescriptive Authority is granted",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

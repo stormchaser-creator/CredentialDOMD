@@ -1,0 +1,569 @@
+{
+ "state": "AL",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Alabama Board of Medical Examiners",
+   "url": "https://www.albme.gov/licensing/pa-aa/license-registration"
+  },
+  "licence": {
+   "title": "Physician Assistant (P.A.) license plus registration to a supervising physician",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annually; application received on or before December 31 (license renews January 1). CME is counted over two calendar years."
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "cyclePeriod": "every two calendar years (certified on each annual renewal)",
+   "categoryRules": "AMA PRA Category 1 or equivalent; AAPA Category I CME, AOA Category 1-A, AAFP Prescribed and ACOG Cognate credits count as equivalent; nationally recognized advanced life support courses count up to 2 credits per course; BLS excluded.",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaNote": "PANCE passage is required for the initial license (540-X-7-.04); Chapter 540-X-7 renewal and CME rules contain no requirement to hold current NCCPA certification and no NCCPA in lieu provision.",
+   "topicMandates": [
+    {
+     "topic": "Professional boundaries (Board-designated course)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "New licensees within 12 months of license issue (effective 2025-01-01); all active PAs licensed before then had a deadline of 2025-12-31"
+    },
+    {
+     "topic": "Controlled substance prescribing (Board-approved course)",
+     "hours": 4,
+     "period": "every 2 years",
+     "appliesTo": "PAs holding a QACSC (AMA PRA Category 1 or equivalent)"
+    },
+    {
+     "topic": "Controlled substance prescribing (8 h) plus advanced pharmacology and prescribing trends for controlled substances (4 h)",
+     "hours": 12,
+     "period": "one-time",
+     "appliesTo": "Before applying for a QACSC, completed within 1 year preceding application"
+    },
+    {
+     "topic": "Board of Medical Examiners prescribed CE on Alabama rules and statutes governing supervised practice",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "Each PA registering to a supervising physician (effective 2024-01-01): completed within 48 months before or 12 months after registration; the rule states no hour count",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    }
+   ],
+   "controlledSubstanceCe": "4 AMA PRA Category 1 credits every two years in a Board-approved controlled substance prescribing course to renew a QACSC; 12 hours one-time before a first QACSC."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Registration to a supervising physician is filed with and approved by the Board (application with practice sites, hours and a signed job description that includes the non-controlled formulary). No periodic re-filing rule was found; a new registration agreement is submitted when the supervising physician changes. Quarterly quality assurance by the supervising physician is required.",
+   "notes": "No independent practice. Remote sites: physician present 10% of scheduled hours for PAs with under 2 years (4,000 hours) in a registration agreement; after that, site visits twice a year and quarterly meetings."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "stateCsRegistrationName": "Qualified Alabama Controlled Substances Registration Certificate (QACSC), Schedules III to V, issued by the Board of Medical Examiners; renewed annually by December 31",
+   "separateAuthorityRegistration": true,
+   "ceForPrescribers": "QACSC renewal: 4 AMA PRA Category 1 credits every 2 years in controlled substance prescribing; current PDMP registration and current DEA registration required to renew the QACSC. Legend drug prescribing is limited to the Board-approved formulary in the job description. A first QACSC also requires 12 months of active practice under Board-approved registration agreements after NCCPA certification (or 3 years supervised practice in any state plus 1 year holding DEA registration)."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 1,
+    "cite": "Ala. Admin. Code r. 540-X-7-.07(1)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.07",
+    "quote": "A license to practice as a physician assistant shall be renewed annually on or before January 1st of each year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "December 31 (application received by)",
+    "cite": "Ala. Admin. Code r. 540-X-7-.07(1)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.07",
+    "quote": "Application for annual renewal shall be received by the Board on or before December 31st",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "50 hours every two calendar years",
+    "cite": "Ala. Admin. Code r. 540-X-7-.29(1)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+    "quote": "every two calendar years, each physician assistant licensed by the Board must earn not less than fifty (50) hours of AMA PRA Category 1 Credits™",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "AAPA Category I counts as equivalent",
+    "cite": "Ala. Admin. Code r. 540-X-7-.29(3)(e)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+    "quote": "Programs of continuing medical education designated as AAPA Category I CME Credits",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.professionalBoundaries.new",
+    "value": "one-time within 12 months of license issue",
+    "cite": "Ala. Admin. Code r. 540-X-7-.29(1)(a)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+    "quote": "shall complete a Board-designated course in the area of professional boundaries within twelve (12) months of the license issue date.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.professionalBoundaries.existing",
+    "value": "by December 31, 2025, no exemptions",
+    "cite": "Ala. Admin. Code r. 540-X-7-.29(1)(b)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+    "quote": "all actively licensed physician assistants shall complete a Board-designated course in the area of professional boundaries by December 31, 2025.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": "false (PANCE at initial licensure only)",
+    "cite": "Ala. Admin. Code r. 540-X-7-.04(1)(b)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.04",
+    "quote": "successful completion of the Physician Assistant National Certification Examination (PANCE) as administered by the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "note": "Absence of a renewal certification requirement is inferred from rules 540-X-7-.07 and .29; the statute (Code of Ala. 34-24-290 et seq.) was not loaded.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "supervision",
+    "cite": "Ala. Admin. Code r. 540-X-7-.23(2)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.23",
+    "quote": "There shall be no independent, unsupervised practice by physician assistants.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFiling",
+    "value": "registration application filed with the Board",
+    "cite": "Ala. Admin. Code r. 540-X-7-.15(1)(a)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.15",
+    "quote": "A completed application for registration in the form specified in Appendix A to Chapter 7 shall be submitted to the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.qualityAssurance",
+    "value": "quarterly",
+    "cite": "Ala. Admin. Code r. 540-X-7-.23(10)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.23",
+    "quote": "The supervising physician must complete quarterly quality assurance with each physician assistant.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "Ala. Admin. Code r. 540-X-7-.28(2)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/540-X-7-.28",
+    "quote": "upon being granted a Qualified Alabama Controlled Substances Certificate (QACSC) and upon submission of an approved QACSC formulary.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.qacscRenewalCe",
+    "value": "4 AMA PRA Category 1 credits every two years",
+    "cite": "Ala. Admin. Code r. 540-X-12-.05(3)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-12",
+    "quote": "As a requirement for renewing a QACSC, a P.A. shall obtain, every two years, four (4) AMA PRA Category 1 credits™ or equivalent",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.qacscRenewalDea",
+    "value": "current DEA registration required to renew QACSC",
+    "cite": "Ala. Admin. Code r. 540-X-12-.05(5)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-12",
+    "quote": "an applicant shall have a current and appropriate registration issued by the United States Drug Enforcement Administration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.qacscInitialCe",
+    "value": "8 h controlled substance prescribing + 4 h advanced pharmacology, one-time",
+    "cite": "Ala. Admin. Code r. 540-X-12-.03(3)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-12",
+    "quote": "includes eight (8) hours of instruction regarding the prescribing of controlled substances and four (4) hours of advanced pharmacology and prescribing trends",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.qacscRenewalDeadline",
+    "value": "annually, received by December 31",
+    "cite": "Ala. Admin. Code r. 540-X-12-.05(1)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-12",
+    "quote": "Renewal of a QACSC shall be annually on or before January 1st of each year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.supervisedPracticeCe",
+    "value": "one-time, within 48 months before or 12 months after registration to a physician",
+    "cite": "Ala. Admin. Code r. 540-X-7-.16(6)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-7",
+    "quote": "obtain continuing education prescribed by the Board of Medical Examiners regarding the rules and statutes governing supervised practice in Alabama",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.qacscInitialPractice",
+    "value": "12 months registered practice following NCCPA certification before a first QACSC",
+    "cite": "Ala. Admin. Code r. 540-X-12-.03(4)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-12",
+    "quote": "a minimum of twelve (12) months of active clinical practice pursuant to one or more registration agreements approved by the Alabama Board of Medical Examiners",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.qacscRenewalPdmp",
+    "value": "current PDMP (Controlled Substances Prescription Database) registration required to renew QACSC",
+    "cite": "Ala. Admin. Code r. 540-X-12-.05(4)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-12",
+    "quote": "the applicant shall have a current registration to access the Controlled Substances Prescription Database",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.boardPageRenewal",
+    "value": "annual renewal by Dec 31; 50 Category 1 every 2 years",
+    "cite": "ALBME PA license and registration page",
+    "url": "https://www.albme.gov/licensing/pa-aa/license-registration",
+    "quote": "50 AMA PRA Category 1 Credits or equivalent are required every 2 years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaOptionalOnRenewalForm",
+    "value": "renewal form asks NCCPA status as a yes/no question (not a condition)",
+    "cite": "Ala. Admin. Code ch. 540-X-7, Appendix (PA renewal application form)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-7",
+    "quote": "Are you currently certified by NCCPA? If your answer is “yes”, provide your certification number",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Alabama Board of Nursing (collaboration jointly with the Alabama Board of Medical Examiners)",
+   "url": "https://www.abn.alabama.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 of the expiration year; renewal window September 1 to December 31. Single state RN licenses expire December 31 of even years; Alabama multistate RN licenses expire December 31 of odd years.",
+   "ceHoursPerCycle": 24,
+   "nlcCompactMember": true,
+   "topicMandates": [
+    {
+     "topic": "Board-provided CE on statutory and administrative frameworks, scope and standards of practice",
+     "hours": 4,
+     "period": "one-time",
+     "appliesTo": "First license renewal only (counts within the prorated total)"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "CRNP (Certified Registered Nurse Practitioner)",
+   "separateLicenceOrCertificate": "Certificate of qualification plus Board approval to practice in a specific collaborative practice; approval is renewed with the RN license",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 24,
+   "ceNote": "No separate APRN hour total: the 6 pharmacology hours are part of the 24 RN contact hours.",
+   "pharmacologyHoursPerCycle": 6,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Pharmacology specific to prescriptive practice in the approved collaborative practice area",
+     "hours": 6,
+     "period": "every cycle",
+     "appliesTo": "CRNPs with prescriptive authority (not required for the first renewal if one year or less remained in the license period at initial approval)"
+    },
+    {
+     "topic": "Board of Nursing prescribed CE on Alabama collaborative practice rules and statutes",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "Each CRNP, completed within 48 months before or 12 months after commencement of collaborative practice"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "pharmacologyCeForPrescribers": "6 contact hours per 2 year cycle within the 24 hours",
+   "controlledSubstanceCe": "QACSC holders: 4 AMA PRA Category 1 credits (or equivalent) every two years in a Board-approved controlled substance prescribing course; 12 hours (8 controlled substance prescribing + 4 advanced pharmacology) one-time within 1 year before applying.",
+   "stateCsRegistrationRequired": true,
+   "stateCsRegistrationName": "QACSC issued by the Alabama Board of Medical Examiners (Chapter 540-X-18); renewed annually by December 31; requires current DEA and PDMP registration and 12 months of approved collaborative practice before first issue"
+  },
+  "practice": {
+   "authority": "restricted",
+   "authorityNote": "Label is the conventional classification; the primary rules require a physician collaborative practice agreement with physician presence and quarterly meetings, which is what the label summarises. 610-X-9-.15(1)(a) still refers to an exemption from collaboration under 610-X-5-.07, but 610-X-5-.07 was repealed effective 2026-01-10, so the exemption's current criteria could not be located in the rules.",
+   "agreementType": "collaboration",
+   "transitionToPracticeHours": null,
+   "transitionNote": "Not a transition to independent practice: for CRNPs with under 2 years (4,000 hours) of collaborative practice the collaborating physician must be present at least 10% of scheduled hours.",
+   "agreementFilingAndRenewal": "Collaborative practice (with standard protocol) is approved jointly by the Board of Nursing and the Board of Medical Examiners; the physician files a Commencement of Collaborative Practice form with the BME. Approval continues at each RN renewal on verification of continued collaboration and payment of the advanced practice renewal fee; termination must be reported and ends the approval. Quarterly quality assurance with each CRNP and, after 4,000 hours, quarterly physician meetings; remote sites visited at least twice a year (610-X-5-.09(5))."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycle.singleState",
+    "value": "2 years, expires Dec 31 of even years",
+    "cite": "Ala. Admin. Code r. 610-X-4-.08(1)(a)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+    "quote": "The Alabama single state registered nurse license shall be valid for two years beginning January 1 of each odd-numbered year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalCycle.multistate",
+    "value": "2 years, expires Dec 31 of odd years",
+    "cite": "Ala. Admin. Code r. 610-X-4-.08(1)(b)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+    "quote": "The Alabama multistate registered nurse license shall be valid for two years beginning January 1 of each even-numbered year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "Ala. Admin. Code r. 610-X-4-.08(1)(b)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+    "quote": "The Alabama multistate registered nurse license shall be valid for two years",
+    "loaded": true,
+    "verified": true,
+    "note": "Confirmed on the Board of Nursing's own compact page (see np.rn.nlcBoardPage).",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalWindow",
+    "value": "Sept 1 to Dec 31 of expiration year",
+    "cite": "Ala. Admin. Code r. 610-X-4-.08(3)(a)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+    "quote": "the renewal period shall be from 8:00 a.m. on September 1 to 4:30 p.m. on December 31 of the year the license expires.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 24,
+    "cite": "Ala. Admin. Code r. 610-X-4-.08(3)(c)3.(ii)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+    "quote": "A licensed nurse shall earn in each earning period not less than 24 contact hours of Board-approved or Board-recognized continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.firstRenewal",
+    "value": "4 hours Board-provided CE, one-time",
+    "cite": "Ala. Admin. Code r. 610-X-4-.08(3)(c)3.(i)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+    "quote": "for the first license renewal, earn four contact hours of Board-provided continuing education related to statutory and administrative frameworks for nursing regulation",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.title",
+    "value": "CRNP certificate of qualification",
+    "cite": "Ala. Admin. Code r. 610-X-9-.16(1)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+    "quote": "The Board of Nursing may grant a certificate of qualification for advanced practice nursing as a certified registered nurse practitioner",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "Ala. Admin. Code r. 610-X-9-.14(1)(d)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+    "quote": "Current certification as a certified registered nurse practitioner granted by a national certifying agency recognized by the Board of Nursing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.expiresWithNationalCertification",
+    "value": true,
+    "cite": "Ala. Admin. Code r. 610-X-9-.16(4)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+    "quote": "The advanced practice approval shall expire prior to the RN license if the nurse practitioner's national certification expires during the license period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": 6,
+    "cite": "Ala. Admin. Code r. 610-X-9-.16(5)(d); r. 610-X-4-.08(7)(a)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+    "quote": "Six contact hours of pharmacology content specific to prescriptive practice in the approved area for collaborative practice.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.collaborativePracticeCe",
+    "value": "one-time, within 48 months before or 12 months after commencement",
+    "cite": "Ala. Admin. Code r. 610-X-9-.14(3)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+    "quote": "continuing education prescribed by the Board of Nursing regarding the rules and statutes governing collaborative practice in Alabama, not more than forty-eight (48) months",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementRenewal",
+    "value": "approval continued at renewal on verification of continued collaboration",
+    "cite": "Ala. Admin. Code r. 610-X-9-.16(5)(b)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+    "quote": "Continued collaboration with the approved physician(s) or eligibility for continued exemption from collaboration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFiling",
+    "value": "physician files Commencement of Collaborative Practice form with BME",
+    "cite": "Ala. Admin. Code r. 610-X-5-.04(3)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-5",
+    "quote": "shall notify the State Board of Medical Examiners in writing of the date for commencement of the collaborative practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.physicianPresence",
+    "value": "10% of scheduled hours under 4,000 hours",
+    "cite": "Ala. Admin. Code r. 610-X-5-.09(5)(b)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-5",
+    "quote": "Be present for not less than ten percent (10%) of the CRNP’s scheduled hours in an approved practice site",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.qacscRenewalCe",
+    "value": "4 AMA PRA Category 1 credits every two years",
+    "cite": "Ala. Admin. Code r. 540-X-18-.05(2)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-18",
+    "quote": "As a requirement for renewing a QACSC, a CRNP or CNM shall obtain, every two years, four (4) AMA PRA Category 1 credits™ or equivalent",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.qacscInitial",
+    "value": "8 h + 4 h one-time; 12 months approved collaborative practice",
+    "cite": "Ala. Admin. Code r. 540-X-18-.03(2)-(3)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-18",
+    "quote": "a minimum of twelve (12) months of active clinical practice pursuant to one or more collaborative practice agreements approved by the Alabama Board of Nursing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.qacscRenewalDeadline",
+    "value": "annually by December 31; DEA and PDMP registration required",
+    "cite": "Ala. Admin. Code r. 540-X-18-.05(1),(3),(4)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/540-X-18",
+    "quote": "Renewal of a QACSC shall be annually on or before January 1 of each year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcBoardPage",
+    "value": "Alabama is a party state to the enhanced NLC since 2020-01-01",
+    "cite": "Alabama Board of Nursing, Nurse Licensure Compact page",
+    "url": "https://www.abn.alabama.gov/nurse-licensure-compact/",
+    "quote": "applicants who meet the requirements for multistate licensure (ABN Administrative Code § 610-X-4 Licensure) may apply for licensure under the Enhanced Nurse Licensure Compact (eNLC)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.multistateHolders",
+    "value": "NPs on another compact state's multistate RN licence still need Alabama approval, renewed Sept 1 to Dec 31 of odd years",
+    "cite": "Ala. Admin. Code r. 610-X-4-.08(7)",
+    "url": "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+    "quote": "Advanced practice nurses holding multistate RN licenses issued by party states shall renew approval to practice between September 1 and December 31 of odd-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.quarterlyMeetingsAndQa",
+    "value": "quarterly meetings after 4,000 hours; quarterly QA always; remote sites visited twice a year",
+    "cite": "Ala. Admin. Code r. 610-X-5-.09(5)(d)-(f)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-5",
+    "quote": "Meet no less than quarterly with the CRNP who has more than two (2) years (4,000 hours) of collaborative practice experience.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.protocolOnFile",
+    "value": "standard protocol on file with both boards and at each site",
+    "cite": "Ala. Admin. Code r. 610-X-5-.09(8)(c)",
+    "url": "https://admincode.legislature.state.al.us/api/chapter/610-X-5",
+    "quote": "Be maintained at each practice site and be on file with the Board of Nursing and Board of Medical Examiners.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: the Alabama PA statute (Code of Ala. 1975, 34-24-290 et seq.) was not loaded; 'NCCPA not required for renewal' rests on rules 540-X-7-.07, .29 and the optional NCCPA question on the renewal form in the 540-X-7 appendix.",
+  "NP: 'restricted' practice authority is a classification label; the rules confirm a mandatory physician collaborative practice agreement. The criteria for exemption from collaboration (statute 34-21-80 et seq.; repealed rule 610-X-5-.07) were not located in current rules.",
+  "NP and PA: the one-time supervised/collaborative practice CE rules (540-X-7-.16(6), 610-X-9-.14(3)) state no hour count.",
+  "No additional topic mandates (opioid, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide, infection control, cultural competency, domestic violence) were found in 540-X-7, 540-X-12, 540-X-18, 610-X-4-.08, 610-X-5 or 610-X-9 as loaded; the federal one-time 8 hour MATE (DEA) training is federal and not in these rules."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "PA: added missed one-time mandate, BME-prescribed CE on supervised practice rules within 48 months before or 12 months after registration (540-X-7-.16(6)); no hour count in the rule.",
+   "PA: added QACSC prerequisite of 12 months registered practice after NCCPA certification (540-X-12-.03(4)) and a separate PDMP fact (540-X-12-.05(4)); the PDMP point was asserted in prose but had no fact.",
+   "PA: NCCPA-not-required conclusion strengthened: the PA renewal form in the 540-X-7 appendix asks NCCPA status as an optional yes/no question with a CME attestation of 50 credits over two calendar years; board page loaded and agrees on annual renewal and 50 per 2 years.",
+   "NP: qacscRenewalDeadline cite corrected from 540-X-18-.05(1),(4) to (1),(3),(4): PDMP registration is paragraph (3), DEA is (4).",
+   "NP: physicianPresence quote trimmed to 25 words or fewer (was 27).",
+   "NP: NLC membership now confirmed on abn.alabama.gov (was inferred); added that NPs holding another compact state's multistate RN licence still need Alabama CRNP approval renewed in odd years (610-X-4-.08(7)) and must show 6 pharmacology hours.",
+   "NP: added quarterly QA, quarterly meetings after 4,000 hours and twice-yearly remote site visits (610-X-5-.09(5)), and protocol filing with both boards (610-X-5-.09(8)(c)).",
+   "NP: noted that the collaboration exemption cross-reference in 610-X-9-.15 points to 610-X-5-.07, which was repealed 2026-01-10 (CRNP rules moved to 610-X-9 effective 2026-01-10, amended 2026-07-13)."
+  ],
+  "sourcesLoaded": [
+   "https://admincode.legislature.state.al.us/api/rule/540-X-7-.07",
+   "https://admincode.legislature.state.al.us/api/rule/540-X-7-.29",
+   "https://admincode.legislature.state.al.us/api/chapter/540-X-7",
+   "https://admincode.legislature.state.al.us/api/chapter/540-X-12",
+   "https://admincode.legislature.state.al.us/api/chapter/540-X-18",
+   "https://admincode.legislature.state.al.us/api/rule/610-X-4-.08",
+   "https://admincode.legislature.state.al.us/api/chapter/610-X-9",
+   "https://admincode.legislature.state.al.us/api/chapter/610-X-5",
+   "https://www.albme.gov/licensing/pa-aa/license-registration",
+   "https://www.abn.alabama.gov/nurse-licensure-compact/"
+  ]
+ }
+}

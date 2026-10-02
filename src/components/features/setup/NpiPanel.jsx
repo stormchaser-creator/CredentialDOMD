@@ -5,7 +5,8 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../../constants/states";
 import { generateId } from "../../../utils/helpers";
 import { lookupNPI, findProvidersByName, extractLicensesFromNPI } from "../../../utils/npiLookup";
-import { splitName, mergeNpiLicenses, additionalStatesAfterImport, degreeFromCredential, licenseKey } from "../../../utils/npiImport";
+import { splitName, mergeNpiLicenses, additionalStatesAfterImport } from "../../../utils/npiImport";
+import { degreeAfterNppes } from "../../../constants/professions";
 
 /**
  * The registry lookup and import, in one place.
@@ -43,10 +44,12 @@ export default function NpiPanel({ onImported, dense = false }) {
   const npiLicenses = useMemo(() => (result ? extractLicensesFromNPI(result) : []), [result]);
   // What an import would actually add. Same key the merge uses, so a
   // hand-typed "35.123456" is never offered again as the registry's "35123456".
-  const fresh = useMemo(() => {
-    const have = new Set((data.licenses || []).map((l) => licenseKey(l?.state, l?.licenseNumber)));
-    return npiLicenses.filter((nl) => !have.has(licenseKey(nl.state, nl.licenseNumber)));
-  }, [npiLicenses, data.licenses]);
+  // An NP's RN and APRN rows with one number are two licences, so the count
+  // is the merge's own answer for this profession.
+  const fresh = useMemo(
+    () => mergeNpiLicenses(data.licenses, npiLicenses, { degreeType: s.degreeType, makeId: () => "" }),
+    [npiLicenses, data.licenses, s.degreeType],
+  );
 
   const lookupByNumber = async (clean) => {
     const r = await lookupNPI(clean);
@@ -54,8 +57,10 @@ export default function NpiPanel({ onImported, dense = false }) {
     setNpi(clean);
     setResult(r);
     const patch = { npi: clean };
-    const deg = degreeFromCredential(r.credential);
-    if (deg && !s.degreeType) patch.degreeType = deg;
+    // Fills a blank profession only: MD or DO from the credential as before,
+    // PA or NP from the NUCC taxonomy or the credential (professions.js).
+    const { degree } = degreeAfterNppes(s.degreeType, { credential: r.credential, taxonomies: r.allTaxonomies }, { site: "setup" });
+    if (degree) patch.degreeType = degree;
     updateSettings(patch);
   };
 

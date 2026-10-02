@@ -1,0 +1,38 @@
+{
+ "state": "ND",
+ "facts": [
+  {
+   "field": "aprn.certificationOrCompetence",
+   "profession": "np",
+   "value": "Renewal: current national certification or a board recognized competence maintenance program",
+   "cite": "NDAC 54-05-03.1-06(3)",
+   "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+   "quote": "Submit evidence of current national certification ... or participate in a competence maintenance program recognized by the board",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "aprn.prescriberCertification",
+   "profession": "np",
+   "value": "Prescriptive authority renewal requires current national certification",
+   "cite": "NDAC 54-05-03.1-11(2)",
+   "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+   "quote": "Submit verification of current certification by a national nursing certification body in the specific area of nursing practice",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "aprn.licenseCycle",
+   "profession": "np",
+   "value": "APRN license valid for the same period as the RN license",
+   "cite": "NDAC 54-05-03.1-06",
+   "url": "https://www.ndlegis.gov/information/acdata/pdf/54-05-03.1.pdf",
+   "quote": "The advanced practice registered nurse license is valid for the same period of time as the applicant's registered nurse license",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

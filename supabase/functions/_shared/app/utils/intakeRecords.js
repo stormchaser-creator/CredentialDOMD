@@ -38,7 +38,7 @@
 // Pure: plain node tests import it, and scripts/sync-shared-app-modules.mjs
 // copies it for the edge functions.
 
-import { INSURANCE_TYPES, PRIVILEGE_TYPES, LICENSE_TYPES_MD, LICENSE_TYPES_DO, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../constants/credentialTypes.js";
+import { INSURANCE_TYPES, PRIVILEGE_TYPES, ALL_LICENSE_TYPES, ALL_CME_CATEGORIES } from "../constants/credentialTypes.js";
 import { STATE_NAMES } from "../constants/states.js";
 import { normalizeLifecycle } from "./lifecycle.js";
 
@@ -80,8 +80,10 @@ const uniq = (xs) => [...new Set(xs)];
 export const SECTION_TYPES = Object.freeze({
   insurance: Object.freeze([...INSURANCE_TYPES]),
   privileges: Object.freeze([...PRIVILEGE_TYPES]),
-  licenses: Object.freeze(uniq([...LICENSE_TYPES_MD, ...LICENSE_TYPES_DO])),
-  cme: Object.freeze(uniq([...CME_CATEGORIES_MD, ...CME_CATEGORIES_DO])),
+  // Intake does not know the member's profession, so it accepts every
+  // profession's vocabulary (MD, DO, PA and NP).
+  licenses: Object.freeze(uniq([...ALL_LICENSE_TYPES])),
+  cme: Object.freeze(uniq([...ALL_CME_CATEGORIES])),
 });
 
 // Sections with a status source column (migration 20260925030000).

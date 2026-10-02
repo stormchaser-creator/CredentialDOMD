@@ -3,7 +3,8 @@ import { BASE_KEYS, scopedKey, purgeForSignOut, localCopyCurrent, hydrateOffline
   localWriteGuard, storageRefusalKind, reportStorageRefusal, offlineCopyUnread, getActiveUserId, offlineWriteStamp,
   deviceOnlySectionsOf, sameDeviceOnlySections, rebaseDeviceOnlySections, holdDeviceOnlyChanges, heldDeviceOnlyChanges,
   withHeldDeviceOnlyChanges, releaseHeldDeviceOnlyChanges, setBeforeDeviceOnlyTrim, writeOwnLocalCopy, rewriteLocalCopy,
-  saveStopGuard, holdsDeviceOnlyChangesHere, takeReleasedHoldHere } from "./storageScope";
+  saveStopGuard, holdsDeviceOnlyChangesHere, takeReleasedHoldHere, spillOfflineText, markOfflineCopyBehind,
+  clearOfflineCopyBehind, offlineCopyBehind } from "./storageScope";
 import { loadDeviceKeys, EXPORT_REDACT_FIELDS, sanitizeCachedBlob, stripDeviceFields } from "../lib/supabase";
 
 const ENV_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
@@ -430,7 +431,7 @@ const saveQueue = new Map();       // key -> the last save begun, settled
 // read looked like the copy the text was based on, so the older text was
 // written over it.
 function saveText(key, userId, payload, guard, how = {}) {
-  const seq = beginSave(key, userId, payload);
+  const seq = beginSave(key, userId, payload, guard, how);
   const stopSnapshot = saveStopGuard(userId);
   const readFrom = how.readToken ? readCopies.get(how.readToken) || null : null;
   const before = saveQueue.get(key);
@@ -441,10 +442,14 @@ function saveText(key, userId, payload, guard, how = {}) {
   settled.then(() => { if (saveQueue.get(key) === settled) saveQueue.delete(key); });
   return run;
 }
-function beginSave(key, userId, payload) {
+function beginSave(key, userId, payload, guard = null, how = {}) {
   const seq = ++saveCounter;
   latestSave.set(key, seq);
-  inFlightSaves.set(key, { payload, seq, userId });
+  inFlightSaves.set(key, { payload, seq, userId, guard, how });
+  // Until it lands, the stored copy may lack these records (a page torn
+  // down now never lands it). Not for the stored copy rewritten (readToken):
+  // that is no change made on this device.
+  if (!how.readToken) markOfflineCopyBehind(userId);
   return seq;
 }
 async function saveTextNow(key, userId, payload, guard, how, seq, stopSnapshot, readFrom = null) {
@@ -485,7 +490,8 @@ async function saveTextNow(key, userId, payload, guard, how, seq, stopSnapshot, 
     // changed, so the save is made again under a fresh guard. Never after a
     // purge of this account, here or in another tab.
     if (!how.again && latestSave.get(key) === seq && stopSnapshot.otherAccountOnly()) {
-      return saveTextNow(key, userId, payload, localWriteGuard(userId), { ...how, again: true }, beginSave(key, userId, payload), saveStopGuard(userId), readFrom);
+      const again = localWriteGuard(userId);
+      return saveTextNow(key, userId, payload, again, { ...how, again: true }, beginSave(key, userId, payload, again, how), saveStopGuard(userId), readFrom);
     }
     if (latestSave.get(key) === seq) refusedSaves.delete(key);
     return false;
@@ -520,6 +526,11 @@ async function saveTextNow(key, userId, payload, guard, how, seq, stopSnapshot, 
     const divergent = fromStored ? (prior ? prior.divergent || !sameDeviceOnlySections(final, prior.base) : false) : final !== mine;
     knownCopies.set(key, { stamp: result.stamp ?? null, base, divergent });
     if (releaseHeldDeviceOnlyChanges(userId, final)) setDeviceOnlyUnsaved(userId, null);
+    // The latest records handed over are stored, and no change waits behind
+    // them (setCacheWritePending): the copy is current.
+    if (latestSave.get(key) === seq && !fromStored && !cacheWritesPending.has(userId)) {
+      clearOfflineCopyBehind(userId, { before: Number.isFinite(how.loadBegan) ? how.loadBegan : null });
+    }
   }
   if (latestSave.get(key) === seq) {
     const stale = !saved && kind && !storedCopyIs(key, json) ? kind : null;
@@ -540,8 +551,58 @@ async function saveTextNow(key, userId, payload, guard, how, seq, stopSnapshot, 
 }
 
 // Saves of the file begun and not finished, per key: what a session-end
-// trim holds aside before it cancels them (setBeforeDeviceOnlyTrim).
+// trim holds aside before it cancels them (setBeforeDeviceOnlyTrim), and
+// what spillOfflineSave puts in localStorage when the page is left.
+// { payload, seq, userId, guard, how, spilled }.
 const inFlightSaves = new Map();
+
+// Accounts with a change on screen that is not handed to saveData yet
+// (AppContext's cache write, waiting for a burst of changes to end): while
+// one waits, a save landing does not make the stored copy current.
+const cacheWritesPending = new Set();
+/**
+ * `pending`: a change of `userId`'s records is waiting to be saved (true), or
+ * no longer waits (false). `current` (with false): the records on screen are
+ * the ones last handed to saveData, so once no save of them is under way or
+ * refused the stored copy holds them.
+ */
+export function setCacheWritePending(userId, pending, { current = false } = {}) {
+  if (!userId) return;
+  if (pending) { cacheWritesPending.add(userId); markOfflineCopyBehind(userId); return; }
+  cacheWritesPending.delete(userId);
+  const key = scopedKey(BASE_KEYS.data, userId);
+  if (current && key && !inFlightSaves.has(key) && !refusedSaves.has(key)) clearOfflineCopyBehind(userId);
+}
+
+/**
+ * The page is being left (pagehide, hidden, beforeunload, a reload the app
+ * asks for): the save of `userId`'s offline file still under way is put into
+ * localStorage now, synchronously (storageScope.js spillOfflineText), since
+ * the IndexedDB write will not land once the page is torn down. Only the
+ * latest save, never the stored copy rewritten, and only as the records in
+ * memory are based on the stored copy (no other writer since, nothing it
+ * holds that they lack). Returns "none" (no save under way), "spilled", or
+ * "refused" (the copy stays marked behind, offlineCopyBehind).
+ */
+export function spillOfflineSave(userId) {
+  const key = scopedKey(BASE_KEYS.data, userId);
+  const pending = key ? inFlightSaves.get(key) : null;
+  if (!pending || pending.userId !== userId || latestSave.get(key) !== pending.seq) return "none";
+  if (pending.spilled) return "spilled";
+  if (pending.how?.readToken || !localCopyCurrent(userId)) return "refused";
+  const prior = knownCopies.get(key) || null;
+  if (!prior || prior.divergent) return "refused";
+  const result = spillOfflineText(key, pending.payload.json, pending.guard, { knownStamp: prior.stamp ?? null });
+  if (!result.saved) return "refused";
+  pending.spilled = true;
+  storedText.set(key, { text: pending.payload.json, current: localWriteGuard(userId, { adopted: false }) });
+  knownCopies.set(key, { stamp: result.stamp ?? null, base: pending.payload.mine, divergent: false });
+  if (!cacheWritesPending.has(userId)) clearOfflineCopyBehind(userId);
+  return "spilled";
+}
+
+/** May `userId`'s stored offline file lack a change made on this device (a save that never landed)? */
+export function offlineCopyMayBeBehind(userId) { return offlineCopyBehind(userId); }
 function holdUnsavedDeviceOnly(userId, prior, mine) {
   if (adoptReleasedHold(userId)) prior = knownCopies.get(scopedKey(BASE_KEYS.data, userId)) || prior;
   if (!prior || !mine) return;
@@ -624,6 +685,7 @@ export async function clearLocalData(userId) {
   await purgeForSignOut(userId);
   const key = scopedKey(BASE_KEYS.data, userId);
   if (key) { storedText.delete(key); latestSave.delete(key); refusedSaves.delete(key); knownCopies.delete(key); inFlightSaves.delete(key); }
+  cacheWritesPending.delete(userId);
   setDeviceOnlyUnsaved(userId, null);
   setCacheStale(null);
 }

@@ -1,0 +1,27 @@
+{
+ "state": "KY",
+ "facts": [
+  {
+   "field": "pa.ce.dementia.deadline",
+   "profession": "pa",
+   "value": "Within the first two years of initial licensure or before the end of the first renewal cycle after the regulation",
+   "cite": "201 KAR 9:360 Section 4(1)",
+   "url": "https://apps.legislature.ky.gov/law/kar/titles/201/009/360/",
+   "quote": "within the first two (2) years of initial licensure or prior to the expiration of first renewal cycle after the promulgation of this administrative regulation",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.board.page",
+   "profession": "np",
+   "value": "Kentucky Board of Nursing home page",
+   "cite": "Kentucky Board of Nursing",
+   "url": "https://kbn.ky.gov/Pages/index.aspx",
+   "quote": "Board of Nursing",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

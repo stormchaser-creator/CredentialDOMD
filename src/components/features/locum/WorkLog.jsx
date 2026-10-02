@@ -48,7 +48,7 @@ import {
 } from "../../../utils/billing";
 import { hasTimedPeriods, isTimedPeriod, periodHasCallDay, clockLabel, contractZone } from "../../../utils/coverageBlocks";
 import { scheduledContracts, readContractPick, contractPickValue, pickHolds, callDaysKey } from "../../../utils/scheduledContract";
-import { physicianLabel } from "../../../utils/invoiceArgs";
+import { invoiceSenderFields } from "../../../utils/invoiceArgs";
 import InvoiceEmailModal from "./InvoiceEmailModal";
 import InvoiceEmailIt from "../../shared/InvoiceEmailIt";
 import useOnline from "../../../hooks/useOnline";
@@ -1301,7 +1301,6 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       ? unbilled.filter(e => daySet.has(callDayOf(e)) && !waitsForContainer(e, daySet))
       : unbilled;
     const s = data.settings || {};
-    const physician = physicianLabel(s);
     const billing = computeBilling(contract, selEntries, true, contractEntries, data.invoices, daySet);
     if (!billing.lines.length) return null;
     // The invoiced period is the chosen days — including empty stipend days
@@ -1319,7 +1318,8 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     // The text invoice reads the same day blocks and day totals as the PDF,
     // Word and Excel files (utils/invoiceLayout.js).
     const textArgs = {
-      physician, npi: s.npi, email: s.email, phone: s.phone,
+      ...invoiceSenderFields(s),
+      npi: s.npi, email: s.email, phone: s.phone,
       facility: contract.facility, agency: contract.agency,
       periodStart: dates[0], periodEnd: dates[dates.length - 1], terms: termsText,
       lines: billing.lines, total: billing.total, dayStartHour: callDayStartHour(contract),
@@ -1746,7 +1746,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     const s = data.settings || {};
     return {
       number: preview.number,
-      physician: physicianLabel(s),
+      ...invoiceSenderFields(s),
       npi: s.npi, email: s.email, phone: s.phone,
       facility: contract?.facility, agency: contract?.agency,
       location: contract?.location, billTo: contract?.billTo,

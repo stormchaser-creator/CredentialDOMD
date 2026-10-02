@@ -1199,7 +1199,7 @@ async function storeAsDocuments(profile: MatchedProfile, files: Downloaded[], do
 
 /** What the scanner is told about this physician, and whether it may run on the shared key. */
 interface ScanContext {
-  degree: string;           // "DO" | "MD" | "" as the app passes it
+  degree: string;           // "MD" | "DO" | "PA" | "NP" | "" as the app passes it
   categoryNames: string[];  // live custom categories, so a second badge files where the first went
   key: string;              // the shared Gemini key, or "" when it may not be used
   why: string;              // why the key is "" (for the ledger), else ""
@@ -1225,7 +1225,9 @@ async function scanContext(profile: MatchedProfile): Promise<ScanContext> {
     db.from("app_secrets").select("name, value").in("name", [ANTHROPIC_INTAKE_SECRET_NAME, ANTHROPIC_SECRET_NAME]),
   ]);
   const p = (prof.data ?? {}) as { degree_type?: string | null; access_status?: string | null; name?: string | null };
-  const degree = ["DO", "MD"].includes(String(p.degree_type ?? "")) ? String(p.degree_type) : "";
+  // Any profession the app models; anything else is blank, and the scanner
+  // then offers every profession's types (scannerCore.js).
+  const degree = ["DO", "MD", "PA", "NP"].includes(String(p.degree_type ?? "")) ? String(p.degree_type) : "";
   const categoryNames = ((cats.data ?? []) as { name: string | null; archived_at: string | null }[])
     .filter((c) => !c.archived_at && c.name).map((c) => String(c.name));
   const isAdmin = Boolean(admin.data);

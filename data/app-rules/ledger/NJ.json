@@ -1,0 +1,524 @@
+{
+ "state": "NJ",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "New Jersey State Board of Medical Examiners, Physician Assistant Advisory Committee",
+   "url": "https://www.njconsumeraffairs.gov/pa"
+  },
+  "licence": {
+   "title": "Physician Assistant (licence)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Biennial; licence runs two years from last expiration. Board site blocked; cycle start of September 1 (per N.J.A.C. 13:35-2B.8(b)) implies expiry August 31 of odd years, not confirmed on a board page"
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "categoryRules": "50 Category I credits approved by AMA, AAPA, AAFP, AOA or ACCME; 15 credits may carry over if earned in last 6 months of prior cycle",
+   "acceptsNccpaCertificationInLieu": null,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Prescription opioid drugs (responsible prescribing, alternatives, abuse/diversion)",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all PA licensees (counts within the 50)"
+    },
+    {
+     "topic": "Explicit and implicit bias in perinatal care",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "licensees who provide perinatal treatment and care to pregnant persons; rule applies from the first biennial renewal after May 5, 2026 (the 2027 renewal), then every biennial renewal per P.L.2021, c.79, s.3 (counts within the 50)"
+    }
+   ],
+   "controlledSubstanceCe": "1 opioid credit per biennial cycle within the 50 (applies to all PA licensees per rule text)"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Written delegation agreement with each supervising physician, signed and dated annually, kept at the practice site, provided to and kept on file by the PA Advisory Committee; supervisory ratio 4 PAs per physician at any one time (Board may alter on application)",
+   "notes": "Practice only under physician supervision (N.J.A.C. 13:35-2B.10). Initial licensure requires passing NCCPA exam; renewal rule does not require current NCCPA certification."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "No separate prescriber CE beyond the 1 opioid credit in the 50; CDS prescribing must be delegated by supervising physician"
+  },
+  "facts": [
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 50,
+    "cite": "N.J.A.C. 13:35-2B.8(a)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-8",
+    "quote": "a minimum of 50 continuing education credit hours in category I courses approved by the American Medical Association, the American Academy of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.opioid",
+    "value": "1 of the 50 credits, every biennial cycle",
+    "cite": "N.J.A.C. 13:35-2B.8(b); P.L.2017, c.28",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-8",
+    "quote": "one of the 50 continuing education credits ... shall ... be in programs or topics concerning prescription opioid drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.perinatalBias",
+    "value": "1 of the 50 credits for perinatal care providers, from first renewal after May 5, 2026",
+    "cite": "N.J.A.C. 13:35-2B.8(c); P.L.2021, c.79",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-8",
+    "quote": "a licensee who provides perinatal treatment and care to pregnant persons shall ... complete one of the 50 continuing education credit hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.carryover",
+    "value": "15 credits if earned in last 6 months",
+    "cite": "N.J.A.C. 13:35-2B.8(f)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-8",
+    "quote": "Fifteen credits may be carried over into a succeeding biennial period only if earned during the last six months of the preceding biennial period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "N.J.A.C. 13:35-2B.14(b)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-14",
+    "quote": "A licensee shall renew his or her license for a period of two years from the last expiration date.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.cycleStart",
+    "value": "Biennial renewal periods begin September 1 (odd years)",
+    "cite": "N.J.A.C. 13:35-2B.8(b)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-8",
+    "quote": "Commencing with the biennial renewal period beginning on September 1, 2017",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.nccpa.initialExam",
+    "value": "NCCPA exam required for initial licensure only",
+    "cite": "N.J.A.C. 13:35-2B.5(a)4",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-5",
+    "quote": "Has passed the examination administered by the National Commission on Certification of Physician Assistants (NCCPA), or its successor.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "supervision",
+    "cite": "N.J.A.C. 13:35-2B.10(a)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-10",
+    "quote": "A physician assistant shall engage in practice only under the supervision of a physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementRenewal",
+    "value": "Delegation agreement signed and dated annually",
+    "cite": "N.J.A.C. 13:35-2B.10(f)3ii",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-10",
+    "quote": "Be signed and dated annually by the physician and the physician assistant and updated as necessary",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFiling",
+    "value": "Kept at practice site and provided to the PA Advisory Committee",
+    "cite": "N.J.A.C. 13:35-2B.10(f)3iii",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-10",
+    "quote": "Be kept on file at the practice site, be provided to the Physician Assistant Advisory Committee, and be kept on file by the Committee",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.cdsRegistration",
+    "value": "DEA plus State CDS registration",
+    "cite": "N.J.A.C. 13:35-2B.12(c)2",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-12",
+    "quote": "obtained authorization to order or prescribe controlled dangerous substances from the Federal Drug Enforcement Administration and any other appropriate State and Federal agencies",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCdsRenewal",
+    "value": "State CDS registration renewed every year",
+    "cite": "N.J.A.C. 13:45H-1.2(c)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-45H-1-2",
+    "quote": "Every person who dispenses (including prescribing, administering, compounding, or delivering) ... shall obtain a renewal of the registration every year thereafter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.perinatalBias.statute",
+    "value": "1 credit of explicit and implicit bias CME as a condition of each biennial renewal for PAs who provide perinatal care",
+    "cite": "P.L.2021, c.79, s.3",
+    "url": "https://pub.njleg.gov/Bills/2020/PL21/79_.HTM",
+    "quote": "each person licensed as a physician assistant who provides perinatal treatment and care to pregnant persons, as a condition of biennial renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": false,
+    "cite": "N.J.S.A. 45:9-27.13(b), as amended by P.L.2015, c.224, s.2",
+    "url": "https://pub.njleg.gov/bills/2014/PL15/224_.PDF",
+    "quote": "Present satisfactory evidence that any continuing education requirements have been completed as required by P.L.1991, c.378",
+    "note": "Renewal conditions are a sworn statement and CE only; NCCPA exam appears only among initial licence requirements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.ratio",
+    "value": "4 PAs per supervising physician at any one time",
+    "cite": "N.J.A.C. 13:35-2B.10(c)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-2B-10",
+    "quote": "The supervisory ratio shall be no more than four physician assistants to one physician at any one time.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.paCompactMember",
+    "value": "NJ enacted the PA Licensure Compact (P.L.2025, c.198, A4328), approved January 9, 2026, effective immediately; compact privileges not yet confirmed as being issued",
+    "cite": "P.L.2025, c.198 (C.45:9-27.29)",
+    "url": "https://pub.njleg.gov/Bills/2024/PL25/198_.HTM",
+    "quote": "The State of New Jersey enacts and enters into the PA licensure compact with all other jurisdictions that legally join the compact",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.emergencyWaiverEnded",
+    "value": "Temporary waiver of PA delegation agreement and supervision rules ran February 16, 2026 to April 2, 2026 only; supervision rules apply again",
+    "cite": "Division of Consumer Affairs Administrative Order 2026-01 (EO 13)",
+    "url": "https://www.njconsumeraffairs.gov/Documents/A0_2026-01.pdf",
+    "quote": "from February 16, 2026 to April 2, 2026, for the limited purposes of waiving statutory provisions",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "New Jersey Board of Nursing",
+   "url": "https://www.njconsumeraffairs.gov/nur"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 30,
+   "nlcCompactMember": true,
+   "renewalDeadline": "Biennial; cycle begins June 1 of even years (so expiry May 31 of even years, inferred; board site blocked)",
+   "topicMandates": [
+    {
+     "topic": "Prescription opioid drugs",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all RNs/LPNs (within the 30)"
+    },
+    {
+     "topic": "Explicit and implicit bias in perinatal care",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "RNs (including APNs) who provide perinatal treatment and care to pregnant persons; required by statute P.L.2021, c.79, s.5 since November 1, 2021; N.J.A.C. 13:37-5.3 has not been amended to list it"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "APN (Advanced Practice Nurse) certification",
+   "separateLicenceOrCertificate": "certificate",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": "30 RN hours plus the national certifier's CE requirement",
+   "pharmacologyHoursPerCycle": "10 contact hours each biennial period for APNs practising without a joint protocol (P.L.2026, c.6); for joint-protocol APNs the statute requires 6 CDS pharmacology contact hours to prescribe, cadence not stated",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "End-of-life care",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all APNs (within required CE)"
+    },
+    {
+     "topic": "Pharmacology related to controlled substances incl. opioids",
+     "hours": 6,
+     "period": "one-time",
+     "appliesTo": "initial APN certification (N.J.A.C. 13:37-7.2(c))"
+    },
+    {
+     "topic": "Pharmacology related to controlled substances, addiction prevention and opioid issues",
+     "hours": 6,
+     "period": "cadence not stated",
+     "appliesTo": "APNs prescribing under joint protocols; the 6 hours are in addition to the pharmacology required for initial certification and recertification under N.J.A.C. 13:37-7.2; statute gives no repeat cadence and Board of Nursing implementing rules were not found"
+    },
+    {
+     "topic": "Pharmacology related to controlled substances (independent practice)",
+     "hours": 14,
+     "period": "cadence not stated (prerequisite)",
+     "appliesTo": "APNs ordering medications without a joint protocol; 8 of the 14 are in addition to the initial certification CDS pharmacology hours; statute gives no repeat cadence"
+    },
+    {
+     "topic": "Pharmacology (independent practice)",
+     "hours": 10,
+     "period": "every cycle",
+     "appliesTo": "APNs practising without a joint protocol"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": "6 CDS pharmacology contact hours (joint protocol); 14 one-time plus 10 per biennium (no joint protocol)",
+   "controlledSubstanceCe": "1 opioid hour in RN CE every cycle; CDS pharmacology as above",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "reduced",
+   "agreementType": "collaboration (joint protocols with a collaborating physician); exempt for qualifying APNs",
+   "transitionToPracticeHours": 5000,
+   "agreementFilingAndRenewal": "Joint protocols reviewed, updated and signed at least annually by APN and collaborating physician. Exemption (no joint protocol) since P.L.2026, c.6 (approved March 30, 2026) for APNs with more than 5,000 hours in population focus of family/individual across lifespan, adult gerontology, pediatrics, women's health or behavioral health, providing primary or behavioral health care, not general obstetrics or elective aesthetic services; malpractice coverage required and Board of Nursing notified",
+   "notes": "Reduced practice by default (joint protocols). Since P.L.2026, c.6, APNs who meet the 5,000-hour and population-focus conditions practise and prescribe without a joint protocol, limited to primary or behavioral health care."
+  },
+  "facts": [
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "N.J.A.C. 13:37-5.3(b)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-5-3",
+    "quote": "a minimum of 30 hours of continuing education that shall ... include at least one hour in topics concerning prescription opioid drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "N.J.A.C. 13:37-5.2(a)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-5-2",
+    "quote": "Licenses shall be renewed biennially on a form provided by the Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.cycleStart",
+    "value": "Biennial renewal periods begin June 1 (even years)",
+    "cite": "N.J.A.C. 13:37-5.3(b)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-5-3",
+    "quote": "commencing with the biennial renewal period beginning on June 1, 2020",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "P.L.2019, c.172 (C.45:11A-9)",
+    "url": "https://pub.njleg.gov/Bills/2018/PL19/172_.HTM",
+    "quote": "The State of New Jersey enacts and enters into the Nurse Licensure Compact with all other jurisdictions that legally join in the compact",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "N.J.A.C. 13:37-7.7(a)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-7-7",
+    "quote": "issued for a two-year certification period that coincides with the advanced practice nurse's registered professional nurse licensure renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "N.J.A.C. 13:37-7.7(a)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-7-7",
+    "quote": "proof that the applicant is currently certified by a national certifying agency that is accredited by the American Board of Nursing Specialties",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationGrandfather",
+    "value": "APNs certified before June 16, 2008 exempt",
+    "cite": "N.J.A.C. 13:37-7.7(a)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-7-7",
+    "quote": "certified prior to June 16, 2008, shall not have to show that he or she is certified by a national certifying agency",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ce",
+    "value": "RN CE plus national certifier CE",
+    "cite": "N.J.A.C. 13:37-7.8(a)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-7-8",
+    "quote": "continuing education required for the renewal of a registered professional nurse license ... and the continuing education requirements of the national certifying agency",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.endOfLife",
+    "value": "2 credits every cycle",
+    "cite": "N.J.A.C. 13:37-7.8(b); N.J.S.A. 45:11-47.1",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-7-8",
+    "quote": "two credits of the continuing education completed pursuant to (a) above shall be in programs or topics related to end-of-life care.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.initialCdsPharmacology",
+    "value": "6 contact hours, initial certification",
+    "cite": "N.J.A.C. 13:37-7.2(c)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-7-2",
+    "quote": "an applicant shall have completed six contact hours in pharmacology related to controlled dangerous substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.jointProtocolAnnual",
+    "value": "Joint protocols signed at least annually",
+    "cite": "N.J.S.A. 45:11-49(b)(6) and (c)(7) as amended by P.L.2026, c.6, s.3",
+    "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+    "quote": "the joint protocols developed by the collaborating physician and the advanced practice nurse are reviewed, updated, and signed at least annually by both parties",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.cdsPharmacology6",
+    "value": "6 contact hours CDS pharmacology to prescribe under joint protocols",
+    "cite": "N.J.S.A. 45:11-49(b)(7) and (c)(8) as amended by P.L.2026, c.6, s.3",
+    "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+    "quote": "the advanced practice nurse has completed six contact hours of continuing professional education in pharmacology related to controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": 5000,
+    "cite": "N.J.S.A. 45:11-49(h)(1)(a), P.L.2026, c.6",
+    "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+    "quote": "the advanced practice nurse has more than 5,000 hours of licensed, active, advanced nursing practice in a role with the applicable population focus",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.independentScope",
+    "value": "Primary or behavioral health care only",
+    "cite": "N.J.S.A. 45:11-49(h)(1)(b), P.L.2026, c.6",
+    "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+    "quote": "the advanced practice nurse is providing primary health care or behavioral health care",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.independent14",
+    "value": "14 contact hours CDS pharmacology to order medications without a joint protocol (8 in addition to initial certification hours); cadence not stated",
+    "cite": "N.J.S.A. 45:11-49(h)(2)(b), P.L.2026, c.6",
+    "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+    "quote": "shall have completed 14 contact hours of continuing professional education in pharmacology related to controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": 10,
+    "cite": "N.J.S.A. 45:11-49(h)(2)(c), P.L.2026, c.6",
+    "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+    "quote": "the advanced practice nurse shall have completed 10 contact hours of continuing professional education in pharmacology each biennial period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.lawDate",
+    "value": "P.L.2026, c.6 approved March 30, 2026, effective immediately (s.10)",
+    "cite": "P.L.2026, c.6, s.10",
+    "url": "https://pub.njleg.gov/Bills/2026/PL26/6_.HTM",
+    "quote": "This act shall take effect immediately",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": "State CDS registration, renewed yearly",
+    "cite": "N.J.A.C. 13:45H-1.2(c)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-45H-1-2",
+    "quote": "Every person who dispenses (including prescribing, administering, compounding, or delivering) ... shall obtain a renewal of the registration every year thereafter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.perinatalBias",
+    "value": "1 credit per biennial renewal for nurses who provide perinatal care",
+    "cite": "P.L.2021, c.79, s.5 (effective November 1, 2021)",
+    "url": "https://pub.njleg.gov/Bills/2020/PL21/79_.HTM",
+    "quote": "licensed as a professional nurse or a practical nurse who provides perinatal treatment and care to pregnant persons, as a condition of biennial license renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceCarryover",
+    "value": "Up to 15 extra hours carry into the next biennial period",
+    "cite": "N.J.A.C. 13:37-5.3(c)",
+    "url": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-37-5-3",
+    "quote": "may carry up to 15 of the additional hours into the succeeding biennial period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "All njconsumeraffairs.gov board pages (BME, PA Advisory Committee, Board of Nursing, Drug Control Unit) sit behind an Incapsula human check, which was not bypassed. Rule text comes from N.J.A.C. on Cornell LII (amendment notes current to 57 N.J.R. 923(a), effective 5/5/2025, for 13:35-2B.8). Statute text comes from pub.njleg.gov.",
+  "The PA licence expiry (August 31 of odd years) and the RN/APN expiry (May 31 of even years) are worked out from the cycle start dates in the rules. Neither date was read on a board page.",
+  "Whether NJ accepts current NCCPA certification in place of the 50 Category I credits: neither the rule nor the statute provides for it. Treat the 50 credits as required.",
+  "Cadence of the 6-hour (joint protocol) and 14-hour (no joint protocol) APN CDS pharmacology hours: P.L.2026, c.6 sets none. The Board of Nursing rules required by s.9 were not found, and LII's N.J.A.C. 13:37-7.9 still shows the pre-2026 joint-protocol text.",
+  "Perinatal bias CE for nurses is required by statute (P.L.2021, c.79, s.5), but N.J.A.C. 13:37-5.3 as published has not been amended to list it.",
+  "The PA Licensure Compact is enacted (P.L.2025, c.198). Whether compact privileges are being issued yet was not confirmed.",
+  "No board page confirmed when NJ began issuing multistate NLC licences. Only the enacting law, P.L.2019, c.172, was loaded.",
+  "Annual state CDS renewal rests on the N.J.A.C. 13:45H-1.2(c) rule text. The Drug Control Unit page is blocked.",
+  "Checked for and found no PA or nurse requirement in N.J.A.C. 13:35-2B or 13:37 for these topics: human trafficking, child abuse, HIV, Alzheimer, suicide prevention, infection control, cultural competency, domestic violence. The cultural competency CE law covers physicians and was not loaded for PAs."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "NJ PA: removed 'supervising physician change reported within 30 days' from agreementFilingAndRenewal; no 30-day notice appears in N.J.A.C. 13:35-2B.4, 2B.9 to 2B.16 as loaded.",
+   "NJ PA perinatal bias: confirmed 'every cycle' from the statute (P.L.2021, c.79, s.3 'as a condition of biennial renewal'); clarified that the rule's May 5, 2026 date is the start point, not a one-time window.",
+   "NJ PA: added PA Licensure Compact membership, confirmed in the enacted law P.L.2025, c.198 (approved January 9, 2026) on pub.njleg.gov; the researcher had this as unconfirmed.",
+   "NJ PA: added statute fact (N.J.S.A. 45:9-27.13(b)) confirming NCCPA certification is not a renewal condition; added 4:1 ratio fact; added note that the 2026 emergency waiver of PA supervision ended April 2, 2026.",
+   "NJ RN/APN: ADDED missed mandate: 1 credit of explicit and implicit bias training each biennial renewal for nurses who provide perinatal care (P.L.2021, c.79, s.5). The statute was loaded; the researcher looked only in N.J.A.C. 13:37-5.3.",
+   "NJ APN: changed the 6-hour joint-protocol CDS pharmacology and the 14-hour independent CDS pharmacology from 'one-time' to 'cadence not stated'. P.L.2026, c.6 sets no cadence, so calling them one-time was a guess.",
+   "NJ APN: fixed subsection cites in N.J.S.A. 45:11-49. The annual joint-protocol signature is (b)(6)/(c)(7), not (c)(7) alone. The 6 CDS hours are (b)(7)/(c)(8)."
+  ]
+ }
+}

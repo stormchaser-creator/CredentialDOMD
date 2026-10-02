@@ -1,0 +1,201 @@
+{
+  "state": "NY",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "New York State Education Department, Office of the Professions (State Board for Medicine)",
+      "url": "https://www.op.nysed.gov/professions/physician-assistants"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 3,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "unverified",
+      "reason": "Education Law 6541 ties renewal to CE the Commissioner of Health may establish; no loaded source states that none is set.",
+      "cycleYears": {
+        "value": 3,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Infection Control",
+        "hours": 0,
+        "label": "Infection control and barrier precautions coursework, every four years",
+        "period": {
+          "years": 4
+        },
+        "fact": "pa.ce.topicMandates.infectionControl"
+      },
+      {
+        "topic": "Pain Management",
+        "hours": 3,
+        "label": "Pain management, palliative care and addiction, 3 hours, by July 1, 2017 and once every three years after",
+        "period": {
+          "years": 3,
+          "anchor": "2017-07-01"
+        },
+        "periodReason": "Public Health Law 3309-a sets fixed due dates: July 1, 2017 and every three years after; the period running to the next due date is counted.",
+        "condition": {
+          "field": "Holds a DEA registration",
+          "question": "Do you hold a DEA registration?",
+          "description": "New York prescriber education for DEA registrants."
+        },
+        "facts": [
+          "pa.ce.topicMandates.prescriberEducation",
+          "pa.ce.prescriberEducation.dueDates"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A PA performs medical services only under the supervision of a physician; a physician supervises no more than six PAs in private practice at one time.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.ratio"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether the Commissioner of Health has set any CE for PA registration renewal (Education Law 6541)",
+      "The updated mandated reporter training due by November 17, 2026 for registered PAs (Social Services Law 413; the PA board page was not checked)",
+      "Whether PAs need a New York controlled substance registration beyond DEA"
+    ],
+    "dated": [
+      {
+        "date": "2026-11-17",
+        "item": "Updated mandated reporter training due (Social Services Law 413)"
+      }
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "New York State Education Department, Office of the Professions (State Board for Nursing)",
+      "url": "https://www.op.nysed.gov/professions/nurse-practitioners"
+    },
+    "rn": {
+      "nlc": {
+        "value": false,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "unverified",
+        "notes": [
+          {
+            "text": "Mandated reporters, including those already trained, complete the updated child abuse curriculum by November 17, 2026; anyone trained between 11/1/2022 and 8/31/2025 may take a 15 minute addendum.",
+            "facts": [
+              "np.rn.topicMandates.mandatedReporterUpdate",
+              "np.rn.topicMandates.mandatedReporterAddendum"
+            ]
+          },
+          {
+            "text": "RNs first licensed after June 18, 2020 attain a baccalaureate or higher degree in nursing within 10 years, with listed exemptions.",
+            "fact": "np.rn.bsnIn10"
+          }
+        ],
+        "cycleYears": {
+          "value": 3,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "topics": [
+        {
+          "topic": "Infection Control",
+          "hours": 0,
+          "label": "Infection control and barrier precautions coursework, every four years",
+          "period": {
+            "years": 4
+          },
+          "fact": "np.rn.topicMandates.infectionControl"
+        },
+        {
+          "topic": "Child Abuse Recognition",
+          "hours": 2,
+          "label": "Identification and reporting of child abuse and maltreatment, once",
+          "period": "lifetime",
+          "fact": "np.rn.topicMandates.childAbuse"
+        }
+      ],
+      "unverified": [
+        "Whether New York sets any general contact hours for RN renewal (none appear in the law or the board's pages)"
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 3,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "dated": [
+        {
+          "date": "2026-11-17",
+          "item": "Updated mandated reporter training due for RNs (NYSED)"
+        }
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 3,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "unverified",
+        "cycleYears": {
+          "value": 3,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "topics": [
+        {
+          "topic": "Pain Management",
+          "hours": 3,
+          "label": "Pain management, palliative care and addiction, 3 hours, by July 1, 2017 and once every three years after",
+          "period": {
+            "years": 3,
+            "anchor": "2017-07-01"
+          },
+          "periodReason": "Public Health Law 3309-a sets fixed due dates: July 1, 2017 and every three years after; the period running to the next due date is counted.",
+          "condition": {
+            "field": "Holds a DEA registration",
+            "question": "Do you hold a DEA registration?",
+            "description": "New York prescriber education for DEA registrants."
+          },
+          "facts": [
+            "np.prescribing.controlledSubstanceCe",
+            "np.prescribing.controlledSubstanceCe.dueDates"
+          ]
+        }
+      ],
+      "unverified": [
+        "Whether New York sets any CE hours or national certification for NP registration renewal (none appear in the law or the board's pages)"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "Until 3,600 hours of experience an NP practices under a written practice agreement and protocols with a collaborating physician, kept at the practice setting, with patient record review at least every three months. After 3,600 hours no collaboration is required until July 1, 2030, when an attestation form documents collaborative relationships.",
+        "facts": [
+          "np.practice.transitionToPracticeHours",
+          "np.practice.agreementFiling",
+          "np.practice.chartReview",
+          "np.practice.authority",
+          "np.practice.post2030"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether NPs need a New York controlled substance registration beyond DEA"
+    ]
+  }
+}

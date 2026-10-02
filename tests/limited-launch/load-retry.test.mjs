@@ -366,6 +366,23 @@ test('a denied profile row read is an answer and is not retried', async () => {
   assert.equal(f.restRequests.length, 1);
 });
 
+// Release goal3: a weak signal can let the identity check through and then
+// fail every try of the profile row read. No server answered about the
+// account, so it is marked transient too: AppContext then opens the device
+// copy read-only and retries on its own instead of a stop screen with Reload.
+test('a profile row read with no answer after every try is marked transient; a denial or a missing row never is', async () => {
+  for (const rows of [async () => Promise.reject(new TypeError('Load failed')), async () => Response.json({ message: 'Synthetic outage' }, { status: 503 })]) {
+    const f = loadFixture({ edge: async () => Response.json(receipt()), rows });
+    await assert.rejects(f.api.ensureProfile(OWNER, FAST), error => error.code === 'continuity_initialization_failed' && error.transient === true);
+    assert.equal(f.restRequests.length, 3, 'tried three times first');
+  }
+  const denied = loadFixture({ edge: async () => Response.json(receipt()),
+    rows: async () => Response.json({ code: '42501', message: 'Synthetic denial' }, { status: 403 }) });
+  await assert.rejects(denied.api.ensureProfile(OWNER, FAST), error => error.transient !== true);
+  const missing = loadFixture({ edge: async () => Response.json(receipt()), rows: async () => Response.json([]) });
+  await assert.rejects(missing.api.ensureProfile(OWNER, FAST), error => error.transient !== true);
+});
+
 test('(a) a record save in flight while Clerk replaces the session object (same session) is sent', async () => {
   const f = loadFixture({ edge: async () => Response.json(receipt()) });
   let release;

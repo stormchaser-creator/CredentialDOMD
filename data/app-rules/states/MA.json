@@ -1,0 +1,210 @@
+{
+  "state": "MA",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Massachusetts Board of Registration of Physician Assistants",
+      "url": "https://www.mass.gov/how-to/renew-your-physician-assistant-license"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "facts": [
+          "licence.renewalDeadline",
+          "ce.hoursPerCycle"
+        ],
+        "reason": "Licenses renew by March 1 of every odd-numbered year; the hours are per renewal period."
+      },
+      "total": {
+        "value": 100,
+        "fact": "ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 40,
+        "fact": "ce.categoryRules",
+        "label": "Category I (AMA or AAPA criteria)",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1"
+        ],
+        "unverifiedAccepted": [
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ]
+      },
+      "notes": [
+        {
+          "text": "Applying to participate in MassHealth (billing or ordering and referring) is a condition of renewing the license.",
+          "fact": "licence.massHealthEnrollment"
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Pharmacology",
+        "hours": 4,
+        "measure": "pharmacology",
+        "label": "Pharmacology or pharmacokinetics, each renewal period",
+        "fact": "ce.pharmacology"
+      },
+      {
+        "topic": "Domestic Violence",
+        "hours": 0,
+        "label": "Board approved domestic and sexual violence training, once",
+        "period": "lifetime",
+        "fact": "ce.topicMandates.domesticViolence"
+      },
+      {
+        "topic": "Geriatric Medicine",
+        "hours": 0,
+        "label": "One time course on the diagnosis, treatment and care of patients with cognitive impairments",
+        "period": "lifetime",
+        "fact": "ce.topicMandates.dementia",
+        "condition": {
+          "field": "Serves adult populations",
+          "question": "Do you serve adult patient populations?",
+          "description": "Massachusetts dementia training applies to clinicians who serve adults."
+        }
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "Whether the controlled substance prescriber training needs new hours at each renewal or a completed program once",
+        "condition": {
+          "field": "Prescribes controlled substances",
+          "question": "Do you prescribe controlled substances?",
+          "description": "Applies to clinicians who prescribe controlled substances."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "PAs practice under the supervision of a registered physician. Written prescribing guidelines are reviewed annually, dated and initialed by both, and need not be filed.",
+        "facts": [
+          "practice.agreementType",
+          "practice.guidelinesAnnualReview",
+          "practice.guidelinesFiling"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Massachusetts Board of Registration in Nursing",
+      "url": "https://www.mass.gov/how-to/renew-your-nursing-license"
+    },
+    "rn": {
+      "nlc": {
+        "value": false,
+        "fact": "rn.nlcCompact"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 15,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "No CE is required for the first renewal.",
+            "facts": [
+              "rn.firstRenewalCeExempt",
+              "rn.firstRenewalCeExemptRule"
+            ]
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Geriatric Medicine",
+          "hours": 0,
+          "label": "One time course on the diagnosis, treatment and care of patients with cognitive impairments",
+          "period": "lifetime",
+          "facts": [
+            "rn.topicMandates.alzheimers",
+            "rn.topicMandates.alzheimersScope"
+          ],
+          "condition": {
+            "field": "Serves adult populations",
+            "question": "Do you serve adult patient populations?",
+            "description": "Massachusetts dementia training applies to clinicians who serve adults."
+          }
+        }
+      ],
+      "unverified": [
+        "Whether nurses repeat the domestic and sexual violence training at each renewal"
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN authorization renews on current CNP certification from a recognized certifying organization; the contact hours are the RN license's.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalDeadline",
+          "reason": "The RN license and APRN authorization expire on the birthday in even-numbered years."
+        },
+        "notes": [
+          {
+            "text": "Applying to participate in MassHealth is a condition of renewing APRN authorization.",
+            "fact": "aprn.massHealthStatute"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": null,
+          "status": "unverified",
+          "unverifiedItem": "Whether the controlled substance prescriber training needs new hours at each renewal or a completed program once",
+          "condition": {
+            "field": "Prescribes controlled substances",
+            "question": "Do you prescribe controlled substances?",
+            "description": "Applies to clinicians who prescribe controlled substances."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "prescriptive practice guidelines",
+        "conditional": true,
+        "text": "For at least 2 years after certification a CNP prescribes under signed guidelines with a qualified healthcare professional, kept on file in the workplace. Prescriptive practice without supervision begins on submitting an attestation to the Board.",
+        "facts": [
+          "practice.transitionToPractice",
+          "practice.agreementFilingAndRenewal",
+          "practice.attestation"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

@@ -1,0 +1,170 @@
+{
+  "state": "NM",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "New Mexico Medical Board",
+      "url": "https://www.nmmb.state.nm.us/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Each renewal requires current NCCPA (or board approved) certification; the state sets no separate hour count.",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears",
+        "reason": "Each biennial renewal cycle."
+      }
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Pain Management",
+        "hours": 3,
+        "label": "Pain management and prescribing of controlled substances, each biennial cycle",
+        "fact": "pa.ce.topicMandates.painMgmt",
+        "condition": {
+          "field": "Holds DEA and state controlled substance registrations",
+          "question": "Do you hold both a DEA registration and a New Mexico controlled substances registration?",
+          "description": "New Mexico pain management CE for controlled substance registrants."
+        }
+      },
+      {
+        "topic": "Pain Management",
+        "hours": 5,
+        "label": "Pain management, during the first year of licensure (counts toward the other required hours)",
+        "period": "lifetime",
+        "periodReason": "Required once, during the first year of licensure.",
+        "fact": "pa.ce.topicMandates.painMgmtFirstYear",
+        "condition": {
+          "field": "In the first year of New Mexico licensure with DEA and NM controlled substance registrations",
+          "question": "Are you in your first year of New Mexico PA licensure and hold both DEA and New Mexico controlled substances registrations?",
+          "description": "New Mexico's five first-year pain management hours apply to new licensees with both registrations."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "conditional": true,
+        "text": "The supervising physician files notice of intent to supervise; the PA renews the registration of supervision with the license each biennium, and the board is told within 30 days when employment ends. A primary care PA with three years of supervised practice may practice collaboratively.",
+        "facts": [
+          "pa.practice.supervisionNotice",
+          "pa.practice.supervisionRegistrationRenewal",
+          "pa.practice.terminationNotice",
+          "pa.practice.collaborativeEligibility"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "New Mexico Board of Nursing",
+      "url": "https://www.bon.nm.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "covers": [
+            "total"
+          ],
+          "fact": "np.aprn.certificationMeetsCe",
+          "note": "A valid APRN national certification meets the RN and APRN continuing education requirement.",
+          "bodiesVerified": false
+        }
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "A valid APRN national certification meets the RN and APRN continuing education requirement.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pain Management",
+          "hours": 5,
+          "label": "Management of non-cancer pain, every renewal period",
+          "facts": [
+            "np.aprn.topicMandates.painMgmt",
+            "np.aprn.topicMandates.painMgmt.everyRenewal"
+          ],
+          "condition": {
+            "field": "Holds a DEA registration",
+            "question": "Did you hold a DEA registration at any time during this renewal period?",
+            "description": "New Mexico pain management CE for DEA registered NPs."
+          }
+        }
+      ]
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "independent practice",
+        "text": "A certified nurse practitioner makes independent decisions about the client's health care needs and in carrying out health care regimens.",
+        "facts": [
+          "np.practice.authority"
+        ]
+      }
+    }
+  }
+}

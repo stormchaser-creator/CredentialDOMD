@@ -243,6 +243,8 @@ function appFixture({ offline = false, profileId = 'profileA', withCache = false
     loadedDeletionRef: { current: { owner: ownerA, stamp: null, fence: null } }, WIPE_SEEN_KEY: 'synthetic-wipe', lsGet: () => null, sameDeletionStamp,
     localFence: () => null, adoptLocalFence() {}, localCopyCurrent: () => true,
     data: state, loaded: true, saveTimer: { current: null }, clearTimeout: id => clearedTimers.push(id), getActiveUserId: () => actor,
+    // The records last handed to saveData (none yet): the cache effect now reads it as it runs.
+    cachedRecordsRef: { current: null },
     useRef: value => ({ current: value }), useEffect: callback => callback(),
     setTimeout: callback => { timers.push(callback); return timers.length; },
     saveData: async (value, accountId) => cacheWrites.push({ value, accountId, actor }),

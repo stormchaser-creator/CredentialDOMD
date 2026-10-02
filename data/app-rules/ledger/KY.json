@@ -1,0 +1,571 @@
+{
+ "state": "KY",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Kentucky Board of Medical Licensure",
+   "url": "https://kbml.ky.gov/ah/Pages/Physician-Assistant.aspx"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) license",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "March 31 of the renewal year (window opens February 1); 30-day grace period with $50 penalty, closes April 30"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "100 hours per two-year cycle approved by the AMA, AOA, AAFP, AAPA or another board-approved entity. No Category 1 minimum is set in KRS 311.844 or 201 KAR 9:360.",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [
+    {
+     "topic": "Pediatric abusive head trauma (recognition and prevention)",
+     "hours": 1.5,
+     "period": "one-time",
+     "appliesTo": "All PAs, within the first two years of licensure or before the first renewal"
+    },
+    {
+     "topic": "Alzheimer's disease and other forms of dementia",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "All PAs, once: within the first two years of licensure or before the first renewal. KBML FAQ: existing licensees before the end of the first renewal cycle after July 1, 2025"
+    },
+    {
+     "topic": "Controlled substance diversion, pain management, addiction disorders, or KASPER use (any combination of two or more)",
+     "hours": 7.5,
+     "period": "every cycle",
+     "appliesTo": "PAs authorized to prescribe or administer Schedule II to V controlled substances"
+    },
+    {
+     "topic": "Recognition and prevention of pediatric ingestion or inhalation of controlled substances",
+     "hours": 1,
+     "period": "every 3 years",
+     "appliesTo": "All PAs under KRS 311.844(3)(b)3 (listed as its own item, not limited to prescribers; effective July 15, 2026). The KBML FAQ instead counts this hour inside the 7.5 controlled substance hours for prescribers."
+    },
+    {
+     "topic": "Addiction medicine",
+     "hours": 12,
+     "period": "every cycle",
+     "appliesTo": "PAs authorized to prescribe or administer buprenorphine mono-product or buprenorphine with naloxone (201 KAR 9:360 Section 2(3))"
+    }
+   ],
+   "controlledSubstanceCe": "7.5 hours per two-year cycle for controlled substance prescribers, completed within the prior two years before controlled substance authority is granted; 12 hours addiction medicine for buprenorphine prescribers; all count within the 100 hours"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Effective July 15, 2026 (2026 Ky. Acts ch. 94, SB 116): a PA may not provide any service until a supervision agreement on the board's standardized form is completed, signed by the supervising physician and PA, and in effect. A copy and every amendment must be furnished to and kept on file by the board and kept at the primary practice location. The supervising physician must be board approved; a physician may supervise no more than four PAs at a time. Licensed facilities may designate alternate supervising physicians. No fixed renewal interval for the agreement is set in the statute; the board is to set renewal procedures by regulation. KBML FAQ: since July 15, 2026 the board files but no longer approves agreements; an amended agreement is resubmitted (no fee); if the supervising physician stops supervising, the PA notifies the board in writing within three business days and may not practice until a new application and agreement are in.",
+   "notes": "PAs may not practice independently (KRS 311.858(8) as amended 2026). KRS 311.860 (separate practice location rules) was repealed by the 2026 Act."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": "KASPER (Kentucky PDMP) registration required before controlled substance prescribing; the statute also says 'any other applicable state controlled substance regulatory authority' without naming one",
+   "separateAuthorityRegistration": true,
+   "ceForPrescribers": "Separate board approval of prescriptive authority for controlled substances: at least 1 year of PA practice, application signed by the supervising physician, board approval notice, DEA registration and KASPER registration. Schedule II to V allowed with supply limits (narcotic Schedule II 72 hours; hydrocodone combinations, nonnarcotic Schedule II and Schedule III 30 days; Schedule IV and V six months; benzodiazepines and carisoprodol 30 days). 7.5 hours CS CE per cycle."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "KRS 311.844(3)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57470",
+    "quote": "A physician assistant's license shall be valid for two (2) years and shall be renewed by the board upon fulfillment of the following requirements",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "February 1 to March 31 of the renewal year",
+    "cite": "KBML PA FAQ",
+    "url": "https://kbml.ky.gov/ah/Documents/FAQ%20PA%20final.pdf",
+    "quote": "The renewal cycle opens on February 1st of the year you are due to renew and remains open through March 31st of the same year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 100,
+    "cite": "KRS 311.844(3)(b)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57470",
+    "quote": "a minimum of one hundred (100) hours of continuing education approved by the American Medical Association",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "KRS 311.844(3)(c)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57470",
+    "quote": "The holder shall provide proof of current certification with the National Commission on Certification of Physician Assistants.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.abusiveHeadTrauma",
+    "value": "1.5 hours one-time",
+    "cite": "KRS 311.844(3)(b)1.a",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57470",
+    "quote": "One and one-half (1.5) hours of continuing education in the prevention and recognition of pediatric abusive head trauma",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.dementia",
+    "value": "1 hour one-time",
+    "cite": "KRS 311.844(3)(b)1.b",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57470",
+    "quote": "complete a one (1) time course of one (1) hour of continuing education approved by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.controlledSubstances",
+    "value": "7.5 hours per 2-year cycle for CS prescribers",
+    "cite": "KRS 311.844(3)(b)2",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57470",
+    "quote": "a minimum of seven and one-half (7.5) hours of approved continuing education relating to controlled substance diversion, pain management, addiction disorders",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.pediatricIngestion",
+    "value": "1 hour every 3 years",
+    "cite": "KRS 311.844(3)(b)3",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57470",
+    "quote": "At least one (1) hour one (1) time every three (3) years continuing education in the recognition and prevention of pediatric ingestion",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.buprenorphine",
+    "value": "12 hours addiction medicine per cycle for buprenorphine prescribers",
+    "cite": "201 KAR 9:360 Section 2(3)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/009/360/",
+    "quote": "a minimum of twelve (12) hours of board-approved continuing education relating to addiction medicine for each two (2) year continuing education cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "supervision agreement required before any service",
+    "cite": "KRS 311.854(3) as amended by 2026 Ky. Acts ch. 94 sec. 4",
+    "url": "https://apps.legislature.ky.gov/law/acts/26RS/documents/0094.pdf",
+    "quote": "A physician assistant shall not render any medical service or procedure unless the required supervision agreement is completed and signed",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "agreement and amendments filed with the board",
+    "cite": "KRS 311.854(4)(b) as amended by 2026 Ky. Acts ch. 94 sec. 4",
+    "url": "https://apps.legislature.ky.gov/law/acts/26RS/documents/0094.pdf",
+    "quote": "A copy of the completed and signed supervision agreement, and any subsequent amendments, shall be furnished to and maintained on file by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.notIndependent",
+    "value": "PA may not practice independently",
+    "cite": "KRS 311.858(8) as amended by 2026 Ky. Acts ch. 94 sec. 6",
+    "url": "https://apps.legislature.ky.gov/law/acts/26RS/documents/0094.pdf",
+    "quote": "A physician assistant shall not practice medicine or osteopathy independently.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.separateAuthorityRegistration",
+    "value": "board application for CS prescriptive authority, 1 year experience",
+    "cite": "KRS 311.858(4)(b) as amended by 2026 Ky. Acts ch. 94 sec. 6",
+    "url": "https://apps.legislature.ky.gov/law/acts/26RS/documents/0094.pdf",
+    "quote": "Submit to the board a completed application for prescriptive authority for controlled substances signed by the physician assistant's supervising physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.deaAndKasper",
+    "value": "DEA and KASPER registration before CS prescribing",
+    "cite": "KRS 311.858(4)(b)4 as amended by 2026 Ky. Acts ch. 94 sec. 6",
+    "url": "https://apps.legislature.ky.gov/law/acts/26RS/documents/0094.pdf",
+    "quote": "Obtain a Controlled Substance Registration Certificate through the United States Drug Enforcement Administration and register with the electronic system for monitoring controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.regulationCurrent",
+    "value": "201 KAR 9:360 effective 6-16-2026, still requires 7.5 CS hours and 12 addiction medicine hours for buprenorphine prescribers",
+    "cite": "201 KAR 9:360 history (52 Ky.R. 1189, 1687; eff. 6-16-2026)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/009/360/",
+    "quote": "a minimum of twelve (12) hours of board-approved continuing education relating to addiction medicine for each two (2) year continuing education cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.boardNoLongerApproves",
+    "value": "since July 15, 2026 agreements are filed, not approved; amendments resubmitted",
+    "cite": "KBML PA FAQ",
+    "url": "https://kbml.ky.gov/ah/Documents/FAQ%20PA%20final.pdf",
+    "quote": "effective July 15, 2026, Physician Assistant Supervision Agreements are no longer approved by the board due to changes in Kentucky law (SB 116).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisorChangeNotice",
+    "value": "notify board in writing within 3 business days if supervising physician stops supervising",
+    "cite": "KBML PA FAQ",
+    "url": "https://kbml.ky.gov/ah/Documents/FAQ%20PA%20final.pdf",
+    "quote": "you must notify the Board, in writing, within three (3) business days.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.maxPAs",
+    "value": "a physician may supervise no more than four PAs",
+    "cite": "KRS 311.854(10) as amended by 2026 Ky. Acts ch. 94 sec. 4",
+    "url": "https://apps.legislature.ky.gov/law/acts/26RS/documents/0094.pdf",
+    "quote": "A physician may enter into supervision agreements with no more than four (4) physician assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.otherStateAuthority",
+    "value": "statute adds 'any other applicable state controlled substance regulatory authority' without naming one",
+    "cite": "KRS 311.858(4)(b)4 as amended by 2026 Ky. Acts ch. 94 sec. 6",
+    "url": "https://apps.legislature.ky.gov/law/acts/26RS/documents/0094.pdf",
+    "quote": "and any other applicable state controlled substance regulatory authority.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Kentucky Board of Nursing",
+   "url": "https://kbn.ky.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 1,
+   "renewalDeadline": "October 31 each year (licensure period November 1 to October 31)",
+   "ceHoursPerCycle": 14,
+   "nlcCompactMember": true,
+   "ceNotes": "Each earning period (November 1 to October 31) the nurse validates competency by one method: 14 contact hours; or current national certification or recertification; or a research project, peer-reviewed publication or 120-hour preceptorship; or 7 contact hours plus a satisfactory employment evaluation. Section 5 mandates apply under every method.",
+   "topicMandates": [
+    {
+     "topic": "Pediatric abusive head trauma",
+     "hours": 1.5,
+     "period": "one-time",
+     "appliesTo": "All nurses, once (KRS 314.073(6)(a)); listed new licensees within 3 years of licensure; completed on or before July 15, 2024 need not repeat"
+    },
+    {
+     "topic": "Domestic violence and elder abuse, neglect, and exploitation",
+     "hours": 3,
+     "period": "one-time",
+     "appliesTo": "All nurses, once (201 KAR 20:215 Section 5(5)(b)); listed new licensees within 3 years of licensure; completed on or before July 15, 2024 need not repeat"
+    },
+    {
+     "topic": "Alzheimer's disease and other forms of dementia",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "All nurses, once. Nurses with an active licence on July 15, 2024 must finish by October 31, 2027 (201 KAR 20:215 Section 5(7)); listed new licensees within 3 years of licensure"
+    },
+    {
+     "topic": "Suicide prevention (1 hour general, 1 hour on nurse suicide risk and pathways to care)",
+     "hours": 2,
+     "period": "one-time",
+     "appliesTo": "All nurses, once. Nurses who completed it on or before July 15, 2024 need not repeat it. Listed new licensees (201 KAR 20:215 Section 5(8)) must finish within 3 years of licensure. The rule gives no deadline for other existing licensees."
+    },
+    {
+     "topic": "Recognition and prevention of pediatric ingestion or inhalation of controlled substances",
+     "hours": 1,
+     "period": "every 3 years",
+     "appliesTo": "All practitioners licensed under KRS Chapter 314 (KRS 314.073(6)(b), effective July 15, 2026)"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse), designated certified nurse practitioner with a population focus",
+   "separateLicenceOrCertificate": "separate APRN license that expires or lapses with the RN license or multistate privilege",
+   "renewalCycleYears": 1,
+   "renewalNotes": "Annual, same October 31 expiration as the RN license; renew the RN license or privilege on active status first",
+   "ceHoursPerCycle": 14,
+   "ceNotes": "No separate APRN hour total; the RN validation method applies (14 contact hours, or national certification or another listed method plus the Section 5 mandates). Every APRN needs 5 pharmacology contact hours each year (KRS 314.073(9)).",
+   "pharmacologyHoursPerCycle": 5,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Pharmacology (at least 3 of the 5 hours on pain management or addiction disorders)",
+     "hours": 5,
+     "period": "every cycle",
+     "appliesTo": "APRNs registered with the DEA who have a PDMP (KASPER) account; other APRNs need 5 pharmacology hours on any qualifying content"
+    },
+    {
+     "topic": "Treating and managing patients with opioid or other substance use disorders (DEA MATE training)",
+     "hours": 8,
+     "period": "one-time",
+     "appliesTo": "APRNs with a DEA registration, before the next scheduled DEA registration after June 27, 2023 (recent graduates and prior DATA waiver training may satisfy it)"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "CAPA-NS and CAPA-CS collaborative agreements are notified to the board (no separate prescribing licence); CAPA-CS exemption requires a board good-standing review and written notice",
+   "pharmacologyCeForPrescribers": "5 contact hours pharmacology every year for every APRN; at least 3 on pain management or addiction disorders if DEA registered with a PDMP account",
+   "controlledSubstanceCe": "3 of the 5 annual pharmacology hours on pain management or addiction disorders (DEA registrants); one-time 8 hours substance use disorder training for DEA registrants",
+   "stateCsRegistrationRequired": "KASPER master account registration within 30 days of DEA registration and before prescribing controlled substances; no separate state CS registration named in KRS 314.042"
+  },
+  "practice": {
+   "authority": "reduced",
+   "agreementType": "collaboration",
+   "transitionToPracticeHours": "4 years of prescribing (not hours): CAPA-NS for nonscheduled legend drugs until 4 years of prescribing in the population focus; CAPA-CS for Schedule II to V until 4 years of controlled substance prescribing plus a board review",
+   "agreementFilingAndRenewal": "CAPA-NS: written, signed by APRN and a Kentucky physician in the same or similar specialty; APRN notifies KBN of its existence and the physician's name; copy at each practice site; after 4 years the APRN notifies KBN and may stop. CAPA-CS: on the standardized CAPA-CS form; KBN notified and forwards to KBML; copy at each site; first year quarterly meetings and next three years twice-yearly meetings to review the reverse KASPER report, records kept one year past expiration; rescission on 30 days written notice with KBN notified. After 4 years with DEA and KASPER maintained, the APRN requests a KBN good-standing review and may not prescribe controlled substances without a CAPA-CS until KBN notifies in writing."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 1,
+    "cite": "201 KAR 20:085 Section 2",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/085/",
+    "quote": "The licensure period for all licenses and credentials, except for provisional, inactive, and retired status licenses, shall be for one (1) year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 14,
+    "cite": "201 KAR 20:215 Section 3(1)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/215/",
+    "quote": "Fourteen (14) contact hours of continuing education, which shall:",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.earningPeriod",
+    "value": "November 1 to October 31",
+    "cite": "201 KAR 20:215 Section 1(2)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/215/",
+    "quote": "\"Earning period\" means November 1 through October 31 of a current licensure period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "KRS 314.475 (Nurse Licensure Compact, effective July 20, 2017)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=47114",
+    "quote": "The Nurse Licensure Compact is hereby enacted and entered into with all other jurisdictions that legally join in the Compact",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.oneTime",
+    "value": "AHT 1.5, domestic violence/elder abuse 3, dementia 1, suicide prevention 2 (one-time)",
+    "cite": "201 KAR 20:215 Section 5(5)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/215/",
+    "quote": "(b) A minimum of three (3) contact hours on domestic violence and elder abuse, neglect, and exploitation",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.pediatricIngestion",
+    "value": "1 hour every 3 years",
+    "cite": "KRS 314.073(6)(b)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57471",
+    "quote": "One (1) hour one (1) time every three (3) years covering the recognition and prevention of pediatric ingestion or inhalation of controlled substances.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewal",
+    "value": "APRN license lapses with RN licence or privilege",
+    "cite": "201 KAR 20:056 Section 6(1)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/056/",
+    "quote": "The advanced practice registered nurse license shall expire or lapse when the registered nurse license or privilege expires or lapses.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": 5,
+    "cite": "KRS 314.073(9)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=57471",
+    "quote": "at least five (5) contact hours in pharmacology continuing education for any person licensed as an advanced practice registered nurse.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "3 of 5 pharmacology hours on pain management or addiction for DEA registrants",
+    "cite": "201 KAR 20:215 Section 5(1)(b)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/215/",
+    "quote": "shall earn a minimum of five (5) contact hours in pharmacology, including at least three (3) contact hours on either pain management or addiction disorders.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.mate",
+    "value": "8 hours one-time for DEA registrants",
+    "cite": "201 KAR 20:215 Section 5(2)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/215/",
+    "quote": "an APRN who has a DEA registration shall earn a minimum of eight (8) hours on the subject of treating and managing patients",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "201 KAR 20:056 Section 8(1)(a)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/056/",
+    "quote": "An advanced practice registered nurse (APRN) shall maintain current certification or recertification from one (1) of the national organizations recognized",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.capaNs",
+    "value": "CAPA-NS required for nonscheduled legend drugs",
+    "cite": "KRS 314.042(12)(a)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=56824",
+    "quote": "the advanced practice registered nurse shall enter into a written \"Collaborative Agreement for the Advanced Practice Registered Nurse's Prescriptive Authority for Nonscheduled Legend Drugs\"",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.capaNsExemption",
+    "value": "after 4 years of prescribing",
+    "cite": "KRS 314.042(13)(a)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=56824",
+    "quote": "practice registered nurse shall have completed four (4) years of prescribing as a certified nurse practitioner",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.capaCs",
+    "value": "CAPA-CS on standardized form for Schedule II to V",
+    "cite": "KRS 314.042(15)(a)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=56824",
+    "quote": "on a standardized CAPA-CS form with a physician who has an active and unrestricted license in Kentucky",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.capaCsExemption",
+    "value": "after 4 years with CAPA-CS, DEA and KASPER maintained, plus board review",
+    "cite": "KRS 314.042(17)(a)1",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=56824",
+    "quote": "Completed four (4) years of prescribing authority for controlled substances with a CAPA-CS;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFilingAndRenewal",
+    "value": "notify KBN of CAPA-CS and physician",
+    "cite": "KRS 314.042(15)(b)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=56824",
+    "quote": "The advanced practice registered nurse shall notify the Kentucky Board of Nursing of the existence of the CAPA-CS and the name of the collaborating",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": "KASPER registration before prescribing CS",
+    "cite": "KRS 314.042(15)(k)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=56824",
+    "quote": "the advanced practice registered nurse shall register with the electronic system for monitoring controlled substances established by KRS 218A.202",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.dementiaDeadline",
+    "value": "nurses active on 2024-07-15 complete dementia hour by 2027-10-31",
+    "cite": "201 KAR 20:215 Section 5(7)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/215/",
+    "quote": "active nursing license on July 15, 2024, shall satisfy the continuing competency requirement in subsection (5)(c) of this section on or before October 31, 2027.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "np.aprn.capaCsMeetings",
+    "value": "CAPA-CS: quarterly meetings in year 1, at least biannual in the next three years, to review reverse KASPER report",
+    "cite": "KRS 314.042(15)",
+    "url": "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=56824",
+    "quote": "In the ensuing three (3) years of the CAPA-CS, the advanced practice registered nurse and the physician shall meet at least biannually",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertAtRenewal",
+    "value": "maintain national certification as a renewal condition",
+    "cite": "201 KAR 20:056 Section 6(2)(d)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/056/",
+    "quote": "Maintain current certification by a recognized national certifying organization.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceAlternatives",
+    "value": "national certification held for the whole earning period is an alternative to the 14 hours, but the Section 5 mandates still apply",
+    "cite": "201 KAR 20:215 Section 3(2)",
+    "url": "https://apps.legislature.ky.gov/law/kar/titles/201/020/215/",
+    "quote": "Current national certification or recertification and the continuing education required by Section 5 of this administrative regulation.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "The KY PA renewal dates (February 1 to March 31 of the renewal year, grace to April 30) come from the KBML PA FAQ PDF, a board document. The regulation that sets the PA renewal date was not loaded.",
+  "201 KAR 9:360 (effective June 16, 2026) does not yet list the pediatric ingestion or inhalation hour that KRS 311.844(3)(b)3 adds from July 15, 2026. The statute applies it to all PAs; the KBML FAQ applies it to prescribers within the 7.5 hours.",
+  "201 KAR 9:360 Section 2(3) still requires 12 addiction medicine hours for buprenorphine prescribers. No source loaded shows whether KBML still enforces it after the federal X waiver ended.",
+  "The PA supervision agreement has no fixed renewal interval in KRS 311.854 as amended. The implementing regulation was not loaded.",
+  "KRS 311.858 and 314.042 name no separate Kentucky state controlled substance registration for PAs or APRNs, only KASPER. KRS 311.858(4)(b)4 also says 'any other applicable state controlled substance regulatory authority' without naming one.",
+  "201 KAR 20:215 (effective July 30, 2025) does not yet include the KRS 314.073(6)(b) pediatric ingestion or inhalation hour (statute effective July 15, 2026). Start date and documentation rules for it are not yet in regulation.",
+  "The suicide prevention mandate (201 KAR 20:215 Section 5(5)(d)) gives no completion deadline for nurses licensed before July 15, 2024 who have not done it. Section 5(7) sets October 31, 2027 only for the dementia hour.",
+  "The 'reduced' practice authority label is inferred from the CAPA-NS and CAPA-CS requirements in KRS 314.042; the board does not use that label."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verifiedBy": "verifier-2026-10",
+ "verificationNotes": "All KY facts re-loaded 2026-10-01 from apps.legislature.ky.gov (KRS 311.844 effective July 15, 2026; KRS 314.042 effective April 10, 2026; KRS 314.073 effective July 15, 2026; 201 KAR 9:360 effective June 16, 2026; 201 KAR 20:215 effective July 30, 2025), 2026 Ky. Acts ch. 94 and the KBML PA FAQ.",
+ "corrections": [
+  "KY PA pediatric ingestion hour: the statute lists it as item 3 under (3)(b), at the same level as the prescriber item 2, so it applies to every PA. The KBML FAQ (2026) folds it into the 7.5 prescriber hours. appliesTo now records both readings.",
+  "KY PA dementia hour: added the KBML FAQ timing for existing licensees (before the end of the first renewal cycle after July 1, 2025).",
+  "KY PA buprenorphine 12 hours: 201 KAR 9:360 was amended effective June 16, 2026 and still contains Section 2(3), so the rule is current and in force. Removed from unverified.",
+  "KY PA agreement: added KBML FAQ facts. Since July 15, 2026 the board files agreements without approving them, amendments are resubmitted, and a supervisor change is reported within 3 business days.",
+  "KY RN suicide prevention: WRONG. The October 31, 2027 deadline in 201 KAR 20:215 Section 5(7) is for subsection (5)(c), Alzheimer's and dementia, not suicide prevention. Moved the deadline to the dementia mandate. Suicide prevention now reads: one time; new licensees within 3 years; no stated deadline for other existing licensees.",
+  "KY NLC fact: replaced the indirect evidence (a 201 KAR 20:056 renewal form name) with the compact statute itself, KRS 314.475, effective July 20, 2017. KRS 314.470 (old compact) was repealed in 2017."
+ ]
+}

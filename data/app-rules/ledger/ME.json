@@ -1,0 +1,488 @@
+{
+ "state": "ME",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Maine Board of Licensure in Medicine (or Maine Board of Osteopathic Licensure; PA may be licensed by either)",
+   "url": "https://www.maine.gov/md/licensure/pa-license"
+  },
+  "licence": {
+   "title": "Physician Associate (PA); title changed from physician assistant by PL 2025, c. 316, effective 2025-09-24",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Last day of birth month; odd birth year renews in odd years, even birth year in even years"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "At least 50 Category 1 (AAPA, AMA, ACCME, AAFP, MMA, AOA or MOA accredited); up to 50 Category 2; all 100 may be Category 1. Prorated in first licensure period.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Prescribing of opioid medication",
+     "hours": 3,
+     "period": "every 2 years",
+     "appliesTo": "BOLIM-licensed PAs: all PAs regardless of whether they prescribe opioids (Ch. 21 §5(1), from 2018-12-31). Osteopathic-board-licensed PAs: as a condition of prescribing opioid medication (Ch. 21 §5(3)). Chapter 2 §11(1)(D) states it for all PAs. Category 1."
+    }
+   ],
+   "controlledSubstanceCe": "3 hours Category 1 opioid prescribing CME every 2 years",
+   "nonCompliance": "If the required CME is not completed and submitted, an inactive status licence renewal is issued unless the board granted an extension or deferment (Ch. 2 §11(1)(B))."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Under 4,000 documented clinical hours: collaborative agreement with an active physician, submitted to the board for approval and kept on file at the main practice location; a PA in a physician group practice or health care facility may use its credentialing/privileging and scope of practice agreement instead. On submitting documentation of 4,000 clinical hours the requirement ends. Since 2026-04-03 (PL 2025 c. 604) practice agreements are abolished: PAs over 4,000 documented hours need no agreement in any setting. No fixed periodic renewal of the collaborative agreement found.",
+   "notes": "Attestation of 4,000 hours submitted to the board ends the collaborative agreement requirement. Jurisprudence exam at application and every other renewal cycle (about 4 years). Joint Rule Chapter 2 posted by the Secretary of State is still the 2020-12-16 version (title physician assistant; still describes practice agreements, which statute no longer provides for)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": false,
+   "separateAuthorityNote": "Prescribing (including schedule II to V) is within PA scope under 32 MRSA §3270-G; no separate state prescriptive authority registration found.",
+   "ceForPrescribers": "3 hours opioid prescribing CME every 2 years"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "02-373/02-383 CMR Ch. 2 §3(1)",
+    "url": "https://www.maine.gov/osteo/sites/maine.gov.osteo/files/inline-files/Chapter%202%20-%20Physician%20Assistants%20-%20Effective%20DEC%2016%202020_2.pdf",
+    "quote": "The physician assistant must renew the license every two (2) years prior to the expiration of the license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "last day of birth month, odd/even year",
+    "cite": "02-373/02-383 CMR Ch. 2 §3(1)",
+    "url": "https://www.maine.gov/osteo/sites/maine.gov.osteo/files/inline-files/Chapter%202%20-%20Physician%20Assistants%20-%20Effective%20DEC%2016%202020_2.pdf",
+    "quote": "expires at midnight on the last day of the month of the physician assistant’s birth every odd-numbered year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "32 MRSA §3270-E(1)(A)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-E.html",
+    "quote": "A license, which must be renewed biennially with the board that issued the initial license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.title",
+    "value": "physician associate",
+    "cite": "32 MRSA §3270-E (PL 2025, c. 316)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-E.html",
+    "quote": "A physician associate may not render medical services until the physician associate has applied for and obtained",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Effective date 2025-09-24 not confirmed in a primary source this session; statute history shows PL 2025, c. 316."
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 100,
+    "cite": "02-373/02-383 CMR Ch. 2 §11(1)(A)",
+    "url": "https://www.maine.gov/osteo/sites/maine.gov.osteo/files/inline-files/Chapter%202%20-%20Physician%20Assistants%20-%20Effective%20DEC%2016%202020_2.pdf",
+    "quote": "during each biennial licensing period, a minimum of one hundred (100) credit hours of continuing medical education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "min 50 Category 1",
+    "cite": "02-373/02-383 CMR Ch. 2 §11(1)(A)(1)",
+    "url": "https://www.maine.gov/osteo/sites/maine.gov.osteo/files/inline-files/Chapter%202%20-%20Physician%20Assistants%20-%20Effective%20DEC%2016%202020_2.pdf",
+    "quote": "At least fifty (50) hours must be in Category 1 (as defined by this rule)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "02-373/02-383 CMR Ch. 2 §11(1)(C)",
+    "url": "https://www.maine.gov/osteo/sites/maine.gov.osteo/files/inline-files/Chapter%202%20-%20Physician%20Assistants%20-%20Effective%20DEC%2016%202020_2.pdf",
+    "quote": "Proof of current NCCPA certification at the time an application for renewal is submitted satisfies CME requirements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[opioid]",
+    "value": "3 hours Category 1 every 2 years",
+    "cite": "02-373/02-383 CMR Ch. 2 §11(1)(D)",
+    "url": "https://www.maine.gov/osteo/sites/maine.gov.osteo/files/inline-files/Chapter%202%20-%20Physician%20Assistants%20-%20Effective%20DEC%2016%202020_2.pdf",
+    "quote": "Physician assistants must complete 3 hours of Category 1 credit CME every two years on the prescribing of opioid medication",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "collaborative agreement under 4,000 hours",
+    "cite": "32 MRSA §3270-G(5)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-G.html",
+    "quote": "A physician associate with less than 4,000 hours of clinical practice documented to the board shall work in accordance with a collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "practice agreement over 4,000 hours as principal provider",
+    "cite": "32 MRSA §3270-G(6)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-G.html",
+    "quote": "A physician associate shall submit the practice agreement to the board for approval",
+    "loaded": true,
+    "verified": false,
+    "supersededBy": "PL 2025, c. 604 (LD 2088), emergency, approved 2026-04-03: repealed §3270-G sub-§6 (and §2594-F sub-§6); practice agreements no longer exist.",
+    "reason": "Quote is from the online statute page, which had not yet been updated; the subsection was repealed effective 2026-04-03."
+   },
+   {
+    "field": "pa.practice.noAgreement",
+    "value": "over 4,000 hours with physician partner",
+    "cite": "02-373/02-383 CMR Ch. 2 §6(8)(C)",
+    "url": "https://www.maine.gov/osteo/sites/maine.gov.osteo/files/inline-files/Chapter%202%20-%20Physician%20Assistants%20-%20Effective%20DEC%2016%202020_2.pdf",
+    "quote": "are not required to have either a collaborative agreement or practice agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Rule text still current, but after PL 2025 c.604 no PA with 4,000+ documented hours needs any agreement regardless of setting."
+   },
+   {
+    "field": "pa.licence.jurisprudenceExam",
+    "value": "every other renewal cycle",
+    "cite": "BOLIM PA licence page",
+    "url": "https://www.maine.gov/md/licensure/pa-license",
+    "quote": "The exam must be taken every other renewal cycle (approximately 4 years).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "practice agreement subsection repealed",
+    "cite": "PL 2025, c. 604, Sec. 8 (LD 2088)",
+    "url": "https://legislature.maine.gov/bills/getPDF.asp?paper=HP1403&item=3&snum=132",
+    "quote": "32 MRSA §3270-G, sub-§6, as enacted by PL 2019, c. 627, Pt. B, §17 and amended by PL 2025, c. 316, §3, is repealed.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal (effective)",
+    "value": "effective 2026-04-03 (emergency)",
+    "cite": "PL 2025, c. 604, emergency clause",
+    "url": "https://legislature.maine.gov/bills/getPDF.asp?paper=HP1403&item=3&snum=132",
+    "quote": "In view of the emergency cited in the preamble, this legislation takes effect when approved.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.over4000",
+    "value": "no agreement over 4,000 hours",
+    "cite": "BOLIM PA licence page",
+    "url": "https://www.maine.gov/md/licensure/pa-license",
+    "quote": "as of 4/3/26 Practice Agreements are no longer required for Physician Associates with more than 4,000 verified clinical hours.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.collaborativeAgreementFiling",
+    "value": "submitted for board approval; kept at main location",
+    "cite": "32 MRSA §3270-G(5)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-G.html",
+    "quote": "A physician associate shall submit the collaborative agreement, or, if appropriate, the scope of practice agreement, to the board for approval",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[opioid].appliesTo (BOLIM)",
+    "value": "all clinicians regardless of prescribing",
+    "cite": "02-373 CMR Ch. 21 §5(1)",
+    "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/content/assets/373c021-2024-039-20to-20-042-20-AMD--20--20to-20post.docx",
+    "quote": "all clinicians must complete 3 hours of Category 1 credit Continuing Medical Education every two years on the prescribing of opioid medication regardless of whether",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "pa.ce.topicMandates[opioid].appliesTo (clinician)",
+    "value": "PA is a clinician",
+    "cite": "02-373 CMR Ch. 21 §2(6)",
+    "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/content/assets/373c021-2024-039-20to-20-042-20-AMD--20--20to-20post.docx",
+    "quote": "Clinician – An allopathic (MD) or osteopathic (DO) physician, physician assistant (PA), advanced practice registered nurse (APRN), or podiatrist (DPM).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[opioid].statute",
+    "value": "3 hours every 2 years",
+    "cite": "32 MRSA §3300-F(4)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3300-F.html",
+    "quote": "must successfully complete 3 hours of continuing education every 2 years on the prescription of opioid medication as a condition of prescribing opioid medication",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce (currency)",
+    "value": "Chapter 2 current = 2020-12-16 amendment",
+    "cite": "02-373 CMR Ch. 2 history (SOS posting, accessibility check July 2025)",
+    "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/373c002%20-%20JUL%202025.docx",
+    "quote": "December 16, 2020 – filing 2020-246 (a joint rule with 02-383 – Board of Osteopathic Licensure)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "last day of birth month, even/odd year",
+    "cite": "BOLIM PA licence page",
+    "url": "https://www.maine.gov/md/licensure/pa-license",
+    "quote": "Licensees born in even-numbered years must renew their licenses by the last day of their birth month every even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Maine State Board of Nursing",
+   "url": "https://www.maine.gov/boardofnursing/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "On or before birthday every 2 years; no grace period",
+   "ceHoursPerCycle": null,
+   "ceNote": "32 MRSA §2206 lists no CE condition for RN renewal; no RN contact-hour requirement found.",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN, Certified Nurse Practitioner (CNP)",
+   "separateLicenceOrCertificate": "APRN licence/approval to practice from the Board of Nursing, renewed concurrently with the RN licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 50,
+   "ceNote": "50 contact hours per 2-year period in the area of APRN practice; at least 30 Category I; no more than 20 Category II. 50 hours per specialty intent, but overlapping content counts for both.",
+   "pharmacologyHoursPerCycle": null,
+   "pharmacologyNote": "No recurring pharmacology hours at renewal. When applying for approval to practice (prescriptive authority), an applicant who has not prescribed in the past 2 years needs 15 pharmacology contact hours within the prior 2 years (45 if not prescribed in 5 years). Initial approval requires 45 pharmacology contact hours.",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Prescribing of opioid medication",
+     "hours": 3,
+     "period": "every 2 years",
+     "appliesTo": "APRNs with prescriptive authority, as a condition of prescribing opioid medication (Category I; within the 50-hour APRN requirement)."
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "separateAuthorityNote": "Prescriptive authority is part of APRN approval (initial 45 contact hours pharmacology); no separate registration found.",
+   "pharmacologyCeForPrescribers": "None recurring at renewal; 15 hours at application for approval if not prescribed in the past 2 years (45 if not in 5 years).",
+   "controlledSubstanceCe": "3 hours opioid prescribing every 2 years (32 MRSA §2210(4))",
+   "stateCsRegistrationRequired": null
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "supervision",
+   "transitionToPracticeHours": null,
+   "transitionNote": "24 months of practice under a registered supervising physician or supervising NP (or employment by a clinic/hospital with a physician medical director) before independent practice; supervising APRN needs 5 years APRN practice in the same specialty.",
+   "agreementFilingAndRenewal": "Register the supervisory relationship with the board online before practice and before any change; submit written evidence of completing the 24 months. No agreement required after that."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "32 MRSA §2206",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec2206.html",
+    "quote": "The license of every registered nurse licensed under this chapter is renewable every 2 years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "birthday",
+    "cite": "32 MRSA §2206",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec2206.html",
+    "quote": "issue to the applicant a renewal of license for a period of 2 years, expiring on the anniversary of the applicant's birth",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "32 MRSA ch. 31, subch. 2-A (§§2171-2181)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32ch31sec0.html",
+    "quote": "Subchapter 2-A: NURSE LICENSURE COMPACT 32 §2171. Short title; findings and declaration of purpose",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": 50,
+    "cite": "02-380 CMR Ch. 8 §8(1)(A)",
+    "url": "https://www.maine.gov/boardofnursing/sites/boardofnursing/files/archive/Chapter%208%20Regulations%20Relating%20Advanced%20Practice%20Registered%20Nursing%20final%20rule.pdf",
+    "quote": "must have completed during the 2 year period of licensure a minimum of 50 contact hours of continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.categoryRules",
+    "value": "min 30 Category I",
+    "cite": "02-380 CMR Ch. 8 §8(1)(B)",
+    "url": "https://www.maine.gov/boardofnursing/sites/boardofnursing/files/archive/Chapter%208%20Regulations%20Relating%20Advanced%20Practice%20Registered%20Nursing%20final%20rule.pdf",
+    "quote": "A minimum of 30 contact hours must be in Category I",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.categoryRules",
+    "value": "max 20 Category II",
+    "cite": "02-380 CMR Ch. 8 §8(1)(C)",
+    "url": "https://www.maine.gov/boardofnursing/sites/boardofnursing/files/archive/Chapter%208%20Regulations%20Relating%20Advanced%20Practice%20Registered%20Nursing%20final%20rule.pdf",
+    "quote": "No more than 20 contact hours may be in Category II.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates[opioid]",
+    "value": "3 hours Category I",
+    "cite": "02-380 CMR Ch. 8 §8(1)(B)",
+    "url": "https://www.maine.gov/boardofnursing/sites/boardofnursing/files/archive/Chapter%208%20Regulations%20Relating%20Advanced%20Practice%20Registered%20Nursing%20final%20rule.pdf",
+    "quote": "advanced practice registered nurses with prescriptive authority must complete 3 contact hours of Category I continuing education on the prescribing of opioid medication",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "3 hours every 2 years",
+    "cite": "32 MRSA §2210(4)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec2210.html",
+    "quote": "must successfully complete 3 hours of continuing education every 2 years on the prescription of opioid medication",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "02-380 CMR Ch. 8 §2(3)(A)",
+    "url": "https://www.maine.gov/boardofnursing/sites/boardofnursing/files/archive/Chapter%208%20Regulations%20Relating%20Advanced%20Practice%20Registered%20Nursing%20final%20rule.pdf",
+    "quote": "must include evidence of current certification by the appropriate national certifying body.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": "concurrent with RN",
+    "cite": "02-380 CMR Ch. 8 §2(3)(A)",
+    "url": "https://www.maine.gov/boardofnursing/sites/boardofnursing/files/archive/Chapter%208%20Regulations%20Relating%20Advanced%20Practice%20Registered%20Nursing%20final%20rule.pdf",
+    "quote": "Request for continuing approval must be made concurrently with renewal of the registered nurse license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.pharmacologyCeForPrescribers",
+    "value": "15 hours if not prescribed in 2 years",
+    "cite": "02-380 CMR Ch. 8 §6(1)(A)",
+    "url": "https://www.maine.gov/boardofnursing/sites/boardofnursing/files/archive/Chapter%208%20Regulations%20Relating%20Advanced%20Practice%20Registered%20Nursing%20final%20rule.pdf",
+    "quote": "has not prescribed drugs within the past 2 years, the applicant shall provide evidence of satisfactory completion of 15 contact hours of pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Applies when applying for approval to practice/prescriptive authority, not at each renewal."
+   },
+   {
+    "field": "np.practice.transition",
+    "value": "24 months supervised",
+    "cite": "32 MRSA §2102(2-A)",
+    "url": "https://legislature.maine.gov/legis/statutes/32/title32sec2102.html",
+    "quote": "must practice, for at least 24 months, under the supervision of a licensed physician or a supervising nurse practitioner",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFilingAndRenewal",
+    "value": "registered supervisory relationship",
+    "cite": "Board of Nursing APRN page",
+    "url": "https://www.maine.gov/boardofnursing/licensure/advanced-practice-registered-nurse",
+    "quote": "If supervising provider is an APRN, he/she must have practiced as an APRN for a minimum of 5 years in the same specialty",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates[opioid].period",
+    "value": "every 2 years",
+    "cite": "02-380 CMR Ch. 21 §5(2)",
+    "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/content/assets/373c021-2024-039-20to-20-042-20-AMD--20--20to-20post.docx",
+    "quote": "advanced practice registered nurses with prescriptive authority must complete 3 contact hours of Category I continuing education every two (2) years on the prescribing of",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle (currency)",
+    "value": "50 contact hours; current SOS text matches",
+    "cite": "02-380 CMR Ch. 8 §8(1)(A), last amended 2020-03-01",
+    "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/380c008%20-%20JUL%202025.docx",
+    "quote": "must have completed during the 2 year period of licensure a minimum of 50 contact hours of continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline (grace)",
+    "value": "no grace period",
+    "cite": "Maine Board of Nursing License FAQs",
+    "url": "https://www.maine.gov/boardofnursing/licensure/license-faqs",
+    "quote": "You must renew your license on or before your birthdate when it is due to expire. The Board does not offer a grace period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFilingAndRenewal",
+    "value": "register supervisory relationship before practice/changes",
+    "cite": "02-380 CMR Ch. 8 §2(2)(D)(1)",
+    "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/380c008%20-%20JUL%202025.docx",
+    "quote": "Obtain an application from the Board to register a supervising relationship as part of the initial authority to practice process",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "Maine state controlled substance registration: none confirmed or ruled out in a primary source (DEA applies federally). Left null.",
+  "Maine RN CE: 32 MRSA §2206 and the Board's licence FAQ show no RN CE condition; absence of any other RN CE rule not exhaustively confirmed.",
+  "Physician associate title effective date (2025-09-24): PL 2025, c. 316 confirmed in statute history; its effective date was not loaded from a primary source.",
+  "Joint Rule Chapter 2 has not been amended for the title change or for PL 2025 c. 604 as of the SOS posting loaded; a later amendment could change CME numbers.",
+  "NP practice authority label 'full' is the conventional classification; 32 MRSA §2102(2-A) requires 24 months supervised practice first and does not use the word 'full'.",
+  "Maine APRN 50 contact hours per specialty: rule text says 50 per 2-year period; per-specialty arithmetic comes from the Board FAQ, not loaded this session.",
+  "Maine Nurse Licensure Compact implementation date not loaded; statute subchapter 2-A confirms membership."
+ ],
+ "verifiedAt": "2026-10"
+}

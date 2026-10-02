@@ -5,10 +5,13 @@ import { complianceFor, findStateLicense, cycleBucket, cmeTopics } from "./compl
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
 import { STATE_NAMES } from "../constants/states";
 import { boardComplianceFor, aoaNationalEntry } from "./boardCompliance";
+import { certificationCards } from "./certCompliance.js";
 import { cat1BucketLabel } from "../constants/creditEquivalence";
 import { resolveDocument } from "./receiptFiles.js";
 import { shareAtHandoff, shareNotStartedMessage } from "./shareHandoff.js";
 import { fileShareText } from "./shareText.js";
+import { professionCopy } from "../constants/professionCopy.js";
+import { isPhysicianDegree } from "../constants/professions.js";
 
 /**
  * Board-ready CME transcript PDF.
@@ -293,11 +296,23 @@ export function certificateSummary(model) {
 
 // "CME Transcript, Colorado, Ana Li DO.pdf": the Gmail app takes the file's
 // name as the subject ("CME-Transcript-CO-2026-10-01" said nothing of whose).
-function transcriptFileName(scope, physician = {}) {
+// An NP's transcript is a "CE Transcript"; a PA's or NP's scope names the
+// licence kind ("Texas RN", "Texas APRN"), so an NP's two transcripts for one
+// state get their own names.
+function transcriptFileName(scope, physician = {}, title = "CME Transcript") {
   // eslint-disable-next-line no-control-regex
   const safe = (s) => String(s || "").replace(/[\\/:*?"<>|,\u{0}-\u{1f}]/gu, " ").replace(/\s+/g, " ").trim();
   const who = safe([physician.name, physician.degree].filter(Boolean).join(" "));
-  return `${["CME Transcript", safe(scope), who].filter(Boolean).join(", ")}.pdf`;
+  return `${[title, safe(scope), who].filter(Boolean).join(", ")}.pdf`;
+}
+
+/**
+ * What the transcript calls the member: "Physician" for MD and DO, as
+ * always; "Physician Assistant", "Nurse Practitioner", or "Clinician" when
+ * no profession is chosen (a transcript goes to a board or an employer).
+ */
+export function memberRoleLabel(degree) {
+  return isPhysicianDegree(degree) ? "Physician" : professionCopy(degree, { audience: "third-party" }).nounCap;
 }
 
 function physicianBlock(data) {
@@ -311,10 +326,24 @@ function physicianBlock(data) {
  * Everything the state transcript needs, or { error } with a sentence the
  * UI can show instead of producing an empty PDF.
  */
-export function stateTranscriptModel(data, state, { certFiles = null } = {}) {
-  if (!state) return { error: "Pick a state first. Add a state medical license or set your primary state in Settings." };
+export function stateTranscriptModel(data, state, { certFiles = null, kind } = {}) {
   const deg = data.settings?.degreeType || "";
-  const comp = complianceFor(data, state);
+  if (!state) return { error: `Pick a state first. Add ${deg === "PA" ? "your physician assistant license" : deg === "NP" ? "your APRN license" : "a state medical license"} or set your primary state in Settings.` };
+  const comp = complianceFor(data, state, kind);
+  // A PA or NP transcript is for their own licence and its own board's rules;
+  // with no verified counting period there is no window to print hours in.
+  const app = !!comp.profession;
+  const licenseNoun = comp.kind === "pa" ? "physician assistant license" : comp.kind === "rn" ? "RN license" : "APRN license";
+  // A verified period that runs from the member's own start (North Carolina,
+  // Tennessee PAs) is known except for its first day: ask for that, by the
+  // licence form's own field name. Only a period the app has not verified
+  // says so.
+  if (app && !comp.windowKnown && comp.rulesVerified && comp.windowRule === "memberStart") {
+    return { error: `Set CME Cycle Start on your ${STATE_NAMES[state] || state} ${licenseNoun} to the first day of your current period, then build the transcript.` };
+  }
+  if (app && !comp.windowKnown) {
+    return { error: `The ${STATE_NAMES[state] || state} ${licenseNoun} counting period is not yet verified, so no transcript window can be printed. Set CME Cycle Start on the license record to choose the dates.` };
+  }
   const entries = entriesBetween(data.cme, comp.windowStart, comp.windowEnd);
   const stateName = STATE_NAMES[state] || state;
   if (!(data.cme || []).length) {
@@ -325,16 +354,16 @@ export function stateTranscriptModel(data, state, { certFiles = null } = {}) {
       error: `No CME entries fall inside the ${stateName} cycle window (${showDate(comp.windowStart)} to ${showDate(comp.windowEnd)}). Check entry dates or the license expiration that anchors the window.`,
     };
   }
-  const req = getStateEntry(state, deg) || {};
-  const lic = findStateLicense(data.licenses, state);
+  const req = getStateEntry(state, deg, comp.kind) || {};
+  const lic = findStateLicense(data.licenses, state, app ? comp.kind : "medical");
   const { rows, certs } = assignCertificates(data, entries, certFiles);
-  const source = req.source || "State medical board rule";
+  const source = req.source || (app ? (comp.board || "Not yet verified") : "State medical board rule");
   return {
     kind: "state",
     state,
     stateName,
-    title: "CME Transcript",
-    subtitle: `${stateName} medical license renewal${hasSeparateBoards(state) && deg ? ` (${deg} board)` : ""}`,
+    title: deg === "NP" && app ? "CE Transcript" : "CME Transcript",
+    subtitle: app ? `${stateName} ${licenseNoun} renewal` : `${stateName} medical license renewal${hasSeparateBoards(state) && deg ? ` (${deg} board)` : ""}`,
     physician: physicianBlock(data),
     license: lic ? { number: lic.licenseNumber || "", expires: lic.expirationDate || "", name: lic.name || lic.type || "" } : null,
     window: {
@@ -353,7 +382,10 @@ export function stateTranscriptModel(data, state, { certFiles = null } = {}) {
     rows,
     certs,
     source,
-    fileName: transcriptFileName(stateName, physicianBlock(data)),
+    // An NP's APRN and RN transcripts for one state get their own names.
+    fileName: app
+      ? transcriptFileName(`${stateName} ${String(comp.kind || "").toUpperCase()}`, physicianBlock(data), deg === "NP" ? "CE Transcript" : "CME Transcript")
+      : transcriptFileName(stateName, physicianBlock(data)),
     footnotes: [
       comp.degreeUnknown ? "Degree not set in Settings. MD board rules were applied." : "",
       // Surface a board/MOC exemption when a Board Certification record is on
@@ -372,10 +404,26 @@ export function stateTranscriptModel(data, state, { certFiles = null } = {}) {
 }
 
 /** Boards that can get their own transcript: the same cards Home shows. */
+const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 export function boardTranscriptOptions(data) {
   const list = boardComplianceFor(data).filter(b => !b.followsParent);
   if (data.settings?.degreeType === "DO" && (data.cme || []).length > 0 && !list.some(b => b.source === "AOA")) {
     list.unshift(aoaNationalEntry(data));
+  }
+  // A PA's NCCPA cycle and an NP's certifier cycles (certCompliance.js): the
+  // cycle a certifier audits, with the card's own counted figures.
+  for (const c of certificationCards(data)) {
+    if (c.needsRole || c.required == null || !(c.windowStart instanceof Date) || !(c.windowEnd instanceof Date)) continue;
+    list.push({
+      id: c.id, source: "CERT", body: c.body, code: c.body, name: c.label, label: c.label,
+      from: isoDay(c.windowStart), to: isoDay(c.windowEnd), windowLabel: c.windowLabel,
+      unit: c.unit, required: c.required, earned: c.earned, assessment: c.assessment,
+      cat1Required: c.cat1Required || 0, cat1Earned: c.cat1Earned || 0, notes: (c.lines || []).join(" "),
+      // The card's own counting test, so a row the certifier card leaves out
+      // (unaccredited CE, NCC life support) is marked as not counted.
+      counts: typeof c.counts === "function" ? c.counts : null, countRule: `${c.body} ${c.unit || "hours"}`,
+    });
   }
   return list;
 }
@@ -393,13 +441,33 @@ export function boardTranscriptModel(data, board, { certFiles = null } = {}) {
     return { error: `No CME entries fall inside the ${board.name} window (${formatDate(board.from)} to ${formatDate(board.to)}).` };
   }
   const isABMS = board.source === "ABMS";
+  const isCert = board.source === "CERT";
   const counts = isABMS
     ? (c) => (c.category || "").includes("AMA PRA Category 1")
     : () => true;
   const { rows, certs } = assignCertificates(data, entries, certFiles);
-  const source = isABMS
-    ? `ABMS ${board.code} continuing certification, ${board.unit || "AMA PRA Category 1"}`
-    : `AOA ${board.code === "AOA" ? "national CME requirement" : `${board.code} OCC`}, ${board.windowLabel || "3-year cycle"}`;
+  const source = isCert
+    ? `${board.body} certification, ${board.windowLabel}`
+    : isABMS
+      ? `ABMS ${board.code} continuing certification, ${board.unit || "AMA PRA Category 1"}`
+      : `AOA ${board.code === "AOA" ? "national CME requirement" : `${board.code} OCC`}, ${board.windowLabel || "3-year cycle"}`;
+  if (isCert) {
+    return {
+      kind: "board", board,
+      title: data.settings?.degreeType === "NP" ? "CE Transcript" : "CME Transcript",
+      subtitle: plain(board.label || board.name),
+      physician: physicianBlock(data), license: null,
+      window: { start: board.from + "T00:00:00", end: board.to + "T23:59:59", label: windowLabelText(board.windowLabel) },
+      rows: rows.map(r => ({ ...r, counted: board.counts ? !!board.counts(r.entry) : true })), certs, countRule: board.countRule || null,
+      requirements: [
+        { name: `Total ${board.unit || "credits"}`, rule: plain(board.assessment), required: fmtHrs(board.required), earned: fmtHrs(board.earned), met: board.earned >= board.required },
+        ...(board.cat1Required > 0 ? [{ name: "Category 1 minimum", rule: "", required: fmtHrs(board.cat1Required), earned: fmtHrs(board.cat1Earned), met: board.cat1Earned >= board.cat1Required }] : []),
+      ],
+      source,
+      fileName: transcriptFileName(board.label || board.name || board.code, physicianBlock(data), data.settings?.degreeType === "NP" ? "CE Transcript" : "CME Transcript"),
+      footnotes: [plain(board.notes)].filter(Boolean),
+    };
+  }
   return {
     kind: "board",
     board,
@@ -438,8 +506,64 @@ export function boardTranscriptModel(data, board, { certFiles = null } = {}) {
 
 // ─── Rendering ────────────────────────────────────────────────────────────
 
+/**
+ * A PA's or NP's requirement rows: only what the rule data verifies, the
+ * items it does not yet verify named with the board link, and never a
+ * "null" hour figure (DESIGN 4.5). Physician rows are below, unchanged.
+ */
+function appRequirementRows(model) {
+  const { comp } = model;
+  const unit = comp.unit || "hours";
+  const ce = comp.profession === "np" ? "CE" : "CME";
+  const rows = [];
+  if (!comp.rulesVerified) {
+    rows.push({ name: `Total ${ce}`, rule: `Not yet verified. ${comp.board || "The board"}: ${comp.boardUrl || "link not yet verified"}`, required: "Not yet verified", earned: fmtHrs(comp.totalEarned), met: null, status: "Not yet verified" });
+  } else if (comp.ceMode === "hours" && comp.totalRequired > 0) {
+    rows.push({
+      name: `Total ${ce} ${unit} (${comp.cycle}-year cycle)`,
+      rule: comp.satisfiedVia?.body && !comp.satisfiedVia.confirm ? `Met through current ${comp.satisfiedVia.body} certification (expires ${comp.satisfiedVia.expirationDate})` : "",
+      required: fmtHrs(comp.totalRequired), earned: fmtHrs(comp.totalEarned), met: comp.totalMet,
+    });
+  } else if (comp.ceMode === "none") {
+    rows.push({ name: `Total ${ce} ${unit}`, rule: "No general hour requirement", required: "None", earned: fmtHrs(comp.totalEarned), met: true });
+  } else if (comp.ceMode === "options") {
+    rows.push({ name: `${ce} option for this renewal`, rule: (comp.options?.list || []).map(o => o.text).join(" OR "), required: "One option", earned: fmtHrs(comp.totalEarned), met: comp.options?.confirmed ? true : null, status: comp.options?.confirmed ? undefined : "Not confirmed" });
+  }
+  if (comp.cat1Required > 0) {
+    rows.push({ name: `Category 1 minimum`, rule: plain(comp.cat1Note), required: fmtHrs(comp.cat1Required), earned: fmtHrs(comp.cat1Earned), met: comp.cat1Met });
+  }
+  if (comp.pharmacology?.required) {
+    rows.push({ name: "Pharmacology", rule: "", required: fmtHrs(comp.pharmacology.required), earned: fmtHrs(comp.pharmacology.earned), met: (comp.pharmacology.earned || 0) >= comp.pharmacology.required });
+  }
+  for (const t of comp.topicResults || []) {
+    rows.push({ name: t.topic, rule: plain(t.note), required: t.checklist ? "Any activity" : fmtHrs(t.required), earned: fmtHrs(t.earned), met: t.met });
+  }
+  for (const topic of comp.conditionalTopics || []) {
+    if (topic.applicability === "applies" || topic.status === "unverified") continue;
+    rows.push({
+      name: `${topic.topic} (conditional)`,
+      rule: [topic.condition?.description, topic.cite, topic.url].filter(Boolean).join(" "),
+      required: topic.applicability === "unknown" ? `${topic.checklist ? "Any activity" : fmtHrs(topic.required)} if applicable` : "Not applied",
+      earned: "-", met: null,
+      status: topic.applicability === "unknown" ? "Confirm applicability" : "Not applicable (selected)",
+    });
+  }
+  for (const c of comp.credentialChecks || []) {
+    rows.push({ name: c.label, rule: [c.cite, c.url].filter(Boolean).join(" "), required: "Yes", earned: c.met === true ? "Yes" : c.met === false ? "No" : "-", met: c.met, ...(c.met == null ? { status: "Not answered" } : {}) });
+  }
+  if (comp.mate) {
+    rows.push({ name: "MATE Act opioid/SUD training", rule: "One-time 8 hours of opioid or substance use disorder training for DEA registrants; counted across all dates, not just this cycle", required: fmtHrs(comp.mate.required), earned: fmtHrs(comp.mate.earned), met: comp.mate.met });
+  }
+  const unverified = [...new Set([...(comp.unverifiedItems || []).map(u => u.item), ...(comp.unverifiedTopics || []).filter(t => t.applicability !== "not-applicable").map(t => t.unverifiedItem || `${t.topic} requirement`)])].filter(Boolean);
+  if (comp.rulesVerified) for (const item of unverified) {
+    rows.push({ name: item, rule: `Not yet verified. ${comp.boardUrl || ""}`.trim(), required: "Not yet verified", earned: "-", met: null, status: "Not yet verified" });
+  }
+  return rows;
+}
+
 export function stateRequirementRows(model) {
   const { comp, req } = model;
+  if (comp?.profession) return appRequirementRows(model);
   const deg = model.physician.degree;
   const rows = [];
   if (comp.noGeneralReq) {
@@ -518,7 +642,7 @@ function drawKeyValue(doc, y, label, value) {
  */
 export function certificateIndexNote(model) {
   if (!model.certs.length) return "No certificate files are linked to these entries. Attach certificates to CME entries in Documents to include them.";
-  const ONREQUEST = "not included; available from the physician on request";
+  const ONREQUEST = `not included; available from the ${memberRoleLabel(model.physician?.degree).toLowerCase()} on request`;
   const label = (c) => {
     if (c.mode === "image") return "embedded on a following page";
     if (c.mode === "convert") return `${ONREQUEST} (image format could not be embedded)`;
@@ -555,13 +679,14 @@ export function buildTranscriptPdf(model, { today = new Date() } = {}) {
 
   // ── Physician + window ──
   const p = model.physician;
-  const who = [p.name || "Physician", p.degree].filter(Boolean).join(", ");
-  y = drawKeyValue(doc, y, "Physician", who);
+  const role = memberRoleLabel(p.degree);
+  const who = [p.name || role, p.degree].filter(Boolean).join(", ");
+  y = drawKeyValue(doc, y, role, who);
   y = drawKeyValue(doc, y, "NPI", p.npi || "Not on file");
   if (model.kind === "state") {
     const lic = model.license;
     y = drawKeyValue(doc, y, `${model.state} license`,
-      lic ? `${lic.number ? `#${lic.number}` : "Number not on file"}${lic.expires ? `, expires ${formatDate(lic.expires)}` : ""}` : `No ${model.state} medical license on file`);
+      lic ? `${lic.number ? `#${lic.number}` : "Number not on file"}${lic.expires ? `, expires ${formatDate(lic.expires)}` : ""}` : `No ${model.state} ${model.comp?.profession ? ({ pa: "physician assistant license", aprn: "APRN license", rn: "RN license" }[model.comp.kind] || "license") : "medical license"} on file`);
   } else {
     y = drawKeyValue(doc, y, "Board", plain(model.board.label || model.board.name));
   }
@@ -817,7 +942,8 @@ export async function shareTranscriptPdf(model, { onHanded, onUndo, onUnanswered
   if (shareOne) {
     const p = prepared.physician || {};
     const { title, text } = fileShareText({
-      what: `CME transcript${prepared.subtitle ? ` for the ${prepared.subtitle}` : ""}`,
+      // "CME transcript", or "CE transcript" for an NP (the model's title).
+      what: `${String(prepared.title || "CME Transcript").replace(/ Transcript$/, " transcript")}${prepared.subtitle ? ` for the ${prepared.subtitle}` : ""}`,
       settings: { name: p.name, degreeType: p.degree, npi: p.npi },
     });
     const outcome = await shareAtHandoff({ title, text, files: pdfDelivery === "share" ? [file, ...certFiles] : [file] }, {

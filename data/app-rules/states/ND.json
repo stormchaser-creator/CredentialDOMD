@@ -1,0 +1,159 @@
+{
+  "state": "ND",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "North Dakota Board of Medicine",
+      "url": "https://www.ndbom.org"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Renewal requires evidence of current NCCPA (or board approved) certification; the state sets no CME hour count.",
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears",
+        "reason": "Licenses expire every other year on December 31."
+      },
+      "notes": [
+        {
+          "text": "Report a loss of NCCPA certification to the board within 10 days; the license then expires.",
+          "fact": "ce.nccpaLossReporting"
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative agreement",
+        "conditional": true,
+        "text": "No written agreement is required at a licensed health care facility, a facility with credentialing and privileging, or a physician-owned practice. Outside those settings a PA with fewer than 4,000 hours of practice executes a written collaborative agreement with a North Dakota physician. A PA practicing outside those settings applies to the board for approval to practice independently.",
+        "facts": [
+          "practice.agreementType",
+          "practice.settings",
+          "practice.under4000Hours",
+          "practice.independentApproval"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether PAs need a North Dakota Board of Pharmacy controlled substance registration",
+      "Whether the PA license renews every two years (the board page) or every year (NDAC 50-03-01-13 and -17 still say annual)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "North Dakota Board of Nursing",
+      "url": "https://www.ndbon.org"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 12,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "No CE is needed before the first renewal after licensure by examination.",
+            "fact": "rn.firstRenewalExempt"
+          }
+        ]
+      },
+      "practiceHours": {
+        "hours": 400,
+        "years": 4,
+        "fact": "rn.practiceHours"
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN renewal requires a current RN license or compact privilege and current national certification; no APRN hour total is set.",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "aprn.renewalCycleYears",
+            "rn.renewalCycleYears"
+          ],
+          "reason": "The APRN license is valid for the same two calendar years as the RN license."
+        },
+        "notes": [
+          {
+            "text": "The pharmacotherapy hours may also count toward the RN license's hours; certificates must itemize pharmacology CE.",
+            "facts": [
+              "aprn.pharmacologyCountsTowardRn",
+              "aprn.pharmacologyItemized"
+            ]
+          },
+          {
+            "text": "Without prescriptive authority, a board recognized competence maintenance program may stand in for national certification.",
+            "fact": "aprn.certificationOrCompetence"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.prescriberCertification",
+        "condition": {
+          "field": "Holds prescriptive authority",
+          "question": "Do you hold prescriptive authority?",
+          "description": "North Dakota requires current national certification to renew prescriptive authority."
+        }
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 15,
+          "measure": "pharmacology",
+          "label": "Pharmacotherapy related to your scope of practice, in the previous two years",
+          "facts": [
+            "aprn.pharmacologyHoursPerCycle",
+            "aprn.pharmacologyBoardPage"
+          ],
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          }
+        }
+      ],
+      "unverified": [
+        "Whether NPs need a North Dakota Board of Pharmacy controlled substance registration"
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "aprn.licenseCycle",
+            "rn.renewalCycleYears"
+          ],
+          "reason": "The APRN license runs with the RN license, two calendar years."
+        }
+      }
+    }
+  }
+}

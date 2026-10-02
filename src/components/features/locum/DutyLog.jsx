@@ -26,7 +26,7 @@ import { markInvoiceBusy } from "../../../utils/invoiceBusy";
 import useHeldSync from "../../shared/useHeldSync";
 import usePreviewStillUnbilled, { itemsBilledSince } from "../../shared/usePreviewStillUnbilled";
 import { typedChanges } from "../../../utils/formEdits";
-import { physicianLabel } from "../../../utils/invoiceArgs";
+import { invoiceSenderFields } from "../../../utils/invoiceArgs";
 import InvoiceEmailModal from "./InvoiceEmailModal";
 import InvoiceEmailIt from "../../shared/InvoiceEmailIt";
 import useOnline from "../../../hooks/useOnline";
@@ -260,7 +260,6 @@ function DutyLog({ contract, onBusyChange }) {
       .sort((a, b) => a.date.localeCompare(b.date));
     if (!chosen.length) return null;
     const s = data.settings || {};
-    const physician = physicianLabel(s);
     const lines = [];
     let total = 0;
     for (const d of chosen) {
@@ -280,7 +279,8 @@ function DutyLog({ contract, onBusyChange }) {
     // Same day blocks and day totals as the PDF and the time engine's text
     // invoice (utils/invoiceLayout.js). The money is this engine's own.
     const textArgs = {
-      physician, npi: s.npi, email: s.email, phone: s.phone,
+      ...invoiceSenderFields(s),
+      npi: s.npi, email: s.email, phone: s.phone,
       facility: contract.facility, agency: contract.agency,
       periodStart: dates[0], periodEnd: dates[dates.length - 1], terms, lines, total,
     };
@@ -831,7 +831,7 @@ function DutyLog({ contract, onBusyChange }) {
     const s = data.settings || {};
     return {
       number: preview.number,
-      physician: physicianLabel(s),
+      ...invoiceSenderFields(s),
       npi: s.npi, email: s.email, phone: s.phone,
       facility: contract.facility, agency: contract.agency,
       location: contract.location, billTo: contract.billTo,

@@ -1,0 +1,49 @@
+{
+ "state": "AZ",
+ "facts": [
+  {
+   "field": "pa.ce.acceptedSponsors",
+   "profession": "pa",
+   "value": "Category I approved by AAPA, AMA, AOA or another accrediting organization acceptable to the board",
+   "cite": "A.R.S. 32-2523(A)",
+   "url": "https://www.azleg.gov/ars/32/02523.htm",
+   "quote": "forty hours of category I continuing medical education approved by the American academy of physician assistants, the American medical association, the American osteopathic association",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.ce.firstPeriodProration",
+   "profession": "pa",
+   "value": "First biennial period: a pro-rated number of hours set by the Board",
+   "cite": "Ariz. Admin. Code R4-17-205(B)",
+   "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-17-205",
+   "quote": "During a licensee's first biennial license period, the licensee may complete a pro-rated number of continuing medical education hours established by the Board",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.practiceAlternatives",
+   "profession": "np",
+   "value": "Post-licensure degree or advanced practice certificate within five years satisfies the practice requirement",
+   "cite": "Ariz. Admin. Code R4-19-312(B)(1)",
+   "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-312",
+   "quote": "Completed a post-licensure nursing education program ... and obtained a degree, or an advanced practice certificate in nursing within the past five years",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.aprn.practiceAlternatives",
+   "profession": "np",
+   "value": "Completing an advanced practice nursing education program within five years satisfies the practice requirement",
+   "cite": "Ariz. Admin. Code R4-19-506(A)(1)",
+   "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R4-19-506",
+   "quote": "Completed an advanced practice nursing education program within the past five years",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

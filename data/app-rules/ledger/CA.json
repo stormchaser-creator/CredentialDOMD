@@ -1,0 +1,470 @@
+{
+ "state": "CA",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Physician Assistant Board of California (PAB)",
+   "url": "https://www.pab.ca.gov/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Expires at 12 midnight on the last day of the birth month in the second year of the two-year term (BPC 3523, as amended effective January 1, 2026)"
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "categoryRules": "50 hours of approved CME per two-year renewal period; approved programs are Category I (Preapproved) from AAPA, AMA, AOACCME, AAFP, ACCME or an ACCME-recognized state medical society",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Geriatric medicine, dementia care or care of older patients",
+     "hours": "20% of all mandatory CE hours (10 of 50 on the CME route; no hour figure stated for PAs who comply through NCCPA certification)",
+     "period": "every cycle",
+     "appliesTo": "PAs providing primary care to a population over 25% aged 65 or older (effective January 1, 2025)"
+    },
+    {
+     "topic": "Schedule II controlled substances and risks of addiction",
+     "hours": "not stated as hours",
+     "period": "one-time",
+     "appliesTo": "PAs authorized in the practice agreement to furnish Schedule II, DEA registered, who did not complete the one-time course under 16 CCR 1399.610 and 1399.612"
+    },
+    {
+     "topic": "Implicit bias (curriculum content inside every direct patient care course, not a separate hour count)",
+     "hours": null,
+     "period": "every cycle",
+     "appliesTo": "all CME courses with a direct patient care component (since January 1, 2022)"
+    }
+   ],
+   "controlledSubstanceCe": "One-time Schedule II course (risks of addiction) as part of CE for PAs furnishing Schedule II who had not completed the 16 CCR 1399.610/1399.612 course"
+  },
+  "practice": {
+   "agreementType": "practice agreement",
+   "agreementFilingAndRenewal": "Written practice agreement signed by the PA and one or more physicians (or an authorized physician for an organized health care system); not approved or filed with the board; must state the method of periodic competence review and review of the agreement. Delegation of services agreements in effect before January 1, 2020 are deemed compliant.",
+   "notes": "PA furnishes drugs under physician supervision per the practice agreement; physician must be reachable by phone or electronic means when the PA examines the patient."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "No separate state certificate; drug and device ordering (Schedule II to V as agreed) is authorized in the practice agreement. DEA-registered practitioners must apply for CURES (PDMP) access upon receiving DEA registration.",
+   "ceForPrescribers": "One-time Schedule II course for PAs furnishing Schedule II who had not already completed it"
+  },
+  "facts": [
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "50 hours of approved CME per two-year renewal period",
+    "cite": "16 CCR § 1399.615 (as stated on PAB CME page)",
+    "url": "https://pab.ca.gov/licensees/cmeregs.shtml",
+    "quote": "is required to complete a minimum of fifty (50) hours of approved continuing medical education (CME) during each two (2) year renewal period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "16 CCR 1399.615 itself was not loaded (Cornell LII blocked); value taken from the PAB page, which is the board's own statement of the rule."
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": "Current NCCPA certification at renewal satisfies the CME requirement",
+    "cite": "PAB CME page; Bus. & Prof. Code § 3524.5(a)",
+    "url": "https://pab.ca.gov/licensees/cmeregs.shtml",
+    "quote": "certified by the National Commission on Certification of Physician Assistants (NCCPA), or other qualified certifying body ... at the time of renewal are compliant",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "Category I (Preapproved) from AAPA, AMA, AOACCME, AAFP, ACCME or ACCME-recognized state medical society",
+    "cite": "16 CCR § 1399.616 (as stated on PAB CME page)",
+    "url": "https://pab.ca.gov/licensees/cmeregs.shtml",
+    "quote": "programs are approved by the Board for CME if they are designated as Category I (Preapproved) by one of the following sponsors",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.statutoryCap",
+    "value": "Board may not require more than 50 hours every two years and shall accept NCCPA as appropriate",
+    "cite": "Bus. & Prof. Code § 3524.5(a)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3524.5",
+    "quote": "The board shall not require more than 50 hours of continuing education every two years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.geriatric",
+    "value": "At least 20% of mandatory CE hours in geriatrics if over 25% of primary care patients are 65 or older",
+    "cite": "Bus. & Prof. Code § 3524.6",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3524.6",
+    "quote": "shall complete at least 20 percent of all mandatory continuing education hours in a course in the field of geriatric medicine",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.implicitBias",
+    "value": "CME courses with a direct patient care component must include implicit bias curriculum",
+    "cite": "Bus. & Prof. Code § 3524.5(b)(1)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3524.5",
+    "quote": "all continuing education courses for licensees under this chapter contain curriculum that includes the understanding of implicit bias.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.controlledSubstanceCe",
+    "value": "Schedule II course as part of CE for PAs who had not completed the one-time 1399.610/1399.612 course",
+    "cite": "Bus. & Prof. Code § 3502.1(e)(3)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3502.1",
+    "quote": "shall complete, as part of their continuing education requirements, a course that covers Schedule II controlled substances, and the risks of addiction",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "Expires midnight last day of birth month in second year of two-year term",
+    "cite": "Bus. & Prof. Code 3523 (amended by AB 1501, effective January 1, 2026)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3523",
+    "quote": "shall expire at 12 midnight of the last day of the birth month of the licensee during the second year of a two-year term",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.recordRetention",
+    "value": "Keep CME records 4 years",
+    "cite": "PAB CME page",
+    "url": "https://pab.ca.gov/licensees/cmeregs.shtml",
+    "quote": "Physician assistants are required to retain records issued by an approved CME provider for a period of four (4) years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Practice agreement signed by PA and physician(s); board approval not required",
+    "cite": "Bus. & Prof. Code § 3502.3(a)(2), (a)(5)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3502.3",
+    "quote": "Nothing in this section shall be construed to require approval of a practice agreement by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.practiceAgreementContent",
+    "value": "Agreement must state drugs, circumstances, extent of supervision, periodic competence review and review of the agreement",
+    "cite": "Bus. & Prof. Code § 3502.1(b)(1)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3502.1",
+    "quote": "the method of periodic review of the PA's competence, including peer review, and review of the practice agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.cures",
+    "value": "Practitioners authorized for Schedule II to V must apply for CURES access upon receiving DEA registration",
+    "cite": "Health & Saf. Code § 11165.1(a)(1)(A)(i)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=HSC&sectionNum=11165.1",
+    "quote": "shall, upon receipt of a federal Drug Enforcement Administration (DEA) registration, submit an application developed by the department to obtain approval to electronically access",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.implicitBias.exception",
+    "value": "Courses with no direct patient care component (research or similar) need not contain implicit bias content",
+    "cite": "Bus. & Prof. Code 3524.5(c)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3524.5",
+    "quote": "a continuing education course dedicated solely to research or other issues that does not include a direct patient care component is not required",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "pa.ce.oneTimeScheduleIIEquivalence",
+    "value": "A course meeting the 1399.610/1399.612 standards (as of June 7, 2019) satisfies the Schedule II course; no hour count stated",
+    "cite": "Bus. & Prof. Code 3502.1(e)(3)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=3502.1",
+    "quote": "Evidence of completion of a course meeting the standards, including pharmacological content, established in Sections 1399.610 and 1399.612",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "California Board of Registered Nursing (BRN)",
+   "url": "https://www.rn.ca.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Every two years on or before the last day of the month following the birthday month",
+   "ceHoursPerCycle": 30,
+   "nlcCompactMember": false,
+   "topicMandates": [
+    {
+     "topic": "Implicit bias",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "RNs within the first two years after initial licensure (otherwise exempt from CE on first renewal)"
+    },
+    {
+     "topic": "Gerontology, dementia care or care of older patients",
+     "hours": "20% of all mandatory CE hours (6 of 30)",
+     "period": "every cycle",
+     "appliesTo": "NPs providing primary care to a patient population over 25% aged 65 or older; certified at renewal"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "Nurse Practitioner (NP) certificate; NP Furnishing Number (NPF); 103 NP and 104 NP certifications for practice without standardized procedures",
+   "separateLicenceOrCertificate": "NP certification on the RN licence, plus a separate furnishing number for drug ordering; 103 NP / 104 NP certificates for practice without standardized procedures",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": "No separate NP hour count found; the 30 RN contact hours apply",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": "Not required for the standard NP certificate when the NP completed a BRN-approved program (national certification is the alternative route for out-of-state graduates); required for 103 NP and 104 NP",
+   "topicMandates": [
+    {
+     "topic": "Schedule II controlled substances (risks of addiction, legal requirements, patient-specific protocols)",
+     "hours": 3,
+     "period": "by the time of renewal (board wording; whether every cycle or one-time is not stated)",
+     "appliesTo": "NPs with a furnishing number authorized to furnish Schedule II and DEA registered"
+    }
+   ],
+   "renewalNote": "NP certificate and NP furnishing number renew at the same time as the RN licence, with additional fees",
+   "creditRuleFuture": "From July 1, 2027: NPs whose patients are adult women under 65 earn 2 CE hours per hour of accredited perimenopause/menopause/postmenopause courses, capped at 6 hours (BPC 2811.5(j)(2), SB 164, 2026). A credit rule, not a mandate."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "BRN Nurse Practitioner Furnishing Number (requires pharmacology course); renewable with the RN licence; Schedule II designation added to the furnishing number",
+   "pharmacologyCeForPrescribers": "No recurring pharmacology hour requirement found beyond the Schedule II course",
+   "controlledSubstanceCe": "Minimum 3-hour Schedule II course by the time of renewal for NPs who furnish Schedule II",
+   "stateCsRegistrationRequired": null
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "standardized procedures/protocols with physician supervision (physician may supervise no more than four NPs for furnishing); 103 NP and 104 NP pathways remove standardized procedures",
+   "transitionToPracticeHours": 4600,
+   "agreementFilingAndRenewal": "Standardized procedure or protocol developed and approved by the supervising physician, the NP and the facility administrator; must specify method of periodic competence review and review of the standardized procedure; not filed with the board. 103 NP: 3 full-time-equivalent years or 4,600 hours transition to practice; 104 NP: a further 3 years practice as an NP in good standing."
+  },
+  "facts": [
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": "30 contact hours every two years",
+    "cite": "16 CCR § 1451 (as stated on BRN CE page)",
+    "url": "https://www.rn.ca.gov/licensees/ce-renewal.shtml",
+    "quote": "to complete 30 contact hours of continuing education every two years, in addition to paying the renewal fee, to maintain an active license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "Biennial, by last day of month following birthday month",
+    "cite": "Bus. & Prof. Code § 2811(a)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2811",
+    "quote": "every two years on or before the last day of the month following the month in which their birthday occurs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.implicitBias",
+    "value": "1 hour implicit bias for licensees in first two years after initial licensure",
+    "cite": "Bus. & Prof. Code § 2811.5(h)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2811.5",
+    "quote": "those licensees shall complete one hour of direct participation in an implicit bias course",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.topicMandates.geriatric",
+    "value": "6 of 30 hours in gerontology for NPs whose primary care population is over 25% aged 65+",
+    "cite": "BRN CE page, Advanced Practice Certificates",
+    "url": "https://www.rn.ca.gov/licensees/ce-renewal.shtml",
+    "quote": "at least 6 of the 30 continuing education hours required to renew their registered nurse license, in a course in the field of gerontology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "BRN page states 6 of 30; statute states 20 percent of mandatory hours (BPC 2811.5(j)(1))."
+   },
+   {
+    "field": "np.prescribing.separateAuthorityRegistration",
+    "value": "Furnishing number issued by BRN; renewable at RN licence renewal",
+    "cite": "Bus. & Prof. Code § 2836.3(a), (b)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2836.3",
+    "quote": "The number shall be renewable at the time of the applicant's registered nurse license renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "Schedule II course as part of CE for furnishing NPs authorized for Schedule II with DEA registration",
+    "cite": "Bus. & Prof. Code § 2836.1(g)(3)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2836.1",
+    "quote": "shall complete, as part of their continuing education requirements, a course including Schedule II controlled substances, and the risks of addiction",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe.hours",
+    "value": "Minimum 3-hour course by the time of renewal",
+    "cite": "BRN Advanced Practice Certification page (citing BPC 2836.1(g)(3))",
+    "url": "https://www.rn.ca.gov/applicants/ad-pract.shtml",
+    "quote": "nurse practitioners, by the time of renewal, complete a minimum 3-hour continuing education course that meets the Board requirements",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementType",
+    "value": "Standardized procedure or protocol approved by supervising physician, NP and facility administrator; max four NPs per physician for furnishing",
+    "cite": "Bus. & Prof. Code § 2836.1(b), (e)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2836.1",
+    "quote": "no physician and surgeon shall supervise more than four nurse practitioners at one time.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": "103 NP: 3 full-time-equivalent years or 4,600 hours transition to practice; national certification required",
+    "cite": "Bus. & Prof. Code § 2837.103(a)(1)(B), (D)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2837.103",
+    "quote": "Has completed a transition to practice in California of a minimum of three full-time equivalent years of practice or 4600 hours.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.104NP",
+    "value": "104 NP: additional 3 years practice in good standing beyond the transition to practice, plus master's or doctoral degree",
+    "cite": "Bus. & Prof. Code § 2837.104(b)(3)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2837.104",
+    "quote": "Has practiced as a nurse practitioner in good standing for at least three years, not inclusive of the transition to practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertification",
+    "value": "National certification is the route for graduates of programs not approved by the BRN",
+    "cite": "BRN Advanced Practice Certification page",
+    "url": "https://www.rn.ca.gov/applicants/ad-pract.shtml",
+    "quote": "If you did not complete a California Board-approved program, you will need to submit verification of national certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": "Not a member (secondary source only)",
+    "cite": "none (secondary)",
+    "url": "https://www.nursinglicensure.org/np-state/california-nurse-practitioner/",
+    "quote": "California is not a Nurse Licensure Compact state",
+    "loaded": false,
+    "verified": false,
+    "reason": "No primary source states non-membership affirmatively. Supporting primary evidence: California NLC bills AB 410 (2021-22) and AB 3232 (2023-24) both show status Died on leginfo; no California NLC statute found.",
+    "supportingPrimary": [
+     {
+      "url": "https://leginfo.legislature.ca.gov/faces/billStatusClient.xhtml?bill_id=202120220AB410",
+      "quote": "Inactive Bill - Died",
+      "loaded": true
+     },
+     {
+      "url": "https://leginfo.legislature.ca.gov/faces/billStatusClient.xhtml?bill_id=202320240AB3232",
+      "quote": "Inactive Bill - Died",
+      "loaded": true
+     }
+    ]
+   },
+   {
+    "field": "np.rn.topicMandates.geriatric.statute",
+    "value": "NPs with over 25% of primary care patients aged 65+ certify 20% of mandatory CE in gerontology, dementia or older patient care at renewal",
+    "cite": "Bus. & Prof. Code 2811.5(j)(1) (amended by SB 164, effective June 29, 2026)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2811.5",
+    "quote": "shall certify that they have completed at least 20 percent of all existing mandatory continuing education hours in a course in the field of gerontology",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.rn.ceCap",
+    "value": "Board CE standards may not exceed 30 hours",
+    "cite": "Bus. & Prof. Code 2811.5(c)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2811.5",
+    "quote": "shall not exceed 30 hours of direct participation in a course or courses approved by the board",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.rn.firstRenewalExemption",
+    "value": "First renewal after passing NCLEX within two years is exempt from CE except the implicit bias hour",
+    "cite": "BRN Continuing Education page; Bus. & Prof. Code 2811.5(h)",
+    "url": "https://www.rn.ca.gov/licensees/ce-renewal.shtml",
+    "quote": "this is your first renewal, you are exempt from the CE requirement, with the exception of the Implicit Bias requirement.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.aprn.renewal",
+    "value": "NP and NP furnishing certificates renew with the RN licence; renewal fees due at the same time",
+    "cite": "BRN License/Certificate Renewal page, Advanced Practice Certificate Renewal",
+    "url": "https://www.rn.ca.gov/licensees/lic-renewal.shtml",
+    "quote": "Renewal fees for the certificates listed above are due at the same time as your RN license renewal fee.",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.prescribing.scheduleIIRetention",
+    "value": "3-hour Schedule II course is required to retain Schedule II furnishing privileges, completed by the time of renewal",
+    "cite": "BRN Advanced Practice Certification page (BPC 2836.1(g)(3))",
+    "url": "https://www.rn.ca.gov/applicants/ad-pract.shtml",
+    "quote": "in order to retain privileges to furnish Schedule II substances, nurse practitioners, by the time of renewal, complete a minimum 3-hour",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   },
+   {
+    "field": "np.aprn.103NP.nationalCertification",
+    "value": "103 NP requires a current national NP certification from an NCCA or ABNS accredited body recognized by the board",
+    "cite": "Bus. & Prof. Code 2837.103(a)(1)(B)",
+    "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2837.103",
+    "quote": "Holds a certification as a nurse practitioner from a national certifying body accredited by the National Commission for Certifying Agencies",
+    "loaded": true,
+    "verifiedBy": "verifier-2026-10",
+    "verified": true
+   }
+  ]
+ },
+ "unverified": [
+  "California not a Nurse Licensure Compact member: no primary source states it affirmatively; NLC bills AB 410 (2021-22) and AB 3232 (2023-24) both died (leginfo status pages loaded). Recorded false with verified:false.",
+  "16 CCR 1399.615, 1399.616 and 16 CCR 1451 were not loaded directly (Cornell LII returned a block page); content taken from the PAB and BRN pages, which are the boards' own statements.",
+  "State controlled substance registration for PA and NP: none found; only CURES access on DEA registration (HSC 11165.1) is confirmed. Left null.",
+  "NP Schedule II 3-hour course: BRN says 'in order to retain privileges... by the time of renewal'; whether every renewal or once is not stated in BPC 2836.1(g)(3) or the BRN page.",
+  "Whether continued national certification is checked at renewal of 103 NP / 104 NP certificates was not confirmed (2837.103 states it as a qualification).",
+  "PA Schedule II course hours: BPC 3502.1(e)(3) gives no hour figure; 16 CCR 1399.610/1399.612 standards not loaded.",
+  "PA geriatric 20% rule (BPC 3524.6) for PAs who comply through NCCPA certification: how the 20% is measured is not stated.",
+  "Practice authority label 'restricted' is our reading of BPC 2836.1 (standardized procedures, physician supervision, max four NPs per physician for furnishing) with the 103/104 NP exceptions."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedOn": "2026-10-01",
+  "corrections": [
+   "pa.licence.renewalDeadline: removed 'no grace period'; neither BPC 3523 nor any PAB page loaded says that. Noted BPC 3523 was amended by AB 1501 effective January 1, 2026 (birth month rule unchanged).",
+   "PA geriatric mandate: hours expressed as 20% of mandatory hours (10 of 50 on the CME route); unclear for the NCCPA route.",
+   "NP gerontology: now cited to the statute BPC 2811.5(j)(1) (20 percent of mandatory hours, certified at renewal), amended by SB 164 effective June 29, 2026; BRN's '6 of 30' kept as the derived figure.",
+   "Added future credit rule: from July 1, 2027 NPs treating adult women under 65 earn double credit (up to 6 hours) for menopause courses (BPC 2811.5(j)(2)). Not a mandate.",
+   "Resolved: NP certificate and furnishing number renew with the RN licence (BRN renewal page), removed from unverified.",
+   "np.rn.nlcCompactMember: kept verified:false; added primary supporting evidence (AB 410 and AB 3232 died).",
+   "Added facts: implicit bias exception for non-patient-care courses (3524.5(c)); Schedule II course equivalence (3502.1(e)(3)); RN CE cap 30 hours (2811.5(c)); first renewal exemption except implicit bias; 103 NP national certification (2837.103(a)(1)(B)).",
+   "Missed-mandate sweep: the 12-hour one-time pain/end-of-life course (BPC 2190.5) is physician-only; BPC 2811.5(e)-(g) and 3524.5(e) only ask the boards to 'consider' spousal abuse, end of life, menopause and maternal mental health courses, so none is a mandate. No other PA or NP topic mandate found."
+  ]
+ }
+}

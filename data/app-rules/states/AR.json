@@ -1,0 +1,161 @@
+{
+  "state": "AR",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Arkansas State Medical Board",
+      "url": "https://www.armedicalboard.org/"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.ce.hoursPerCycle",
+        "reason": "20 credit hours per year on an annual license"
+      },
+      "total": {
+        "value": 20,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "notes": [
+        {
+          "text": "The license renews by the last day of your birth month; there is no grace period.",
+          "fact": "pa.licence.renewalDeadline"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 1,
+        "label": "Prescribing of opioids and benzodiazepines, each year, part of the 20 hours",
+        "fact": "pa.ce.topicMandates.opioidsBenzodiazepines"
+      },
+      {
+        "topic": "Pain Management",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "Pain management CE: at least 5 hours for PAs authorized to prescribe Schedule II hydrocodone combination products; how often it is due is not yet verified",
+        "fact": "pa.ce.topicMandates.painManagement",
+        "condition": {
+          "field": "Authorized to prescribe Schedule II hydrocodone combination products",
+          "question": "Are you authorized to prescribe Schedule II hydrocodone combination products?",
+          "description": "Arkansas PAs with this authority complete pain management CE."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "The board accepts the delegation agreement before licensure. The written agreement is signed by the physician and the PA and updated annually; changes or additions of supervising physicians are reported within 10 calendar days.",
+        "facts": [
+          "pa.practice.delegationAgreementAcceptance",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.notification"
+        ]
+      }
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.licence.renewalDeadline"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Arkansas State Board of Nursing (ASBN)",
+      "url": "https://healthy.arkansas.gov/boards-commissions/boards/nursing-arkansas-state-board/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "options": [
+          {
+            "text": "15 practice focused contact hours from a recognized CE approval body",
+            "fact": "np.rn.ceHoursPerCycle"
+          },
+          {
+            "text": "National certification or recertification during the renewal period",
+            "fact": "np.rn.ceHoursPerCycle"
+          },
+          {
+            "text": "An academic course in nursing or a related field",
+            "fact": "np.rn.ceHoursPerCycle"
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN renewal requires current national certification, and the CE submitted to the certifying body meets the statutory CE requirement.",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.rn.renewalCycleYears",
+            "np.aprn.renewal"
+          ],
+          "reason": "APRN renewal coincides with the biennial RN renewal."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.renewal"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 5,
+          "measure": "pharmacology",
+          "label": "Pharmacotherapeutics in the area of certification, each biennium",
+          "fact": "np.aprn.pharmacologyHoursPerCycle",
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Pharmacology hours apply to nurse practitioners who prescribe."
+          }
+        },
+        {
+          "topic": "Prescriptive Practice",
+          "hours": 2,
+          "label": "Maintaining professional boundaries and Arkansas APRN prescribing rules and laws, 2 of the 5 pharmacotherapeutics hours",
+          "fact": "np.aprn.topicMandates",
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Pharmacology hours apply to nurse practitioners who prescribe."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative practice agreement",
+        "conditional": true,
+        "text": "Prescribers without full independent practice authority submit evidence of a current collaborative practice agreement at each renewal and notify the board within 7 days after it ends. Full independent practice authority requires 6,240 practice hours and renews every 3 years.",
+        "facts": [
+          "np.practice.agreementFilingAndRenewal",
+          "np.practice.terminationNotice",
+          "np.practice.transitionToPracticeHours",
+          "np.practice.fullIndependentPracticeRenewal"
+        ]
+      }
+    }
+  }
+}

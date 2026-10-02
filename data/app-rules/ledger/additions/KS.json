@@ -1,0 +1,38 @@
+{
+ "state": "KS",
+ "facts": [
+  {
+   "field": "pa.ce.firstRenewalExempt",
+   "profession": "pa",
+   "value": "Initially licensed within one year of a renewal date: exempt for that first renewal",
+   "cite": "K.A.R. 100-28a-5(d) (Kansas Register Vol. 40, No. 25)",
+   "url": "https://sos.ks.gov/publications/Register/Volume-40/Issues/Issue%2025/06-24-21-49232.html",
+   "quote": "physician assistant initially licensed within one year of a renewal registration date shall be exempt from the continuing education ... for that first renewal period",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "pa.practice.upcoming.collaborationDiscipline",
+   "profession": "pa",
+   "value": "Collaboration needs 4,000 or more hours and no disciplinary action on the license",
+   "cite": "K.S.A. 65-28a08(h) as amended by 2026 HB 2702",
+   "url": "https://sos.ks.gov/publications/sessionlaws/2026/Chapter-36-HB-2702.html",
+   "quote": "attests to having 4,000 hours or more of postgraduate clinical experience, and has not had a disciplinary action taken against such licensee’s license",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.rn.noCarryover",
+   "profession": "np",
+   "value": "RN contact hours over 30 do not carry over",
+   "cite": "K.A.R. 60-9-106(b)",
+   "url": "https://ksbn.kansas.gov/wp-content/uploads/NPA/npa.pdf",
+   "quote": "The required 30 contact hours of approved CNE ... Contact hours accumulated in excess of the 30-hour requirement shall not be carried over",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

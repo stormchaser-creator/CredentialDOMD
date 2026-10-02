@@ -1,0 +1,1183 @@
+{
+ "generated": "2026-10-01",
+ "scope": "National PA and NP requirements",
+ "facts": [
+  {
+   "field": "pa.nccpa.cycle",
+   "value": "10-year certification maintenance cycle made of five 2-year CME logging cycles",
+   "cite": "NCCPA Maintain Certification",
+   "url": "https://www.nccpa.net/maintain-certification/",
+   "quote": "The 10-year certification maintenance process includes five two-year cycles",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.cme_per_cycle",
+   "value": {
+    "total": 100,
+    "category1_min": 50,
+    "remainder": "Category 1, Category 2, or both",
+    "period_years": 2
+   },
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "you must earn and log at least 100 CME credits, including at least 50 Category 1 CME credits.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.cme_remainder",
+   "value": "Remaining 50 may be Category 1, Category 2 or a mix",
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "The remaining 50 credits can be Category 1, Category 2 or a combination of both.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.logging_deadline",
+   "value": "11:59 p.m. PT, December 31 of the certification expiration year (CME logged and maintenance fee submitted)",
+   "cite": "NCCPA Maintain Certification",
+   "url": "https://www.nccpa.net/maintain-certification/",
+   "quote": "submit a certification maintenance fee by 11:59 p.m. PT, December 31 of their certification expiration year",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.sa_pi_required",
+   "value": false,
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "Two types of Category 1 CME are self-assessment CME and PI-CME. While these types are no longer required as part of the 50 credits",
+   "loaded": true,
+   "verified": true,
+   "note": "SA and PI CME are optional; bonus weighting only",
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.sa_multiplier",
+   "value": 1.5,
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "NCCPA applies a multiplication factor of 1.5 to Self-Assessment CME credits",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.pi_bonus",
+   "value": "First 20 PI-CME credits per 2-year cycle are doubled",
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "NCCPA doubles the first 20 PI-CME credits earned for each PA per CME logging cycle.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.exam_deadline",
+   "value": "Pass PANRE or PANRE-LA by the end of year 10 of the maintenance cycle",
+   "cite": "NCCPA Maintain Certification",
+   "url": "https://www.nccpa.net/maintain-certification/",
+   "quote": "PAs must pass ... (PANRE) or ... (PANRE-LA®) by the end of the 10th year of their certification maintenance cycle.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Quote corrected to exact page text (registered marks); value unchanged"
+  },
+  {
+   "field": "pa.nccpa.panre_timing",
+   "value": "Traditional PANRE taken in year 9 or 10",
+   "cite": "NCCPA Maintain Certification",
+   "url": "https://www.nccpa.net/maintain-certification/",
+   "quote": "If you are in your 9th or 10th year of your certification maintenance cycle, just log in to your NCCPA Portal to register for PANRE.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.panre_la_timing",
+   "value": "Apply in year 6; 12 quarters across years 7 to 9 (may finish in 8 quarters); if not passed, up to three PANRE attempts in year 10",
+   "cite": "NCCPA Maintain Certification",
+   "url": "https://www.nccpa.net/maintain-certification/",
+   "quote": "apply for the PANRE-LA in the 6th year ... administered over 12 quarters in years 7-9 ... may finish as early as eight quarters.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.panre_la_fallback",
+   "value": "Not passing PANRE-LA after 12 quarters leaves three PANRE attempts in year 10",
+   "cite": "NCCPA Maintain Certification",
+   "url": "https://www.nccpa.net/maintain-certification/",
+   "quote": "If you don't pass by the end of the 12 quarters, you will have three attempts to take and pass PANRE in year 10",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.panre_la_cme",
+   "value": "Each fully answered PANRE-LA quarter (25 questions) earns 2 Category 1 SA CME credits, 3 with the 50% bonus",
+   "cite": "NCCPA Maintain Certification",
+   "url": "https://www.nccpa.net/maintain-certification/",
+   "quote": "For every quarter that you answer all 25 questions, you will receive two Category 1 Self-Assessment CME credits (three credits with NCCPA's 50% bonus",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.panre_la_permanent",
+   "value": "PANRE-LA is a permanent alternative to PANRE since 2023 (first questions January 2023)",
+   "cite": "NCCPA news release",
+   "url": "https://www.nccpa.net/panre-la/",
+   "quote": "NCCPA is pleased to announce that beginning in 2023, PAs will have two options for their recertification assessment.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.category1_sponsors",
+   "value": [
+    "AAPA Category 1",
+    "AMA PRA Category 1 Credit (ACCME or recognized state medical society accredited providers)",
+    "AOA Category 1A",
+    "EACCME",
+    "AAFP Prescribed",
+    "Royal College MOC (RCPSC)",
+    "Mainpro+ (CFPC)",
+    "PACCC Mainpro C / M1",
+    "activities meeting NCCPA SA or PI-CME definitions"
+   ],
+   "cite": "NCCPA CME page, CME Types",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "NCCPA accepts for Category 1 CME credit activities designated for Category 1 credit by the following sponsors: American Academy of Physician Associates (AAPA)",
+   "loaded": true,
+   "verified": true,
+   "note": "ANCC nursing contact hours are NOT on NCCPA's Category 1 list",
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.category2_definition",
+   "value": "Any activity related to medicine, patient care or the PA role not designated for Category 1",
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "NCCPA accepts for Category 2 credit any educational activity that relates to medicine, patient care or the role of the PA",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.nccpa.category2_not_audited",
+   "value": "NCCPA does not audit Category 2; state boards may",
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "NCCPA does not audit Category 2 CME. This is the policy for NCCPA, not the state medical boards.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.aapa.category1_definition",
+   "value": "Clinical and professional activities that maintain or increase PA knowledge, skills and performance; three types for NCCPA: Category 1, Category 1 SA, Category 1 PI-CME",
+   "cite": "AAPA CME FAQs",
+   "url": "https://www.aapa.org/education/cme-faqs/",
+   "quote": "Category 1 CME consists of clinical and professional educational activities that serve to maintain, develop or increase the knowledge, skills and professional performance",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.aapa.category2_definition",
+   "value": "Elective; related to medicine, patient care, or professional issues such as reimbursement and CPT coding",
+   "cite": "AAPA CME FAQs",
+   "url": "https://www.aapa.org/education/cme-faqs/",
+   "quote": "Category 2 credit is elective and must be related to medicine, patient care or other professional issues such as reimbursement and CPT coding.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.aapa.ama_pra_for_pas",
+   "value": "PAs receive a certificate stating the activity was certified for AMA PRA Category 1 Credit; accepted for NCCPA and state renewal",
+   "cite": "AAPA CME FAQs",
+   "url": "https://www.aapa.org/education/cme-faqs/",
+   "quote": "accredited CME providers can and should issue documentation to PA participants that states the activity was certified for AMA PRA Category 1 Credit",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.aapa.nursing_only_credit",
+   "value": "Nursing-only credit (ANCC contact hours) counts only as Category 2 for PAs",
+   "cite": "AAPA CME FAQs",
+   "url": "https://www.aapa.org/education/cme-faqs/",
+   "quote": "Programs approved for nursing credit only should be logged as a Category 2 (elective) activity.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "pa.aapa.state_variance",
+   "value": "Acceptable credit types for state licensing boards may differ from NCCPA",
+   "cite": "AAPA CME FAQs",
+   "url": "https://www.aapa.org/education/cme-faqs/",
+   "quote": "Please note that acceptable credit types for individual state licensing boards may vary.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.aanpcb.brand",
+   "value": "American Academy of Nurse Practitioners Certification Board (AANPCB), doing business as Nurse Practitioners Certification Board (NPCB)",
+   "cite": "NPCB FNP Renewal Handbook (06-04-2026)",
+   "url": "https://www.aanpcert.org/wp-content/uploads/FNP-Renewal-Handbook-06-04-2026.pdf",
+   "quote": "Certification Board (AANPCB), doing business as Nurse Practitioners Certification Board.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Strengthened: handbook states the legal name and DBA"
+  },
+  {
+   "field": "np.aanpcb.cycle_years",
+   "value": 5,
+   "cite": "NPCB recertification page",
+   "url": "https://candidateportal.aanpcert.org/recert",
+   "quote": "Practice must be during the 5-year certification period.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.aanpcb.option1_ce",
+   "value": "Option 1: at least 100 contact hours of advanced CE, of which 25 must be advanced practice pharmacology, within the 5-year period",
+   "cite": "NPCB recertification page",
+   "url": "https://candidateportal.aanpcert.org/recert",
+   "quote": "Minimum 100 contact hours of advanced CE ... 25 credits of the 100 CEs must be advanced practice pharmacology",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://www.aanpcert.org/wp-content/uploads/FNP-Renewal-Handbook-06-04-2026.pdf",
+     "quote": "Minimum of 25 advanced pharmacology contact hours included within the 100 CE"
+    }
+   ],
+   "correction": "Value confirmed; added the current handbook as primary source"
+  },
+  {
+   "field": "np.aanpcb.option1_practice_hours",
+   "value": 1000,
+   "cite": "NPCB recertification page",
+   "url": "https://candidateportal.aanpcert.org/recert",
+   "quote": "Minimum of 1,000 practice hours as an NP in the population focus of certification",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.aanpcb.option2_exam",
+   "value": "Option 2: pass the certification exam before expiration (FNP, A-GNP, PMHNP, ENP; ENP exam renewal also requires current FNP certification); CE and practice hours not required; ANP and GNP certificants renew by practice hours and CE only (exams retired)",
+   "cite": "NPCB FNP, AGNP and ENP Renewal Handbooks (06-04-2026)",
+   "url": "https://www.aanpcert.org/wp-content/uploads/AGNP-Renewal-Handbook-06-04-2026.pdf",
+   "quote": "Renewal by examination is not available because the ANP and GNP certification examinations have been retired.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://www.aanpcert.org/wp-content/uploads/FNP-Renewal-Handbook-06-04-2026.pdf",
+     "quote": "Continuing education and practice hour requirements are not needed for renewal by examination."
+    },
+    {
+     "url": "https://www.aanpcert.org/wp-content/uploads/ENP-Renewal-Handbook-06-04-2026.pdf",
+     "quote": "Hold current Family Nurse Practitioner (FNP) certification"
+    }
+   ],
+   "correction": "Exam renewal is available for FNP, A-GNP, PMHNP and ENP (ENP requires current FNP certification), not only A-GNP and FNP. ANP and GNP renew by practice hours and CE only. Source is the 06-04-2026 renewal handbooks."
+  },
+  {
+   "field": "np.aanpcb.precepting",
+   "value": "Precepting (NP, PA, medical, pharmacy or dental students, during direct patient care) may replace up to 25 non-pharmacology CE hours; max 120 preceptor hours; roughly 1 CE per 5 preceptor hours, 120+ hours = 25 CE",
+   "cite": "NPCB FNP Renewal Handbook (06-04-2026), Preceptorship Hours",
+   "url": "https://www.aanpcert.org/wp-content/uploads/FNP-Renewal-Handbook-06-04-2026.pdf",
+   "quote": "A maximum of 120 preceptorship hours may be applied toward a maximum of 25 non-pharmacology CE contact hours",
+   "loaded": true,
+   "verified": true,
+   "note": "candidateportal.aanpcert.org/recert still says 125; superseded",
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Conflict resolved: current handbooks (06-04-2026) and FAQ both say 120; the candidateportal page (125) is stale. Conversion table read: 1 CE per 5 preceptor hours, 120+ hours = 25 CE."
+  },
+  {
+   "field": "np.aanpcb.accepted_ce",
+   "value": "CE must be relevant to the population focus, intended for advanced practice or healthcare professionals, and awarded by an accredited provider (FAQ examples: AANP, ANCC). ALS courses (ACLS, PALS, NRP, ABLS, ALSO, ATLS) accepted; BLS not. AMA PRA Category 1 equivalence not stated.",
+   "cite": "NPCB FNP Renewal Handbook (06-04-2026), CE Accreditation",
+   "url": "https://www.aanpcert.org/wp-content/uploads/FNP-Renewal-Handbook-06-04-2026.pdf",
+   "quote": "Continuing education credit is awarded by an accredited provider",
+   "loaded": true,
+   "verified": false,
+   "note": "AMA PRA Category 1 acceptance for NPCB renewal: not yet verified (no primary statement found). Do not show a 1:1 rule.",
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Handbook now loads (06-04-2026 edition, not truncated). It says only \"awarded by an accredited provider\"; it names no AMA PRA Category 1 rule. Still unconfirmed whether AMA PRA counts 1:1."
+  },
+  {
+   "field": "np.aanpcb.audit_retention",
+   "value": "Keep CE and practice documentation for 2 years after the renewal deadline (audit)",
+   "cite": "NPCB renewal application page",
+   "url": "https://aanpcert.org/renew/continuing-education/",
+   "quote": "Applicants must retain verification of Continuing Education and other renewal activities for two years following their renewal deadline.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.aanpcb.rn_license",
+   "value": "Current, active professional nurse licensure in the United States or a U.S. territory throughout the certification period",
+   "cite": "NPCB FNP Renewal Handbook (06-04-2026)",
+   "url": "https://www.aanpcert.org/wp-content/uploads/FNP-Renewal-Handbook-06-04-2026.pdf",
+   "quote": "Current, active, professional nurse licensure in the United States or U.S. territory is required",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Handbook wording is broader than RN: current, active professional nurse licensure in the U.S. or a U.S. territory"
+  },
+  {
+   "field": "np.ancc.cycle_years",
+   "value": 5,
+   "cite": "ANCC Certification Renewal Handbook, effective Sept 10, 2025, Version 2 Feb 10, 2026",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+   "quote": "ANCC's Commission on Board Certification (COC) established a policy for a five (5) year period for certification.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Cite updated: 2025 handbook is now Version 2 (February 10, 2026); value unchanged"
+  },
+  {
+   "field": "np.ancc.ce_hours",
+   "value": {
+    "total": 75,
+    "pharmacology_min": 25,
+    "formally_approved_min": 60
+   },
+   "cite": "ANCC Renewal Handbook (2025), Category 1",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+   "quote": "Complete the mandatory 75 continuing education contact hours (CE CH). All certificants renewing a Nurse Practitioner ... required to complete 25 hours of pharmacology",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.ancc.formally_approved",
+   "value": "At least 60 of 75 must be formally approved: accredited CNE, AMA PRA Category 1 CME, or Joint Accreditation",
+   "cite": "ANCC Renewal Handbook (2025), Category 1",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+   "quote": "At least 60 of the 75 CH must be formally approved continuing education hours.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.ancc.conversion",
+   "value": "1 contact hour = 60 minutes = 1 AMA PRA Category 1 Credit; 1 semester credit = 15 CH; 1 quarter credit = 12.5 CH",
+   "cite": "ANCC Renewal Handbook (2025), Category 1 item 6",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+   "quote": "1 Contact Hour = 60 minutes or 1 AMA PRA Category 1 Credit",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.ancc.pa_credit_accepted",
+   "value": "CH from other disciplines including physician assistants are acceptable if applicable",
+   "cite": "ANCC Renewal Handbook (2025), Category 1 item 3",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+   "quote": "Other healthcare disciplines' CH applicable to your certification specialty (e.g., ... physician assistants) are acceptable.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.ancc.professional_development_2025",
+   "value": "Through Jan 31, 2027 handbook: complete 1 of 8 professional development categories in its entirety",
+   "cite": "ANCC Renewal Handbook (2025)",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+   "quote": "Complete at least one (1) of the eight (8) certification renewal professional development categories in its entirety.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.ancc.practice_hours",
+   "value": "1,000 practice hours in specialty is an OPTIONAL category, not required",
+   "cite": "ANCC Renewal Handbook (2025), Category 7",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+   "quote": "Practice or work hours are an option to renew your certification but are not required.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.ancc.accrual_rule",
+   "value": "Effective Jan 14, 2026 all renewal activities must accrue within the designated 5-year period before applying",
+   "cite": "ANCC Renewal Handbook (2025)",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+   "quote": "Effective January 14, 2026, a certificant must accrue renewal activities during their designated 5-year certification period",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.ancc.handbook_2027",
+   "value": "Handbook effective Feb 1, 2027 supersedes prior editions: 75 CE CH, all accredited or formally approved (APRNs: 25 pharmacology), plus one pathway: additional 75 CE CH; or practice (1,000 practice hours, 120 preceptor hours, or 120 volunteer service hours); or scholarship",
+   "cite": "ANCC Renewal Handbook, Feb 2027",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certification-renewal-handbook_2027.pdf",
+   "quote": "For APRN certificants, a minimum of 25 of the required 75 CE CH must be in pharmacology.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certification-renewal-handbook_2027.pdf",
+     "quote": "All CE CH must be either accredited and/or formally approved hours."
+    }
+   ],
+   "correction": "Added detail: in the 2027 handbook ALL CE must be accredited or formally approved (the 2025 rule allowed 15 of 75 not formally approved); practice pathway options are 1,000 practice hours, 120 preceptor hours, or 120 volunteer service hours"
+  },
+  {
+   "field": "np.ancc.no_grace",
+   "value": "No grace period; renew on or before expiration",
+   "cite": "ANCC Renewal Handbook, Feb 2027",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certification-renewal-handbook_2027.pdf",
+   "quote": "Certification is valid for five (5) years and must be renewed on or before the expiration date. There is no grace period",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certrenewalrequirements.pdf",
+     "quote": "ANCC policy does not allow a grace period or backdating"
+    }
+   ],
+   "correction": "Also confirmed in the current (2025) handbook, not only the 2027 one"
+  },
+  {
+   "field": "np.pncb.annual",
+   "value": "Annual recertification; open enrollment Nov 1 to Jan 31; expiration Feb 28 (late Feb 1 to 28 with fee)",
+   "cite": "PNCB Recertification Guide",
+   "url": "https://www.pncb.org/sites/default/files/resources/PNCB_Recert_Guide.pdf",
+   "quote": "Open enrollment runs November 1 through January 31 each year, leading up to the February 28 expiration date",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.pncb.yearly_ce",
+   "value": "15 contact hours (or PNCB-accepted equivalents) every year, plus current, active, unencumbered nursing licence; practice hours may cover up to 10 of the 15; a record review year counts as the 15 once per 7-year cycle",
+   "cite": "PNCB Recertification Guide, requirements table",
+   "url": "https://www.pncb.org/sites/default/files/resources/PNCB_Recert_Guide.pdf",
+   "quote": "Complete 15 contact hours (or equivalent PNCB-accepted activities) related to your certification specialty.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://www.pncb.org/sites/default/files/resources/PNCB_Recert_Guide.pdf",
+     "quote": "Record review year is optional and may only be used once per 7-year cycle."
+    }
+   ],
+   "correction": "Quote corrected to the PDF text (line-broken hyphen); value confirmed. Added: practice hours can cover up to 10 of the 15; record review year counts as 15 once per 7-year cycle"
+  },
+  {
+   "field": "np.pncb.seven_year_cycle",
+   "value": "CPNP-PC and CPNP-AC: within each 7-year cycle, 4 Pediatric Updates modules (2 role-specific) and 15 contact hours of pediatric pharmacology; dual AC/PC needs 6 modules",
+   "cite": "PNCB Recertification Guide, requirements table",
+   "url": "https://www.pncb.org/sites/default/files/resources/PNCB_Recert_Guide.pdf",
+   "quote": "1. Complete 4 PNCB Pediatric Updates modules ... 2. Complete 15 contact hours of pediatric pharmacology.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Quote fragments confirmed in the requirements table (PDF table layout split them); value confirmed"
+  },
+  {
+   "field": "np.pncb.cme_counts",
+   "value": "Contact hours may be CE, CNE or CME, but must be accredited; practice hours and academic credit have fixed equivalents (e.g., 200 practice hours + 10 contact hours = 15)",
+   "cite": "PNCB Recertification Guide",
+   "url": "https://www.pncb.org/sites/default/files/resources/PNCB_Recert_Guide.pdf",
+   "quote": "Contact hours—sometimes called CE, CNE, or CME—are the credits you earn by taking part in accredited continuing education.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.pncb.first_recert",
+   "value": "First recertification is the window in the calendar year after passing the exam (pass Aug 2026, first recert Nov 2027 to Jan 2028)",
+   "cite": "PNCB Recertification Guide",
+   "url": "https://www.pncb.org/sites/default/files/resources/PNCB_Recert_Guide.pdf",
+   "quote": "if you pass the PNCB board exam in August 2026, you will not recertify during the November 2026-January 31, 2027 window.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "np.ncc.cycle_years",
+   "value": 3,
+   "cite": "NCC 2026 Core Maintenance Catalog",
+   "url": "https://www.nccwebsite.org/content/documents/cms/maintenance-core.pdf",
+   "quote": "Certification must be maintained every three years by continuing education.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Quote confirmed in the catalog (text is line-broken in the PDF layout); value unchanged"
+  },
+  {
+   "field": "np.ncc.cca_required",
+   "value": "Continuing Competency Assessment at start of each cycle sets an individual education plan; only CE earned after the CCA counts; CCA earns 5 hours",
+   "cite": "NCC How and why page",
+   "url": "https://www.nccwebsite.org/maintain-your-certification/how-and-why",
+   "quote": "NO CE that is earned PRIOR to taking the assessment can be used for maintenance.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Quote confirmed (page has a space before the period); value unchanged"
+  },
+  {
+   "field": "np.ncc.ce_range",
+   "value": {
+    "plan_total_min": 15,
+    "plan_total_max": 50,
+    "cca_credit_hours": 5,
+    "min_after_cca_credit": 10,
+    "opt_out_alternate_hours": 50
+   },
+   "cite": "NCC WHNP-BC coding book; NCC Core Maintenance Catalog (alternate maintenance)",
+   "url": "https://www.nccwebsite.org/content/documents/cms/coding-book-whc.pdf",
+   "quote": "Every plan is composed of a maximum of 50 and a minimum of 15 CE hours.",
+   "loaded": true,
+   "verified": true,
+   "note": "Show the plan total from the member's own NCC education plan; do not hard-code 10 or 15.",
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://www.nccwebsite.org/content/documents/cms/cca-education-plans.pdf",
+     "quote": "The 5 hours of CE awarded by NCC for completion of the assessment tool is deducted from the CE hour total."
+    },
+    {
+     "url": "https://www.nccwebsite.org/content/documents/cms/maintenance-core.pdf",
+     "quote": "50 hours of CE is required which is assigned to each of the designated competency areas"
+    },
+    {
+     "url": "https://www.nccwebsite.org/maintain-your-certification/how-and-why",
+     "quote": "CE hour requirements can be as low as 10 hours but no higher than 50 hours."
+    }
+   ],
+   "correction": "Corrected: the specialty coding books (WHNP-BC, NNP-BC) say every plan totals 15 to 50 hours (15 baseline minimum). The how-and-why page figure of 10 is net of the 5 hours credited for the CCA. Opt-out 50 hours is in the catalog, not on the how-and-why page."
+  },
+  {
+   "field": "np.ncc.conversion",
+   "value": "1 AMA Category (1) credit = 1 hour; 1 CME = 1 hour; 1 CEU = 10 hours; 1 semester hour = 15; 1 quarter hour = 10",
+   "cite": "NCC 2026 Core Maintenance Catalog, accepted education",
+   "url": "https://www.nccwebsite.org/content/documents/cms/maintenance-core.pdf",
+   "quote": "1 AMA Category = 1 hour of continuing education ... 1 CME = 1 hour of continuing education",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Quote confirmed in the catalog (PDF layout); value unchanged"
+  },
+  {
+   "field": "np.ncc.pharmacology",
+   "value": "No fixed minimum. Pharmacology (Code 4) requires 10 hours only if the CCA specialty index for that area is below 7.5 (WHNP-BC and NNP-BC)",
+   "cite": "NCC WHNP-BC and NNP-BC coding books",
+   "url": "https://www.nccwebsite.org/content/documents/cms/coding-book-whc.pdf",
+   "quote": "*Number of CE hours required if you do not achieve a specialty index of 7.5 or more in the content area.",
+   "loaded": true,
+   "verified": true,
+   "note": "No fixed pharmacology hour minimum found for WHNP-BC/NNP-BC in the catalog; distribution set by the individual education plan; not yet verified",
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://www.nccwebsite.org/content/documents/cms/coding-book-nnp.pdf",
+     "quote": "Pharmacology (Code 4) ... *10 hours ... Common Drug Therapies",
+     "note": "table cells, read from layout text"
+    }
+   ],
+   "correction": "Resolved: no fixed pharmacology minimum; WHNP-BC and NNP-BC plans assign 10 hours to Pharmacology (Code 4) only when the CCA specialty index in that area is below 7.5"
+  },
+  {
+   "field": "conversion.nccpa_vs_nursing",
+   "value": "NCCPA counts nursing-only contact hours as Category 2 only; AMA PRA Category 1 counts as Category 1 for PAs",
+   "cite": "AAPA CME FAQs",
+   "url": "https://www.aapa.org/education/cme-faqs/",
+   "quote": "Programs approved for nursing credit only should be logged as a Category 2 (elective) activity.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "dea.renewal_cycle_months",
+   "value": 36,
+   "cite": "21 CFR 1301.13(d)",
+   "url": "https://www.ecfr.gov/current/title-21/chapter-II/part-1301/section-1301.13",
+   "quote": "After the initial registration period, the registration expires 36 months from the initial expiration date.",
+   "loaded": true,
+   "verified": true,
+   "note": "Loaded via eCFR versioner API (date 2026-09-01); initial period 28 to 39 months",
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "dea.separate_registration",
+   "value": "Separate DEA registration for each principal place of practice where controlled substances are dispensed; a prescribing-only office with no stock in the same state as an existing registration does not need its own (so in practice at least one per state of practice)",
+   "cite": "21 CFR 1301.12(a)",
+   "url": "https://www.ecfr.gov/current/title-21/chapter-II/part-1301/section-1301.12",
+   "quote": "A separate registration is required for each principal place of business or professional practice at one general physical location where controlled substances are ... dispensed",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://www.ecfr.gov/current/title-21/chapter-II/part-1301/section-1301.12",
+     "quote": "An office used by a practitioner (who is registered at another location in the same State"
+    }
+   ],
+   "correction": "Value narrowed: the rule is per principal place of practice where CS are dispensed; \"one per state\" was a gloss. 1301.12(b)(3) exempts a prescribing-only office in the same state where the practitioner is registered elsewhere."
+  },
+  {
+   "field": "dea.midlevel_definition",
+   "value": "NPs, CNSs, nurse midwives, nurse anesthetists and PAs are DEA 'mid-level practitioners'",
+   "cite": "21 CFR 1300.01",
+   "url": "https://www.ecfr.gov/current/title-21/chapter-II/part-1300/section-1300.01",
+   "quote": "Examples of mid-level practitioners include ... nurse practitioners, nurse midwives, nurse anesthetists, clinical nurse specialists and",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "dea.mate.requirement",
+   "value": "One-time 8-hour training on opioid/substance use disorders for every DEA-registered practitioner except veterinarians, including PAs and NPs",
+   "cite": "Consolidated Appropriations Act 2023 (MATE Act); DEA letter to registrants",
+   "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_Training_Letter_Final.pdf",
+   "quote": "the Consolidated Appropriations Act of 2023 enacted a new one-time, eight-hour training requirement for all Drug Enforcement Administration (DEA)-registered practitioners",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "dea.mate.when",
+   "value": "Attest on the first DEA initial or renewal application filed on or after June 27, 2023",
+   "cite": "DEA MATE letter",
+   "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_Training_Letter_Final.pdf",
+   "quote": "Beginning on June 27, 2023, practitioners will be required to check a box on their online DEA registration form",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "dea.mate.one_time",
+   "value": "Not repeated on later renewals",
+   "cite": "DEA MATE Act Q&A",
+   "url": "https://www.deadiversion.usdoj.gov/faq/MATE_Act_faq.html",
+   "quote": "This one-time training requirement affirmation will not be a part of future registration renewals.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "dea.mate.pa_np_school_exemption",
+   "value": "PA or advanced practice nursing graduates within 5 years whose curriculum had 8+ hours of SUD training satisfy it",
+   "cite": "DEA MATE Act Q&A",
+   "url": "https://www.deadiversion.usdoj.gov/faq/MATE_Act_faq.html",
+   "quote": "graduated in good standing from an accredited physician assistant school or accredited school of advanced practice nursing ... during the past 5 years",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "dea.mate.cumulative",
+   "value": "Training can be cumulative across sessions and formats",
+   "cite": "DEA MATE letter to registrants",
+   "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_Training_Letter_Final.pdf",
+   "quote": "The training does not have to occur in one session. It can be cumulative across multiple sessions that equal eight hours of training.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Quote on the FAQ supports formats, not cumulative sessions; the cumulative rule is in the DEA letter"
+  },
+  {
+   "field": "compact.nlc.count",
+   "value": "43 jurisdictions have enacted the NLC (RN/LPN multistate licence; does not cover APRN licence)",
+   "cite": "NLC Commission home + map PDF (revised Sept 6, 2023 header, table includes CT Oct 1 2025)",
+   "url": "https://www.nursecompact.com/files/NLC_Map.pdf",
+   "quote": "43 jurisdictions have enacted the NLC",
+   "loaded": true,
+   "verified": true,
+   "note": "Source is the Interstate Commission of NLC Administrators (compact governing body, NCSBN hosted). Partial or pending: Guam, Massachusetts, U.S. Virgin Islands (compact licence not available until full implementation). State statutes not individually checked.",
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "compact.nlc.pending",
+   "value": "Guam, Massachusetts, U.S. Virgin Islands: enacted, implementation date to be determined",
+   "cite": "NLC map PDF",
+   "url": "https://www.nursecompact.com/files/NLC_Map.pdf",
+   "quote": "Compact license not available until full implementation is complete.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "compact.nlc.residency_move",
+   "value": "Moving between compact states: apply in new primary state of residence within 60 days",
+   "cite": "NLC Commission home",
+   "url": "https://www.nursecompact.com/",
+   "quote": "Nurses moving from one compact state to another must apply for licensure in their new primary state of residence within 60 days.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "compact.aprn.status",
+   "value": "APRN Compact NOT in effect; needs 7 enacting states",
+   "cite": "South Dakota Board of Nursing APRN Compact page (updated 3/30/2026)",
+   "url": "https://www.sdbon.org/Additional%20resources%20licensure/APRNcompact.asp",
+   "quote": "The compact is not in effect yet; seven states need to join before it will be implemented.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "compact.aprn.enacted_states",
+   "value": [
+    "Delaware",
+    "North Dakota",
+    "South Dakota",
+    "Utah",
+    "Wyoming"
+   ],
+   "cite": "SD BON APRN Compact page; Wyoming Statutes 33-21-301, 33-21-302",
+   "url": "https://www.sdbon.org/Additional%20resources%20licensure/APRNcompact.asp",
+   "quote": "Currently, four states have joined, Deleware, North Dakota, South Dakota, and Utah.",
+   "loaded": true,
+   "verified": true,
+   "note": "DE, ND, UT confirmed only through the SD board page, not their own statutes. Not operational either way.",
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+     "quote": "The Advanced Practice Registered Nurse Compact is enacted into law and entered into on behalf of this state"
+    }
+   ],
+   "correction": "Resolved to 5: Wyoming has enacted the compact in statute (W.S. 33-21-302, statute PDF dated May 2026); SD BON list of 4 omits Wyoming"
+  },
+  {
+   "field": "compact.aprn.threshold",
+   "value": {
+    "board_pages": 7,
+    "wyoming_statute_text": 10,
+    "operational": false
+   },
+   "cite": "Wyoming State Board of Nursing APRN Compact page",
+   "url": "https://wsbn.wyo.gov/aprn-compact",
+   "quote": "The APRN Compact will be implemented when 7 states have enacted the legislation.",
+   "loaded": true,
+   "verified": false,
+   "reloaded": true,
+   "verify_status": "corrected",
+   "extra_sources": [
+    {
+     "url": "https://wyoleg.gov/statutes/compress/title33.pdf",
+     "quote": "This compact shall come into limited effect at the time the compact has been enacted into law in ten (10) party states"
+    }
+   ],
+   "note": "No app logic should depend on the threshold.",
+   "correction": "Conflict found: Wyoming's codified compact text says limited effect at 10 party states; SD and WY board pages say 7 (amended model). Treat activation threshold as unresolved; not operational in any case."
+  },
+  {
+   "field": "taxonomy.version",
+   "value": "NUCC Health Care Provider Taxonomy version 26.1, effective 7/1/26",
+   "cite": "NUCC CSV download page",
+   "url": "https://www.nucc.org/index.php?option=com_content&view=article&id=107&catid=18:taxonomy-more-information&Itemid=128",
+   "quote": "Version 26.1 7/1/26",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "taxonomy.pa",
+   "value": {
+    "363A00000X": "Physician Assistant",
+    "363AM0700X": "Physician Assistant, Medical",
+    "363AS0400X": "Physician Assistant, Surgical"
+   },
+   "cite": "NUCC taxonomy 26.1 CSV",
+   "url": "https://www.nucc.org/images/stories/CSV/nucc_taxonomy_261.csv",
+   "quote": "363A00000X ... Physician Assistant",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "taxonomy.np",
+   "value": {
+    "363L00000X": "Nurse Practitioner",
+    "363LA2100X": "Acute Care",
+    "363LA2200X": "Adult Health",
+    "363LC1500X": "Community Health",
+    "363LC0200X": "Critical Care Medicine",
+    "363LF0000X": "Family",
+    "363LG0600X": "Gerontology",
+    "363LN0000X": "Neonatal",
+    "363LN0005X": "Neonatal, Critical Care",
+    "363LX0001X": "Obstetrics & Gynecology",
+    "363LX0106X": "Occupational Health",
+    "363LP0200X": "Pediatrics",
+    "363LP0222X": "Pediatrics, Critical Care",
+    "363LP1700X": "Perinatal",
+    "363LP2300X": "Primary Care",
+    "363LP0808X": "Psychiatric/Mental Health",
+    "363LS0200X": "School",
+    "363LW0102X": "Women's Health"
+   },
+   "cite": "NUCC taxonomy 26.1 CSV",
+   "url": "https://www.nucc.org/images/stories/CSV/nucc_taxonomy_261.csv",
+   "quote": "363LF0000X ... Nurse Practitioner ... Family ... Family Nurse Practitioner",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "taxonomy.other_aprn",
+   "value": {
+    "364S00000X": "Clinical Nurse Specialist (364S...)",
+    "367500000X": "Certified Registered Nurse Anesthetist",
+    "367A00000X": "Advanced Practice Midwife",
+    "367H00000X": "Anesthesiologist Assistant"
+   },
+   "cite": "NUCC taxonomy 26.1 CSV",
+   "url": "https://www.nucc.org/images/stories/CSV/nucc_taxonomy_261.csv",
+   "quote": "367500000X ... Nurse Anesthetist, Certified Registered",
+   "loaded": true,
+   "verified": true,
+   "note": "Not PA or NP; must not be mapped to NP",
+   "reloaded": true,
+   "verify_status": "confirmed"
+  },
+  {
+   "field": "nppes.credential_strings",
+   "value": {
+    "PA_sample_n": 4000,
+    "PA_top": {
+     "PA-C": 2080,
+     "PA": 778,
+     "(blank)": 724,
+     "PAC": 97,
+     "PHYSICIAN ASSISTANT": 62,
+     "RPA-C": 26,
+     "PA C": 16,
+     "PA - C": 7,
+     "MPAS, PA-C": 7,
+     "MS, PA-C": 7
+    },
+    "NP_sample_n": 4000,
+    "NP_top": {
+     "(blank)": 706,
+     "FNP": 538,
+     "NP": 523,
+     "CRNP": 313,
+     "ARNP": 284,
+     "FNP-C": 224,
+     "APRN": 184,
+     "CNP": 97,
+     "FNP-BC": 90,
+     "NP-C": 66,
+     "DNP": 46,
+     "NURSE PRACTITIONER": 41,
+     "APRN-CNP": 36,
+     "PNP": 26,
+     "CPNP": 23,
+     "RN": 23,
+     "APRN, FNP-C": 20,
+     "AGACNP-BC": 13,
+     "APN": 13,
+     "PMHNP": 12,
+     "WHNP": 11,
+     "CPNP-PC": 9
+    },
+    "normalization": "uppercased, periods removed"
+   },
+   "cite": "NPPES NPI Registry API v2.1, basic.credential (free text), taxonomy_description search, 10 states x 400 rows each, aggregate counts only",
+   "url": "https://npiregistry.cms.hhs.gov/api/?version=2.1",
+   "quote": "basic.credential (API JSON field name; counts are aggregates, no records stored)",
+   "loaded": true,
+   "verified": true,
+   "note": "Credential is free text; blank rate varies by state (18 percent in the 10-state sample, 36 to 37 percent in TX and OH). Taxonomy_description search matches any listed taxonomy and also returns surgical assistants (LSA, CSA). Classify by PRIMARY taxonomy 363A/363L first, credential string second. Sample is API order, not random.",
+   "reloaded": true,
+   "verify_status": "corrected",
+   "correction": "Re-sampled (TX, OH, 200 each, aggregate counts only): blank credential is 36 to 37 percent there vs 18 percent in the original sample; ~14 percent of PA hits and ~9 percent of NP hits have a non-363A/363L primary taxonomy; surgical assistant strings (LSA, CSA) appear in PA results. Conclusion unchanged: classify by primary taxonomy first."
+  },
+  {
+   "field": "pa.nccpa.cme_window",
+   "value": "CME earning and logging window runs from May 1 of the year the current certification was issued through December 31 of the expiration year; new certificants count CME from the issue date",
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "Your CME earning and logging window begins May 1 of the year your current certification was issued",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "added"
+  },
+  {
+   "field": "pa.nccpa.record_retention",
+   "value": "Keep Category 1 CME documentation for the current and the previous CME cycle (audit); NCCPA does not audit Category 2",
+   "cite": "NCCPA CME page",
+   "url": "https://www.nccpa.net/maintain-certification/continuing-medical-education/",
+   "quote": "keep their Category 1 CME documentation for their current CME cycle and their last CME cycle",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "added"
+  },
+  {
+   "field": "pa.nccpa.regain_cme",
+   "value": "To regain lapsed certification: 100 Category 1 CME earned within the 2 years before the PANRE application, outstanding fees, and pass PANRE",
+   "cite": "NCCPA Maintain Certification",
+   "url": "https://www.nccpa.net/maintain-certification/",
+   "quote": "at least 100 Category 1 CME credits earned within the two-year period ending on the date your PANRE application is submitted",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "added"
+  },
+  {
+   "field": "np.aanpcb.certifications",
+   "value": [
+    "FNP-C",
+    "A-GNP-C",
+    "PMHNP-C",
+    "ENP-C",
+    "NP-C (legacy ANP, GNP)"
+   ],
+   "cite": "NPCB Handbooks page (renewal handbooks dated 06-04-2026)",
+   "url": "https://www.aanpcert.org/resources/handbooks/",
+   "quote": "PMHNP-Renewal-Handbook-06-04-2026.pdf",
+   "loaded": true,
+   "verified": true,
+   "note": "Same renewal rules across FNP, AGNP, PMHNP and ENP handbooks (diffed)",
+   "reloaded": true,
+   "verify_status": "added"
+  },
+  {
+   "field": "np.aanpcb.academic_conversion",
+   "value": "1 semester credit = 15 CE contact hours; 1 quarter credit = 10 (differs from ANCC 12.5)",
+   "cite": "NPCB FNP Renewal Handbook (06-04-2026)",
+   "url": "https://www.aanpcert.org/wp-content/uploads/FNP-Renewal-Handbook-06-04-2026.pdf",
+   "quote": "One academic quarter credit equals 10 CE contact hours",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "added"
+  },
+  {
+   "field": "np.aanpcb.expired",
+   "value": "No grace period stated; after expiration the credential may not be used and the NP must contact NPCB for eligibility review",
+   "cite": "NPCB FNP Renewal Handbook (06-04-2026), Expired Certification",
+   "url": "https://www.aanpcert.org/wp-content/uploads/FNP-Renewal-Handbook-06-04-2026.pdf",
+   "quote": "Nurse Practitioners seeking renewal after certification expiration must contact NPCB by email for additional instructions and eligibility review.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "added"
+  },
+  {
+   "field": "np.ancc.ama_pra_pharm_2027",
+   "value": "AMA PRA Category 1 credit is accepted for the APRN pharmacology hours; 1 contact hour = 60 minutes or 1 AMA PRA Category 1 credit",
+   "cite": "ANCC Renewal Handbook, Feb 2027",
+   "url": "https://www.nursingworld.org/globalassets/certification/renewals/ancc-certification-renewal-handbook_2027.pdf",
+   "quote": "ANCC accepts AMA PRA Category 1 CE credits™ for required APRN pharmacology CE CH.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "added"
+  },
+  {
+   "field": "np.ncc.deadline_extension",
+   "value": "Maintenance application due by midnight Central on the due date; may submit up to 12 months early; one-time 3-month extension, during which status verifies as lapsed",
+   "cite": "NCC 2026 Core Maintenance Catalog",
+   "url": "https://www.nccwebsite.org/content/documents/cms/maintenance-core.pdf",
+   "quote": "A one time, three month extension can be requested when maintenance cannot be completed by the due date",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "added"
+  },
+  {
+   "field": "np.ncc.life_support",
+   "value": "ACLS and BLS cannot be used for any NCC certification; ALSO/ALS-OB approved for WHNP-BC",
+   "cite": "NCC WHNP-BC coding book",
+   "url": "https://www.nccwebsite.org/content/documents/cms/coding-book-whc.pdf",
+   "quote": "Advanced Cardiovascular Life Support (ACLS) and Basic Life Support (BCLS/BLS) cannot be used in the maintenance or reinstatement of any NCC certification.",
+   "loaded": true,
+   "verified": true,
+   "reloaded": true,
+   "verify_status": "added"
+  }
+ ],
+ "verified": "2026-10-01 adversarial re-load of every url (curl, browser UA); copies in nppa-research/verify/",
+ "corrections": [
+  {
+   "field": "pa.nccpa.exam_deadline",
+   "what": "Quote corrected to exact page text (registered marks); value unchanged"
+  },
+  {
+   "field": "np.aanpcb.option2_exam",
+   "what": "Exam renewal is available for FNP, A-GNP, PMHNP and ENP (ENP requires current FNP certification), not only A-GNP and FNP. ANP and GNP renew by practice hours and CE only. Source is the 06-04-2026 renewal handbooks."
+  },
+  {
+   "field": "np.aanpcb.precepting",
+   "what": "Conflict resolved: current handbooks (06-04-2026) and FAQ both say 120; the candidateportal page (125) is stale. Conversion table read: 1 CE per 5 preceptor hours, 120+ hours = 25 CE."
+  },
+  {
+   "field": "np.aanpcb.accepted_ce",
+   "what": "Handbook now loads (06-04-2026 edition, not truncated). It says only \"awarded by an accredited provider\"; it names no AMA PRA Category 1 rule. Still unconfirmed whether AMA PRA counts 1:1."
+  },
+  {
+   "field": "np.aanpcb.option1_ce",
+   "what": "Value confirmed; added the current handbook as primary source"
+  },
+  {
+   "field": "np.aanpcb.rn_license",
+   "what": "Handbook wording is broader than RN: current, active professional nurse licensure in the U.S. or a U.S. territory"
+  },
+  {
+   "field": "np.aanpcb.brand",
+   "what": "Strengthened: handbook states the legal name and DBA"
+  },
+  {
+   "field": "np.ancc.cycle_years",
+   "what": "Cite updated: 2025 handbook is now Version 2 (February 10, 2026); value unchanged"
+  },
+  {
+   "field": "np.ancc.handbook_2027",
+   "what": "Added detail: in the 2027 handbook ALL CE must be accredited or formally approved (the 2025 rule allowed 15 of 75 not formally approved); practice pathway options are 1,000 practice hours, 120 preceptor hours, or 120 volunteer service hours"
+  },
+  {
+   "field": "np.ancc.no_grace",
+   "what": "Also confirmed in the current (2025) handbook, not only the 2027 one"
+  },
+  {
+   "field": "np.pncb.yearly_ce",
+   "what": "Quote corrected to the PDF text (line-broken hyphen); value confirmed. Added: practice hours can cover up to 10 of the 15; record review year counts as 15 once per 7-year cycle"
+  },
+  {
+   "field": "np.pncb.seven_year_cycle",
+   "what": "Quote fragments confirmed in the requirements table (PDF table layout split them); value confirmed"
+  },
+  {
+   "field": "np.ncc.cycle_years",
+   "what": "Quote confirmed in the catalog (text is line-broken in the PDF layout); value unchanged"
+  },
+  {
+   "field": "np.ncc.cca_required",
+   "what": "Quote confirmed (page has a space before the period); value unchanged"
+  },
+  {
+   "field": "np.ncc.ce_range",
+   "what": "Corrected: the specialty coding books (WHNP-BC, NNP-BC) say every plan totals 15 to 50 hours (15 baseline minimum). The how-and-why page figure of 10 is net of the 5 hours credited for the CCA. Opt-out 50 hours is in the catalog, not on the how-and-why page."
+  },
+  {
+   "field": "np.ncc.conversion",
+   "what": "Quote confirmed in the catalog (PDF layout); value unchanged"
+  },
+  {
+   "field": "np.ncc.pharmacology",
+   "what": "Resolved: no fixed pharmacology minimum; WHNP-BC and NNP-BC plans assign 10 hours to Pharmacology (Code 4) only when the CCA specialty index in that area is below 7.5"
+  },
+  {
+   "field": "dea.separate_registration",
+   "what": "Value narrowed: the rule is per principal place of practice where CS are dispensed; \"one per state\" was a gloss. 1301.12(b)(3) exempts a prescribing-only office in the same state where the practitioner is registered elsewhere."
+  },
+  {
+   "field": "dea.mate.cumulative",
+   "what": "Quote on the FAQ supports formats, not cumulative sessions; the cumulative rule is in the DEA letter"
+  },
+  {
+   "field": "compact.aprn.enacted_states",
+   "what": "Resolved to 5: Wyoming has enacted the compact in statute (W.S. 33-21-302, statute PDF dated May 2026); SD BON list of 4 omits Wyoming"
+  },
+  {
+   "field": "compact.aprn.threshold",
+   "what": "Conflict found: Wyoming's codified compact text says limited effect at 10 party states; SD and WY board pages say 7 (amended model). Treat activation threshold as unresolved; not operational in any case."
+  },
+  {
+   "field": "nppes.credential_strings",
+   "what": "Re-sampled (TX, OH, 200 each, aggregate counts only): blank credential is 36 to 37 percent there vs 18 percent in the original sample; ~14 percent of PA hits and ~9 percent of NP hits have a non-363A/363L primary taxonomy; surgical assistant strings (LSA, CSA) appear in PA results. Conclusion unchanged: classify by primary taxonomy first."
+  }
+ ]
+}

@@ -1,0 +1,230 @@
+{
+  "state": "RI",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Rhode Island Board of Licensure for Physician Assistants (RI Department of Health)",
+      "url": "https://health.ri.gov/licensing/physician-assistant"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "windowRule": "unverified",
+      "cycleYears": {
+        "value": 1,
+        "fact": "ce.hoursPerYear",
+        "reason": "25 hours of approved CME annually"
+      },
+      "total": {
+        "value": 25,
+        "fact": "ce.hoursPerYear"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AAFP Prescribed Credit",
+          "AOA Category 1-A"
+        ],
+        "fact": "ce.categoryRules",
+        "reason": "Programs approved by AAPA, ACCME or AMA, AAFP or AOA, as the app names them."
+      },
+      "totalUnverifiedAccepted": [
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)",
+        "Category 2 CME"
+      ],
+      "notes": [
+        {
+          "text": "The license runs two years, but the hours are 25 for each year. The regulation counts them from July 1 to June 30; the statute sets a different annual window.",
+          "facts": [
+            "ce.period",
+            "ce.hoursPerYear",
+            "licence.renewalCycleYears"
+          ]
+        }
+      ],
+      "exemption": {
+        "field": "Initially licensed after the July 1 renewal date",
+        "question": "Were you first licensed as a Rhode Island PA after the last July 1 renewal date?",
+        "text": "A PA first licensed after the July 1 renewal date is exempt from the CME until the next renewal cycle.",
+        "fact": "ce.newLicenseeExempt",
+        "topics": "all"
+      }
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 8,
+        "label": "Category 1 CME in best practices for opioid prescribing, once, before the controlled substance registration renewal or within two years, whichever is longer (not required with DATA 2000 training and an X designation)",
+        "period": "lifetime",
+        "facts": [
+          "ce.topicMandates.opioid",
+          "ce.topicMandates.opioid.timing",
+          "ce.opioidExemption"
+        ],
+        "condition": {
+          "field": "Prescribes Schedule II opioids",
+          "question": "Do you prescribe Schedule II opioids?",
+          "description": "Rhode Island opioid prescribing training for Schedule II opioid prescribers."
+        }
+      },
+      {
+        "topic": "Opioid Prescribing",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "The extended release and long acting opioid REMS education for prescribers of those opioids",
+        "condition": {
+          "field": "Prescribes extended release or long acting opioids",
+          "question": "Do you prescribe extended release or long acting opioids?",
+          "description": "Rhode Island REMS education for these prescribers."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "PAs practice in collaboration with physicians; the practice sets the degree of collaboration and a physician must be accessible at all times for consultation.",
+        "facts": [
+          "practice.agreementType"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Rhode Island Board of Nurse Registration and Nursing Education (RI Department of Health)",
+      "url": "https://health.ri.gov/licensing/nurses"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember",
+        "effectiveThrough": "2027-01-01"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 10,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "Rhode Island's compact law sections are marked to expire January 1, 2027; no extension was found.",
+            "fact": "rn.nlcSunset"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Substance Use Disorders",
+          "hours": 2,
+          "label": "Substance abuse, 2 of the 10 hours, every licensing cycle",
+          "fact": "rn.topicMandates.substanceAbuse"
+        },
+        {
+          "topic": "Geriatric Medicine",
+          "hours": 1,
+          "label": "One time course on the diagnosis, treatment and care of patients with cognitive impairments, including Alzheimer's disease",
+          "period": "lifetime",
+          "fact": "rn.topicMandates.alzheimers"
+        }
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "reason": "The APRN license is issued under 216-RICR-40-05-3, and 3.5(A) applies the 10 hours to every license renewed under that Part; current national certification is also verified.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears",
+          "reason": "The APRN license renews with the two-year nursing license cycle."
+        },
+        "total": {
+          "value": 10,
+          "fact": "aprn.ceHours"
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 8,
+          "label": "Category 1 CME or equivalent CE in best practices for opioid prescribing, 8 hours, once, before the controlled substance registration renewal or within two years, whichever is longer (not required with DATA 2000 training and an X designation)",
+          "period": "lifetime",
+          "periodReason": "Required only once.",
+          "condition": {
+            "field": "Prescribes Schedule II opioids",
+            "question": "Do you prescribe Schedule II opioids?",
+            "description": "Rhode Island opioid prescribing training for Schedule II opioid prescribers."
+          },
+          "facts": [
+            "prescribing.controlledSubstanceCe",
+            "aprn.opioidEquivalent"
+          ]
+        },
+        {
+          "topic": "Substance Use Disorders",
+          "hours": 2,
+          "label": "Substance abuse, 2 of the 10 hours, every licensing cycle",
+          "fact": "rn.topicMandates.substanceAbuse"
+        },
+        {
+          "topic": "Geriatric Medicine",
+          "hours": 1,
+          "label": "One time course on the diagnosis, treatment and care of patients with cognitive impairments, including Alzheimer's disease",
+          "period": "lifetime",
+          "fact": "rn.topicMandates.alzheimers"
+        },
+        {
+          "topic": "Opioid Prescribing",
+          "status": "unverified",
+          "hours": null,
+          "unverifiedItem": "The extended release and long acting opioid REMS education for prescribers of those opioids",
+          "condition": {
+            "field": "Prescribes extended release or long acting opioids",
+            "question": "Do you prescribe extended release or long acting opioids?",
+            "description": "Rhode Island REMS education for these prescribers."
+          }
+        }
+      ],
+      "unverified": [
+        "Whether the same contact hours count for both the RN and the APRN license"
+      ]
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

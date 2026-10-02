@@ -1,5 +1,6 @@
 import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
-import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE } from "../../utils/cmePresentation";
+import AppCardDetails from "../shared/AppCardDetails";
+import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, appCardTitle, certificationMetLine } from "../../utils/cmePresentation";
 import { useState, useMemo, useCallback, useEffect, useRef, memo } from "react";
 import { supabase, downloadDocumentBlob } from "../../lib/supabase";
 import { useApp } from "../../context/AppContext";
@@ -23,14 +24,17 @@ import RuleProvenance from "../shared/RuleProvenance";
 import TopicProvenance from "../shared/TopicProvenance";
 import DeskTable from "../shared/DeskTable";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon, StarIcon } from "../shared/Icons";
-import { CME_TOPICS } from "../../constants/cmeTopics";
-import { getCMECategories } from "../../constants/credentialTypes";
+import { getCmeTopics } from "../../constants/cmeTopics";
+import { getCMECategories, PHARMACOLOGY_HOURS_FIELD, NCCPA_ACTIVITY_FIELD, NCCPA_ACTIVITIES } from "../../constants/credentialTypes";
+import { isAdvancedPractice, practiceKindsFor } from "../../constants/professions";
+import { ruleSetFor } from "../../utils/ruleResolver";
 import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
-import { complianceFor, windowNotes, cycleBucket, round2 } from "../../utils/compliance";
+import { complianceFor, complianceListFor, mainCardFor, windowNotes, cycleBucket, round2 } from "../../utils/compliance";
 import { boardComplianceFor, effectiveBoardSpecialties, aoaNationalEntry } from "../../utils/boardCompliance";
+import { certificationCards } from "../../utils/certCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateSummary, certificatesNotIncludedMessage } from "../../utils/cmeTranscriptPdf";
 import { CME_INBOX_ADDRESS, docMime } from "../../utils/inboxDocs";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
@@ -58,6 +62,16 @@ const readableError = (e) => {
   const text = String(e?.message || (typeof e === "string" ? e : "")).trim();
   return text && !/^[[{]/.test(text) ? text : "";
 };
+/** A PA or NP card's cycle line: never "null-year cycle". */
+function appCycleLine(comp) {
+  if (!comp.rulesVerified) return "Rules not yet verified";
+  if (comp.ceMode === "certification") return "Keep national certification current";
+  if (comp.ceMode === "options") return "The board offers several CE options";
+  if (comp.ceMode === "none") return "No general hour requirement";
+  return comp.cycle ? `${comp.cycle}-year cycle` : "Cycle not yet verified";
+}
+// A PA or NP card's licence, by kind (cmePresentation.js appCardTitle).
+const APP_LICENSE_NOUN = { pa: "physician assistant license", aprn: "APRN license", rn: "RN license" };
 const DELETE_CONFIRM = "Delete this CME entry? Its attached certificate (if any) will be deleted too. This cannot be undone.";
 
 // Desk table group order: rows after the cycle window (dated past the license
@@ -108,16 +122,23 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
 
   const deg = data.settings.degreeType;
   const categories = getCMECategories(deg);
+  // A PA or NP: their own topic list, their own words (an NP logs CE in
+  // contact hours), and no CME Passport (built for physician licences).
+  const appProfession = isAdvancedPractice(deg);
+  const ce = deg === "NP" ? "CE" : "CME";
+  const cmeTopicList = getCmeTopics(deg);
 
   // Every topic a tracked state mandates, including zero-hour checklist
   // items: those are met only when an entry carries the tag, and several
   // (e.g. MI opioid awareness, TX Life of the Mother Act) are not in the
   // general CME_TOPICS list, so this is the only place they can be tagged.
   const requiredTopics = useMemo(() =>
-    [...new Set(allTrackedStates.flatMap(st =>
-      (getStateEntry(st, deg)?.topics || []).map(t => t.topic)
-    ))],
-    [allTrackedStates, deg]
+    [...new Set(allTrackedStates.flatMap(st => (appProfession
+      // Every licence kind a PA or NP holds: an NP's RN topics are theirs too.
+      ? practiceKindsFor(deg).flatMap(kind => ruleSetFor(st, deg, kind)?.topics || [])
+      : getStateEntry(st, deg)?.topics || []
+    ).map(t => t.topic)))],
+    [allTrackedStates, deg, appProfession]
   );
 
   // "Restored what you were typing..." on a form opened from a draft (CRED-021).
@@ -220,6 +241,16 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     );
   };
 
+  // One custom field on the entry (blank removes it), kept beside any the
+  // entry already carries (an import's "Imported from").
+  const setCustomField = useCallback((field, value) => {
+    setForm(f => {
+      const customFields = { ...(f.customFields || {}) };
+      if (value === "" || value == null) delete customFields[field]; else customFields[field] = value;
+      return { ...f, customFields };
+    });
+  }, []);
+
   const toggleTopic = useCallback((topic) => {
     setForm(f => {
       const tags = f.topics || [];
@@ -229,11 +260,14 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
 
   const complianceData = useMemo(() => {
     if (!showCompliance) return [];
+    // One card per state for physicians, as before; a PA licence card per
+    // state, and an NP's APRN and RN cards (compliance.js complianceListFor).
+    if (appProfession) return complianceListFor(data).map(({ st, key, kind, comp, lic }) => ({ state: st, key, kind, compliance: comp, lic }));
     return allTrackedStates.map(st => ({
       state: st,
       compliance: complianceFor(data, st),
     }));
-  }, [showCompliance, allTrackedStates, data]);
+  }, [showCompliance, allTrackedStates, data, appProfession]);
 
   const totalHours = useMemo(() => round2(data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0)), [data.cme]);
 
@@ -241,13 +275,20 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
   //    compliance engine the cards use, with linked certificates embedded.
   const flash = useCallback((msg) => { setNote(msg); setTimeout(() => setNote(""), 6000); }, []);
 
+  // The renewals a transcript can be built for: each state for a physician,
+  // each licence card for a PA or NP ("Texas APRN license renewal").
+  const transcriptCards = useMemo(() => (appProfession
+    ? complianceListFor(data).map(({ st, kind, key }) => ({ st, kind, key }))
+    : allTrackedStates.map(st => ({ st, kind: undefined, key: st }))),
+  [appProfession, data, allTrackedStates]);
+
   const transcriptOptions = useMemo(() => {
     if (!showTranscript) return { states: [], boards: [] };
     return {
-      states: allTrackedStates.map(st => ({ st, model: stateTranscriptModel(data, st, { certFiles }) })),
+      states: transcriptCards.map(({ st, kind, key }) => ({ st, kind, key, model: stateTranscriptModel(data, st, { certFiles, kind }) })),
       boards: boardTranscriptOptions(data).map(b => ({ board: b, model: boardTranscriptModel(data, b, { certFiles }) })),
     };
-  }, [showTranscript, allTrackedStates, data, certFiles]);
+  }, [showTranscript, transcriptCards, data, certFiles]);
 
   const runTranscript = useCallback(async (model) => {
     if (!model || model.error) { flash(model?.error || "Nothing to put in a transcript yet."); return; }
@@ -281,7 +322,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
   const openTranscript = useCallback(() => {
     const boards = boardTranscriptOptions(data);
     if (allTrackedStates.length === 0 && boards.length === 0) {
-      flash("Add a state medical license or set your primary state in Settings, then come back for a transcript.");
+      flash(`Add ${appProfession ? (deg === "PA" ? "your physician assistant license" : "your APRN license") : "a state medical license"} or set your primary state in Settings, then come back for a transcript.`);
       return;
     }
     // Always through the picker, even for one state: the certificates are
@@ -291,7 +332,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     // certificate ever saved; one already fetched is not fetched again.
     setShowTranscript(true);
     const docs = certificateDocsForModels([
-      ...allTrackedStates.map(st => stateTranscriptModel(data, st, { certFiles })),
+      ...transcriptCards.map(({ st, kind }) => stateTranscriptModel(data, st, { certFiles, kind })),
       ...boards.map(b => boardTranscriptModel(data, b, { certFiles })),
     ]);
     if (!docs.length) return;
@@ -300,7 +341,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
       .then(fetched => setCertFiles(prev => new Map([...(prev || []), ...fetched])))
       .catch(() => {})
       .finally(() => setCertsPreparing(false));
-  }, [data, allTrackedStates, flash, certFiles]);
+  }, [data, allTrackedStates, transcriptCards, flash, certFiles, appProfession, deg]);
 
   const optionSummary = (model) => {
     if (model.error) return model.error;
@@ -336,6 +377,10 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     if (effectiveBoardSpecialties(data).length === 0) return [];
     return boardComplianceFor(data);
   }, [showCompliance, data]);
+
+  // A PA's NCCPA card and an NP's certifier cards (certCompliance.js), the
+  // same cards Home shows: the national CME obligation, on the CME page too.
+  const certCards = useMemo(() => (showCompliance ? certificationCards(data).filter(c => !c.needsRole) : []), [showCompliance, data]);
 
   // Newest first by when it was added, so a transcript imported today sits at
   // the top even when its activities are years old.
@@ -402,7 +447,12 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     : null;
   const auditCycle = useMemo(() => {
     if (!auditState) return null;
-    const comp = complianceFor(data, auditState);
+    // The state's own card with its licence kind (an NP's RN-only state is
+    // grouped by the RN window), and no grouping at all when the rule data
+    // does not settle the counting window (it would be zero days long).
+    const card = mainCardFor(data, auditState);
+    const comp = card?.comp || complianceFor(data, auditState);
+    if (comp.windowKnown === false) return null;
     return { state: auditState, comp, start: comp.windowStart, end: comp.windowEnd };
   }, [auditState, data.cme, data.licenses, deg]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -465,19 +515,21 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
 
       {/* Transcript import: CE Broker / ACCME / PARS / CSV -> review -> addItem("cme") */}
       <CMEImport open={showImport} onClose={() => setShowImport(false)} requiredTopics={requiredTopics} />
-      <CmePassportPanel onImport={() => setShowImport(true)} />
+      {/* The CME Passport's licence lookup and reporting are built for
+          physician licences; a PA or NP never sees the panel (DESIGN 4.5). */}
+      {!appProfession && <CmePassportPanel onImport={() => setShowImport(true)} />}
 
       {/* Transcript picker: which state renewal or board the PDF is for */}
       <Modal open={showTranscript} onClose={() => setShowTranscript(false)} title="Transcript PDF" width={460}>
         <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12 }}>
-          One PDF per renewal: physician and license details, the cycle window, each requirement with hours earned, and every CME entry in the window. Certificate images are added as pages and PDF certificates go as separate files in the same share. Boards audit renewals; hospital reappointment asks for the same summary.
+          One PDF per renewal: {appProfession ? "your details and the license" : "physician and license details"}, the cycle window, each requirement with hours earned, and every {ce} entry in the window. Certificate images are added as pages and PDF certificates go as separate files in the same share. Boards audit renewals; hospital reappointment asks for the same summary.
         </div>
         {transcriptOptions.states.length > 0 && (
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", marginBottom: 6 }}>State renewal</div>
-            {transcriptOptions.states.map(({ st, model }) => optionButton(
-              `state:${st}`,
-              `${STATE_NAMES[st] || st} (${st})${st === data.settings.primaryState ? ", primary" : ""}`,
+            {transcriptOptions.states.map(({ st, kind, key, model }) => optionButton(
+              `state:${key}`,
+              `${appProfession ? `${STATE_NAMES[st] || st} ${APP_LICENSE_NOUN[kind] || "license"}` : `${STATE_NAMES[st] || st} (${st})`}${st === data.settings.primaryState ? ", primary" : ""}`,
               model,
               model.error ? null : `${formatDate(model.window.start)} to ${formatDate(model.window.end)}`,
             ))}
@@ -504,19 +556,19 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
           backgroundColor: T.card, border: `1px solid ${borderColor}`,
           borderRadius: 14, padding: "16px 18px", marginBottom: isDesktop ? 0 : 10, boxShadow: T.shadow1,
         });
-        const stateCards = complianceData.map(({ state: st, compliance: comp }) => (
-            <div key={st} style={cardStyle(comp.fullyCompliant ? T.success : T.border)}>
+        const stateCards = complianceData.map(({ state: st, key, compliance: comp, lic }) => (
+            <div key={key ?? st} style={cardStyle(comp.fullyCompliant ? T.success : T.border)}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{st}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{comp.profession ? appCardTitle(comp) : st}</span>
                     {st === data.settings.primaryState && <span style={{ fontSize: 11, color: T.accent }}>(PRIMARY)</span>}
-                    {hasSeparateBoards(st) && <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, backgroundColor: T.warningDim, color: T.warning, fontWeight: 600 }}>{deg ? `${deg} Board` : "MD or DO board? Set your degree in Settings"}</span>}
+                    {!comp.profession && hasSeparateBoards(st) && <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, backgroundColor: T.warningDim, color: T.warning, fontWeight: 600 }}>{deg ? `${deg} Board` : "Choose your profession in Profile & settings"}</span>}
                   </div>
-                  <div style={{ fontSize: 13, color: T.textDim }}>{comp.noGeneralReq ? "No general hour requirement" : `${comp.cycle}-year cycle`}</div>
+                  <div style={{ fontSize: 13, color: T.textDim }}>{comp.profession ? appCycleLine(comp) : comp.noGeneralReq ? "No general hour requirement" : `${comp.cycle}-year cycle`}</div>
                   {comp.degreeUnknown && (
                     <div style={{ fontSize: 12, color: T.warning, marginTop: 2 }}>
-                      Shown with MD rules until you set your degree in Settings.
+                      Shown with MD rules until you choose your profession in Profile &amp; settings.
                     </div>
                   )}
                 </div>
@@ -539,14 +591,14 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                   <div key={i} style={{ marginTop: 3, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
                 ))}
               </div>
-              {!comp.noGeneralReq && (
+              {!comp.noGeneralReq && (!comp.profession || comp.totalRequired > 0) && (
                 <>
-                  <ComplianceBar label="Total logged hours" earned={comp.totalEarned} required={comp.totalRequired} met={comp.totalMet} />
+                  <ComplianceBar label={comp.profession ? `Total logged ${comp.unit || "hours"}` : "Total logged hours"} earned={comp.totalEarned} required={comp.totalRequired} met={comp.totalMet} note={certificationMetLine(comp) || undefined} />
                   {!comp.totalMet && (
                     <button onClick={() => navigate("credentials", "findCme")} style={{
                       padding: "3px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
                       backgroundColor: T.accentGlow, color: T.accent, cursor: "pointer", marginTop: 2, marginBottom: 4, marginLeft: 2,
-                    }}>Find CME Courses &rarr;</button>
+                    }}>Find {ce} Courses &rarr;</button>
                   )}
                 </>
               )}
@@ -561,7 +613,11 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                 onFindCme={() => navigate("credentials", "findCme")}
               />
               <div style={{ fontSize: 13, color: T.textMuted, margin: "8px 0" }}>{cmeAssessmentLabel(comp)}</div>
+              {comp.profession && comp.boardUrl && (!comp.rulesVerified || (comp.unverifiedItems || []).length > 0) && (
+                <a href={comp.boardUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: TAP_MIN, boxSizing: "border-box" }}>{comp.board || "Board website"} &rarr;</a>
+              )}
               <ConditionalCmeTopics comp={comp} />
+              <AppCardDetails comp={comp} lic={lic} />
               {needsPriorCompletionReview(comp) && <p style={{ fontSize: 12, color: T.textMuted }}>{PRIOR_COMPLETION_NOTE}</p>}
               {/* Every mandated topic carries its own periodicity and its own
                   link to the rule, because the rule set's single sourceUrl
@@ -581,7 +637,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                     <button onClick={() => navigate("credentials", `findCme:${tr.topic}`)} style={{
                       padding: "3px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
                       backgroundColor: T.accentGlow, color: T.accent, cursor: "pointer", marginTop: 2, marginBottom: 4, marginLeft: 2,
-                    }}>Find CME for {tr.topic} &rarr;</button>
+                    }}>Find {ce} for {tr.topic} &rarr;</button>
                   )}
                 </div>
               ))}
@@ -600,8 +656,8 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                 );
               })()}
               <RuleProvenance
-                reportKey={st}
-                subject={`${st}${hasSeparateBoards(st) ? ` (${deg || "MD"})` : ""}`}
+                reportKey={key ?? st}
+                subject={comp.profession ? appCardTitle(comp) : `${st}${hasSeparateBoards(st) ? ` (${deg || "MD"})` : ""}`}
                 citation={comp.source}
                 meta={STATE_REQS_META}
                 verified={comp.verified}
@@ -654,6 +710,28 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
             </div>
           );
 
+          const certCard = certCards.length > 0 && (
+            <div style={cardStyle(T.border)}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>National certification</div>
+              <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>{deg === "NP" ? "Continuing education for your certification" : "CME for your NCCPA certification"}</div>
+              {certCards.map(c => (
+                <div key={c.id} style={{ marginBottom: 12 }}>
+                  {c.required != null
+                    ? <ComplianceBar label={c.label} earned={c.earned} required={c.required} met={c.met}
+                        note={`${c.unit} \u00b7 ${c.windowLabel}${c.daysLeft != null ? ` \u00b7 ${c.daysLeft} days left` : ""}`} />
+                    : <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{c.label}</div>}
+                  {c.cat1Required > 0 && (
+                    <ComplianceBar label="Category 1 minimum" earned={c.cat1Earned} required={c.cat1Required} met={c.cat1Earned >= c.cat1Required} />
+                  )}
+                  {c.assessment && <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.4 }}>{c.assessment}</div>}
+                  {c.exam && <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>{c.exam}</div>}
+                  {(c.lines || []).map(line => <div key={line} style={{ fontSize: 11.5, color: T.textDim, marginTop: 3, lineHeight: 1.4 }}>{line}</div>)}
+                  {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: 32, boxSizing: "border-box" }}>{c.body} renewal rules &rarr;</a>}
+                </div>
+              ))}
+            </div>
+          );
+
           // AOA National 120/3-yr requirement, cycle-windowed via the same
           // engine the transcript and Home use (the old block compared a
           // LIFETIME hour sum to a 3-year requirement). Suppressed when an
@@ -675,12 +753,12 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
           })();
 
           return isDesktop
-            ? <div className="cmd-responsive-grid-2" style={{ marginBottom: 16 }}>{stateCards}{boardCard}{aoaCard}</div>
-            : <div style={{ marginBottom: 16 }}>{stateCards}{boardCard}{aoaCard}</div>;
+            ? <div className="cmd-responsive-grid-2" style={{ marginBottom: 16 }}>{stateCards}{certCard}{boardCard}{aoaCard}</div>
+            : <div style={{ marginBottom: 16 }}>{stateCards}{certCard}{boardCard}{aoaCard}</div>;
       })()}
 
       {/* Add/Edit Modal */}
-      <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit CME" : "Add CME"}>
+      <Modal open={showForm} onClose={closeForm} title={editItem ? `Edit ${ce}` : `Add ${ce}`}>
         {draftNote && <div role="status" style={{ fontSize: 13, fontWeight: 600, color: T.success || "#22c55e", marginBottom: 10 }}>{draftNote}</div>}
         {/* CME has no separate detail view: its form is where the record is read. */}
         {editItem && <FollowUpHistory item={editItem} />}
@@ -700,13 +778,31 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
         {/* minmax(0, 1fr): a 1fr track cannot shrink below the date input's
             own minimum width, which pushes a phone form past its edge. */}
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8 }}>
-          <Field label="Hours"><input type="number" step="0.5" value={form.hours || ""} onChange={e => setForm(f => ({ ...f, hours: e.target.value }))} style={iS} placeholder="0" /></Field>
+          <Field label={deg === "NP" ? "Contact Hours" : deg === "PA" ? "Credits (hours)" : "Hours"}><input type="number" step="0.5" value={form.hours || ""} onChange={e => setForm(f => ({ ...f, hours: e.target.value }))} style={iS} placeholder="0" /></Field>
           <Field label="Date Completed"><input type="date" value={form.date || ""} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={iS} /></Field>
         </div>
+        {/* NP and PA: pharmacology hours inside this activity (hours that
+            count toward a state's pharmacology mandate, Georgia and Ohio PAs
+            included, and an NP's certification cards). PA:
+            the NCCPA activity type a Category 1 sponsor can carry, which
+            NCCPA credits at a higher rate. Both live in custom_fields. */}
+        {(deg === "NP" || deg === "PA") && (
+          <Field label="Pharmacology Hours" hint={`Of the ${deg === "NP" ? "contact hours" : "credits"} above, how many the certificate lists as pharmacology. Leave blank if none.`}>
+            <input type="number" step="0.25" min="0" value={form.customFields?.[PHARMACOLOGY_HOURS_FIELD] ?? ""} onChange={e => setCustomField(PHARMACOLOGY_HOURS_FIELD, e.target.value)} style={iS} placeholder="0" />
+          </Field>
+        )}
+        {deg === "PA" && (
+          <Field label="NCCPA Activity" hint="Only if the certificate says Self-Assessment or Performance Improvement (PI-CME).">
+            <select value={form.customFields?.[NCCPA_ACTIVITY_FIELD] || ""} onChange={e => setCustomField(NCCPA_ACTIVITY_FIELD, e.target.value)} style={{ ...iS, appearance: "auto" }}>
+              <option value="">Neither</option>
+              {NCCPA_ACTIVITIES.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Provider / Institution"><input value={form.provider || ""} onChange={e => setForm(f => ({ ...f, provider: e.target.value }))} style={iS} placeholder="e.g. AMA, hospital name" /></Field>
         <Field label="Certificate #"><input value={form.certificateNumber || ""} onChange={e => setForm(f => ({ ...f, certificateNumber: e.target.value }))} style={iS} /></Field>
 
-        <Field label="Topics Covered" hint="Tag the topics this CME covers. This determines state compliance.">
+        <Field label="Topics Covered" hint={`Tag the topics this ${ce} covers. This determines state compliance.`}>
           {requiredTopics.length > 0 && (
             <div style={{ marginBottom: 6 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", marginBottom: 4 }}>Required by your states</div>
@@ -726,7 +822,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
             </div>
           )}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {CME_TOPICS.filter(t => !requiredTopics.includes(t)).map(topic => {
+            {cmeTopicList.filter(t => !requiredTopics.includes(t)).map(topic => {
               const sel = (form.topics || []).includes(topic);
               return (
                 <button key={topic} type="button" onClick={() => toggleTopic(topic)} style={{
@@ -753,7 +849,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
 
       {/* List */}
       {data.cme.length === 0 ? (
-        <EmptyState icon={"\ud83c\udf93"} title="No CME logged" subtitle="Track your continuing education hours and topic compliance." onAction={openAdd} actionLabel="Add CME" />
+        <EmptyState icon={"\ud83c\udf93"} title={`No ${ce} logged`} subtitle="Track your continuing education hours and topic compliance." onAction={openAdd} actionLabel={`Add ${ce}`} />
       ) : isDesktop ? (
         /* Desk width: the same entries as one table, grouped by the chosen
            state's renewal cycle window so the rows audit against the math
@@ -791,7 +887,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                 )}
               </>
             ) : (
-              <span>Add a state medical license or set your primary state in Settings to group entries by renewal cycle.</span>
+              <span>Add {appProfession ? (deg === "PA" ? "your physician assistant license" : "your APRN license") : "a state medical license"} or set your primary state in Settings to group entries by renewal cycle.</span>
             )}
           </div>
           <DeskTable
@@ -818,8 +914,8 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                   cells: {
                     hours: (
                       <>
-                        <div style={{ color: comp.noGeneralReq ? T.text : comp.totalMet ? T.success : T.danger }}>{total}</div>
-                        <div style={deskSub}>{comp.noGeneralReq ? "no hour requirement" : `of ${comp.totalRequired} required`}</div>
+                        <div style={{ color: comp.noGeneralReq || comp.totalRequired == null ? T.text : comp.totalMet ? T.success : T.danger }}>{total}</div>
+                        <div style={deskSub}>{comp.noGeneralReq ? "no hour requirement" : comp.totalRequired == null ? "requirement not yet verified" : `of ${comp.totalRequired} required`}</div>
                       </>
                     ),
                   },

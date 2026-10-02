@@ -1,0 +1,60 @@
+{
+ "state": "OH",
+ "facts": [
+  {
+   "field": "aprn.certificationCeDualUse",
+   "profession": "np",
+   "value": "Certification CE in the area of practice may count toward both the RN and APRN renewal hours",
+   "cite": "OAC 4723-8-10(A)",
+   "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-8-10",
+   "quote": "may use those continuing education hours to satisfy ... a registered nurse and advanced practice registered nurse",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "rn.firstRenewalExam",
+   "profession": "np",
+   "value": "No CE at the first renewal after licensure by examination; 12 hours if licensed by endorsement one year or less",
+   "cite": "OAC 4723-14-03(A)(1), (2)",
+   "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-14-03",
+   "quote": "licensure by examination ... is not required to complete any contact hours of continuing education for the first license renewal",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.pharmacologyFirstRenewal",
+   "profession": "pa",
+   "value": "First renewal after the 500 supervised hours: 6, 3 or 0 pharmacology hours",
+   "cite": "OAC 4730-1-06(H)(4)",
+   "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4730-1-06",
+   "quote": "the first renewal after the holder has completed the five hundred hours of on site supervision ... six total hours ... three total hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.board.page",
+   "profession": "np",
+   "value": "Ohio Board of Nursing home page",
+   "cite": "Ohio Board of Nursing",
+   "url": "https://nursing.ohio.gov",
+   "quote": "Ohio Board of Nursing We are located at",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "rn.endorsementTwelve",
+   "profession": "np",
+   "value": "Licensed by endorsement one year or less: 12 contact hours",
+   "cite": "OAC 4723-14-03(A)(2)",
+   "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-14-03",
+   "quote": "A nurse who has been licensed by endorsement in Ohio for one year or less must complete twelve contact hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

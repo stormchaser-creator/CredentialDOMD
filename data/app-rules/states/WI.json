@@ -1,0 +1,195 @@
+{
+  "state": "WI",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Wisconsin Physician Assistant Affiliated Credentialing Board (attached to the Medical Examining Board; administered by DSPS)",
+      "url": "https://dsps.wi.gov/a-z-professions-list/physician-assistant-pa/"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.reportingPeriod"
+      },
+      "total": {
+        "value": 30,
+        "fact": "ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ],
+        "fact": "ce.hoursPerCycle",
+        "reason": "Category 1 as defined by NCCPA, as the app names the NCCPA Category 1 sponsors."
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "notForTopics": [
+          "Controlled Substances"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [],
+      "exemption": {
+        "field": "First Wisconsin PA renewal after the license was issued",
+        "question": "Is this the first renewal since your Wisconsin PA license was issued?",
+        "text": "The CE hours, including the controlled substance hours, do not apply to the first renewal after the license is issued.",
+        "fact": "ce.firstRenewalExempt",
+        "topics": "all"
+      }
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 2,
+        "label": "Responsible controlled substances prescribing, 2 of the 30 hours",
+        "facts": [
+          "ce.topicMandates[0]",
+          "ce.topicMandates[0] (board page)"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "A PA keeps, and gives the board on request, either evidence of a physician led employment arrangement or a written collaborative agreement with a physician; either party may end the agreement with at least 30 days' written notice.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal",
+          "practice.agreementFilingAndRenewal#2"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalDeadline",
+        "reason": "PA licenses renew March 1 of each even-numbered year: every two years."
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Wisconsin Board of Nursing (administered by DSPS)",
+      "url": "https://dsps.wi.gov/a-z-professions-list/advanced-practice-registered-nurse-aprn/"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "rn.ncl"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalDeadline",
+          "reason": "RN licenses renew March 1 of each even-numbered year."
+        }
+      },
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalDeadline",
+          "reason": "RN licenses renew March 1 of each even-numbered year: every two years."
+        }
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalDeadline",
+          "reason": "APRN licenses renew March 1 of each even-numbered year."
+        },
+        "total": {
+          "value": 16,
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "Evidence of malpractice liability insurance is submitted at every renewal.",
+            "fact": "aprn.malpractice"
+          },
+          {
+            "text": "Renewing the APRN license also renews a Wisconsin RN license you hold.",
+            "fact": "aprn.renewalAlsoRenewsRn"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "facts": [
+          "aprn.nationalCertificationRequired",
+          "aprn.nationalCertificationRequired (statute)"
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 16,
+          "measure": "pharmacology",
+          "label": "Clinical pharmacology or therapeutics relevant to your area of practice, all 16 hours",
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 2,
+          "label": "Responsible prescribing of controlled substances, part of the 16 hours",
+          "facts": [
+            "aprn.topicMandates[0]",
+            "aprn.topicMandates[0] (rule)",
+            "aprn.ceHoursPerCycle"
+          ]
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalDeadline",
+          "reason": "APRN licenses renew March 1 of each even-numbered year: every two years."
+        }
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "An APRN practices in collaboration with a physician or dentist, documented by the APRN and not filed with DSPS, until the board verifies independent practice: 3,840 clinical hours of APRN practice with a physician or dentist available and 3,840 hours of clinical nursing, with 24 months each.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal",
+          "practice.transitionToPracticeHours",
+          "practice.authority (independent practice)"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": false,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

@@ -83,7 +83,8 @@ test('AppInner opens the sheet from the held link, settles it on view, and every
   const inner = src.slice(src.indexOf('function AppInner('));
   assert.match(inner, /const supportLink = supportDeepLink\(deepLink\);[\s\S]{0,80}setSupportTab\("tickets"\);\s+setSupportTicketId\(supportLink\.ticketId\);\s+setShowSupport\(true\);\s+\}, \[deepLink\]\);/);
   assert.match(inner, /if \(deepLink && !supportDeepLink\(deepLink\) && loaded && !recordsLoadIssue\) settleDeepLink\(\);/);
-  assert.match(inner, /if \(deepLink\) stashAppDeepLink\(deepLink\);\s+window\.location\.reload\(\);/);
+  // reloadPage (utils/pageLeave.js) saves what the device copy still owes, then reloads.
+  assert.match(inner, /if \(deepLink\) stashAppDeepLink\(deepLink\);\s+reloadPage\(\);/);
   assert.match(inner, /<AccountRecordsLoadError theme=\{T\} onRetry=\{reloadKeepingLink\} \/>/);
   assert.match(inner, /gate\.action === "refresh" \? limitedLaunch\.refresh\(\) : reloadKeepingLink\(\)/);
   assert.doesNotMatch(inner, /takeAppDeepLink\(\)/, 'AppInner no longer takes the link itself');

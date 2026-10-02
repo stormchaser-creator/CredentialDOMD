@@ -98,7 +98,8 @@ test('the transcript index says the PDF certificate went as a separate file', ()
 test('the CME picker and Home fetch before the tap, never inside it', () => {
   const cme = read('src/components/features/CMESection.jsx');
   assert.match(cme, /prefetchCertificates\(docs, \{ download: downloadDocumentBlob/);
-  assert.match(cme, /stateTranscriptModel\(data, st, \{ certFiles \}\)/);
+  // One model per card: a PA or NP card passes its licence kind (undefined for a physician).
+  assert.match(cme, /stateTranscriptModel\(data, st, \{ certFiles, kind \}\)/);
   assert.doesNotMatch(cme, /runTranscript\(stateTranscriptModel\(data, allTrackedStates\[0\]\)\)/, 'the one-state shortcut goes through the picker');
   const app = read('src/App.jsx');
   assert.match(app, /stateTranscriptModel\(data, st, \{ certFiles: packetCerts \}\)/);

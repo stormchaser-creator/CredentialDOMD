@@ -136,12 +136,15 @@ export async function postgresFixture({ port = 56441 } = {}) {
       end loop;
     end $$;
     grant update on profiles to service_role;`, 'postgres');
-  // Both portal migrations, each applied twice: the follow-on must apply on
-  // top of the original and be idempotent.
+  // Every portal migration, each applied twice: a follow-on must apply on
+  // top of the one before it and be idempotent. The last one shares a PA's
+  // and an NP's licences (credential_portal_license_ok).
   const portal = migration('20260918091000_credential_portal.sql');
   const administratorAccess = migration('20260925040000_credential_portal_admin_access.sql');
+  const appLicenses = migration('20261002060000_credential_portal_app_licenses.sql');
   await sql(portal, 'postgres'); await sql(portal, 'postgres');
   await sql(administratorAccess, 'postgres'); await sql(administratorAccess, 'postgres');
+  await sql(appLicenses, 'postgres'); await sql(appLicenses, 'postgres');
   return {
     root, sql,
     rows: async (query, user) => JSON.parse(await sql(`select coalesce(json_agg(q),'[]'::json) from (${query}) q`, user)),

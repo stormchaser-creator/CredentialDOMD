@@ -38,7 +38,10 @@ async function page(topic, states, degreeType) {
   const app = { data: { settings: { degreeType, specialties: [] }, cme: [], licenses: [] }, theme: {}, allTrackedStates: states };
   return mountComponent('src/components/features/CMEResourcesSection.jsx', { app, props: { initialTopicFilter: topic }, modules: {
     cmeProviders: await import(src('constants/cmeProviders.js')), cmeTopicSources: sources,
-    compliance: { complianceFor: () => ({ topicResults: [], noGeneralReq: true, totalRequired: 0, totalEarned: 0, cat1Required: 0, cat1Earned: 0, fullyCompliant: true }) },
+    compliance: (() => {
+      const comp = () => ({ topicResults: [], noGeneralReq: true, totalRequired: 0, totalEarned: 0, cat1Required: 0, cat1Earned: 0, fullyCompliant: true });
+      return { complianceFor: comp, cardsForStates: (_d, sts) => sts.map(st => ({ st, key: st, kind: 'medical', comp: comp() })) };
+    })(),
     creditEquivalence: { providerAoaLine: () => '' },
   } });
 }

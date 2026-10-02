@@ -34,10 +34,10 @@ const req = (name) => (name === 'react' ? { useState: (v) => [v, () => {}] } : r
 new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(req, mod, mod.exports);
 const { Archive } = mod.exports;
 
-const download = (contracts, { sentAt = '2026-10-19T17:00:00Z' } = {}) => {
+const download = (contracts, { sentAt = '2026-10-19T17:00:00Z', settings = {} } = {}) => {
   const record = { id: 'inv-northfield', number: 'INV-SYN-1', contractId: NORTHFIELD_CONTRACT.id, periodStart: '2026-10-16', periodEnd: '2026-10-19', totalAmount: NORTHFIELD.total, lines: NORTHFIELD.lines, sentAt };
   globalThis.__archive = {
-    app: { data: { settings: {}, invoices: [record], locumContracts: contracts }, theme: { text: '#111', textMuted: '#666', border: '#aaa', card: '#fff' }, navigate() {} },
+    app: { data: { settings, invoices: [record], locumContracts: contracts }, theme: { text: '#111', textMuted: '#666', border: '#aaa', card: '#fff' }, navigate() {} },
     pdf: [], saved: [],
   };
   const button = nodes(Archive({ scope: 'practice' })).find((n) => n.type === 'button' && textOf(n) === 'Download invoice PDF');
@@ -68,4 +68,21 @@ test('a paused account\'s invoice download prints the local day it was sent', ()
   } finally {
     if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone;
   }
+});
+
+// The archive always printed the name as typed, with no degree added. An MD
+// or DO keeps exactly that (byte-identical to main); a PA or NP gets the
+// sender every live send site prints, with the profession's services phrase.
+test('a paused account\'s invoice keeps the MD or DO sender it always had; a PA or NP gets the send sites\' sender', () => {
+  for (const deg of ['MD', 'DO']) {
+    const args = download([NORTHFIELD_CONTRACT], { settings: { name: 'Pat Example', degreeType: deg } });
+    assert.equal(args.physician, 'Pat Example', deg);
+    assert.equal('servicesPhrase' in args, false, deg);
+    assert.equal(download([NORTHFIELD_CONTRACT], { settings: { name: '', degreeType: deg } }).physician, 'Physician', deg);
+  }
+  const pa = download([NORTHFIELD_CONTRACT], { settings: { name: 'Pat Example, PA-C', degreeType: 'PA' } });
+  assert.equal(pa.physician, 'Pat Example, PA-C');
+  assert.equal(pa.servicesPhrase, 'physician assistant services');
+  assert.equal(download([NORTHFIELD_CONTRACT], { settings: { name: 'Kim Sample', degreeType: 'NP' } }).physician, 'Kim Sample, NP');
+  assert.equal(download([NORTHFIELD_CONTRACT], { settings: { name: '', degreeType: '' } }).physician, 'Clinician');
 });

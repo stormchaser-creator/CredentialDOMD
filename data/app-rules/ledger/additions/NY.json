@@ -1,0 +1,27 @@
+{
+ "state": "NY",
+ "facts": [
+  {
+   "field": "pa.ce.prescriberEducation.dueDates",
+   "profession": "pa",
+   "value": "By July 1, 2017 and once every three years after",
+   "cite": "NYSED, Mandatory Prescriber Education (PA)",
+   "url": "https://www.op.nysed.gov/professions/physician-assistants/nysdoh-mandatory-prescriber-education",
+   "quote": "by July 1, 2017, and once every three (3) years thereafter",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.prescribing.controlledSubstanceCe.dueDates",
+   "profession": "np",
+   "value": "By July 1, 2017 and once every three years after",
+   "cite": "NYSED, Mandatory Prescriber Education (NP)",
+   "url": "https://www.op.nysed.gov/professions/nurse-practitioners/mandatory-prescriber-education-nurse",
+   "quote": "by July 1, 2017, and once every three (3) years thereafter",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

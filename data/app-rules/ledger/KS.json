@@ -1,0 +1,458 @@
+{
+ "state": "KS",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Kansas State Board of Healing Arts",
+   "url": "https://www.ksbha.ks.gov/professions/physician-assistant-p-a"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) license, active designation",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annual: license cancelled December 31 each year (a license issued or reinstated October 1 to December 31 runs to December 31 of the following year); renewal window opens November 15; late renewal January 1 to January 31 with late fee; status Cancelled for Failure to Renew on February 1."
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "categoryRules": "Annual option: 50 hours in the preceding year with at least 20 Category I and at least 1 Category III. Two-year option: 100 hours in the preceding two years with at least 40 Category I and at least 2 Category III. Category III = a Category I or II activity on acute or chronic pain management, appropriate opioid prescribing, or use of prescription drug monitoring programs. One hour = 50 minutes. PAs initially licensed within one year of a renewal date are exempt for the first renewal.",
+   "acceptsNccpaCertificationInLieu": "Not named in the rule. K.A.R. 100-28a-5(a)(3) accepts verification of equivalent hours, in number and category, from a national, state or local organization with standards at least as stringent as the board's.",
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Category III: acute or chronic pain management, appropriate prescribing of opioids, or use of prescription drug monitoring programs",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "All PAs renewing (1 hour per year on the 50 hour option; 2 hours on the 100 hour two-year option)"
+    }
+   ],
+   "controlledSubstanceCe": "Category III hour(s) above; no separate prescriber-only CE found"
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Before practicing, file an Active Practice Request form signed by the PA and the supervising physician, containing the written agreement (services, prohibited procedures, supervision types, prescription-only drug authority). Amendments go to the board within 10 days. The supervising physician reviews the form at least annually. Termination of supervision is reported on a board form. A current active practice form and written agreement must be on file.",
+   "notes": "PAs practice 'in a dependent role with a supervising physician' (K.S.A. 65-28a08). Professional liability insurance and Health Care Stabilization Fund surcharge required for an active license.",
+   "upcoming": {
+    "effective": "2027-01-01",
+    "source": "2026 Kan. Sess. Laws ch. 36 (HB 2702), approved April 3, 2026",
+    "agreementType": "collaboration for PAs attesting 4,000+ postgraduate clinical hours with no discipline; supervision for fewer than 4,000 hours",
+    "agreementFilingAndRenewal": "Collaborating PAs: practice agreement kept on file at the practice site and given to the board on request. PAs under 4,000 hours: physician supervision under a written practice agreement; supervision practice agreements must be provided to the board before practice, and termination is reported on a board form. Act renamed the physician assistant and physician associate licensure act.",
+    "note": "The board's implementing regulations (K.A.R. 100-28a) for the new practice agreements were not loaded; the active practice request form rules below remain in force until January 1, 2027."
+   }
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "Prescribing only under the written agreement with the supervising physician; DEA registration required for controlled substances. No separate Kansas controlled substance registration: mid-level practitioners (PAs with prescribing authority under a written agreement) are exempt from Board of Pharmacy registration."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 1,
+    "cite": "KSBHA PA licensure types page; cycle set by K.A.R. 100-28a-15 under K.S.A. 65-28a03(b)",
+    "url": "https://www.ksbha.ks.gov/departments/licensing/licensure-types-designations/physician-assistant",
+    "quote": "Each active license may be renewed annually.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "cancelled December 31 each year",
+    "cite": "K.A.R. 100-28a-15(a) (amended May 6, 2016), as printed in the KSBHA PA statutes and regulations booklet, November 2024",
+    "url": "https://www.ksbha.ks.gov/home/showpublisheddocument/200/638677703561030000",
+    "quote": "each physician assistant license issued by the board shall be cancelled on December 31 of each year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.lateRenewal",
+    "value": "January 1 to January 31, late fee",
+    "cite": "KSBHA PA licensing FAQ",
+    "url": "https://www.ksbha.ks.gov/departments/licensing/licensing-faqs/physician-assistant",
+    "quote": "The late renewal cycle is from January 1st – January 31st. There is an additional late fee.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "50 per year (20 Category I)",
+    "cite": "K.A.R. 100-28a-5(a)(1)",
+    "url": "https://sos.ks.gov/publications/Register/Volume-40/Issues/Issue%2025/06-24-21-49232.html",
+    "quote": "at least 50 continuing education credit hours during the preceding year. At least 20 continuing education credit hours shall be acquired from category I",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.twoYearOption",
+    "value": "100 per two years (40 Category I, 2 Category III)",
+    "cite": "K.A.R. 100-28a-5(a)(2)",
+    "url": "https://sos.ks.gov/publications/Register/Volume-40/Issues/Issue%2025/06-24-21-49232.html",
+    "quote": "at least 100 continuing education credit hours during the preceding two-year period. At least 40 continuing education credit hours shall be acquired from category I",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.categoryIII",
+    "value": "at least 1 hour Category III per year",
+    "cite": "K.A.R. 100-28a-5(a)(1)",
+    "url": "https://sos.ks.gov/publications/Register/Volume-40/Issues/Issue%2025/06-24-21-49232.html",
+    "quote": "at least one continuing education credit hour shall be acquired from category III",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryIIIContent",
+    "value": "pain management, opioid prescribing, or PDMP use",
+    "cite": "K.A.R. 100-28a-5(e)(3)",
+    "url": "https://sos.ks.gov/publications/Register/Volume-40/Issues/Issue%2025/06-24-21-49232.html",
+    "quote": "(A) Acute or chronic pain management; (B) the appropriate prescribing of opioids; or (C) the use of prescription drug monitoring programs.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.acceptsNccpaCertificationInLieu",
+    "value": "equivalent hours verified by a national organization accepted; NCCPA not named",
+    "cite": "K.A.R. 100-28a-5(a)(3)",
+    "url": "https://sos.ks.gov/publications/Register/Volume-40/Issues/Issue%2025/06-24-21-49232.html",
+    "quote": "issued by a national, state, or local organization with continuing education standards that are at least as stringent as the board’s standards",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "supervision with written agreement",
+    "cite": "K.S.A. 65-28a08(a)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_028a_0008.html",
+    "quote": "Physician assistants practice in a dependent role with a supervising physician, and may perform those duties and responsibilities through delegated authority or written agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.activePracticeRequest",
+    "value": "request signed by PA and responsible physician",
+    "cite": "K.S.A. 65-28a03(a)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_028a_0003.html",
+    "quote": "each licensed physician assistant shall file a request to engage in active practice signed by the physician assistant and the physician who will be responsible",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "amendments filed within 10 days",
+    "cite": "K.A.R. 100-28a-9a(c)",
+    "url": "https://www.ksbha.ks.gov/home/showpublisheddocument/200/638677703561030000",
+    "quote": "any subsequent amendments to the information on that individual's active practice request form within 10 days of the amendment being made",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.annualReview",
+    "value": "supervising physician reviews form at least annually",
+    "cite": "K.A.R. 100-28a-10(a)(4)",
+    "url": "https://www.ksbha.ks.gov/home/showpublisheddocument/200/638677703561030000",
+    "quote": "at least annually, review the active practice request form required by K.A.R. 100-28a-9 and determine if any amendments are necessary",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.dea",
+    "value": "DEA registration required for controlled substances",
+    "cite": "K.S.A. 65-28a08(e)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_028a_0008.html",
+    "quote": "In order to prescribe or dispense controlled substances, the physician assistant shall register with the federal drug enforcement administration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "K.S.A. 65-4116(c)(8); K.S.A. 65-1626 ('mid-level practitioner')",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_041_0016.html",
+    "quote": "The following persons need not register and may lawfully possess controlled substances under this act",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.midLevelDefinition",
+    "value": "PA with written-agreement prescribing authority is a mid-level practitioner",
+    "cite": "K.S.A. 65-1626",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_016_0026.html",
+    "quote": "or a physician assistant licensed pursuant to the physician assistant licensure act who has authority to prescribe drugs pursuant to a written agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.lateRenewalStatute",
+    "value": "late renewal within the 30 days after the renewal date with late fee; otherwise cancelled by operation of law",
+    "cite": "K.S.A. 65-28a03(c)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_028a_0003.html",
+    "quote": "received by the board within the 30-day period following the renewal date",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalWindowBoard",
+    "value": "renewal opens November 15; portal closes January 31",
+    "cite": "KSBHA PA licensing FAQ",
+    "url": "https://www.ksbha.ks.gov/departments/licensing/licensing-faqs/physician-assistant",
+    "quote": "The renewal cycle for Physician Assistants begins November 15th and ends January 31st each calendar year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.upcoming.collaboration",
+    "value": "from 2027-01-01: collaboration under a practice agreement for PAs with 4,000+ postgraduate clinical hours",
+    "cite": "K.S.A. 65-28a08(h) as amended by 2026 HB 2702 sec. 10",
+    "url": "https://sos.ks.gov/publications/sessionlaws/2026/Chapter-36-HB-2702.html",
+    "quote": "A physician assistant who attests to having 4,000 hours or more of postgraduate clinical experience ... may practice in collaboration with a physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.upcoming.supervisionUnder4000",
+    "value": "from 2027-01-01: fewer than 4,000 hours means supervision under a written practice agreement",
+    "cite": "K.S.A. 65-28a08(j) as amended by 2026 HB 2702 sec. 10",
+    "url": "https://sos.ks.gov/publications/sessionlaws/2026/Chapter-36-HB-2702.html",
+    "quote": "A physician assistant with fewer than 4,000 hours of postgraduate clinical experience shall practice with physician supervision under the terms of a written practice agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.upcoming.effectiveDate",
+    "value": "2027-01-01",
+    "cite": "2026 HB 2702 sec. 14",
+    "url": "https://sos.ks.gov/publications/sessionlaws/2026/Chapter-36-HB-2702.html",
+    "quote": "This act shall take effect and be in force from and after January 1, 2027",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Kansas State Board of Nursing",
+   "url": "https://ksbn.kansas.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Last day of the birth month; renew in odd-numbered years if born in an odd year, even-numbered years if born in an even year; board mails a renewal notice at least 60 days before expiration; a licence that would come due within six months of qualifying expires the last day of the month after the third birthday from licensure.",
+   "ceHoursPerCycle": 30,
+   "nlcCompactMember": true,
+   "ceNotes": "30 contact hours of approved CNE in the most recent prior licensing period; no carryover. No CE for the first renewal of a licence that expires within 30 months after the licensure exam, or within the first nine months after licensure by reinstatement or endorsement (K.S.A. 65-1117(a)).",
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse), nurse practitioner role",
+   "separateLicenceOrCertificate": "separate APRN license, renewed with a separate application alongside the RN license",
+   "renewalCycleYears": 2,
+   "renewalNotes": "Same biennial cycle as the RN license (K.A.R. 60-11-113(a)); proof of malpractice insurance at renewal unless an exception applies",
+   "ceHoursPerCycle": 30,
+   "ceNotes": "30 contact hours of approved CNE related to the APRN role; these hours also count toward the RN license renewal. Up to 15 hours may be instructor credit. CME needs individual offering approval (IOA) before renewal.",
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": "Required for initial licensure on or after July 1, 2023; APRNs licensed before then may submit it at renewal. Maintenance at each renewal is not stated in the statute or rule.",
+   "topicMandates": []
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": null,
+   "stateCsRegistrationRequired": false
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None since the 2022 amendment (L. 2022 ch. 65; 2022 S Sub for HB 2279): the statute authorizes APRN prescribing with no collaborative agreement or protocol. Malpractice insurance is required to render clinical services."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "K.S.A. 65-1117(a)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_011_0017.html",
+    "quote": "including multi-state licenses under the nurse licensure compact, shall expire every two years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "K.S.A. 65-1117(a)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_011_0017.html",
+    "quote": "including multi-state licenses under the nurse licensure compact, shall expire every two years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "last day of birth month",
+    "cite": "K.A.R. 60-3-108(a)(1)",
+    "url": "https://ksbn.kansas.gov/wp-content/uploads/NPA/npa.pdf",
+    "quote": "The expiration date of each license shall be the last day of the month in which the licensee's birthday occurs.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "K.A.R. 60-9-106(a)",
+    "url": "https://ksbn.kansas.gov/wp-content/uploads/NPA/npa.pdf",
+    "quote": "any licensee may be required to submit proof of completion of 30 contact hours of approved continuing nursing education (CNE).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "K.A.R. 60-11-113(a)",
+    "url": "https://ksbn.kansas.gov/wp-content/uploads/NPA/npa.pdf",
+    "quote": "Advanced practice registered nurse licenses shall be renewed on the same biennial cycle as the cycle for the registered professional nurse licensure renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "K.A.R. 60-11-113(b)",
+    "url": "https://ksbn.kansas.gov/wp-content/uploads/NPA/npa.pdf",
+    "quote": "have completed the required 30 contact hours of approved continuing nursing education (CNE) related to the advanced practice registered nurse role",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceCountsForRn",
+    "value": true,
+    "cite": "K.A.R. 60-11-113(h)",
+    "url": "https://ksbn.kansas.gov/wp-content/uploads/NPA/npa.pdf",
+    "quote": "All CNE accumulated for APRN license renewal shall also be applicable to the renewal of the registered professional nurse license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": "initial licensure on/after 2023-07-01",
+    "cite": "K.S.A. 65-1130(b)(2)(A)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_011_0030.html",
+    "quote": "an applicant for initial licensure as an advanced practice registered nurse shall have a current advanced practice registered nurse certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.authority",
+    "value": "prescribes any drug within role and population focus, no agreement",
+    "cite": "K.S.A. 65-1130(d)(1)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_011_0030.html",
+    "quote": "An advanced practice registered nurse may prescribe durable medical equipment and prescribe, procure and administer any drug consistent with such licensee's specific role",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.dea",
+    "value": "DEA registration to prescribe controlled substances",
+    "cite": "K.S.A. 65-1130(d)(3)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_011_0030.html",
+    "quote": "(A) Register with the federal drug enforcement administration; and (B) comply with federal drug enforcement administration requirements related to controlled substances.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.malpractice",
+    "value": "malpractice coverage required",
+    "cite": "K.S.A. 65-1130(d)(5)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_011_0030.html",
+    "quote": "An advanced practice registered nurse shall maintain malpractice insurance coverage as a condition of rendering professional clinical services",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "K.S.A. 65-4116(c)(8); K.S.A. 65-1626 ('mid-level practitioner')",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_016_0026.html",
+    "quote": "an advanced practice registered nurse issued a license pursuant to K.S.A. 65-1131 , and amendments thereto, who has authority to prescribe drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.firstRenewalExempt",
+    "value": "no CE for first renewal within 30 months of exam, or within 9 months of reinstatement/endorsement",
+    "cite": "K.S.A. 65-1117(a)",
+    "url": "https://ksrevisor.gov/statutes/chapters/ch65/065_011_0017.html",
+    "quote": "Except for the first renewal for a license that expires within 30 months following licensure examination",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationAtRenewalPre2023",
+    "value": "APRNs licensed before 2023-07-01 may submit certification at renewal",
+    "cite": "K.A.R. 60-11-113(i)",
+    "url": "https://ksbn.kansas.gov/wp-content/uploads/NPA/npa.pdf",
+    "quote": "Any APRN whose initial licensure is before July 1, 2023 may submit evidence of APRN certification to the board upon license renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.noCarryover",
+    "value": "no carryover of APRN CNE",
+    "cite": "K.A.R. 60-11-113(b)",
+    "url": "https://ksbn.kansas.gov/wp-content/uploads/NPA/npa.pdf",
+    "quote": "Contact hours accumulated in excess of the 30-hour requirement shall not be carried over to the next renewal period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "K.A.R. 100-28a-5 and 100-28a-15 were confirmed in the Kansas Register (July 2021) and the KSBHA November 2024 booklet. The official SOS regulation site needs a CAPTCHA, so an amendment after November 2024 is not ruled out.",
+  "The KSBHA FAQ says PA licences 'expire on January 31st'. K.A.R. 100-28a-15 says cancelled December 31, and K.S.A. 65-28a03(c) allows renewal with a late fee within the following 30 days. Recorded as a December 31 deadline with a January 1 to 31 late window.",
+  "No page loaded says whether KSBHA accepts current NCCPA certification under K.A.R. 100-28a-5(a)(3).",
+  "From January 1, 2027 (HB 2702), K.S.A. 65-1626 still defines a PA 'mid-level practitioner' by a 'written agreement with a supervising physician'. Whether collaborating PAs stay exempt from Board of Pharmacy controlled substance registration under K.S.A. 65-4116(c)(8) is not settled by any source loaded.",
+  "KSBHA implementing regulations for HB 2702 practice agreements (form, filing, review interval) were not found or loaded.",
+  "Neither K.S.A. 65-1130 nor K.A.R. 60-11-113 says Kansas APRNs must keep national certification at each renewal. They require it only for initial licensure on or after July 1, 2023.",
+  "'Full' practice authority for Kansas APRNs is inferred: K.S.A. 65-1130 (history ends L. 2022 ch. 65; 2026 statute book) has no collaboration or supervision requirement. The board does not use that label.",
+  "The KSBN Nurse Practice Act (December 2025) has no Kansas RN or APRN topic mandates (opioid, implicit bias, trafficking, suicide, dementia); recorded as none. KSBN regulations amended after December 2025 were not checked because of the SOS CAPTCHA."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verifiedBy": "verifier-2026-10",
+ "verificationNotes": "KSBHA pages return 403 to curl and WebFetch; loaded in a browser on 2026-10-01 (FAQ, licensure types page, November 2024 booklet PDF via in-page pdf.js). Statute currency checked on kslegislature.gov 2026 statute pages (65-1117, 65-1130, 65-4116, 65-28a08). HB 2702 loaded from the SOS 2026 session laws page.",
+ "corrections": [
+  "KS PA renewalCycleYears cite: K.S.A. 65-28a03 does not say 'annually'; it leaves the cancellation date to board rule (K.A.R. 100-28a-15). Quote re-confirmed on the KSBHA page (loaded in a browser; curl gets 403).",
+  "KS PA renewalDeadline: confirmed in the KSBHA November 2024 booklet (loaded in a browser) as amended May 6, 2016. The Cornell LII copy still shows the 2001 'expire' wording and is outdated. The official SOS site needs a CAPTCHA, so a post-2024 amendment is still not ruled out.",
+  "KS PA practice: MISSED BY RESEARCHER. 2026 HB 2702 (Sess. Laws ch. 36, approved April 3, 2026, effective January 1, 2027) moves PAs with 4,000+ postgraduate clinical hours and no discipline from supervision to collaboration under a practice agreement kept at the practice site. PAs under 4,000 hours stay supervised under a written practice agreement. Added as pa.practice.upcoming with three facts. Current (2026) supervision facts stay valid until then; the 2026 statute book page for 65-28a08 still shows the supervision text.",
+  "KS RN renewalDeadline: 'renewal window opens 90 days before expiration' is not in any primary source loaded (K.S.A. 65-1117 says notice at least 60 days before); removed. Added K.A.R. 60-3-108(b) short-first-period rule.",
+  "KS RN ceNotes: first-renewal exemption also covers a licence expiring within nine months of reinstatement or endorsement (K.S.A. 65-1117(a)); added."
+ ]
+}

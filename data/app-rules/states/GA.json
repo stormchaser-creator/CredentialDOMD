@@ -1,0 +1,218 @@
+{
+  "state": "GA",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Georgia Composite Medical Board",
+      "url": "https://medicalboard.georgia.gov"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.hoursPerCycle",
+        "reason": "40 hours biennially"
+      },
+      "total": {
+        "value": 40,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "AAPA Category 1 CME"
+        ],
+        "fact": "pa.ce.categoryRules",
+        "reason": "AMA, AOA, AAAA, AAFP and AAPA Category 1 credit, as the app names them."
+      },
+      "totalUnverifiedAccepted": [
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "notes": [
+        {
+          "text": "At least 10 hours relate directly to the specialty of the Board approved primary supervising physician.",
+          "fact": "pa.ce.specialtyHours"
+        }
+      ],
+      "exemption": {
+        "field": "First Georgia PA license renewal",
+        "question": "Is this your first renewal of this Georgia PA license?",
+        "text": "At the first renewal the 40 hours are not required; the prescriber pharmaceutical hours still are.",
+        "fact": "pa.ce.firstRenewal"
+      }
+    },
+    "topics": [
+      {
+        "topic": "Pharmacology",
+        "hours": 3,
+        "measure": "pharmacology",
+        "label": "Practice specific pharmaceuticals for PAs with prescription order privileges",
+        "fact": "pa.ce.prescriberPharmaceuticals",
+        "condition": {
+          "field": "Holds prescriptive authority",
+          "question": "Do you hold prescriptive authority?",
+          "description": "Applies to clinicians who prescribe."
+        }
+      },
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 1,
+        "additional": true,
+        "label": "Appropriate ordering and use of hydrocodone, oxycodone and compounds, one additional hour every renewal",
+        "fact": "pa.ce.hydrocodoneOxycodone",
+        "condition": {
+          "field": "Delegated hydrocodone or oxycodone ordering",
+          "question": "Are you delegated authority to order hydrocodone or oxycodone in emergencies?",
+          "description": "Georgia's added hour for this delegated authority."
+        }
+      },
+      {
+        "topic": "Death Certificates",
+        "hours": 1,
+        "additional": true,
+        "label": "Recognition and documentation of causes of death, one additional hour every renewal",
+        "fact": "pa.ce.deathCertificates",
+        "condition": {
+          "field": "Authorized to sign death certificates",
+          "question": "Are you authorized to sign death certificates?",
+          "description": "Georgia's added hour for this delegated authority."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "Active practice requires a Board approved primary supervising physician and a job description on file with and approved by the Board.",
+        "facts": [
+          "pa.practice.agreement",
+          "pa.practice.jobDescription"
+        ]
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Georgia Board of Nursing",
+      "url": "https://sos.ga.gov/page/nursing-renewal-information"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.rn.renewalDeadline",
+            "np.rn.renewalYearParity"
+          ],
+          "reason": "Licenses expire January 31 of even or odd years, every two years."
+        },
+        "options": [
+          {
+            "text": "30 continuing education hours from a Board approved provider",
+            "fact": "np.rn.ceHoursPerCycle"
+          },
+          {
+            "text": "Maintained certification or recertification by a national certifying body recognized by the Board",
+            "fact": "np.rn.ceAlternative"
+          },
+          {
+            "text": "An accredited academic program of study in nursing or a related field",
+            "fact": "np.rn.ceAcademic"
+          },
+          {
+            "text": "Competency verified by a licensed health care facility or health system physician office, with at least 500 hours practiced",
+            "fact": "np.rn.ceFacilityCompetency"
+          },
+          {
+            "text": "Other activities the board approves that show competency",
+            "fact": "np.rn.ceOtherApproved"
+          }
+        ],
+        "notes": [
+          {
+            "text": "If the initial license period is six months or less, the competency requirement waits until the second renewal.",
+            "fact": "np.rn.firstRenewal"
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN renewal requires renewing the RN license and maintaining national certification; no APRN hour total is set.",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.aprn.renewalCoincides",
+            "np.rn.renewalYearParity"
+          ],
+          "reason": "The authorization renews with the two-year RN license period."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 0,
+          "label": "Pharmacology training appropriate to the delegating physician's scope, at least annually (the card checks the year before renewal; the rule asks for training every year)",
+          "period": {
+            "years": 1
+          },
+          "fact": "np.prescribing.pharmacologyAnnual",
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          }
+        },
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 1,
+          "label": "Appropriate ordering and use of hydrocodone, oxycodone and compounds, biennially",
+          "condition": {
+            "field": "Delegated hydrocodone or oxycodone ordering",
+            "question": "Are you delegated authority to order hydrocodone or oxycodone (O.C.G.A. 43-34-25(d.1))?",
+            "description": "Georgia's added hour for APRNs delegated this authority."
+          },
+          "facts": [
+            "np.prescribing.hydrocodoneCe",
+            "np.prescribing.hydrocodoneDelegation"
+          ]
+        },
+        {
+          "topic": "Death Certificates",
+          "hours": 1,
+          "label": "Recognition and documentation of causes of death, biennially",
+          "fact": "np.prescribing.deathCertificateCe",
+          "condition": {
+            "field": "Authorized to sign death certificates",
+            "question": "Are you authorized to sign death certificates?",
+            "description": "Georgia's added hour for this delegated authority."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "nurse protocol agreement",
+        "text": "The delegating physician files the nurse protocol agreement with the Composite Medical Board within 30 days of execution; it is reviewed, revised or updated annually, and amendments are filed within 30 days.",
+        "facts": [
+          "np.practice.protocolFiling",
+          "np.practice.protocolReceivedWithin30Days",
+          "np.practice.protocolAnnualReview",
+          "np.practice.protocolAmendments"
+        ]
+      }
+    }
+  }
+}

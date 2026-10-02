@@ -909,6 +909,13 @@ export function logNoteFor(appCategory, degreeType) {
  */
 export function cat1BucketLabel(accepted, degreeType) {
   const list = Array.isArray(accepted) ? accepted : [];
+  // A PA's or NP's minimum is named from the categories its rule accepts
+  // (AAPA, AMA PRA and the other NCCPA sponsors; accredited contact hours),
+  // never "AMA PRA Category 1 minimum" for an AAPA-only rule.
+  if (degreeType === "PA" || degreeType === "NP") {
+    if (list.length === 0) return degreeType === "NP" ? "Accredited contact hours minimum" : "Category 1 minimum";
+    return `${degreeType === "NP" ? "Accredited contact hours" : "Category 1"} minimum (${list.map(shortCategory).join(", ")})`;
+  }
   if (list.length === 0) return "Category 1 minimum";
   const aoa = list.filter(k => k.startsWith("AOA Category"));
   const other = list.filter(k => !k.startsWith("AOA Category"));
@@ -967,6 +974,7 @@ export function cat1Breakdown(cmeEntries, { start, end, accepted, degreeType }) 
 /** Why a logged credit type is outside the Category 1 minimum. */
 function excludedReason(appCategory, degreeType) {
   if (appCategory === "Uncategorized") return "no credit category on the entry";
+  if (degreeType === "PA" || degreeType === "NP") return "not accepted for this minimum, or not yet verified for it";
   if (degreeType === "DO") {
     const code = aoaCategoryFor(appCategory);
     if (code) return `AOA Category ${code}`;

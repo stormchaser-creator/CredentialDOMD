@@ -30,7 +30,7 @@ import { serverBilledIn, billedOnOf, requestRecordsRefresh } from "../../../util
 import { docMime } from "../../../utils/inboxDocs";
 import { agencyOptions, agencyForDate, sameAgency, agencyKey } from "../../../utils/contractsForDate";
 import { localDate } from "../../../utils/billing";
-import { physicianLabel } from "../../../utils/invoiceArgs";
+import { invoiceSenderFields } from "../../../utils/invoiceArgs";
 import { outgoingFileNames, renameFiles } from "../../../utils/docLabel";
 import InvoiceEmailModal from "./InvoiceEmailModal";
 import InvoiceEmailIt from "../../shared/InvoiceEmailIt";
@@ -443,7 +443,7 @@ function Expenses() {
     return {
       number,
       kind: "expenses", // the cover says travel expenses, not physician services
-      physician: physicianLabel(s),
+      ...invoiceSenderFields(s),
       npi: s.npi, email: s.email, phone: s.phone,
       facility: agency || "Locums agency", // BILL TO: the agency itself
       periodStart: dates[0], periodEnd: dates[dates.length - 1],

@@ -1,0 +1,511 @@
+{
+ "state": "OH",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "State Medical Board of Ohio",
+   "url": "https://med.ohio.gov"
+  },
+  "licence": {
+   "title": "License to practice as a physician assistant",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Before the licence expiration date, two years after issuance (not a fixed calendar date); unrenewed licence is automatically suspended on expiry",
+   "renewalWindow": "Renewal may be submitted up to 180 days before expiry; emails at 90, 60 and 30 days (State Medical Board PA page)"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "100 hours of CME per 2-year licensure period (OAC 4730-1-06(G)(2)); courses acceptable for NCCPA certification satisfy it; prorated to 50, 25 or 0 hours for a licence issued partway through the period. PAs with a prescriber number also need 12 hours of Category I pharmacology every 2 years, in addition.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [
+    {
+     "topic": "Pharmacology",
+     "hours": 12,
+     "period": "every cycle",
+     "appliesTo": "PAs holding a valid prescriber number (physician-delegated prescriptive authority); Category I; Board-approved; in addition to the 100 hours; prorated to 6, 3 or 0 hours at the first renewal after the 500 on-site supervision hours"
+    }
+   ],
+   "controlledSubstanceCe": "None separate; prescribers of opioid analgesics or benzodiazepines must certify OARRS (drug database) access at renewal",
+   "cycleYears": 2,
+   "nccpaRecertExamReferenced": true
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Written supervision agreement signed by the supervising physician and PA before supervision begins; each keeps a copy. Not filed with the Board and has no expiration or renewal (State Medical Board PA page). Amendable at any time.",
+   "notes": "Supervising physician is legally responsible for the PA's services.",
+   "qualityAssurance": "Supervising physician quality assurance review of selected PA records and orders at least twice in the PA's first year of practice, then at least once a year; records kept 7 years (OAC 4730-1-05)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": "not yet verified",
+   "separateAuthorityRegistration": "Prescriber number issued by the State Medical Board; prescriptive authority is physician-delegated",
+   "ceForPrescribers": "12 hours pharmacology every 2 years (ORC 4730.49(A)(1)); DEA registration if delegated controlled substance authority; OARRS access certification at renewal for opioid or benzodiazepine prescribers",
+   "onSiteSupervision": "First 500 hours of prescriptive authority under on-site supervision (OAC 4730-2-04(B)) unless 1,000 hours of prescribing in another jurisdiction is documented"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 2,
+    "cite": "ORC 4730.14(A)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.14",
+    "quote": "A license to practice as a physician assistant shall be valid for a two-year period ... shall expire on the date that is two years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "ORC 4730.14(B)(1)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.14",
+    "quote": "The applicant must certify to the board that the applicant has maintained certification by the national commission on certification of physician assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "CME needed for current NCCPA certification (statute); rule sets 100 hours, see ce.hoursPerCycle.rule",
+    "cite": "ORC 4730.14(B)(2)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.14",
+    "quote": "in compliance with the continuing medical education requirements necessary to hold current certification from the commission or its successor",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.lapse",
+    "value": "automatically suspended on expiration",
+    "cite": "ORC 4730.14(E)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.14",
+    "quote": "A license to practice that is not renewed on or before its expiration date is automatically suspended on its expiration date.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.pharmacology",
+    "value": {
+     "hours": 12,
+     "appliesTo": "PAs with physician-delegated prescriptive authority"
+    },
+    "cite": "ORC 4730.49(A)(1)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.49",
+    "quote": "The applicant shall complete every two years at least twelve hours of continuing education in pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.pharmacologyAdditional",
+    "value": true,
+    "cite": "ORC 4730.49(C)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.49",
+    "quote": "The continuing education required by this section is in addition to the continuing education required under section 4730.14 of the Revised Code.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.oarrsCertification",
+    "value": "certify OARRS access at renewal",
+    "cite": "ORC 4730.49(A)(2)(a)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.49",
+    "quote": "in the case of an applicant who prescribes opioid analgesics or benzodiazepines ... the applicant shall certify to the board whether the applicant has been",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.prescriberNumber",
+    "value": "prescriber number issued by Medical Board",
+    "cite": "ORC 4730.41(A)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.41",
+    "quote": "A physician assistant who holds a valid prescriber number issued by the state medical board is authorized to prescribe and personally furnish drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "DEA registration if delegated controlled substance authority",
+    "cite": "ORC 4730.41(B)(3)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.41",
+    "quote": "the physician assistant shall register with the federal drug enforcement administration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "supervision agreement",
+    "cite": "ORC 4730.19(A)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.19",
+    "quote": "Before initiating supervision of one or more physician assistants licensed under this chapter, a physician shall enter into a supervision agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementRetention",
+    "value": "each party retains a copy",
+    "cite": "ORC 4730.19(D)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.19",
+    "quote": "Each physician assistant who entered into the supervision agreement shall retain a copy of the agreement in the records maintained by the physician assistant.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle.rule",
+    "value": 100,
+    "cite": "OAC 4730-1-06(G)(2)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4730-1-06",
+    "quote": "a physician assistant shall have completed one hundred hours of CME during the licensure registration period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaCoursesSatisfy",
+    "value": true,
+    "cite": "OAC 4730-1-06(G)(6)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4730-1-06",
+    "quote": "Completion of the CME requirement may be satisfied by courses acceptable for the individual to maintain NCCPA certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.proration",
+    "value": "50 / 25 / 0 hours for licences issued partway through the period",
+    "cite": "OAC 4730-1-06(G)(4)(a)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4730-1-06",
+    "quote": "initially issued prior to the first day of the second year of a licensure period, the licensee shall be required to earn fifty total hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.pharmacology.category",
+    "value": "Category I",
+    "cite": "OAC 4730-1-06(H)(2)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4730-1-06",
+    "quote": "completion of at least twelve hours of category I continuing education in pharmacology.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.nccpaRecertExam",
+    "value": "renewal certification includes passing periodic recertification examinations",
+    "cite": "ORC 4730.14(B)(1)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4730.14",
+    "quote": "by meeting the standards to hold current certification from the commission or its successor, including passing periodic recertification examinations",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.qualityAssurance",
+    "value": "QA twice in first year, then yearly; records 7 years",
+    "cite": "OAC 4730-1-05(C),(D)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4730-1-05",
+    "quote": "conducted at least twice per year during the first year of a physician assistant's practice and at least once per year thereafter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.onSiteSupervision500",
+    "value": "first 500 hours of prescribing on-site supervised",
+    "cite": "OAC 4730-2-04(B)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4730-2-04",
+    "quote": "the first five hundred hours of a physician assistant's exercise of physician-delegated prescriptive authority shall be under the on-site supervision of a supervising physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementNotFiled",
+    "value": "supervision agreement not filed; no expiration or renewal",
+    "cite": "State Medical Board of Ohio PA page",
+    "url": "https://med.ohio.gov/apply-and-renew/licenses-and-certifications/04-physician-assistant-(pa)",
+    "quote": "Since supervision agreements are no longer filed with the Board, there is no expiration nor renewal of them.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalWindow",
+    "value": "renew up to 180 days before expiry",
+    "cite": "State Medical Board of Ohio PA page",
+    "url": "https://med.ohio.gov/apply-and-renew/licenses-and-certifications/04-physician-assistant-(pa)",
+    "quote": "Renewals can be submitted within 180 days prior to the expiration date.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Ohio Board of Nursing",
+   "url": "https://nursing.ohio.gov"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Odd-numbered years; application due September 15, licence lapses November 1",
+   "ceHoursPerCycle": 24,
+   "nlcCompactMember": true,
+   "topicMandates": [
+    {
+     "topic": "Ohio nursing law and rules (Category A)",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all RNs and LPNs"
+    }
+   ],
+   "ceNote": "No CE required for the first renewal after licensure by examination; 12 hours if licensed by endorsement for one year or less"
+  },
+  "aprn": {
+   "title": "APRN designated as certified nurse practitioner (APRN-CNP)",
+   "separateLicenceOrCertificate": "Separate APRN licence (requires current Ohio or compact RN licence)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Odd-numbered years; application due September 15, licence lapses November 1",
+   "ceHoursPerCycle": 24,
+   "ceNote": "24 APRN hours are IN ADDITION to the 24 RN hours; CE completed for national certification counts toward both if from a Board-approved source. No APRN CE is required for the first renewal after the APRN licence is first issued (OAC 4723-8-10(B)(3)); the RN CE waiver cannot be used for APRN hours (4723-8-10(D)); up to 8 hours may be volunteer care to indigent and uninsured patients",
+   "pharmacologyHoursPerCycle": 12,
+   "pharmacologyNote": "At least 12 of the 24 APRN hours in advanced pharmacology from an accredited institution recognized by the Board (CNPs, CNMs, CNSs)",
+   "nationalCertificationRequired": true,
+   "topicMandates": []
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": 12,
+   "controlledSubstanceCe": null,
+   "stateCsRegistrationRequired": "not yet verified",
+   "notes": "Prescriptive authority comes with the CNP designation and is exercised under the standard care arrangement and the Board formulary (OAC 4723-9-10); OARRS review provisions must be in the standard care arrangement"
+  },
+  "practice": {
+   "authority": "reduced",
+   "agreementType": "standard care arrangement with collaborating physician or podiatrist",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "Written standard care arrangement with each collaborating physician or podiatrist, retained by the employer; no prior Board approval. Names and addresses of collaborating physicians submitted to the Board within 30 days of starting practice and within 30 days of any change, and listed on each renewal. Arrangement records its initial execution date and most recent review date; new arrangement required for a different or additional employer. A collaborating physician may collaborate in prescribing with no more than five nurses at once.",
+   "qualityAssurance": "Random chart review including prescribing patterns at least annually by a collaborating physician or physician-led QA committee, with a chance to discuss feedback, and a patient evaluation process (OAC 4723-8-05(C)). Any change to the body of the standard care arrangement requires reapproval; prior arrangements kept 3 years (OAC 4723-8-04(D)(7)(a),(F))."
+  },
+  "facts": [
+   {
+    "field": "rn.renewal",
+    "value": "odd-numbered years; due Sept 15; lapses Nov 1",
+    "cite": "ORC 4723.24(A)(1)(a)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.24",
+    "quote": "An active license to practice nursing as a registered nurse is subject to renewal in odd-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": 24,
+    "cite": "ORC 4723.24(C)(1)(a)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.24",
+    "quote": "For renewal of a license that was issued for a two-year renewal period, twenty-four hours of continuing nursing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.ohioLaw",
+    "value": 1,
+    "cite": "ORC 4723.24(C)(1)(c); OAC 4723-14-03(A)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-14-03",
+    "quote": "at least one of the required hours needs to be in category A continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "ORC 4723.11",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.11",
+    "quote": "The \"Nurse Licensure Compact\" is hereby ratified, enacted into law, and entered into by the state of Ohio",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewal",
+    "value": "odd-numbered years; due Sept 15; lapses Nov 1",
+    "cite": "ORC 4723.24(A)(1)(c)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.24",
+    "quote": "An active license to practice nursing as an advanced practice registered nurse is subject to renewal in odd-numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceHoursPerCycle",
+    "value": 24,
+    "cite": "ORC 4723.24(C)(2)(a); OAC 4723-8-10(B)(1)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.24",
+    "quote": "For renewal of a license that was issued for a two- year renewal period, twenty-four hours of continuing nursing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.pharmacologyHoursPerCycle",
+    "value": 12,
+    "cite": "ORC 4723.24(C)(2)(c)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.24",
+    "quote": "at least twelve hours of the education must be in advanced pharmacology and be received from an accredited institution recognized by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceAdditionalToRn",
+    "value": true,
+    "cite": "ORC 4723.24(C)(2)(d)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.24",
+    "quote": "is in addition to the continuing education required by division (C)(1)(a) or (b) of this section",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "ORC 4723.42(B)(2)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.42",
+    "quote": "the holder has maintained certification in the nursing specialty with a national certifying organization approved by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCollaboratorList",
+    "value": true,
+    "cite": "ORC 4723.42(B)(3)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.42",
+    "quote": "A list of the names and business addresses of the holder's current collaborating physicians and podiatrists",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "standard care arrangement",
+    "cite": "ORC 4723.431(A)(1)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.431",
+    "quote": "may practice only in accordance with a standard care arrangement entered into with each physician or podiatrist with whom the nurse collaborates",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.noPriorApproval",
+    "value": true,
+    "cite": "ORC 4723.431(A)(1)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.431",
+    "quote": "Prior approval of the standard care arrangement by the board of nursing is not required",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.collaboratorNotice",
+    "value": "within 30 days of starting practice and of changes",
+    "cite": "ORC 4723.431(A)(1)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.431",
+    "quote": "Not later than thirty days after first engaging in the practice of nursing ... the nurse shall submit to the board the name and business",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.scaReviewDate",
+    "value": "SCA records most recent review date",
+    "cite": "OAC 4723-8-04(D)(3)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-8-04",
+    "quote": "The date of the most recent review of the arrangement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.firstRenewalExempt",
+    "value": "no APRN CE before first APRN renewal",
+    "cite": "OAC 4723-8-10(B)(3)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-8-10",
+    "quote": "immediately following the initial issuance of the advanced practice registered nurse license by the board, a licensee is not required to complete any contact hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.annualChartReview",
+    "value": "random chart review at least annually",
+    "cite": "OAC 4723-8-05(C)(1)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-8-05",
+    "quote": "Periodic random chart review which includes prescribing patterns and schedule II prescribing, if indicated, at least annually by a collaborating physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.scaReapproval",
+    "value": "modifying the SCA body requires reapproval",
+    "cite": "OAC 4723-8-04(D)(7)(a)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-8-04",
+    "quote": "When modification is made to the body of the standard care arrangement, reapproval of the standard care arrangement is required",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.priorScaRetention",
+    "value": "prior SCAs kept 3 years",
+    "cite": "OAC 4723-8-04(F)",
+    "url": "https://codes.ohio.gov/ohio-administrative-code/rule-4723-8-04",
+    "quote": "Copies of previously effective standard care arrangements shall be retained by the nurse for three years and provided to the board upon request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.prescribingCollaboratorCap",
+    "value": "physician collaborates in prescribing with no more than five nurses at once",
+    "cite": "ORC 4723.431(A)(1)",
+    "url": "https://codes.ohio.gov/ohio-revised-code/section-4723.431",
+    "quote": "the physician or podiatrist shall not collaborate at the same time with more than five nurses in the prescribing component of their practices.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA and NP state controlled substance registration: no Ohio statute or rule requiring an individual prescriber state CS registration was found; a terminal distributor of dangerous drugs licence for personally furnishing was not researched. Show as not yet verified with https://www.pharmacy.ohio.gov.",
+  "PA: the State Medical Board PA page lists only NCCPA certification and the 12 pharmacology hours under Continuing Education and does not mention the 100 hours in OAC 4730-1-06(G)(2); the rule is the controlling primary source and NCCPA courses satisfy it.",
+  "PA: ORC 4730.14(A) says the licence expires two years after issuance; OAC 4730-1-06 speaks of a 'licensure registration period' with proration by month. Use the expiry date on the licence.",
+  "NP: 'reduced' is the AANP label; primary sources confirm a required standard care arrangement with a collaborating physician or podiatrist.",
+  "PA and NP: no Ohio topic mandate (opioid/pain, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide prevention, infection control, cultural competency, domestic violence) was found for PAs (ORC 4730.14, 4730.49, OAC 4730-1-06) or APRNs (ORC 4723.24, OAC 4723-8-10). For RNs, 1 hour Category A (Ohio nursing law) is mandatory; 1 hour on human trafficking or sexual assault victims may count but is optional (OAC 4723-14-03(J)). OARRS access certification at renewal applies to PA opioid or benzodiazepine prescribers. Federal DEA MATE (one-time 8 hours) still applies to DEA registrants."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "corrections": [
+  "PA CE hours: WRONG in research. Researcher said Ohio sets no state hour count; OAC 4730-1-06(G)(2) (effective October 31, 2025) requires 100 hours of CME per licensure period, satisfiable by NCCPA-acceptable courses, prorated 50/25/0 for licences issued mid-period. hoursPerCycle changed from null to 100, cycleYears 2.",
+  "PA pharmacology: added that the 12 hours must be Category I (OAC 4730-1-06(H)(2)) and are prorated to 6/3/0 at the first renewal after the 500 on-site supervision hours (H)(4).",
+  "PA: ORC 4730.14(B)(1) expressly requires 'passing periodic recertification examinations' (PANRE/PANRE-LA) as part of maintained NCCPA certification; recorded.",
+  "PA: MISSED recurring requirement added: supervising physician quality assurance review at least twice in the PA's first year and at least yearly after, records kept 7 years (OAC 4730-1-05).",
+  "PA: MISSED requirement added: first 500 hours of prescriptive authority under on-site supervision (OAC 4730-2-04(B), ORC 4730.44).",
+  "PA: State Medical Board page confirms supervision agreements are not filed and have no expiration or renewal; renewal can be filed up to 180 days before expiry.",
+  "NP: added that no APRN CE is due at the first APRN renewal after initial issuance and the RN waiver does not apply to APRN hours (OAC 4723-8-10(B)(3),(D)).",
+  "NP: MISSED recurring requirement added: random chart review including prescribing patterns at least annually under the standard care arrangement quality assurance process (OAC 4723-8-05(C)(1)). The researcher's note that no review frequency exists was true only of the SCA document itself.",
+  "NP: added SCA reapproval on modification and 3-year retention of prior SCAs (OAC 4723-8-04), and gave the five-nurse prescribing cap its own primary quote (ORC 4723.431(A)(1)).",
+  "NP/RN: OAC 4723-14-03 re-loaded at its March 26, 2026 version; 24 hours with 1 hour Category A still current.",
+  "Quotes over 25 words trimmed to their first 25 words (still verbatim): licence.renewalCycleYears, prescribing.oarrsCertification, practice.collaboratorNotice"
+ ]
+}

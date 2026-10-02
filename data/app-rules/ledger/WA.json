@@ -1,0 +1,538 @@
+{
+ "state": "WA",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Washington Medical Commission",
+   "url": "https://wmc.wa.gov/"
+  },
+  "licence": {
+   "title": "Physician Assistant licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Licensee's birthday every two years"
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "At least 40 hours Category I; Commission adopts AAPA standards for category",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Suicide assessment, treatment, and management",
+     "hours": 6,
+     "period": "one-time",
+     "appliesTo": "All PAs except those with only brief, limited, or no patient contact; due by end of first full CE period after initial licensure"
+    },
+    {
+     "topic": "Health equity (implicit bias)",
+     "hours": 2,
+     "period": "every 4 years",
+     "appliesTo": "All PAs; counts toward CME"
+    },
+    {
+     "topic": "Opioid prescribing best practices or Washington opioid prescribing rules",
+     "hours": 1,
+     "period": "one-time",
+     "appliesTo": "PAs licensed to prescribe opioids"
+    },
+    {
+     "topic": "Telemedicine training (state and federal law, liability, informed consent)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "PAs who provide clinical services through telemedicine; attestation signed and retained"
+    }
+   ],
+   "controlledSubstanceCe": "One-time 1 hour opioid prescribing CE"
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Collaboration agreement signed before practice; kept electronically or on paper at primary practice location and provided to the Commission on request (not filed). PAs on a pre-July 1, 2025 practice agreement had to move to a collaboration agreement by their renewal date or July 1, 2025, whichever is later. May be amended at any time.",
+   "notes": "Fewer than 4,000 postgraduate clinical hours: supervision by a participating physician. 4,000 or more hours with 2,000 supervised hours in the specialty: collaboration. Changing specialty: first 2,000 hours in the new specialty supervised. PA tracks own hours."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "One-time 1 hour opioid CE; PMP registration required if prescribing Schedule II to V"
+  },
+  "facts": [
+   {
+    "field": "licence.renewal",
+    "value": "every two years on birthday",
+    "cite": "WAC 246-918-171(2)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-171",
+    "quote": "A physician assistant must renew their license every two years on their birthday.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": 100,
+    "cite": "WAC 246-918-180(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-180",
+    "quote": "A physician assistant must complete one hundred hours of continuing education every two years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "WAC 246-918-180(2)(a)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-180",
+    "quote": "In lieu of one hundred hours of continuing medical education the commission will accept: (a) Current certification with the NCCPA",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "minimum 40 Category I",
+    "cite": "WAC 246-918-180(3)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-180",
+    "quote": "A minimum of forty credit hours must be earned in Category I.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topic.suicide",
+    "value": "6 hours one-time",
+    "cite": "WAC 246-918-185(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-185",
+    "quote": "must complete a one-time training in suicide assessment, treatment, and management. The training must be at least six hours in length",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topic.healthEquity",
+    "value": "2 hours every 4 years",
+    "cite": "WAC 246-918-195(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-195",
+    "quote": "A physician assistant must complete two hours of health equity continuing education training every four years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topic.opioid",
+    "value": "1 hour one-time",
+    "cite": "WAC 246-918-825(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-825",
+    "quote": "shall complete a one-time continuing education requirement regarding best practices in the prescribing of opioids or the opioid prescribing rules in this chapter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pmp",
+    "value": "PMP registration if prescribing Schedule II to V",
+    "cite": "WAC 246-918-935(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-935",
+    "quote": "shall register to access the PMP or demonstrate proof of having assured access to the PMP if they prescribe Schedule II-V medications",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "collaboration agreement before practice",
+    "cite": "RCW 18.71A.120(1)(a)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.71A.120",
+    "quote": "Prior to commencing practice, a physician assistant licensed in Washington state must enter into a collaboration agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFiling",
+    "value": "kept at primary practice location, available on request",
+    "cite": "RCW 18.71A.120(1)(f)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.71A.120",
+    "quote": "must be available either electronically or on paper at the physician assistant's primary location of practice and made available to the commission upon request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.supervisionThreshold",
+    "value": "under 4,000 postgraduate hours: supervision",
+    "cite": "RCW 18.71A.030(2)(a)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.71A.030",
+    "quote": "A physician assistant who has completed fewer than 4,000 hours of postgraduate clinical practice must work under the supervision of a participating physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionDeadline",
+    "value": "renewal date or July 1, 2025, whichever later",
+    "cite": "WAC 246-918-055(2)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-055",
+    "quote": "shall enter into a collaboration agreement by either the renewal date of their license or July 1, 2025, whichever is later.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.cycleStart",
+    "value": "CME review period begins on first birthday after initial licence",
+    "cite": "WAC 246-918-171(3)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-918-171",
+    "quote": "The review period begins on the first birthday after receiving the initial license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topic.suicide.statute",
+    "value": "PAs listed for one-time suicide training",
+    "cite": "RCW 43.70.442(5)(a)(vii)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=43.70.442",
+    "quote": "(vii) A physician assistant licensed under chapter 18.71A RCW;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topic.telemedicine",
+    "value": "one-time telemedicine training for non-physician professionals who provide telemedicine",
+    "cite": "RCW 43.70.495(2)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=43.70.495",
+    "quote": "a health care professional who provides clinical services through telemedicine, other than a physician licensed under chapter 18.71 RCW",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementAmendment",
+    "value": "collaboration agreement may be amended for any reason",
+    "cite": "RCW 18.71A.120(4)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.71A.120",
+    "quote": "A collaboration agreement may be amended for any reason.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.hoursTracking",
+    "value": "PA tracks own postgraduate clinical hours",
+    "cite": "RCW 18.71A.120(3)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.71A.120",
+    "quote": "The physician assistant is responsible for tracking the number of postgraduate clinical hours completed",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.specialtyChange",
+    "value": "first 2,000 hours in a new specialty supervised",
+    "cite": "RCW 18.71A.030(2)(b)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.71A.030",
+    "quote": "the first 2,000 hours of postgraduate clinical practice in the new specialty must be completed under the supervision of a participating physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Washington State Board of Nursing (formerly Nursing Care Quality Assurance Commission)",
+   "url": "https://nursing.wa.gov/"
+  },
+  "rn": {
+   "renewalCycleYears": 1,
+   "ceHoursPerCycle": "8 hours CE plus 96 hours active practice within the 12 months before each annual renewal; at least 2 of the 8 hours on health equity",
+   "nlcCompactMember": true,
+   "topicMandates": [
+    {
+     "topic": "Health equity (implicit bias)",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "All nurses, annually; first due by second full reporting period after initial licensure or 2026 renewal, whichever later"
+    },
+    {
+     "topic": "Suicide assessment, treatment, and management",
+     "hours": 6,
+     "period": "one-time",
+     "appliesTo": "RNs and LPNs, and ARNPs other than CRNAs (RCW 43.70.442(5)(a)(iii)); by end of first full year of licensure; counts toward the 8 hours"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "ARNP (advanced registered nurse practitioner), designation CNP; retitled advanced practice registered nurse (APRN) effective June 30, 2027 (RCW 18.79.250 as amended by 2024 c 239 and 2026 c 139)",
+   "separateLicenceOrCertificate": "separate ARNP licence; WAC 246-840-990(3) requires a valid single or multistate RN licence renewed every year, while WAC 246-840-360(1)(a) (last amended 2020) says an active Washington state RN licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 30,
+   "pharmacologyHoursPerCycle": 15,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Opioid prescribing best practices",
+     "hours": 4,
+     "period": "one-time",
+     "appliesTo": "ARNPs licensed to prescribe opioids"
+    },
+    {
+     "topic": "Telemedicine training (state and federal law, liability, informed consent)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "ARNPs who provide clinical services through telemedicine; attestation signed and retained"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "pharmacologyCeForPrescribers": "15 contact hours pharmacotherapeutics per 2 year renewal, in addition to the 30 ARNP hours",
+   "controlledSubstanceCe": "One-time 4 hour opioid prescribing CE",
+   "stateCsRegistrationRequired": null,
+   "notes": "PMP registration required if prescribing opioids (WAC 246-840-4990)."
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None required."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": 1,
+    "cite": "WAC 246-840-990(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-990",
+    "quote": "must renew their single or multistate license every year on the licensee's birthday.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.practiceHours",
+    "value": 96,
+    "cite": "WAC 246-840-220(2)(a)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-220",
+    "quote": "A minimum of 96 hours of active nursing practice; and",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHours",
+    "value": 8,
+    "cite": "WAC 246-840-220(2)(b)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-220",
+    "quote": "A minimum of eight hours of continuing nursing education of which at least two hours must be on health equity training",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topic.suicide",
+    "value": "6 hours one-time",
+    "cite": "WAC 246-840-220(3)(a)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-220",
+    "quote": "must complete a one-time, six-hour training in suicide assessment, treatment, and management from a qualified suicide prevention training program.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topic.healthEquity",
+    "value": "2 hours every year",
+    "cite": "WAC 246-840-222(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-222",
+    "quote": "Nurses must complete a minimum of two hours of health equity continuing education every year upon license renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "WAC 246-840-092(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-092",
+    "quote": "Applicants applying for a multistate license under the Enhanced Nurse Licensure Compact (eNLC) shall meet all requirements outlined in this chapter",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "WAC 246-840-990(3)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-990",
+    "quote": "An advanced registered nurse practitioner (ARNP) must renew their license every two years on the licensee's birthday.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "WAC 246-840-360(1)(b)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-360",
+    "quote": "Current certification from a certifying body as identified in WAC 246-840-302",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "WAC 246-840-360(1)(c)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-360",
+    "quote": "Thirty contact hours of continuing education obtained during the renewal period in each ARNP designation.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pharmacologyCe",
+    "value": 15,
+    "cite": "WAC 246-840-450(1)(b)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-450",
+    "quote": "fifteen contact hours of continuing education during the renewal period in pharmacotherapeutics related to the licensee's scope of practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthority",
+    "value": "renewed with ARNP licence",
+    "cite": "WAC 246-840-450(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-450",
+    "quote": "ARNP prescriptive authority must be renewed at the time of renewal of the ARNP license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.opioidCe",
+    "value": "4 hours one-time",
+    "cite": "WAC 246-840-4655(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-4655",
+    "quote": "The continuing education must be at least four hours in length.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pmp",
+    "value": "PMP registration if prescribing opioids",
+    "cite": "WAC 246-840-4990(1)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-4990",
+    "quote": "shall register to access the prescription monitoring program (PMP) or demonstrate proof of having registered to access the PMP if they prescribe opioids",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority",
+    "value": "full (licensed independent practitioner)",
+    "cite": "WAC 246-840-300(2)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-300",
+    "quote": "As a licensed independent practitioner, an ARNP provides a wide range of health care services",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "board.name",
+    "value": "Washington State Board of Nursing",
+    "cite": "RCW 18.79.070(1)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.79.070",
+    "quote": "board of nursing is established, consisting of fifteen members to be appointed by the governor to four-year terms.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.titleChange",
+    "value": "ARNP statute text effective until June 30, 2027; from June 30, 2027 the title becomes advanced practice registered nurse",
+    "cite": "RCW 18.79.250 (heading)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.79.250",
+    "quote": "Activities allowed. (Effective until June 30, 2027.)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.titleFrom2027",
+    "value": "title becomes advanced practice registered nurse effective June 30, 2027",
+    "cite": "RCW 18.79.250 (version effective June 30, 2027)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=18.79.250",
+    "quote": "Hold herself or himself out to the public or designate herself or himself as an advanced practice registered nurse",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ce.rules",
+    "value": "30 hours acceptable to certifying body, 50 minute hours, excludes the 15 pharmacotherapeutics hours",
+    "cite": "WAC 246-840-361(3)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-361",
+    "quote": "Not include the fifteen hours of continuing education required for an ARNP with prescriptive authority",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.rnAnnualRenewal",
+    "value": "ARNP must also hold and renew RN licence every year",
+    "cite": "WAC 246-840-990(3)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-990",
+    "quote": "An ARNP must also hold a valid single or multistate RN license and pay all associated fees every year on the licensee's birthday.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topic.suicide.statute",
+    "value": "ARNPs other than CRNAs listed for one-time suicide training",
+    "cite": "RCW 43.70.442(5)(a)(iii)",
+    "url": "https://app.leg.wa.gov/RCW/default.aspx?cite=43.70.442",
+    "quote": "advanced registered nurse practitioner, other than a certified registered nurse anesthetist, licensed under chapter 18.79 RCW;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.healthEquity.firstDue",
+    "value": "first due by second full reporting period after initial licensure or 2026 renewal",
+    "cite": "WAC 246-840-222(4)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-222",
+    "quote": "must be completed by the second full continuing education reporting period after initial licensure or 2026 renewal, whichever is later.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.topic.telemedicine",
+    "value": "one-time telemedicine training for those who provide telemedicine",
+    "cite": "RCW 43.70.495(2); WAC 246-840-220(5)",
+    "url": "https://app.leg.wa.gov/wac/default.aspx?cite=246-840-220",
+    "quote": "A nurse providing clinical services through telemedicine shall complete requirements under RCW 43.70.495 .",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "APRN retitling on June 30, 2027 is confirmed (RCW 18.79.250); whether the renewal CE numbers in WAC 246-840-360 and -450 change with it is not confirmed.",
+  "ARNP licence holders and the RN health equity hours: WAC 246-840-222 applies to 'nurses' at the annual RN renewal; no separate ARNP health equity rule was found.",
+  "WAC 246-840-360(1)(a) says an active Washington state RN licence while WAC 246-840-990(3) accepts a valid single or multistate RN licence; which governs for a multistate licence issued by another compact state is not confirmed.",
+  "Washington state controlled substance registration for individual PA or ARNP prescribers: not researched to a primary source; only DEA and PMP registration confirmed.",
+  "Telemedicine training: RCW 43.70.495 sets no hour count; the content is set by the telemedicine collaborative."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verificationCorrections": [
+  "All 26 researcher facts re-loaded from app.leg.wa.gov on 2026-10-01; values and quotes match. WAC 246-840-220, -222 and -092 carry a WSR 26-02-031 amendment effective 1/30/26 and are current.",
+  "ARNP title: researcher said the replacement text was not loaded. RCW 18.79.250 shows a version effective June 30, 2027 retitling ARNP as advanced practice registered nurse (2024 c 239, 2026 c 139). Title updated and fact added; removed from unverified.",
+  "Suicide training for ARNPs: researcher left it unverified; RCW 43.70.442(5)(a)(iii) lists ARNPs other than CRNAs. appliesTo updated and fact added. Added (5)(a)(vii) fact for PAs.",
+  "Missed mandate: one-time telemedicine training (RCW 43.70.495, WAC 246-840-220(5)) for PAs and ARNPs who provide telemedicine; added to both mandate lists with hours null.",
+  "ARNP RN prerequisite: researcher said Washington single state or multistate RN; WAC 246-840-360(1)(a) says active Washington state RN licence while 246-840-990(3) says single or multistate. Both recorded; conflict listed as unverified.",
+  "Added: WAC 246-918-171(3) CME cycle start, RCW 18.71A.120(3),(4), RCW 18.71A.030(2)(b), WAC 246-840-361(3), WAC 246-840-990(3) annual RN renewal for ARNPs, WAC 246-840-222(4) health equity first due date."
+ ]
+}

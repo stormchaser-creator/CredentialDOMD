@@ -18,6 +18,8 @@ import { complianceFor } from "../../../utils/compliance";
 import { STATE_NAMES } from "../../../constants/states";
 import { isAlertable, isInactive } from "../../../utils/lifecycle";
 import { daysUntilDate as daysUntil } from "../../../utils/dateDays.js";
+import { appMatrixRow } from "../../../utils/appMatrix.js";
+import { isAdvancedPractice } from "../../../constants/professions.js";
 
 function statusColor(days, T) {
   if (days == null) return T.textDim;
@@ -38,6 +40,9 @@ function statusLabel(days) {
 export default function MultiStateMatrix({ onAddLicense }) {
   const { data, theme: T } = useApp();
   const degreeType = data.settings?.degreeType || "";
+  // A PA or NP gets their own licences, CE and agreement columns
+  // (utils/appMatrix.js); MD and DO rows are built below as before.
+  const app = isAdvancedPractice(degreeType);
 
   const stateRows = useMemo(() => {
     // One row per state held today: a historical or superseded licence is
@@ -47,6 +52,14 @@ export default function MultiStateMatrix({ onAddLicense }) {
     licenses.forEach((l) => l.state && stateSet.add(l.state));
     if (data.settings?.primaryState) stateSet.add(data.settings.primaryState);
     (data.settings?.additionalStates || []).forEach((s) => stateSet.add(s));
+
+    if (app) {
+      return [...stateSet].sort().map((state) => ({
+        ...appMatrixRow(data, state),
+        privCount: (data.privileges || []).filter((p) => p && p.state === state && !isInactive(p)).length,
+        privEarliest: (data.privileges || []).filter((p) => p && p.state === state && p.expirationDate && isAlertable(p)).map((p) => p.expirationDate).sort()[0],
+      }));
+    }
 
     return [...stateSet].sort().map((state) => {
       // Find primary license for this state (first by type === "Medical License" or earliest expiration)
@@ -89,7 +102,7 @@ export default function MultiStateMatrix({ onAddLicense }) {
         privEarliest,
       };
     });
-  }, [data]);
+  }, [data, app]);
 
   if (stateRows.length === 0) {
     return (
@@ -97,7 +110,7 @@ export default function MultiStateMatrix({ onAddLicense }) {
         textAlign: "center", padding: "40px 20px",
         color: T.textMuted, fontSize: 14,
       }}>
-        Add at least one state medical license to see the matrix.
+        Add at least one {degreeType === "PA" ? "physician assistant license" : degreeType === "NP" ? "APRN license" : "state medical license"} to see the matrix.
         <br />
         <button
           style={{
@@ -127,7 +140,8 @@ export default function MultiStateMatrix({ onAddLicense }) {
 
       {/* State cards (each state is one row) */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {stateRows.map((row) => {
+        {app && stateRows.map((row) => <AppRow key={row.state} row={row} degreeType={degreeType} T={T} />)}
+        {!app && stateRows.map((row) => {
           // A date not known yet (or awaiting confirmation) is not a countdown.
           const licDays = row.medLicense && isAlertable(row.medLicense) ? daysUntil(row.medLicense.expirationDate) : null;
           const deaDays = row.deaLicense && isAlertable(row.deaLicense) ? daysUntil(row.deaLicense.expirationDate) : null;
@@ -255,6 +269,74 @@ function Cell({ T, label, value, status, statusColor }) {
       <div style={{ fontSize: 11, color: statusColor, marginTop: 2, fontWeight: 600 }}>
         {status}
       </div>
+    </div>
+  );
+}
+
+const AGREEMENT_STATUS = {
+  required: "Required in this state",
+  yes: "You practise under one",
+  no: "Not needed, per your answer",
+  ask: "Ask: depends on your hours or setting",
+};
+
+/** A PA's or NP's state row (DESIGN 4.8). */
+function AppRow({ row, degreeType, T }) {
+  const days = (rec) => (rec && isAlertable(rec) ? daysUntil(rec.expirationDate) : null);
+  // No em dash placeholder here: a record without a countable date says so.
+  const when = (rec) => (days(rec) == null ? "Date not known" : statusLabel(days(rec)));
+  const licCell = (label, rec, missing = "Not on file") => (
+    <Cell T={T} label={label} value={rec?.licenseNumber || "None"}
+      status={rec ? when(rec) : missing} statusColor={rec ? statusColor(days(rec), T) : T.textDim} />
+  );
+  const comp = row.comp || {};
+  const unit = comp.unit || "hours";
+  const ce = degreeType === "NP" ? "CE" : "CME";
+  let ceValue, ceStatus, ceColor = T.textDim;
+  if (!comp.rulesVerified) { ceValue = "Not yet verified"; ceStatus = comp.board || "See the board"; }
+  else if (comp.ceMode === "hours" && comp.totalRequired > 0) {
+    const pct = Math.min(100, Math.round((comp.totalEarned / comp.totalRequired) * 100));
+    ceValue = `${comp.totalEarned} / ${comp.totalRequired} ${unit}`;
+    ceStatus = comp.satisfiedVia?.body && !comp.satisfiedVia.confirm ? `Met through ${comp.satisfiedVia.body}` : `${pct}%`;
+    ceColor = comp.totalMet ? "#10b981" : pct >= 75 ? "#eab308" : "#ef4444";
+  } else if (comp.ceMode === "certification") { ceValue = "National certification"; ceStatus = comp.fullyCompliant ? "Current" : "Keep it current"; }
+  else if (comp.ceMode === "options") { ceValue = "Board CE options"; ceStatus = comp.options?.confirmed ? "Confirmed" : "Confirm on Home"; }
+  else { ceValue = "None"; ceStatus = "No general hour requirement"; }
+  const practiceLabel = row.practiceKind === "pa" ? "PA License" : "APRN License";
+  const rnStatus = row.rn?.via === "multistate"
+    ? `Multistate RN from ${row.rn.homeName}; ${row.stateName} is a compact state`
+    : null;
+  return (
+    <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "14px 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18, fontWeight: 800, color: T.text }}>{row.state}</span>
+          <span style={{ fontSize: 11, color: T.textMuted }}>{row.stateName}</span>
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, backgroundColor: T.input, color: T.textMuted }}>{degreeType}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        {licCell(practiceLabel, row.practice)}
+        {row.profession === "np" && (rnStatus
+          ? <Cell T={T} label="RN License" value={row.rn.license.licenseNumber || "None"} status={rnStatus} statusColor={statusColor(days(row.rn.license), T)} />
+          : licCell("RN License", row.rn?.license))}
+        <Cell T={T} label={`${ce}${comp.totalRequired > 0 && comp.rulesVerified ? ` (${comp.totalRequired} ${unit === "contact hours" ? "contact hr" : "hr"} req)` : ""}`} value={ceValue} status={ceStatus} statusColor={ceColor} />
+        {licCell("DEA", row.dea, "Not in this state")}
+        {licCell("State Controlled Substance", row.csr)}
+        {row.agreement && (
+          <Cell T={T} label="Practice agreement" value={row.agreement.record ? (row.agreement.record.name || "On file") : row.agreement.agreement.kind}
+            status={AGREEMENT_STATUS[row.agreement.status]} statusColor={row.agreement.status === "ask" ? "#eab308" : T.textMuted} />
+        )}
+        <Cell T={T} label={`Privileges (${row.privCount})`} value={row.privCount === 0 ? "None" : `${row.privCount} hosp.`}
+          status={row.privEarliest ? statusLabel(daysUntil(row.privEarliest)) : "None"} statusColor={row.privEarliest ? statusColor(daysUntil(row.privEarliest), T) : T.textDim} />
+      </div>
+      {row.unmet.length > 0 && (
+        <div style={{ marginTop: 10, padding: "6px 10px", backgroundColor: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, fontSize: 11, color: T.text }}>
+          <strong style={{ color: "#ef4444" }}>Unmet topics:</strong>{" "}
+          {row.unmet.slice(0, 3).map((u) => u.topic).join(", ")}
+          {row.unmet.length > 3 && ` +${row.unmet.length - 3} more`}
+        </div>
+      )}
     </div>
   );
 }

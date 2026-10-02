@@ -1,0 +1,592 @@
+{
+ "state": "MS",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Mississippi State Board of Medical Licensure",
+   "url": "https://www.msbml.ms.gov/Licensure/Physician_Assistant"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) license",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "June 30 every year (renewal opens May 1; licence year July 1 to June 30). CME is counted on a separate two-year cycle that begins July 1 of each even-numbered year (current cycle July 1, 2026 to June 30, 2028)."
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "cycleYears": 2,
+   "cycleStart": "July 1 of each even-numbered year (cycle began July 1, 2022 and every two years thereafter)",
+   "categoryRules": "At least 50 of the 100 hours must be Category 1 as defined by ACCME, AAPA, AMA or AOA. PAs authorized to prescribe controlled substances must include 5 hours on prescribing with an emphasis on controlled substances, counted inside the 50 Category 1 hours.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaNote": "Current NCCPA certification is a licensure qualification (Rule 1.3) and, at renewal, evidence of current NCCPA certification meets the 100-hour CME requirement (Rule 1.9; the Board page says it 'satisfies the whole requirement'). The 100-hour record is the alternative, so NCCPA is not itself a renewal condition. The Rule 1.9 paragraph for controlled substance prescribers does not repeat the NCCPA alternative.",
+   "topicMandates": [
+    {
+     "topic": "Prescribing of medications with an emphasis on controlled substances",
+     "hours": 5,
+     "period": "every cycle",
+     "appliesTo": "PAs authorized to prescribe controlled substances (Category 1, counted inside the 50 Category 1 hours and the 100 total)"
+    }
+   ],
+   "controlledSubstanceCe": "5 Category 1 hours every two-year cycle for PAs with controlled substance prescriptive authority. The Board's CE page says the federal one-time 8-hour DEA training satisfies the Board's controlled substance training requirement; whether that substitutes for the PA 5 hours is not stated."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "PA practices under a protocol mutually agreed with the supervising physician; supervisor and practice information must be reported to the Board through MELS before practice. A protocol must be presented to and approved by the Board before practising more than 75 miles from the supervising physician's primary office (hospitals, state health department facilities, FQHCs and volunteer clinics excluded). Primary care pairings meeting the Rule 1.6 conditions are exempt from the mileage limit. No periodic refiling interval is stated.",
+   "notes": "New graduates and PAs whose Mississippi licence is their initial licence need on-site supervising physician presence for 120 days or 960 hours (may be reduced if the clerkship was with the supervising physician). Quality improvement program (Rule 1.6): supervising physician reviews a random sample of 10% or 20 charts, whichever is less, every month; the PA keeps a chart review log; documented face to face meeting (in person or video) once per quarter. Primary care PAs with a primary care physician in compatible practice using EMR have no mileage restriction. Notify the Board immediately in writing of termination or change in employment (Rule 1.7)."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "stateCsRegistrationNote": "Board adopts the DEA registration in lieu of a separate state registration (Rule 1.5 D.2).",
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Controlled substance prescriptive authority (Schedules II to V) requires a Board-approved educational program and a Board application; DEA registration required.",
+   "ceForPrescribers": "5 Category 1 hours on prescribing/controlled substances per two-year cycle (inside the 50 Category 1 and the 100 total)."
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": 1,
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.12 (Renewal Schedule)",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "The license of every person licensed to practice as a physician assistant in the state of Mississippi shall be renewed annually.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "June 30",
+    "cite": "MSBML Physician Assistant (PA) License Renewal page",
+    "url": "https://www.msbml.ms.gov/licensure/pa-renewal",
+    "quote": "Renewal period: Begins May 1 and ends June 30 each year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": 100,
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.9",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "not less than 100 hours of continuing medical education (CME) over a two-year cycle, 50 hours of which must be Category 1",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.cycleStart",
+    "value": "July 1, 2022 and every two years thereafter",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.9",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "the two-year period begins July 1, 2022, and every two years thereafter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.currentCycle",
+    "value": "July 1, 2026 to June 30, 2028",
+    "cite": "MSBML Physician Assistant CME Requirements page",
+    "url": "https://www.msbml.ms.gov/licensure/physician-assistant-cme-requirements",
+    "quote": "Current cycle : July 1, 2026 to June 30, 2028",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.9",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "Physician assistants who are certified by the NCCPA may meet this requirement by providing evidence of current NCCPA certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[controlled substances]",
+    "value": 5,
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.9",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "and 5 hours of which must be related to the prescribing of medications with an emphasis on controlled substances.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.controlledSubstanceCe.deaTraining",
+    "value": "One-time 8-hour DEA training satisfies Board CS training requirement",
+    "cite": "MSBML Continuing Education Requirements page",
+    "url": "https://www.msbml.ms.gov/licensure/cme-requirements",
+    "quote": "It satisfies the Board's controlled substance training requirement.",
+    "loaded": true,
+    "verified": true,
+    "note": "The Board says the federal one-time 8-hour training satisfies 'the Board's controlled substance training requirement'; it does not say expressly that it replaces the PA 5-hour prescribing CME in Rule 1.9.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licensure.nccpaAtApplication",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.3",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "Pass the certification examination administered by the NCCPA and have current NCCPA certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "supervision (protocol)",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.5",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "Physician assistants shall practice according to a protocol which has been mutually agreed upon by the physician assistant and the supervising physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.filing",
+    "value": "Report supervisor to Board via MELS before practice",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.5",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "no physician assistant shall practice until they have reported their supervisor and practice information to the Board via the Medical Enforcement and Licensure System",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.newGraduateOnSite",
+    "value": "120 days or 960 hours on-site supervision",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.6",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "require the on-site presence of a supervising physician for one hundred twenty (120) days or its equivalent of 960 hours.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.distanceProtocol",
+    "value": "Board-approved protocol needed beyond 75 miles",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.6",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "Before any physician assistant shall practice in a location greater than 75 miles, the physician assistant must present to the Board a duly executed protocol",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.5 B",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "Physician assistant applicants applying for controlled substance prescriptive authority must complete a Board approved educational program prior to making application.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.5 D.2",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "the Board hereby adopts, in lieu of a separate registration with the Board, the registration with the U.S. Drug Enforcement Administration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[controlled substances].category",
+    "value": "The 5 prescribing hours count inside the 50 Category 1 hours",
+    "cite": "MSBML PA License Renewal page (implementing 30 Miss. Admin. Code Pt. 2615 R. 1.9)",
+    "url": "https://www.msbml.ms.gov/licensure/pa-renewal",
+    "quote": "As part of the 50 Category 1 hours, physician assistants authorized to prescribe controlled substances must complete at least 5 hours of CME",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.prescriberParagraphNoNccpaAlternative",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.9 (second paragraph)",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "All physician assistants authorized to prescribe controlled substances must show proof of completing 100 hours of CME each cycle",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10",
+    "note": "The prescriber paragraph repeats the 100/50 requirement and adds 5 prescribing hours without restating the NCCPA alternative; the Board CME page nevertheless says current NCCPA certification satisfies the whole requirement."
+   },
+   {
+    "field": "ce.nccpaSatisfiesWhole",
+    "value": "Board says current NCCPA certification satisfies the whole requirement",
+    "cite": "MSBML Physician Assistant CME Requirements page",
+    "url": "https://www.msbml.ms.gov/licensure/physician-assistant-cme-requirements",
+    "quote": "Current NCCPA certification satisfies the whole requirement. You attest that you have met it when you renew.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.attestation",
+    "value": "Attest at renewal in MELS; documents only on audit",
+    "cite": "MSBML Physician Assistant CME Requirements page",
+    "url": "https://www.msbml.ms.gov/licensure/physician-assistant-cme-requirements",
+    "quote": "You attest at renewal in MELS. Keep your records. You upload documentation only if your renewal is selected for audit.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.chartReview",
+    "value": "Supervising physician reviews 10% or 20 charts (whichever is less) every month; PA keeps a log",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.6 A-B",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "a random sample of charts that represent 10% or 20 charts, whichever is less, of patients seen by the physician assistant every month.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.quarterlyMeeting",
+    "value": "Documented face to face meeting (in person or video) with a supervising physician once per quarter",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.6 C",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "shall meet face to face, either in person or via video conferencing, with a supervisory physician once per quarter",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.primaryCareMileageExemption",
+    "value": "No mileage restriction for a primary care PA with a primary care physician in compatible practice using EMR, physician in state 20 h/week",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.6",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "Physician Assistants practicing in primary care shall have no mileage restrictions placed on the relationship between the supervisory physician and the physician assistant",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.terminationNotice",
+    "value": "Notify the Board in writing immediately on termination or any change in employment",
+    "cite": "30 Miss. Admin. Code Pt. 2615, Ch. 1, R. 1.7",
+    "url": "https://www.msbml.ms.gov/mississippi-administrative-code",
+    "quote": "The physician assistant shall notify the Board in writing immediately upon the physician assistant’s termination; physician retirement; withdrawal from active practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "federal.deaOneTimeTraining",
+    "value": "One-time 8-hour training on opioid or other substance use disorders for DEA registrants, affirmed at the first DEA registration or renewal on or after June 27, 2023",
+    "cite": "DEA Diversion Control Division letter to registrants (Consolidated Appropriations Act of 2023)",
+    "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_Training_Letter_Final.pdf",
+    "quote": "enacted a new one-time, eight-hour training requirement for all Drug Enforcement Administration (DEA)-registered practitioners on the treatment and management of patients",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Mississippi Board of Nursing",
+   "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 of even-numbered years (renewal September to December of even years, together with the APRN)",
+   "ceHoursPerCycle": 0,
+   "ceNote": "Part 2815 (CE) was repealed in February 2020. 20 contact hours in the prior two years apply only when the nurse has been out of practice more than five years.",
+   "nlcCompactMember": true,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN, Certified Nurse Practitioner (CNP), State Certification issued by the Board of Nursing",
+   "separateLicenceOrCertificate": true,
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "ceNote": "No fixed hour total: maintaining and renewing national certification satisfies the general CE requirement, plus 5 contact hours on controlled substances each certification period.",
+   "pharmacologyHoursPerCycle": 5,
+   "pharmacologyNote": "The 5 hours are controlled substance CE, required of every APRN regardless of controlled substance prescriptive authority; new graduates within 2 years are exempt for the first renewal only. Upload to CE Broker; earning window January 1 of the odd year to December 31 of the even year.",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Controlled substances",
+     "hours": 5,
+     "period": "every cycle",
+     "appliesTo": "All APRNs, irrespective of controlled substance prescriptive authority (new graduates exempt for first renewal)"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Controlled Substance Prescriptive Authority (CSPA) through the Board of Nursing, completed at initial DEA registration and at each DEA renewal; only Mississippi DEA registrations accepted.",
+   "pharmacologyCeForPrescribers": "No separate prescriber hour count found beyond the 5 controlled substance hours that apply to all APRNs.",
+   "controlledSubstanceCe": "5 contact hours per two-year certification period (all APRNs).",
+   "stateCsRegistrationRequired": false,
+   "stateCsNote": "No separate state controlled substance registration: the Board of Nursing grants CSPA and then the APRN registers with DEA using the APRN licence number (the Board page says there is no state controlled substance number). All APRNs must register with and use the Mississippi Prescription Monitoring Program, even without a DEA registration.",
+   "pmpRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "restricted",
+   "authorityNote": "Label follows the AANP taxonomy (not a primary source). Primary fact: every APRN must practise in a collaborative relationship with a Mississippi-licensed physician under a formal collaborative agreement submitted to the Board.",
+   "agreementType": "collaboration",
+   "transitionToPracticeHours": "1,000 monitored practice hours (2,000 if the APRN had under 1 year/2,000 hours of RN experience before the APRN program); APRN program clinical hours may count if national certification is obtained within 2 years; 1 year of active APRN practice in another jurisdiction may satisfy it (Rule 1.3 C). Evidence of completion is submitted within 30 days.",
+   "agreementFilingAndRenewal": "Formal collaborative agreement submitted to the Board before practice; updated agreement submitted at every renewal; revisions submitted with a fee before implementation; practice site changes approved before practice at the site. 90-day grace period (plus possible 90-day extension) if the collaborating physician leaves. A collaborative agreement is uploaded for each practice site; QA/QI components listed by the Board include collaborating physician chart review of 10% or 20 charts and quarterly face to face meetings."
+  },
+  "facts": [
+   {
+    "field": "aprn.renewalCycleYears",
+    "value": 2,
+    "cite": "MSBN APRN page",
+    "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse",
+    "quote": "APRN Application along with RN application renewed every two (2) years September - December of even numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.2 B(5) (rev. 2025)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "Maintain documentation of current national certification as an APRN in a designated area of practice by a national certification organization recognized by the Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceViaNationalCertification",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.2 B(8)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "renewal of a national certification in a designated area of practice by a national certification organization recognized by the Board shall satisfy this requirement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.topicMandates[controlled substances]",
+    "value": 5,
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.2 B(9)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "Complete a minimum of five (5) contact hours of continuing education directly related to controlled substances per State Certification Period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.csCeAppliesToAll",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.2 B(9)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "This requirement applies to all APRNs, irrespective of controlled substance prescriptive authority.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.csCeWindow",
+    "value": "Jan 1 odd year to Dec 31 even year",
+    "cite": "MSBN APRN page",
+    "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse",
+    "quote": "within the renewal cycle 01/01 of the odd year to 12/31 of the even year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": 0,
+    "cite": "MSBN FAQ (Part 2815 repealed)",
+    "url": "https://www.msbn.ms.gov/faqs",
+    "quote": "Title 30 Mississippi Administrative Code, Part 2815: Continuing Education was repealed by the Board in February 2020.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.1 B",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "currently licensed to practice as registered nurse under the Nurse Licensure Compact with a multistate licensure privilege to practice in Mississippi",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "collaboration",
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.4 C",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "The APRN shall practice in a collaborative relationship with a Mississippi licensed physician whose practice is compatible with that of the APRN.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Submit updated agreement at each renewal",
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.2 B(4)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "Submit an updated formal collaborative agreement(s).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPracticeHours",
+    "value": "1,000 or 2,000 monitored hours",
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.3 (rev. 2025)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "must complete one- thousand (1,000) monitored practice hours.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": "CSPA with fee at initial DEA and DEA renewal",
+    "cite": "MSBN APRN page",
+    "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse",
+    "quote": "You must complete the CSPA and pay the $100.00 fee at initial DEA license and at renewal of DEA license (every three years).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pmpRegistrationRequired",
+    "value": true,
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.4 F",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "APRNs shall enroll in and utilize the Mississippi Prescription Monitoring Program (MPMP).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionOutOfStateCredit",
+    "value": "One year of active APRN practice in another jurisdiction may satisfy the monitored hours",
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.3 C (rev. 2025)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "The APRN that has a minimum of one (1) year active practice experience in another jurisdiction may be deemed to have satisfied this requirement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": false,
+    "cite": "MSBN APRN page (DEA registration instructions)",
+    "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse",
+    "quote": "When completing the DEA registration application you should enter your APRN license number. You will not have a state controlled substance number.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pmpEvenWithoutDea",
+    "value": true,
+    "cite": "MSBN APRN page",
+    "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse",
+    "quote": "You must register for the PMP to simply have an APRN license in Mississippi.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalDeadline",
+    "value": "December 31 of even-numbered years (RN and APRN)",
+    "cite": "MSBN FAQ (Renewal of License)",
+    "url": "https://www.msbn.ms.gov/faqs",
+    "quote": "RNs and APRNs with an active or inactive license that expire December 31st of the immediately prior to a two years within even numbered years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.reinstatementCe",
+    "value": "40 contact hours in the past 2 years (5 on controlled substances) to reinstate a lapsed APRN certification",
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.2 C(7)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "Submit documentation evidencing completion of a minimum of forty (40) contact hours of continuing education related to the advanced clinical practice of the APRN",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.csCeNewGradExemption",
+    "value": "Graduates within 2 years exempt from the 5 hours for the first renewal only",
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.2 B(9)(c)",
+    "url": "https://www.msbn.ms.gov/sites/default/files/Part2840_1.pdf",
+    "quote": "are exempt from this requirement for the first renewal of State Certification only.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.qaqi",
+    "value": "Formal QA/QI program on site; Board components include collaborating physician review of 10% or 20 charts and quarterly face to face meetings",
+    "cite": "30 Miss. Admin. Code Pt. 2840, R. 1.4 D; MSBN APRN page (QA/QI components)",
+    "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse",
+    "quote": "Chart Review of 10% or 20 charts by collaborative physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.siteAndCollaboratorFiling",
+    "value": "Each Mississippi practice site needs a Board-approved site, collaborating physician and agreement before practice",
+    "cite": "MSBN APRN page",
+    "url": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse",
+    "quote": "you MAY NOT begin work until you have an approved practice site, collaborating physician of compatible practice and a collaborative agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "addedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "MS NP practice authority label 'restricted' is the AANP classification; Mississippi primary sources establish only that a formal collaborative agreement with a physician is mandatory for all APRN practice.",
+  "MS PA: whether current NCCPA certification alone satisfies the 5 Category 1 prescribing hours for PAs with controlled substance authority is unclear. The Board CME page says NCCPA 'satisfies the whole requirement', but the Rule 1.9 prescriber paragraph and the renewal page require the 5 hours without restating the NCCPA alternative. The app should ask prescribing PAs to log the 5 hours.",
+  "MS PA: whether the federal one-time 8-hour DEA training substitutes for the PA 5-hour prescribing CME is not stated; the Board says only that it satisfies 'the Board's controlled substance training requirement'.",
+  "MS NP: the 2025 revision of Part 2840 (PDF modified April 2026) is the version used; the earlier 2022 PDF marked monitored practice hours as suspended and is superseded."
+ ],
+ "verification": {
+  "by": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "MS PA licence.renewalCycleYears: cite corrected from Rule 1.13 to Rule 1.12 (Renewal Schedule); Rule 1.13 is Disciplinary Proceedings. Value (annual) unchanged.",
+   "MS PA: the 5 controlled substance prescribing hours are Category 1 (inside the 50 Category 1 hours, per the Board's PA renewal page), not merely 'inside the 100'. categoryRules and topicMandates updated.",
+   "MS PA: added missed practice duties from Rule 1.6/1.7: monthly chart review of 10% or 20 charts (whichever is less) with a log, documented quarterly face to face meeting, primary care mileage exemption, immediate written notice of termination or employment change.",
+   "MS PA and NP: federal one-time 8-hour DEA (MATE) training now confirmed from the DEA's own letter (loaded), replacing the earlier 'not checked against a federal primary source'.",
+   "MS NP practice.transitionToPracticeHours: out-of-state credit corrected from '3 years of active practice in another jurisdiction' to 1 year (Rule 1.3 C). The 3-year figure in Rule 1.3 is the experience required of a monitoring APRN, not of the new APRN.",
+   "MS NP prescribing.stateCsRegistrationRequired: null changed to false. The Board of Nursing APRN page states 'You will not have a state controlled substance number'; CSPA (Board) plus DEA is the full set.",
+   "MS NP: added RN/APRN renewal deadline fact (December 31 of even years, MSBN FAQ), reinstatement CE (40 contact hours, 5 on controlled substances), first-renewal exemption fact, PMP registration required even without a DEA, and the QA/QI chart review and quarterly meeting components.",
+   "MS both professions: searched for missed mandates (opioid/pain, implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide prevention, infection control, cultural competency, domestic violence). Part 2615 R. 1.9 and Part 2840 R. 1.2 B contain no topic mandate other than the controlled substance hours; none added."
+  ],
+  "stillUnverified": [
+   "MS NP practice authority label 'restricted' is the AANP classification; Mississippi primary sources establish only that a formal collaborative agreement with a physician is mandatory for all APRN practice.",
+   "MS PA: whether current NCCPA certification alone satisfies the 5 Category 1 prescribing hours for PAs with controlled substance authority is unclear. The Board CME page says NCCPA 'satisfies the whole requirement', but the Rule 1.9 prescriber paragraph and the renewal page require the 5 hours without restating the NCCPA alternative. The app should ask prescribing PAs to log the 5 hours.",
+   "MS PA: whether the federal one-time 8-hour DEA training substitutes for the PA 5-hour prescribing CME is not stated; the Board says only that it satisfies 'the Board's controlled substance training requirement'.",
+   "MS NP: the 2025 revision of Part 2840 (PDF modified April 2026) is the version used; the earlier 2022 PDF marked monitored practice hours as suspended and is superseded."
+  ]
+ }
+}

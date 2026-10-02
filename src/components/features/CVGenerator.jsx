@@ -8,6 +8,7 @@ import { cvPlainText } from "../../utils/shareText";
 import CvImportReview from "./CvImportReview";
 import { TAP_MIN } from "../shared/actionButton";
 import Modal from "../shared/Modal";
+import { professionCopy } from "../../constants/professionCopy";
 
 
 // `lists` says what each CV is built from, for the note shown when this CV
@@ -62,7 +63,7 @@ function CVGenerator() {
   const handlePdfCV = async () => {
     if (!hasData) { flash(emptyNote()); return; }
     try {
-      const result = await shareCvPdf(cvContent, { name: s.name || "Physician", degree: s.degreeType || "", settings: s });
+      const result = await shareCvPdf(cvContent, { name: s.name || professionCopy(s.degreeType, { audience: "third-party" }).fallbackName, degree: s.degreeType || "", settings: s });
       if (result === "download") flash("PDF downloaded.");
       else if (result === "share") flash("PDF ready in the share sheet.");
     } catch (err) {

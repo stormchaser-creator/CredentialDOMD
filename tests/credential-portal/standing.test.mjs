@@ -27,6 +27,9 @@ test('administrator access: standing grants on the real migrations', { timeout: 
   t.after(() => db.close());
   const alice = { id: id(1), subject: 'user_alicenew', legacy: 'user_alicelegacy', email: 'alice@example.test' };
   const bob = { id: id(2), subject: 'user_bobnew', legacy: 'user_boblegacy' };
+  // A physician assistant and a nurse practitioner, added by their own test.
+  const carol = { id: id(3), subject: 'user_carolpa' };
+  const nina = { id: id(4), subject: 'user_ninanp' };
   const R = {
     L1: id(101), L2: id(102), L3: id(103), L4: id(104), I1: id(111), I2: id(112), P1: id(121), H1: id(131), H2: id(132), H3: id(133), H4: id(134),
     W1: id(141), S1: id(151), M1: id(161), MH1: id(171), PR1: id(181), C1: id(191), E1: id(201), CC1: id(211), CC2: id(212), CR1: id(221), CR2: id(222),
@@ -145,7 +148,8 @@ test('administrator access: standing grants on the real migrations', { timeout: 
   };
   const deps = {
     crypto: box, store, waitUntil: work => pending.push(work), ownerProfiles: () => ownerSetting,
-    authenticateOwner: async req => ({ alice: { profileId: alice.id, subject: alice.subject }, bob: { profileId: bob.id, subject: bob.subject } })[req.headers.get('x-owner')] || null,
+    authenticateOwner: async req => ({ alice: { profileId: alice.id, subject: alice.subject }, bob: { profileId: bob.id, subject: bob.subject },
+      carol: { profileId: carol.id, subject: carol.subject }, nina: { profileId: nina.id, subject: nina.subject } })[req.headers.get('x-owner')] || null,
     readFile: async (path, limit) => { fileReads++; const bytes = files.get(path); if (duringRead) await duringRead(); if (!bytes || bytes.length > limit) throw Error('unavailable'); return bytes.slice(); },
     sendMail: async (payload, key) => { mails.push({ payload: structuredClone(payload), key }); return { state: 'sent', providerId: `synthetic-${mails.length}` }; },
   };
@@ -475,6 +479,79 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     assert.equal(await ok('ACLS Certification', 'ACLS'), true);
     assert.equal(await ok('Board Certification', 'American Board of Neurological Surgery'), true);
     assert.equal(await ok('State Medical License (DO)', 'Colorado'), true);
+  });
+
+  await t.test("a PA's and an NP's licences and their files are shared and selectable; a non-licence or another member's record is not", async () => {
+    const L = { pa: id(301), rx: id(302), pa2: id(303), pance: id(304), other: id(305), dl: id(306), bc: id(307), aprn: id(311), rn: id(312), rnm: id(313), nclex: id(314), rx2: id(315), pa3: id(316), travel: id(317) };
+    const F = { pa: id(601), rx: id(602), agreement: id(603), other: id(604), dl: id(605), bc: id(606), aprn: id(611), rn: id(612), foreignRecord: id(613), ninaOwn: id(614), travel: id(615) };
+    await db.sql(`
+      insert into profiles(id,auth_user_id,access_status,name,degree_type,primary_state,verified_email) values
+       (${q(carol.id)},${q(carol.subject)},'active','Carol Example','PA','WI','carol@example.test'),
+       (${q(nina.id)},${q(nina.subject)},'active','Nina Example','NP','TX','nina@example.test');
+      insert into licenses(id,user_id,type,name,license_number,state,expiration_date) values
+       (${q(L.pa)},${q(carol.id)},'State Physician Assistant License','WI Physician Assistant License','PA-1','WI','2028-02-28'),
+       (${q(L.rx)},${q(carol.id)},'Prescriptive Authority','WI prescribing','RX-1','WI',null),
+       (${q(L.pa2)},${q(carol.id)},'Practice Agreement','Collaborative practice agreement, Synthetic Clinic',null,'WI',null),
+       (${q(L.pance)},${q(carol.id)},'PANCE','PANCE',null,null,null),
+       (${q(L.pa3)},${q(carol.id)},'Physician’s Assistant License','Typed on an iPhone','PA-2','MN',null),
+       (${q(L.other)},${q(carol.id)},'Other','SECRET-OTHER',null,null,null),
+       (${q(L.dl)},${q(carol.id)},'Practice Agreement','SECRET Driver''s License','SECRET-DL','WI',null),
+       (${q(L.bc)},${q(carol.id)},'Practice Agreement','SECRET Birth certificate',null,null,null),
+       (${q(L.aprn)},${q(nina.id)},'APRN License (NP)','TX APRN License','AP-1','TX','2027-05-31'),
+       (${q(L.rn)},${q(nina.id)},'RN License','TX RN License','RN-1','TX','2027-05-31'),
+       (${q(L.rnm)},${q(nina.id)},'RN License (Multistate)','Compact licence, Texas','RN-2','TX',null),
+       (${q(L.travel)},${q(nina.id)},'RN License (Multistate)','Compact licence for travel assignments','RN-3','TX',null),
+       (${q(L.nclex)},${q(nina.id)},'NCLEX-RN','NCLEX-RN',null,null,null),
+       (${q(L.rx2)},${q(nina.id)},'Prescriptive Authority','TX prescriptive authority',null,'TX',null);
+      insert into documents(id,user_id,name,mime_type,size_bytes,storage_path,linked_to,type) values
+       ${doc(F.pa, carol.id, carol.subject, `licenses:${L.pa}`, 'PA license.pdf')},
+       ${doc(F.rx, carol.id, carol.subject, `licenses:${L.rx}`, 'Prescriptive authority.pdf')},
+       ${doc(F.agreement, carol.id, carol.subject, `licenses:${L.pa2}`, 'Practice agreement.pdf')},
+       ${doc(F.other, carol.id, carol.subject, `licenses:${L.other}`, 'SECRET other.pdf')},
+       ${doc(F.dl, carol.id, carol.subject, `licenses:${L.dl}`, 'SECRET DL.pdf')},
+       ${doc(F.bc, carol.id, carol.subject, `licenses:${L.bc}`, 'SECRET birth certificate.pdf')},
+       ${doc(F.foreignRecord, carol.id, carol.subject, `licenses:${L.aprn}`, 'SECRET linked to another member.pdf')},
+       ${doc(F.aprn, nina.id, nina.subject, `licenses:${L.aprn}`, 'APRN license.pdf')},
+       ${doc(F.rn, nina.id, nina.subject, `licenses:${L.rn}`, 'RN license.pdf')},
+       ${doc(F.ninaOwn, nina.id, nina.subject, `licenses:${L.rnm}`, 'Compact RN.pdf')},
+       ${doc(F.travel, nina.id, nina.subject, `licenses:${L.travel}`, 'Travel compact RN.pdf')};`, 'postgres');
+    ownerSetting = `${alice.id},${carol.id},${nina.id}`;
+    try {
+      // Standing grants show every PA and NP licence record and its file, never Other or an identity document.
+      let session = await visit(await grant({ sections: ['licenses'] }, 'carol'));
+      let view = (await summary(session)).body;
+      assert.deepEqual(new Set(recordIds(view)), new Set([L.pa, L.rx, L.pa2, L.pance, L.pa3]));
+      assert.deepEqual(new Set(docIds(view)), new Set([F.pa, F.rx, F.agreement]));
+      assert.ok(!JSON.stringify(view).includes('SECRET'));
+      assert.equal((await file('view', F.pa, session)).status, 200);
+      assert.equal((await file('view', F.agreement, session)).status, 200);
+      for (const denied of [F.other, F.dl, F.bc, F.foreignRecord, F.aprn]) assert.equal((await file('view', denied, session)).status, 401, denied);
+      session = await visit(await grant({ sections: ['licenses'] }, 'nina'));
+      view = (await summary(session)).body;
+      assert.deepEqual(new Set(recordIds(view)), new Set([L.aprn, L.rn, L.rnm, L.nclex, L.rx2]));
+      assert.deepEqual(new Set(docIds(view)), new Set([F.aprn, F.rn, F.ninaOwn]));
+      assert.equal((await file('view', F.rn, session)).status, 200);
+      assert.equal((await file('view', F.ninaOwn, session)).status, 200, 'a compact licence');
+      // Accepted limitation: a licence named for travel stays out, as on 2026-09-25 (renaming it shares it).
+      assert.equal((await file('view', F.travel, session)).status, 401, 'a licence named for travel assignments');
+      // One-time invitations: the same files are selectable.
+      await resetDailyQuota();
+      for (const [owner, ids] of [['carol', [F.pa, F.rx, F.agreement]], ['nina', [F.aprn, F.rn, F.ninaOwn]]]) {
+        const created = await call({ action: 'create', recipientEmail: `${owner}-office@example.test`, documentIds: ids, requestId: crypto.randomUUID() }, owner);
+        assert.equal(created.status, 201, `${owner}: ${JSON.stringify(created.body)}`);
+      }
+      // Other, an identity document filed as a practice agreement, and a file linked to another member's record are refused.
+      for (const denied of [F.other, F.dl, F.bc, F.foreignRecord]) {
+        const refused = await call({ action: 'create', recipientEmail: 'carol-office@example.test', documentIds: [denied], requestId: crypto.randomUUID() }, 'carol');
+        assert.equal(refused.status, 409, denied); assert.equal(refused.body.error, 'document_not_shareable', denied);
+      }
+      const travel = await call({ action: 'create', recipientEmail: 'nina-office@example.test', documentIds: [F.travel], requestId: crypto.randomUUID() }, 'nina');
+      assert.equal(travel.status, 409); assert.equal(travel.body.error, 'document_not_shareable');
+      // Another member's own file is not the owner's to select.
+      const foreign = await call({ action: 'create', recipientEmail: 'carol-office@example.test', documentIds: [F.ninaOwn], requestId: crypto.randomUUID() }, 'carol');
+      assert.equal(foreign.status, 409); assert.equal(foreign.body.error, 'document_unavailable');
+      await settle();
+    } finally { ownerSetting = alice.id; }
   });
 
   await t.test('drug screen reports and Flagged or Review screenings are held back by default and shown only when the owner opts in', async () => {

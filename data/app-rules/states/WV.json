@@ -1,0 +1,232 @@
+{
+  "state": "WV",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "West Virginia Board of Medicine (PAs collaborating with osteopathic physicians may instead be licensed by the WV Board of Osteopathic Medicine)",
+      "url": "https://wvbom.wv.gov/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "ce.hoursPerCycle",
+        "reason": "100 hours during the preceding two-year period for the biennial renewal"
+      },
+      "total": {
+        "value": 100,
+        "fact": "ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 50,
+        "label": "Category I (AMA, AAPA or AAFP)",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AAFP Prescribed Credit"
+        ],
+        "unverifiedAccepted": [],
+        "facts": [
+          "ce.categoryRules#2",
+          "ce.onlyListedCategories"
+        ]
+      },
+      "notes": [
+        {
+          "text": "Holding NCCPA certification does not satisfy the CME. Passing an NCCPA recertification exam during the period earns up to 100 hours (97 when the controlled substance course is required).",
+          "facts": [
+            "ce.nccpaRecertExam",
+            "ce.nccpaCertificationInLieu (board FAQ)"
+          ]
+        },
+        {
+          "text": "Category II credit is capped at 50 hours.",
+          "fact": "ce.categoryRules"
+        },
+        {
+          "text": "A PA master's degree completed within one year of the initial license expiring earns up to 100 hours (97 when the controlled substance course is required).",
+          "fact": "ce.mastersPathway"
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 3,
+        "label": "Board approved course on risk assessment and responsible prescribing of controlled substances, each reporting period",
+        "fact": "ce.topicMandates[0]",
+        "condition": {
+          "field": "Prescribes, administers or dispenses controlled substances",
+          "question": "Did you prescribe, administer or dispense a controlled substance under your West Virginia license this period?",
+          "description": "West Virginia controlled substance course."
+        }
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": 3,
+        "label": "The same board approved controlled substance course within one year of initial licensure",
+        "period": "lifetime",
+        "facts": [
+          "ce.topicMandates[1]",
+          "ce.topicMandates (statute)"
+        ],
+        "condition": {
+          "field": "Prescribes, administers or dispenses controlled substances",
+          "question": "Did you prescribe, administer or dispense a controlled substance under your West Virginia license this period?",
+          "description": "West Virginia controlled substance course."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "practice notification",
+        "text": "A PA may not practice independently. The PA and a health care facility file a practice notification with the Board, and the Board is told in writing within 10 days when it ends.",
+        "facts": [
+          "practice.noIndependentPractice",
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether a West Virginia PA needs a state controlled substance registration to prescribe",
+      "The CME rules for PAs licensed by the West Virginia Board of Osteopathic Medicine (24 CSR 2; only a 2019 emergency version was checked)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "West Virginia Board of Registered Nurses (WV RN Board)",
+      "url": "https://wvrnboard.wv.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.ncl"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears",
+          "reason": "Licenses expire June 30 of each even numbered year."
+        },
+        "total": {
+          "value": 12,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "A nurse first licensed in West Virginia during a reporting period is exempt from CE for that period.",
+            "fact": "rn.firstPeriodExempt"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 3,
+          "label": "Safe prescribing, drug diversion and opioid antagonist training within 1 year of initial licensure",
+          "period": "lifetime",
+          "facts": [
+            "rn.topicMandates[0]",
+            "rn.topicMandates[0] (statute)"
+          ],
+          "condition": {
+            "field": "Prescribes, administers or dispenses controlled substances",
+            "question": "Do you prescribe, administer or dispense controlled substances?",
+            "description": "West Virginia controlled substance training."
+          }
+        }
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.ceHoursPerCycle (board page)"
+        },
+        "total": {
+          "value": 24,
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "12 of the 24 APRN hours may count toward the RN license's hours.",
+            "fact": "aprn.rnOverlap"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 12,
+          "measure": "pharmacology",
+          "label": "Pharmacotherapeutics, 12 of the 24 hours (the other 12 in clinical management of patients)",
+          "facts": [
+            "aprn.ceHoursPerCycle",
+            "aprn.ceHoursPerCycle (board page)"
+          ]
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 3,
+          "label": "Safe prescribing, drug diversion and opioid antagonist training within 1 year of initial licensure",
+          "period": "lifetime",
+          "facts": [
+            "rn.topicMandates[0]",
+            "rn.topicMandates[0] (statute)"
+          ],
+          "condition": {
+            "field": "Prescribes, administers or dispenses controlled substances",
+            "question": "Do you prescribe, administer or dispense controlled substances?",
+            "description": "West Virginia controlled substance training."
+          }
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycle",
+          "reason": "The APRN license runs July 1 of an odd year to June 30 of the next odd year, a year apart from the RN license (June 30 of even years)."
+        }
+      }
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative agreement (prescribing)",
+        "conditional": true,
+        "text": "Prescriptive authority requires a written collaborative agreement with a physician, verified with the RN Board, until the APRN has practiced at least three years in a documented collaborative relationship. If the agreement ends with no other in place, the APRN has 60 days to file a new one.",
+        "facts": [
+          "practice.agreementFilingAndRenewal",
+          "practice.transition",
+          "practice.agreementFilingAndRenewal#2"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether a West Virginia APRN needs a state controlled substance registration to prescribe"
+    ]
+  }
+}

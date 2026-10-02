@@ -2,12 +2,22 @@ import { useApp } from "../../context/AppContext";
 import { findStateLicense } from "../../utils/compliance";
 import { inlineLinkTap } from "./actionButton";
 
+// A PA or NP card answers on its own licence (pa, rn or aprn), and one
+// question asked by several topics (Florida's "Do you hold prescriptive
+// authority?") is shown once. Physician cards are unchanged.
+const LICENSE_NOUN = { pa: "physician assistant license", rn: "RN license", aprn: "APRN license" };
+
 export default function ConditionalCmeTopics({ comp }) {
   const { data, editItem, theme: T } = useApp();
   if (!comp?.conditionalTopics?.length && !comp?.informationalTopics?.length) return null;
-  const license = findStateLicense(data.licenses, comp.state);
+  const appKind = comp.profession && LICENSE_NOUN[comp.kind] ? comp.kind : null;
+  const license = appKind ? findStateLicense(data.licenses, comp.state, appKind) : findStateLicense(data.licenses, comp.state);
+  const seen = new Set();
+  const topics = appKind
+    ? (comp.conditionalTopics || []).filter(t => t?.condition?.field && !seen.has(t.condition.field) && seen.add(t.condition.field))
+    : (comp.conditionalTopics || []);
   return <div onClick={e => e.stopPropagation()} style={{ margin: "10px 0" }}>
-    {(comp.conditionalTopics || []).map(topic => {
+    {topics.map(topic => {
       const value = topic.applicability === "applies" ? "Yes" : topic.applicability === "not-applicable" ? "No" : "";
       return <div key={topic.condition.field} style={{ backgroundColor: T.input, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
         <div style={{ color: T.text, fontWeight: 700, marginBottom: 4 }}>{topic.topic}: {value === "Yes" ? "applies per your selection" : value === "No" ? "does not apply per your selection" : "confirm applicability"}</div>
@@ -22,9 +32,11 @@ export default function ConditionalCmeTopics({ comp }) {
             <option value="Yes">Yes, this rule applies to me</option>
             <option value="No">No, this rule does not apply to me</option>
           </select>
-        </label> : <p>Add your {comp.state} medical license with its expiration date to record your answer.</p>}
-        {topic.applicability === "unknown" && <p style={{ margin: "8px 0 0" }}>The conditional {topic.required}-hour rule is awaiting confirmation. It is not counted as missing hours or assumed exempt.</p>}
-        <p style={{ margin: "8px 0 0" }}><a href={topic.url} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, ...inlineLinkTap }}>{topic.cite}</a> · Checked {topic.checkedOn}</p>
+        </label> : <p>Add your {comp.state} {appKind ? LICENSE_NOUN[appKind] : "medical license"} with its expiration date to record your answer.</p>}
+        {topic.applicability === "unknown" && (appKind
+          ? <p style={{ margin: "8px 0 0" }}>This rule is awaiting your answer. It is not counted as missing hours or assumed exempt.</p>
+          : <p style={{ margin: "8px 0 0" }}>The conditional {topic.required}-hour rule is awaiting confirmation. It is not counted as missing hours or assumed exempt.</p>)}
+        <p style={{ margin: "8px 0 0" }}><a href={topic.url} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, ...inlineLinkTap }}>{topic.cite}</a>{appKind && !topic.checkedOn ? null : <> · Checked {topic.checkedOn}</>}</p>
       </div>;
     })}
     {(comp.informationalTopics || []).map(topic => <details key={topic.topic} style={{ marginTop: 8, padding: "8px 10px", backgroundColor: T.input, borderRadius: 8, fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>

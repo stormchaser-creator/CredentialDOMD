@@ -1,0 +1,460 @@
+{
+ "state": "MI",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Michigan Task Force on Physician's Assistants (LARA Bureau of Professional Licensing)",
+   "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs"
+  },
+  "licence": {
+   "title": "Physician's Assistant",
+   "renewalCycleYears": 3,
+   "renewalDeadline": "Licence expiration date; renewal opens 90 days before; 60 day grace period with late fee"
+  },
+  "ce": {
+   "hoursPerCycle": 0,
+   "categoryRules": "No general CE required for renewal",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Implicit bias training",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "all PAs (1 hour for each year of the 3 year cycle; no carry forward)",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    },
+    {
+     "topic": "Identifying victims of human trafficking",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "all PAs",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    },
+    {
+     "topic": "Opioids and controlled substances awareness (MAPS use; state and federal prescribing law)",
+     "hours": null,
+     "period": "unverified",
+     "appliesTo": "PAs holding or applying for a Michigan controlled substance licence (R 338.3135(1)-(4))",
+     "verified": false,
+     "reason": "R 338.3135(1) requires completion before applying for or renewing a CS licence and the LARA guide requires certifying completion at renewal; neither states one-time or every renewal for PAs (subrule (5)'s once-per-cycle applies to delegatees other than PAs)."
+    }
+   ],
+   "controlledSubstanceCe": "R 338.3135 opioid and controlled substances awareness training before applying for or renewing the controlled substance licence; no hour count"
+  },
+  "practice": {
+   "agreementType": "practice agreement",
+   "agreementFilingAndRenewal": "Practice agreement with a participating physician, signed by both, with a 30 day written termination provision; the statute lists contents only and sets no filing with LARA or periodic renewal",
+   "notes": "Practice agreement replaced delegation/supervision effective March 22, 2017 (2016 PA 379). Agreement must include communication and decision making process, alternate physician protocol, duties, and physician verification of PA credentials."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Michigan controlled substance licence (applied with or after the PA licence) plus DEA",
+   "ceForPrescribers": "Opioids and controlled substances awareness training (R 338.3135)"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": "3 years",
+    "cite": "LARA PA Licensing Guide",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+    "quote": "PA licenses are valid for 3 years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "No CE required",
+    "cite": "LARA PA Licensing Guide FAQ; R 338.6311",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+    "quote": "Currently Michigan statute and administrative rules do not require continuing education for renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.humanTrafficking",
+    "value": "One-time human trafficking training",
+    "cite": "R 338.6103; LARA PA guide",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+    "quote": "they have completed a one-time training in identifying victims of human trafficking that meets the standards in Administrative Rule 338.6103.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.implicitBias",
+    "value": "1 hour per year of the licence cycle, every renewal",
+    "cite": "R 338.7004(2)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.7001+to+R+338.7005.pdf",
+    "quote": "shall have completed a minimum of 1 hour of implicit bias training for each year of the applicant's license or registration cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.implicitBiasNoCarry",
+    "value": "No carry forward between cycles",
+    "cite": "R 338.7004(3)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.7001+to+R+338.7005.pdf",
+    "quote": "A licensee or registrant shall not carry forward implicit bias training hours earned during 1 renewal cycle to the next renewal cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.controlledSubstanceCe",
+    "value": "Training required before applying for or renewing a CS licence (topics: MAPS use; state and federal prescribing law); PAs are subject to subrules (1), (3), (4); no hours; repeat interval not stated",
+    "cite": "R 338.3135(1)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.3101+to+R+338.3199q.pdf",
+    "quote": "An individual who is applying for or renewing a controlled substance license shall complete a training in opioids and controlled substances awareness",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "Separate Michigan controlled substance licence",
+    "cite": "LARA PA Licensing Guide",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+    "quote": "you must apply for both a physician's assistant and controlled substance license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "Practice agreement required",
+    "cite": "MCL 333.17047(1)",
+    "url": "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-333-17047",
+    "quote": "A physician's assistant shall not engage in the practice as a physician's assistant except under the terms of a practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.termination",
+    "value": "30 day written termination provision",
+    "cite": "MCL 333.17047(2)(d)",
+    "url": "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-333-17047",
+    "quote": "terminate the practice agreement by providing written notice at least 30 days before the date of termination.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.gracePeriod",
+    "value": "60 day grace period with late fee",
+    "cite": "LARA PA Licensing Guide",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+    "quote": "there is a 60-day grace period in which you may renew your license without having to go through the relicensure process.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.controlledSubstanceCe.paScope",
+    "value": "PAs follow R 338.3135(1),(3),(4), not the delegatee once-per-cycle subrule (5)",
+    "cite": "R 338.3135(2)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.3101+to+R+338.3199q.pdf",
+    "quote": "A physician’s assistant is subject to subrules (1), (3), and (4) of this rule.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates.implicitBiasGuide",
+    "value": "Implicit bias is not one-time; required each renewal cycle",
+    "cite": "LARA PA Licensing Guide",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+    "quote": "this is not a one-time training and must be completed for each renewal cycle prior to the renewal being completed.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.renewalRule",
+    "value": "PA renewal rule sets no CE; only code, rules, fee and application",
+    "cite": "R 338.6311",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.6101+to+R+338.6401.pdf",
+    "quote": "An applicant for license renewal shall satisfy the requirements of the code and the rules promulgated under the code",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Michigan Board of Nursing (LARA Bureau of Professional Licensing)",
+   "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 25,
+   "nlcCompact": false,
+   "nlcNote": "HB 4246 (Nurse Licensure Compact) passed the House 6/11/2025 and was referred to the Senate Regulatory Affairs committee; not enacted",
+   "topicMandates": [
+    {
+     "topic": "Pain and symptom management",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all RNs (within the 25 hours)",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    },
+    {
+     "topic": "Implicit bias training",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all RNs (1 hour per year of the 2 year cycle; may also count toward CE)",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    },
+    {
+     "topic": "Identifying victims of human trafficking",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "all RNs (one-time; certified at renewal per LARA nursing guide)",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    }
+   ]
+  },
+  "aprn": {
+   "title": "RN with Nurse Practitioner specialty certification (APRN)",
+   "separateLicenceOrCertificate": "Specialty certification on the Michigan RN licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 25,
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Opioids and controlled substances awareness (8 listed topics including MAPS, pain alternatives, stigma, disposal)",
+     "hours": null,
+     "period": "every cycle",
+     "appliesTo": "APRNs prescribing controlled substances as a physician's delegatee (taken 1 time during each current licence cycle)",
+     "verified": true,
+     "verifiedBy": "verifier-2026-10"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "None for nonscheduled drugs; schedules 2 to 5 only as a delegated act of a physician with a written delegation agreement; APRNs get no Michigan CS licence, only DEA",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "R 338.3135(5) training once in each current licence cycle for delegatees",
+   "stateCsRegistrationRequired": false
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "physician delegation (written delegation agreement) for controlled substances only",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "No collaborative agreement for nonscheduled prescribing (MCL 333.17211a). For schedules 2 to 5 the delegating physician's written authorization (names, licence numbers, signatures, limits, effective date) is reviewed and updated annually, kept at the physician's primary place of practice, and a copy given to the NP; it is not filed with LARA (R 338.2411). Controlled substance prescriptions carry both names and DEA numbers.",
+   "authorityNote": "'restricted' is a classification label, not a primary source term; statute allows independent nonscheduled prescribing and delegated schedules 2 to 5."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalCycleYears",
+    "value": "2 years",
+    "cite": "LARA Nursing Licensing Guide",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs",
+    "quote": "Renewal Cycle: 2 years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "25 hours in the 2 years before expiration",
+    "cite": "R 338.10601(1)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.10101+to+R+338.10705.pdf",
+    "quote": "shall accumulate not less than 25 hours of continuing education that are approved by the board under these rules",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.pain",
+    "value": "2 of the 25 hours in pain and symptom management each renewal",
+    "cite": "R 338.10601(2)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.10101+to+R+338.10705.pdf",
+    "quote": "shall complete not less than 2 hours of the 25 required hours, of continuing education in pain and pain symptom management in each renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.implicitBias",
+    "value": "1 hour per year of the cycle",
+    "cite": "R 338.7004(2)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.7001+to+R+338.7005.pdf",
+    "quote": "shall have completed a minimum of 1 hour of implicit bias training for each year of the applicant's license or registration cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates.humanTrafficking",
+    "value": "One-time human trafficking training (certified at renewal)",
+    "cite": "R 338.10105(1); LARA Nursing Licensing Guide",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs",
+    "quote": "they have completed a one-time training in identifying victims of human trafficking that meets the standards in Administrative Rule 338.10105.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompact",
+    "value": "Not a member; HB 4246 pending in Senate committee",
+    "cite": "HB 4246 of 2025 status",
+    "url": "https://www.legislature.mi.gov/Bills/Bill?ObjectName=2025-HB-4246",
+    "quote": "REFERRED TO COMMITTEE ON REGULATORY AFFAIRS",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalSchedule",
+    "value": "Specialty certification renews on the RN schedule",
+    "cite": "R 338.10405b(1)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.10101+to+R+338.10705.pdf",
+    "quote": "Specialty certification renewal must correspond with the same schedule as the license renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "National certification maintained within the 2 years before renewal",
+    "cite": "R 338.10405b(2)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.10101+to+R+338.10705.pdf",
+    "quote": "shall have obtained recertification or maintained certification within the 2-year period immediately before the application",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scope",
+    "value": "Nonscheduled drugs independently; schedules 2 to 5 as physician delegated act",
+    "cite": "MCL 333.17211a(1)",
+    "url": "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-333-17211a",
+    "quote": "a controlled substance included in schedules 2 to 5 of part 72, as a delegated act of a physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "No Michigan CS licence for APRNs; DEA only",
+    "cite": "LARA Nursing Licensing Guide FAQ",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs",
+    "quote": "APRNs do not get their own CS license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.delegationAgreement",
+    "value": "Written delegation agreement for controlled substances",
+    "cite": "LARA Nursing Licensing Guide FAQ; R 338.2411",
+    "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs",
+    "quote": "there must be a written delegation agreement between the APRN and the doctor when dealing with controlled substances.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.controlledSubstanceCe",
+    "value": "Delegatee CS training once during each current licence cycle",
+    "cite": "R 338.3135(5)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.3101+to+R+338.3199q.pdf",
+    "quote": "The training must be taken 1 time during the current license cycle",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.delegationAgreementRule",
+    "value": "Physician's written authorization delegating schedule 2 to 5 prescribing to an NP must state limits and effective date",
+    "cite": "R 338.2411(1)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R%20338.2401%20to%20R%20338.2443.pdf",
+    "quote": "if the delegating physician establishes a written authorization that has all the following information",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.delegationAnnualReview",
+    "value": "Written authorization reviewed and updated annually; review date noted on it",
+    "cite": "R 338.2411(2)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R%20338.2401%20to%20R%20338.2443.pdf",
+    "quote": "The delegating physician shall review and update a written authorization on an annual basis after the original date or the date of amendment",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.delegationKept",
+    "value": "Kept at the delegating physician's primary place of practice; copy to the NP; not filed with LARA",
+    "cite": "R 338.2411(3),(4)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R%20338.2401%20to%20R%20338.2443.pdf",
+    "quote": "The delegating physician shall maintain a written authorization at the delegating physician’s primary place of practice.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceFirstCycle",
+    "value": "25 hours apply to a nurse licensed for the full 2 years before expiration",
+    "cite": "R 338.10601(1)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.10101+to+R+338.10705.pdf",
+    "quote": "an applicant for license renewal who has been licensed for the 2-year period immediately before the expiration date of the license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.csTrainingIfCsLicence",
+    "value": "A renewing nurse who also applies for a CS licence completes a 1-time opioid and CS awareness training",
+    "cite": "R 338.10601(3)",
+    "url": "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.10101+to+R+338.10705.pdf",
+    "quote": "shall complete a 1-time training in opioids and other controlled substances awareness as required in R 338.3135.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA opioid/CS awareness training repeat interval: R 338.3135(1) (as amended, eff. May 28, 2024) requires completion before applying for or renewing a CS licence, and the LARA PA guide requires certifying completion at renewal; neither says one-time or every renewal.",
+  "MI NP practice authority label 'restricted' is a classification, not a primary source term.",
+  "Exact MI RN and PA expiration dates (fixed calendar date vs licence anniversary) were not found in loaded LARA pages; renewal opens about 90 days before the licence expiration date.",
+  "No Michigan pharmacology CE requirement for NPs was found in R 338.10601 to 338.10602 or R 338.10405b; this is absence by reading of the rules."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "PA: opioid/CS awareness training period changed from 'every cycle' to 'unverified' with the reason; R 338.3135(2) (added as a fact) shows PAs fall under subrules (1),(3),(4), and neither the rule nor the LARA guide states the repeat interval.",
+   "PA: added LARA guide quote that implicit bias is not one-time and is due each renewal cycle; added R 338.6311 confirming no CE in the PA renewal rule.",
+   "NP: added missed Board of Medicine rule R 338.2411: written delegation authorization for schedule 2 to 5 must be reviewed and updated annually, kept at the delegating physician's primary place of practice, copy to the NP; the researcher had 'filing rule ... not found'. Agreement filing/renewal text rewritten.",
+   "NP: human trafficking training now cited to the LARA nursing guide, which states 'one-time' explicitly (R 338.10105 alone does not say one-time).",
+   "NP: added R 338.10601(1) full-cycle condition for the 25 hours and R 338.10601(3) 1-time CS training for a renewing nurse who also applies for a CS licence."
+  ],
+  "sourcesLoaded": [
+   "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+   "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs",
+   "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.7001+to+R+338.7005.pdf",
+   "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.3101+to+R+338.3199q.pdf",
+   "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.10101+to+R+338.10705.pdf",
+   "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R+338.6101+to+R+338.6401.pdf",
+   "https://ars.apps.lara.state.mi.us/AdminCode/DownloadAdminCodeFile?FileName=R%20338.2401%20to%20R%20338.2443.pdf",
+   "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-333-17047",
+   "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-333-17211a",
+   "https://www.legislature.mi.gov/Bills/Bill?ObjectName=2025-HB-4246"
+  ]
+ }
+}

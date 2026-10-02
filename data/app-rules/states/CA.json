@@ -1,0 +1,203 @@
+{
+  "state": "CA",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Physician Assistant Board of California (PAB)",
+      "url": "https://www.pab.ca.gov/"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 50,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit"
+        ],
+        "fact": "pa.ce.categoryRules",
+        "reason": "Category I (Preapproved) from AAPA, AMA, AOACCME, AAFP, ACCME or an ACCME recognized state medical society, as the app names them."
+      },
+      "totalUnverifiedAccepted": [
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "Every CME course with a direct patient care component must include implicit bias content.",
+          "fact": "pa.ce.topicMandates.implicitBias"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Geriatric Medicine",
+        "hours": 10,
+        "reason": "20 percent of the 50 mandatory hours",
+        "label": "Geriatric medicine, dementia care or care of older patients: at least 20 percent of the mandatory hours",
+        "fact": "pa.ce.topicMandates.geriatric",
+        "condition": {
+          "field": "Over 25 percent of primary care patients are 65 or older",
+          "question": "Are more than a quarter of your primary care patients aged 65 or older?",
+          "description": "California's geriatric CE share applies to this practice population."
+        },
+        "unverifiedUnderCertification": "How the geriatric share is measured for PAs who renew through NCCPA certification"
+      },
+      {
+        "topic": "Controlled Substances",
+        "facts": [
+          "pa.ce.controlledSubstanceCe",
+          "pa.ce.oneTimeScheduleIIEquivalence"
+        ],
+        "condition": {
+          "field": "Furnishes Schedule II controlled substances",
+          "question": "Are you authorized to furnish Schedule II controlled substances?",
+          "description": "Applies to clinicians authorized for Schedule II."
+        },
+        "status": "unverified",
+        "hours": null,
+        "unverifiedItem": "How often the Schedule II controlled substances course is due (the statute does not say once or at every renewal)"
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "practice agreement",
+        "text": "A written practice agreement signed by the PA and one or more physicians; the board does not approve it. It states the drugs and devices, the extent of supervision, and the method of periodic competence review and review of the agreement.",
+        "facts": [
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.prescribing.practiceAgreementContent"
+        ]
+      }
+    },
+    "unverified": [
+      "How the geriatric share is measured for PAs who renew through NCCPA certification"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "California Board of Registered Nursing (BRN)",
+      "url": "https://www.rn.ca.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline"
+        }
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "total": {
+          "value": 30,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "The first renewal after passing NCLEX within two years is exempt from CE except the implicit bias hour.",
+            "fact": "np.rn.firstRenewalExemption"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Implicit Bias",
+          "hours": 1,
+          "label": "Implicit bias course in the first two years after initial licensure",
+          "period": "lifetime",
+          "condition": {
+            "field": "First licensed as a nurse within the last two years",
+            "question": "Were you first licensed as a nurse (in California or any other state) within the last two years?",
+            "description": "California's implicit bias hour applies in the first two years after initial licensure anywhere."
+          },
+          "facts": [
+            "np.rn.topicMandates.implicitBias",
+            "np.rn.implicitBias.audience"
+          ]
+        },
+        {
+          "topic": "Geriatric Medicine",
+          "hours": 6,
+          "label": "Gerontology, dementia care or care of older patients: 6 of the 30 hours",
+          "facts": [
+            "np.rn.topicMandates.geriatric",
+            "np.rn.topicMandates.geriatric.statute"
+          ],
+          "condition": {
+            "field": "Over 25 percent of primary care patients are 65 or older",
+            "question": "Are more than a quarter of your primary care patients aged 65 or older?",
+            "description": "California's geriatric CE share applies to this practice population."
+          }
+        }
+      ],
+      "unverified": [
+        "Nurse Licensure Compact membership"
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "facts": [
+            "np.aprn.renewal",
+            "np.rn.ceHoursPerCycle"
+          ],
+          "reason": "The NP certificate and furnishing number renew with the RN license; the board names no NP hours beyond the RN license's contact hours."
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline"
+        }
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": null,
+          "status": "unverified",
+          "unverifiedItem": "Controlled substances course for NPs who furnish Schedule II: at least 3 hours by the time of renewal; whether it is due at every renewal or once is not yet verified",
+          "condition": {
+            "field": "Furnishes Schedule II controlled substances",
+            "question": "Are you authorized to furnish Schedule II controlled substances?",
+            "description": "Applies to clinicians authorized for Schedule II."
+          },
+          "facts": [
+            "np.prescribing.controlledSubstanceCe.hours",
+            "np.prescribing.scheduleIIRetention"
+          ]
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "standardized procedures",
+        "conditional": true,
+        "text": "NPs practice under standardized procedures or protocols approved by the supervising physician, the NP and the facility administrator; a physician supervises no more than four NPs for furnishing. A 103 NP, after a transition to practice of three full time equivalent years or 4,600 hours, practices without standardized procedures.",
+        "facts": [
+          "np.practice.agreementType",
+          "np.practice.transitionToPracticeHours"
+        ]
+      }
+    }
+  }
+}

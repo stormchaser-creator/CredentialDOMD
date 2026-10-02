@@ -1,0 +1,60 @@
+{
+ "state": "DE",
+ "facts": [
+  {
+   "field": "ce.topicMandates.childAbuseTraining",
+   "profession": "pa",
+   "value": "Child abuse, exploitation and domestic violence recognition and reporting training before every renewal; applies to PAs",
+   "cite": "DPR Board of Medical Licensure, Mandatory Training (24 Del. C. 1723)",
+   "url": "https://dpr.delaware.gov/boards/medicalpractice/mandatory_training/",
+   "quote": "It applies to everyone licensed by the Board of Medical Licensure and Discipline including Physician Assistants",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.topicMandates.childAbuseTraining.hours",
+   "profession": "pa",
+   "value": "One hour, before every renewal",
+   "cite": "DPR Board of Medical Licensure, Mandatory Training",
+   "url": "https://dpr.delaware.gov/boards/medicalpractice/mandatory_training/",
+   "quote": "This training is an hour (1 hour) both in length and ACCME accreditation",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.topicMandates.childAbuseTraining.every",
+   "profession": "pa",
+   "value": "Before every renewal",
+   "cite": "DPR Board of Medical Licensure, Mandatory Training",
+   "url": "https://dpr.delaware.gov/boards/medicalpractice/mandatory_training/",
+   "quote": "You must complete the training before every renewal",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "ce.boardCategories",
+   "profession": "pa",
+   "value": "Category I approved by the AMA or equivalent courses approved by the AOA",
+   "cite": "DPR Board of Medical Licensure, Continuing Education and Audit Information (PA)",
+   "url": "https://dpr.delaware.gov/boards/medicalpractice/continuing-education-and-audit-information/",
+   "quote": "courses approved by the American Medical Association (AMA) or equivalent courses approved by the American Osteopathic Association (AOA)",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "rn.practiceHoursBoardPage",
+   "profession": "np",
+   "value": "RN renewal attests 1,000 practice hours in five years or 400 in two",
+   "cite": "DPR Board of Nursing, License Renewal",
+   "url": "https://dpr.delaware.gov/boards/nursing/renewal/",
+   "quote": "you have practiced Nursing at least 1,000 hours in the past five years or 400 hours in the past two years",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -1,0 +1,1494 @@
+{
+ "states": {
+  "AK": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Whether the pain management and opioid use and addiction CE applies at each PA renewal"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Whether the board's own contact hour requirement applies at renewal where the certifying body sets no CE (the rule that states it covers initial licensure)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard.aspx",
+    "np": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/BoardofNursing.aspx"
+   }
+  },
+  "AL": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether current NCCPA certification is required to renew (the rule cited covers initial licensure; the renewal form only asks)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.albme.gov/licensing/pa-aa/license-registration",
+    "np": "https://www.abn.alabama.gov/"
+   }
+  },
+  "AR": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Pain management CE: at least 5 hours for PAs authorized to prescribe Schedule II hydrocodone combination products; how often it is due is not yet verified"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.armedicalboard.org/",
+    "np": "https://healthy.arkansas.gov/boards-commissions/boards/nursing-arkansas-state-board/"
+   }
+  },
+  "AZ": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.azpa.gov/",
+    "np": "https://www.azbn.gov/"
+   }
+  },
+  "CA": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "How often the Schedule II controlled substances course is due (the statute does not say once or at every renewal)",
+     "How the geriatric share is measured for PAs who renew through NCCPA certification"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Nurse Licensure Compact membership"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "none",
+    "unverified": [
+     "Controlled substances course for NPs who furnish Schedule II: at least 3 hours by the time of renewal; whether it is due at every renewal or once is not yet verified"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.pab.ca.gov/",
+    "np": "https://www.rn.ca.gov/"
+   }
+  },
+  "CO": {
+   "pa": {
+    "status": "unverified",
+    "ceMode": "unverified",
+    "unverified": [
+     "Whether the substance use prevention training still applies at renewal (its statute was struck and the rule must be repealed by July 1, 2027)",
+     "Whether the 30-hour CME rule (3 CCR 713-1 Rule 1.33) applies to PAs: the board's clarifying amendment is proposed, not adopted"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "none",
+    "unverified": [
+     "How often a single state RN license renews (the board states only the current expiration date)"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "none",
+    "unverified": [
+     "Whether the substance use prevention training still applies at renewal (its statute was struck and the rule must be repealed by July 1, 2027)",
+     "Whether national certification is checked at each APR registration renewal for APRNs without prescriptive authority"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://dpo.colorado.gov/Medical",
+    "np": "https://dpo.colorado.gov/Nursing"
+   }
+  },
+  "CT": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": [
+     {
+      "date": "2028-01-01",
+      "item": "Nurse Licensure Compact membership ends unless extended"
+     }
+    ]
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether AANPCB and PNCB certification are accepted for APRN renewal (the renewal statute names other certifiers)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician-assistant/physician-assistant-licensure",
+    "np": "https://portal.ct.gov/dph/practitioner-licensing--investigations/aprn/advanced-practice-registered-nurse-licensure"
+   }
+  },
+  "DC": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether PAs practice under supervision (17 DCMR 4914 to 4916) or collaboration (D.C. Code 3-1201.02(13)): the statute and the regulations disagree",
+     "The DC controlled substance registration term (it rests on a 2011 letter)",
+     "Whether AOA Category 1 and AAFP Prescribed credit count as Category 1 (17 DCMR 4907.2 not reloaded)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Nurse Licensure Compact membership"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Which providers' hours count toward the 15, whether they must relate to your specialty, the application-date window, and whether the first APRN renewal is exempt (17 DCMR 5903.5(c) and the 2026 renewal notice were not reloaded)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://dchealth.dc.gov/bomed",
+    "np": "https://dchealth.dc.gov/bon"
+   }
+  },
+  "DE": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://dpr.delaware.gov/boards/medicalpractice/renewal/",
+    "np": "https://dpr.delaware.gov/boards/nursing/renewal/"
+   }
+  },
+  "FL": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether the one hour human trafficking course applies to PAs licensed after January 1, 2021"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether the domestic violence hours count inside the general hours or are additional"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether an Autonomous APRN's base CE is the general hours or the statute's larger figure"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://flboardofmedicine.gov/physician-assistant-renewal/",
+    "np": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/"
+   }
+  },
+  "GA": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://medicalboard.georgia.gov/",
+    "np": "https://sos.ga.gov/page/nursing-renewal-information"
+   }
+  },
+  "HI": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "options",
+    "unverified": [
+     "Nurse Licensure Compact membership"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "National certification for APRNs without prescriptive authority whose license rests on certification rather than a graduate degree (HAR 16-89-87(a)(1))"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://cca.hawaii.gov/pvl/boards/medical/physician-assistant-renewal-requirements/",
+    "np": "https://cca.hawaii.gov/pvl/boards/nursing/"
+   }
+  },
+  "IA": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://dial.iowa.gov/licenses/health-professions/physician-associates",
+    "np": "https://dial.iowa.gov/licenses/health-professions/nursing-professional-midwifery"
+   }
+  },
+  "ID": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Topic mandates set by Idaho statute (Idaho Code Title 54 chapters 14 and 18 were not searched exhaustively)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "none",
+    "unverified": [
+     "Topic mandates set by Idaho statute (Idaho Code Title 54 chapters 14 and 18 were not searched exhaustively)"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Topic mandates set by Idaho statute (Idaho Code Title 54 chapters 14 and 18 were not searched exhaustively)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://dopl.idaho.gov/paac/",
+    "np": "https://dopl.idaho.gov/bon/"
+   }
+  },
+  "IL": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://idfpr.illinois.gov/profs/physicianassistant.html",
+    "np": "https://idfpr.illinois.gov/profs/nursing.html"
+   }
+  },
+  "IN": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Whether the board must approve the collaborative agreement before practice begins (the statute lets the PA proceed unless the board denies it; the current Indiana Administrative Code text was not loaded)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether national certification stands in for the APRN contact hours (the board's audit page says so; the statute and rule list both)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.in.gov/pla/professions/physician-assistant-home/",
+    "np": "https://www.in.gov/pla/professions/nursing-home/"
+   }
+  },
+  "KS": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "options",
+    "unverified": [
+     "Whether the board accepts current NCCPA certification as equivalent hours",
+     "Whether PAs practicing in collaboration from January 1, 2027 stay exempt from Kansas Board of Pharmacy controlled substance registration",
+     "The form, filing and review interval of the HB 2702 practice agreement (implementing regulations not loaded)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.ksbha.ks.gov/professions/physician-assistant-p-a",
+    "np": "https://ksbn.kansas.gov/"
+   }
+  },
+  "KY": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether the pediatric ingestion or inhalation hour applies to every PA (the statute) or counts inside the 7.5 prescriber hours (the board's FAQ); the regulation does not list it yet",
+     "Whether the board still enforces the 12 addiction medicine hours for buprenorphine prescribers",
+     "How often the supervision agreement must be renewed (the implementing regulation was not loaded)",
+     "Which state controlled substance authority KRS 311.858(4)(b)4 refers to"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "options",
+    "unverified": [
+     "The research, publication, preceptorship and employment evaluation methods"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://kbml.ky.gov/ah/Pages/Physician-Assistant.aspx",
+    "np": "https://kbn.ky.gov/"
+   }
+  },
+  "LA": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "options",
+    "unverified": [
+     "Which certifying bodies' certifications the board approves for APRNs meeting the RN renewal"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.lsbme.la.gov/",
+    "np": "https://www.lsbn.state.la.us/"
+   }
+  },
+  "MA": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether the controlled substance prescriber training needs new hours at each renewal or a completed program once"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether nurses repeat the domestic and sexual violence training at each renewal"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Whether the controlled substance prescriber training needs new hours at each renewal or a completed program once"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.mass.gov/how-to/renew-your-physician-assistant-license",
+    "np": "https://www.mass.gov/how-to/renew-your-nursing-license"
+   }
+  },
+  "MD": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.mbp.state.md.us/",
+    "np": "https://health.maryland.gov/mbon/Pages/default.aspx"
+   }
+  },
+  "ME": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "none",
+    "unverified": [
+     "Whether any RN continuing education rule applies beyond the renewal statute (the absence was not exhaustively confirmed)"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.maine.gov/md/licensure/pa-license",
+    "np": "https://www.maine.gov/boardofnursing/"
+   }
+  },
+  "MI": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "none",
+    "unverified": [
+     "Whether the opioids and controlled substances awareness training is repeated at each controlled substance license renewal"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "How often the opioids and controlled substances awareness training is due for a delegatee (the rule says one time during the current license cycle; the nursing rule calls it a 1-time training)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+    "np": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs"
+   }
+  },
+  "MN": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Fetal alcohol syndrome education for PAs with primary responsibility for diagnosing and treating it (Minn. Stat. 214.12 subd. 3; the board rule was not loaded)",
+     "Whether the PA Licensure Compact is operational for Minnesota PAs"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Fetal alcohol syndrome education for APRNs with primary responsibility for diagnosing and treating it (Minn. Stat. 214.12 subd. 3; the board rule was not loaded)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://mn.gov/boards/medical-practice/",
+    "np": "https://mn.gov/boards/nursing/"
+   }
+  },
+  "MO": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "How often the PA license renews (the statute says valid for two years and renewable annually; the board mails renewals every year)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "unverified",
+    "ceMode": "unverified",
+    "unverified": [
+     "Whether RN renewal requires any continuing education (the renewal rule lists only the fee and workforce data)"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://pr.mo.gov/physicianassistants.asp",
+    "np": "https://pr.mo.gov/nursing.asp"
+   }
+  },
+  "MS": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether current NCCPA certification, or the one-time DEA 8-hour training, satisfies the 5 controlled substance prescribing hours",
+     "Whether the board's exemption for initial licensure during the cycle applies to PAs (the cited exemption is in the physician rule)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.msbml.ms.gov/licensure/pa-renewal",
+    "np": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse"
+   }
+  },
+  "MT": {
+   "pa": {
+    "status": "unverified",
+    "ceMode": "unverified",
+    "unverified": [
+     "Whether Montana requires any CME for PA renewal (the PA renewal and NCCPA maintenance rules were repealed and no CME rule was found)",
+     "Whether prescribers need a Montana Board of Pharmacy controlled substance registration (MCA 50-32-308 requires registration to dispense Schedules II to V)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://boards.bsd.dli.mt.gov/medical-examiners/license-information/physician-assistant",
+    "np": "https://boards.bsd.dli.mt.gov/nursing/license-information/aprn"
+   }
+  },
+  "NC": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.ncmedboard.org/",
+    "np": "https://www.ncbon.com/"
+   }
+  },
+  "ND": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Whether PAs need a North Dakota Board of Pharmacy controlled substance registration",
+     "Whether the PA license renews every two years (the board page) or every year (NDAC 50-03-01-13 and -17 still say annual)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Whether NPs need a North Dakota Board of Pharmacy controlled substance registration"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.ndbom.org/",
+    "np": "https://www.ndbon.org/"
+   }
+  },
+  "NE": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether PAs need a state controlled substance registration (the statement that Nebraska issues none is on the nursing page)"
+    ],
+    "dated": [
+     {
+      "date": "2029-01-01",
+      "item": "Opioid Prescribing ends for licenses expiring on or after this date"
+     }
+    ]
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": [
+     {
+      "date": "2029-01-01",
+      "item": "Opioid Prescribing ends for licenses expiring on or after this date"
+     }
+    ]
+   },
+   "boardUrls": {
+    "pa": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx",
+    "np": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx"
+   }
+  },
+  "NH": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": [
+     {
+      "date": "2027-01-01",
+      "item": "The PA collaboration waiver paragraph (RSA 328-D:3-b, I) is replaced"
+     }
+    ]
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Which of the contact hours national certification may count toward under Nur 401.03(b): the RN license's or the APRN license's"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Which of the contact hours national certification may count toward under Nur 401.03(b): the RN license's or the APRN license's"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.oplc.nh.gov/applications-physician-associate",
+    "np": "https://www.oplc.nh.gov/board-nursing-laws-and-rules"
+   }
+  },
+  "NJ": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": [
+     {
+      "date": "2026-05-06",
+      "item": "Implicit Bias starts for licenses expiring on or after this date"
+     }
+    ]
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "When the Board of Nursing starts requiring the perinatal bias hour (N.J.A.C. 13:37-5.3 has not been amended to list it)"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "How often APNs prescribing under joint protocols repeat the controlled substance pharmacology hours",
+     "For APNs ordering without a joint protocol: 14 contact hours of pharmacology related to controlled substances (8 beyond the initial certification hours); when they are due is not stated"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.njconsumeraffairs.gov/pa",
+    "np": "https://www.njconsumeraffairs.gov/nur"
+   }
+  },
+  "NM": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.nmmb.state.nm.us/",
+    "np": "https://www.bon.nm.gov/"
+   }
+  },
+  "NV": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether the one time course on the medical consequences of terrorism is still enforced for PAs",
+     "Whether current NCCPA certification is checked at each renewal",
+     "Whether the hours within your scope of practice are required (they appear on the board's summary, not in NAC 630.350)",
+     "The renewal rules for PAs licensed by the Nevada State Board of Osteopathic Medicine (NRS 633), which this card does not cover"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://medboard.nv.gov/",
+    "np": "https://nevadanursingboard.org/"
+   }
+  },
+  "NY": {
+   "pa": {
+    "status": "unverified",
+    "ceMode": "unverified",
+    "unverified": [
+     "Whether the Commissioner of Health has set any CE for PA registration renewal (Education Law 6541)",
+     "The updated mandated reporter training due by November 17, 2026 for registered PAs (Social Services Law 413; the PA board page was not checked)",
+     "Whether PAs need a New York controlled substance registration beyond DEA"
+    ],
+    "dated": [
+     {
+      "date": "2026-11-17",
+      "item": "Updated mandated reporter training due (Social Services Law 413)"
+     }
+    ]
+   },
+   "rn": {
+    "status": "unverified",
+    "ceMode": "unverified",
+    "unverified": [
+     "Whether New York sets any general contact hours for RN renewal (none appear in the law or the board's pages)"
+    ],
+    "dated": [
+     {
+      "date": "2026-11-17",
+      "item": "Updated mandated reporter training due for RNs (NYSED)"
+     }
+    ]
+   },
+   "aprn": {
+    "status": "unverified",
+    "ceMode": "unverified",
+    "unverified": [
+     "Whether New York sets any CE hours or national certification for NP registration renewal (none appear in the law or the board's pages)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.op.nysed.gov/professions/physician-assistants",
+    "np": "https://www.op.nysed.gov/professions/nurse-practitioners"
+   }
+  },
+  "OH": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether Ohio requires a state controlled substance registration for prescribing PAs"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://med.ohio.gov/",
+    "np": "https://nursing.ohio.gov/"
+   }
+  },
+  "OK": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether one opioid addiction hour meets both the rule's substance abuse hour and the statute's pain management or opioid hour"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.okmedicalboard.org/physician_assistants",
+    "np": "https://oklahoma.gov/nursing.html"
+   }
+  },
+  "OR": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "How often the pain management course is due: ORS 677.510(5) says 36 months, OAR 847-008-0075 says 24"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": [
+     {
+      "date": "2028-01-01",
+      "item": "Oregon RN renewals need 20 contact hours from this date; switch the RN rule from none to hours"
+     }
+    ]
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": [
+     {
+      "date": "2028-01-01",
+      "item": "Every Oregon NP shows primary source evidence of national certification at renewal; drop the licensed-after-2011 condition"
+     }
+    ]
+   },
+   "boardUrls": {
+    "pa": "https://www.oregon.gov/omb/",
+    "np": "https://www.oregon.gov/osbn/"
+   }
+  },
+  "PA": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "When the 2 organ and tissue donation hours are due: one time within 5 years of the first renewal on or after May 1, 2026 (or of initial licensure); the rule does not say they repeat"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "When the 2 organ and tissue donation hours are due: within 5 years of certification renewal from May 1, 2026; the rule does not say they repeat",
+     "Whether the CRNP hours also satisfy the RN license's hours",
+     "Whether the 16 pharmacology hours are part of the 30 (the board snapshot) or in addition to them (the rule's wording)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/medicine",
+    "np": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/nursing"
+   }
+  },
+  "RI": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Which dates count toward the hours",
+     "The extended release and long acting opioid REMS education for prescribers of those opioids"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": [
+     {
+      "date": "2027-01-01",
+      "item": "Nurse Licensure Compact membership ends unless extended"
+     }
+    ]
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "The extended release and long acting opioid REMS education for prescribers of those opioids",
+     "Whether the same contact hours count for both the RN and the APRN license"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://health.ri.gov/licensing/physician-assistant",
+    "np": "https://health.ri.gov/licensing/nurses"
+   }
+  },
+  "SC": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "The statute or rule that requires a South Carolina controlled substance registration for PAs (only the renewal form's question was loaded)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://llr.sc.gov/med/",
+    "np": "https://llr.sc.gov/nurse/aprn.aspx"
+   }
+  },
+  "SD": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://sdbmoe.gov/professions-physician-assistant-pa/",
+    "np": "https://www.sdbon.org/"
+   }
+  },
+  "TN": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": [
+     {
+      "date": "2027-01-01",
+      "item": "Board target for the collaborative practice endorsement rules (6,000 postgraduate hours); recheck the Tennessee PA practice agreement"
+     }
+    ]
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.tn.gov/health/licensure/pa.html",
+    "np": "https://www.tn.gov/health/licensure/nurs.html"
+   }
+  },
+  "TX": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "How often the pain management and opioid prescribing CE is due (statute: annually; board chart: each renewal)",
+     "Length of the HHSC human trafficking course"
+    ],
+    "dated": [
+     {
+      "date": "2027-02-28",
+      "item": "Forensic Evidence Collection starts for licenses expiring on or after this date"
+     },
+     {
+      "date": "2027-05-30",
+      "item": "Nutrition starts for licenses expiring on or after this date"
+     }
+    ]
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Nutrition and metabolic health CE hours and start date for nurses"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether the controlled substance CE appears in the adopted rule text (the board page cites it; the rule text did not load)"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.tmb.texas.gov/apply-renew/physician-assistant",
+    "np": "https://www.bon.texas.gov/"
+   }
+  },
+  "UT": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether PAs owe the half hour controlled substance database tutorial",
+     "Whether current NCCPA certification covers all the CME (the DOPL page) or only the Category One part of it (R156-70a-304(2)(b))"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://commerce.utah.gov/dopl/physician-assistant/",
+    "np": "https://commerce.utah.gov/dopl/nursing/"
+   }
+  },
+  "VA": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "Whether the 2026 law allowing PAs to practice without a practice agreement has taken effect"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.dhp.virginia.gov/Boards/Medicine/",
+    "np": "https://www.dhp.virginia.gov/Boards/Nursing/"
+   }
+  },
+  "VT": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether the hospice, palliative care or pain management CME hour (Rule 24.1.5, written for physicians) applies to PAs",
+     "Whether online PA renewal still asks for proof of NCCPA certification"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "options",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "certification",
+    "unverified": [
+     "How the Office of Professional Regulation collects the APRN controlled substance attestation"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://www.healthvermont.gov/systems/board-medical-practice",
+    "np": "https://sos.vermont.gov/nursing/"
+   }
+  },
+  "WA": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "When the health equity hours first fall due: WAC 246-840-222(4) says by the second full CE period after initial licensure or the 2026 renewal; the board page says by the 2026 renewal (new licensees by their second renewal)"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether the ARNP CE numbers change with the June 30, 2027 retitling",
+     "Whether an ARNP may rely on another compact state's multistate RN license (WAC 246-840-360(1)(a) says a Washington RN license; 246-840-990(3) accepts single or multistate)",
+     "Whether ARNPs have a health equity rule of their own"
+    ],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://wmc.wa.gov/",
+    "np": "https://nursing.wa.gov/"
+   }
+  },
+  "WI": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "none",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://dsps.wi.gov/a-z-professions-list/physician-assistant-pa/",
+    "np": "https://dsps.wi.gov/a-z-professions-list/advanced-practice-registered-nurse-aprn/"
+   }
+  },
+  "WV": {
+   "pa": {
+    "status": "partial",
+    "ceMode": "hours",
+    "unverified": [
+     "Whether a West Virginia PA needs a state controlled substance registration to prescribe",
+     "The CME rules for PAs licensed by the West Virginia Board of Osteopathic Medicine (24 CSR 2; only a 2019 emergency version was checked)"
+    ],
+    "dated": []
+   },
+   "rn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://wvbom.wv.gov/",
+    "np": "https://wvrnboard.wv.gov/"
+   }
+  },
+  "WY": {
+   "pa": {
+    "status": "verified",
+    "ceMode": "hours",
+    "unverified": [],
+    "dated": []
+   },
+   "rn": {
+    "status": "partial",
+    "ceMode": "options",
+    "unverified": [
+     "The NCLEX, refresher course and nursing degree competency options"
+    ],
+    "dated": []
+   },
+   "aprn": {
+    "status": "verified",
+    "ceMode": "certification",
+    "unverified": [],
+    "dated": []
+   },
+   "boardUrls": {
+    "pa": "https://wyomedboard.wyo.gov/physician-assistants",
+    "np": "https://wsbn.wyo.gov/"
+   }
+  }
+ },
+ "national": {
+  "NCCPA": {
+   "status": "verified",
+   "unverified": []
+  },
+  "AANPCB": {
+   "status": "partial",
+   "unverified": [
+    "Which CE providers AANPCB accepts (the handbook says CE from an accredited provider; AMA PRA Category 1 acceptance is not stated)"
+   ]
+  },
+  "ANCC": {
+   "status": "verified",
+   "unverified": []
+  },
+  "PNCB": {
+   "status": "partial",
+   "unverified": [
+    "The dates the 15 yearly contact hours must fall between (PNCB says only within the accepted date range)"
+   ]
+  },
+  "NCC": {
+   "status": "verified",
+   "unverified": []
+  },
+  "AACN": {
+   "status": "unverified",
+   "unverified": [
+    "AACN renewal rules"
+   ]
+  }
+ }
+}

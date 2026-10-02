@@ -59,6 +59,10 @@ export const ROOTS = Object.freeze([
   // send-invoice-email names the receipts it attaches the way the app's
   // share sheet names them (outgoingFileNames).
   "utils/docLabel.js",
+  // The profession rules (MD, DO, PA, NP; licence kinds; NPPES taxonomy):
+  // public-record types an import the way the app does, and send-reminders
+  // routes a reminder line by licence kind.
+  "constants/professions.js",
 ]);
 
 export const banner = (rel) =>

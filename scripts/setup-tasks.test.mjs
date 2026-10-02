@@ -176,8 +176,11 @@ eq("dateless never walks privileges or insurance", dateless({
   const notDone = { settings: { ...settledSettings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } }, licenses: [doLicense] };
   eq("na wins over skipped for the same task", statusOf(build({ ...notDone, settings: { ...notDone.settings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } } }), "dea"), "na");
   eq("a skip shows its date", build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: new Date(2026, 8, 4, 12).toISOString() } } } }, licenses: [doLicense] }).byId.dea.detail, "Skipped 4 Sep. Still on the list.");
+  // The PA or NP practice agreement row applies only to them (appliesWhen),
+  // so a physician's board is still six protected rows and eleven packet rows.
   eq("the board is six protected rows and eleven packet rows",
-    [TASK_DEFS.filter((d) => d.tier === 1).length, TASK_DEFS.filter((d) => d.tier === 2).length], [6, 11]);
+    [TASK_DEFS.filter((d) => d.tier === 1 && !d.appliesWhen).length, TASK_DEFS.filter((d) => d.tier === 2 && !d.appliesWhen).length], [6, 11]);
+  eq("a physician's board never carries the PA or NP agreement row", build({ settings: settledSettings, licenses: [doLicense] }).tasks.length, 17);
   ok("every task has a derived rule, so no checkbox can lie", TASK_DEFS.every((d) => typeof d.doneWhen === "function"));
 }
 
@@ -799,7 +802,7 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   eq("the proof row's manual button is not the camera verb",
     [verbs.proof.verb, verbs.proof.addVerb], ["Photograph them", "Add a license by hand"]);
   ok("every other row's manual button is its own verb",
-    TASK_DEFS.every((d) => d.id === "proof" || verbs[d.id].addVerb === verbs[d.id].verb));
+    TASK_DEFS.every((d) => d.id === "proof" || d.appliesWhen || verbs[d.id].addVerb === verbs[d.id].verb));
   eq("an empty file gives an empty queue, never a crash", evidenceQueue(null, "proof").records.length, 0);
 }
 
@@ -882,7 +885,9 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   eq("a cleared name names itself", tier1Regressed(build(noName, { isPro: true }))?.regressionLine, "your name is blank");
   const noDegree = stamped(fullyPacked());
   noDegree.settings = { ...noDegree.settings, degreeType: "" };
-  eq("a cleared degree still names the degree", tier1Regressed(build(noDegree, { isPro: true }))?.regressionLine, "your degree is blank");
+  // A blank profession may be a PA or an NP now, so the line asks for the
+  // profession (DESIGN 5.3, setupTasks identity copy).
+  eq("a cleared degree names the profession", tier1Regressed(build(noDegree, { isPro: true }))?.regressionLine, "your profession is blank");
   const deaGone = stamped(fullyPacked());
   deaGone.licenses = deaGone.licenses.filter((l) => l.id !== "d1");
   eq("a deleted DEA is not an undated DEA",

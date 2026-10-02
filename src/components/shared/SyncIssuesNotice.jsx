@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useApp } from "../../context/AppContext";
 import { describeSyncIssues } from "../../utils/syncIssues.js";
 import { actionButtonStyle } from "./actionButton.js";
+import { reloadPage } from "../../utils/pageLeave.js";
 
 /**
  * Records the cloud refused, named one by one.
@@ -52,7 +53,7 @@ export default function SyncIssuesNotice() {
             // background, and WebKit lets a page open it again only after a
             // reload (2026-10-02, the owner's iPhone): say so, and offer it.
             ? <>This device&rsquo;s offline storage could not be opened, so its offline copy of your records could not be updated. Reload the app to open it again.{" "}
-                <button type="button" data-offline-reload="" onClick={() => { try { window.location.reload(); } catch { /* the next launch */ } }}
+                <button type="button" data-offline-reload="" onClick={() => reloadPage()}
                   style={{ ...actionButtonStyle(T, { primary: false, isDesktop }), marginTop: 8 }}>Reload</button></>
             : <>This device&rsquo;s storage is full, so its offline copy of your records could not be updated. What opens offline is older than what you see now.</>}
       </p>

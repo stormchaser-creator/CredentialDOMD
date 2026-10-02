@@ -1,0 +1,215 @@
+{
+  "state": "OR",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Oregon Medical Board",
+      "url": "https://www.oregon.gov/omb/"
+    },
+    "license": {
+      "title": "Physician associate license",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 60,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAPA Category 1 CME"
+        ],
+        "facts": [
+          "pa.ce.categoryRules",
+          "pa.ce.hoursPerCycle"
+        ],
+        "reason": "AMA or AOA Category 1, or AAPA Category 1 (pre-approved), relevant to current practice."
+      },
+      "totalUnverifiedAccepted": [
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "A PA licensed during the second year of the biennium owes 30 hours. AOA Category 2-A credit also counts.",
+          "fact": "pa.ce.secondYearAndBodies"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Pain Management",
+        "hours": 1,
+        "label": "Oregon Pain Management Commission course, at initial licensure and every 24 months",
+        "period": {
+          "years": 2
+        },
+        "fact": "pa.ce.topicMandates.painManagement"
+      },
+      {
+        "topic": "Cultural Competency",
+        "hours": 2,
+        "reason": "At least one hour per year of the two-year registration period",
+        "label": "Cultural competency, at least one hour per year (audited every other renewal)",
+        "facts": [
+          "pa.ce.topicMandates.culturalCompetency",
+          "pa.ce.culturalCompetencyAudit"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "Every PA practices under a written collaboration agreement kept at the primary practice location, given to the board on request and reviewed as part of the performance assessment. Under 2,000 postgraduate clinical hours it includes a plan for consistent and quality collaboration.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.agreementFiling",
+          "pa.practice.agreementReview",
+          "pa.practice.newPaPlan"
+        ]
+      }
+    },
+    "unverified": [
+      "How often the pain management course is due: ORS 677.510(5) says 36 months, OAR 847-008-0075 says 24"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Oregon State Board of Nursing",
+      "url": "https://www.oregon.gov/osbn/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": false,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "facts": [
+            "np.rn.ceHoursPerCycle",
+            "np.rn.practiceHoursRemoved"
+          ],
+          "reason": "General CE hours start with renewals on or after January 1, 2028; practice hours ended January 1, 2026."
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "notes": [
+          {
+            "text": "From January 1, 2028: 20 contact hours within the prior two years; the pain management and cultural competency hours count toward them.",
+            "facts": [
+              "np.rn.ceHoursPerCycle",
+              "np.rn.ceCountsTowardTotal"
+            ]
+          }
+        ]
+      },
+      "dated": [
+        {
+          "date": "2028-01-01",
+          "item": "Oregon RN renewals need 20 contact hours from this date; switch the RN rule from none to hours"
+        }
+      ],
+      "topics": [
+        {
+          "topic": "Pain Management",
+          "hours": 1,
+          "label": "Oregon Pain Management Commission course, at initial licensure and every 36 months",
+          "period": {
+            "years": 3
+          },
+          "fact": "np.rn.topicMandates.painManagement"
+        },
+        {
+          "topic": "Cultural Competency",
+          "hours": 2,
+          "label": "Cultural competency, every other renewal cycle",
+          "period": {
+            "years": 4
+          },
+          "periodReason": "Every other two-year renewal cycle is every four years.",
+          "fact": "np.rn.topicMandates.culturalCompetency"
+        }
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "facts": [
+            "np.aprn.ceHoursPerCycle",
+            "np.aprn.nationalCertificationRequired"
+          ],
+          "reason": "No NP contact hours are set; holding current national certification fulfills the CE requirement."
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "notes": [
+          {
+            "text": "Current national certification is required now for NPs first licensed after January 1, 2011, and for all NPs from January 1, 2028.",
+            "facts": [
+              "np.aprn.nationalCertificationRequired",
+              "np.aprn.nationalCertification2028"
+            ]
+          },
+          {
+            "text": "Renewing prescriptive authority requires attesting that you reviewed the board's prescriptive and dispensing authority education video.",
+            "fact": "np.prescribing.renewalCondition"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired",
+        "condition": {
+          "field": "First licensed as an NP after January 1, 2011",
+          "question": "Were you first licensed as an Oregon NP after January 1, 2011?",
+          "description": "Oregon NPs licensed after January 1, 2011 show current national certification at renewal; from 2028 every NP does."
+        }
+      },
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "dated": [
+        {
+          "date": "2028-01-01",
+          "item": "Every Oregon NP shows primary source evidence of national certification at renewal; drop the licensed-after-2011 condition"
+        }
+      ]
+    }
+  }
+}

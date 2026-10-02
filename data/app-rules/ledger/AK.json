@@ -1,0 +1,475 @@
+{
+ "state": "AK",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Alaska State Medical Board",
+   "url": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard.aspx"
+  },
+  "licence": {
+   "title": "Physician Assistant license",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "December 31 of even-numbered years (current period January 1, 2025 to December 31, 2026)"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "categoryRules": "Renewal requires meeting NCCPA continuing medical education and recertification requirements (including the NCCPA recertification exam) and holding current NCCPA certification; the state sets no separate hour total.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [
+    {
+     "topic": "Pain management and opioid use and addiction",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "Not yet verified for PA renewal. Confirmed for PAs at initial licensure only when holding or applying for DEA (12 AAC 40.400(b)(7)). AS 08.64.312(b) requires it of licensees of medicine, osteopathy and podiatry; SB 89 (effective 2026-09-16) adds PAs only to the exemption clause (c).",
+     "verified": false
+    }
+   ],
+   "controlledSubstanceCe": "2 hours pain management and opioid use and addiction at initial licensure for DEA holders (12 AAC 40.400(b)(7)); whether it recurs at each PA renewal is not yet verified."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Under regulations 12 AAC 40.410 a collaborative plan must be filed with the division within 14 days of its effective date or of any change; renewal attests to an active plan. SB 89 (Chapter 21 SLA 26, effective 2026-09-16) replaces this with a written collaborative agreement: the PA attests at licensure and renewal and provides the agreement to the board on request; PAs at physician directed facilities, licensed health care facilities, federal or tribal facilities, FQHCs, rural health clinics, military and veterans facilities, or with board authorization may practice without one.",
+   "notes": "Board regulations had not yet been revised to match SB 89 when loaded; the 2025 to 2026 renewal form still asks for collaborative plan verification."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": false,
+   "ceForPrescribers": "2 hours pain management and opioid use and addiction; PDMP registration within 30 days of licensure or DEA registration. Controlled substance prescribing needs a DEA number on file and authorization in the collaborative plan (pre SB 89 regulations)."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 2,
+    "cite": "12 AAC 40.470(a)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.40.400&secEnd=12.40.999",
+    "quote": "A physician assistant license must be renewed biennially on the date set by the department.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "December 31, 2026 (current period)",
+    "cite": "Alaska PA renewal application 08-0079 (Rev. 07/31/2025)",
+    "url": "https://www.commerce.alaska.gov/web/portals/5/pub/med0079.pdf",
+    "quote": "Physician Assistant License Renewal Application January 1, 2025 – December 31, 2026",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "12 AAC 40.470(b)(2)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.40.400&secEnd=12.40.999",
+    "quote": "the applicant has met the continuing medical education and recertification requirements of the NCCPA, including the NCCPA recertification examination, and is currently certified by NCCPA",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates.opioid",
+    "value": "2 hours in the 2 years before renewal",
+    "cite": "AS 08.64.312(b)",
+    "url": "https://www.akleg.gov/basis/statutes.asp?media=print&secStart=08.64.312&secEnd=08.64.312",
+    "quote": "Continuing education requirements must include not less than two hours of education in pain management and opioid use and addiction in the two years preceding",
+    "loaded": true,
+    "verified": false,
+    "reason": "Quote is accurate, but applicability to PAs is not confirmed: AS 08.64.312(a) as loaded scopes CE to 'every licensee of medicine, osteopathy, and podiatry'; SB 89 sec. 9 amends only subsection (c) (exemptions) to add PAs and leaves (a) and (b) unchanged; 12 AAC 40.470 does not list it; the PA renewal form (period 2025-01-01 to 2026-12-31) does not ask for it. Show as 'not yet verified' with the board link until the board states it applies to PA renewal."
+   },
+   {
+    "field": "pa.ce.topicMandates.opioid.paCoverage",
+    "value": "SB 89 adds physician assistants to the 312(c) exemption clause",
+    "cite": "SB 89 sec. 9 (Chapter 21 SLA 26), amending AS 08.64.312(c)",
+    "url": "https://www.akleg.gov/basis/Bill/Plaintext/34?Hsid=SB0089Z",
+    "quote": "podiatrist, or physician assistant from the requirements of (b) of this section",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Sec. 9 amends only AS 08.64.312(c); subsection (a) still names licensees of medicine, osteopathy and podiatry."
+   },
+   {
+    "field": "pa.ce.topicMandates.opioid.initial",
+    "value": "2 hours at initial licensure (waived until DEA application)",
+    "cite": "12 AAC 40.400(b)(7)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.40.400&secEnd=12.40.999",
+    "quote": "at least two hours of education in pain management and opioid use and addiction",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "collaboration",
+    "cite": "12 AAC 40.410(a)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.40.400&secEnd=12.40.999",
+    "quote": "A licensed physician assistant may not practice without at least one collaborative relationship established under this chapter.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFiling",
+    "value": "file within 14 days of effective date or change",
+    "cite": "12 AAC 40.410(b)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.40.400&secEnd=12.40.999",
+    "quote": "The collaborative plan must be filed with the division within 14 days after the effective date of the collaborative plan",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.sb89Attestation",
+    "value": "attestation at licensure or renewal (effective 2026-09-16)",
+    "cite": "AS 08.64.107(c) as reenacted by SB 89 sec. 2",
+    "url": "https://www.akleg.gov/basis/Bill/Plaintext/34?Hsid=SB0089Z",
+    "quote": "provide to the board with the physician assistant's application for licensure or renewal a written attestation",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.sb89Exemption",
+    "value": "no agreement needed at listed facility types or with board authorization",
+    "cite": "AS 08.64.107(d) as reenacted by SB 89 sec. 2",
+    "url": "https://www.akleg.gov/basis/Bill/Plaintext/34?Hsid=SB0089Z",
+    "quote": "A physician assistant may practice without a collaborative agreement if",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.sb89EffectiveDate",
+    "value": "2026-09-16; became law without signature as Chapter 21 SLA 26",
+    "cite": "SB 89 bill history, 34th Legislature",
+    "url": "https://www.akleg.gov/basis/Bill/Detail/34?Root=SB%2089",
+    "quote": "EFFECTIVE DATE(S) OF LAW 9/16/26",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.dea",
+    "value": "DEA registration on file required for controlled substances",
+    "cite": "12 AAC 40.450(a)(1)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.40.400&secEnd=12.40.999",
+    "quote": "have a current Drug Enforcement Administration (DEA) registration number, valid for that handling of that controlled substance on file with the department",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.pdmp",
+    "value": "register with PDMP within 30 days",
+    "cite": "12 AAC 40.976(1)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.40.400&secEnd=12.40.999",
+    "quote": "register and comply with the prescription drug monitoring program (PDMP) controlled substance prescription database not later than 30 days after initial licensure",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.renewalFormNccpa",
+    "value": "renewal form requires NCCPA attestation; no opioid CE question",
+    "cite": "Alaska PA renewal application 08-0079",
+    "url": "https://www.commerce.alaska.gov/web/portals/5/pub/med0079.pdf",
+    "quote": "I attest I am currently certified by the NCCPA.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.licence.sb89NccpaAtLicensure",
+    "value": "new AS 08.64.206 requires current NCCPA certification to be licensed",
+    "cite": "AS 08.64.206(2) as enacted by SB 89 sec. 3",
+    "url": "https://www.akleg.gov/basis/Bill/Plaintext/34?Hsid=SB0089Z",
+    "quote": "proof of current certification issued by the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.sb89Scope",
+    "value": "SB 89 scope includes Schedule II to V prescribing",
+    "cite": "AS 08.64.107(a)(14) as reenacted by SB 89 sec. 2",
+    "url": "https://www.akleg.gov/basis/Bill/Plaintext/34?Hsid=SB0089Z",
+    "quote": "prescribing schedule II, III, IV, and V controlled substances under federal law and all federal legend drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Alaska Board of Nursing",
+   "url": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/BoardofNursing.aspx"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "November 30 of even-numbered years (current period ends November 30, 2026)",
+   "ceHoursPerCycle": null,
+   "ceNote": "Continuing competency: two of three per cycle: 30 contact hours of CE, 30 hours of uncompensated professional activities, or 320 hours of nursing employment (or an alternative such as a refresher course). Alternatives: a board-approved refresher course or passing NCLEX after the last renewal (12 AAC 44.640). A nurse first licensed in the second year of the period first complies before the second renewal. Of the 30 CE hours, at least 20 must be from ANCC, ACCME, ACPE, NP-certifying-body or board-approved sponsors.",
+   "nlcCompactMember": false,
+   "topicMandates": []
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse)",
+   "separateLicenceOrCertificate": "Separate APRN license; prescriptive authority and controlled substance authority are separate board authorizations renewed with it",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "ceNote": "Renewal requires current national certification in each role and population focus. 12 AAC 44.400(a)(4) requires 60 contact hours every two years only where the certifying body has no CE requirement.",
+   "pharmacologyHoursPerCycle": null,
+   "pharmacologyNote": "15 contact hours of advanced pharmacology within 2 years before applying for prescriptive authority (one-time at application). Renewal of prescriptive authority requires national certification showing completion of the certifying body's CE.",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Pain management and opioid use and addiction",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "APRNs with controlled substance prescriptive authority and a DEA registration"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "pharmacologyCeForPrescribers": "15 contact hours within 2 years before the prescriptive authority application (one-time); no separate state pharmacology hours at renewal.",
+   "controlledSubstanceCe": "2 hours pain management and opioid use and addiction each licensing cycle for DEA holders with controlled substance authority.",
+   "stateCsRegistrationRequired": false,
+   "stateCsNote": "No separate state controlled substance registration; Schedule II to V authority is a Board of Nursing authorization (12 AAC 44.445) plus DEA and PDMP registration."
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None. The collaborative relationship rule (12 AAC 44.410) was repealed in 1984; no transition to practice hours found in 12 AAC 44."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycle",
+    "value": "biennial",
+    "cite": "12 AAC 44.315(a)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "A registered nurse license and advanced practice registered nurse license must be renewed biennially on or before a date set by the department.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "November 30, 2026",
+    "cite": "Alaska RN renewal application 08-4121",
+    "url": "https://www.commerce.alaska.gov/web/portals/5/pub/nur4121.pdf",
+    "quote": "Your license lapses after November 30, 2026.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.continuingCompetency",
+    "value": "two of three methods",
+    "cite": "12 AAC 44.600(2)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "completion of two of the following three methods for maintaining continuing competency",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHours",
+    "value": "30 contact hours (if CE is one of the two methods)",
+    "cite": "12 AAC 44.610(a)(1)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "completion of at least 30 contact hours of continuing education for renewal of a license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.employmentHours",
+    "value": "320 hours",
+    "cite": "12 AAC 44.630",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "at least 320 hours of practice of practical nursing or registered nursing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": false,
+    "cite": "HB 131 (34th Legislature) bill status",
+    "url": "https://www.akleg.gov/basis/Bill/Detail/34?Root=HB%20131",
+    "quote": "Current Status (H) L&C Then FIN Status Date 03/10/2025",
+    "loaded": true,
+    "verified": true,
+    "note": "Compact bills HB 131 and SB 124 ('NURSING: LICENSURE; MULTISTATE COMPACT') remained in committee; no enacted compact statute found.",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "November 30, 2026",
+    "cite": "Alaska APRN renewal application 08-0081 (Rev. 08/25/2026)",
+    "url": "https://www.commerce.alaska.gov/web/portals/5/pub/nur0081.pdf",
+    "quote": "Your license lapses after November 30, 2026. There is no grace period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "The form's heading 'December 1, 2026 – November 30, 2028' is the next licence period; renewal is due by November 30, 2026."
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "12 AAC 44.470(2)(A)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "holds national certification for each of the roles and population focus areas in which the applicant is seeking renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceFallback",
+    "value": "60 contact hours every two years only if certifying body has no CE requirement",
+    "cite": "12 AAC 44.400(a)(4)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "in the absence of a continuing education requirement of the certifying body, submit documented evidence of having obtained 60 contact hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.initialPharmacology",
+    "value": "15 contact hours within 2 years before application",
+    "cite": "12 AAC 44.440(b)(2)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "15 contact hours of education in advanced pharmacology and clinical management of drug therapy within the two-year period immediately before",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.renewal",
+    "value": "biennially with APRN license",
+    "cite": "12 AAC 44.440(e)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "An APRN's prescriptive authority must be renewed biennially with the APRN licensure.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceAuthority",
+    "value": "separate Board authorization, Schedules II to V",
+    "cite": "12 AAC 44.445(a)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "the board may authorize an advanced practice registered nurse (APRN) to prescribe and dispense schedule II - V controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.topicMandates.opioid",
+    "value": "2 hours per licensing cycle",
+    "cite": "12 AAC 44.470(5)(A)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "completed no less than two hours of continuing education in pain management and opioid use and addiction during the licensing cycle",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.authority",
+    "value": "full (no collaborative relationship)",
+    "cite": "12 AAC 44.410",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "12 AAC 44.410. Collaborative relationship. Repealed 12/1/84.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.independent",
+    "value": "independent clinical practice",
+    "cite": "12 AAC 44.475(f)(1)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "means independent clinical practice in the role and population focus areas",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "The quoted text is the 12 AAC 44.475(f)(1) definition of 'clinical practice' for reinstatement; supporting, not a standalone practice authority grant."
+   },
+   {
+    "field": "np.aprn.definitionNoPhysician",
+    "value": "APRN statutory definition has no physician collaboration or supervision element",
+    "cite": "AS 08.68.850(1)",
+    "url": "https://www.akleg.gov/basis/statutes.asp?media=print&secStart=08.68.850&secEnd=08.68.850",
+    "quote": "is certified to perform acts of medical diagnosis and the prescription and dispensing of medical, therapeutic, or corrective measures under regulations adopted by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalFormOpioid",
+    "value": "renewal form asks DEA holders for 2 hours pain/opioid CE between 2024-12-01 and 2026-11-30",
+    "cite": "Alaska APRN renewal application 08-0081 (Rev. 08/25/2026)",
+    "url": "https://www.commerce.alaska.gov/web/portals/5/pub/nur0081.pdf",
+    "quote": "Have you completed 2 hours in pain management and opioid use and addiction between 12/1/2024 and 11/30/2026",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalPdmp",
+    "value": "DEA holders with CS authority attest PDMP registration at renewal",
+    "cite": "12 AAC 44.470(5)(B)",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "registered with the Prescription Drug Monitoring Program (PDMP) controlled substance prescription database",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.alternativeCompetency",
+    "value": "refresher course alternative; first renewal proration by year of original licence",
+    "cite": "12 AAC 44.640; 12 AAC 44.650",
+    "url": "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+    "quote": "A nurse may meet continuing competency requirements without meeting the requirements of 12 AAC 44.610 - 12 AAC 44.630",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA: whether the 2 hour pain management and opioid CE (AS 08.64.312(b)) applies at each PA renewal. Statute subsection (a) names licensees of medicine, osteopathy and podiatry; SB 89 adds PAs only to the exemption clause; 12 AAC 40.470 and the renewal form do not require it. Show as not yet verified with the board link.",
+  "PA: SB 89 (Chapter 21 SLA 26, effective 2026-09-16) replaces the filed collaborative plan with a written agreement plus attestation and facility exemptions; 12 AAC 40.410's 14 day filing rule was still in the regulations when loaded and conflicts with the new statute. Treat the statute as controlling.",
+  "Board web pages on commerce.alaska.gov are behind a bot check; board PDFs (renewal forms) on the same host loaded and were used.",
+  "NP: Nurse Licensure Compact non-membership rests on HB 131 and SB 124 (34th Legislature) remaining in committee (status date 2025-03-10); a negative cannot be quoted from statute.",
+  "No other topic mandates (implicit bias, human trafficking, child abuse, ethics, HIV, end of life, Alzheimer, suicide, infection control, cultural competency, domestic violence) were found in 12 AAC 40, 12 AAC 44 or the renewal forms as loaded; the federal one-time 8 hour MATE training is federal."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "PA: 2 hour pain management/opioid CE every cycle downgraded to verified:false. AS 08.64.312(a) covers licensees of medicine, osteopathy and podiatry; SB 89 sec. 9 changes only the exemption subsection (c); neither 12 AAC 40.470 nor the PA renewal form requires it. The researcher had marked it verified:true while listing the doubt in 'unverified'.",
+   "PA: added SB 89 sec. 3 (new AS 08.64.206) requiring current NCCPA certification at licensure, and the renewal form's NCCPA attestation.",
+   "NP: 'full' practice now also rests on AS 08.68.850(1) (no physician element); noted that the 44.475(f)(1) quote is a reinstatement definition.",
+   "NP: APRN renewal deadline quote replaced; the researcher quoted the next period's heading (2026-12-01 to 2028-11-30) rather than the lapse sentence.",
+   "NP/RN: added the refresher course alternative, first-renewal proration and the 20 of 30 accredited hours rule (12 AAC 44.610, .640)."
+  ],
+  "sourcesLoaded": [
+   "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.40.400&secEnd=12.40.999",
+   "https://www.akleg.gov/basis/aac.asp?media=print&secStart=12.44.010&secEnd=12.44.999",
+   "https://www.akleg.gov/basis/statutes.asp?media=print&secStart=08.64.312&secEnd=08.64.312",
+   "https://www.akleg.gov/basis/Bill/Plaintext/34?Hsid=SB0089Z",
+   "https://www.akleg.gov/basis/Bill/Detail/34?Root=SB%2089",
+   "https://www.commerce.alaska.gov/web/portals/5/pub/med0079.pdf",
+   "https://www.commerce.alaska.gov/web/portals/5/pub/nur4121.pdf",
+   "https://www.commerce.alaska.gov/web/portals/5/pub/nur0081.pdf",
+   "https://www.akleg.gov/basis/Bill/Detail/34?Root=HB%20131",
+   "https://www.akleg.gov/basis/Bill/Detail/34?Root=SB%20124",
+   "https://www.akleg.gov/basis/statutes.asp?media=print&secStart=08.68.850&secEnd=08.68.850"
+  ]
+ }
+}

@@ -1,0 +1,305 @@
+{
+  "state": "UT",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Utah Division of Professional Licensing (DOPL), Physician Assistant Licensing Board",
+      "url": "https://commerce.utah.gov/dopl/physician-assistant/"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 40,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 34,
+        "fact": "pa.ce.hoursPerCycle",
+        "label": "Category 1",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1"
+        ],
+        "unverifiedAccepted": [
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "Up to 15% of the CME may come from documented volunteer service.",
+          "fact": "pa.ce.volunteerCredit"
+        },
+        {
+          "text": "Controlled substance hours are prorated from licensure for a prescriber not licensed for the whole two-year period.",
+          "fact": "pa.prescribing.csProration"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Suicide Prevention",
+        "hours": 0,
+        "label": "Suicide prevention video, each renewal",
+        "fact": "pa.ce.topicMandates.suicide"
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": 3.5,
+        "label": "Controlled substance prescribing, each licensing period (the SBIRT class counts for the period it was taken)",
+        "fact": "pa.ce.topicMandates.controlledSubstance",
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Utah controlled substance license?",
+          "description": "Applies to holders of the state controlled substance license."
+        },
+        "alsoTopics": [
+          "Substance Use Disorders"
+        ]
+      },
+      {
+        "topic": "Substance Use Disorders",
+        "hours": 3.5,
+        "label": "SBIRT training class, once during Utah licensure (it counts for the controlled substance hours of that period)",
+        "period": "lifetime",
+        "facts": [
+          "pa.ce.topicMandates.sbirt",
+          "pa.ce.topicMandates.sbirtRequired"
+        ],
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Utah controlled substance license?",
+          "description": "Applies to holders of the state controlled substance license."
+        }
+      },
+      {
+        "topic": "Medical Cannabis",
+        "hours": 0,
+        "label": "Continuing education for recommending medical providers",
+        "fact": "pa.ce.medicalCannabis",
+        "condition": {
+          "field": "Recommending medical cannabis provider",
+          "question": "Are you a Utah recommending medical provider for medical cannabis?",
+          "description": "Utah CE for recommending medical providers."
+        }
+      },
+      {
+        "topic": "Controlled Substances",
+        "hours": null,
+        "status": "unverified",
+        "unverifiedItem": "Whether PAs owe the half hour controlled substance database tutorial",
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Utah controlled substance license?",
+          "description": "Applies to holders of the state controlled substance license."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "A PA with under 8,500 hours of post-graduate clinical practice works under written practice-level policies. For the first 4,000 hours the PA collaborates with a physician; between 4,000 and 8,500 hours a written collaborative agreement, with a physician or with a PA over 8,500 hours in the same specialty, is kept at the practice location and given to the board on request. Changing specialty restarts 4,000 hours of collaboration.",
+        "facts": [
+          "pa.practice.collaborationFirst4000",
+          "pa.practice.collaborativeAgreement",
+          "pa.practice.agreementFiling",
+          "pa.practice.policies"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Whether current NCCPA certification covers all the CME (the DOPL page) or only the Category One part of it (R156-70a-304(2)(b))"
+    ],
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalDeadline",
+        "reason": "PA licenses renew May 31 of even years: every two years."
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Utah Division of Professional Licensing (DOPL), Board of Nursing and Certified Nurse Midwives",
+      "url": "https://commerce.utah.gov/dopl/nursing/"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlc"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalDeadline",
+          "reason": "RN licenses renew January 31 of odd years, every two years."
+        },
+        "options": [
+          {
+            "text": "Licensed practice for at least 400 hours in the two years before renewal",
+            "fact": "np.rn.ce"
+          },
+          {
+            "text": "Licensed practice for at least 200 hours plus 15 contact hours of approved continuing education",
+            "fact": "np.rn.ce"
+          },
+          {
+            "text": "30 contact hours of approved continuing education",
+            "fact": "np.rn.ce"
+          }
+        ],
+        "notes": [
+          {
+            "text": "The RN license renews January 31 of odd years and the APRN license January 31 of even years: two separate renewals.",
+            "facts": [
+              "np.rn.renewalDeadline",
+              "np.aprn.renewalDeadline"
+            ]
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Suicide Prevention",
+          "hours": 0,
+          "label": "Suicide prevention video, each renewal",
+          "fact": "np.rn.topicMandates.suicide"
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.licenseCycle",
+            "np.rn.renewalDeadline"
+          ]
+        }
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN renewal requires current certification or recertification in the specialty; no APRN hour total is set.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalDeadline",
+          "reason": "APRN licenses renew January 31 of even years, every two years."
+        },
+        "notes": [
+          {
+            "text": "An APRN licensed before July 1, 1992 may instead complete 30 hours of approved CE and 400 hours of practice.",
+            "fact": "np.aprn.pre1992Alternative"
+          },
+          {
+            "text": "Controlled substance hours are prorated from licensure for a prescriber not licensed for the whole two-year period.",
+            "fact": "np.prescribing.csProration"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "facts": [
+          "np.aprn.nationalCertificationRequired",
+          "np.aprn.nationalCertificationStatute"
+        ],
+        "condition": {
+          "field": "Licensed as an APRN on or after July 1, 1992",
+          "question": "Were you licensed as a Utah APRN on or after July 1, 1992?",
+          "description": "Utah APRNs licensed before July 1, 1992 may renew on 30 hours of CE and 400 practice hours instead of certification."
+        }
+      },
+      "topics": [
+        {
+          "topic": "Suicide Prevention",
+          "hours": 0,
+          "label": "Suicide prevention video, each renewal",
+          "fact": "np.rn.topicMandates.suicide"
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 3.5,
+          "label": "Controlled substance prescribing, each licensing period (the SBIRT class counts for the period it was taken)",
+          "fact": "np.prescribing.controlledSubstanceCeHours",
+          "condition": {
+            "field": "Holds a state controlled substance registration",
+            "question": "Do you hold a Utah controlled substance license?",
+            "description": "Applies to holders of the state controlled substance license."
+          },
+          "alsoTopics": [
+            "Substance Use Disorders"
+          ]
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 0.5,
+          "label": "DOPL controlled substance database tutorial and test, each renewal, separate from the 3.5 hours (waived if you attest to using the database)",
+          "condition": {
+            "field": "Holds a state controlled substance registration",
+            "question": "Do you hold a Utah controlled substance license?",
+            "description": "Applies to holders of the state controlled substance license."
+          },
+          "separate": true,
+          "facts": [
+            "np.prescribing.csdTutorial",
+            "np.prescribing.controlledSubstanceCeHours"
+          ]
+        },
+        {
+          "topic": "Substance Use Disorders",
+          "hours": 3.5,
+          "label": "SBIRT training class, once during Utah licensure",
+          "period": "lifetime",
+          "periodReason": "Required once during Utah licensure.",
+          "facts": [
+            "np.aprn.topicMandates.sbirtRequired",
+            "np.prescribing.controlledSubstanceCeHours"
+          ],
+          "condition": {
+            "field": "Holds a state controlled substance registration",
+            "question": "Do you hold a Utah controlled substance license?",
+            "description": "Applies to holders of the state controlled substance license."
+          }
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.licenseCycle",
+            "np.aprn.renewalDeadline"
+          ]
+        }
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.controlledSubstanceCe"
+      }
+    }
+  }
+}

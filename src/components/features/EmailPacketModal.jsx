@@ -69,13 +69,16 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
   // literal each render (initialDocIds={docs.map(...)}) cannot wipe what
   // the physician is typing mid-edit: the reset runs on open only.
   const prefillRef = useRef(null);
-  prefillRef.current = { request, initialDocIds, initialNote, initialSubject, initialTo, physicianName, settings: data.settings };
+  // The subject goes to a third party: it names only the profession the
+  // member chose ("your physician assistant"), never one they did not.
+  const memberNoun = degree === "PA" ? "physician assistant" : degree === "NP" ? "nurse practitioner" : degree === "MD" || degree === "DO" ? "physician" : "clinician";
+  prefillRef.current = { request, initialDocIds, initialNote, initialSubject, initialTo, physicianName, memberNoun, settings: data.settings };
   useEffect(() => {
     if (!open) return;
     const p = prefillRef.current;
     setTo(p.initialTo || p.request?.from_addr || "");
     setCcSelf(true);
-    setSubject(p.initialSubject || (p.request?.subject ? `Re: ${p.request.subject}` : `Credential documents from ${p.physicianName || "your physician"}`));
+    setSubject(p.initialSubject || (p.request?.subject ? `Re: ${p.request.subject}` : `Credential documents from ${p.physicianName || `your ${p.memberNoun}`}`));
     // The default note greets and signs off (it was one bare sentence).
     setText(p.initialNote || defaultPacketNote(p.settings));
     setSelected(new Set((p.initialDocIds || []).filter(Boolean)));

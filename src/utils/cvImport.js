@@ -33,8 +33,9 @@
 
 import { clean } from "./publicRecord.js";
 import {
-  EDUCATION_TYPES, WORK_HISTORY_TYPES, PRIVILEGE_TYPES, getLicenseTypes,
+  WORK_HISTORY_TYPES, PRIVILEGE_TYPES, getLicenseTypes, getEducationTypes,
 } from "../constants/credentialTypes.js";
+import { isKnownDegree } from "../constants/professions.js";
 import { STATES, STATE_NAMES } from "../constants/states.js";
 import { isCurrentJob } from "./helpers.js";
 
@@ -156,7 +157,6 @@ export function namesThePhysician(name, ownName) {
  * input for.
  */
 export function normalizeCvSections(raw, { deg = "", name = "" } = {}) {
-  const licenseTypes = getLicenseTypes(deg);
   const r = raw && typeof raw === "object" ? raw : {};
 
   const settings = {};
@@ -166,8 +166,14 @@ export function normalizeCvSections(raw, { deg = "", name = "" } = {}) {
     const v = str(s[k]);
     if (v) settings[k] = v;
   }
+  // MD, DO, PA or NP as the CV states it; offered through the review, never
+  // applied silently.
   const degree = str(s.degreeType).toUpperCase();
-  if (degree === "MD" || degree === "DO") settings.degreeType = degree;
+  if (isKnownDegree(degree)) settings.degreeType = degree;
+  // The member's own profession picks the type lists. A member with no
+  // profession is asked it before a CV is read (CvImportReview), so the
+  // lists are never guessed from the CV.
+  const licenseTypes = getLicenseTypes(deg);
   const npi = str(s.npi).replace(/\D/g, "");
   if (npi.length === 10) settings.npi = npi;
   const specialties = arr(s.specialties).map(str).filter(Boolean);
@@ -182,7 +188,7 @@ export function normalizeCvSections(raw, { deg = "", name = "" } = {}) {
     (isPerson(given) ? "" : str(given)) || fallback;
 
   const education = arr(r.education).map((e) => {
-    const type = toOption(e?.type, EDUCATION_TYPES);
+    const type = toOption(e?.type, getEducationTypes(deg));
     return {
       type,
       name: credentialLabel(e?.name, [type, str(e?.institution)].filter(Boolean).join(" - ")),

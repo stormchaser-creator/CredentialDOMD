@@ -1,0 +1,198 @@
+{
+  "state": "LA",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Louisiana State Board of Medical Examiners (LSBME)",
+      "url": "https://www.lsbme.la.gov"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Renewal requires current NCCPA certification and the CE needed to maintain it; the state sets no hour count.",
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "notes": [
+        {
+          "text": "All LSBME licensees track CE in CE Broker; renewal is blocked if CE Broker does not show the required credits.",
+          "fact": "pa.ce.ceTracking"
+        }
+      ]
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "pa.ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 3,
+        "label": "Board approved CDS prescribing practices (drug diversion, best practices, treatment of addiction), once, as a prerequisite to renewal; exempt by attesting no CDS was prescribed in the expiring year",
+        "period": "lifetime",
+        "facts": [
+          "pa.ce.topicMandates[CDS].hours",
+          "pa.ce.topicMandates[CDS].period",
+          "pa.ce.topicMandates[CDS].exemption"
+        ],
+        "condition": {
+          "field": "Holds a state controlled substance registration",
+          "question": "Do you hold a Louisiana controlled dangerous substance (CDS) license?",
+          "description": "Applies to holders of the state controlled substance license."
+        }
+      },
+      {
+        "topic": "Jurisprudence and Ethics",
+        "hours": 0,
+        "label": "LSBME online Laws and Rules Course, before the first renewal",
+        "period": "lifetime",
+        "facts": [
+          "pa.ce.topicMandates[lawsAndRules]",
+          "pa.ce.topicMandates[lawsAndRules].appliesTo"
+        ],
+        "condition": {
+          "field": "First renewal of this license",
+          "question": "Is this your first renewal of this license?",
+          "description": "Some boards require a course at the first renewal only."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "PAs practice under a board approved supervising physician; changes in supervising physicians are reported within 15 days, and clinical practice guidelines and any written practice agreement are reviewed, updated and signed annually.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.supervisorChangeNotice",
+          "pa.practice.agreementFilingAndRenewal"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Louisiana State Board of Nursing (LSBN)",
+      "url": "https://www.lsbn.state.la.us"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.rn.ceHoursPerCycle",
+          "reason": "The two-year licensure period"
+        },
+        "reason": "The RN license renews on 30 contact hours, or 900 employer-verified practice hours, in the two-year period; a nationally certified APRN meets it by holding an approved certification.",
+        "options": [
+          {
+            "text": "At least 30 board approved contact hours of continuing education in the two-year licensure period",
+            "fact": "np.rn.ceHoursPerCycle"
+          },
+          {
+            "text": "At least 900 practice hours in the two-year licensure period, verified by your employer",
+            "fact": "np.rn.cePracticeAlternative"
+          },
+          {
+            "text": "For a nationally board certified APRN: holding an approved national certification",
+            "fact": "np.aprn.ceHoursPerCycle"
+          }
+        ]
+      },
+      "unverified": [
+        "Which certifying bodies' certifications the board approves for APRNs meeting the RN renewal"
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "A nationally certified APRN renews by keeping current national certification; no APRN contact hour total is set.",
+        "cycleYears": {
+          "value": 2,
+          "facts": [
+            "np.aprn.renewalCycleYears",
+            "np.rn.renewalCycleYears"
+          ],
+          "reason": "The APRN license expires with the biennial RN license."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 12,
+          "measure": "pharmacology",
+          "label": "Pharmacotherapeutics in your role and population focus: 6 contact hours each year, 12 over the two-year license (the board audits 12); controlled substance prescribing hours count toward the year they were taken",
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          },
+          "facts": [
+            "np.aprn.pharmacologyHoursPerCycle",
+            "np.prescribing.pharmacologyCeForPrescribers",
+            "np.prescribing.csCountsTowardPharmacology"
+          ]
+        },
+        {
+          "topic": "Controlled Substances",
+          "hours": 3,
+          "label": "Board approved controlled substance prescribing practices, once, as a prerequisite to renewal; exempt by attesting no controlled substance was prescribed in the expiring period",
+          "period": "lifetime",
+          "facts": [
+            "np.prescribing.controlledSubstanceCe",
+            "np.prescribing.controlledSubstanceCe.period",
+            "np.prescribing.controlledSubstanceCe.exemption"
+          ],
+          "condition": {
+            "field": "Holds a state controlled substance registration",
+            "question": "Do you hold a Louisiana controlled dangerous substance (CDS) license?",
+            "description": "Applies to holders of the state controlled substance license."
+          }
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "text": "An APRN engaged in medical diagnosis and management has a collaborative practice agreement, reviewed and signed at least annually; changes in collaborating physicians are reported within 30 days.",
+        "facts": [
+          "np.practice.agreementType",
+          "np.practice.agreementFilingAndRenewal",
+          "np.practice.changeNotice"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

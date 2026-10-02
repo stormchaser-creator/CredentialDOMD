@@ -1,0 +1,520 @@
+{
+ "state": "LA",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Louisiana State Board of Medical Examiners (LSBME)",
+   "url": "https://www.lsbme.la.gov"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA, PA-C)",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annually, on or before the last day of the licensee's birth month (initial licence expires the last day of the year issued)"
+  },
+  "ce": {
+   "hoursPerCycle": null,
+   "hoursNote": "No state hour count: renewal requires the CE needed to maintain current NCCPA certification (NCCPA's own cycle numbers are not restated by the state rule).",
+   "categoryRules": "Whatever NCCPA requires to maintain certification; LSBME rule sets no separate category split",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": true,
+   "topicMandates": [
+    {
+     "topic": "Controlled dangerous substance prescribing (drug diversion, best practices for CDS prescribing, treatment of addiction)",
+     "hours": 3,
+     "period": "one-time",
+     "appliesTo": "PAs whose scope includes authority to prescribe, dispense or administer CDS (LSBME: prescribers holding a Board of Pharmacy CDS licence); condition of the first Louisiana licence renewal; exemption by attestation that no CDS was prescribed, administered or dispensed during the expiring licence year (verified via PMP)"
+    },
+    {
+     "topic": "LSBME Laws and Rules Course for physician assistants (online, via CE Broker)",
+     "hours": null,
+     "period": "one-time",
+     "appliesTo": "Every PA before the first renewal of a Louisiana licence (initial, reciprocity or reinstatement); hours count toward CE. Course length not stated in the rule."
+    }
+   ],
+   "controlledSubstanceCe": "3 hours one-time, board-approved, counts hour for hour toward renewal CE (LAC 46:XLV.4005)",
+   "ceTracking": "All LSBME licensees must use CE Broker; renewal is blocked if CE Broker does not show the required credits or first-renewal courses."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "PA practises under a board-approved supervising physician; notify board of intent to practise and of supervising physician changes within 15 days. Clinical practice guidelines/protocols and any written practice agreement must be reviewed, updated and signed annually by PA and SP; SP keeps a credentials file reviewed annually; performance plan with chart review.",
+   "notes": "Statute (R.S. 37:1360.22, last amended 2015) still uses supervision; no collaboration model found in Louisiana."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Registration of prescriptive authority with LSBME, delegated by the supervising physician; eligibility includes 500 clinical training hours completed before graduation from the PA program. PA and SP verify the registration annually. CDS also needs a Louisiana Board of Pharmacy CDS licence and DEA registration; a PA with delegated CDS authority must enroll in and periodically access the Louisiana PMP.",
+   "ceForPrescribers": "3 hours CDS prescribing CME one-time (LAC 46:XLV.4005)"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalCycleYears",
+    "value": 1,
+    "cite": "LAC 46:XLV.1517.B",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "shall be renewed annually on or before the last day of the month in which the licensee was born",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": true,
+    "cite": "LAC 46:XLV.1517.B(1)",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "satisfactory verification of current certification by the National Commission on Certificate of Physician Assistants or its successors",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": "CE required to maintain NCCPA certification",
+    "cite": "LAC 46:XLV.1517.B(3)",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "confirmation of the completion of such continuing education as is required to maintain current NCCPA certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.recordRetention",
+    "value": "4 years",
+    "cite": "LAC 46:XLV.1517.B(3)",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "A physician assistant shall maintain a record of certification of attendance for at least four years from the date of completion",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[CDS].appliesTo",
+    "value": "PAs are authorized prescribers",
+    "cite": "LAC 46:XLV.4003",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "Authorized Prescriber―a physician, podiatrist, physician assistant, medical psychologist and any other category of health care provider",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[CDS].hours",
+    "value": 3,
+    "cite": "LAC 46:XLV.4005.A",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "successfully complete three hours of CME approved by the board on CDS prescribing practices (the CME requirement)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[CDS].period",
+    "value": "one-time",
+    "cite": "LAC 46:XLV.4001.A",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "the one-time continuing medical education (CME) requirement for controlled dangerous substances prerequisite to license renewal of an authorized prescriber",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "supervision",
+    "cite": "R.S. 37:1360.22(7)",
+    "url": "https://www.legis.la.gov/legis/LawPrint.aspx?d=93206",
+    "quote": "\"Supervising physician\" means a physician who has been approved by the board to supervise a physician assistant.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "annual review and signature",
+    "cite": "LAC 46:XLV.4511",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "clinical practice guidelines or protocols and any written practice agreement shall be annually reviewed, updated as appropriate, and signed",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.supervisorChangeNotice",
+    "value": "15 days",
+    "cite": "LAC 46:XLV.1517.D(2)",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "notifies the board of any changes in or additions to his supervising physicians within 15 days",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "LAC 46:XLV.1521.A(4)",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "apply for a controlled dangerous substance license from the Louisiana Board of Pharmacy and register with the United States Drug Enforcement Agency",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.separateAuthorityRegistration",
+    "value": "annual verification",
+    "cite": "LAC 46:XLV.1529.C",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "The PA, together with the SP, shall annually verify the accuracy of registration information on file with the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[lawsAndRules]",
+    "value": "one-time, before first renewal",
+    "cite": "LAC 46:XLV.449.A",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "successful completion of an online “Laws and Rules Course” approved by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[lawsAndRules].appliesTo",
+    "value": "all LSBME licensees incl. PAs",
+    "cite": "LSBME Board Orientations & Online Courses page",
+    "url": "https://lsbme.la.gov/content/board-orientations-online-courses",
+    "quote": "All licensees except CEPs and Perfusionists must take a Laws and Rules course for their practitioner group before renewing their license for the first time.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.annualRequirement",
+    "value": "NCCPA certification (annually)",
+    "cite": "LSBME Annual CE Requirements by Practitioner Group (7-20-2026)",
+    "url": "https://a.storyblok.com/f/150540/x/befbaa2201/ce-requirements-by-group-7-20-2026.pdf",
+    "quote": "PHYSICIAN ASSISTANTS NCCPA Certification (annually) Birth month",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.ceTracking",
+    "value": "CE Broker required",
+    "cite": "LSBME Renewals page",
+    "url": "https://www.lsbme.la.gov/content/renewals",
+    "quote": "All LSBME licensees are required to use CE Broker to track their CME/CE.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.topicMandates[CDS].exemption",
+    "value": "no CDS prescribed during expiring licence year",
+    "cite": "LAC 46:XLV.4005.F",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "attesting that he/she has not prescribed, administered or dispensed any CDS during the entire year covered by the authorized prescriber’s expiring license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.pmpEnrollment",
+    "value": "required with CDS authority",
+    "cite": "LAC 46:XLV.4505.D",
+    "url": "https://www.doa.la.gov/media/t5scfw11/46v45.docx",
+    "quote": "A PA who has been delegated controlled substance prescriptive authority shall enroll in and periodically accesses the Prescription Monitoring Program",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType (currency)",
+    "value": "supervision; statute last amended 2015",
+    "cite": "R.S. 37:1360.22 history",
+    "url": "https://www.legis.la.gov/legis/LawPrint.aspx?d=93206",
+    "quote": "Acts 2015, No. 453, §1, eff. July 1, 2015.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Louisiana State Board of Nursing (LSBN)",
+   "url": "https://www.lsbn.state.la.us"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Renew online during the renewal season October 1 to December 31; unrenewed licences expire January 31",
+   "ceHoursPerCycle": 30,
+   "ceNote": "One of: 30 board-approved contact hours in the 2-year period, OR 900 practice hours verified by employer, OR initial licensure in the previous calendar year, OR current board-recognised specialty certification (APRNs meet this by holding national certification).",
+   "nlcCompactMember": true,
+   "topicMandates": [],
+   "topicMandatesNote": "None found in LAC 46:XLVII.3335 or the LSBN CE brochure/FAQs. CE vendor pages claiming Louisiana nurse human trafficking or implicit bias CE were not supported by any LSBN primary source loaded."
+  },
+  "aprn": {
+   "title": "APRN (role designation CNP, certified nurse practitioner)",
+   "separateLicenceOrCertificate": "separate APRN licence issued by LSBN, expiring with the RN licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "ceNote": "No separate APRN contact-hour count for nationally certified APRNs: maintaining current national certification is the renewal requirement. Grandfathered or commensurate-requirement APRNs: 300 practice hours per year plus 2 college credits or 30 CE contact hours per year.",
+   "pharmacologyHoursPerCycle": 12,
+   "pharmacologyNote": "6 contact hours of pharmacotherapeutics each year for APRNs with prescriptive authority (12 per 2-year licence period at audit).",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Controlled substance prescribing (drug diversion, best practices, treatment of addiction)",
+     "hours": 3,
+     "period": "one-time",
+     "appliesTo": "APRNs with prescriptive authority who hold a Louisiana CDS licence; for those approved after the rule (LR 45:1202, Sept 2019) the 3 hours are submitted with the application for controlled substance privileges and satisfy later renewals. Exemption by attestation that no controlled substance was prescribed, administered or dispensed during the expiring licence period."
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": true,
+   "separateAuthorityNote": "Prescriptive and distributing authority is a separate LSBN credential: application plus Attestation of APRN Collaborative Practice, 500 APRN clinical hours within 2 years, 45 contact hours each of advanced pharmacotherapeutics, pathophysiology and health assessment. Controlled substances need a further board authorization.",
+   "pharmacologyCeForPrescribers": "6 contact hours pharmacotherapeutics every year",
+   "controlledSubstanceCe": "3 hours one-time (LAC 46:XLVII.4516)",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "collaboration",
+   "transitionToPracticeHours": null,
+   "transitionNote": "No transition to independent practice. 500 hours of APRN clinical practice within 2 years is a prerequisite for prescriptive authority.",
+   "agreementFilingAndRenewal": "APRN engaged in medical diagnosis and management must have a collaborative practice agreement (board template, max two collaborating physicians per site) kept on site; Attestation of APRN Collaborative Practice filed with LSBN; agreement reviewed and signed at least annually; notify the board within 30 days of collaborating physician or site changes."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalCycleYears",
+    "value": 2,
+    "cite": "LAC 46:XLVII.3333.A",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "shall renew his or her license biennially prior to the expiration of his or her license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "Oct 1 to Dec 31 season; expires Jan 31",
+    "cite": "LSBN Renewal FAQs",
+    "url": "https://www.lsbn.state.la.us/renewal-faqs/",
+    "quote": "You must renew your license during the active renewal season beginning October 1st through December 31st.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "LAC 46:XLVII.3335.C.1.a",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "a minimum of 30 board-approved contact hours of continuing education during the two-year licensure period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.cePracticeAlternative",
+    "value": "900 practice hours",
+    "cite": "LAC 46:XLVII.3335.C.1.b",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "a minimum of 900 practice hours during the two-year licensure period as verified by the employer on a form provided by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "LSBN Nurse Licensure Compact page",
+    "url": "https://www.lsbn.state.la.us/nurse-licensure-compact/",
+    "quote": "Louisiana implemented the Nurse Licensure Compact (NLC) July 1, 2019.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.title",
+    "value": "APRN; CNP",
+    "cite": "LAC 46:XLVII.4503.C",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "A licensed advanced practice registered nurse must use the title \"APRN.\"",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalCycleYears",
+    "value": "coincides with RN licence",
+    "cite": "LAC 46:XLVII.4507.A.3",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "An APRN license shall be issued with an expiration date that coincides with the applicant’s RN license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "LAC 46:XLVII.4507.E.1.b",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "evidence of current certification/recertification in each APRN role and population focus being renewed by a national certifying body approved by the board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": "certification satisfies RN CE",
+    "cite": "LSBN Continuing Education FAQs #2",
+    "url": "https://www.lsbn.state.la.us/continuing-education-faqs/",
+    "quote": "APRNs who are nationally board certified meet the provisions for renewal of their Louisiana RN license by holding an approved certification.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.pharmacologyCeForPrescribers",
+    "value": "6 contact hours yearly",
+    "cite": "LAC 46:XLVII.4513.D.6",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "Each year an APRN with prescriptive authority shall obtain six contact hours of continuing education in pharmacotherapeutics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": 12,
+    "cite": "LSBN Continuing Education FAQs #2",
+    "url": "https://www.lsbn.state.la.us/continuing-education-faqs/",
+    "quote": "APRNs with prescriptive authority who are selected for the audit must provide 12 contact hours of CE in pharmacotherapeutics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe",
+    "value": "3 hours one-time",
+    "cite": "LAC 46:XLVII.4516.A",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "as a one-time prerequisite to licensure renewal, successfully complete three hours of continuing education approved by the board on controlled substance prescribing practices",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": true,
+    "cite": "LAC 46:XLVII.4513.D.2.b.ii",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "obtaining and possessing an active Louisiana controlled dangerous substance license and Drug Enforcement Administration registration number prior to prescribing",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.separateAuthorityRegistration",
+    "value": "500 hours prerequisite",
+    "cite": "LAC 46:XLVII.4513.D.1.e.i",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "500 hours of clinical practice as a licensed APRN or APRN applicant within two years in the role and population focus",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementType",
+    "value": "collaboration",
+    "cite": "LAC 46:XLVII.4513.B",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "The APRN who engages in medical diagnosis and management shall have a collaborative practice agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFilingAndRenewal",
+    "value": "reviewed and signed annually",
+    "cite": "LAC 46:XLVII.4513.D.1.f.ii(d)",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "reviewed and signed at least annually by the APRN and physician to reflect current practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.changeNotice",
+    "value": "30 days",
+    "cite": "LAC 46:XLVII.4513.D.8",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "including the addition and deletion of any collaborating physicians within 30 days",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe.appliesTo",
+    "value": "prescriptive authority + CDS licence",
+    "cite": "LAC 46:XLVII.4516.A",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "Every APRN with both active prescriptive authority and who holds an active controlled dangerous substance (CDS) license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe.exemption",
+    "value": "no CS prescribed in expiring period",
+    "cite": "LAC 46:XLVII.4516.E",
+    "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+    "quote": "attesting that he/she has not prescribed, administered or dispensed any controlled substance during the entire period covered by the APRN’s expiring APRN license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.controlledSubstanceCe.period",
+    "value": "one-time",
+    "cite": "LSBN Required CEs for APRNs",
+    "url": "https://www.lsbn.state.la.us/wp-content/uploads/aprn/requiredcesforaprns.pdf",
+    "quote": "This is a one-time requirement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline (expiry)",
+    "value": "licences expire January 31",
+    "cite": "LSBN CE/Nursing Practice brochure (rev 9/20)",
+    "url": "https://www.lsbn.state.la.us/wp-content/uploads/credentialing/CEBrochure.pdf",
+    "quote": "All licenses expire January 31st if not renewed before the expiration date",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.recordRetention",
+    "value": "5 years",
+    "cite": "LAC 46:XLVII.3335.I.1 (quoted in LSBN CE FAQs #15)",
+    "url": "https://www.lsbn.state.la.us/continuing-education-faqs/",
+    "quote": "Maintaining documentation of continuing education for at least five years is the responsibility of each individual.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "PA CE hour count and category split: Louisiana defers to NCCPA maintenance; NCCPA's own cycle numbers were not loaded from a primary source and are not stated by the state rule.",
+  "PA Laws and Rules course length (hours) is not stated in LAC 46:XLV.449 or the LSBME page loaded.",
+  "NP practice authority label 'restricted' is the conventional classification; LAC 46:XLVII.4513.B confirms a collaborative practice agreement for medical diagnosis and management, but the rule does not use the word 'restricted'.",
+  "LAC 46:XLVII.4507.E.1 still says RN and APRN renewal is submitted 'annually'; LAC 46:XLVII.3333.A (amended 2020) and the LSBN brochure say biennial (2-year licensure period). Biennial is used.",
+  "RN/APRN topic mandates: none in LAC 46:XLVII or LSBN CE pages; not exhaustively checked against every Louisiana statute.",
+  "PA renewal deadline: a 2008 Register text said 'first day' of birth month; current LAC 46:XLV.1517.B says 'last day', used here.",
+  "Louisiana Board of Pharmacy CDS licence renewal period was not loaded for either profession."
+ ],
+ "verifiedAt": "2026-10"
+}

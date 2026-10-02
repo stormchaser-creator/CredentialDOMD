@@ -76,7 +76,9 @@ test('copies eligible slots only, retains every source, and journals digests bef
     // unrecordedInvoices and contractPick joined BASE_KEYS after the version 1
     // list and no account before them ever held one (a contract pick lasts one
     // call day in any case). formDrafts (2026-10-01) is typed text a day old at most.
-    if (base === BASE_KEYS.lastIdentity || base === BASE_KEYS.accessAnswer || base === BASE_KEYS.unrecordedInvoices || base === BASE_KEYS.contractPick || base === BASE_KEYS.formDrafts) assert.equal(f.values.has(f.target(base)), false);
+    // veraProfessionLater (Vera's "Not now" to the profession choice) joined
+    // later too: the new account is simply asked.
+    if (base === BASE_KEYS.lastIdentity || base === BASE_KEYS.accessAnswer || base === BASE_KEYS.unrecordedInvoices || base === BASE_KEYS.contractPick || base === BASE_KEYS.formDrafts || base === BASE_KEYS.veraProfessionLater) assert.equal(f.values.has(f.target(base)), false);
     else assert.equal(f.values.get(f.target(base)), before.get(f.source(base)));
   }
   assert.equal(f.writes[0].key, continuityJournalKey(f.binding));

@@ -41,7 +41,7 @@ export default function SideNav({ items, active, onChange, fabItem }) {
         </div>
         <div>
           <div style={{ fontSize: 15, fontWeight: 800, color: T.text, letterSpacing: -0.3 }}>CredentialDOMD</div>
-          <div style={{ fontSize: 11, color: T.textDim, fontWeight: 500 }}>Physician Credentials</div>
+          <div style={{ fontSize: 11, color: T.textDim, fontWeight: 500 }}>{data?.settings?.degreeType === "PA" ? "PA Credentials" : data?.settings?.degreeType === "NP" ? "NP Credentials" : "Physician Credentials"}</div>
         </div>
       </div>
 

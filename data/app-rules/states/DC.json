@@ -1,0 +1,217 @@
+{
+  "state": "DC",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "District of Columbia Board of Medicine (DC Health)",
+      "url": "https://dchealth.dc.gov/bomed"
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 100,
+        "fact": "ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 40,
+        "fact": "ce.hoursPerCycle",
+        "label": "Category 1",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1"
+        ],
+        "unverifiedAccepted": [
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "notForTopics": [
+          "Cultural Competency",
+          "Public Health Priorities"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "The first renewal of a license granted by examination is exempt.",
+          "fact": "ce.firstRenewalExempt"
+        },
+        {
+          "text": "During the move to birth month expirations, a license term under two years owes 50% of the CE hours; the LGBTQ and public health hours are still owed in full.",
+          "fact": "licence.transitionCeProration"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Cultural Competency",
+        "hours": 2,
+        "label": "LGBTQ cultural competency or clinical treatment, Category 1 or equivalent",
+        "fact": "ce.topicMandates[LGBTQ]"
+      },
+      {
+        "topic": "Public Health Priorities",
+        "hours": 10,
+        "reason": "At least 10 percent of the 100 required hours",
+        "label": "DC Health public health priority subjects, at least 10% of the required hours",
+        "facts": [
+          "ce.topicMandates[public health priorities]",
+          "ce.publicHealthPriorityTopics"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A written delegation agreement on the Board's form, signed by the supervising physicians and the PA, is filed with the Board, kept at the primary practice site and refiled on any change. A practice advisory review is completed quarterly. The statute describes PA practice as collaboration with a physician; the regulations still require supervision.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal",
+          "practice.quarterlyReview",
+          "practice.agreementType (statute)"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Whether PAs practice under supervision (17 DCMR 4914 to 4916) or collaboration (D.C. Code 3-1201.02(13)): the statute and the regulations disagree",
+      "The DC controlled substance registration term (it rests on a 2011 letter)",
+      "Whether AOA Category 1 and AAFP Prescribed credit count as Category 1 (17 DCMR 4907.2 not reloaded)"
+    ],
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears (legacy default)",
+        "reason": "Licenses expire December 31 of each even-numbered year (every two years); a birth-month expiration moves the date, not the two-year term."
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "District of Columbia Board of Nursing (DC Health)",
+      "url": "https://dchealth.dc.gov/bon"
+    },
+    "rn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalDeadline",
+          "reason": "RN licenses expire June 30 of each even-numbered year, or at the end of the birth month in the matching year parity."
+        },
+        "total": {
+          "value": 24,
+          "fact": "rn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "The first renewal after the initial license is exempt from CE.",
+            "fact": "rn.firstRenewalExempt"
+          },
+          {
+            "text": "During the move to birth month expirations, a license term under two years owes 50% of the CE hours.",
+            "fact": "rn.transitionCeProration"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Cultural Competency",
+          "hours": 2,
+          "label": "LGBTQ cultural competency or specialized clinical training",
+          "facts": [
+            "rn.ceHoursPerCycle",
+            "rn.topicMandates (2026 notice)"
+          ]
+        },
+        {
+          "topic": "Public Health Priorities",
+          "hours": 2.5,
+          "label": "DC Health public health priority topics (the board's renewal notice states 2.5 hours)",
+          "fact": "rn.topicMandates (2026 notice)"
+        }
+      ],
+      "unverified": [
+        "Nurse Licensure Compact membership"
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalDeadline",
+          "reason": "Licenses expire June 30 of each even-numbered year (every two years); a birth-month expiration moves the date, not the two-year term."
+        }
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycle (2026 notice)",
+          "reason": "The board's CE window runs July 1, 2024 to June 30, 2026, two years."
+        },
+        "total": {
+          "value": 15,
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "Proposed, not in effect: a pending rulemaking would require 24 hours of CE in the two years before license expiration.",
+            "fact": "aprn.upcoming"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 15,
+          "measure": "pharmacology",
+          "label": "Pharmacology: the board's renewal notice states 15 hours in pharmacology (the rule requires a pharmacology component)",
+          "facts": [
+            "aprn.pharmacology (2026 notice)",
+            "aprn.ceHoursPerCycle"
+          ]
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycle (2026 notice)",
+          "reason": "The board's CE window for the license expiring June 30, 2026 runs from July 1, 2024: a two-year term."
+        }
+      },
+      "unverified": [
+        "Which providers' hours count toward the 15, whether they must relate to your specialty, the application-date window, and whether the first APRN renewal is exempt (17 DCMR 5903.5(c) and the 2026 renewal notice were not reloaded)"
+      ]
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

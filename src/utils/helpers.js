@@ -1,6 +1,8 @@
 // Extension spelled out so pure-node test scripts can import this module
 // (Vite resolves either way; node's ESM loader needs the ".js").
 import { CERTIFICATION_TYPE, isInherentlyNonExpiringLicense } from "../constants/credentialTypes.js";
+import { certBodyOf, DEGREE_LABELS, isAdvancedPractice, isPhysicianDegree, mayNotExpire } from "../constants/professions.js";
+import { professionCopy } from "../constants/professionCopy.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
 import { scrubSsn, plainDashes, withDegree } from "./outgoingText.js";
 import { LIFECYCLE_SECTIONS, lifecycleNote } from "./lifecycle.js";
@@ -66,7 +68,12 @@ export function isNonExpiring(item, sectionKey) {
   // record's type to a state license hid the checkbox but left the flag set,
   // and a dated credential dropped out of the missing-date banner and out of
   // dateless() with it: invisible to the one system Tier 1 exists to feed.
-  if (item.noExpiration === true && (sectionKey !== "licenses" || t === CERTIFICATION_TYPE || /board certification/i.test(t))) return true;
+  // NCCPA and every NP certification expire, and their date anchors the
+  // certification's CE window, so a stored "does not expire" never silences
+  // one (certBodyOf, src/constants/professions.js).
+  // A practice agreement or prescriptive authority record may be marked as
+  // not expiring too (Ohio PA agreements do not expire).
+  if (item.noExpiration === true && (sectionKey !== "licenses" || t === CERTIFICATION_TYPE || (/board certification/i.test(t) && !certBodyOf(t)) || mayNotExpire(t))) return true;
   if (sectionKey === "licenses" && isInherentlyNonExpiringLicense(t)) return true;
   if (sectionKey === "insurance" && /health insurance|dental|vision|life insurance|disability/i.test(t)) return true;
   if (sectionKey === "healthRecords" && /immune|titer/i.test(String(item.name || "") + " " + String(item.category || "")) && !item.expirationDate) return true;
@@ -290,13 +297,19 @@ export function buildCredentialText(item, section, settings, { footer = true } =
   if (section === "peerReferences") return buildReferenceText(item);
   const lines = [];
   const deg = settings.degreeType || "";
+  // MD and DO read exactly as before. A PA or NP states their own profession;
+  // a member who has not chosen one is not given a degree or an honorific,
+  // since this text goes to a credentialing office (DESIGN 5.1 rule 2).
+  const physician = isPhysicianDegree(deg);
   // ASCII, not a box-drawing glyph: Mail renders "\u2500" in a wide symbol font
   // that wraps onto its own line on an iPhone (see invoiceCover.js TEXT_RULE).
   const div = "-".repeat(30);
 
   lines.push("CREDENTIAL VERIFICATION", div);
-  // No name on the profile: no "Physician: Dr." line.
-  if (settings.name) lines.push("Physician: " + withDegree(settings.name, deg));
+  // No name on the profile: no "Physician: Dr." or "Name: Clinician" line.
+  // MD and DO read "Physician:"; a PA or NP, or a member with no profession
+  // chosen, reads "Name:" (DESIGN 5.1 rule 2).
+  if (settings.name) lines.push(physician ? "Physician: " + withDegree(settings.name, deg) : "Name: " + withDegree(settings.name, isAdvancedPractice(deg) ? deg : ""));
   if (settings.npi) lines.push("NPI: " + settings.npi);
   if (settings.specialties?.length) {
     const names = settings.specialties.map(id => {
@@ -305,7 +318,8 @@ export function buildCredentialText(item, section, settings, { footer = true } =
     });
     lines.push("Specialty: " + names.join(", "));
   }
-  if (degreeLongForm(deg)) lines.push("Degree: " + degreeLongForm(deg));
+  if (isAdvancedPractice(deg)) lines.push("Profession: " + DEGREE_LABELS[deg]);
+  else if (degreeLongForm(deg)) lines.push("Degree: " + degreeLongForm(deg));
   // The record's heading ("State Medical License, CO") only when the facts
   // below do not already say all of it ("Type: State Medical License",
   // "State: CO" right under it read as the same line twice).
@@ -356,7 +370,9 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
         return parts[parts.length - 1];
       }).join(", ")
     : "";
-  const physician = (settings.name ? withDegree(settings.name, deg) : "the physician")
+  // No name: "the physician" (MD, DO) or the chosen profession's noun, "the
+  // clinician" when none is chosen; never "Dr." or a placeholder name.
+  const physician = (settings.name ? withDegree(settings.name, deg) : `the ${professionCopy(deg, { audience: "third-party" }).noun}`)
     + (settings.npi ? " (NPI " + settings.npi + ")" : "")
     + (specialties ? ", " + specialties : "");
   const facts = getSectionFacts(item, section)
@@ -379,7 +395,10 @@ export function buildEmailSubject(item, section, settings) {
     return `Professional reference${who ? ` for ${who}` : ""}: ${item.name || "Reference"}`;
   }
   const label = plainLabel(item, settings?.name, section) || "Credential";
-  const physician = settings?.name || "Physician";
+  // No name: "Physician" for an MD or DO, "Clinician" for a PA, an NP or a
+  // member with no profession chosen, the invoice's own placeholders
+  // (invoiceArgs.js physicianLabel), never a profession she did not choose.
+  const physician = settings?.name || (isPhysicianDegree(settings?.degreeType) ? "Physician" : "Clinician");
   return `Credential Verification: ${label} - ${physician}`;
 }
 

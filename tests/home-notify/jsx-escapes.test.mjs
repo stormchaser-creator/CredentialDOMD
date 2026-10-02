@@ -70,6 +70,7 @@ test('no JSX in src/ prints a raw escape sequence', () => {
 
 test('the Home board cards read as sentences, with no em dash', () => {
   const app = readFileSync(path.join(root, 'src/App.jsx'), 'utf8');
-  assert.match(app, /\{`\$\{b\.unit\} \\u00b7 \$\{b\.windowLabel\}`\}/);
+  // A physician board card; a PA or NP certification card (b.body) prints its own window line.
+  assert.match(app, /: `\$\{b\.unit\} \\u00b7 \$\{b\.windowLabel\}`\}/);
   assert.match(app, /\{b\.label\}: CME follows the primary board above/);
 });

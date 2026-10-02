@@ -1,0 +1,16 @@
+{
+ "state": "CA",
+ "facts": [
+  {
+   "field": "np.rn.implicitBias.audience",
+   "profession": "np",
+   "value": "Implicit bias hour applies in the first two years after initial licensure in California or any other jurisdiction",
+   "cite": "BPC 2811.5(h)",
+   "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=2811.5",
+   "quote": "This section shall not apply to licensees during the first two years immediately following their initial licensure in California or any other governmental jurisdiction",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -1,0 +1,236 @@
+{
+  "state": "CT",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Connecticut Department of Public Health (licensing) with the Connecticut Medical Examining Board (discipline)",
+      "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician-assistant/physician-assistant-licensure"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "certification",
+      "reason": "Renewal requires meeting NCCPA's mandatory CME and any NCCPA continued competency exam; Connecticut sets no hour total of its own.",
+      "cycleYears": {
+        "value": 1,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "certificationRequired": {
+      "value": true,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 1,
+        "label": "Prescribing controlled substances and pain management in the preceding two years",
+        "period": {
+          "years": 2
+        },
+        "fact": "ce.topicMandates[controlled substances]"
+      },
+      {
+        "topic": "Suicide Prevention",
+        "hours": 2,
+        "label": "Screening for PTSD, suicide risk, depression and grief, and suicide prevention, first renewal then once every six years; training administered by AAPA, a hospital or licensed health care institution, or a regionally accredited college",
+        "period": {
+          "years": 6
+        },
+        "facts": [
+          "ce.topicMandates[mental health]",
+          "ce.topicMandates.mentalHealthProviders"
+        ]
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "supervision",
+        "text": "A written delegation agreement set by the supervising physician and reviewed not less than annually; it is not filed with the Department of Public Health.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal",
+          "practice.agreementFiling"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Connecticut Department of Public Health with the Connecticut State Board of Examiners for Nursing",
+      "url": "https://portal.ct.gov/dph/practitioner-licensing--investigations/aprn/advanced-practice-registered-nurse-licensure"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 1,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "facts": [
+          "rn.nlcCompactMember",
+          "rn.nlcStatute"
+        ],
+        "effectiveThrough": "2028-01-01"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "fact": "rn.topicMandates",
+          "reason": "The RN statute sets only the mental health training below; no general contact hour total is set."
+        },
+        "cycleYears": {
+          "value": 1,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "topics": [
+        {
+          "topic": "Suicide Prevention",
+          "hours": 2,
+          "label": "Screening for PTSD, suicide risk, depression and grief, and suicide prevention, first renewal then once every six years",
+          "period": {
+            "years": 6
+          },
+          "condition": {
+            "field": "Actively practicing in Connecticut",
+            "question": "Are you actively practicing as a nurse in Connecticut?",
+            "description": "Connecticut's mental health training applies to RNs actively practicing in the state."
+          },
+          "facts": [
+            "rn.topicMandates",
+            "rn.topicMandates.audience"
+          ]
+        }
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 1,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.ceHoursPerCycle",
+          "reason": "50 contact hours within the 24 months before each annual renewal"
+        },
+        "total": {
+          "value": 50,
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "The first license renewal is exempt from the CE requirements.",
+            "fact": "aprn.firstRenewalExempt"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 5,
+          "measure": "pharmacology",
+          "label": "Pharmacotherapeutics, part of the 50 hours",
+          "facts": [
+            "aprn.pharmacologyHoursPerCycle",
+            "aprn.ceHoursPerCycle"
+          ]
+        },
+        {
+          "topic": "HIV/AIDS",
+          "hours": 1,
+          "label": "Infectious diseases, including HIV and AIDS",
+          "alsoTopics": [
+            "Infection Control"
+          ],
+          "facts": [
+            "aprn.topicMandates.infectious",
+            "aprn.topicMandates[six 1 hour topics]"
+          ]
+        },
+        {
+          "topic": "Risk Management",
+          "hours": 1,
+          "label": "Risk management",
+          "fact": "aprn.topicMandates[six 1 hour topics]"
+        },
+        {
+          "topic": "Sexual Assault",
+          "hours": 1,
+          "label": "Sexual assault",
+          "fact": "aprn.topicMandates[six 1 hour topics]"
+        },
+        {
+          "topic": "Domestic Violence",
+          "hours": 1,
+          "label": "Domestic violence",
+          "fact": "aprn.topicMandates[six 1 hour topics]"
+        },
+        {
+          "topic": "Cultural Competency",
+          "hours": 1,
+          "label": "Cultural competency",
+          "fact": "aprn.topicMandates[six 1 hour topics]"
+        },
+        {
+          "topic": "Substance Use Disorders",
+          "hours": 1,
+          "label": "Substance abuse, including prescribing controlled substances and pain management",
+          "fact": "aprn.topicMandates[six 1 hour topics]"
+        },
+        {
+          "topic": "Mental Health",
+          "hours": 2,
+          "label": "Mental health conditions common to veterans and their families, including suicide prevention, first renewal period then once every six years",
+          "period": {
+            "years": 6
+          },
+          "periodReason": "The statute requires the training in the first renewal period and not less than once every six years thereafter.",
+          "fact": "aprn.topicMandates[veterans mental health]"
+        }
+      ],
+      "unverified": [
+        "Whether AANPCB and PNCB certification are accepted for APRN renewal (the renewal statute names other certifiers)"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "For at least three years and 2,000 hours an APRN practices in collaboration with a physician, with collaboration on prescriptive authority in writing. After that the APRN gives written notice to the Commissioner of Public Health before practicing without collaboration.",
+        "facts": [
+          "practice.transitionToPracticeHours",
+          "practice.agreementFilingAndRenewal"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

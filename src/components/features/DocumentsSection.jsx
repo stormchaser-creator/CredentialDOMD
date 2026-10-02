@@ -37,6 +37,7 @@ import { relinkCorrection, keepCorrection, recordCorrection } from "../../utils/
 import { alertWriteRefused, scopesForWrite } from "../../utils/limitedLaunchAccess.js";
 import { documentMime } from "../../utils/syncRules.js";
 import { findStoredDuplicate } from "../../utils/storedDuplicate.js";
+import { cmeEntryFromScan } from "../../utils/scanShape";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -579,13 +580,15 @@ function DocumentsSection() {
     // facts and suggestedCategory come only from an "other" read and are never
     // columns; written as keys they would reject the whole record.
     const { facts: _facts, suggestedCategory: _suggested, ...kept } = fields || {};
-    const entry = { ...kept, id };
+    let entry = { ...kept, id };
     // The review card already snapped the state; a caller that skipped it
     // still never stores "North Dakota" where every lookup expects "ND".
     if ((section === "licenses" || section === "privileges") && typeof entry.state === "string" && entry.state) {
       entry.state = canonicalState(entry.state) || entry.state;
     }
     if (section === "cme" && !entry.topics) entry.topics = [];
+    // An NP certificate's pharmacology hours are a custom field, never a column.
+    if (section === "cme") entry = cmeEntryFromScan(entry);
     if (section === "locumContracts") {
       // Contract terms drive billing math: numbers with defaults, and the
       // coverage blocks the way the Contracts form saves them, with any time

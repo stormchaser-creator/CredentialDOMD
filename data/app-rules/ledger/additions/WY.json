@@ -1,0 +1,16 @@
+{
+ "state": "WY",
+ "facts": [
+  {
+   "field": "pa.board.page",
+   "profession": "pa",
+   "value": "Wyoming Board of Medicine physician assistants page",
+   "cite": "Wyoming Board of Medicine, Physician Assistants",
+   "url": "https://wyomedboard.wyo.gov/physician-assistants",
+   "quote": "Renew PA License",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

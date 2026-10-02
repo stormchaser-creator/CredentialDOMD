@@ -14,7 +14,7 @@ import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiMode
 import { geminiCall, proxyErrorMessage } from "./aiClient";
 import { compressImage } from "./documentScanner";
 import {
-  EDUCATION_TYPES, WORK_HISTORY_TYPES, PRIVILEGE_TYPES, getLicenseTypes,
+  WORK_HISTORY_TYPES, PRIVILEGE_TYPES, getLicenseTypes, getEducationTypes,
 } from "../constants/credentialTypes.js";
 
 
@@ -50,7 +50,7 @@ export const CV_PROMPT = (degreeType) => `You are reading a physician's curricul
 
 Return ONLY this object, with no prose and no code fence:
 {
-  "settings": { "name": "", "degreeType": "MD"|"DO", "npi": "", "email": "", "phone": "", "address": "", "website": "", "languages": "", "specialties": [], "professionalSummary": "", "cvHighlights": "" },
+  "settings": { "name": "", "degreeType": ${degreeType === "MD" || degreeType === "DO" ? `"MD"|"DO"` : `"MD"|"DO"|"PA"|"NP"`}, "npi": "", "email": "", "phone": "", "address": "", "website": "", "languages": "", "specialties": [], "professionalSummary": "", "cvHighlights": "" },
   "education": [ { "type": "", "name": "", "institution": "", "startDate": "", "graduationDate": "", "fieldOfStudy": "", "honors": "" } ],
   "workHistory": [ { "type": "", "position": "", "employer": "", "city": "", "state": "", "startDate": "", "endDate": "", "current": true|false, "description": "" } ],
   "licenses": [ { "type": "", "name": "", "state": "", "licenseNumber": "", "issuedDate": "", "expirationDate": "" } ],
@@ -68,7 +68,7 @@ RULES, all of them hard:
 3. "name" IS A DISPLAY LABEL FOR THE CREDENTIAL, never the physician. Write "DO Diploma - PCOM" or "CO Medical License", never "Daniel Marchetti". The physician's own name goes in settings.name and nowhere else.
 
 4. USE THESE EXACT VALUES for the type fields, or omit the field:
-   education.type: ${list(EDUCATION_TYPES)}
+   education.type: ${list(getEducationTypes(degreeType))}
    workHistory.type: ${list(WORK_HISTORY_TYPES)}
    licenses.type: ${list(getLicenseTypes(degreeType))}
    privileges.type: ${list(PRIVILEGE_TYPES)}

@@ -266,6 +266,19 @@ test('with no ready profile the note offers the reload that reconnects, and prom
   assert.match(render(Notice), /<button type="button" style="[^"]*">Try again<\/button>/);
 });
 
+// Lab, release goal3: after a weak-network launch the identity notice says
+// "Trying again on its own", and it does, loading the account with no tap.
+// "Reload to reconnect your account" directly under it was wrong.
+test('while the identity check is still retrying on its own, no second notice asks for a reload', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  Object.assign(value.limitedLaunch, { status: 'loading', access: null, remembered: { credential: null, practice: null },
+    checking: false, reconnecting: true, profileReady: false, identityWaiting: true });
+  assert.equal(render(Notice), '');
+  // Once the identity check answers, a profile that still is not ready keeps its Reload.
+  value.limitedLaunch.identityWaiting = false;
+  assert.match(render(Notice), /Reload to reconnect your account\./);
+});
+
 // Review of 43edb23c: an offline session (no Clerk, no ready profile) on a
 // device that remembers an active membership. No save can be authorized
 // offline, so the archive shows (the access hook no longer lets a remembered

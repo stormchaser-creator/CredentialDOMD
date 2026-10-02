@@ -1,0 +1,485 @@
+{
+ "state": "WI",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Wisconsin Physician Assistant Affiliated Credentialing Board (attached to the Medical Examining Board; administered by DSPS)",
+   "url": "https://dsps.wi.gov/a-z-professions-list/physician-assistant-pa/"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA)",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "March 1 of each even numbered year (Wis. Stat. 440.08(2)(a)59.). DSPS states the reporting period as March 1 of an even year through February 28 of the next even year (its example: March 1, 2026 to February 28, 2028)."
+  },
+  "ce": {
+   "hoursPerCycle": 30,
+   "categoryRules": "At least 30 hours Category 1 as defined by NCCPA, or board approved, per biennium. Not required for the first renewal after licensure.",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaNote": "Active NCCPA certification is accepted as meeting the 30 hour requirement under PA 2.04(3)(a). The rule text accepts it only for sub. (3)(a); the 2 hour controlled substance topic is sub. (3)(b), so the safe reading is that the 2 hours are still owed (the DSPS page wording is ambiguous).",
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Responsible controlled substances prescribing",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "All PA licensees renewing (part of the 30 hours); not the first renewal"
+    }
+   ],
+   "controlledSubstanceCe": "2 of the 30 hours each biennium on responsible controlled substances prescribing (PA 2.04(3)(b))."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "PA keeps, and gives the board on request, either (a) evidence of an employment arrangement in which a physician is primarily responsible for the overall direction and management of the PA's professional activities, or (b) a written collaborative agreement with a physician signed by both, describing scope of practice and an alternate collaborating physician protocol. Not filed with the board; no renewal cycle; either party may terminate on 30 days' written notice. If the collaborating physician is unavailable more than 90 business days a new agreement is needed; if none is available, a PA with at least 2,080 hours in the same specialty notifies the board within 3 business days and may continue up to 120 business days (PA 3.04(3)(a)).",
+   "notes": "Wisconsin is a PA Licensure Compact member (Wis. Stat. 448.988 compact privilege). PAs supervised by a podiatrist follow separate rules."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": "None. Prescribing authority is part of the PA licence (Wis. Stat. 448.975(1)(b)); a federal DEA registration authorizes controlled substance dispensing in Wisconsin (Wis. Stat. 961.32(1m)(a)).",
+   "ceForPrescribers": "2 hours responsible controlled substances prescribing each biennium (applies to all PA licensees)."
+  },
+  "facts": [
+   {
+    "field": "licence.renewalDeadline",
+    "value": "March 1 of each even numbered year",
+    "cite": "Wis. Stat. 440.08(2)(a)59.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/440.pdf",
+    "quote": "Physician assistant: March 1 of each even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.reportingPeriod",
+    "value": "March 1 even year to February 28 next even year",
+    "cite": "DSPS PA profession page",
+    "url": "https://dsps.wi.gov/a-z-professions-list/physician-assistant-pa/",
+    "quote": "The two-year reporting period runs from: March 1 of an even-numbered year through February 28 of the next even-numbered year",
+    "loaded": true,
+    "verified": true,
+    "researcherUrl": "https://dsps.wi.gov/Pages/Professions/PhysicianAssistant/Default.aspx",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "30 hours Category 1",
+    "cite": "Wis. Admin. Code PA 2.04(3)(a)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20PA%202.pdf",
+    "quote": "At least 30 hours of continuing medical education classified as Category 1 as defined by the NCCPA or as approved by the Board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[0]",
+    "value": "2 hours responsible controlled substances prescribing",
+    "cite": "Wis. Admin. Code PA 2.04(3)(b)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20PA%202.pdf",
+    "quote": "Of the required 30 hours of continuing medical education, at least 2 hours are on the topic of responsible controlled substances prescribing.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.firstRenewalExempt",
+    "value": "CE not required for the first renewal",
+    "cite": "Wis. Admin. Code PA 2.04(4)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20PA%202.pdf",
+    "quote": "Subsection (3) does not apply to the first renewal following the date a license is issued.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": "Active NCCPA certification meets sub. (3)(a)",
+    "cite": "Wis. Admin. Code PA 2.04(6)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20PA%202.pdf",
+    "quote": "the board shall accept such certification as meeting the requirements under sub. (3) (a).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.recordRetention",
+    "value": "Keep certificates 4 years",
+    "cite": "Wis. Admin. Code PA 2.04(5)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20PA%202.pdf",
+    "quote": "Licensees shall retain certificates of continuing medical education attendance for a minimum of four years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.initialNccpa",
+    "value": "NCCPA (or equivalent) exam required for initial licence",
+    "cite": "Wis. Stat. 448.974(1)(a)4.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/448/IX.pdf",
+    "quote": "The applicant passes the National Commission on Certification of Physician Assistants examination or an equivalent national examination adopted by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "Written collaborative agreement with a physician (or physician led employment arrangement)",
+    "cite": "Wis. Admin. Code PA 3.01(1)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20PA%203.pdf",
+    "quote": "a physician assistant shall maintain and practice in accordance with a written collaborative agreement with a physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Maintain and provide to board on request",
+    "cite": "Wis. Stat. 448.975(2)(a)1.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/448/IX.pdf",
+    "quote": "a physician assistant who provides care to patients shall maintain and provide to the board upon request one of the following",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "Either party may terminate on 30 days written notice",
+    "cite": "Wis. Stat. 448.975(2)(a)1m.a.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/448/IX.pdf",
+    "quote": "The agreement may be terminated by either party by providing written notice at least 30 days prior to the date of",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": "Prescribing included in PA licence",
+    "cite": "Wis. Stat. 448.975(1)(b)1.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/448/IX.pdf",
+    "quote": "a physician assistant may order, prescribe, procure, dispense, and administer prescription drugs, medical devices, services, and supplies.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "No state CS registration; federal registration suffices",
+    "cite": "Wis. Stat. 961.32(1m)(a)",
+    "url": "https://docs.legis.wisconsin.gov/document/statutes/961.32",
+    "quote": "may possess, manufacture, distribute, dispense or conduct research with those substances in this state to the extent authorized by their federal registration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu (board page)",
+    "value": "DSPS page: active NCCPA certification accepted as meeting \"the requirements\"",
+    "cite": "DSPS PA profession page",
+    "url": "https://dsps.wi.gov/a-z-professions-list/physician-assistant-pa/",
+    "quote": "the board shall accept such certification as meeting the requirements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "Rule PA 2.04(6) limits this to sub. (3)(a); track the 2 hour CS topic separately."
+   },
+   {
+    "field": "ce.topicMandates[0] (board page)",
+    "value": "2 of 30 hours on responsible CS prescribing",
+    "cite": "DSPS PA profession page",
+    "url": "https://dsps.wi.gov/a-z-professions-list/physician-assistant-pa/",
+    "quote": "2 of the required 30 hours of continuing medical education must be on the topic of responsible controlled substances prescribing.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal (absence)",
+    "value": "New collaborating physician if unavailable more than 90 business days; notify board within 3 business days if none available (PA with 2,080 hours in the specialty)",
+    "cite": "Wis. Admin. Code PA 3.04(2),(3)(a)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20PA%203.pdf",
+    "quote": "shall notify the board within 3 business days of the collaborating physician’s absence",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ],
+  "ruleCurrency": "Wis. Admin. Code ch. PA 2 was amended by CR 25-029 (Register December 2025, eff. 1-1-26) to add compact privilege (PA 2.015); PA 2.04 itself is unchanged since 2023."
+ },
+ "np": {
+  "board": {
+   "name": "Wisconsin Board of Nursing (administered by DSPS)",
+   "url": "https://dsps.wi.gov/a-z-professions-list/advanced-practice-registered-nurse-aprn/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "March 1 of each even numbered year",
+   "ceHoursPerCycle": 0,
+   "ncl": true,
+   "topicMandates": [],
+   "notes": "No continuing education is required for the Wisconsin RN licence; renewal requires the nursing workforce survey."
+  },
+  "aprn": {
+   "title": "APRN (Advanced Practice Registered Nurse) with specialty designation Nurse Practitioner (N.P.); replaced the APNP certificate on September 1, 2026 (2025 Wis. Act 17)",
+   "separateLicenceOrCertificate": "Separate APRN licence (requires WI RN licence or NLC multistate RN licence). Existing APNPs were converted to APRN licences on September 1, 2026; renewal of the APRN licence also renews a WI RN licence held.",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "March 1 of each even numbered year (first APRN renewal for converted APNPs coincides with the RN renewal in February 2028)",
+   "ceHoursPerCycle": 16,
+   "pharmacologyHoursPerCycle": 16,
+   "ceNote": "16 contact hours per biennium in clinical pharmacology or therapeutics relevant to the area of practice, including at least 2 contact hours in responsible prescribing of controlled substances. No other APRN CE hours.",
+   "nationalCertificationRequired": true,
+   "otherRenewalItems": "Evidence of malpractice liability insurance at every renewal; nursing workforce survey.",
+   "topicMandates": [
+    {
+     "topic": "Responsible prescribing of controlled substances",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "All APRNs (within the 16 hours), per the DSPS APRN page; statute 441.09(4) sets the 16 hours for every APRN, including any whose licence carries a no prescribing notation"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "No separate registration after September 1, 2026: prescribing is part of the APRN licence unless the licence carries a 'may not issue prescription orders' notation.",
+   "pharmacologyCeForPrescribers": "16 contact hours clinical pharmacology or therapeutics per biennium",
+   "controlledSubstanceCe": "2 contact hours responsible prescribing of controlled substances per biennium (within the 16)",
+   "stateCsRegistrationRequired": false
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "collaboration (until board verifies independent practice)",
+   "transitionToPracticeHours": 3840,
+   "transitionNote": "Default is practice in collaboration with a physician or dentist. Independent practice requires board verification on application of: 3,840 hours of professional nursing in a clinical setting, 3,840 clinical hours of APRN practice in the role with a physician or dentist immediately available, and at least 24 months elapsed for each. Approval is shown on the licence. Invasive pain treatment keeps a physician collaboration requirement outside hospital settings.",
+   "agreementFilingAndRenewal": "Collaborative relationship must be documented by the APRN; it is not filed with DSPS (evidence may be requested in a disciplinary matter). No renewal cycle for the relationship."
+  },
+  "facts": [
+   {
+    "field": "rn.renewalDeadline",
+    "value": "March 1 of each even numbered year",
+    "cite": "Wis. Stat. 440.08(2)(a)49.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/440.pdf",
+    "quote": "Nurse, registered: March 1 of each even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "None",
+    "cite": "DSPS RN profession page",
+    "url": "https://dsps.wi.gov/a-z-professions-list/registered-nurse-rn/",
+    "quote": "There is no continuing education required for this license type.",
+    "loaded": true,
+    "verified": true,
+    "researcherUrl": "https://dsps.wi.gov/Pages/Professions/RN/Default.aspx",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ncl",
+    "value": "Wisconsin is an NLC state",
+    "cite": "Wis. Stat. 441.51; DSPS RN page",
+    "url": "https://dsps.wi.gov/a-z-professions-list/registered-nurse-rn/",
+    "quote": "Applicants who are seeking to request Multistate Compact Privileges through the NLC.",
+    "loaded": true,
+    "verified": true,
+    "researcherUrl": "https://dsps.wi.gov/Pages/Professions/RN/Default.aspx",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalDeadline",
+    "value": "March 1 of each even numbered year",
+    "cite": "Wis. Stat. 440.08(2)(a)47r.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/440.pdf",
+    "quote": "Nurse, advanced practice registered: March 1 of each even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.transition",
+    "value": "APNPs certified on Aug 31, 2026 granted APRN licences",
+    "cite": "Wis. Stat. 441.09(1)(b)1.b.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "The board shall grant an advanced practice registered nurse license to each individual who, on August 31, 2026, was certified to issue prescription orders",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.firstRenewal",
+    "value": "Converted APNPs next renew with the RN renewal in February 2028",
+    "cite": "DSPS APRN Implementation FAQ",
+    "url": "https://dsps.wi.gov/a-z-boards-and-councils-list/nursing/faqs-implement-aprn/",
+    "quote": "renewal of that credential will then coincide with the next RN renewal in February 2028.",
+    "loaded": true,
+    "verified": true,
+    "researcherUrl": "https://dsps.wi.gov/Documents/APRN_FAQs.pdf",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceHoursPerCycle",
+    "value": "16 contact hours per biennium clinical pharmacology/therapeutics",
+    "cite": "Wis. Stat. 441.09(4)",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "at least 16 contact hours per biennium in clinical pharmacology or therapeutics relevant to the advanced practice registered nurse's area of practice.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.topicMandates[0]",
+    "value": "At least 2 of the 16 hours in responsible CS prescribing",
+    "cite": "DSPS APRN profession page",
+    "url": "https://dsps.wi.gov/a-z-professions-list/advanced-practice-registered-nurse-aprn/",
+    "quote": "including at least 2 contact hours in responsible prescribing of controlled substances.",
+    "loaded": true,
+    "verified": true,
+    "researcherUrl": "https://dsps.wi.gov/Pages/Professions/APNP/Default.aspx",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.topicMandates[0] (rule)",
+    "value": "Same 2 hour requirement in the board rule (written for APNPs)",
+    "cite": "Wis. Admin. Code N 8.05(1)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20N%208.pdf",
+    "quote": "including at least 2 contact hours in responsible prescribing of controlled substances.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "Yes, at licensure and renewal",
+    "cite": "DSPS APRN profession page",
+    "url": "https://dsps.wi.gov/a-z-professions-list/advanced-practice-registered-nurse-aprn/",
+    "quote": "NTL (National Certification is required)",
+    "loaded": true,
+    "verified": true,
+    "researcherUrl": "https://dsps.wi.gov/Pages/Professions/APNP/Default.aspx",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired (statute)",
+    "value": "Licence requires current national certification; renewal requires current evidence of par. (a) 2.",
+    "cite": "Wis. Stat. 441.09(1)(a)2.a.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "the applicant holds a current certification by a national certifying body approved by the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.malpractice",
+    "value": "Malpractice insurance evidence at renewal",
+    "cite": "Wis. Stat. 441.09(5)",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "shall submit evidence of that coverage to the board when applying for an initial license under this section or a renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "Collaboration with physician or dentist by default",
+    "cite": "Wis. Stat. 441.09(3m)(a)1.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "practice advanced practice registered nursing only in collaboration with a physician or dentist.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPracticeHours",
+    "value": "3,840 APRN clinical hours with physician/dentist available (plus 3,840 RN clinical hours, 24 months each)",
+    "cite": "Wis. Stat. 441.09(3m)(b)3.",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "The advanced practice registered nurse has completed 3,840 clinical hours of advanced practice registered nursing practice in that recognized role",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "APRN documents the collaborative relationship",
+    "cite": "Wis. Stat. 441.09(3m)(bm)",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "The advanced practice registered nurse shall document such a collaborative relationship.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "No documentation submitted to DSPS",
+    "cite": "DSPS APRN Implementation FAQ",
+    "url": "https://dsps.wi.gov/a-z-boards-and-councils-list/nursing/faqs-implement-aprn/",
+    "quote": "Do I need to provide DSPS with any documentation of this relationship? A: No.",
+    "loaded": true,
+    "verified": true,
+    "researcherUrl": "https://dsps.wi.gov/Documents/APRN_FAQs.pdf",
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.separateAuthorityRegistration",
+    "value": "Prescribing authorized by the APRN licence",
+    "cite": "Wis. Stat. 441.09(2)(a)",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "an advanced practice registered nurse may issue prescription orders, subject to the rules promulgated under sub. (6) (a) 1. and 4.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "No state CS registration; federal registration suffices",
+    "cite": "Wis. Stat. 961.32(1m)(a)",
+    "url": "https://docs.legis.wisconsin.gov/document/statutes/961.32",
+    "quote": "may possess, manufacture, distribute, dispense or conduct research with those substances in this state to the extent authorized by their federal registration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalAlsoRenewsRn",
+    "value": "APRN renewal also renews a WI RN licence held",
+    "cite": "Wis. Stat. 441.09(1)(c)",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "shall, if the person holds a license under s. 441.06 (1), (1c), or (1m), also grant the renewal of that license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority (independent practice)",
+    "value": "Independent practice only after board verification of 3,840 RN clinical hours, 3,840 APRN hours and 24 months each",
+    "cite": "Wis. Stat. 441.09(3m)(b)",
+    "url": "https://docs.legis.wisconsin.gov/statutes/statutes/441.pdf",
+    "quote": "if the board verifies, upon application of the advanced practice registered nurse, that the advanced practice registered nurse satisfies all of the following",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceRuleCurrency",
+    "value": "N 8.05 still written for APNPs (amended CR 25-012, eff. 10-1-25)",
+    "cite": "Wis. Admin. Code N 8.05(1)",
+    "url": "https://docs.legis.wisconsin.gov/document/administrativecode/ch.%20N%208.pdf",
+    "quote": "Every advanced practice nurse prescriber shall complete 16 contact hours per biennium",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "verifierNote": "The post September 1, 2026 APRN rule was not found; statute 441.09(4) and the DSPS APRN page carry the requirement."
+   }
+  ]
+ },
+ "unverified": [
+  "PA: whether active NCCPA certification also satisfies the 2 hour CS topic. PA 2.04(6) accepts it only for sub. (3)(a) (the 30 hours); the DSPS page says 'the requirements'. Track the 2 hours separately.",
+  "NP: no post September 1, 2026 APRN CE rule was found; Wis. Admin. Code N 8 is still the APNP chapter (last amended eff. 10-1-25). The 16 hours is statute (441.09(4)); the 2 hour CS topic is on the DSPS APRN page and in N 8.05(1).",
+  "NP: 'full' practice applies only after board verification under 441.09(3m)(b); until then collaboration with a physician or dentist is required by statute, and invasive pain treatment outside a hospital keeps a pain physician collaboration requirement.",
+  "No other WI topic mandate (implicit bias, human trafficking, child abuse, ethics, HIV, end of life, dementia, suicide prevention, infection control, domestic violence) was found in PA 2, N 8, Wis. Stat. 441.09 or the DSPS PA, RN and APRN pages."
+ ],
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "verifierCorrections": [
+  "DSPS pages moved: PA, RN, APRN profession pages and the APRN implementation FAQ now live under dsps.wi.gov/a-z-professions-list/... and dsps.wi.gov/a-z-boards-and-councils-list/nursing/faqs-implement-aprn/ (the FAQ is an HTML page, not the APRN_FAQs.pdf). URLs updated; old URL kept as researcherUrl. Board URLs updated.",
+  "PA licence.renewalDeadline: researcher wrote the period ends 'February 28/29 ... February 29, 2028'; the board page states February 28, 2028. Rewritten to the board's wording.",
+  "PA practice: the 3 business day board notice in PA 3.04(3)(a) applies to a PA with at least 2,080 hours of practice in the same specialty (who may then practise up to 120 business days without collaboration); added a fact and the condition.",
+  "NP: added facts that APRN renewal also renews a WI RN licence (441.09(1)(c)), the board verification condition for independent practice (441.09(3m)(b)), and that N 8 is still the APNP era rule (CR 25-012, eff. 10-1-25)."
+ ]
+}

@@ -1,0 +1,105 @@
+{
+  "state": "MT",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Montana Board of Medical Examiners",
+      "url": "https://boards.bsd.dli.mt.gov/medical-examiners/license-information/physician-assistant"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "unverified"
+    },
+    "certificationRequired": {
+      "value": false,
+      "fact": "ce.nccpaCertificationRequiredForRenewal"
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "A PA with fewer than 8,000 hours of postgraduate clinical experience practices under a collaborative agreement documented in written practice policies, given to the board on request. PAs who actively practiced 8,000 hours before October 1, 2023 are exempt.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFilingAndRenewal",
+          "practice.exemption"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether Montana requires any CME for PA renewal (the PA renewal and NCCPA maintenance rules were repealed and no CME rule was found)",
+      "Whether prescribers need a Montana Board of Pharmacy controlled substance registration (MCA 50-32-308 requires registration to dispense Schedules II to V)"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Montana Board of Nursing",
+      "url": "https://boards.bsd.dli.mt.gov/nursing/license-information/aprn"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "none",
+        "none": {
+          "value": true,
+          "facts": [
+            "rn.ceHoursPerCycle",
+            "aprn.ceRepeal"
+          ]
+        },
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "The board repealed its CE renewal rules in 2023; an APRN practices only in the role and population focus of a current national certification.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalRule"
+        },
+        "notes": [
+          {
+            "text": "Send verification of national recertification to the board within 30 days of issuance.",
+            "fact": "aprn.recertificationReporting"
+          },
+          {
+            "text": "Keep an individualized quality assurance plan.",
+            "fact": "aprn.qualityAssurancePlan"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      }
+    },
+    "unverified": [
+      "Whether prescribers need a Montana Board of Pharmacy controlled substance registration (MCA 50-32-308 requires registration to dispense Schedules II to V)"
+    ]
+  }
+}

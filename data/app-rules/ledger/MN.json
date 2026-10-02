@@ -1,0 +1,416 @@
+{
+ "state": "MN",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Minnesota Board of Medical Practice",
+   "url": "https://mn.gov/boards/medical-practice/"
+  },
+  "licence": {
+   "title": "Physician Assistant",
+   "renewalCycleYears": 1,
+   "renewalDeadline": "Annually, last day of the licensee's birth month"
+  },
+  "ce": {
+   "hoursPerCycle": "50 contact hours per 2 years (or current NCCPA certification)",
+   "categoryRules": "Must be equivalent to Category 1 (AOA, Royal College of Canada, AAPA, or AMA PRA reciprocal organizations)",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [],
+   "controlledSubstanceCe": "None found; the former opioid prescribing CE in Minn. Stat. 214.12 subd. 6 expired in 2020",
+   "cyclePeriod": "50 hours within the 2 years before each annual renewal, or current NCCPA certification"
+  },
+  "practice": {
+   "agreementType": "practice agreement",
+   "agreementFilingAndRenewal": "Practice agreement at the practice level, reviewed annually by a licensed physician in the same facility who knows the PA's practice; a document recording the review is kept at the practice and provided to the Board on request (not filed). New licensees must also complete 2,080 hours under a collaborative agreement in a hospital or integrated clinical setting, with written evidence submitted to the Board.",
+   "notes": "Spinal injections for pain require physician referral and a collaboration plan (147A.09 subd. 4). Minnesota has enacted the PA Licensure Compact (147A.35); operational status not confirmed."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": false,
+   "separateAuthorityRegistration": "No separate state authority; must comply with DEA and file all DEA registrations and numbers with the Board",
+   "ceForPrescribers": "None found"
+  },
+  "facts": [
+   {
+    "field": "licence.renewalCycleYears",
+    "value": "Annual renewal",
+    "cite": "Minn. Stat. 147A.07(a)",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "A person who holds a license as a physician assistant shall annually, upon notification from the board, renew the license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "Last day of birth month",
+    "cite": "Minn. Stat. 147A.29 subd. 1, 4",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "converted to an annual cycle where renewal is due on the last day of the licensee's month of birth.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "50 contact hours in the 2 years before renewal, or NCCPA certification",
+    "cite": "Minn. Stat. 147A.24 subd. 1",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "provide evidence of successful completion of at least 50 contact hours of continuing education within the two years immediately preceding license renewal.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": "Current NCCPA certification satisfies CE",
+    "cite": "Minn. Stat. 147A.24 subd. 1",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "must either meet standards for continuing education through current certification by the National Commission on Certification of Physician Assistants",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.categoryRules",
+    "value": "Category 1 equivalent",
+    "cite": "Minn. Stat. 147A.24 subd. 2",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "Continuing education is approved if it is equivalent to category 1 credit hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.initialNccpa",
+    "value": "NCCPA certification required for initial licensure",
+    "cite": "Minn. Stat. 147A.02(a)(3)",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "has current certification from the National Commission on Certification of Physician Assistants, or its successor agency as approved by the board;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "Practice agreement required",
+    "cite": "Minn. Stat. 147A.09 subd. 1",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "Physician assistants shall practice medicine only under an established practice agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.annualReview",
+    "value": "Annual review by a physician in the same facility",
+    "cite": "Minn. Stat. 147A.09 subd. 3",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "The practice agreement must be reviewed on an annual basis by a licensed physician within the same clinic, hospital, health system, or other facility",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.reviewRecord",
+    "value": "Review document kept at practice, available to Board on request",
+    "cite": "Minn. Stat. 147A.09 subd. 3",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "A document stating that the review occurred must be maintained at the practice level and made available to the board, upon request.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionHours",
+    "value": "2,080 hours under a collaborative agreement for new licensees",
+    "cite": "Minn. Stat. 147A.02(c)",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "must practice for at least 2,080 hours, within the context of a collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "File all DEA registrations with the Board",
+    "cite": "Minn. Stat. 147A.185 subd. 2",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "file any and all of the physician assistant's DEA registrations and numbers with the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.controlledSubstanceCe",
+    "value": "Opioid CE subdivision expired",
+    "cite": "Minn. Stat. 214.12 subd. 6",
+    "url": "https://www.revisor.mn.gov/statutes/cite/214.12",
+    "quote": "MS 2020 [Expired, 2019 c 63 art 2 s 10]",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalCycleOngoing",
+    "value": "After conversion, renewal cycles are annual",
+    "cite": "Minn. Stat. 147A.29 subd. 4",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "subsequent renewal cycles are annual and begin on the last day of the month of the licensee's birth.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.spinalInjections",
+    "value": "Spinal injections for pain need physician referral and a mutually agreed collaboration plan",
+    "cite": "Minn. Stat. 147A.09 subd. 4",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "may only perform spinal injections to address acute and chronic pain symptoms upon referral and in collaboration with a physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.paCompact",
+    "value": "PA Licensure Compact enacted into Minnesota law",
+    "cite": "Minn. Stat. 147A.35",
+    "url": "https://www.revisor.mn.gov/statutes/cite/147A/full",
+    "quote": "The physician assistant (PA) licensure compact is enacted into law",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Minnesota Board of Nursing",
+   "url": "https://mn.gov/boards/nursing/"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 24,
+   "nlcCompact": false,
+   "nlcNote": "Not a compact state; SF 2608 (2025) shows only introduction and committee referral. Minnesota instead recognizes RN/LPN licences of residents of Iowa, North Dakota, South Dakota and Wisconsin under 148.211 subd. 2a",
+   "topicMandates": [],
+   "renewalDeadline": "Last day of birth month; even years if born in an even year, odd years if born in an odd year (Minn. R. 6310.2600 subp. 15)"
+  },
+  "aprn": {
+   "title": "APRN (CNP)",
+   "separateLicenceOrCertificate": "Separate APRN licence from the Board of Nursing, plus RN licence",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 24,
+   "pharmacologyHoursPerCycle": null,
+   "nationalCertificationRequired": true,
+   "topicMandates": [],
+   "renewalNote": "APRN registration follows the same 24 month registration period defined for advanced practice, professional and practical nursing (Minn. R. 6310.2600 subp. 15)."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "None; APRNs prescribe legend drugs and controlled substances under licence, must comply with DEA and file DEA numbers with the Board",
+   "pharmacologyCeForPrescribers": null,
+   "controlledSubstanceCe": "None found (214.12 subd. 6 expired)",
+   "stateCsRegistrationRequired": false
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "collaborative agreement during the first 2,080 hours only",
+   "transitionToPracticeHours": 2080,
+   "agreementFilingAndRenewal": "Written evidence of the 2,080 collaborative hours submitted to the Board with the application or on completion. Effective August 1, 2026 (2026 c. 115 art. 11; no effective date in the article, so Minn. Stat. 645.02 applies) the collaborator may be a physician or an APRN with at least 3 years of APRN practice; NPs providing services other than primary care or mental health must complete the 2,080 hours in a setting where APRNs and physicians work together.",
+   "authorityNote": "'full' is a classification label derived from 148.211 subd. 1c (independent after 2,080 collaborative hours) and 148.235 subd. 7a; not a primary source term."
+  },
+  "facts": [
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "1 contact hour per month of registration (24 per 24 month period)",
+    "cite": "Minn. R. 6310.2800 subp. 3",
+    "url": "https://www.revisor.mn.gov/rules/6310.2800/",
+    "quote": "A registered nurse shall participate in the ratio of at least one contact hour of acceptable continuing education for each month of registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.ceParticipationPeriod",
+    "value": "24 month CE participation period",
+    "cite": "Minn. R. 6310.2600 subp. 4",
+    "url": "https://www.revisor.mn.gov/rules/6310.2600/",
+    "quote": "the 24-month interval of time immediately before the registration expiration date",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": "Current national certification at each APRN renewal",
+    "cite": "Minn. Stat. 148.231 subd. 1(c)",
+    "url": "https://www.revisor.mn.gov/statutes/cite/148.231",
+    "quote": "An applicant for advanced practice registered nursing (APRN) renewal must provide evidence of current certification or recertification in the appropriate APRN role",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.certificationAsCeEvidence",
+    "value": "National certification can document CE learning objectives",
+    "cite": "Minn. R. 6310.2800 subp. 4a",
+    "url": "https://www.revisor.mn.gov/rules/6310.2800/",
+    "quote": "Evidence of written learning objectives is not required when a licensee submits current certification from a national professional nursing organization",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.transitionToPracticeHours",
+    "value": "2,080 hours under a collaborative agreement",
+    "cite": "Minn. Stat. 148.211 subd. 1c",
+    "url": "https://www.revisor.mn.gov/statutes/cite/148.211",
+    "quote": "must practice for at least 2,080 hours, within the context of a collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.collaborator2026",
+    "value": "APRN collaborator must have at least 3 years of APRN practice",
+    "cite": "2026 Minn. Laws c. 115 art. 11 s. 1",
+    "url": "https://www.revisor.mn.gov/laws/2026/0/Session+Law/Chapter/115/",
+    "quote": "advanced practice registered nurses licensed under this section who have at least three years of practice as an advanced practice registered nurse",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.specialtySetting2026",
+    "value": "Non primary care, non mental health NPs complete hours in a joint APRN and physician setting",
+    "cite": "2026 Minn. Laws c. 115 art. 11 s. 2",
+    "url": "https://www.revisor.mn.gov/laws/2026/0/Session+Law/Chapter/115/",
+    "quote": "who provides services other than primary care services or mental health services in their first 2,080 hours of practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.scope",
+    "value": "APRNs prescribe legend and controlled substances",
+    "cite": "Minn. Stat. 148.235 subd. 7a",
+    "url": "https://www.revisor.mn.gov/statutes/cite/148.235",
+    "quote": "prescribe, procure, sign for, record, administer, and dispense over-the-counter, legend, and controlled substances, including sample drugs",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.dea",
+    "value": "File DEA registrations with the Board",
+    "cite": "Minn. Stat. 148.235 subd. 7b",
+    "url": "https://www.revisor.mn.gov/statutes/cite/148.235",
+    "quote": "file any and all of the nurse's DEA registrations and numbers with the board.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompact",
+    "value": "NLC bill not enacted (introduced and referred only)",
+    "cite": "SF 2608 status, 94th Legislature",
+    "url": "https://www.revisor.mn.gov/bills/94/2025/0/SF/2608/",
+    "quote": "Introduction and first reading",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.borderStates",
+    "value": "Border state licence recognition instead of compact",
+    "cite": "Minn. Stat. 148.211 subd. 2a",
+    "url": "https://www.revisor.mn.gov/statutes/cite/148.211",
+    "quote": "A license to practice professional or practical nursing issued by Iowa, North Dakota, South Dakota, or Wisconsin (border state) to a resident",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.controlledSubstanceCe",
+    "value": "Former opioid CE requirement expired",
+    "cite": "Minn. Stat. 214.12 subd. 6",
+    "url": "https://www.revisor.mn.gov/statutes/cite/214.12",
+    "quote": "MS 2020 [Expired, 2019 c 63 art 2 s 10]",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalCycleYears",
+    "value": "Registration periods (RN and APRN) are 24 months after the initial 6 to 29 month period",
+    "cite": "Minn. R. 6310.2600 subp. 15",
+    "url": "https://www.revisor.mn.gov/rules/6310.2600/",
+    "quote": "Subsequent registration periods are 24-month periods.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalDeadline",
+    "value": "Last day of birth month in even years if born in an even year, odd years if born in an odd year; covers advanced practice, professional and practical nursing",
+    "cite": "Minn. R. 6310.2600 subp. 15",
+    "url": "https://www.revisor.mn.gov/rules/6310.2600/",
+    "quote": "ending on the last day of the licensee's month of birth in an even-numbered year if the year of birth was an even-numbered year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.collaborator2026Effective",
+    "value": "2026 c. 115 art. 11 states no effective date, so it took effect August 1, 2026 under the default rule",
+    "cite": "Minn. Stat. 645.02",
+    "url": "https://www.revisor.mn.gov/statutes/cite/645.02",
+    "quote": "takes effect on August 1 next following its final enactment, unless a different date is specified in the act.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "fetalAlcoholSyndrome",
+    "value": "Board of Nursing and Board of Medical Practice must require FAS education by rule for licensees with primary responsibility for diagnosing and treating it",
+    "cite": "Minn. Stat. 214.12 subd. 3",
+    "url": "https://www.revisor.mn.gov/statutes/cite/214.12",
+    "quote": "receive education on the subject of fetal alcohol syndrome and fetal alcohol effects",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "mn.gov Board of Medical Practice and Board of Nursing pages were not loaded (bot challenge reported by researcher; this verifier used only revisor.mn.gov statutes, rules and session laws).",
+  "Fetal alcohol syndrome education (214.12 subd. 3): implementing Board rule not loaded; hours, period and exact who-applies are unrecorded.",
+  "MN PA Licensure Compact (147A.35) is enacted; whether compact privileges are being issued yet was not confirmed.",
+  "No Minnesota state controlled substance registration for prescribers was found; 147A.185 and 148.235 require only DEA compliance and filing DEA numbers with the Board (absence of a requirement, not an affirmative statement).",
+  "Practice authority label 'full' for MN NPs is a classification derived from statute.",
+  "The exact date 2026 c. 115 was finally enacted was not read from the loaded page; the August 1, 2026 effective date assumes enactment during the 2026 session before August 1, which the chapter number and year support."
+ ],
+ "verification": {
+  "verifiedBy": "verifier-2026-10",
+  "verifiedAt": "2026-10-01",
+  "corrections": [
+   "PA: renewal deadline cite extended to 147A.29 subd. 4 (subd. 1 is the 2020 conversion clause; subd. 4 states subsequent cycles are annual from the birth month); added spinal injection and PA compact facts that were asserted in notes without a fact.",
+   "PA: noted CE window is a rolling 2 years before each annual renewal (147A.24 subd. 1).",
+   "NP: renewal cycle and deadline now confirmed in Minn. R. 6310.2600 subp. 15: 24 month registration periods ending the last day of the birth month in even or odd years matching birth year, and the definition covers APRN registration too (researcher had these as unconfirmed). The researcher's 'rn.renewalCycleYears' fact actually quoted the CE participation period and was renamed rn.ceParticipationPeriod.",
+   "NP: 2026 c. 115 art. 11 effective date resolved to August 1, 2026 via Minn. Stat. 645.02 (the article has no effective date clause); note that revisor's compiled 148.211 subd. 1c still shows the pre-2026 text.",
+   "PA and NP: added fact for 214.12 subd. 3 fetal alcohol syndrome education (statute directs both boards to require it by rule for licensees with primary responsibility; implementing rule not loaded, so no hours or period)."
+  ],
+  "sourcesLoaded": [
+   "https://www.revisor.mn.gov/statutes/cite/147A/full",
+   "https://www.revisor.mn.gov/statutes/cite/214.12",
+   "https://www.revisor.mn.gov/statutes/cite/148.211",
+   "https://www.revisor.mn.gov/statutes/cite/148.231",
+   "https://www.revisor.mn.gov/statutes/cite/148.235",
+   "https://www.revisor.mn.gov/statutes/cite/645.02",
+   "https://www.revisor.mn.gov/rules/6310.2600/",
+   "https://www.revisor.mn.gov/rules/6310.2800/",
+   "https://www.revisor.mn.gov/laws/2026/0/Session+Law/Chapter/115/",
+   "https://www.revisor.mn.gov/bills/94/2025/0/SF/2608/"
+  ]
+ }
+}

@@ -1,0 +1,230 @@
+{
+  "state": "OK",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Oklahoma State Board of Medical Licensure and Supervision (Physician Assistant Advisory Committee)",
+      "url": "https://www.okmedicalboard.org/physician_assistants"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "windowRule": "calendarYears",
+      "cycleYears": {
+        "value": 1,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 20,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "totalAccepted": {
+        "value": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1"
+        ],
+        "fact": "pa.ce.hoursPerCycle",
+        "reason": "Category I CME, as the app names it."
+      },
+      "totalUnverifiedAccepted": [
+        "AOA Category 1-A",
+        "AAFP Prescribed Credit",
+        "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+      ],
+      "notes": [
+        {
+          "text": "Newly licensed PAs report no CME until one year after licensure.",
+          "fact": "pa.ce.firstRenewalExemption"
+        },
+        {
+          "text": "A PA who has not met the hours by December 31 of the previous calendar year must obtain 40 Category I hours.",
+          "fact": "pa.ce.deficiencyRule"
+        }
+      ],
+      "window": {
+        "value": "preceding calendar year",
+        "fact": "pa.ce.calendarYear",
+        "preceding": true,
+        "reason": "The hours count over the calendar year before each March 31 renewal."
+      }
+    },
+    "topics": [
+      {
+        "topic": "Substance Use Disorders",
+        "hours": 1,
+        "label": "Category I CME on substance abuse, each calendar year",
+        "fact": "pa.ce.topicMandates.substanceAbuse"
+      },
+      {
+        "topic": "Pain Management",
+        "hours": 1,
+        "label": "Pain management, or opioid use or addiction, part of the annual hours",
+        "fact": "pa.ce.topicMandates.painOrOpioid"
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "practice agreement",
+        "conditional": true,
+        "text": "A practice agreement with each delegating physician is filed with the Medical Board within 10 business days of execution and of each change. A PA who has reported 6,240 or more postgraduate clinical hours may practice without one.",
+        "facts": [
+          "pa.practice.agreementRequiredBelowHours",
+          "pa.practice.agreementFilingAndRenewal",
+          "pa.practice.independentPracticeHours"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    },
+    "unverified": [
+      "Whether one opioid addiction hour meets both the rule's substance abuse hour and the statute's pain management or opioid hour"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Oklahoma Board of Nursing",
+      "url": "https://oklahoma.gov/nursing.html"
+    },
+    "rn": {
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears",
+          "reason": "The two-year RN licensure renewal."
+        },
+        "options": [
+          {
+            "text": "At least 520 hours of nursing work in a position requiring the license, in the two years before expiry",
+            "fact": "np.rn.competenceOptions"
+          },
+          {
+            "text": "At least 24 contact hours of continuing education applicable to nursing practice, in the two years before expiry",
+            "fact": "np.rn.ceHoursPerCycle"
+          },
+          {
+            "text": "Current certification in a nursing specialty area",
+            "fact": "np.rn.competenceOptions"
+          },
+          {
+            "text": "A Board-approved refresher course",
+            "fact": "np.rn.competenceOptions"
+          },
+          {
+            "text": "At least six academic semester credit hours of nursing coursework at your licensure level or higher",
+            "fact": "np.rn.competenceOptions"
+          }
+        ]
+      },
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears",
+          "reason": "The RN license renews every two years (the APRN renews with this two-year RN renewal)."
+        }
+      }
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN renewal requires current, maintained national certification; the hours below attach to prescriptive authority.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "np.aprn.renewalCycleYears"
+        },
+        "notes": [
+          {
+            "text": "The pharmacotherapeutics hours are not required when renewing within 24 months of initial prescriptive authority approval.",
+            "fact": "np.prescribing.firstRenewalExemption"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 15,
+          "measure": "pharmacology",
+          "label": "Pharmacotherapeutics in the two years before renewal, for supervised prescriptive authority",
+          "fact": "np.prescribing.pharmacologyCeForPrescribers",
+          "condition": {
+            "field": "Holds supervised prescriptive authority",
+            "question": "Do you hold supervised (not independent) prescriptive authority?",
+            "description": "Oklahoma pharmacotherapeutics hours for supervised prescriptive authority."
+          }
+        },
+        {
+          "topic": "Pain Management",
+          "hours": 2,
+          "label": "Pain management, or opioid use or addiction, each renewal",
+          "fact": "np.prescribing.controlledSubstanceCe",
+          "condition": {
+            "field": "Holds a DEA registration",
+            "question": "Do you hold a DEA registration?",
+            "description": "Oklahoma pain and opioid hours for DEA registered prescribers."
+          }
+        },
+        {
+          "topic": "General / No Specific Topic",
+          "measure": "total",
+          "hours": 40,
+          "acceptedCategories": [
+            "AMA PRA Category 1"
+          ],
+          "label": "Category I CME, 40 hours in the two years before renewal, for independent prescriptive authority (in place of the 15 pharmacotherapeutics hours)",
+          "condition": {
+            "field": "Holds independent prescriptive authority",
+            "question": "Do you hold independent prescriptive authority?",
+            "description": "Oklahoma APRNs with independent prescriptive authority renew it on 40 hours of Category I CME."
+          },
+          "facts": [
+            "np.prescribing.independentCeRule",
+            "np.prescribing.pharmacologyCeForPrescribers"
+          ]
+        }
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "supervision (prescriptive authority)",
+        "conditional": true,
+        "text": "Prescriptive authority requires a supervising physician on file with the Board of Nursing, a signed supervising physician statement at renewal, and changes filed within 30 days. After 6,240 supervised prescribing hours an APRN may apply for independent prescriptive authority and no longer needs a supervising physician.",
+        "facts": [
+          "np.practice.agreementFilingAndRenewal",
+          "np.practice.bonFilingOfChanges",
+          "np.practice.transitionToPracticeHours",
+          "np.practice.independentAgreement"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+ "state": "UT",
+ "facts": [
+  {
+   "field": "np.aprn.pre1992Alternative",
+   "profession": "np",
+   "value": "APRNs licensed before July 1, 1992 may instead complete 30 hours of CE and 400 hours of practice",
+   "cite": "Utah Admin. Code R156-31b-303(3)(b)(i)(B)",
+   "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules",
+   "quote": "(B)  if licensed before July 1, 1992, complete 30 hours of approved continuing education and 400 hours of practice",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "np.licenseCycle",
+   "profession": "np",
+   "value": "Two-year renewal cycle for licensees under the Nurse Practice Act",
+   "cite": "Utah Admin. Code R156-31b-303(1)",
+   "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules",
+   "quote": "the renewal date for the two-year renewal cycle for licensees under Title 58, Chapter 31b, Nurse Practice Act, is established in Section R156-1-308a",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "np.prescribing.csProration",
+   "profession": "np",
+   "value": "CS CE prorated from licensure for licensees not licensed the whole two years",
+   "cite": "Utah Admin. Code R156-37-402(3)(b)",
+   "url": "https://adminrules.utah.gov/public/rule/R156-37/Current%20Rules",
+   "quote": "prorate from date of licensure continuing education hours for licensees who have not been licensed for the entire two-year period",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "pa.prescribing.csProration",
+   "profession": "pa",
+   "value": "CS CE prorated from licensure for licensees not licensed the whole two years",
+   "cite": "Utah Admin. Code R156-37-402(3)(b)",
+   "url": "https://adminrules.utah.gov/public/rule/R156-37/Current%20Rules",
+   "quote": "prorate from date of licensure continuing education hours for licensees who have not been licensed for the entire two-year period",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "pa.practice.policies",
+   "profession": "pa",
+   "value": "Under 8,500 hours: practice-level written policies; the agreement may be with a PA over 8,500 hours in the same specialty; a specialty change restarts 4,000 hours of collaboration",
+   "cite": "Utah Code 58-70a-307(2), (3), (4)",
+   "url": "https://le.utah.gov/xcode/Title58/Chapter70A/58-70a-S307.html",
+   "quote": "practice under written policies and procedures established at a practice level ... more than 8,500 hours of practice experience in the same specialty",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  }
+ ]
+}

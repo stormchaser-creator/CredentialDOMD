@@ -5,9 +5,10 @@ import { downloadBlob } from "../../utils/credentialExport";
 import { invoicePdfFile, invoiceTextPdfFile } from "../../utils/invoicePdf";
 import { callDayStartHour } from "../../utils/billing";
 import { sentDay } from "../../utils/helpers";
+import { archiveSenderFields } from "../../utils/invoiceArgs";
 import { archiveSections, documentDetail, documentLabel } from "../../utils/readOnlyArchive.js";
 import { actionButtonStyle, inlineLinkTap } from "../shared/actionButton.js";
-import { credentialOnlyMembership, renewalPaymentFailed } from "../../utils/limitedLaunchAccess.js";
+import { credentialOnlyMembership, lastAnswer, renewalPaymentFailed } from "../../utils/limitedLaunchAccess.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 
 /**
@@ -16,7 +17,7 @@ import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
  * a membership check in progress keeps the normal screens (ticket fe321c16).
  */
 export default function ReadOnlyRecords({ scope }) {
-  const { data, theme: T, navigate, isDesktop, limitedLaunch, manage } = useApp();
+  const { data, theme: T, navigate, isDesktop, limitedLaunch, manage, loadedFrom, deviceCopyBehind } = useApp();
   const [message, setMessage] = useState(null);
   // Every array in data used to be listed, Protected Identity included: its
   // legal names and notes printed in full, and "Download saved records"
@@ -33,6 +34,19 @@ export default function ReadOnlyRecords({ scope }) {
   const trialEnded = credentialOnly && access.practiceTrial?.state === "expired" && access.practiceTrial.endsAt
     ? new Date(access.practiceTrial.endsAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : null;
   const small = { ...button(false), minHeight: 40, padding: "8px 14px" };
+  // No membership answer at all, this session or remembered (a weak signal at
+  // launch, offline, a first check not back yet): the scope is read-only
+  // because nothing can be confirmed, not because a membership ended. The
+  // notice above says why (IdentityWaitingNotice, OfflineBanner,
+  // LaunchAccessNotice); a sentence here about membership expiry contradicted it.
+  const answered = lastAnswer(access, scope, limitedLaunch?.remembered) !== null;
+  // The records are this device's copy (the account could not be read): an
+  // empty section here is only empty on this device, and a change made just
+  // before the app closed may not have reached the copy (deviceCopyBehind).
+  const deviceCopy = loadedFrom === "local";
+  const emptyLine = !deviceCopy ? "No saved records in this section."
+    : deviceCopyBehind ? "Your latest changes may not be in this device's copy yet. Your records show here once your account connects."
+      : "This device has no saved copy of records in this section. Your records show here once your account connects.";
   const exportRecords = () => {
     downloadBlob(new Blob([JSON.stringify(saved, null, 2)], { type: "application/json" }), `credentialdomd-${scope}-records.json`);
   };
@@ -51,7 +65,7 @@ export default function ReadOnlyRecords({ scope }) {
       const ledger = (record.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
       const paid = ledger > 0 ? ledger : record.paidAt ? total : 0;
       const args = {
-        number: record.number, physician: data.settings.name || "Physician", npi: data.settings.npi, email: data.settings.email,
+        number: record.number, ...archiveSenderFields(data.settings || {}), npi: data.settings.npi, email: data.settings.email,
         facility: contract.facility, agency: contract.agency, location: contract.location, billTo: contract.billTo,
         periodStart: record.periodStart, periodEnd: record.periodEnd, terms: record.terms, lines: record.lines,
         totalMin: record.totalMinutes, total, paid, balance: Math.max(0, total - paid), issuedDate: sentDay(record.sentAt) || undefined,
@@ -83,7 +97,7 @@ export default function ReadOnlyRecords({ scope }) {
       </p>
       <button type="button" style={button(false)} onClick={() => navigate("more", "settings")}>Profile &amp; settings</button>
     </div>
-      : <p style={{ color: T.textMuted, lineHeight: 1.6, margin: "0 0 12px", fontSize: 14 }}>These records are read-only. You can view and download them. Membership expiry does not delete your data.</p>}
+      : <p style={{ color: T.textMuted, lineHeight: 1.6, margin: "0 0 12px", fontSize: 14 }}>These records are read-only. You can view and download them.{answered && " Membership expiry does not delete your data."}</p>}
     {renewalPaymentFailed(limitedLaunch?.access) && <div role="status" style={{ margin: "0 0 12px" }}>
       <p style={{ color: T.text, lineHeight: 1.6, margin: "0 0 8px", fontSize: 14 }}>{MEMBERSHIP_COPY.renewalPaymentFailed}</p>
       <button type="button" style={button(true)} onClick={() => manage?.()}>Update payment method</button>
@@ -93,7 +107,7 @@ export default function ReadOnlyRecords({ scope }) {
       <button type="button" style={button(false)} onClick={() => navigate("more", "export")}>All export options</button>
     </div>
     {message && <p role="status" style={{ color: T.danger || T.text, fontSize: 14, lineHeight: 1.5 }}>{message}</p>}
-    {!sections.length && <p style={{ color: T.textMuted }}>No saved records in this section.</p>}
+    {!sections.length && <p style={{ color: T.textMuted }}>{emptyLine}</p>}
     {sections.map(section => <section key={section.key} style={{ marginTop: 22 }}>
       <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: T.textMuted, margin: "0 0 8px" }}>{section.label} ({section.records.length || section.files.length})</h3>
       {section.records.map((entry, index) => <details key={entry.record.id || index} style={card}>

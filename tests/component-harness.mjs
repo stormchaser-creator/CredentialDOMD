@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import vm from 'node:vm';
+import { settleOutcome } from './helpers/settle-outcome.mjs';
 
 const same = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 
@@ -42,7 +43,9 @@ class FakeFileReader {
   }
 }
 
-export const settle = async (turns = 60) => { for (let i = 0; i < turns; i++) await new Promise(r => setImmediate(r)); };
+// Waits for the outcome (a file read, a short timer), bounded, not a fixed
+// number of turns: tests/helpers/settle-outcome.mjs.
+export const settle = (turns = 60) => settleOutcome(turns);
 
 export async function mountComponent(path, { modules = {}, app = {}, props = {}, exportName = 'default', globals = {} } = {}) {
   const source = await readFile(new URL(`../${path}`, import.meta.url), 'utf8');

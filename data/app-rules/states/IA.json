@@ -1,0 +1,245 @@
+{
+  "state": "IA",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Iowa Board of Physician Associates (Department of Inspections, Appeals, and Licensing)",
+      "url": "https://dial.iowa.gov/licenses/health-professions/physician-associates"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "pa.licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 100,
+        "fact": "pa.ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 50,
+        "label": "Category I",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1",
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit"
+        ],
+        "unverifiedAccepted": [
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ],
+        "facts": [
+          "pa.ce.categoryRules",
+          "pa.ce.categoryIProviders"
+        ]
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "pa.ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "No CE is required for the first renewal after initial licensure.",
+          "fact": "pa.ce.firstRenewalExempt"
+        },
+        {
+          "text": "Hours over the requirement may carry to the next period: up to 50 percent of the required hours, at most 50.",
+          "fact": "pa.ce.carryover"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 2,
+        "label": "CDC guideline for prescribing opioids for chronic pain, part of the 100 hours",
+        "facts": [
+          "pa.ce.topicMandates.opioid",
+          "pa.ce.hoursPerCycle"
+        ],
+        "condition": {
+          "field": "Prescribed opioids this renewal cycle",
+          "question": "Did you prescribe opioids to a patient during this renewal cycle?",
+          "description": "Iowa's opioid guideline hours apply to clinicians who prescribed opioids."
+        }
+      },
+      {
+        "topic": "Child Abuse Recognition",
+        "hours": 0,
+        "label": "Child abuse identification and reporting training within the previous three years, attested at renewal",
+        "period": {
+          "years": 3
+        },
+        "fact": "pa.ce.topicMandates.mandatoryReporter",
+        "condition": {
+          "field": "Regularly treats children in Iowa",
+          "question": "Do you regularly examine, attend, counsel or treat children in Iowa?",
+          "description": "Iowa mandatory reporter training for licensees who regularly treat children."
+        }
+      },
+      {
+        "topic": "Dependent Adult Abuse",
+        "hours": 0,
+        "label": "Dependent adult abuse identification and reporting training within the previous three years, attested at renewal",
+        "period": {
+          "years": 3
+        },
+        "fact": "pa.ce.topicMandates.mandatoryReporter",
+        "condition": {
+          "field": "Regularly treats adults in Iowa",
+          "question": "Do you regularly examine, attend, counsel or treat adults in Iowa?",
+          "description": "Iowa mandatory reporter training for licensees who regularly treat adults."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "Collaboration is determined at the practice level and no agreement is filed. A PA in an independent practice arrangement with under 2 years of prior supervised or collaborative practice is supervised by a physician and names that physician to the board on its forms before practicing.",
+        "facts": [
+          "pa.practice.agreementType",
+          "pa.practice.supervisionWhenRequired",
+          "pa.practice.agreementFilingAndRenewal"
+        ]
+      }
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "pa.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Iowa Board of Nursing (Department of Inspections, Appeals, and Licensing)",
+      "url": "https://dial.iowa.gov/licenses/health-professions/nursing-professional-midwifery"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 3,
+          "fact": "np.rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "np.rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 3,
+          "fact": "np.rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 36,
+          "fact": "np.rn.ceHoursPerCycle"
+        },
+        "certificationInLieu": {
+          "bodies": [
+            "AANPCB",
+            "ANCC",
+            "PNCB",
+            "NCC",
+            "AACN"
+          ],
+          "covers": [
+            "total"
+          ],
+          "fact": "np.rn.nationalCertificationCounts",
+          "bodiesVerified": false,
+          "note": "The rule credits any current national certification related to nursing practice as 36 contact hours; it names no certifying bodies."
+        },
+        "notes": [
+          {
+            "text": "A first license runs 24 to 36 months before it moves to the three-year cycle; the hours count over that first license period.",
+            "fact": "np.rn.initialPeriod"
+          }
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Child Abuse Recognition",
+          "hours": 0,
+          "label": "Child abuse identification and reporting training within the previous three years, attested at renewal",
+          "period": {
+            "years": 3
+          },
+          "fact": "np.rn.topicMandates.mandatoryReporter",
+          "condition": {
+            "field": "Regularly treats children in Iowa",
+            "question": "Do you regularly examine, attend, counsel or treat children in Iowa?",
+            "description": "Iowa mandatory reporter training for licensees who regularly treat children."
+          }
+        },
+        {
+          "topic": "Dependent Adult Abuse",
+          "hours": 0,
+          "label": "Dependent adult abuse identification and reporting training within the previous three years, attested at renewal",
+          "period": {
+            "years": 3
+          },
+          "periodReason": "The rule asks for the training within the previous three years, the same as the child abuse training.",
+          "fact": "np.rn.topicMandates.mandatoryReporter",
+          "condition": {
+            "field": "Regularly treats adults in Iowa",
+            "question": "Do you regularly examine, attend, counsel or treat adults in Iowa?",
+            "description": "Iowa mandatory reporter training for licensees who regularly treat adults."
+          }
+        }
+      ]
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "An ARNP keeps current national certification at all times; the contact hours are the RN license's.",
+        "cycleYears": {
+          "value": 3,
+          "facts": [
+            "np.aprn.renewal",
+            "np.rn.renewalCycleYears"
+          ],
+          "reason": "The ARNP license expires on the same date as the three-year RN license."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "np.aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 2,
+          "label": "CDC guideline for prescribing opioids for chronic pain",
+          "fact": "np.aprn.topicMandates.opioid",
+          "condition": {
+            "field": "Prescribed opioids this renewal cycle",
+            "question": "Did you prescribe opioids to a patient during this renewal cycle?",
+            "description": "Iowa's opioid guideline hours apply to clinicians who prescribed opioids."
+          }
+        }
+      ]
+    },
+    "prescribing": {
+      "stateCsRegistration": {
+        "value": true,
+        "fact": "np.prescribing.stateCsRegistrationRequired"
+      }
+    }
+  }
+}

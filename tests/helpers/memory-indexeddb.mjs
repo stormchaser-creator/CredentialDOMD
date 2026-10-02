@@ -6,7 +6,12 @@
 // `failOpens` for the next n), a connection lost after it opened (`loseConnections`:
 // every open connection's transactions then fail with UnknownError; and
 // `closeConnections`: a closing one throws InvalidStateError), and writes refused by the store
-// (`failWrites`). Synthetic data only.
+// (`failWrites`), and a page torn down (`unloadPage`: an open it asked for,
+// and every transaction on a connection it opened, that has not run yet
+// never runs and reports nothing, as WebKit and Chromium drop an IndexedDB
+// write begun in pagehide; the next page's opens and transactions run as
+// usual).
+// Synthetic data only.
 
 function quotaError() {
   const error = new Error('The quota has been exceeded.');
@@ -33,6 +38,9 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
     readHook: null,
     opened: 0,
     writes: [],
+    pageEpoch: 0,
+    /** The page is torn down: what it began and did not finish is dropped. */
+    unloadPage() { factory.pageEpoch += 1; },
     /** Bytes held by every store, counted like localStorage (UTF-16). */
     usedBytes() {
       let n = 0;
@@ -52,7 +60,9 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
     open(name, version = 1) {
       const req = { result: null, error: null, onsuccess: null, onerror: null, onupgradeneeded: null };
       factory.opened += 1;
+      const openEpoch = factory.pageEpoch;
       setImmediate(() => {
+        if (openEpoch !== factory.pageEpoch) return;
         if (factory.failOpens > 0) {
           factory.failOpens -= 1;
           req.error = new Error('InvalidStateError');
@@ -81,6 +91,7 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
 
   function makeDb(rec) {
     const db = {
+      epoch: factory.pageEpoch,
       closed: false,
       lost: false,
       objectStoreNames: { contains: n => rec.stores.has(n) },
@@ -112,6 +123,7 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
           },
         };
         chain = chain.then(later).then(() => {
+          if (db.epoch !== factory.pageEpoch) return;
           const store = rec.stores.get(storeName);
           const snapshot = new Map(store);
           if (db.lost) {

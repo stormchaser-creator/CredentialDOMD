@@ -1,0 +1,546 @@
+{
+ "state": "GA",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Georgia Composite Medical Board",
+   "url": "https://medicalboard.georgia.gov"
+  },
+  "licence": {
+   "title": "Physician Assistant licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Last day of the licensee's birth month, biennially (late renewal allowed for 3 months, then administratively revoked)"
+  },
+  "ce": {
+   "hoursPerCycle": 40,
+   "categoryRules": "Board approved = AMA Category 1, AOA Category 1, AAAA Category 1, AAFP Category I, or AAPA Category 1. At least 10 hours directly related to the specialty of the Board approved primary supervising physician. First renewal: 40 hours not required (prescriber 3 hours still required).",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Specialty of primary supervising physician",
+     "hours": 10,
+     "period": "every cycle",
+     "appliesTo": "all PAs (within the 40)"
+    },
+    {
+     "topic": "Practice specific pharmaceuticals",
+     "hours": 3,
+     "period": "every cycle",
+     "appliesTo": "PAs authorized to issue prescription drug orders (within the 40; required even at first renewal; not waivable)"
+    },
+    {
+     "topic": "Appropriate ordering and use of hydrocodone, oxycodone, and compounds",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "PAs authorized in their job description to order hydrocodone/oxycodone in emergencies (additional hour)"
+    },
+    {
+     "topic": "Recognition and documentation of causes of death; execution of death certificates",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "PAs delegated authority to sign death certificates (additional hour)"
+    }
+   ],
+   "controlledSubstanceCe": "No general controlled substance course for PAs found; 1 hour hydrocodone/oxycodone every renewal only for PAs delegated that Schedule II emergency authority."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementFilingAndRenewal": "Job description signed by the PA and primary supervising physician must be on file with and approved by the Board (360-5-.04(1),(5)); renewal for active practice requires a Board approved primary supervising physician and approved job description (360-5-.06(1)(c)). Under O.C.G.A. 43-34-103(c)(4), per the Board's 2024 statement, a new job description that attaches a substantially similar approved one is 'automatically deemed approved' on submission but still reviewed; all job descriptions must still be submitted. New delegations (hydrocodone/oxycodone in emergencies, death certificates) require a new job description (Form F).",
+   "notes": "Physician limit is the combined equivalent of eight PA job descriptions and APRN protocol agreements (2024 law per board statement). Rules 360-5-.07 and 360-5-.12 amended effective May 25, 2026."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": null,
+   "separateAuthorityRegistration": "Prescriptive authority is delegated through the Board approved job description; PAs prescribing controlled substances must hold DEA registration and register with the Georgia PDMP within 30 days of obtaining a DEA number.",
+   "ceForPrescribers": "3 hours practice specific pharmaceuticals every renewal; plus 1 hour hydrocodone/oxycodone if so delegated"
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "birth month, biennially",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.06(1)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.06",
+    "quote": "All physician assistant licenses must be renewed biennially on the last day of the month in which the licensee's birthday falls.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 40,
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.07(1)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.07",
+    "quote": "shall complete Board approved continuing medical education of not less than forty (40) hours biennially.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.specialtyHours",
+    "value": 10,
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.07(1)(a)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.07",
+    "quote": "At least ten (10) hours shall be directly related to the specialty of the Board approved primary supervising physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.prescriberPharmaceuticals",
+    "value": 3,
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.07(1)(b)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.07",
+    "quote": "to complete a minimum of three (3) hours in practice specific pharmaceuticals in which the physician assistant has prescription order privileges.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hydrocodoneOxycodone",
+    "value": "1 hour every renewal",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.07(1)(c)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.07",
+    "quote": "one (1) additional hour of continuing medical education every renewal period in the appropriate ordering and use of hydrocodone, oxycodone",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.deathCertificates",
+    "value": "1 hour every renewal",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.07(1)(d)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.07",
+    "quote": "Physician assistants who are authorized to sign death certificates shall be required to complete one (1) additional hour of continuing medical education every renewal period",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.firstRenewal",
+    "value": "40 hours waived at first renewal; prescriber 3 hours still due",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.07(1)(e)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.07",
+    "quote": "shall not be required to complete the 40 hours of continuing education during their first renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "AMA/AOA/AAAA/AAFP/AAPA Category 1",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.07(2)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.07",
+    "quote": "and the A.A.P.A. (American Academy of Physician Assistants) Category 1 credit as meeting its requirement for Board approval.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": false,
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.06(1) (renewal requirements list has no NCCPA item)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.06",
+    "quote": "Complete the renewal application; (b) Complete the Board approved continuing education requirements",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreement",
+    "value": "Board approved job description + primary supervising physician",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.06(1)(c)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.06",
+    "quote": "If intending to continue active practice have a Board approved primary supervising physician and approved job description",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.jobDescription",
+    "value": "job description on file with Board",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.04(5)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.04",
+    "quote": "A physician assistant may only perform those tasks which are included in his/her job description currently on file with and approved by the Board",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.dea_pdmp",
+    "value": "DEA + Georgia PDMP within 30 days",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.12(3)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.12",
+    "quote": "must register with the Georgia PDMP (prescription drug monitoring program) within 30 days of obtaining a DEA registration number.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.scheduleII",
+    "value": "hydrocodone/oxycodone in emergencies only, if in job description",
+    "cite": "GCMB statement on 2024 PA law changes (HB 557)",
+    "url": "https://medicalboard.georgia.gov/document/document/gcmb-statement-pa-law-changes-2024pdf/download",
+    "quote": "Issuance of prescription drug orders for hydrocodone, oxycodone, or compounds thereof in emergency situations",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.deemedApproved",
+    "value": "only substantially similar job descriptions are deemed approved on submission",
+    "cite": "GCMB statement on 2024 PA law changes (O.C.G.A. 43-34-103(c)(4))",
+    "url": "https://medicalboard.georgia.gov/document/document/gcmb-statement-pa-law-changes-2024pdf/download",
+    "quote": "the new submission will be required to contain a copy of the substantially similar approved job description",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nonWaivablePrescriberHours",
+    "value": "hardship waiver cannot cover (b),(c),(d) hours",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.07(1)(g)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.07",
+    "quote": "Except for the continuing education hours listed in paragraphs (b), (c), and (d), of this subsection, the Board is authorized to waive",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.scheduleIIRule",
+    "value": "Schedule III-V, plus hydrocodone/oxycodone in emergencies if in job description",
+    "cite": "Ga. Comp. R. & Regs. r. 360-5-.12(1)",
+    "url": "https://rules.sos.ga.gov/gac/360-5-.12",
+    "quote": "or hydrocodone, oxycodone, or compounds thereof in emergency situations pursuant to the requirements set forth in O.C.G.A. § 43-34-103 (e.1)(1)(B)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.physicianOnlyMandates",
+    "value": "3 hour one-time controlled substance CME and 2 hour sexual misconduct training apply to physicians, not PAs",
+    "cite": "Ga. Comp. R. & Regs. r. 360-15-.01(4)-(5) (Requirements for Physicians)",
+    "url": "https://rules.sos.ga.gov/gac/360-15-.01",
+    "quote": "every physician not subject to Rule 360-15-.01(3) who maintains an active DEA certificate and prescribes controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Georgia Board of Nursing",
+   "url": "https://sos.ga.gov/page/nursing-renewal-information"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": 30,
+   "ceNote": "30 CE hours is one of five continuing competency options; maintained national certification, an accredited academic program, employer-verified competency with 500 practice hours, or other board-approved activity also satisfies it.",
+   "nlcCompactMember": true,
+   "renewalDeadline": "January 31, biennially; even or odd year depends on the licence (RNs licensed on or after June 1, 2004 expire in the parity of the issue year; earlier licences by licence number parity). Rules 295-2-.05 and 295-2-.12. APRN authorization renews with the RN licence period.",
+   "topicMandates": [],
+   "firstRenewalNote": "Competency requirement deferred to the second renewal if the initial licence period is six months or less (Rule 410-13-.01(4))."
+  },
+  "aprn": {
+   "title": "APRN (authorization to practice as a nurse practitioner)",
+   "separateLicenceOrCertificate": "separate APRN authorization (two renewal applications: RN then APRN)",
+   "renewalCycleYears": 2,
+   "ceHoursPerCycle": null,
+   "ceNote": "No APRN-specific hour count in Board of Nursing rules; APRN must renew the RN licence (30 hour or alternative competency option) and maintain national certification.",
+   "pharmacologyHoursPerCycle": null,
+   "pharmacologyNote": "Delegating physician must ensure the APRN with delegated prescriptive authority receives pharmacology training at least annually (no hour number set).",
+   "nationalCertificationRequired": true,
+   "topicMandates": [
+    {
+     "topic": "Pharmacology training appropriate to the delegating physician's scope",
+     "hours": null,
+     "period": "every 1 year",
+     "appliesTo": "APRNs with delegated prescriptive authority (ensured and documented by the delegating physician)"
+    },
+    {
+     "topic": "Appropriate ordering and use of hydrocodone, oxycodone, and compounds",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "APRNs delegated the emergency hydrocodone/oxycodone authority under O.C.G.A. 43-34-25(d.1)"
+    },
+    {
+     "topic": "Recognition and documentation of causes of death; death certificates",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "APRNs delegated authority to sign death certificates"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "No separate prescriptive licence; prescriptive authority is delegated in the nurse protocol agreement filed with the Composite Medical Board.",
+   "pharmacologyCeForPrescribers": "annual pharmacology training (hours not specified)",
+   "controlledSubstanceCe": "1 hour biennially hydrocodone/oxycodone only if delegated that authority; Schedule I and II otherwise excluded",
+   "stateCsRegistrationRequired": null
+  },
+  "practice": {
+   "authority": "restricted",
+   "agreementType": "nurse protocol agreement with a delegating physician",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "Delegating physician files the nurse protocol agreement with a Board form and fee with the Georgia Composite Medical Board, plus Board of Nursing verification (360-32-.03(1)-(2)); the agreement must be received within 30 days of execution (360-32-.03(6)); amendments filed within 30 days of execution (360-32-.02(1)(c), 360-32-.03(5)); reviewed, revised or updated annually (360-32-.02(11)); APRN DEA number provided to the Board within 30 days of issuance (360-32-.02(1)(a)1.); physician notifies the Board within 10 working days of termination (360-32-.05(5)); APRN notifies the Board within 7 days of the delegating physician's death or departure (360-32-.05(6)); annual onsite observation and quarterly record review by the delegating physician unless the 43-34-25(g.1) exception applies (360-32-.05(2))."
+  },
+  "facts": [
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 30,
+    "cite": "Ga. Comp. R. & Regs. r. 410-13-.01(1)(a)",
+    "url": "https://rules.sos.ga.gov/gac/410-13-.01",
+    "quote": "Completion of thirty (30) continuing education hours by a Board approved provider;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceAlternative",
+    "value": "maintained national certification satisfies RN competency",
+    "cite": "Ga. Comp. R. & Regs. r. 410-13-.01(1)(b)",
+    "url": "https://rules.sos.ga.gov/gac/410-13-.01",
+    "quote": "Maintenance of certification or recertification by a national certifying body recognized by the Board;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "January 31",
+    "cite": "Ga. Comp. R. & Regs. r. 410-5-.01(1)",
+    "url": "https://rules.sos.ga.gov/gac/410-5-.01",
+    "quote": "Licenses shall expire on January 31 of even or odd years according to Joint Secretary, Professional Licensing Boards Rules",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalCycle2026",
+    "value": "renewals due January 31, 2026",
+    "cite": "Board of Nursing renewal page",
+    "url": "https://sos.ga.gov/page/nursing-renewal-information",
+    "quote": "RN, APRN, and GAA renewals opened November 1, 2025 and must be completed by January 31, 2026.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.aprn.separateRenewal",
+    "value": "RN then APRN, two applications",
+    "cite": "Board of Nursing renewal page",
+    "url": "https://sos.ga.gov/page/nursing-renewal-information",
+    "quote": "you must renew your RN license before you may renew your APRN license. You need to submit two renewal applications",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.rn.nlcCompactMember",
+    "value": true,
+    "cite": "Board of Nursing renewal page",
+    "url": "https://sos.ga.gov/page/nursing-renewal-information",
+    "quote": "If you hold a multistate license in Georgia and Georgia is your PSOR, please renew your Georgia license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "loadedVia": "browser (curl blocked by Cloudflare)"
+   },
+   {
+    "field": "np.aprn.renewalRequirements",
+    "value": "renew RN, application, attestation, fee",
+    "cite": "Ga. Comp. R. & Regs. r. 410-11-.03(6)(b)",
+    "url": "https://rules.sos.ga.gov/gac/410-11-.03",
+    "quote": "Renew licensure as a registered professional nurse in Georgia; 2. Submit a completed renewal application for advanced nursing practice",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "Ga. Comp. R. & Regs. r. 410-11-.10",
+    "url": "https://rules.sos.ga.gov/gac/410-11-.10",
+    "quote": "or who fails to maintain national certification and/or continuing competency requirements.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.protocolAnnualReview",
+    "value": "annual review",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.02(11)",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.02",
+    "quote": "A nurse protocol agreement between a physician and an advanced practice registered nurse shall be reviewed, revised, or updated annually",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.protocolAmendments",
+    "value": "amendments filed within 30 days",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.02(1)(c)",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.02",
+    "quote": "Any amendments made to the protocol agreement shall be filed with the Board for review within 30 days of execution",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.protocolFiling",
+    "value": "delegating physician files with Composite Medical Board",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.03(1)",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.03",
+    "quote": "The delegating physician shall file the nurse protocol agreement and a Board approved form with the Board for review",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.pharmacologyAnnual",
+    "value": "annual pharmacology training",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.05(3)(a)1.",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.05",
+    "quote": "receives pharmacology training appropriate to the delegating physician's scope of practice at least annually.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.hydrocodoneCe",
+    "value": "1 hour biennially",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.05(3)(a)2.",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.05",
+    "quote": "completes one hour of continuing education biennially in the appropriate ordering and use of hydrocodone, oxycodone, and compounds thereof.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.scheduleII",
+    "value": "no Schedule I or II except 43-34-25(d.1)",
+    "cite": "Ga. Comp. R. & Regs. r. 410-11-.14(2)(e)1.",
+    "url": "https://rules.sos.ga.gov/gac/410-11-.14",
+    "quote": "No prescription drug orders submitted by an APRN for Schedule I or II controlled substances;",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Rule 410-11-.14 (eff. 2015) contains no hydrocodone exception; the 2024 emergency hydrocodone/oxycodone delegation (O.C.G.A. 43-34-25(d.1)) is reflected in Medical Board Rule 360-32-.05(3)(a)2., not in this Board of Nursing rule."
+   },
+   {
+    "field": "np.prescribing.deathCertificateCe",
+    "value": "1 hour biennially if delegated death certificates",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.05(3)(a)3.",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.05",
+    "quote": "completes one hour of continuing education biennially regarding the recognition and documentation of the causes of death",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalYearParity",
+    "value": "January 31 of even years for some RNs, odd years for others",
+    "cite": "Ga. Comp. R. & Regs. r. 295-2-.05(b) and 295-2-.12(b)",
+    "url": "https://rules.sos.ga.gov/gac/295-2-.05",
+    "quote": "Registered Professional Nurses whose licenses were issued on or after June 1, 2004 of an even numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.renewalYearOdd",
+    "value": "odd-year cohort exists",
+    "cite": "Ga. Comp. R. & Regs. r. 295-2-.12(b)",
+    "url": "https://rules.sos.ga.gov/gac/295-2-.12",
+    "quote": "Registered Professional Nurses whose licenses were issued on or after June 1, 2004 of an odd numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalCoincides",
+    "value": "NP authorization renewal coincides with RN licence period",
+    "cite": "Ga. Comp. R. & Regs. r. 410-11-.03(6)(a)",
+    "url": "https://rules.sos.ga.gov/gac/410-11-.03",
+    "quote": "The date for renewal of Board authorization as a nurse practitioner will coincide with the renewal license period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.firstRenewal",
+    "value": "deferred if initial period six months or less",
+    "cite": "Ga. Comp. R. & Regs. r. 410-13-.01(4)",
+    "url": "https://rules.sos.ga.gov/gac/410-13-.01",
+    "quote": "to meet the requirements of this subsection until the time of the second renewal if the applicant's initial license period is six months or less",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "quoteTrimmed": true
+   },
+   {
+    "field": "np.practice.protocolReceivedWithin30Days",
+    "value": "protocol received by Board within 30 days of execution",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.03(6)",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.03",
+    "quote": "Nurse protocol agreements must be received by the Board within 30 days from the date of execution of the agreement.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.terminationNotice",
+    "value": "10 working days",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.05(5)",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.05",
+    "quote": "A delegating physician shall notify the Board within ten (10) working days of the date of termination of a nurse protocol agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.dea30Days",
+    "value": "APRN DEA number to Board within 30 days",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.02(1)(a)1.",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.02",
+    "quote": "The delegating physician must provide the APRN's DEA number to the Board within 30 days of issuance.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.oversight",
+    "value": "annual onsite observation; quarterly record review",
+    "cite": "Ga. Comp. R. & Regs. r. 360-32-.05(2)",
+    "url": "https://rules.sos.ga.gov/gac/360-32-.05",
+    "quote": "direct onsite observation of the practice of the APRN, conducted at least once annually",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "State controlled substance registration (PA and APRN): no Georgia practitioner CS registration found; PDMP registration within 30 days of DEA is confirmed for PAs (360-5-.12(3)) but not checked for APRNs. Left null.",
+  "Which January 31 (even or odd year) applies to a given RN depends on the licence; the app should take the expiry date from the licence rather than assume a year.",
+  "APRN national certification at renewal: 410-11-.03(6)(b) asks only for an attestation; maintaining certification is confirmed via 410-11-.10 discipline language, not a renewal submission.",
+  "Physician supervision limits: Board of Nursing Rule 410-11-.14(3) still says four APRNs per delegating physician; Medical Board Rule 360-32-.02(7)(b) allows a combined equivalent of eight at accredited (g.1) locations; the Board's 2024 statement describes a general combined eight under 43-34-103(b)(1). Statute text not loaded.",
+  "O.C.G.A. 43-34-103 and 43-34-25 statute text were not loaded; facts rely on current rules (current through Sept 2, 2026) and the Medical Board statement.",
+  "GA PA: no NCCPA-in-lieu provision exists in Rule 360-5-.07; acceptsNccpaCertificationInLieu=false is an inference from the rule text.",
+  "Federal DEA MATE 8 hour one-time training is federal, not Georgia law; not loaded in this verification."
+ ],
+ "verification": {
+  "by": "verifier-2026-10",
+  "date": "2026-10-01",
+  "corrections": [
+   "URLs: chapter-level rule links (410-13, 410-5, 410-11, 360-32) replaced with the specific rule pages that were loaded (rules.sos.ga.gov loads rule text by session; plain curl returns 403).",
+   "Citations sharpened: pharmacology training 360-32-.05(3)(a)1., hydrocodone CE (3)(a)2., amendments 360-32-.02(1)(c), annual review 360-32-.02(11).",
+   "NP death-certificate CE mandate had no supporting fact; added from 360-32-.05(3)(a)3.",
+   "np.rn.renewalDeadline: researcher presumed the next deadline is January 31, 2028 for everyone. Joint Secretary Rules 295-2-.05 and 295-2-.12 split RNs into even-year and odd-year January 31 cohorts by issue year (or licence number before June 2004). The board page's 'January 31, 2026' was one season, not a universal cycle. NP authorization coincides with the RN period (410-11-.03(6)(a)).",
+   "NP practice: researcher's DEA-within-30-days claim had no fact; now sourced (360-32-.02(1)(a)1.). Added the 30 day receipt deadline (360-32-.03(6)), 10 working day termination notice and 7 day death/departure notice (360-32-.05(5)-(6)), annual onsite observation and quarterly record review (360-32-.05(2)).",
+   "PA practice: researcher wrote that a job description is 'now deemed approved on filing'. The Board statement limits 'automatically deemed approved' to a new submission that attaches a substantially similar approved job description; all job descriptions must still be submitted and reviewed.",
+   "Checked missed mandates: the one-time 3 hour controlled substance CME and 2 hour professional boundaries training in Rule 360-15-.01 are physician-only (rule title 'Requirements for Physicians'); none found for PAs or APRNs in 360-5, 360-32 or 410 rules."
+  ]
+ }
+}

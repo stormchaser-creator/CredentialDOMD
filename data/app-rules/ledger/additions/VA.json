@@ -1,0 +1,49 @@
+{
+ "state": "VA",
+ "facts": [
+  {
+   "field": "rn.ce.otherOptions",
+   "profession": "np",
+   "value": "Specialty certification, 3 academic credits, refresher, evidence-based project, publication, teaching a course, or teaching CE up to 30 hours",
+   "cite": "18VAC90-19-160(A)(1) to (7)",
+   "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section160/",
+   "quote": "Current specialty certification by a national certifying organization ... a minimum of three credit hours of post-licensure academic education ... A board-approved refresher course",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "rn.ce.firstRenewalExempt",
+   "profession": "np",
+   "value": "Exempt at the first renewal after initial licensure by examination or endorsement",
+   "cite": "18VAC90-19-160(D)",
+   "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section160/",
+   "quote": "A licensee is exempt from the continued competency requirement for the first renewal following initial licensure by examination or endorsement",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "rn.ce.otherOptions.teaching",
+   "profession": "np",
+   "value": "Evidence-based project or study; publication; teaching a course of three semester hours; teaching CE up to 30 contact hours",
+   "cite": "18VAC90-19-160(A)(4) to (7)",
+   "url": "https://law.lis.virginia.gov/admincode/title18/agency90/chapter19/section160/",
+   "quote": "evidence-based practice project or research study ... author or co-author ... three semester hours of college credit ... up to 30 contact hours",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  },
+  {
+   "field": "np.board.url",
+   "profession": "np",
+   "value": "Virginia Board of Nursing",
+   "cite": "Virginia Board of Nursing home page (Department of Health Professions)",
+   "url": "https://www.dhp.virginia.gov/Boards/Nursing/",
+   "quote": "Virginia Board of Nursing",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

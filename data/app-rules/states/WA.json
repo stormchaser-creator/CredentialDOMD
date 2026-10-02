@@ -1,0 +1,264 @@
+{
+  "state": "WA",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Washington Medical Commission",
+      "url": "https://wmc.wa.gov/"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewal"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "ce.hoursPerCycle"
+      },
+      "total": {
+        "value": 100,
+        "fact": "ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 40,
+        "fact": "ce.categoryRules",
+        "label": "Category I",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1"
+        ],
+        "unverifiedAccepted": [
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ],
+        "reason": "Category I is accredited sponsorship judged by AAPA standards; read as AAPA and AMA PRA Category 1 credit."
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "An AAPA or NCCPA maintenance of competency program is also accepted in place of the 100 hours.",
+          "fact": "ce.maintenanceProgram"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Suicide Prevention",
+        "hours": 6,
+        "label": "One time training in suicide assessment, treatment and management, at least six hours",
+        "period": "lifetime",
+        "facts": [
+          "ce.topic.suicide",
+          "ce.topic.suicide.statute"
+        ]
+      },
+      {
+        "topic": "Implicit Bias",
+        "hours": 2,
+        "label": "Health equity training, every four years",
+        "period": {
+          "years": 4
+        },
+        "fact": "ce.topic.healthEquity"
+      },
+      {
+        "topic": "Opioid Prescribing",
+        "hours": 1,
+        "label": "One time CE on best practices in opioid prescribing or the Washington opioid prescribing rules",
+        "period": "lifetime",
+        "fact": "ce.topic.opioid",
+        "condition": {
+          "field": "Licensed to prescribe opioids",
+          "question": "Are you licensed to prescribe opioids?",
+          "description": "Washington one-time opioid CE for prescribers."
+        }
+      },
+      {
+        "topic": "Telemedicine",
+        "hours": 0,
+        "label": "One time telemedicine training",
+        "period": "lifetime",
+        "periodReason": "RCW 43.70.495 requires the training once.",
+        "fact": "ce.topic.telemedicine",
+        "condition": {
+          "field": "Provides telemedicine",
+          "question": "Do you provide clinical services through telemedicine?",
+          "description": "Washington telemedicine training."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "collaboration",
+        "conditional": true,
+        "text": "Before practice a PA signs a collaboration agreement, kept at the primary practice location and given to the Commission on request. Under 4,000 postgraduate clinical hours, and for the first 2,000 hours in a new specialty, the PA works under a participating physician's supervision.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFiling",
+          "practice.supervisionThreshold",
+          "practice.specialtyChange"
+        ]
+      }
+    }
+  },
+  "np": {
+    "board": {
+      "name": "Washington State Board of Nursing (formerly Nursing Care Quality Assurance Commission)",
+      "url": "https://nursing.wa.gov/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 1,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 1,
+          "fact": "rn.renewalCycleYears"
+        },
+        "total": {
+          "value": 8,
+          "fact": "rn.ceHours"
+        }
+      },
+      "practiceHours": {
+        "hours": 96,
+        "years": 1,
+        "label": "At least 96 hours of active nursing practice in the year before renewal",
+        "fact": "rn.practiceHours"
+      },
+      "topics": [
+        {
+          "topic": "Implicit Bias",
+          "hours": 2,
+          "label": "Health equity training, at least 2 of the 8 hours, every year once first due",
+          "facts": [
+            "rn.topic.healthEquity",
+            "rn.ceHours"
+          ]
+        },
+        {
+          "topic": "Suicide Prevention",
+          "hours": 6,
+          "label": "One time six-hour training in suicide assessment, treatment and management",
+          "period": "lifetime",
+          "facts": [
+            "rn.topic.suicide",
+            "rn.topic.suicide.statute"
+          ]
+        }
+      ],
+      "unverified": [
+        "When the health equity hours first fall due: WAC 246-840-222(4) says by the second full CE period after initial licensure or the 2026 renewal; the board page says by the 2026 renewal (new licensees by their second renewal)"
+      ]
+    },
+    "aprn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        }
+      },
+      "ce": {
+        "mode": "hours",
+        "cycleYears": {
+          "value": 2,
+          "fact": "aprn.renewalCycleYears"
+        },
+        "total": {
+          "value": 30,
+          "fact": "aprn.ceHoursPerCycle"
+        },
+        "notes": [
+          {
+            "text": "The ARNP title becomes advanced practice registered nurse on June 30, 2027.",
+            "fact": "aprn.titleChange"
+          },
+          {
+            "text": "An ARNP also holds an RN license renewed every year.",
+            "fact": "aprn.rnAnnualRenewal"
+          },
+          {
+            "text": "The 30 hours are due in each ARNP designation you hold; hours count toward more than one only when they apply to each area of practice.",
+            "fact": "aprn.ceHoursPerCycle"
+          }
+        ]
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "topics": [
+        {
+          "topic": "Pharmacology",
+          "hours": 15,
+          "measure": "pharmacology",
+          "additional": true,
+          "label": "Pharmacotherapeutics during the renewal period, in addition to the 30 ARNP hours",
+          "facts": [
+            "prescribing.pharmacologyCe",
+            "aprn.ce.rules",
+            "aprn.ceHoursPerCycle"
+          ],
+          "condition": {
+            "field": "Holds prescriptive authority",
+            "question": "Do you hold prescriptive authority?",
+            "description": "Applies to clinicians who prescribe."
+          }
+        },
+        {
+          "topic": "Opioid Prescribing",
+          "hours": 4,
+          "label": "One time CE on opioid prescribing",
+          "period": "lifetime",
+          "periodReason": "WAC 246-840-4655 makes it a one-time requirement.",
+          "fact": "prescribing.opioidCe",
+          "condition": {
+            "field": "Licensed to prescribe opioids",
+            "question": "Are you licensed to prescribe opioids?",
+            "description": "Washington one-time opioid CE for prescribers."
+          }
+        },
+        {
+          "topic": "Telemedicine",
+          "hours": 0,
+          "label": "One time telemedicine training",
+          "period": "lifetime",
+          "periodReason": "RCW 43.70.495 requires the training once.",
+          "fact": "aprn.topic.telemedicine",
+          "condition": {
+            "field": "Provides telemedicine",
+            "question": "Do you provide clinical services through telemedicine?",
+            "description": "Washington telemedicine training."
+          }
+        }
+      ],
+      "unverified": [
+        "Whether the ARNP CE numbers change with the June 30, 2027 retitling",
+        "Whether an ARNP may rely on another compact state's multistate RN license (WAC 246-840-360(1)(a) says a Washington RN license; 246-840-990(3) accepts single or multistate)",
+        "Whether ARNPs have a health equity rule of their own"
+      ]
+    }
+  }
+}

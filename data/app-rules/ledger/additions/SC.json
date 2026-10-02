@@ -1,0 +1,16 @@
+{
+ "state": "SC",
+ "facts": [
+  {
+   "field": "practice.underservedRequirement.add",
+   "profession": "np",
+   "value": "NPs spend a portion of their time in an underserved or rural area or serving an underserved population",
+   "cite": "S.C. Code 40-33-34(C)",
+   "url": "https://www.scstatehouse.gov/code/t40c033.php",
+   "quote": "must spend a portion of his time practicing in an underserved or rural area or serving an underserved population",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+{
+ "state": "LA",
+ "facts": [
+  {
+   "field": "np.prescribing.csCountsTowardPharmacology",
+   "profession": "np",
+   "value": "The controlled substance hours count toward that year's pharmacotherapeutics hours",
+   "cite": "LAC 46:XLVII.4513.D.6",
+   "url": "https://www.doa.la.gov/media/s41heoqe/46v47.docx",
+   "quote": "Continuing education completed to meet the requirements of LAC 46:XLVII.4516 ... shall be applied to the aforementioned required continuing education",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

@@ -1,0 +1,749 @@
+{
+ "state": "IL",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "Illinois Department of Financial and Professional Regulation (IDFPR), Illinois State Medical Board",
+   "url": "https://idfpr.illinois.gov/profs/physicianassistant.html"
+  },
+  "licence": {
+   "title": "Physician Assistant in Medicine, Licensed",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "1 March of each even-numbered year"
+  },
+  "ce": {
+   "hoursPerCycle": 50,
+   "categoryRules": "At least 25 hours Category 1 (as determined by NCCPA); remaining 25 may be Category 1, Category 2 or a mix. All hours in the 24 months before expiration. First Illinois renewal is exempt.",
+   "acceptsNccpaCertificationInLieu": false,
+   "nccpaCertificationRequiredForRenewal": false,
+   "topicMandates": [
+    {
+     "topic": "Sexual harassment prevention training",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all individual IDFPR licensees; one hour each renewal cycle, beginning with the first renewal (hour count from IDFPR CE page; statute states none)",
+     "cite": "20 ILCS 2105/2105-15.5; IDFPR CE page"
+    },
+    {
+     "topic": "Implicit bias awareness (from 1 July 2026 includes maternal health risk factors for those reporting maternal care; from 1 January 2027 a perimenopause and menopause course may count)",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "health care professionals with CE requirements",
+     "cite": "20 ILCS 2105/2105-15.7"
+    },
+    {
+     "topic": "Alzheimer's disease and other dementias",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "direct patient interaction with adults age 26 or older; complete before the first renewal that requires CE, then once every 6 years (IDFPR), under 2105-365 and 2105-375(d-5)",
+     "cite": "20 ILCS 2105/2105-365; 2105-375"
+    },
+    {
+     "topic": "Cultural competency",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "health care professionals with CE requirements; complete before the first renewal that requires CE, then once every 6 years (IDFPR), under 2105-370 and 2105-375",
+     "cite": "20 ILCS 2105/2105-370; 2105-375"
+    },
+    {
+     "topic": "Safe opioid prescribing practices",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "every prescriber licensed to prescribe controlled substances; one hour each pre-renewal period; counts toward licence CE and may overlap other opioid CE",
+     "cite": "720 ILCS 570/315.5"
+    },
+    {
+     "topic": "Pharmacology",
+     "hours": 5,
+     "period": "every year",
+     "appliesTo": "PAs delegated Schedule II controlled substances; 5 hours every year (annual)",
+     "cite": "720 ILCS 570/303.05(a)(1)(B)(vii)"
+    },
+    {
+     "topic": "Child abuse mandated reporter training (medical personnel)",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "Medical personnel who work with children: training at least every 6 years plus an attestation at every renewal. Those who do not work with children may attest at each renewal instead of retraining. IDFPR lists PA, APRN and RN as medical personnel.",
+     "cite": "325 ILCS 5/4(j),(k); IDFPR CE page"
+    }
+   ],
+   "controlledSubstanceCe": "1 hour safe opioid prescribing per controlled substance licence renewal (720 ILCS 570/315.5); 5 hours pharmacology annually if Schedule II is delegated (720 ILCS 570/303.05)."
+  },
+  "practice": {
+   "agreementType": "collaboration",
+   "agreementFilingAndRenewal": "Written collaborative agreement required (except PAs privileged in a hospital, hospital affiliate, FQHC or ambulatory surgical treatment center under Sec. 7.7). A signed copy must be available to IDFPR on request; no renewal interval in statute. The collaborating physician files notice of any delegation of prescriptive authority and its termination.",
+   "notes": "Agreement adequate if the physician jointly formulates and approves orders or guidelines, periodically reviews them, and provides consultation at least once a month. A physician may collaborate with up to 7 full-time-equivalent PAs (hospital, affiliate, FQHC, ASTC exempt). A PA may keep practising up to 90 days after an agreement ends."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": "Prescriptive authority is delegated by the collaborating physician in the written agreement; controlled substances require an Illinois mid-level practitioner controlled substances licence.",
+   "ceForPrescribers": "1 hour safe opioid prescribing per CS licence renewal; Schedule II delegation adds 5 hours pharmacology every year."
+  },
+  "facts": [
+   {
+    "field": "pa.licence.renewalDeadline",
+    "value": "1 March of each even-numbered year",
+    "cite": "68 Ill. Adm. Code 1350.115(a)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801350",
+    "quote": "All licenses issued under the Act shall expire on March 1 of each even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.hoursPerCycle",
+    "value": 50,
+    "cite": "68 Ill. Adm. Code 1350.116(a)(1); 225 ILCS 95/11.5",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801350",
+    "quote": "all licensed physician assistants shall complete 50 hours of approved CE per 2-year license renewal cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.categoryRules",
+    "value": "Minimum 25 hours Category 1",
+    "cite": "68 Ill. Adm. Code 1350.116(b)(1)(A)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801350",
+    "quote": "A minimum of 25 hours of required CEs must be earned in Category 1 CMEs as determined by the National Commission on Certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.firstRenewalExempt",
+    "value": true,
+    "cite": "68 Ill. Adm. Code 1350.116(a)(3)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801350",
+    "quote": "A renewal applicant shall not be required to comply with CE requirements for the first renewal of an Illinois license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.nccpaCertificationRequiredForRenewal",
+    "value": false,
+    "cite": "225 ILCS 95/16",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "The certification as a physician assistant by the National Commission on Certification of Physician Assistants or an equivalent successor agency is not required for renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementType",
+    "value": "Written collaborative agreement",
+    "cite": "225 ILCS 95/7.5(a)",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "A written collaborative agreement is required for all physician assistants to practice in the State, except as provided in Section 7.7 of this Act.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementFilingAndRenewal",
+    "value": "Available to IDFPR on request",
+    "cite": "225 ILCS 95/7.5(a)(3)",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "agreement must be available to the Department upon request from both the physician assistant and the collaborating physician.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.consultationFrequency",
+    "value": "At least monthly",
+    "cite": "225 ILCS 95/7.5(a)(2)(B)",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "Provides consultation at least once a month.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.stateCsRegistrationRequired",
+    "value": "Mid-level practitioner controlled substances licence",
+    "cite": "225 ILCS 95/7.5(b)(1)",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "a physician assistant must obtain a mid-level practitioner controlled substances license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.delegationNotice",
+    "value": "Collaborating physician files notice of delegation and termination",
+    "cite": "225 ILCS 95/7.5(b)(2)",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "The collaborating physician shall file with the Department notice of delegation of prescriptive authority to a physician assistant and termination of delegation",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.scheduleIIPharmacologyCe",
+    "value": "5 hours pharmacology every year when Schedule II is delegated",
+    "cite": "720 ILCS 570/303.05(a)(1)(B)(vii)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/072005700K303.05.htm",
+    "quote": "the physician assistant must annually complete at least 5 hours of continuing education in pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.opioid",
+    "value": "1 hour safe opioid prescribing per renewal for CS licence holders",
+    "cite": "720 ILCS 570/315.5",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/072005700K315.5.htm",
+    "quote": "complete one hour of continuing education on safe opioid prescribing practices",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.sexualHarassment",
+    "value": "Before each renewal",
+    "cite": "20 ILCS 2105/2105-15.5(a)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/002021050K2105-15.5.htm",
+    "quote": "The training shall be completed, at a minimum, prior to a licensee's renewal of his or her license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.implicitBias",
+    "value": "1 hour per renewal period",
+    "cite": "20 ILCS 2105/2105-15.7(b)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/002021050K2105-15.7.htm",
+    "quote": "must complete at least a one-hour course in training on implicit bias awareness per renewal period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.dementia",
+    "value": "1 hour; adult patients 26 or older",
+    "cite": "20 ILCS 2105/2105-365(b)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/002021050K2105-365.htm",
+    "quote": "adult populations age 26 or older",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.culturalCompetency",
+    "value": "1 hour",
+    "cite": "20 ILCS 2105/2105-370(b)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/002021050K2105-370.htm",
+    "quote": "must complete at least a one-hour course in training on cultural competency.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.mandatedTopicWindow",
+    "value": "Statutorily mandated topics within 3 renewal periods (4 if more topics are added after 1 January 2025)",
+    "cite": "20 ILCS 2105/2105-375(b)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/002021050K2105-375.htm",
+    "quote": "must complete all statutorily mandated topics within 3 renewal periods.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.sexualHarassmentHours",
+    "value": "1 hour each renewal cycle, from first renewal",
+    "cite": "IDFPR Continuing Education page (20 ILCS 2105/2105-15.5)",
+    "url": "https://idfpr.illinois.gov/dpr/continuing-education.html",
+    "quote": "Each individual (non-business) license holder must complete a one-hour sexual harassment prevention course during each renewal cycle",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.mandatedReporter",
+    "value": "Medical personnel working with children: mandated reporter training at least every 6 years, plus attestation at each renewal",
+    "cite": "325 ILCS 5/4(k)(1)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/032500050K4.htm",
+    "quote": "who work with children in their professional or official capacity, must complete mandated reporter training at least every 6 years.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.mandatedReporterAttestOnly",
+    "value": "Medical personnel not working with children may attest at each renewal instead of retraining",
+    "cite": "325 ILCS 5/4(k)(2)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/032500050K4.htm",
+    "quote": "who do not work with children in their professional or official capacity, may instead attest each time at licensure renewal",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.dementiaCadence",
+    "value": "Before first renewal requiring CE, then once every 6 years",
+    "cite": "IDFPR Continuing Education page (20 ILCS 2105/2105-365, 2105-375)",
+    "url": "https://idfpr.illinois.gov/dpr/continuing-education.html",
+    "quote": "This course must be completed prior to the first renewal that requires continuing education and then retaken once every six years after that.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.csLicenceExpiry",
+    "value": "Illinois CS licence expires with the professional licence",
+    "cite": "77 Ill. Adm. Code 3100.30(a)(1)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=07703100",
+    "quote": "shall expire on the date the certificate holder's superior professional license expires",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.prescribing.facilityCsExemption",
+    "value": "PAs in a hospital, hospital affiliate, FQHC or ASTC need no mid-level CS licence to order controlled substances there",
+    "cite": "225 ILCS 95/7.7(c)",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "are not required to obtain a mid-level controlled substance license to order controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.agreementEndGrace",
+    "value": "May practise up to 90 days after an agreement ends",
+    "cite": "225 ILCS 95/7.6",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "is authorized to continue to practice for up to 90 days after the termination of a written collaborative agreement",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.practice.ratio",
+    "value": "Up to 7 full-time-equivalent PAs per collaborating physician",
+    "cite": "225 ILCS 95/7",
+    "url": "https://ilga.gov/Legislation/ILCS/Articles?ActID=1320&ChapterID=24&Print=True",
+    "quote": "A collaborating physician may collaborate with a maximum of 7 full-time equivalent",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "pa.ce.firstRenewalExemptVsMandates",
+    "value": "Rule exempts the first renewal from CE, but IDFPR applies sexual harassment training from the first renewal",
+    "cite": "IDFPR Continuing Education page",
+    "url": "https://idfpr.illinois.gov/dpr/continuing-education.html",
+    "quote": "beginning with the first renewal after obtaining their initial license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "Illinois Department of Financial and Professional Regulation (IDFPR), Board of Nursing",
+   "url": "https://idfpr.illinois.gov/profs/nursing.html"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "31 May of each even-numbered year",
+   "ceHoursPerCycle": 20,
+   "nlc": false,
+   "topicMandates": [
+    {
+     "topic": "Sexual harassment prevention training",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all individual IDFPR licensees; one hour each renewal cycle, beginning with the first renewal (hour count from IDFPR CE page; statute states none)",
+     "cite": "20 ILCS 2105/2105-15.5; IDFPR CE page"
+    },
+    {
+     "topic": "Implicit bias awareness (from 1 July 2026 includes maternal health risk factors for those reporting maternal care; from 1 January 2027 a perimenopause and menopause course may count)",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "health care professionals with CE requirements",
+     "cite": "20 ILCS 2105/2105-15.7"
+    },
+    {
+     "topic": "Alzheimer's disease and other dementias",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "direct patient interaction with adults age 26 or older; complete before the first renewal that requires CE, then once every 6 years (IDFPR), under 2105-365 and 2105-375(d-5)",
+     "cite": "20 ILCS 2105/2105-365; 2105-375"
+    },
+    {
+     "topic": "Cultural competency",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "health care professionals with CE requirements; complete before the first renewal that requires CE, then once every 6 years (IDFPR), under 2105-370 and 2105-375",
+     "cite": "20 ILCS 2105/2105-370; 2105-375"
+    },
+    {
+     "topic": "Child abuse mandated reporter training (medical personnel)",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "Medical personnel who work with children: training at least every 6 years plus an attestation at every renewal. Those who do not work with children may attest at each renewal instead of retraining. IDFPR lists PA, APRN and RN as medical personnel.",
+     "cite": "325 ILCS 5/4(j),(k); IDFPR CE page"
+    }
+   ],
+   "notes": "APRNs who complete their 80 hours satisfy the RN CE requirement. Illinois is not a Nurse Licensure Compact state; HB4369 (2026) was re-referred to the House Rules Committee on 27 March 2026."
+  },
+  "aprn": {
+   "title": "APRN (nurse practitioner); APRN with Full Practice Authority (APRN-FPA)",
+   "separateLicenceOrCertificate": "Separate APRN licence from IDFPR; the RN licence must also be renewed",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "31 May of each even-numbered year",
+   "ceHoursPerCycle": 80,
+   "pharmacologyHoursPerCycle": 20,
+   "nationalCertificationRequired": true,
+   "ceRules": "80 hours in the specialty: at least 50 in CE programs including at least 20 pharmacotherapeutics (of which 10 opioid prescribing or substance abuse); up to 30 from presentations, evidence-based practice or QI projects, publications, research, or precepting. Passing a specialty recertification exam in the prerenewal period counts as 60 hours. First Illinois renewal exempt.",
+   "topicMandates": [
+    {
+     "topic": "Sexual harassment prevention training",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "all individual IDFPR licensees; one hour each renewal cycle, beginning with the first renewal (hour count from IDFPR CE page; statute states none)",
+     "cite": "20 ILCS 2105/2105-15.5; IDFPR CE page"
+    },
+    {
+     "topic": "Implicit bias awareness (from 1 July 2026 includes maternal health risk factors for those reporting maternal care; from 1 January 2027 a perimenopause and menopause course may count)",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "health care professionals with CE requirements",
+     "cite": "20 ILCS 2105/2105-15.7"
+    },
+    {
+     "topic": "Alzheimer's disease and other dementias",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "direct patient interaction with adults age 26 or older; complete before the first renewal that requires CE, then once every 6 years (IDFPR), under 2105-365 and 2105-375(d-5)",
+     "cite": "20 ILCS 2105/2105-365; 2105-375"
+    },
+    {
+     "topic": "Cultural competency",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "health care professionals with CE requirements; complete before the first renewal that requires CE, then once every 6 years (IDFPR), under 2105-370 and 2105-375",
+     "cite": "20 ILCS 2105/2105-370; 2105-375"
+    },
+    {
+     "topic": "Safe opioid prescribing practices",
+     "hours": 1,
+     "period": "every cycle",
+     "appliesTo": "every prescriber licensed to prescribe controlled substances; one hour each pre-renewal period; counts toward licence CE and may overlap other opioid CE",
+     "cite": "720 ILCS 570/315.5"
+    },
+    {
+     "topic": "Opioid prescribing or substance abuse education (within the 20 pharmacotherapeutics hours)",
+     "hours": 10,
+     "period": "every cycle",
+     "appliesTo": "all APRNs",
+     "cite": "225 ILCS 65/65-60"
+    },
+    {
+     "topic": "Pharmacology",
+     "hours": 5,
+     "period": "every year",
+     "appliesTo": "APRNs (non-FPA) delegated Schedule II; 5 hours every year",
+     "cite": "720 ILCS 570/303.05(a)(2)(B)(vii)"
+    },
+    {
+     "topic": "Child abuse mandated reporter training (medical personnel)",
+     "hours": 1,
+     "period": "every N years",
+     "appliesTo": "Medical personnel who work with children: training at least every 6 years plus an attestation at every renewal. Those who do not work with children may attest at each renewal instead of retraining. IDFPR lists PA, APRN and RN as medical personnel.",
+     "cite": "325 ILCS 5/4(j),(k); IDFPR CE page"
+    }
+   ]
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": "Non-FPA APRNs: prescriptive authority is delegated in the written collaborative agreement and the collaborating physician files notice with IDFPR and the PMP. FPA APRNs prescribe Schedule II to V in their own right (Schedule II narcotics only with a physician consultation relationship recorded in the PMP).",
+   "pharmacologyCeForPrescribers": "20 hours pharmacotherapeutics per 2-year cycle (all APRNs); plus 5 hours pharmacology each year if Schedule II is delegated.",
+   "controlledSubstanceCe": "10 hours opioid prescribing or substance abuse inside the 80; 1 hour safe opioid prescribing per CS licence renewal (can overlap).",
+   "stateCsRegistrationRequired": true
+  },
+  "practice": {
+   "authority": "reduced",
+   "agreementType": "collaboration",
+   "transitionToPracticeHours": 4000,
+   "agreementFilingAndRenewal": "Written collaborative agreement required until Full Practice Authority (except APRNs privileged in a hospital, hospital affiliate or ASTC). Copy available to IDFPR on request; no renewal interval. FPA: file a notarized attestation of 4,000 clinical hours plus 250 hours CE or training after national certification; no agreement needed after that."
+  },
+  "facts": [
+   {
+    "field": "np.rn.renewalDeadline",
+    "value": "31 May of each even-numbered year",
+    "cite": "68 Ill. Adm. Code 1300.40(b)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801300",
+    "quote": "Every registered professional nurse license issued under the Act shall expire on May 31 of each even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.ceHoursPerCycle",
+    "value": 20,
+    "cite": "68 Ill. Adm. Code 1300.130(a)(1)(B); 225 ILCS 65/60-40",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801300",
+    "quote": "All registered nurses shall complete 20 hours of approved continuing education per 2-year license renewal cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.rn.nlc",
+    "value": "No: compact bill HB4369 re-referred to Rules Committee 27 March 2026",
+    "cite": "HB4369, 104th General Assembly",
+    "url": "https://ilga.gov/Legislation/BillStatus?GAID=18&DocNum=4369&DocTypeID=HB&LegId=164933&SessionID=114",
+    "quote": "Rule 19(a) / Re-referred to Rules Committee",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.renewalDeadline",
+    "value": "31 May of each even-numbered year",
+    "cite": "68 Ill. Adm. Code 1300.40(a)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801300",
+    "quote": "Every APRN license issued under the Act, including APRNs granted full practice authority, shall expire on May 31 of each even-numbered year.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "68 Ill. Adm. Code 1300.40(a)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801300",
+    "quote": "At the time of renewal, APRNs shall attest to continued, current national certification in their specialty",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceHoursPerCycle",
+    "value": 80,
+    "cite": "225 ILCS 65/65-60",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-60.htm",
+    "quote": "require 80 hours of continuing education per 2-year license renewal cycle.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.pharmacologyHoursPerCycle",
+    "value": "20 pharmacotherapeutics including 10 opioid prescribing or substance abuse",
+    "cite": "225 ILCS 65/65-60(1)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-60.htm",
+    "quote": "no less than 20 hours of pharmacotherapeutics, including 10 hours of opioid prescribing or substance abuse education.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.satisfiesRnCe",
+    "value": true,
+    "cite": "225 ILCS 65/65-60",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-60.htm",
+    "quote": "Completion of the 80 hours of continuing education shall be deemed to satisfy the continuing education requirements for renewal of a registered professional nurse license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.recertExamCredit",
+    "value": "60 CE hours",
+    "cite": "68 Ill. Adm. Code 1300.130(b)(7)(B)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801300",
+    "quote": "recertification exam in the APRN's area of specialty as recognized in Section 1300.10 may be used for 60 CE hours.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementType",
+    "value": "Written collaborative agreement until FPA",
+    "cite": "225 ILCS 65/65-35(a)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-35.htm",
+    "quote": "A written collaborative agreement is required for all advanced practice registered nurses engaged in clinical practice prior to meeting the requirements of Section 65-43",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.agreementFilingAndRenewal",
+    "value": "Available to IDFPR on request",
+    "cite": "225 ILCS 65/65-35(d)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-35.htm",
+    "quote": "A copy of the signed, written collaborative agreement must be available to the Department upon request",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.transitionToPracticeHours",
+    "value": "4,000 clinical hours plus 250 hours CE or training after national certification",
+    "cite": "225 ILCS 65/65-43(b)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-43.htm",
+    "quote": "at least 250 hours of continuing education or training and at least 4,000 hours of clinical experience after first attaining national certification",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.stateCsRegistrationRequired",
+    "value": "Mid-level practitioner controlled substance licence",
+    "cite": "225 ILCS 65/65-40(b)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-40.htm",
+    "quote": "an advanced practice registered nurse must obtain a mid-level practitioner controlled substance license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.delegationNotice",
+    "value": "Collaborating physician files notice with IDFPR and PMP",
+    "cite": "225 ILCS 65/65-40(c)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-40.htm",
+    "quote": "The collaborating physician shall file with the Department and the Prescription Monitoring Program notice of delegation of prescriptive authority",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.scheduleIIPharmacologyCe",
+    "value": "5 hours pharmacology every year when Schedule II is delegated",
+    "cite": "720 ILCS 570/303.05(a)(2)(B)(vii)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/072005700K303.05.htm",
+    "quote": "must annually complete 5 hours of continuing education in pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.opioidCe",
+    "value": "1 hour per CS licence renewal",
+    "cite": "720 ILCS 570/315.5",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/072005700K315.5.htm",
+    "quote": "complete one hour of continuing education on safe opioid prescribing practices",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.topic.implicitBias",
+    "value": "1 hour per renewal (Nurse Practice Act licensees included)",
+    "cite": "20 ILCS 2105/2105-15.7(b)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/002021050K2105-15.7.htm",
+    "quote": "must complete at least a one-hour course in training on implicit bias awareness per renewal period.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.topic.sexualHarassmentHours",
+    "value": "1 hour each renewal cycle",
+    "cite": "IDFPR Continuing Education page (20 ILCS 2105/2105-15.5)",
+    "url": "https://idfpr.illinois.gov/dpr/continuing-education.html",
+    "quote": "Each individual (non-business) license holder must complete a one-hour sexual harassment prevention course during each renewal cycle",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.topic.mandatedReporter",
+    "value": "RN and APRN are medical personnel: training at least every 6 years if working with children, attestation at each renewal",
+    "cite": "325 ILCS 5/4(a)(1),(k)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/032500050K4.htm",
+    "quote": "registered nurse; licensed practical nurse; advanced practice registered nurse",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.topic.dementiaCulturalCadence",
+    "value": "Dementia and cultural competency: before first renewal requiring CE, then once every 6 years",
+    "cite": "IDFPR Continuing Education page",
+    "url": "https://idfpr.illinois.gov/dpr/continuing-education.html",
+    "quote": "This course must be completed prior to the first renewal that requires continuing education and then retaken once every six years after that.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.csLicenceExpiry",
+    "value": "Illinois CS licence expires with the professional licence",
+    "cite": "77 Ill. Adm. Code 3100.30(a)(1)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=07703100",
+    "quote": "shall expire on the date the certificate holder's superior professional license expires",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.prescribing.facilityCsExemption",
+    "value": "APRNs in a hospital or ASTC need no mid-level CS licence to order controlled substances there",
+    "cite": "225 ILCS 65/65-45(a-3)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-45.htm",
+    "quote": "are not required to obtain a mid-level controlled substance license to order controlled substances",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.ceSplit",
+    "value": "Min 50 hours in CE programs incl. 20 pharmacotherapeutics (10 opioid prescribing or substance abuse); max 30 from presentations, QI, publications, research or precepting",
+    "cite": "68 Ill. Adm. Code 1300.130(a)(1)(C)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801300",
+    "quote": "A maximum of 30 hours of credit may be obtained by presentations in the APRN's clinical specialty, evidence-based practice, or quality improvement projects",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.aprn.firstRenewalExempt",
+    "value": true,
+    "cite": "68 Ill. Adm. Code 1300.130(a)(4)",
+    "url": "https://www.ilga.gov/agencies/JCAR/EntirePart?titlepart=06801300",
+    "quote": "A renewal applicant shall not be required to comply with CE requirements for the first renewal of an Illinois license.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "np.practice.fpaSchedule2Narcotics",
+    "value": "FPA APRNs prescribe Schedule II narcotics only in a physician consultation relationship recorded in the PMP; monthly discussion of opioid patients",
+    "cite": "225 ILCS 65/65-43(c)(4)",
+    "url": "https://www.ilga.gov/documents/legislation/ilcs/documents/022500650K65-43.htm",
+    "quote": "prescribing Schedule II narcotic drugs, such as opioids, only in a consultation relationship with a physician",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "Whether the 1 hour safe opioid prescribing CE (720 ILCS 570/315.5) is a 'statutorily mandated topic' that 2105-375 lets licensees spread over 3 renewal periods: 2105-375(d) carves out only implicit bias and sexual harassment, and the IDFPR CE page does not list the opioid hour at all. Treated as every pre-renewal period.",
+  "Whether the 2105-375 window is 3 or 4 renewal periods (4 if a new statutorily mandated topic was added after 1 January 2025): IDFPR now states the dementia and cultural competency cadence as once every six years, consistent with 3 biennial periods.",
+  "IDFPR lists a Notice of Written Collaborative Agreement form for PAs; whether filing it is mandatory beyond Sec. 7.5 (copy on request; physician files the delegation notice) was not confirmed.",
+  "Whether completed NCCPA recertification can substitute for the 50 PA hours: 1350.116 is silent; recorded as not accepted in lieu.",
+  "'reduced' practice authority for non-FPA NPs is a classification label; the primary sources confirm the collaborative agreement requirement and the FPA pathway.",
+  "Both practice Acts are scheduled for repeal on 1 January 2028 (routine Illinois sunset); renewal of the sunset not checked.",
+  "Federal DEA MATE Act one-time 8 hour training not re-verified here (federal); 720 ILCS 570/315.5 cites it as its basis."
+ ],
+ "verifiedAt": "2026-10-01",
+ "verifiedBy": "verifier-2026-10",
+ "verificationNotes": "All researcher urls re-loaded with curl (JCAR 1350 and 1300 parts, ILCS pages, HB4369 status). Every quote matched. Added IDFPR CE page, 325 ILCS 5/4 and 77 IAC 3100. 225 ILCS 95 and 225 ILCS 65 sections are scheduled for repeal 1 January 2028.",
+ "corrections": [
+  "IL sexual harassment training: hours changed from null to 1. The statute states no hours, but the IDFPR CE page (loaded) says a one-hour course each renewal cycle.",
+  "IL MISSED MANDATE added for PA, RN and APRN: child abuse mandated reporter training under 325 ILCS 5/4(k) (medical personnel working with children: training at least every 6 years plus attestation at every renewal; others may attest instead). IDFPR lists PA, APRN and RN as medical personnel.",
+  "IL Schedule II pharmacology (5 hours): period changed from 'every N years' to 'every year' to match 'annually' in 720 ILCS 570/303.05.",
+  "IL safe opioid hour: researcher tied it to the CS licence renewal; the statute says 'during the pre-renewal period'. Reworded. The CS licence expires with the professional licence (77 IAC 3100.30), so the periods coincide.",
+  "IL dementia and cultural competency appliesTo reworded to the IDFPR page: before the first renewal requiring CE, then once every six years.",
+  "IL PA: added facts for the CS licence expiry (77 IAC 3100.30, resolves a researcher unverified item), the hospital/FQHC/ASTC exemption from the mid-level CS licence (7.7(c)), the 90-day grace (7.6), and the 7 FTE ratio, which the researcher stated without a fact entry.",
+  "IL PA Practice Act and Nurse Practice Act sections carry a sunset: scheduled for repeal on 1 January 2028 (shown on every section loaded). Recorded in verificationNotes.",
+  "IL NP: added fact entries for the RN and APRN mandated reporter mandate, sexual harassment hour, dementia and cultural cadence, CS licence expiry, hospital/ASTC CS exemption (65-45(a-3)), the 50/30 CE split, first-renewal exemption for APRN CE, and FPA Schedule II narcotic consultation. Each was in the researcher prose with no fact or was missing."
+ ]
+}

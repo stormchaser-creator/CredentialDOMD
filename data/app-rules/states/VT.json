@@ -1,0 +1,200 @@
+{
+  "state": "VT",
+  "researchedAt": "2026-10",
+  "verifiedAt": "2026-10",
+  "pa": {
+    "board": {
+      "name": "Vermont Board of Medical Practice (Department of Health)",
+      "url": "https://www.healthvermont.gov/systems/board-medical-practice"
+    },
+    "license": {
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      }
+    },
+    "ce": {
+      "mode": "hours",
+      "cycleYears": {
+        "value": 2,
+        "fact": "licence.renewalCycleYears"
+      },
+      "total": {
+        "value": 100,
+        "fact": "ce.hoursPerCycle"
+      },
+      "categoryMin": {
+        "value": 50,
+        "label": "Category 1",
+        "accepted": [
+          "AAPA Category 1 CME",
+          "AMA PRA Category 1"
+        ],
+        "unverifiedAccepted": [
+          "AOA Category 1-A",
+          "AAFP Prescribed Credit",
+          "NCCPA PANRE-LA (Category 1 Self-Assessment)"
+        ],
+        "facts": [
+          "ce.categoryRules",
+          "ce.topic.controlledSubstances"
+        ],
+        "reason": "Category 1 is read as AMA PRA and AAPA Category 1 credit, the two the Board names for the controlled substance hours (Rule 32.4.3)."
+      },
+      "certificationInLieu": {
+        "bodies": [
+          "NCCPA"
+        ],
+        "covers": [
+          "total",
+          "categoryMin"
+        ],
+        "fact": "ce.acceptsNccpaCertificationInLieu"
+      },
+      "notes": [
+        {
+          "text": "To renew an active license a PA must have practiced as a PA within the last three years, or met the Board's requirements for updating knowledge and skills.",
+          "fact": "licence.practiceCurrency"
+        }
+      ]
+    },
+    "topics": [
+      {
+        "topic": "Controlled Substances",
+        "hours": 2,
+        "label": "Controlled substance prescribing, AMA PRA or AAPA Category 1 or board designated, each renewal",
+        "acceptedCategories": [
+          "AMA PRA Category 1",
+          "AAPA Category 1 CME"
+        ],
+        "facts": [
+          "ce.topic.controlledSubstances",
+          "ce.topic.controlledSubstances.dea"
+        ],
+        "condition": {
+          "field": "Holds or uses a DEA registration",
+          "question": "Do you hold a DEA registration or have one pending?",
+          "description": "Vermont presumes DEA holders and applicants prescribe controlled substances."
+        }
+      }
+    ],
+    "practice": {
+      "agreement": {
+        "kind": "practice agreement",
+        "text": "A written practice agreement with a participating physician is filed with the Board before practice and reviewed during the 90 days before each renewal, with the review documented in writing and signed by both. A new agreement reaches the Board before practice with a new employer.",
+        "facts": [
+          "practice.agreementType",
+          "practice.agreementFiling",
+          "practice.agreementReviewWindow",
+          "practice.agreementReviewDocumented",
+          "practice.newEmployer"
+        ]
+      }
+    },
+    "unverified": [
+      "Whether the hospice, palliative care or pain management CME hour (Rule 24.1.5, written for physicians) applies to PAs",
+      "Whether online PA renewal still asks for proof of NCCPA certification"
+    ]
+  },
+  "np": {
+    "board": {
+      "name": "Vermont State Board of Nursing (Office of Professional Regulation, Secretary of State)",
+      "url": "https://sos.vermont.gov/nursing/"
+    },
+    "rn": {
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "nlc": {
+        "value": true,
+        "fact": "rn.nlcCompactMember"
+      },
+      "ce": {
+        "mode": "options",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        },
+        "options": [
+          {
+            "text": "At least 400 hours of practice in the two years before renewal, or 960 hours in five years",
+            "fact": "rn.continuedCompetency.practice"
+          },
+          {
+            "text": "20 hours of qualifying continuing education in the two years before renewal",
+            "fact": "rn.continuedCompetency.ce"
+          },
+          {
+            "text": "A current nationally recognized certification",
+            "fact": "rn.continuedCompetency.certification"
+          }
+        ]
+      }
+    },
+    "aprn": {
+      "ce": {
+        "mode": "certification",
+        "reason": "APRN renewal requires current national APRN certification and APRN practice hours; no general CE hours are listed.",
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears",
+          "reason": "Licenses are valid for fixed two-year periods."
+        }
+      },
+      "certificationRequired": {
+        "value": true,
+        "fact": "aprn.nationalCertificationRequired"
+      },
+      "practiceHours": {
+        "hours": 400,
+        "years": 2,
+        "label": "At least 400 hours of APRN practice in the two years before renewal, or 960 hours in the five years before",
+        "facts": [
+          "aprn.renewal.requirements",
+          "aprn.renewal.practiceFull"
+        ]
+      },
+      "topics": [
+        {
+          "topic": "Controlled Substances",
+          "hours": 2,
+          "label": "Controlled substance prescribing, each licensing period",
+          "condition": {
+            "field": "Holds a DEA registration, has one pending, or dispenses controlled substances",
+            "question": "Do you hold a DEA registration, have one pending, or dispense controlled substances?",
+            "description": "Vermont's controlled substance CE (Act 173) applies to APRNs with a DEA number or a pending application, or who dispense."
+          },
+          "facts": [
+            "prescribing.controlledSubstanceCe",
+            "prescribing.controlledSubstanceCe.audience"
+          ]
+        }
+      ],
+      "license": {
+        "cycleYears": {
+          "value": 2,
+          "fact": "rn.renewalCycleYears"
+        }
+      },
+      "unverified": [
+        "How the Office of Professional Regulation collects the APRN controlled substance attestation"
+      ]
+    },
+    "practice": {
+      "agreement": {
+        "kind": "collaborative provider agreement",
+        "conditional": true,
+        "text": "During transition to practice (fewer than 24 months and 2,400 hours in the initial role and population focus) an APRN keeps signed and dated collaborative provider agreements and presents a current one at renewal. Once the transition is complete the APRN notifies the Board and may practice solo.",
+        "facts": [
+          "practice.transitionToPracticeHours",
+          "practice.agreementFiling",
+          "aprn.renewal.statute",
+          "practice.solo"
+        ]
+      }
+    }
+  }
+}

@@ -5,6 +5,7 @@
 // for the account ({ credential, practice }), as the authority reads it.
 // Synthetic only.
 import vm from 'node:vm';
+import { settleOutcome } from '../helpers/settle-outcome.mjs';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import * as access from '../../src/utils/limitedLaunchAccess.js';
@@ -17,7 +18,8 @@ import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPo
 export const ACCOUNT = 'user_SyntheticGateA';
 export const PROFILE = '00000000-0000-4000-8000-0000000000a1';
 export const tick = () => new Promise(resolve => setImmediate(resolve));
-export const settle = async (turns = 30) => { for (let i = 0; i < turns; i++) await tick(); };
+// Bounded wait for the outcome, not a fixed number of turns (tests/helpers/settle-outcome.mjs).
+export const settle = (turns = 30) => settleOutcome(turns);
 export const all = value => ({ read: value, write: value, export: value });
 export const active = () => ({
   schemaVersion: 1, policyVersion: PUBLIC_BILLING_POLICY.version, evaluatedAt: '2026-09-29T10:00:00.000Z', enforcementEnabled: true,

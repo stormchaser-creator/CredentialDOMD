@@ -444,7 +444,7 @@ function TaxPrep() {
         {showAssumptions && (
           <>
             {isScorp && (
-              <Field label="S-corp W-2 salary ($/yr)" hint="Your reasonable compensation. The IRS expects specialist-physician salary data to support this number; set it with your CPA. Payroll taxes apply to salary; the rest flows as K-1 distribution.">
+              <Field label="S-corp W-2 salary ($/yr)" hint={`Your reasonable compensation. The IRS expects ${data.settings?.degreeType === "PA" || data.settings?.degreeType === "NP" ? "salary data for your role" : "specialist-physician salary data"} to support this number; set it with your CPA. Payroll taxes apply to salary; the rest flows as K-1 distribution.`}>
                 <input type="number" inputMode="decimal" value={tp.scorpSalary ?? ""} onChange={e => setTp({ scorpSalary: e.target.value })} style={iS} placeholder="e.g. 450000" />
               </Field>
             )}

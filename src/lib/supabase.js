@@ -1780,7 +1780,15 @@ export async function ensureProfile(userId, { isCurrent = () => true, retryDelay
   // A failed read is not permission to create another account.
   if (initializedProfileId && (existing.error || existing.data?.id !== initializedProfileId || existing.data?.auth_user_id !== userId)) {
     const cause = existing.error || { code: existing.data ? "profile_mismatch" : "profile_missing" };
-    throw profileInitializationError("profile", cause, existing.status);
+    const error = profileInitializationError("profile", cause, existing.status);
+    // The identity check answered, then the profile row read had no answer
+    // after every try (a weak signal, or a server error): no server said
+    // anything about this account. As for the identity check above,
+    // AppContext opens the device copy read-only and asks again on its own;
+    // it used to stop on "could not be verified ... Reload to try again".
+    // A denial, a missing row or another account's row is an answer.
+    if (transientReadFailure(existing)) error.transient = true;
+    throw error;
   }
   if (existing.error) throw new Error("Your account could not be loaded. Please try again.");
   if (existing.data) return existing.data;

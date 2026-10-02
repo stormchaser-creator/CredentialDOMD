@@ -1,3 +1,5 @@
+import { ruleSetFor } from "../utils/ruleResolver.js";
+
 // Comprehensive state CME requirements (from Feb 2026 CME Compliance Database)
 // States with separate MD/DO boards have { md: {...}, do: {...} } structure.
 // States with combined boards have a flat structure.
@@ -398,7 +400,23 @@ export const DEFAULT_STATE_REQ = {
   total: 50, cycle: 2, cat1min: 0, cat1note: "", topics: [], notes: "Check your state medical board for specifics.", rollover: "No", moc: "", source: "", sourceUrl: "", upcoming: [],
 };
 
-export function getStateReq(st, deg) {
+// A PA or NP never gets a physician rule set or DEFAULT_STATE_REQ: their
+// state's PA, APRN (default) or RN rule set from the generated modules, or a
+// board-only "not yet verified" stub (src/utils/ruleResolver.js). `hours` and
+// `cycle` are null whenever the rule is not a verified hour total, so a
+// reader can never print a number the data does not state.
+function appStateReq(set) {
+  return {
+    hours: set.total, cycle: set.cycle, cat1min: set.cat1min, cat1note: set.cat1note, topics: set.topics, notes: set.notes,
+    rollover: null, moc: null, source: set.source, verified: set.verified, sourceUrl: set.sourceUrl, upcoming: [],
+    ceMode: set.ceMode, status: set.status, board: set.board, boardUrl: set.boardUrl, profession: set.profession, kind: set.kind,
+    unverified: set.unverified, unit: set.unit,
+  };
+}
+
+export function getStateReq(st, deg, kind) {
+  const app = ruleSetFor(st, deg, kind);
+  if (app) return appStateReq(app);
   const entry = STATE_REQS[st];
   if (!entry) return DEFAULT_STATE_REQ;
   if (entry.md || entry.do) {
@@ -408,7 +426,9 @@ export function getStateReq(st, deg) {
   return { hours: entry.total, cycle: entry.cycle, cat1min: entry.cat1min, cat1note: entry.cat1note, topics: entry.topics, notes: entry.notes, rollover: entry.rollover, moc: entry.moc, source: entry.source, verified: entry.verified, sourceUrl: entry.sourceUrl, upcoming: entry.upcoming };
 }
 
-export function getStateEntry(st, deg) {
+export function getStateEntry(st, deg, kind) {
+  const app = ruleSetFor(st, deg, kind);
+  if (app) return app;
   const entry = STATE_REQS[st];
   if (!entry) return DEFAULT_STATE_REQ;
   if (entry.md || entry.do) return deg === "DO" ? (entry.do || entry.md) : (entry.md || entry.do);

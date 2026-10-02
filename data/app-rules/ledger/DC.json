@@ -1,0 +1,492 @@
+{
+ "state": "DC",
+ "researchedAt": "2026-10",
+ "pa": {
+  "board": {
+   "name": "District of Columbia Board of Medicine (DC Health)",
+   "url": "https://dchealth.dc.gov/bomed"
+  },
+  "licence": {
+   "title": "Physician Assistant (PA) licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Last day of the birth month, in even or odd years matching the birth year (birth month cycle from June 16, 2024); legacy DCMR default December 31 of even years; the 2026 Board of Medicine notice cites June 30, 2026 for the current cohort",
+   "transitionNote": "DC Health moved all credentials to a birth month cycle: credentials issued or renewed from June 16, 2024 (renewals from September 2024) expire on the last day of the birth month; people born in even years get even expiration years and odd years get odd. During the one time transition, a licensee whose term was under 2 years owes 50% of the CE hours but still all of the 2 LGBTQ hours and the 10% public health hours. Ask the member for the expiration date printed on the licence."
+  },
+  "ce": {
+   "hoursPerCycle": 100,
+   "categoryRules": "40 hours Category 1 plus 60 hours Category 1 or 2 per 2 years; 2 hours LGBTQ cultural competency (Category 1 or equivalent, counts toward the 60); at least 10% (10 hours) in DC Director's public health priority topics",
+   "acceptsNccpaCertificationInLieu": true,
+   "nccpaCertificationRequiredForRenewal": false,
+   "nccpaNote": "Current NCCPA PA-C certification substitutes for the 100 hours, but the 2 LGBTQ hours and the 10% public health priority hours are still required.",
+   "firstRenewalExempt": "only for a licence granted by examination (not reciprocity/endorsement)",
+   "topicMandates": [
+    {
+     "topic": "LGBTQ cultural competency or clinical treatment",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all PAs, including those using NCCPA in lieu"
+    },
+    {
+     "topic": "DC public health priorities (notice effective Oct 1, 2025): sexual and reproductive health; chronic disease management; One Health; healthcare professional retention and capacity building (suicide prevention, burnout, quality improvement, substance use disorder, implicit bias and cultural humility); community and patient safety (falls, violence prevention, emergency preparedness, social media, infection control, cognitive impairment)",
+     "hours": 10,
+     "period": "every cycle",
+     "appliesTo": "all PAs (10% of required total), including those using NCCPA in lieu"
+    }
+   ],
+   "controlledSubstanceCe": null,
+   "hivNote": "D.C. Code 3-1205.10(b)(4) requires 3 HIV/AIDS credits for PAs, RNs and physicians unless waived by rule; 17 DCMR 4906.4(e) waives it for PAs and 5406.2 waives it for RNs."
+  },
+  "practice": {
+   "agreementType": "supervision",
+   "agreementTypeNote": "Regulations use supervision with a delegation agreement; the statute (D.C. Code § 3-1201.02) defines PA practice as 'in collaboration with a licensed physician'.",
+   "agreementFilingAndRenewal": "Written delegation agreement on the Board's form, signed by supervising physician(s) and PA, filed with the Board before practice begins and kept at the primary practice site; a new signed form is filed on any change; changes to supervising physicians filed within 10 days; termination form filed within 10 days; quarterly practice advisory review documented on file.",
+   "notes": "A physician may actively supervise no more than 4 on-duty PAs at one time. In outpatient settings supervision requires constant availability by electronic communication."
+  },
+  "prescribing": {
+   "stateCsRegistrationRequired": true,
+   "separateAuthorityRegistration": false,
+   "csRegistrationNote": "DC Controlled Substance Registration (biennial) through DC Health Pharmaceutical Control; the PA application must include the delegation agreement signed by supervising physician(s) who themselves hold a DC CSR. DEA separately. PDMP registration required for prescribers at renewal.",
+   "ceForPrescribers": null
+  },
+  "facts": [
+   {
+    "field": "ce.hoursPerCycle",
+    "value": "100 hours: 40 Category 1 + 60 Category 1 or 2 in the 2 years before expiry",
+    "cite": "17 DCMR § 4906.4(a)-(b)",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "Forty (40) hours of credit in continuing medical education meeting the requirements of Category 1",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[LGBTQ]",
+    "value": "2 hours",
+    "cite": "17 DCMR § 4906.4(c)",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "two (2) hours of credit in Category 1 or Category 1-equivalent continuing medical education coursework focusing on cultural competence",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.topicMandates[public health priorities]",
+    "value": "at least 10% of required total",
+    "cite": "17 DCMR § 4906.4(d)",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "At least ten percent (10%) of the total hours of required continuing medical education shall include subjects determined by the Director as public health priorities",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.acceptsNccpaCertificationInLieu",
+    "value": "yes, except LGBTQ and public health hours",
+    "cite": "17 DCMR § 4906.6",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "Nothing in this subsection shall waive the requirement of §§ 4906.4(c) and (d)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.firstRenewalExempt",
+    "value": "only the first renewal of a licence granted by examination",
+    "cite": "17 DCMR § 4906.2",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "nor does it apply to applicants for the first renewal of a license granted by examination",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce (board restatement)",
+    "value": "100 hours incl 2 LGBTQ and 10 public health priority; NCCPA may substitute for the 100",
+    "cite": "DC Board of Medicine page",
+    "url": "https://dchealth.dc.gov/bomed",
+    "quote": "PAs may substitute NCCPA certification for the one hundred (100) hours",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalDeadline",
+    "value": "last day of birth month (transition from June 16, 2024)",
+    "cite": "DC Board of Medicine page, Change to the Term of License notice; 17 DCMR § 4901.2",
+    "url": "https://dchealth.dc.gov/bomed",
+    "quote": "All credentials issued on or after June 16, 2024, will expire on the last day of the holder's birth month.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.renewalCycleYears (legacy default)",
+    "value": "December 31 of each even-numbered year unless the Director changes the system",
+    "cite": "17 DCMR § 4901.1",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "shall expire at 12:00 midnight of December 31 of each even-numbered year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType",
+    "value": "supervision (regulation)",
+    "cite": "17 DCMR § 4914.1",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "shall be under the supervision of a physician at all times during which the physician assistant is working",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementType (statute)",
+    "value": "collaboration",
+    "cite": "D.C. Code § 3-1201.02(13)",
+    "url": "https://code.dccouncil.gov/us/dc/council/code/sections/3-1201.02",
+    "quote": "means the performance, in collaboration with a licensed physician or osteopath, of acts of medical diagnosis and treatment",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.agreementFilingAndRenewal",
+    "value": "delegation agreement filed with Board, refiled on changes",
+    "cite": "17 DCMR § 4915.2-4915.4",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "be filed by the physician assistant with the Board and kept on file at the primary practice site",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.quarterlyReview",
+    "value": "quarterly practice advisory review",
+    "cite": "17 DCMR § 4914.9",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "must complete a practice advisory review on a quarterly basis",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "DC CSR required in addition to DEA; biennial",
+    "cite": "D.C. Code § 48-901.02 et seq.; DC Health Pharmaceutical Control letter to PAs",
+    "url": "https://dchealth.dc.gov/sites/default/files/dc/sites/doh/publication/attachments/Medicine_Letter_to_Physician_Assistants.pdf",
+    "quote": "This registration is required in addition to federal registration with the U. S. Drug Enforcement Administration (DEA).",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.publicHealthPriorityTopics",
+    "value": "five domains effective October 1, 2025",
+    "cite": "DC Health Public Notice, Identifying Public Health Issues for Continuing Education (2025)",
+    "url": "https://dchealth.dc.gov/sites/default/files/dc/sites/doh/service_content/attachments/2025-02-13%20Directors%20Public%20Health%20Priorities%20for%20CE%20Final_1.pdf",
+    "quote": "The Director has identified five (5) public health domains and provided content examples",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "ce.hivWaived",
+    "value": "3 credit HIV mandate waived for PAs",
+    "cite": "17 DCMR § 4906.4(e)",
+    "url": "https://dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-49",
+    "quote": "Pursuant to D.C. Official Code § 3-1205.10(b-1)(3), the requirements of D.C. Official Code § 3-1205.10(b)(4) are waived.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "licence.transitionCeProration",
+    "value": "50% of CE for terms under 2 years during the one time transition; LGBTQ and 10% public health still required",
+    "cite": "DC Board of Medicine page",
+    "url": "https://dchealth.dc.gov/bomed",
+    "quote": "All Boards have approved acceptance of 50% of the Continuing Education (CE) requirements for licensees who have received less than two (2) years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "np": {
+  "board": {
+   "name": "District of Columbia Board of Nursing (DC Health)",
+   "url": "https://dchealth.dc.gov/bon"
+  },
+  "rn": {
+   "renewalCycleYears": 2,
+   "renewalDeadline": "June 30 of even years under DCMR (2026 renewal window April 1 to June 30, 2026), moving to the last day of the birth month under DC Health's transition",
+   "ceHoursPerCycle": 24,
+   "firstRenewalExempt": true,
+   "nlcCompactMember": false,
+   "nlcNote": "DC is not a Nurse Licensure Compact jurisdiction; B26-0069 (NLC authorization) was pending in committee per secondary sources.",
+   "topicMandates": [
+    {
+     "topic": "LGBTQ cultural competency or specialized clinical training",
+     "hours": 2,
+     "period": "every cycle",
+     "appliesTo": "all RNs"
+    },
+    {
+     "topic": "DC public health priorities",
+     "hours": 2.4,
+     "period": "every cycle",
+     "appliesTo": "all RNs (10% of 24; DC Health 2026 notice states 2.5)"
+    }
+   ],
+   "transitionNote": "DC Health moved all credentials to a birth month cycle: credentials issued or renewed from June 16, 2024 (renewals from September 2024) expire on the last day of the birth month; people born in even years get even expiration years and odd years get odd. During the one time transition, a licensee whose term was under 2 years owes 50% of the CE hours but still all of the 2 LGBTQ hours and the 10% public health hours. Ask the member for the expiration date printed on the licence."
+  },
+  "aprn": {
+   "title": "APRN; DCMR chapter 59 calls it a certificate to practice as a nurse-practitioner",
+   "separateLicenceOrCertificate": "separate APRN credential (certificate under 17 DCMR ch. 59); requires current DC RN licence",
+   "renewalCycleYears": 2,
+   "renewalDeadline": "Renews with the RN cycle (2026 notice: expires June 30, 2026), moving to birth month",
+   "ceHoursPerCycle": 15,
+   "pharmacologyHoursPerCycle": null,
+   "pharmacologyNote": "Adopted rule 17 DCMR 5903.5(c): 15 contact hours in the 2 years before the application date, specialty related, approved by ANCC or another Board recognized certifier, that \"shall include a pharmacology component\". DC Health's 2026 RN/APRN notice states \"Fifteen (15) hours in pharmacology\". The regulation sets no minimum pharmacology split; the Board's own notice treats all 15 as pharmacology. Show both, with the notice as the Board's current instruction.",
+   "nationalCertificationRequired": true,
+   "topicMandates": [],
+   "upcoming": {
+    "status": "proposed, not in effect",
+    "source": "DC Health Second Notice of Proposed Rulemaking, 17 DCMR Ch. 57 to 60 (APRNs), D.C. Register Vol 73/23, June 5, 2026 (first proposed 71 DCR 010935, Sept 20, 2024)",
+    "summary": "Would retitle to certified nurse practitioner (CNP) licence; replace the 15 hour rule with 24 hours of CE per 2 years including 2 LGBTQ+ hours and 10% public health priority hours (first renewal exempt); let current national certification satisfy the hours except the LGBTQ+ and public health hours; waive the HIV mandate; add a controlled substances for pain section."
+   },
+   "nationalCertNote": "17 DCMR 5903.5(b) names ANCC \"or other national certifying body approved by the Board\"; AANPCB is not named in the rule."
+  },
+  "prescribing": {
+   "separateAuthorityRegistration": false,
+   "pharmacologyCeForPrescribers": "15 contact hours per renewal with a pharmacology component (DC Health notice: 15 hours in pharmacology)",
+   "controlledSubstanceCe": null,
+   "stateCsRegistrationRequired": true,
+   "csNote": "DEA plus DC Controlled Substance Registration required before prescribing controlled substances; PDMP registration required for licence renewal of prescribers."
+  },
+  "practice": {
+   "authority": "full",
+   "agreementType": "none",
+   "transitionToPracticeHours": null,
+   "agreementFilingAndRenewal": "None. The statutory collaboration section (D.C. Code § 3-1206.03) is repealed; APRNs act under general authorization in § 3-1206.01.",
+   "note": "D.C. Code 3-1206.02 (protocols) and 3-1206.03 (collaboration) are both repealed (D.C. Law 25-191, 2024); 17 DCMR 5910.1 still refers to \"the protocol under which the nurse-practitioner is practicing\", which is stale text."
+  },
+  "facts": [
+   {
+    "field": "rn.ceHoursPerCycle",
+    "value": "24 hours incl 2 LGBTQ and 10% public health priorities",
+    "cite": "17 DCMR § 5406.1",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-54&ChapterId=742",
+    "quote": "twenty-four (24) hours of continuing education meeting the requirements of § 5410 and the following",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.firstRenewalExempt",
+    "value": true,
+    "cite": "17 DCMR § 5406.4",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-54&ChapterId=742",
+    "quote": "seeking renewal of the license for the first time after the initial grant of the license shall not be required to complete continuing education",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.renewalDeadline",
+    "value": "June 30 of even years (default) or birth month",
+    "cite": "17 DCMR § 5401.1-5401.2",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-54&ChapterId=742",
+    "quote": "shall expire at 12:00 midnight of June 30 of each even-numbered year",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.topicMandates (2026 notice)",
+    "value": "24 hours incl 2 LGBTQ and 2.5 public health priority",
+    "cite": "DC Health 2026 RN/APRN Renewal Notice",
+    "url": "https://dchealth.dc.gov/sites/default/files/dc/sites/doh/service_content/attachments/2026%20RN_APRN%20Renewal%20Notice.pdf",
+    "quote": "Twenty-four (24) hours of CE, which must include 2 HOURS of LGBTQ and 2.5 hours must be in the public health priority topics",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.ceHoursPerCycle",
+    "value": "15 contact hours including pharmacology component",
+    "cite": "17 DCMR § 5903.5(c)",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-59&ChapterId=710",
+    "quote": "submit proof of completion of fifteen (15) contact hours of continuing education, which shall include a pharmacology component",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.pharmacology (2026 notice)",
+    "value": "15 hours in pharmacology",
+    "cite": "DC Health 2026 RN/APRN Renewal Notice",
+    "url": "https://dchealth.dc.gov/sites/default/files/dc/sites/doh/service_content/attachments/2026%20RN_APRN%20Renewal%20Notice.pdf",
+    "quote": "Fifteen (15) hours in pharmacology",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "note": "Board notice is an image PDF; text confirmed by OCR. The adopted regulation 5903.5(c) says only that the 15 hours \"shall include a pharmacology component\"."
+   },
+   {
+    "field": "aprn.nationalCertificationRequired",
+    "value": true,
+    "cite": "17 DCMR § 5903.5(b)",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-59&ChapterId=710",
+    "quote": "Submit evidence of current national certification or recertification, as applicable, by the American Nurses Credentialing Center (ANCC)",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.rnLicenceRequired",
+    "value": true,
+    "cite": "17 DCMR § 5903.5(a)",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-59&ChapterId=710",
+    "quote": "Maintain current licensure as a registered nurse in the District of Columbia",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.renewalCycle (2026 notice)",
+    "value": "expires June 30, 2026; CE window July 1, 2024 to June 30, 2026",
+    "cite": "DC Health 2026 RN/APRN Renewal Notice",
+    "url": "https://dchealth.dc.gov/sites/default/files/dc/sites/doh/service_content/attachments/2026%20RN_APRN%20Renewal%20Notice.pdf",
+    "quote": "CEs must be taken between July 1, 2024, and June 30, 2026.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.authority",
+    "value": "full; collaboration section repealed",
+    "cite": "D.C. Code § 3-1206.03 (repealed by D.C. Law 25-191, 2024)",
+    "url": "https://code.dccouncil.gov/us/dc/council/code/sections/3-1206.03",
+    "quote": "§ 3–1206.03. Collaboration. [Repealed]",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "practice.generalAuthorization",
+    "value": "APRN may diagnose, treat and prescribe",
+    "cite": "D.C. Code § 3-1206.01(a)",
+    "url": "https://code.dccouncil.gov/us/dc/council/code/sections/3-1206.01",
+    "quote": "The advanced practice registered nurse may perform actions of medical diagnosis, treatment, prescription, recommendation, and other functions",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.stateCsRegistrationRequired",
+    "value": "DEA and DC CSR required",
+    "cite": "17 DCMR § 5910.2",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-59&ChapterId=710",
+    "quote": "Possesses a valid District of Columbia controlled substances registration",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.nlcCompactMember",
+    "value": false,
+    "cite": "NCSBN NLC map (compact administrator; secondary)",
+    "url": "https://www.nursecompact.com/files/NLC_Map.pdf",
+    "quote": "43 jurisdictions have enacted the NLC",
+    "loaded": true,
+    "verified": false,
+    "reason": "The NCSBN implementation table (loaded) lists 43 enacted jurisdictions and the District of Columbia is not among them; no DC Code or DC Health primary source stating non-membership was loaded."
+   },
+   {
+    "field": "rn.hivWaived",
+    "value": "3 credit HIV mandate waived for RNs",
+    "cite": "17 DCMR § 5406.2",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-54&ChapterId=742",
+    "quote": "Pursuant to D.C. Official Code § 3-1205.10(b-1)(3), the requirements of D.C. Official Code § 3-1205.10(b)(4) are waived.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.transitionCeProration",
+    "value": "50% of CE for terms under 2 years during the transition",
+    "cite": "DC Board of Nursing page",
+    "url": "https://dchealth.dc.gov/bon",
+    "quote": "All Boards have approved acceptance of 50% of the Continuing Education (CE) requirements for licensees who have received less than two (2) years",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "rn.expiryYearParity",
+    "value": "even birth year = even expiration year; odd = odd",
+    "cite": "DC Health 2026 RN/APRN Renewal Notice (OCR of image PDF)",
+    "url": "https://dchealth.dc.gov/sites/default/files/dc/sites/doh/service_content/attachments/2026%20RN_APRN%20Renewal%20Notice.pdf",
+    "quote": "licensees born in even-numbered years will have expiration years that are even-numbered",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "prescribing.pdmpForRenewal",
+    "value": "PDMP registration required for licence renewal of prescribers",
+    "cite": "DC Health 2026 RN/APRN Renewal Notice",
+    "url": "https://dchealth.dc.gov/sites/default/files/dc/sites/doh/service_content/attachments/2026%20RN_APRN%20Renewal%20Notice.pdf",
+    "quote": "Your license will not be renewed without PDMP registration.",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   },
+   {
+    "field": "aprn.upcoming",
+    "value": "proposed 24 hour CE rule (not final)",
+    "cite": "DC Health Second NOPR, proposed 17 DCMR § 5904.1 (73 DCR, June 5, 2026)",
+    "url": "https://www.dcregs.dc.gov/Common/DCMR/RuleList.aspx?ChapterNum=17-59&ChapterId=710",
+    "quote": "shall have completed twenty-four (24) hours of continuing education during the two-year (2-year) period before the expiration of the license",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10",
+    "status": "proposed",
+    "note": "DCRegs section 17-5903 still lists the 2004 text as the adopted rule and shows only proposed notices; not in effect as of 2026-10."
+   },
+   {
+    "field": "practice.protocolsRepealed",
+    "value": "APRN protocol requirement repealed",
+    "cite": "D.C. Code § 3-1206.02",
+    "url": "https://code.dccouncil.gov/us/dc/council/code/sections/3-1206.02",
+    "quote": "§ 3–1206.02. Requirements of protocols. [Repealed]",
+    "loaded": true,
+    "verified": true,
+    "verifiedBy": "verifier-2026-10"
+   }
+  ]
+ },
+ "unverified": [
+  "DC controlled substance registration term and fee come from a DC Health Pharmaceutical Control letter marked REV 2/11 (biennial, $130); no current CSR rule or page stating the term was loaded.",
+  "Whether DC APRNs owe the 2 LGBTQ hours and 10% public health hours separately on the APRN credential under current rules: 17 DCMR ch. 59 (2004 text) is silent; they are met on the RN licence. The pending June 5, 2026 proposal would make them explicit for CNPs.",
+  "DC Nurse Licensure Compact status rests on the NCSBN map (secondary); no DC primary source was loaded.",
+  "Exact renewal date per licensee during the birth month transition: the app should take the expiration date printed on the licence.",
+  "DC PA supervision vs collaboration: statute (3-1201.02(13)) says collaboration; 17 DCMR 4914 to 4916 (last amended 2020) still require supervision, a filed delegation agreement and quarterly reviews. DCRegs shows no pending PA rulemaking.",
+  "No controlled substance specific CE requirement for DC PAs or APRNs exists in the adopted rules loaded; the pending APRN proposal adds CS for pain prescribing standards but not a CE hour mandate in the text reviewed."
+ ],
+ "sourceNote": "dcregs.dc.gov section text was loaded by the chapter RuleList page postback, which downloads the adopted rule as a Word file (e.g. 174906.doc, 175903.doc).",
+ "verifiedAt": "2026-10",
+ "verifiedBy": "verifier-2026-10",
+ "corrections": [
+  "DC PA: corrected the quote for D.C. Code 3-1201.02(13) to the exact loaded text.",
+  "DC PA: narrowed the first renewal exemption. 17 DCMR 4906.2 exempts only the first renewal of a licence granted by examination, not one granted by reciprocity.",
+  "DC PA and RN: confirmed in the loaded rules that the statutory 3 credit HIV/AIDS mandate is waived for both (4906.4(e), 5406.2) and added the RN fact.",
+  "DC both: added the birth year parity rule (even birth year, even expiry year) and the one time 50% CE proration for transition terms under 2 years, with LGBTQ and public health hours still due in full.",
+  "DC APRN: added the PDMP registration renewal condition with its primary quote (was only described in a note).",
+  "DC APRN: corrected the quote for the 2026 notice and removed the researcher's own \"conservative reading\" wording; the file now states the regulation text and the Board notice text side by side without inventing a split.",
+  "DC APRN: found a pending Second Notice of Proposed Rulemaking (June 5, 2026) that would replace the 15 hour pharmacology rule with 24 hours incl. LGBTQ+ and public health, accept national certification in lieu, and add CS for pain rules. Recorded as upcoming, not in effect.",
+  "DC APRN: added that the protocol statute (3-1206.02) is repealed along with collaboration (3-1206.03); 17 DCMR 5910.1 still mentions a protocol (stale).",
+  "DC RN: NLC non-membership now rests on the loaded NCSBN map (DC absent from the 43 enacted jurisdictions) instead of an unloaded LegiScan summary; still secondary, so verified:false.",
+  "DC both: expanded the public health priority domain list from the loaded 2025 notice; implicit bias, suicide prevention, SUD and infection control are qualifying examples within the 10%, not separate mandates."
+ ]
+}

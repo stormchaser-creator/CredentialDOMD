@@ -1,0 +1,28 @@
+{
+ "state": "HI",
+ "facts": [
+  {
+   "field": "np.rn.learningOptions.more",
+   "profession": "np",
+   "value": "Refresher course, two post-licensure academic semester credits, a preceptorship of 120 hours, a research or evidence-based practice project, a peer reviewed publication, five contact hours of presentations, a nurse residency program, or a similar board recognized activity",
+   "cite": "HRS 457-9.3(3) to (10)",
+   "url": "https://www.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0457/HRS_0457-0009_0003.htm",
+   "quote": "Completion of a board approved refresher course ... a minimum of two semester credits of post-licensure academic education ... nurse residency program",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10",
+   "note": "Loaded in a real browser on 2026-10-01 (the site refuses scripted requests)."
+  },
+  {
+   "field": "np.prescribing.renewalCe",
+   "profession": "np",
+   "value": "30 hours (22 specialty, 8 pharmacology) for APRNs renewing prescriptive authority",
+   "cite": "HAR 16-89-123(a)",
+   "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/HAR-89-C.pdf",
+   "quote": "seeking renewal of ... prescriptive authority shall certify under oath that the licensee has completed the thirty hours of continuing education",
+   "loaded": true,
+   "verified": true,
+   "verifiedBy": "review-fix-2026-10"
+  }
+ ]
+}

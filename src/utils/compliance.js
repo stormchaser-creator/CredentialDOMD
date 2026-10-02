@@ -2,6 +2,19 @@ import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements
 import { topicApplicability } from "./conditionalCme.js";
 import { isAlertable, isInactive, needsResolution } from "./lifecycle.js";
 import { daysUntilDate, parseDay } from "./dateDays.js";
+import { computeAppCompliance } from "./appCompliance.js";
+import { professionStatus } from "./professionStatus.js";
+import { appCardTitle } from "./cmePresentation.js";
+import {
+  certBodyOf, certificationRolePending, isAdvancedPractice, isNationalCertification, isPracticeLicense, licenseKindOf, professionOf,
+} from "../constants/professions.js";
+import { ruleSetFor } from "./ruleResolver.js";
+import {
+  MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, parseLocalDate, cycleBucket, splitByCycle, inWindow,
+  wholeMonthsBetween, showDate, topicPeriodLabel, round2,
+} from "./cmeCore.js";
+
+export { MATE_HOURS, cmeTopics, cycleBucket, splitByCycle, topicPeriodLabel, round2 };
 
 /**
  * CME compliance engine — cycle-windowed.
@@ -54,102 +67,6 @@ import { daysUntilDate, parseDay } from "./dateDays.js";
  * NOT satisfy it, so only the two specific topics count here.
  */
 
-const MATE_TOPICS = ["Opioid Prescribing", "Substance Use Disorders"];
-export const MATE_HOURS = 8;
-
-/**
- * A CME entry's topics as a list. Vera could store them as one string
- * ("Pain Management"), and `(c.topics || []).some` threw on every launch,
- * so a row already saved that way is read as its comma-separated tags.
- */
-export function cmeTopics(c) {
-  const t = c?.topics;
-  if (Array.isArray(t)) return t.filter(x => typeof x === "string");
-  return typeof t === "string" ? t.split(/[,;]/).map(x => x.trim()).filter(Boolean) : [];
-}
-
-const MS_PER_DAY = 86400000;
-
-// Parse a date at LOCAL midnight. A bare "YYYY-MM-DD" otherwise parses as UTC
-// midnight, which in US time zones lands the evening BEFORE and drops an entry
-// dated on the first day of the cycle. Every window bound, the expiration
-// anchor, the cycle-start override and each logged entry go through this, so
-// the boundary day (window start and window end) is in-cycle.
-function parseLocalDate(value) {
-  if (!value) return null;
-  const s = String(value);
-  const d = new Date(s.length === 10 ? s + "T00:00:00" : s);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-/**
- * Which side of a renewal window an entry falls on, by the same local-midnight
- * parse the engine counts with:
- *   "in"       counted toward the cycle (both boundary days included)
- *   "before"   dated before the window opened
- *   "after"    dated after the window closed
- *   "undated"  no usable date; never counted anywhere
- * The engine's own in-window test, the transcript PDF's entry list and the
- * desk-width CME table all route through this, so the hours a compliance card
- * shows, the rows a transcript prints and the in-window subtotal on the CME
- * page are one number from one predicate.
- */
-export function cycleBucket(entry, start, end) {
-  const d = parseLocalDate(entry?.date);
-  if (!d) return "undated";
-  if (d < start) return "before";
-  if (d > end) return "after";
-  return "in";
-}
-
-function inWindow(entry, start, end) {
-  return cycleBucket(entry, start, end) === "in";
-}
-
-/**
- * Entries split the way the engine counts them: `inWin` (counted) and
- * `outWin`, each tagged with its `_bucket` ("before", "after", "undated").
- * Home's CME math modal lists from this so an entry dated on the window's
- * first day is counted there as it is in the total (it used to parse the date
- * as UTC midnight and list it as outside the window in US time zones).
- */
-export function splitByCycle(entries, start, end) {
-  const inWin = [], outWin = [];
-  for (const c of entries || []) {
-    const b = cycleBucket(c, start, end);
-    if (b === "in") inWin.push(c); else outWin.push({ ...c, _bucket: b });
-  }
-  return { inWin, outWin };
-}
-
-// Whole months from `a` to `b`. Used only for state first-cycle rules, whose
-// tiers are written in months ("issued 12 to 18 months before expiration").
-function wholeMonthsBetween(a, b) {
-  let m = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
-  if (b.getDate() < a.getDate()) m -= 1;
-  return m;
-}
-
-const showDate = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-
-/**
- * Plain-English periodicity for one topic mandate.
- *
- * A physician looking at "12 hrs Pain Management" cannot tell a one-time
- * career requirement from something owed at every renewal, and reading it the
- * wrong way costs either 12 needless hours or a failed audit. Every surface
- * that shows a topic row prints this, so the answer is never left implicit.
- */
-export function topicPeriodLabel(period, cycleYears) {
-  if (period === "lifetime") return "One time, not every cycle";
-  if (period && typeof period === "object" && period.years > 0) {
-    return period.years === 1 ? "Every year" : `Every ${period.years} years`;
-  }
-  return cycleYears > 0
-    ? `Every renewal cycle (${cycleYears} yr${cycleYears === 1 ? "" : "s"})`
-    : "Every renewal cycle";
-}
-
 /**
  * First-cycle proration, data-driven and keyed to the LICENSE ISSUE DATE.
  *
@@ -182,17 +99,15 @@ function firstCycleAllowance(rule, licenseIssued, windowEnd) {
   return null;
 }
 
-/**
- * Hours to hundredths. Every sum of CME hours is rounded where it is made,
- * before any comparison: 0.1 + 0.2 summed to 0.30000000000000004 on the
- * cards, and 0.7 + 0.2 + 0.1 of a one-hour topic came to 0.9999999999999999
- * and read as unmet.
- */
-export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-
 export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
+  // A PA or NP is never evaluated against a physician rule set.
+  if (isAdvancedPractice(degreeType)) return computeAppCompliance(cmeEntries, state, degreeType, opts);
   const entry = getStateEntry(state, degreeType);
-  const degreeUnknown = !["MD", "DO"].includes(degreeType) && !!hasSeparateBoards(state);
+  // D-1 (src/utils/professionStatus.js): a blank or unrecognised profession is
+  // unknown in every state, since a blank member may be a PA or an NP. The MD
+  // numbers still show as a stand-in, marked provisional, never "met". MD and
+  // DO are known everywhere, as before.
+  const degreeUnknown = professionStatus(degreeType).unknown;
   const cycleYears = entry?.cycle || 2;
 
   // ── Renewal window ──
@@ -343,8 +258,15 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const knownRequirementsMet = totalMet && cat1Met && allTopicsMet && (!mate || mate.met);
   // Split-board fallback numbers remain visible, but cannot certify compliance
   // or assert a board-specific shortfall until the physician selects MD or DO.
-  const assessmentStatus = degreeUnknown ? "needs-confirmation" : !knownRequirementsMet ? "needs-hours"
-    : applicabilityUnknown ? "needs-confirmation" : "met";
+  //
+  // D-1 never hides a recorded shortfall (DESIGN 7.2): in a combined-board
+  // state the MD and DO numbers are the same, so a blank member who is short
+  // keeps the gap ("needs-hours") exactly as before D-1; only a blank member
+  // whose hours are met, or one in a split-board state where the stand-in
+  // numbers may be the wrong board's, waits on the profession choice.
+  const splitBoardUnknown = degreeUnknown && !!hasSeparateBoards(state);
+  const assessmentStatus = splitBoardUnknown ? "needs-confirmation" : !knownRequirementsMet ? "needs-hours"
+    : applicabilityUnknown || degreeUnknown ? "needs-confirmation" : "met";
 
   return {
     state,
@@ -473,15 +395,29 @@ export function windowNotes(comp) {
  * a historical one, or one whose date is not known yet must never set the
  * CME cycle (src/utils/lifecycle.js).
  */
-export function findStateLicense(licenses, state) {
+// "medical" keeps the exact test it always had; a PA or NP kind matches by
+// licence kind (src/constants/professions.js licenseKindOf).
+const ofKind = (l, kind) => (kind === "medical" ? /medical license/i.test(l?.type || "") : licenseKindOf(l?.type) === kind);
+
+export function findStateLicense(licenses, state, kind = "medical") {
   const candidates = (licenses || []).filter(l =>
-    l && l.state === state && /medical license/i.test(l.type || "") && l.expirationDate && isAlertable(l)
+    l && l.state === state && ofKind(l, kind) && l.expirationDate && isAlertable(l)
   );
   if (candidates.length === 0) return null;
   // Local calendar days: a licence is in force through its whole last day.
   const future = candidates.filter(l => (daysUntilDate(l.expirationDate) ?? -1) >= 0);
   const pool = future.length ? future : candidates;
   return pool.sort((a, b) => (parseDay(a.expirationDate) || 0) - (parseDay(b.expirationDate) || 0))[0];
+}
+
+/**
+ * A current licence of this kind in the state with no expiration date yet
+ * (an NPI import: NPPES carries none), or null. It cannot anchor the card's
+ * window, but it is on file, and the PA or NP card says so
+ * (cmePresentation.js appRenewalLine).
+ */
+export function undatedLicenseOnFile(licenses, state, kind = "medical") {
+  return (licenses || []).find(l => l && l.state === state && ofKind(l, kind) && !l.expirationDate && isAlertable(l)) || null;
 }
 
 /**
@@ -492,9 +428,9 @@ export function findStateLicense(licenses, state) {
  * rollingWindowLabel). Home's state card and the support viewer's copy of it
  * both read it here, so the two never disagree.
  */
-export function resolvePendingLicense(licenses, state) {
+export function resolvePendingLicense(licenses, state, kind = "medical") {
   return (licenses || []).find(l =>
-    l && l.state === state && /medical license/i.test(l.type || "") && needsResolution(l, "licenses")
+    l && l.state === state && ofKind(l, kind) && needsResolution(l, "licenses")
   ) || null;
 }
 
@@ -505,11 +441,14 @@ export function resolvePendingLicense(licenses, state) {
  * CME window then reads as due in the ring, on a Home card and in Vera's
  * snapshot. A state the physician picked in Settings stays tracked.
  */
-export function trackedStates(primaryState, additionalStates, licenses) {
+export function trackedStates(primaryState, additionalStates, licenses, degreeType) {
   const states = new Set([primaryState, ...(Array.isArray(additionalStates) ? additionalStates : [])].filter(Boolean));
   for (const l of licenses || []) {
     if (!l || isInactive(l)) continue;
-    if (l.state && /medical license/i.test(l.type || "")) states.add(l.state);
+    // MD, DO and blank: a medical licence, exactly as before. PA: a PA
+    // licence. NP: an APRN or RN licence. A multistate RN licence tracks only
+    // its own state; no state is added from compact membership.
+    if (l.state && isPracticeLicense(l, degreeType)) states.add(l.state);
   }
   return [...states];
 }
@@ -534,16 +473,16 @@ export function trackedStates(primaryState, additionalStates, licenses) {
  * marked "date not yet known" hold the ring down with "CO CME review
  * records" all the same.
  */
-export function alertingStates(primaryState, additionalStates, licenses) {
+export function alertingStates(primaryState, additionalStates, licenses, degreeType) {
   // Per state: true once a held medical licence there can alert, false while
   // every one held there is a Resolve task. Historical and superseded
   // licences are not held (trackedStates).
   const held = new Map();
   for (const l of licenses || []) {
-    if (!l || isInactive(l) || !l.state || !/medical license/i.test(l.type || "")) continue;
+    if (!l || isInactive(l) || !l.state || !isPracticeLicense(l, degreeType)) continue;
     held.set(l.state, held.get(l.state) === true || isAlertable(l));
   }
-  return trackedStates(primaryState, additionalStates, licenses).filter(st => held.get(st) !== false);
+  return trackedStates(primaryState, additionalStates, licenses, degreeType).filter(st => held.get(st) !== false);
 }
 
 /** DEA registration detection (drives the MATE Act line). */
@@ -556,7 +495,8 @@ export function hasDEARegistration(licenses) {
  * Convenience: compliance for a state using everything we know — the state
  * license's expiration anchors the window, DEA registration adds MATE Act.
  */
-export function complianceFor(data, state) {
+export function complianceFor(data, state, kind) {
+  if (isAdvancedPractice(data.settings.degreeType)) return appComplianceFor(data, state, kind);
   const lic = findStateLicense(data.licenses, state);
   return computeCompliance(data.cme, state, data.settings.degreeType, {
     licenseExpiration: lic?.expirationDate || null,
@@ -568,6 +508,105 @@ export function complianceFor(data, state) {
   });
 }
 
+
+/** A PA's or NP's national certification records, current or not, for the engine. */
+export function certificationsFor(licenses) {
+  return (licenses || [])
+    .filter(l => l && certBodyOf(l.type) && !isInactive(l) && isNationalCertification(l, licenses))
+    .map(l => ({ body: certBodyOf(l.type), expirationDate: l.expirationDate || "", alertable: isAlertable(l), recordId: l.id }));
+}
+
+/**
+ * Certification records of the profession's certifiers whose role (PA-C, NP
+ * certification or another credential) is not answered yet. They are on
+ * file: a check they could satisfy reads "answer the question", never
+ * "not on file".
+ */
+export function pendingCertificationsFor(licenses, degreeType) {
+  return (licenses || [])
+    .filter(l => l && !isInactive(l) && certificationRolePending(l, licenses, degreeType))
+    .map(l => ({ body: certBodyOf(l.type), expirationDate: l.expirationDate || "", alertable: isAlertable(l), recordId: l.id, pendingRole: true }));
+}
+
+const defaultKind = (degreeType) => (professionOf(degreeType) === "pa" ? "pa" : "aprn");
+const deaAnswersOf = (licenses) => (licenses || []).find(l => l && !isInactive(l) && licenseKindOf(l.type) === "dea")?.customFields || {};
+
+/**
+ * One PA or NP card: the licence of that kind anchors the window, its
+ * answers decide conditional topics and practice hours, current national
+ * certification records may satisfy the hours, and MATE shows on the primary
+ * practice card only. An RN card in a state whose APRN hours also satisfy
+ * the RN hours (verified satisfiesRn) is read with the APRN card beside it.
+ */
+function appComplianceFor(data, state, kind) {
+  const deg = data.settings.degreeType;
+  const k = kind || defaultKind(deg);
+  const lic = findStateLicense(data.licenses, state, k);
+  const hasAprn = (data.licenses || []).some(l => l && !isInactive(l) && licenseKindOf(l.type) === "aprn");
+  const opts = {
+    kind: k,
+    licenseExpiration: lic?.expirationDate || null,
+    licenseIssued: lic?.issuedDate || null,
+    cycleStart: lic?.cmeCycleStart || null,
+    licenseAnswers: lic?.customFields || {},
+    hasDEA: hasDEARegistration(data.licenses),
+    deaAnswers: deaAnswersOf(data.licenses),
+    mateApplies: k === "pa" || k === "aprn" || (k === "rn" && !hasAprn),
+    certifications: certificationsFor(data.licenses),
+    pendingCertifications: pendingCertificationsFor(data.licenses, deg),
+  };
+  if (k === "rn" && ruleSetFor(state, deg, "aprn")?.satisfiesRn) opts.aprnComp = appComplianceFor(data, state, "aprn");
+  return computeCompliance(data.cme, state, deg, opts);
+}
+
+/**
+ * Every CME or CE card the member's Home, alerts, support view and Vera
+ * read, in one list: [{ st, kind, key, comp, lic }].
+ *
+ * Physicians (and a blank profession): one card per tracked state, key = the
+ * state, the same objects in the same order as before. A PA: one PA licence
+ * card per tracked state. An NP: an APRN card where an APRN licence is held
+ * or the state is the primary or a Settings pick, an RN card where an RN
+ * licence (single state or multistate) is held, and, when no RN licence is on
+ * file anywhere, an unanchored RN card for the primary state that asks for it.
+ */
+export function complianceListFor(data) {
+  const deg = data.settings.degreeType;
+  const states = trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses, deg);
+  if (!isAdvancedPractice(deg)) {
+    return states.map(st => ({ st, kind: "medical", key: st, comp: complianceFor(data, st), lic: findStateLicense(data.licenses, st) }));
+  }
+  const held = (kind) => new Set((data.licenses || []).filter(l => l && !isInactive(l) && l.state && licenseKindOf(l.type) === kind).map(l => l.state));
+  const card = (st, kind) => ({ st, kind, key: `${st}:${kind}`, comp: complianceFor(data, st, kind), lic: findStateLicense(data.licenses, st, kind) });
+  if (professionOf(deg) === "pa") return states.map(st => card(st, "pa"));
+  const aprn = held("aprn"), rn = held("rn");
+  const picked = new Set([data.settings.primaryState, ...(Array.isArray(data.settings.additionalStates) ? data.settings.additionalStates : [])].filter(Boolean));
+  const out = [];
+  for (const st of states) {
+    if (aprn.has(st) || picked.has(st)) out.push(card(st, "aprn"));
+    if (rn.has(st)) out.push(card(st, "rn"));
+  }
+  const primary = data.settings.primaryState;
+  if (!rn.size && primary && !out.some(c => c.st === primary && c.kind === "rn")) out.push(card(primary, "rn"));
+  return out;
+}
+
+/**
+ * The cards for a list of states, each with its own licence kind: physicians
+ * get one card per state (key = state, kind "medical"); a PA or NP gets the
+ * complianceListFor cards in those states, so a state where an NP holds only
+ * an RN licence is read with the RN rules, never the APRN default.
+ */
+export function cardsForStates(data, states) {
+  const wanted = new Set(states || []);
+  if (!isAdvancedPractice(data.settings.degreeType)) return [...wanted].map(st => ({ st, kind: "medical", key: st, comp: complianceFor(data, st) }));
+  return complianceListFor(data).filter(c => wanted.has(c.st));
+}
+
+/** One state's main card (the first of cardsForStates): what a single-state view counts against. */
+export function mainCardFor(data, state) {
+  return cardsForStates(data, [state])[0] || null;
+}
 
 /**
  * Standing score for the Home ring. Every tracked item is either in good
@@ -605,7 +644,14 @@ export function standingScore({ items = [], missingRequired = [], stateComps = [
     // 90 days out); before that there is nothing to do yet.
     const due = x.comp?.daysLeft == null || x.comp.daysLeft <= leadDays;
     if (x.comp?.fullyCompliant || !due) good += 1;
-    else needsAction.push({ item: { id: `cme:${x.st}`, _sec: "cme", _cat: "CME", state: x.st, needsConfirmation: x.comp?.assessmentStatus === "needs-confirmation" }, days: x.comp?.daysLeft ?? null });
+    // Physician cards are keyed by state (`cme:TX`, as before, so existing
+    // snoozes survive); PA and NP cards by state and kind (`cme:TX:aprn`).
+    // A PA or NP row names its card ("Texas RN license CE") and carries its
+    // kind, so the tap opens that card's math, not the state's default card.
+    // A national certification card (kind "cert": NCCPA, an NP certifier)
+    // names itself ("NCCPA certification (PA-C) credits").
+    else if (x.kind === "cert") needsAction.push({ item: { id: `cme:${x.key}`, _sec: "cme", _cat: "CME", state: x.st, kind: "cert", title: x.comp?.certCard?.label || x.st, ceNoun: "credits", needsConfirmation: false }, days: x.comp?.daysLeft ?? null });
+    else needsAction.push({ item: { id: `cme:${x.key ?? x.st}`, _sec: "cme", _cat: "CME", state: x.st, ...(x.kind && x.kind !== "medical" ? { kind: x.kind, title: appCardTitle(x.comp), ceNoun: x.comp?.profession === "np" ? "CE" : "CME" } : {}), needsConfirmation: x.comp?.assessmentStatus === "needs-confirmation" }, days: x.comp?.daysLeft ?? null });
   }
   needsAction.sort((a, b) => (a.days ?? 9e9) - (b.days ?? 9e9));
   const percent = total === 0 ? (tracked.length === 0 ? 0 : 100) : Math.round((good / total) * 100);

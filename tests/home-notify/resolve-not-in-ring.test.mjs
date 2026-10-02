@@ -74,14 +74,15 @@ test('the bell raises no CME alert for a state held only by a pending or date-un
 
 test('Home feeds the ring, its CME summary and its pending mark from the alerting states only', () => {
   const app = readFileSync(`${root}src/App.jsx`, 'utf8');
-  assert.match(app, /alertingStates\(data\.settings\.primaryState, data\.settings\.additionalStates, data\.licenses\)/);
-  assert.match(app, /items: lapsingCreds, missingRequired: missingExpiration, stateComps: ringComps,/);
+  assert.match(app, /alertingStates\(data\.settings\.primaryState, data\.settings\.additionalStates, data\.licenses, data\.settings\.degreeType\)/);
+  assert.match(app, /items: lapsingCreds, missingRequired: missingExpiration, stateComps: \[\.\.\.ringComps, \.\.\.certRingComps\],/);
   assert.match(app, /const cmeSummary = cmeReviewSummary\(ringComps\);/);
   assert.equal((app.match(/<CmeReviewSummary stateComps=\{ringComps\}/g) || []).length, 2, 'phone and desk heroes');
   assert.doesNotMatch(app, /<CmeReviewSummary stateComps=\{stateComps\}/);
   assert.match(app, /const stateCards = stateComps\.map\(renderStateCard\);/, 'every tracked state keeps its card');
   const bell = readFileSync(`${root}src/utils/notifications.js`, 'utf8');
-  assert.match(bell, /const allStates = alertingStates\(data\.settings\.primaryState, data\.settings\.additionalStates, data\.licenses\);/);
+  assert.match(bell, /const allStates = new Set\(alertingStates\(data\.settings\.primaryState, data\.settings\.additionalStates, data\.licenses, data\.settings\.degreeType\)\);/);
+  assert.match(bell, /complianceListFor\(data\)\.filter\(x => allStates\.has\(x\.st\)\)/);
 });
 
 test('the state card of a licence on the Resolve card names the open question, not "No license on file"', async () => {
@@ -91,7 +92,7 @@ test('the state card of a licence on the Resolve card names the open question, n
   assert.equal(rollingWindowLabel('UT', 2, lifecycleNote(UT)), 'UT license: pending confirmation, so the app tracks a rolling 2-yr window');
   assert.equal(rollingWindowLabel('NM', 3), 'No NM license on file, so the app tracks a rolling 3-yr window');
   const app = readFileSync(`${root}src/App.jsx`, 'utf8');
-  assert.match(app, /const waiting = comp\.windowAnchored \? null : resolvePendingLicense\(data\.licenses, st\);/);
+  assert.match(app, /const waiting = comp\.windowAnchored \? null : resolvePendingLicense\(data\.licenses, st, kind \|\| "medical"\);/);
   const { resolvePendingLicense } = await import('../../src/utils/compliance.js');
   assert.equal(resolvePendingLicense([TX, CO, UT], 'CO'), CO);
   assert.equal(resolvePendingLicense([TX, CO, UT], 'UT'), UT);

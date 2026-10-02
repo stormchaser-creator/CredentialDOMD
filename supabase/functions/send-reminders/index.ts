@@ -29,6 +29,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "./renewalLinks.json" with { type: "json" };
+import appBoardLinks from "./appBoardLinks.json" with { type: "json" };
+import { renewalLineFor } from "../_shared/reminderRenewalLine.mjs";
 import { remindable, reminderLabel, withCurrentCategoryNames, reminderGreeting, reminderHeadline } from "../_shared/reminderRows.mjs";
 import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
 import { reminderEmailDecision, reminderFingerprint, reminderToldStill } from "../_shared/reminderCadence.mjs";
@@ -130,7 +132,7 @@ serve(answerAuthUnavailable({}, async (req) => {
           // Historical, superseded, pending-confirmation and date-unknown
           // records never trigger a reminder (ticket 2c819309).
           if (!remindable(r, { table: t.table, today })) continue;
-          items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date, today), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
+          items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date, today), state: r.state ?? null, type: r.type ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
         }
       }
       const fp = await reminderFingerprint(items);
@@ -157,13 +159,9 @@ serve(answerAuthUnavailable({}, async (req) => {
       const later = items.filter(i => i.days > 30);
       // A warning without the door to fix it is homework, not help: every
       // license line names where to renew it.
-      const renewLine = (i: typeof items[0]) => {
-        if (i.isDea) return "\n      Renew: https://www.deadiversion.usdoj.gov/online_forms_apps.html";
-        if (!i.isLicense || !i.state) return "";
-        const r = (renewalLinks as Record<string, { portal?: string; board?: string; due?: string; guide?: string }>)[i.state];
-        if (!r?.portal) return "";
-        return `\n      Renew: ${r.portal}${r.guide ? `\n      Steps and fees: ${r.guide}` : ""}`;
-      };
+      // A PA's or NP's licence names its own board, never the medical board
+      // portal (_shared/reminderRenewalLine.mjs); MD and DO lines unchanged.
+      const renewLine = (i: typeof items[0]) => renewalLineFor(i, p.degree_type ?? "", { renewalLinks, appBoardLinks });
       const line = (i: typeof items[0]) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})${renewLine(i)}`;
       const parts: string[] = [];
       if (expired.length) parts.push(`EXPIRED\n${expired.map(line).join("\n")}`);

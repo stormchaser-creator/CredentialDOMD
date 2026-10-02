@@ -1,8 +1,11 @@
 import { ohioCmeContext } from "./conditionalCme.js";
-import { calculationEvidence, jurisdictionEvidence, renewalEvidence, savedReferenceContext, evidenceForTurn, EVIDENCE_INSTRUCTIONS } from "./assistantEvidence.js";
+import { calculationEvidence, jurisdictionEvidence, renewalEvidence, savedReferenceContext, evidenceForTurn, EVIDENCE_INSTRUCTIONS, evidenceInstructionsFor } from "./assistantEvidence.js";
 import { loadVeraSources, sourceCheckReceipt } from "./veraSourcesClient.js";
 import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
-import { complianceFor, findStateLicense } from "./compliance";
+import { complianceFor, complianceListFor, findStateLicense, cmeTopics } from "./compliance";
+import { isAdvancedPractice, isKnownDegree } from "../constants/professions.js";
+import { certificationCards } from "./certCompliance.js";
+import { NCCPA_ACTIVITY_FIELD, PHARMACOLOGY_HOURS_FIELD } from "../constants/credentialTypes.js";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
 import { CPT_DESCS } from "../constants/cptDescs";
 import { CME_PROVIDERS } from "../constants/cmeProviders";
@@ -49,12 +52,48 @@ export function lifecycleSnapshot(record) {
   return out;
 }
 
+// What a PA or NP licence renewal checks that is still open: these, not the
+// hours, are what fall due on the renewal date when the CME period runs on.
+function renewalItemsOpen(comp) {
+  return [
+    ...(comp.credentialChecks || []).filter((c) => c.met !== true).map((c) => c.label),
+    ...(comp.mate && !comp.mate.met ? [`MATE Act ${comp.mate.required} hours (one time, DEA registrants)`] : []),
+    ...(comp.options && !comp.options.confirmed && !comp.exemption?.applies ? ["Confirm which renewal option applies"] : []),
+  ];
+}
+
 /** Compact, privacy-lean snapshot of the user's data for grounding. */
 export function buildSnapshot(data, allTrackedStates = []) {
   const today = new Date().toISOString().slice(0, 10);
   const short = (arr, f) => (arr || []).slice(0, 40).map(f);
   const cmeByState = {};
-  for (const st of allTrackedStates) {
+  // A PA or NP: one entry per card, keyed by state and licence ("TX:aprn"),
+  // from their own rule sets; never a physician rule set.
+  if (isAdvancedPractice(data.settings.degreeType)) {
+    const tracked = new Set(allTrackedStates);
+    for (const { st, key, comp, lic } of complianceListFor(data)) {
+      if (!tracked.has(st)) continue;
+      cmeByState[key] = {
+        earned: comp.totalEarned, required: comp.totalRequired, unit: comp.unit,
+        // daysLeft always counts to the renewal date beside it. A CME period
+        // that ends after the licence renews (Mississippi and Alabama PA) is
+        // sent as its own date and countdown, never paired with the licence.
+        renewal: lic?.expirationDate || null, daysLeft: comp.licenseDaysLeft ?? comp.daysLeft,
+        // Hours and topics are counted through the period end whatever the
+        // countdown shows. An open item the renewal itself checks (a
+        // certification, the one-time MATE hours, a renewal option) moves only
+        // the countdown, so those items are named on their own.
+        ...(comp.periodDue ? { cmePeriodEnds: comp.periodDue, cmePeriodDaysLeft: comp.periodDaysLeft, hoursAndTopicsDueBy: "cmePeriodEnds", dueAtRenewal: renewalItemsOpen(comp) } : {}),
+        unmetTopics: comp.topicResults.filter(t => !t.met).map(t => t.topic),
+        assessmentStatus: comp.assessmentStatus,
+        evidence: calculationEvidence(comp, data.settings.degreeType, today),
+        pendingApplicability: comp.conditionalTopics.filter(t => t.applicability === "unknown").map(t => ({ topic: t.topic, condition: t.condition?.description || null })),
+      };
+    }
+  }
+  // A member with no profession chosen gets no rule calculation: which rules
+  // apply depends on the licence she holds (evidenceForTurn sends none).
+  for (const st of isAdvancedPractice(data.settings.degreeType) || !isKnownDegree(data.settings.degreeType) ? [] : allTrackedStates) {
     if (!jurisdictionEvidence(st, data.settings.degreeType)) continue;
     try {
       const comp = complianceFor(data, st);
@@ -115,6 +154,7 @@ export function buildSnapshot(data, allTrackedStates = []) {
     today,
     physician: {
       name: data.settings.name, degree: data.settings.degreeType, npi: data.settings.npi,
+      ...(isAdvancedPractice(data.settings.degreeType) ? { profession: data.settings.degreeType === "PA" ? "physician assistant" : "nurse practitioner" } : {}),
       states: allTrackedStates, specialties: data.settings.specialties,
       address: data.settings.address, website: data.settings.website, languages: data.settings.languages,
     },
@@ -122,10 +162,35 @@ export function buildSnapshot(data, allTrackedStates = []) {
     privileges: short(data.privileges, p => ({ id: p.id, type: p.type, name: p.name, facility: p.facility, expires: p.expirationDate, ...lifecycleSnapshot(p) })),
     insurance: short(data.insurance, i => ({ id: i.id, type: i.type, provider: i.provider, expires: i.expirationDate, ...lifecycleSnapshot(i) })),
     cmeSummary: { entries: (data.cme || []).length, byState: cmeByState },
+    // A PA's NCCPA cycle and an NP's certifier cycles, computed by the same
+    // engine as Home's cards (weighted NCCPA credit included), so Vera never
+    // rebuilds the main national obligation from partial raw rows.
+    ...(isAdvancedPractice(data.settings.degreeType) ? {
+      certifications: certificationCards(data).map(c => (c.needsRole
+        ? { label: c.label, needsRole: true, question: c.question }
+        : {
+          label: c.label, body: c.body, window: c.windowLabel || null, required: c.required, earned: c.earned,
+          cat1Required: c.cat1Required ?? null, cat1Earned: c.cat1Earned ?? null, status: c.status,
+          assessment: c.assessment, exam: c.exam || null, daysLeft: c.daysLeft, notes: c.lines || [],
+        })),
+    } : {}),
     referenceEvidence: savedReferenceContext(allTrackedStates, data.settings.degreeType),
     renewalInfo: Object.fromEntries(allTrackedStates.map(st => [st, renewalEvidence(st, data.settings.degreeType)]).filter(([, value]) => value)),
     deaRenewal: { portal: "https://www.deadiversion.usdoj.gov/online_forms_apps.html", fee: null, feeStatus: "current_amount_not_verified", currentVerification: "not_performed" },
-    cme: short(data.cme, x => ({ id: x.id, title: x.title, hours: x.hours, category: x.category, date: x.date, provider: x.provider })),
+    // A PA's or NP's rows go newest first, so the 40 sent are the current
+    // cycle's, and carry the fields their certifier weighs (NCCPA activity
+    // type, pharmacology hours) and the topics a state mandate counts. MD, DO
+    // and blank members get the first 40 in stored order, exactly as before.
+    cme: (isAdvancedPractice(data.settings.degreeType)
+      ? [...(data.cme || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      : (data.cme || [])).slice(0, 40).map(x => ({
+      id: x.id, title: x.title, hours: x.hours, category: x.category, date: x.date, provider: x.provider,
+      ...(isAdvancedPractice(data.settings.degreeType) ? {
+        ...(cmeTopics(x).length ? { topics: cmeTopics(x) } : {}),
+        ...(x.customFields?.[NCCPA_ACTIVITY_FIELD] ? { nccpaActivity: x.customFields[NCCPA_ACTIVITY_FIELD] } : {}),
+        ...(x.customFields?.[PHARMACOLOGY_HOURS_FIELD] != null && x.customFields[PHARMACOLOGY_HOURS_FIELD] !== "" ? { pharmacologyHours: x.customFields[PHARMACOLOGY_HOURS_FIELD] } : {}),
+      } : {}),
+    })),
     healthRecords: short(data.healthRecords, h => ({ id: h.id, category: h.category, name: h.name, result: h.result, value: h.resultValue, expires: h.expirationDate })),
     screenings: short(data.screenings, s => ({ id: s.id, name: s.name, result: s.result, reported: s.reportDate, expires: s.expirationDate })),
     contracts: short(data.locumContracts, c => ({ id: c.id, facility: c.facility, payModel: c.payModel, dayRate: c.dayRate, stipend: c.callStipend, stipendHours: c.stipendHours, overageRate: c.overageHourlyRate, callRateGrid: c.callRateGrid, periods: c.coveragePeriods })),
@@ -439,10 +504,46 @@ ${JSON.stringify({ renewalInfo: renewalInfo || {}, referenceEvidence: referenceE
 const snapshotBlock = (snapshot) => `USER DATA SNAPSHOT (renewalInfo is in the block above):
 ${JSON.stringify(snapshot)}`;
 
+/**
+ * The static prompt for a PA or NP: the same instructions, about their own
+ * profession, with the PA and NP evidence contract. MD and DO members get
+ * SYSTEM_STATIC unchanged. A member with no profession chosen is not called
+ * a surgeon, and the contract tells Vera no rule is sent until she chooses.
+ */
+export function systemStaticFor(degree) {
+  if (!isKnownDegree(degree)) {
+    return SYSTEM_STATIC
+      .replace("the user is a surgeon, not a technologist", "the user is a busy clinician, not a technologist")
+      .replace(EVIDENCE_INSTRUCTIONS, evidenceInstructionsFor(degree));
+  }
+  if (!isAdvancedPractice(degree)) return SYSTEM_STATIC;
+  const noun = degree === "PA" ? "physician assistant" : "nurse practitioner";
+  return SYSTEM_STATIC
+    .replace("You are the physician's credentialing coordinator", `You are the ${noun}'s credentialing coordinator`)
+    .replace("the user is a surgeon, not a technologist", `the user is a busy ${noun}, not a technologist`)
+    .replace(EVIDENCE_INSTRUCTIONS, evidenceInstructionsFor(degree))
+    .replace(PHYSICIAN_CATEGORY_GUIDANCE, degree === "PA" ? PA_CATEGORY_GUIDANCE : NP_CATEGORY_GUIDANCE);
+}
+
+// The FINDING CME category line, by profession (DESIGN 4.11). The PA and NP
+// lines point at the rule data instead of naming acceptance from memory.
+const PHYSICIAN_CATEGORY_GUIDANCE = `- Keep AMA PRA and AOA categories distinct. Use the linked AMA/AOA credit policies and
+  the activity's credit statement; do not promise equivalence or state acceptance from
+  a provider name alone. Identify the jurisdiction, degree and required category first.`;
+const PA_CATEGORY_GUIDANCE = `- Keep AAPA Category 1, the other Category 1 types and Category 2 distinct. NCCPA's
+  accepted Category 1 types are certificationRules.NCCPA.cat1Accepted; a state license
+  card lists its own (cat1Accepted) and the ones not yet verified for that state
+  (cat1Unverified). Self-Assessment and PI-CME are NCCPA activity types on an entry, not
+  categories. Identify the jurisdiction, license and required category first.`;
+const NP_CATEGORY_GUIDANCE = `- CE for a nurse practitioner is counted in contact hours, with pharmacology hours
+  recorded inside them. The certifier's accepted CE is in certificationRules; an item
+  listed there as unverified is not yet verified. Identify the jurisdiction, license
+  (APRN or RN) and the certification first.`;
+
 /** [static, renewal, snapshot] texts; both model paths read the same words. */
 export function systemBlocks(snapshot) {
   const { renewalInfo, referenceEvidence, ...rest } = snapshot || {};
-  return [SYSTEM_STATIC, renewalBlock(renewalInfo, referenceEvidence), snapshotBlock(rest)];
+  return [systemStaticFor(snapshot?.physician?.degree), renewalBlock(renewalInfo, referenceEvidence), snapshotBlock(rest)];
 }
 
 const SYSTEM = (snapshot) => systemBlocks(snapshot).join("\n\n");
@@ -459,6 +560,9 @@ function parseAssistantJson(raw) {
       reply: parsed.reply || "…",
       actions: Array.isArray(parsed.actions) ? parsed.actions.filter(a => a && a.kind) : [],
       sourceCitations: Array.isArray(parsed.sourceCitations) ? parsed.sourceCitations.slice(0, 6) : [],
+      // A member with no profession asked something that needs a rule: the
+      // app shows the one-tap profession choice under the reply.
+      ...(parsed.needsProfession === true ? { needsProfession: true } : {}),
     };
   } catch {
     // Model answered in plain text — still useful

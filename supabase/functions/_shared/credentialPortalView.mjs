@@ -72,6 +72,33 @@ const CUSTOM_SECTION = Object.freeze({
   fields: Object.freeze([f('issuer', 'Issued by'), f('number', 'Number / ID'), f('issuedDate', 'Issued', 'date'), f('expirationDate', 'Expires', 'date')]),
 });
 
+// What the owner is called to a recipient, by the profession they chose:
+// "physician" for MD and DO, as always; a PA or NP by theirs; "clinician"
+// when none is chosen (an invitation never asserts a profession not chosen).
+const INVITER_NOUN = Object.freeze({ MD: 'physician', DO: 'physician', PA: 'physician assistant', NP: 'nurse practitioner' });
+export const inviterNoun = degreeType => INVITER_NOUN[degreeType] || 'clinician';
+
+/** The one-time document invitation email body. */
+export function documentInvitationText({ degreeType, link }) {
+  return `A ${inviterNoun(degreeType)} has invited you to access selected credential documents privately.\n\nOpen ${link}\n\nThe link expires in 7 days and can be verified once. You must receive a fresh code at this exact email address. Do not forward the link. No documents are attached.\n\nIf you did not expect this invitation, ignore it.`;
+}
+
+// A PA's or NP's licence section does not hold "medical licenses" or boards.
+// Each names what credential_portal_license_ok shares for that profession
+// (20261002060000_credential_portal_app_licenses.sql). With no profession
+// chosen the licence form offers every profession's types, and the server
+// shares them all, so that hint names them all.
+const APP_LICENSES_HINTS = Object.freeze({
+  PA: "PA licenses, prescriptive authority, practice agreements, DEA and state controlled substance, NCCPA certification, the PANCE, life support and other professional certificates. Driver's licenses and ID cards never appear.",
+  NP: "APRN and RN licenses, prescriptive authority, practice agreements, DEA and state controlled substance, national certification, the NCLEX-RN, life support and other professional certificates. Driver's licenses and ID cards never appear.",
+  none: "Medical, PA, APRN and RN licenses, prescriptive authority, practice agreements, DEA and state controlled substance, boards and national certification, licensing exams, life support and other professional certificates. Driver's licenses and ID cards never appear.",
+});
+/** A section's hint for the owner's profession (MD and DO keep the catalog's). */
+export function sectionHint(section, degreeType) {
+  if (section?.key !== 'licenses' || degreeType === 'MD' || degreeType === 'DO') return section?.hint;
+  return APP_LICENSES_HINTS[degreeType === 'PA' || degreeType === 'NP' ? degreeType : 'none'];
+}
+
 export const ADMIN_ACCESS_SECTION_KEYS = Object.freeze(ADMIN_ACCESS_SECTIONS.map(s => s.key));
 export const ADMIN_ACCESS_DEFAULT_SECTIONS = Object.freeze(ADMIN_ACCESS_SECTIONS.filter(s => !s.optIn).map(s => s.key));
 const SECTION = new Map(ADMIN_ACCESS_SECTIONS.map(s => [s.key, s]));
