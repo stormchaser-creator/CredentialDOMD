@@ -231,9 +231,20 @@ test('SYNC-013: a file given again that is already stored under another name is 
 
 test('SYNC-013: a file given again that cannot be read says so and changes nothing', async () => {
   class FailingReader { readAsDataURL() { setTimeout(() => this.onerror?.(new Error('synthetic read failure'))); } }
-  const { stored, page } = await uploadAgain(pdf('license.pdf'), { globals: { FileReader: FailingReader } });
-  assert.equal(stored, false);
-  assert.match(page, /"license\.pdf" could not be read\. Nothing was changed\./);
+  const run = await uploadAgain(pdf('license.pdf'), { globals: { FileReader: FailingReader } });
+  // The read fails on a timer after the pre-read check, which reads the file
+  // itself; on a slow runner a fixed number of turns can end before either
+  // finishes (CI failure on a6a00f5b). Wait for the outcome, bounded.
+  const expected = /"license\.pdf" could not be read\. Nothing was changed\./;
+  const deadline = Date.now() + 3000;
+  while (!expected.test(run.view.pageText()) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 10));
+    await settle();
+    run.view.render();
+  }
+  const names = run.calls.map((c) => c[0]);
+  assert.equal(names.includes('updateSection') || names.includes('upload'), false);
+  assert.match(run.view.pageText(), expected);
 });
 
 test('SYNC-013: a credential given again is read, screened, then stored', async () => {
