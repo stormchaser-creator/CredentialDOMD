@@ -92,12 +92,18 @@ export function isCheckable(url) {
 // A page that answers 200 but is the site's own "not found" or error page.
 const ERROR_PAGE_URL = /(error\.aspx|aspxerrorpath|\/404(\.html?)?([/?#]|$)|page-?not-?found|not-?found\.aspx|\/errors?\/?([?#]|$))/i;
 // "404" alone, never inside a section number ("37-20-404. Prescribing ..., MCA").
-const ERROR_PAGE_TITLE = /<title[^>]*>[^<]*(page not found|(?<![\d.-])404(?![\d.-])|not found|error occurred|an error has occurred|server error)[^<]*<\/title>/i;
+// "We can't find that page" is how dial.iowa.gov titles its not found page.
+const ERROR_TITLE = /(page not found|(?<![\d.-])404(?![\d.-])|not found|error occurred|an error has occurred|server error|can(?:'|\u2019|&#0?39;|&rsquo;)?t find (?:that|this|the) page)/i;
+const TITLE = /<title[^>]*>([^<]*)<\/title>/i;
+// A page that says the address it was asked for is gone (www.msbml.ms.gov
+// answers a retired path with 403, titled "Access Denied", and this text).
+const GONE_TEXT = /that link no longer exists/i;
 const BOT_CHECK = /(perfdrive|captcha|cf-chl|challenge-platform|are you a robot|access denied|request unsuccessful\. incapsula)/i;
 
 /**
  * The verdict for one fetched link: { state: "ok" | "broken" | "blocked" | "unreachable", why }.
- * `res` is { status, finalUrl, body? (the first part of the page), error? }.
+ * `res` is { status, finalUrl, body? (the first part of the page), title? (read
+ * from the whole page; taken from body when absent), error? }.
  */
 export function judgeLink(res) {
   // A name that no longer resolves is gone. A refused or dropped connection,
@@ -105,11 +111,18 @@ export function judgeLink(res) {
   // turn away a client that asked a few times: listed, never a pass.
   if (res.error) return /ENOTFOUND|EAI_NONAME|curl 6\b/.test(res.error) ? { state: "broken", why: `no such host (${res.error})` } : { state: "unreachable", why: `no answer (${res.error})` };
   const { status, finalUrl = "", body = "" } = res;
-  if (status === 401 || status === 403 || status === 429) return { state: "blocked", why: `HTTP ${status}` };
+  const title = res.title ?? (body.match(TITLE) || [])[1] ?? "";
+  const gone = ERROR_TITLE.test(title) || GONE_TEXT.test(body);
+  // A refusal is not a verdict, but a site's own not found page served with
+  // 403 is (dial.iowa.gov, www.msbml.ms.gov): the page is gone, not guarded.
+  if (status === 401 || status === 403 || status === 429) {
+    return gone ? { state: "broken", why: `HTTP ${status} with the site's own not found page` } : { state: "blocked", why: `HTTP ${status}` };
+  }
   if (BOT_CHECK.test(finalUrl) || (status < 400 && BOT_CHECK.test(body) && body.length < 20000)) return { state: "blocked", why: "bot check" };
   if (status >= 400) return { state: "broken", why: `HTTP ${status}` };
   if (ERROR_PAGE_URL.test(new URL(finalUrl).pathname + new URL(finalUrl).search)) return { state: "broken", why: `lands on an error page (${finalUrl})` };
-  if (ERROR_PAGE_TITLE.test(body)) return { state: "broken", why: "the page it lands on is titled as an error" };
+  if (ERROR_TITLE.test(title)) return { state: "broken", why: "the page it lands on is titled as an error" };
+  if (GONE_TEXT.test(body)) return { state: "broken", why: "the page it lands on says the link no longer exists" };
   return { state: "ok", why: status >= 300 ? `HTTP ${status}` : "" };
 }
 
@@ -187,10 +200,15 @@ async function fetchLink(url, { timeoutMs = 40000 } = {}) {
   const t = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const r = await fetch(url, { redirect: "follow", signal: ctl.signal, headers: { "user-agent": BROWSER_UA, accept: "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.8", "accept-language": "en-US,en;q=0.9" } });
-    let body = "";
-    if (/html/i.test(r.headers.get("content-type") || "")) body = (await r.text()).slice(0, 40000);
-    else { try { await r.body?.cancel(); } catch { /* done */ } }
-    return { status: r.status, finalUrl: r.url || url, body };
+    let body = "", title;
+    if (/html/i.test(r.headers.get("content-type") || "")) {
+      const text = await r.text();
+      // The title can sit past the first 40,000 characters (dial.iowa.gov
+      // puts 100 KB of script first), so it is read from the whole page.
+      title = (text.match(TITLE) || [])[1] ?? "";
+      body = text.slice(0, 40000);
+    } else { try { await r.body?.cancel(); } catch { /* done */ } }
+    return { status: r.status, finalUrl: r.url || url, body, title };
   } catch (err) {
     return { error: err?.name === "AbortError" ? "timeout" : (err?.cause?.code || err?.message || "failed") };
   } finally { clearTimeout(t); }

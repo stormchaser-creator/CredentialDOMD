@@ -18,6 +18,16 @@ test("404, a page titled not found, and a host that no longer resolves are broke
   assert.equal(judgeLink({ status: 200, finalUrl: "https://example.gov/404", body: "<title>Error 404</title>" }).state, "broken");
 });
 
+test("a site's own not found page is broken even when it answers 403", () => {
+  const iowa = judgeLink({ status: 403, finalUrl: "https://dial.iowa.gov/about-dial/boards-and-commissions/medicine", body: "<script>x</script>", title: "Please accept our apologies. We can&#039;t find that page | Department of Inspections, Appeals, &amp; Licensing" });
+  assert.equal(iowa.state, "broken");
+  assert.match(iowa.why, /not found page/);
+  const ms = judgeLink({ status: 403, finalUrl: "https://www.msbml.ms.gov/Licensure/Physician_Assistant", body: "<title>Access Denied | Mississippi State Board of Medical Licensure</title><p>You asked for /Licensure/Physician_Assistant. That link no longer exists.</p>" });
+  assert.equal(ms.state, "broken");
+  assert.equal(judgeLink({ status: 403, finalUrl: "https://azbn.gov/", body: "<title>Just a moment...</title>" }).state, "blocked", "a bot check stays blocked");
+  assert.equal(judgeLink({ status: 200, finalUrl: "https://example.gov/a", body: "<p>long script</p>", title: "Page Not Found" }).state, "broken", "a title read past the body excerpt counts");
+});
+
 test("a statute whose section number holds 404 is not an error page", () => {
   const v = judgeLink({ status: 200, finalUrl: "https://mca.legmt.gov/bills/mca/title_0370/chapter_0200/part_0040/section_0040/0370-0200-0040-0040.html", body: "<title>\n  37-20-404. Prescribing and dispensing authority, MCA\n</title>" });
   assert.equal(v.state, "ok");
