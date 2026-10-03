@@ -12,6 +12,7 @@
  *
  *   node scripts/check-external-links.mjs            # every link, a report
  *   node scripts/check-external-links.mjs --json     # the report as JSON
+ *     --concurrency N (default 1)  --pause-ms N (default 400)  --progress
  *
  * Exit 1 when any link is broken. A 401, 403 or 429, or a bot check, is
  * listed as "blocked": the site refused an automated client, which says
@@ -26,21 +27,30 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const BROWSER_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1";
+// A phone's Safari, as the physician opens the link (some boards answer 404
+// to anything else), naming itself so a site's operator can tell who asked.
+export const BROWSER_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1 CredentialDOMD-linkcheck";
 
-// Where the outside links live: the public site, the state data and every
-// file generated from it, the app's constants, and the knowledge files.
+// Where the outside links live: the public site and state pages, the app
+// (its constants: renewal info, assistant sources, the generated PA and NP
+// rules; and every screen and helper), the PA and NP rule data the generator
+// reads (canonical files and the evidence ledger, with the board, rule and
+// source links for 51 jurisdictions and the national bodies), and the server
+// functions (the guide email data, the reminder links, every email template).
 export const LINK_SOURCES = [
-  "landing", "public", "src/constants",
-  "supabase/functions/send-guide/stateGuides.json",
-  "supabase/functions/send-reminders/renewalLinks.json",
+  "landing", "public", "index.html", "src",
+  "data/app-rules",
+  "supabase/functions",
 ];
 const SKIP_DIR = new Set(["node_modules", ".generated", "assets", "icons", "fonts"]);
-const TEXT = /\.(html?|json|js|mjs|txt|xml)$/i;
+const TEXT = /\.(html?|json|jsx?|mjs|tsx?|txt|xml)$/i;
 
 // Our own hosts, and hosts that are never a page (APIs, fonts, schemas).
 const OURS = /(^|\.)credentialdomd\.com$/i;
-const NOT_A_PAGE = /(^|\.)(fonts\.googleapis\.com|fonts\.gstatic\.com|schema\.org|www\.w3\.org|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|api\.[a-z0-9.-]+|supabase\.co|clerk\.[a-z0-9.-]+|stripe\.com|js\.stripe\.com|googletagmanager\.com|example\.(com|org))$/i;
+const NOT_A_PAGE = /(^|\.)(fonts\.googleapis\.com|fonts\.gstatic\.com|schema\.org|www\.w3\.org|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|api\.[a-z0-9.-]+|supabase\.co|clerk\.[a-z0-9.-]+|stripe\.com|js\.stripe\.com|googletagmanager\.com|example\.(com|org)|esm\.sh|deno\.land|generativelanguage\.googleapis\.com|clerk-telemetry\.com|challenges\.cloudflare\.com|eutils\.ncbi\.nlm\.nih\.gov|up\.railway\.app)$/i;
+// Data endpoints the server functions call (a page of JSON, never a link a
+// person opens). Their documentation pages ("/api-page") are still checked.
+const DATA_ENDPOINT = /^(npiregistry\.cms\.hhs\.gov\/api\/|clinicaltables\.nlm\.nih\.gov\/api\/|data\.cms\.gov\/provider-data\/api\/)/i;
 
 /** Every https URL in `text`, trailing punctuation trimmed, de-duplicated. */
 export function urlsIn(text) {
@@ -69,6 +79,9 @@ export function isCheckable(url) {
   if (u.protocol !== "https:" && u.protocol !== "http:") return false;
   if (OURS.test(u.hostname) || NOT_A_PAGE.test(u.hostname)) return false;
   if (u.hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) return false;
+  // A placeholder host ("https://.../api") is not a link.
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(u.hostname)) return false;
+  if (DATA_ENDPOINT.test(u.hostname + u.pathname)) return false;
   // A template ("${...}" or "{id}") is not a link.
   return !/[{}$]/.test(url);
 }
@@ -120,6 +133,48 @@ export function collectLinks(sources = LINK_SOURCES) {
   return new Map([...where].map(([u, s]) => [u, [...s].sort()]));
 }
 
+/**
+ * url -> ["WY: pa.board link", "FL (addition): pa.ce.humanTrafficking (s. 456.0341(1), F.S.)", ...]
+ * for every link in the PA and NP rule data: which jurisdiction, and which
+ * rule or board the link stands behind.
+ */
+export function ruleContext(dir = join(root, "data/app-rules")) {
+  const out = new Map();
+  const add = (url, label) => {
+    let u;
+    // A note can follow the link in the evidence ("https://... (built-in browser)").
+    try { u = new URL(url.trim().split(/\s/)[0]).href; } catch { return; }
+    if (!isCheckable(u)) return;
+    if (!out.has(u)) out.set(u, new Set());
+    out.get(u).add(label);
+  };
+  const visit = (node, where, path) => {
+    if (Array.isArray(node)) { for (const n of node) visit(n, where, path); return; }
+    if (!node || typeof node !== "object") return;
+    // A ledger fact: the rule it proves, and the citation it was loaded from.
+    if (typeof node.url === "string" && node.field) {
+      const field = path.length && !node.field.startsWith(`${path[0]}.`) ? `${path.join(".")}.${node.field}` : node.field;
+      add(node.url, `${where}: ${field}${node.cite ? ` (${node.cite})` : ""}`);
+    }
+    for (const [k, v] of Object.entries(node)) {
+      if (typeof v === "string" && /^https?:\/\//.test(v)) {
+        if (!(k === "url" && node.field)) add(v, `${where}: ${[...path, k === "url" ? "" : k].filter(Boolean).join(".") || "link"}${k === "url" ? " link" : ""}`);
+      } else if (k === "url" && v && typeof v.value === "string") {
+        add(v.value, `${where}: ${path.join(".")} link${v.fact ? ` (fact ${v.fact})` : ""}`);
+      } else visit(v, where, k === "facts" ? path : [...path, k]);
+    }
+  };
+  for (const file of files(relative(root, dir))) {
+    if (!file.endsWith(".json")) continue;
+    const rel = relative(dir, file);
+    const name = rel.replace(/^.*\//, "").replace(/\.json$/, "");
+    if (name === "coverage") continue;
+    const where = name === "national" ? "national" : `${name}${rel.startsWith("ledger/additions/") ? " (addition)" : ""}`;
+    visit(JSON.parse(readFileSync(file, "utf8")), where, []);
+  }
+  return new Map([...out].map(([u, s]) => [u, [...s].sort()]));
+}
+
 async function fetchLink(url, { timeoutMs = 25000 } = {}) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeoutMs);
@@ -154,28 +209,34 @@ function curlLink(url, { timeoutMs = 40000 } = {}) {
 
 async function main() {
   const links = collectLinks();
+  const rules = ruleContext();
   const urls = [...links.keys()];
   const results = [];
+  // Politely: one request at a time by default, with a pause between them.
+  const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i > 0 ? Number(process.argv[i + 1]) : dflt; };
+  const concurrency = Math.max(1, arg("--concurrency", 1)), pauseMs = Math.max(0, arg("--pause-ms", 400));
   let next = 0;
   const worker = async () => {
     while (next < urls.length) {
       const url = urls[next++];
+      if (pauseMs) await new Promise(r => setTimeout(r, pauseMs));
+      if (process.argv.includes("--progress")) process.stderr.write(`${next}/${urls.length} ${url}\n`);
       let res = await fetchLink(url);
       // A link Node could not open (a redirect loop without cookies, a
       // certificate chain it cannot complete, a slow state site): as a
       // browser would, with cookies and the system's certificates.
       if (res.error) { const viaCurl = await curlLink(url); if (!viaCurl.error) res = viaCurl; }
-      results.push({ url, ...judgeLink(res), finalUrl: res.finalUrl || null, status: res.status ?? null, files: links.get(url) });
+      results.push({ url, ...judgeLink(res), finalUrl: res.finalUrl || null, status: res.status ?? null, files: links.get(url), rules: rules.get(url) || [] });
     }
   };
-  await Promise.all(Array.from({ length: 10 }, worker));
+  await Promise.all(Array.from({ length: concurrency }, worker));
   results.sort((a, b) => a.state.localeCompare(b.state) || a.url.localeCompare(b.url));
   if (process.argv.includes("--json")) console.log(JSON.stringify(results, null, 2));
   else {
     for (const state of ["broken", "blocked", "unreachable"]) {
       const rows = results.filter(r => r.state === state);
       console.log(`\n${state.toUpperCase()} (${rows.length})`);
-      for (const r of rows) console.log(`  ${r.url}\n    ${r.why}\n    in ${r.files.join(", ")}`);
+      for (const r of rows) console.log(`  ${r.url}\n    ${r.why}\n    in ${r.files.join(", ")}${r.rules.length ? `\n    for ${r.rules.join("; ")}` : ""}`);
     }
     console.log(`\n${results.filter(r => r.state === "ok").length} of ${results.length} links open.`);
   }
