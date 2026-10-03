@@ -94,6 +94,8 @@ const ERROR_PAGE_URL = /(error\.aspx|aspxerrorpath|\/404(\.html?)?([/?#]|$)|page
 // "404" alone, never inside a section number ("37-20-404. Prescribing ..., MCA").
 // "We can't find that page" is how dial.iowa.gov titles its not found page.
 const ERROR_TITLE = /(page not found|(?<![\d.-])404(?![\d.-])|not found|error occurred|an error has occurred|server error|can(?:'|\u2019|&#0?39;|&rsquo;)?t find (?:that|this|the) page)/i;
+// The part of ERROR_TITLE that says the page is missing, not that the server failed.
+const NOT_FOUND_TITLE = /(page not found|(?<![\d.-])404(?![\d.-])|not found|can(?:'|\u2019|&#0?39;|&rsquo;)?t find (?:that|this|the) page)/i;
 const TITLE = /<title[^>]*>([^<]*)<\/title>/i;
 // A page that says the address it was asked for is gone (www.msbml.ms.gov
 // answers a retired path with 403, titled "Access Denied", and this text).
@@ -119,6 +121,13 @@ export function judgeLink(res) {
     return gone ? { state: "broken", why: `HTTP ${status} with the site's own not found page` } : { state: "blocked", why: `HTTP ${status}` };
   }
   if (BOT_CHECK.test(finalUrl) || (status < 400 && BOT_CHECK.test(body) && body.length < 20000)) return { state: "blocked", why: "bot check" };
+  // A server failure is the host's trouble, not a removed page: www.ndbon.org
+  // answered 509 (Bandwidth Limit Exceeded) with a "Temporarily Unavailable"
+  // page on 2026-10-02 while the board was still there. Listed like no
+  // answer, never a pass, unless the page says the address itself is gone.
+  if (status >= 500 && status < 600) {
+    return NOT_FOUND_TITLE.test(title) || GONE_TEXT.test(body) ? { state: "broken", why: `HTTP ${status} with the site's own not found page` } : { state: "unreachable", why: `HTTP ${status} from the server` };
+  }
   if (status >= 400) return { state: "broken", why: `HTTP ${status}` };
   if (ERROR_PAGE_URL.test(new URL(finalUrl).pathname + new URL(finalUrl).search)) return { state: "broken", why: `lands on an error page (${finalUrl})` };
   if (ERROR_TITLE.test(title)) return { state: "broken", why: "the page it lands on is titled as an error" };

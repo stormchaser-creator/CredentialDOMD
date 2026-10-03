@@ -34,6 +34,16 @@ test("a statute whose section number holds 404 is not an error page", () => {
   assert.equal(isCheckable("https://regulations.delaware.gov/api/AdminCode/regulation"), false, "a POST endpoint named in the evidence");
 });
 
+test("a server failure (509, 503, 500) is listed as unreachable, not as a dead link", () => {
+  const nd = judgeLink({ status: 509, finalUrl: "https://www.ndbon.org/", body: "<title>Temporarily Unavailable</title>" });
+  assert.equal(nd.state, "unreachable");
+  assert.match(nd.why, /509/);
+  assert.equal(judgeLink({ status: 503, finalUrl: "https://ndbon.org/licensing/renewal/ce/", body: "<title>503 Service Unavailable</title>" }).state, "unreachable");
+  assert.equal(judgeLink({ status: 500, finalUrl: "https://example.gov/a", body: "<title>Server Error</title>" }).state, "unreachable");
+  assert.equal(judgeLink({ status: 500, finalUrl: "https://example.gov/b", body: "<title>Page Not Found</title>" }).state, "broken", "a not found page served with 500 is still gone");
+  assert.equal(judgeLink({ status: 410, finalUrl: "https://example.gov/c" }).state, "broken", "a 4xx stays broken");
+});
+
 test("a refusal of an automated client is listed as blocked, never as a pass or a failure", () => {
   assert.equal(judgeLink({ status: 403, finalUrl: "https://azmd.gov/" }).state, "blocked");
   assert.equal(judgeLink({ status: 200, finalUrl: "https://validate.perfdrive.com/x" }).state, "blocked");
