@@ -15,6 +15,13 @@ test("404, a page titled not found, and a host that no longer resolves are broke
   assert.equal(judgeLink({ status: 404, finalUrl: "https://dsps.wi.gov/Pages/Professions/Physician/CE.aspx" }).state, "broken");
   assert.equal(judgeLink({ status: 200, finalUrl: "https://example.gov/x", body: "<html><title>Page Not Found | Board</title>" }).state, "broken");
   assert.equal(judgeLink({ error: "ENOTFOUND" }).state, "broken");
+  assert.equal(judgeLink({ status: 200, finalUrl: "https://example.gov/404", body: "<title>Error 404</title>" }).state, "broken");
+});
+
+test("a statute whose section number holds 404 is not an error page", () => {
+  const v = judgeLink({ status: 200, finalUrl: "https://mca.legmt.gov/bills/mca/title_0370/chapter_0200/part_0040/section_0040/0370-0200-0040-0040.html", body: "<title>\n  37-20-404. Prescribing and dispensing authority, MCA\n</title>" });
+  assert.equal(v.state, "ok");
+  assert.equal(isCheckable("https://regulations.delaware.gov/api/AdminCode/regulation"), false, "a POST endpoint named in the evidence");
 });
 
 test("a refusal of an automated client is listed as blocked, never as a pass or a failure", () => {

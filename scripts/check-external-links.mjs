@@ -42,7 +42,8 @@ export const LINK_SOURCES = [
   "data/app-rules",
   "supabase/functions",
 ];
-const SKIP_DIR = new Set(["node_modules", ".generated", "assets", "icons", "fonts"]);
+// "vendor": third-party bundles copied in at build time (pdf.js), never our links.
+const SKIP_DIR = new Set(["node_modules", ".generated", "assets", "icons", "fonts", "vendor"]);
 const TEXT = /\.(html?|json|jsx?|mjs|tsx?|txt|xml)$/i;
 
 // Our own hosts, and hosts that are never a page (APIs, fonts, schemas).
@@ -50,7 +51,9 @@ const OURS = /(^|\.)credentialdomd\.com$/i;
 const NOT_A_PAGE = /(^|\.)(fonts\.googleapis\.com|fonts\.gstatic\.com|schema\.org|www\.w3\.org|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|api\.[a-z0-9.-]+|supabase\.co|clerk\.[a-z0-9.-]+|stripe\.com|js\.stripe\.com|googletagmanager\.com|example\.(com|org)|esm\.sh|deno\.land|generativelanguage\.googleapis\.com|clerk-telemetry\.com|challenges\.cloudflare\.com|eutils\.ncbi\.nlm\.nih\.gov|up\.railway\.app)$/i;
 // Data endpoints the server functions call (a page of JSON, never a link a
 // person opens). Their documentation pages ("/api-page") are still checked.
-const DATA_ENDPOINT = /^(npiregistry\.cms\.hhs\.gov\/api\/|clinicaltables\.nlm\.nih\.gov\/api\/|data\.cms\.gov\/provider-data\/api\/)/i;
+// The Delaware code's POST endpoint is named in the evidence as how its text
+// was loaded; the rule pages themselves are linked separately.
+const DATA_ENDPOINT = /^(npiregistry\.cms\.hhs\.gov\/api\/|clinicaltables\.nlm\.nih\.gov\/api\/|data\.cms\.gov\/provider-data\/api\/|regulations\.delaware\.gov\/api\/AdminCode\/regulation$)/i;
 
 /** Every https URL in `text`, trailing punctuation trimmed, de-duplicated. */
 export function urlsIn(text) {
@@ -88,7 +91,8 @@ export function isCheckable(url) {
 
 // A page that answers 200 but is the site's own "not found" or error page.
 const ERROR_PAGE_URL = /(error\.aspx|aspxerrorpath|\/404(\.html?)?([/?#]|$)|page-?not-?found|not-?found\.aspx|\/errors?\/?([?#]|$))/i;
-const ERROR_PAGE_TITLE = /<title[^>]*>[^<]*(page not found|404|not found|error occurred|an error has occurred|server error)[^<]*<\/title>/i;
+// "404" alone, never inside a section number ("37-20-404. Prescribing ..., MCA").
+const ERROR_PAGE_TITLE = /<title[^>]*>[^<]*(page not found|(?<![\d.-])404(?![\d.-])|not found|error occurred|an error has occurred|server error)[^<]*<\/title>/i;
 const BOT_CHECK = /(perfdrive|captcha|cf-chl|challenge-platform|are you a robot|access denied|request unsuccessful\. incapsula)/i;
 
 /**
@@ -175,7 +179,10 @@ export function ruleContext(dir = join(root, "data/app-rules")) {
   return new Map([...out].map(([u, s]) => [u, [...s].sort()]));
 }
 
-async function fetchLink(url, { timeoutMs = 25000 } = {}) {
+// State legislature sites answer slowly (legislature.vermont.gov in 20 to 27
+// seconds, legislature.maine.gov up to a minute on 2026-10-02): a slow answer
+// is still an answer.
+async function fetchLink(url, { timeoutMs = 40000 } = {}) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeoutMs);
   try {
@@ -194,7 +201,7 @@ async function fetchLink(url, { timeoutMs = 25000 } = {}) {
 // certificate chain from the system store. curl with a cookie jar does both.
 const jarDir = mkdtempSync(join(tmpdir(), "links-"));
 let jarSeq = 0;
-function curlLink(url, { timeoutMs = 40000 } = {}) {
+function curlLink(url, { timeoutMs = 90000 } = {}) {
   const jar = join(jarDir, `jar-${++jarSeq}`);
   return new Promise((done) => {
     execFile("curl", ["-s", "-L", "--max-redirs", "15", "-c", jar, "-b", jar, "-A", BROWSER_UA, "-o", "/dev/null",
@@ -205,6 +212,16 @@ function curlLink(url, { timeoutMs = 40000 } = {}) {
       done({ status, finalUrl: rest.join(" ") || url, body: "" });
     });
   });
+}
+
+/** Open one link as a browser would; the raw answer for judgeLink. */
+export async function openLink(url) {
+  const res = await fetchLink(url);
+  // A link Node could not open (a redirect loop without cookies, a
+  // certificate chain it cannot complete, a slow state site): as a
+  // browser would, with cookies and the system's certificates.
+  if (res.error) { const viaCurl = await curlLink(url); if (!viaCurl.error) return viaCurl; }
+  return res;
 }
 
 async function main() {
@@ -221,11 +238,7 @@ async function main() {
       const url = urls[next++];
       if (pauseMs) await new Promise(r => setTimeout(r, pauseMs));
       if (process.argv.includes("--progress")) process.stderr.write(`${next}/${urls.length} ${url}\n`);
-      let res = await fetchLink(url);
-      // A link Node could not open (a redirect loop without cookies, a
-      // certificate chain it cannot complete, a slow state site): as a
-      // browser would, with cookies and the system's certificates.
-      if (res.error) { const viaCurl = await curlLink(url); if (!viaCurl.error) res = viaCurl; }
+      const res = await openLink(url);
       results.push({ url, ...judgeLink(res), finalUrl: res.finalUrl || null, status: res.status ?? null, files: links.get(url), rules: rules.get(url) || [] });
     }
   };
