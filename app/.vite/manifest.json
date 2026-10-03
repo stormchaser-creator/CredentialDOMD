@@ -5,8 +5,8 @@
     "src": "__vite-browser-external",
     "isDynamicEntry": true
   },
-  "_mammoth.browser-DqXXKDwc.js": {
-    "file": "assets/mammoth.browser-DqXXKDwc.js",
+  "_mammoth.browser-BRklYfHl.js": {
+    "file": "assets/mammoth.browser-BRklYfHl.js",
     "name": "mammoth.browser",
     "isDynamicEntry": true,
     "imports": [
@@ -14,14 +14,14 @@
     ]
   },
   "index.html": {
-    "file": "assets/index-CjuLIZMb.js",
+    "file": "assets/index-RtH0OIfs.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
       "src/utils/appRulesData.js",
       "node_modules/@anthropic-ai/sdk/index.mjs",
-      "_mammoth.browser-DqXXKDwc.js",
+      "_mammoth.browser-BRklYfHl.js",
       "node_modules/html2canvas/dist/html2canvas.esm.js",
       "node_modules/dompurify/dist/purify.es.mjs",
       "node_modules/canvg/lib/index.es.js",
@@ -33,7 +33,7 @@
     ]
   },
   "node_modules/@anthropic-ai/sdk/index.mjs": {
-    "file": "assets/index-18yMW2VU.js",
+    "file": "assets/index-DuPgYC07.js",
     "name": "index",
     "src": "node_modules/@anthropic-ai/sdk/index.mjs",
     "isDynamicEntry": true,
@@ -57,7 +57,7 @@
     ]
   },
   "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs": {
-    "file": "assets/node.browser-p3JY-y69.js",
+    "file": "assets/node.browser-I7k1--_k.js",
     "name": "node.browser",
     "src": "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs",
     "isDynamicEntry": true,
@@ -67,7 +67,7 @@
     ]
   },
   "node_modules/canvg/lib/index.es.js": {
-    "file": "assets/index.es-B8hxnuFr.js",
+    "file": "assets/index.es-CdjcowHE.js",
     "name": "index.es",
     "src": "node_modules/canvg/lib/index.es.js",
     "isDynamicEntry": true,
