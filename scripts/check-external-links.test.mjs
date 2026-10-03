@@ -25,6 +25,10 @@ test("a site's own not found page is broken even when it answers 403", () => {
   const ms = judgeLink({ status: 403, finalUrl: "https://www.msbml.ms.gov/Licensure/Physician_Assistant", body: "<title>Access Denied | Mississippi State Board of Medical Licensure</title><p>You asked for /Licensure/Physician_Assistant. That link no longer exists.</p>" });
   assert.equal(ms.state, "broken");
   assert.equal(judgeLink({ status: 403, finalUrl: "https://azbn.gov/", body: "<title>Just a moment...</title>" }).state, "blocked", "a bot check stays blocked");
+  assert.equal(judgeLink({ status: 429, finalUrl: "https://example.gov/a", body: "<title>An error occurred</title>" }).state, "blocked", "a rate limit titled as a generic error stays blocked");
+  assert.equal(judgeLink({ status: 403, finalUrl: "https://example.gov/b", body: "<title>Server Error in '/' Application.</title>" }).state, "blocked", "an IIS refusal titled Server Error stays blocked");
+  assert.equal(judgeLink({ status: 401, finalUrl: "https://example.gov/c", body: "<title>An error has occurred</title>" }).state, "blocked");
+  assert.equal(judgeLink({ status: 403, finalUrl: "https://example.gov/d", body: "<title>Access Denied</title>" }).state, "blocked");
   assert.equal(judgeLink({ status: 200, finalUrl: "https://example.gov/a", body: "<p>long script</p>", title: "Page Not Found" }).state, "broken", "a title read past the body excerpt counts");
 });
 

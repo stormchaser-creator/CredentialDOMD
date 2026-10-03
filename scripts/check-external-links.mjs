@@ -114,9 +114,12 @@ export function judgeLink(res) {
   if (res.error) return /ENOTFOUND|EAI_NONAME|curl 6\b/.test(res.error) ? { state: "broken", why: `no such host (${res.error})` } : { state: "unreachable", why: `no answer (${res.error})` };
   const { status, finalUrl = "", body = "" } = res;
   const title = res.title ?? (body.match(TITLE) || [])[1] ?? "";
-  const gone = ERROR_TITLE.test(title) || GONE_TEXT.test(body);
+  // Only a title that says the page is missing, never a generic "error
+  // occurred" or "Server Error", which says the server failed.
+  const gone = NOT_FOUND_TITLE.test(title) || GONE_TEXT.test(body);
   // A refusal is not a verdict, but a site's own not found page served with
   // 403 is (dial.iowa.gov, www.msbml.ms.gov): the page is gone, not guarded.
+  // A refusal titled as a generic error stays blocked.
   if (status === 401 || status === 403 || status === 429) {
     return gone ? { state: "broken", why: `HTTP ${status} with the site's own not found page` } : { state: "blocked", why: `HTTP ${status}` };
   }
@@ -126,7 +129,7 @@ export function judgeLink(res) {
   // page on 2026-10-02 while the board was still there. Listed like no
   // answer, never a pass, unless the page says the address itself is gone.
   if (status >= 500 && status < 600) {
-    return NOT_FOUND_TITLE.test(title) || GONE_TEXT.test(body) ? { state: "broken", why: `HTTP ${status} with the site's own not found page` } : { state: "unreachable", why: `HTTP ${status} from the server` };
+    return gone ? { state: "broken", why: `HTTP ${status} with the site's own not found page` } : { state: "unreachable", why: `HTTP ${status} from the server` };
   }
   if (status >= 400) return { state: "broken", why: `HTTP ${status}` };
   if (ERROR_PAGE_URL.test(new URL(finalUrl).pathname + new URL(finalUrl).search)) return { state: "broken", why: `lands on an error page (${finalUrl})` };
