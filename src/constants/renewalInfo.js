@@ -334,7 +334,7 @@ export const RENEWAL_INFO = {
  "IA": {
   "name": "Iowa",
   "board": "Iowa Board of Medicine (Department of Inspections, Appeals, and Licensing)",
-  "boardUrl": "https://dial.iowa.gov/about/boards/medicine",
+  "boardUrl": "https://dial.iowa.gov/about-dial/boards-and-commissions/board-medicine",
   "portalUrl": "https://amanda-portal.idph.state.ia.us/ibm/portal/#/dashboards/index",
   "doBoard": null,
   "doBoardUrl": null,

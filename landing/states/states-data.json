@@ -1553,7 +1553,7 @@
       "abbreviation": "IA",
       "slug": "iowa",
       "boardName": "Iowa Board of Medicine (Department of Inspections, Appeals, and Licensing)",
-      "boardUrl": "https://dial.iowa.gov/about/boards/medicine",
+      "boardUrl": "https://dial.iowa.gov/about-dial/boards-and-commissions/board-medicine",
       "portalUrl": "https://amanda-portal.idph.state.ia.us/ibm/portal/#/dashboards/index",
       "doBoardName": null,
       "doBoardUrl": null,
@@ -1611,8 +1611,8 @@
       ],
       "sources": [
         {
-          "url": "https://dial.iowa.gov/about/boards/medicine",
-          "what": "Board of Medicine homepage (medicalboard.iowa.gov/physicians/renewal 301-redirects here); portal links and contact info"
+          "url": "https://dial.iowa.gov/about-dial/boards-and-commissions/board-medicine",
+          "what": "Board of Medicine page on the DIAL site: who the board licenses, address, phone, and the Online Services link"
         },
         {
           "url": "https://dial.iowa.gov/licenses/health-professions/physicians",

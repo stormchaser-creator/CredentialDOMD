@@ -371,7 +371,7 @@ export const ASSISTANT_SOURCES = {
       "recordedReview": "2026-08",
       "sources": [
         {
-          "url": "https://dial.iowa.gov/about/boards/medicine"
+          "url": "https://dial.iowa.gov/about-dial/boards-and-commissions/board-medicine"
         },
         {
           "url": "https://dial.iowa.gov/licenses/health-professions/physicians"
@@ -788,7 +788,7 @@ export const ASSISTANT_SOURCES = {
           "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-1"
         },
         {
-          "url": "http://webserver.rilegislature.gov/Statutes/TITLE5/5-37/5-37-10.htm"
+          "url": "https://webserver.rilegislature.gov/Statutes/TITLE5/5-37/5-37-10.htm"
         }
       ]
     },
