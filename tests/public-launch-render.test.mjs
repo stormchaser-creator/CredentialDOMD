@@ -363,3 +363,42 @@ test('both legal modes retain factual device-storage and AI-provider disclosures
     assert.doesNotMatch(privacyText + termsText, /private (?:vault|notes).*end-to-end encrypted/i);
   }
 });
+
+// Signup review 2026-10-07: on a phone the home page's first screen had no
+// signup button (the first "Create your account" was about 16,700 px down on
+// an iPhone 15). The same button and guarantee sentence now sit right under
+// the hero offer, and the sticky bar shows while that button is out of view,
+// so a short screen has one before it is reached.
+test('home: the signup button and its guarantee sit right under the hero offer; other pages unchanged', async () => {
+  const source = await read('landing/index.html');
+  const output = renderPublicLaunch(source, 'home');
+  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ PROBLEM'));
+  const box = hero.indexOf('data-membership-hero-note');
+  const signup = hero.indexOf('<div data-hero-signup');
+  assert.ok(box > 0 && signup > box, 'after the offer box');
+  assert.ok(signup < hero.indexOf('data-membership-review-action'), 'before the plans link');
+  const block = hero.slice(signup, hero.indexOf('</div>', signup) + 6);
+  assert.match(block, /<a class="btn-primary" href="\/app\/"[^>]*><span data-membership-action>Create your account<\/span><\/a>/);
+  assert.match(block, /Card required at checkout\. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time\./);
+  // Only the home hero: the locums page has no such block, and off mode is byte for byte the source.
+  assert.doesNotMatch(renderPublicLaunch(await read('landing/locums.html'), 'locums'), /data-hero-signup/);
+  assert.equal(renderPublicLaunch(source, 'home', { enabled: false }), source);
+});
+
+test('home: the sticky bar follows the hero signup button when there is one, else the whole hero', async () => {
+  const source = await read('landing/index.html');
+  const script = source.slice(source.indexOf('// Sticky mobile CTA bar'), source.indexOf('// Nav scroll effect'));
+  const run = (withButton) => {
+    const observed = [];
+    const button = { id: 'hero-signup' }, hero = { id: 'hero' };
+    const bar = { classList: { toggle() {} }, querySelector: () => ({ addEventListener() {} }) };
+    vm.runInNewContext(script, {
+      document: { getElementById: id => (id === 'sticky-cta' ? bar : id === 'hero' ? hero : null), querySelector: sel => (sel === '[data-hero-signup]' && withButton ? button : null) },
+      window: { IntersectionObserver: true },
+      IntersectionObserver: function (cb) { this.observe = el => observed.push(el.id); },
+    });
+    return observed;
+  };
+  assert.deepEqual(run(true), ['hero-signup']);
+  assert.deepEqual(run(false), ['hero']);
+});

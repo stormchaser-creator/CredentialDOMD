@@ -26,7 +26,23 @@ export const SHELL_URLS = [
   "./icons/icon-512.svg",
 ];
 
-/** Entry-closure walk: entry chunks + static imports + their CSS. */
+// The app itself (src/AuthGate.jsx loads it with a dynamic import, so the
+// sign-in screen does not wait for it). It is the app shell all the same: an
+// installed app opened offline needs it, so it is precached with the entry,
+// with its static imports. Its own lazy chunks stay out, as above.
+export const APP_SOURCE = "src/App.jsx";
+// The manifest names the app's chunk by its source, or (when Rollup gives the
+// chunk no single facade, as it does for this one) "_App-<hash>.js" with the
+// name "App": it is the entry's dynamic import of that name.
+export function appChunkKey(manifest) {
+  if (manifest[APP_SOURCE]) return APP_SOURCE;
+  const bySource = Object.keys(manifest).find((k) => manifest[k]?.src === APP_SOURCE);
+  if (bySource) return bySource;
+  const lazy = new Set(Object.values(manifest).filter((c) => c?.isEntry).flatMap((c) => c.dynamicImports ?? []));
+  return [...lazy].find((k) => manifest[k]?.name === "App" && manifest[k]?.isDynamicEntry) ?? null;
+}
+
+/** Entry-closure walk: entry chunks + static imports + their CSS, and the app chunk's. */
 export function computePrecacheUrls(manifest) {
   const files = new Set();
   const seen = new Set();
@@ -42,6 +58,8 @@ export function computePrecacheUrls(manifest) {
   for (const key of Object.keys(manifest)) {
     if (manifest[key].isEntry) visit(key);
   }
+  const app = appChunkKey(manifest);
+  if (app) visit(app);
   return [...SHELL_URLS, ...[...files].sort().map((f) => `./${f}`)];
 }
 
@@ -119,6 +137,13 @@ export function verifyPrecache(distDir) {
     (chunk.imports ?? []).forEach(walk);
   };
   Object.keys(manifest).forEach((k) => { if (manifest[k].isEntry) walk(k); });
+  // The app chunk, loaded lazily by the entry, is shell too (APP_SOURCE).
+  // Found independently of appChunkKey: by source, else the entry's dynamic
+  // import named "App".
+  const entryLazy = Object.values(manifest).filter((c) => c?.isEntry).flatMap((c) => c.dynamicImports ?? []);
+  const appKey = manifest[APP_SOURCE] ? APP_SOURCE
+    : Object.keys(manifest).find((k) => manifest[k]?.src === APP_SOURCE) ?? entryLazy.find((k) => manifest[k]?.name === "App");
+  if (appKey) walk(appKey);
 
   const missing = [...expected].filter((f) => !stamped.has(`./${f}`));
   if (missing.length) {
@@ -149,4 +174,19 @@ export function verifyPrecache(distDir) {
   const missingRules = rules.filter((u) => !existsSync(resolve(distDir, u.slice(2))));
   if (missingRules.length) throw new Error(`precache verify: APP_RULES_URLS references files not present in dist:\n  ${missingRules.join("\n  ")}`);
   return { count: stamped.size, entryAssets: expected.size, appRules: rules.length };
+}
+
+/**
+ * Fail the build if the app is back in the entry bundle (a static import of
+ * App.jsx from main.jsx or AuthGate.jsx), so the sign-in screen would wait
+ * for all of it again, or if its chunk is not precached with the entry.
+ */
+export function verifyAppSplit(distDir) {
+  const manifest = JSON.parse(readFileSync(resolve(distDir, ".vite", "manifest.json"), "utf8"));
+  const key = appChunkKey(manifest);
+  if (!key || !manifest[key]?.isDynamicEntry) throw new Error("app split verify: the app is not a chunk of its own; the sign-in screen would wait for the whole app (src/AuthGate.jsx)");
+  const sw = readFileSync(resolve(distDir, "sw.js"), "utf8");
+  const m = sw.match(/const PRECACHE_URLS = (\[[\s\S]*?\]);/);
+  if (!m || !JSON.parse(m[1]).includes(`./${manifest[key].file}`)) throw new Error(`app split verify: the app chunk ${manifest[key].file} is not precached; an installed app opened offline could not start`);
+  return { app: manifest[key].file };
 }

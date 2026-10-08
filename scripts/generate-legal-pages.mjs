@@ -16,6 +16,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getLegalDocuments, LEGAL_CONTACT } from "../src/content/legalText.js";
 import { HTTPS_REDIRECT_SCRIPT } from "./https-redirect.mjs";
+import { VISIT_BEACON_SCRIPT } from "./visit-beacon.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = resolve(here, "..", "landing");
@@ -115,6 +116,8 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
   section { padding: 20px 18px; }
 }
 </style>
+<!-- First-party visit beacon (scripts/visit-beacon.mjs): path and referrer only. -->
+${VISIT_BEACON_SCRIPT}
 </head>
 <body><!--email_off-->
 

@@ -103,7 +103,13 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     if (slot === 'cta') return navigation(fallback, view);
     if (slot === 'form') return signupInsteadOfForm(fallback, view);
     if (slot === 'hero-offer') return `<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${escapeHtml(view.foundingOffer)}</p>`
-      + '<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>';
+      + '<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>'
+      // The signup button right under the offer (signup review 2026-10-07: a
+      // phone's first screen of the home page had no way to sign up; the
+      // first "Create your account" was 16,000 px down). The same button and
+      // guarantee sentence as every other signup button (33363fee).
+      + (surface === 'home' ? `<div data-hero-signup style="margin:0 0 20px;"><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a>`
+        + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p></div>` : '');
     // Same approved strings and data attributes as the home hero, so membership-offer.js
     // repaints this block when the live phase changes. No new claims, no new price.
     if (slot === 'guide-offer') return '<div class="guide-offer" style="margin:18px 0 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);max-width:600px;">'
@@ -192,6 +198,8 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
   }
   return markLiveOffer(output, view).replace(/<html\b/, '<html data-public-launch="founding-signup"')
     .replace(/aria-label="Join the waitlist"/g, 'aria-label="Membership signup"')
-    .replace("connect-src 'none'", offerEndpoint ? `connect-src ${escapeHtml(offerEndpoint)}` : "connect-src 'none'")
+    // A page whose policy already allows its own origin (the CME page, for
+    // the visit beacon, scripts/visit-beacon.mjs) keeps it beside the offer endpoint.
+    .replace(/connect-src '(none|self)'/, (whole, kept) => offerEndpoint ? `connect-src ${kept === 'self' ? "'self' " : ''}${escapeHtml(offerEndpoint)}` : whole)
     .replace('</body>', `<script type="module" src="/membership-offer.js"${offerEndpoint ? ` data-membership-endpoint="${escapeHtml(offerEndpoint)}"` : ''}></script>\n</body>`);
 }

@@ -3190,11 +3190,13 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
   });
 });
 
-// Sticky mobile CTA bar: shows once the hero has scrolled out of view,
+// Sticky mobile CTA bar: shows while the hero's signup button is out of view
+// (before it is reached on a short phone screen, and after it scrolls away),
 // hides while the early-access form is on screen, dismiss lasts the visit.
+// Without that button (waitlist mode) it waits for the whole hero to go.
 (function() {
   var bar = document.getElementById('sticky-cta');
-  var hero = document.getElementById('hero');
+  var hero = document.querySelector('[data-hero-signup]') || document.getElementById('hero');
   if (!bar || !hero || !('IntersectionObserver' in window)) return;
   var dismissed = false;
   var heroVisible = true;

@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadVideoCatalog, validateVideoCatalog, videoHref, watchHref } from './help-videos.mjs';
 import { HTTPS_REDIRECT_SCRIPT } from './https-redirect.mjs';
+import { VISIT_BEACON_SCRIPT } from './visit-beacon.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -224,6 +225,8 @@ export function renderHelp(input, videoCatalog = null) {
       applyFilter(); openHash();
     })();
   </script>
+<!-- First-party visit beacon (scripts/visit-beacon.mjs): path and referrer only. -->
+${VISIT_BEACON_SCRIPT}
 <!--/email_off--></body>
 </html>
 `;

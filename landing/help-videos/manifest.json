@@ -21,8 +21,8 @@
         },
         "poster": {
           "file": "first-license/poster.jpg",
-          "sha256": "6c9310bdf59b8028fccd0562c4596627c9655231ed33611947a0a5d017db0981",
-          "bytes": 108985
+          "sha256": "2bf3287e11607bae37f304fd522d4a40f8cd9815265dc7a1887177c35d768864",
+          "bytes": 35649
         },
         "captions": {
           "file": "first-license/captions.vtt",
@@ -64,8 +64,8 @@
         },
         "poster": {
           "file": "scan-license/poster.jpg",
-          "sha256": "41ecc1c8d4a9e7c90d6df0c7f6ec2fa95e3c1288c70aef2117b04ed1b655f6c1",
-          "bytes": 111643
+          "sha256": "d2118aa4eb797c4373ccffdedeb2568b357283580da4f930722a2dc261302d9a",
+          "bytes": 36467
         },
         "captions": {
           "file": "scan-license/captions.vtt",
@@ -107,8 +107,8 @@
         },
         "poster": {
           "file": "scan-cme/poster.jpg",
-          "sha256": "f8768669a0e01fb794c73db39809f0ed98cf0abb930e5a3084b53f671d6aa583",
-          "bytes": 113471
+          "sha256": "711b829d6cefdd5eb3daa3836586e295375c5ca29818eb6c61a1478e912ad0a7",
+          "bytes": 37202
         },
         "captions": {
           "file": "scan-cme/captions.vtt",
@@ -150,8 +150,8 @@
         },
         "poster": {
           "file": "import-cme/poster.jpg",
-          "sha256": "9efece1287d9e84d76163e1a210fe5ea77830c2895f9ffad700f40ad59e63b49",
-          "bytes": 114058
+          "sha256": "049e9a4c48fdc1d7ccac447ddc3f771ef05c7467bb8d9ea79af882a2d911ee3b",
+          "bytes": 37601
         },
         "captions": {
           "file": "import-cme/captions.vtt",
@@ -193,8 +193,8 @@
         },
         "poster": {
           "file": "review-cme/poster.jpg",
-          "sha256": "daa6cbfbf1a45d89333b6d74df94fe5fef68ad6a959acda34045942163271a1a",
-          "bytes": 128763
+          "sha256": "b97835fe9abbaf6398f934b0ea483f6c992406756a8f6111a04c8c05eebd41b0",
+          "bytes": 42699
         },
         "captions": {
           "file": "review-cme/captions.vtt",
@@ -236,8 +236,8 @@
         },
         "poster": {
           "file": "locum-contract/poster.jpg",
-          "sha256": "e26d7a3cfc7b24eb1e0979c578438c4b830a1f6141cf6f0bb1105def2997ab22",
-          "bytes": 128466
+          "sha256": "2a2ec9bc529216ebf247c032cbae042c610caaddcf017ff2218abbfec3ac7900",
+          "bytes": 42163
         },
         "captions": {
           "file": "locum-contract/captions.vtt",
@@ -279,8 +279,8 @@
         },
         "poster": {
           "file": "locum-work/poster.jpg",
-          "sha256": "7d803e3f9974c52c505a3a411c7f3cfc894bb239e2555396687710b643ecc07b",
-          "bytes": 110875
+          "sha256": "19b4893ded0ce5988c108d0fc8ce4ebffd63d37402b9bab6b18d5d08dd56acb9",
+          "bytes": 36252
         },
         "captions": {
           "file": "locum-work/captions.vtt",
@@ -322,8 +322,8 @@
         },
         "poster": {
           "file": "locum-invoice/poster.jpg",
-          "sha256": "560f7c03ab7137a25e8c608b96e94713604787484ad358111849238e0b258186",
-          "bytes": 112497
+          "sha256": "1bb2670dd46c3f818dbdd30ef0f7c74dbacb3a7e880ba5508c3141750cebdf2c",
+          "bytes": 36939
         },
         "captions": {
           "file": "locum-invoice/captions.vtt",
@@ -365,8 +365,8 @@
         },
         "poster": {
           "file": "locum-payment/poster.jpg",
-          "sha256": "2889f1ec8ad770467e2daf9ff1b79bd03f52b18103084f81417f34c78abe1da1",
-          "bytes": 121663
+          "sha256": "e290ccf08a5170fa279261ba91ec6f07bc07c86425fce230e34e5a2f451a2123",
+          "bytes": 40227
         },
         "captions": {
           "file": "locum-payment/captions.vtt",
@@ -408,8 +408,8 @@
         },
         "poster": {
           "file": "reminders/poster.jpg",
-          "sha256": "e64a6f34ecbfabdb2c40a44eb1d8b91a98bf74a9a689823020f85caf764c7760",
-          "bytes": 122705
+          "sha256": "9396c77d4b61adee721e7cee90b7c3dd4c9c7949a22619b482d4a418d0350ec6",
+          "bytes": 40323
         },
         "captions": {
           "file": "reminders/captions.vtt",
@@ -451,8 +451,8 @@
         },
         "poster": {
           "file": "get-help/poster.jpg",
-          "sha256": "7275e00a99d718a9941988ed2ec70d877711cc7023800ecd31b1ad2db1799176",
-          "bytes": 114838
+          "sha256": "15e293d3692ec564a9e224b8e5d097358e0cbf38d8bae7af3aa7852a659d76a8",
+          "bytes": 37988
         },
         "captions": {
           "file": "get-help/captions.vtt",
@@ -494,8 +494,8 @@
         },
         "poster": {
           "file": "backup-data/poster.jpg",
-          "sha256": "f27baa9fdac402ef403d8298caf7ef9c8ba3f6a8f9624b87266962842e5fc6bd",
-          "bytes": 123557
+          "sha256": "f83329696538f335198b6ce81fa66fa15cec8f5849cfbdb7cba2a393e851eb9a",
+          "bytes": 40622
         },
         "captions": {
           "file": "backup-data/captions.vtt",
@@ -537,8 +537,8 @@
         },
         "poster": {
           "file": "share-references/poster.jpg",
-          "sha256": "2633f37c3532373ea3975dd88305c6e3bdc253c27464aa8803857f2390c958b8",
-          "bytes": 126520
+          "sha256": "ceae57753f0c0670f7dc9e21dd64440a61079eec0df8c8d68c237719ff6994b9",
+          "bytes": 41364
         },
         "captions": {
           "file": "share-references/captions.vtt",
@@ -580,8 +580,8 @@
         },
         "poster": {
           "file": "share-documents/poster.jpg",
-          "sha256": "a1d5f09fe81fe5e767e2eab2eb2707fa29a148d96591ae4695f92559c880f024",
-          "bytes": 127713
+          "sha256": "30644ff8683d2c27fed92eb9bf6c1858b7d60df2b3f3ab074e8439ee06c97c37",
+          "bytes": 42342
         },
         "captions": {
           "file": "share-documents/captions.vtt",

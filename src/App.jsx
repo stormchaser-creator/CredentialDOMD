@@ -47,6 +47,8 @@ import { APP_RULES_UNAVAILABLE } from "./utils/appRules.js";
 import OfflineUnavailable from "./components/shared/OfflineUnavailable.jsx";
 import AccountRecordsLoadError from "./components/shared/AccountRecordsLoadError.jsx";
 import LimitedLaunchMembership from "./components/pages/LimitedLaunchMembership.jsx";
+import { useSlowLoad, SLOW_LOAD_TEXT } from "./hooks/useSlowLoad.js";
+import { reportUnlessLeaving } from "./lib/errorReport.js";
 import { DataExport } from "./components/features";
 import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
@@ -321,11 +323,15 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // proposal, or whose proposal predates the newest upload, is rebuilt on
   // the client by the same hook the inbox mounts, so the banner's button
   // and the inbox's card never disagree about what is ready.
-  const { rows: openRequests, count: newRequestCount, refresh: refreshRequests } = useOpenRequests(userIdRef, loaded);
+  // A pending account (signed up, not paid) is on the membership page: the
+  // request and forwarding panels read nothing for it, on load or on focus
+  // (signup review 2026-10-07).
+  const pendingMember = limitedLaunch.enabled === true && limitedLaunch.access?.accessStatus === "pending";
+  const { rows: openRequests, count: newRequestCount, refresh: refreshRequests } = useOpenRequests(userIdRef, loaded && !pendingMember);
   const openRequestRows = useRequestProposals(openRequests);
   // What informational mail entered or offers (no email goes out for one):
   // the newest on Home, all of them in More > Requests, counted in its badge.
-  const { notes: intakeNotes } = useIntakeNotes();
+  const { notes: intakeNotes } = useIntakeNotes({ enabled: !pendingMember });
   const requestsBadge = newRequestCount + intakeNotes.length;
   // The request Home's Review link opens. The inbox reports back once it
   // has opened it, and the id is cleared so a later trip to More > Requests
@@ -345,7 +351,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // the banner then stops detecting a requester-not-found request and offers a
   // send that mails the packet straight back to the physician. The routable
   // list answers a different question and is used in RequestsInbox.jsx.
-  const { rows: forwardingRows } = useForwardingAddresses();
+  const { rows: forwardingRows } = useForwardingAddresses({ enabled: !pendingMember });
   // settings.verifiedEmail is profiles.verified_email, server-owned and
   // read-only here. It is one of the physician's own addresses and was left
   // out, so a request whose From: was their provider-verified mailbox looked
@@ -407,6 +413,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     if (deepLink) stashAppDeepLink(deepLink);
     reloadPage();
   }, [deepLink]);
+  // "Loading..." that lasts: Reload is offered, and the wait is reported once
+  // (hooks/useSlowLoad.js). Kept above the loading screens: hooks cannot be conditional.
+  const loadSlow = useSlowLoad(!authChecked ? "sign-in" : !loaded ? "account" : null,
+    { report: (message, extra) => reportUnlessLeaving(message, "error", extra) });
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");
@@ -517,7 +527,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   }, [user, offlineMode, data.settings?.accessStatus, launchAccessEnabled, refreshLaunchAccess]);
   useEffect(() => {
     if (!loaded || !user) return;
-    recheckAccess();
+    // Launch mode: the access hook asks by itself as the profile becomes
+    // ready; this joins that check (or asks nothing while the answer is
+    // fresh) instead of sending a second one on every load.
+    if (launchAccessEnabled && typeof limitedLaunch.ensure === "function") void limitedLaunch.ensure();
+    else recheckAccess();
     if (offlineMode) return; // presence pings can only fail offline
     touchLastSeen();
     const t = setInterval(touchLastSeen, 15 * 60 * 1000);
@@ -997,11 +1011,18 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   [data.taskNotes]);
 
   // Still checking auth (Clerk SDK still bootstrapping)
+  // Offered once the wait has lasted (useSlowLoad above); nothing else on this screen moves.
+  const slowLoadReload = loadSlow && <>
+    <div role="status" style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}>{SLOW_LOAD_TEXT}</div>
+    <button type="button" onClick={reloadKeepingLink} style={{ marginTop: 12, minHeight: TAP_MIN, padding: "10px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Reload</button>
+  </>;
+
   if (!authChecked) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.textMuted }}>
-      <div style={{ textAlign: "center" }}>
+      <div style={{ textAlign: "center", maxWidth: 360, padding: "0 16px" }}>
         <AsclepiusIcon size={40} color={T.accent} />
         <div style={{ marginTop: 12, fontSize: 14, fontWeight: 500 }}>Loading...</div>
+        {slowLoadReload}
       </div>
     </div>
   );
@@ -1016,6 +1037,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           <div role="status" style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}>{APP_RULES_UNAVAILABLE}</div>
           <button type="button" onClick={retryAppRules} style={{ marginTop: 12, minHeight: TAP_MIN, padding: "10px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Try again</button>
         </>}
+        {!appRulesLaunchFailed && slowLoadReload}
       </div>
     </div>
   );

@@ -1,4 +1,9 @@
-import Stripe from 'https://esm.sh/stripe@15.12.0?target=deno';
+// npm:, not esm.sh's ?target=deno build: that one wraps the SDK in Deno's old
+// std/node polyfills, whose process.runMicrotasks throws ("runMicrotasks() is
+// not supported") as each worker shuts down, about 200 s after every billing
+// response (signup review 2026-10-07). Deno resolves npm:stripe to the SDK's
+// own worker build; the version is the one the tests and the lab mock use.
+import Stripe from 'npm:stripe@15.12.0';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { clerkProfile } from './clerkAuth.ts';
 import { validateBillingRuntime } from './billingCatalog.mjs';

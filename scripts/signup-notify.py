@@ -426,10 +426,12 @@ def query_sql(since, present, now=None):
     and coalesce(m.body, '') not ilike 'CredentialDOMD Support%'
     and coalesce((to_jsonb(m)->>'is_admin_reply')::boolean, false) = false""",
         # kind 'info' is an event, not a fault (a page the browser discarded):
-        # said as such (migration 20261002080000).
+        # said as such (migration 20261002080000). The signup funnel's steps
+        # (kind 'info', "Funnel: ...", src/utils/funnelEvents.js) are for
+        # counting in the table, not alerts (2026-10-07).
         f"""select case when e.kind = 'info' then 'CLIENT EVENT' else 'CLIENT ERROR' end, coalesce(p.name, e.auth_user_id, 'signed-out'), coalesce(p.email,''), e.kind || ': ' || left(regexp_replace(e.message, '\\s+', ' ', 'g'),90), e.created_at, null
   from client_errors e left join profiles p on p.auth_user_id = e.auth_user_id
-  where e.created_at > {s}{upto('e.created_at')}""",
+  where e.created_at > {s}{upto('e.created_at')} and not (e.kind = 'info' and e.message like 'Funnel: %')""",
         f"select 'BETA JOINED', coalesce(name,''), coalesce(email,''), '', activated_at, null from beta_access where activated_at > {s}{upto('activated_at')}",
         # An invitation sent through Admin > Users (send-invite).
         f"""select 'INVITE SENT', {person('b')}, 'beta invitation', b.invite_sent_at, 'beta-invite:' || b.id::text || ':' || b.invite_sent_at::text

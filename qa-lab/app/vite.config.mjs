@@ -31,7 +31,7 @@ import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import baseConfig from '../../vite.config.js';
-import { computePrecacheUrls, stampPrecache, verifyPrecache } from '../../scripts/sw-precache.mjs';
+import { computeAppRulesUrls, computePrecacheUrls, stampAppRules, stampPrecache, verifyAppSplit, verifyPrecache } from '../../scripts/sw-precache.mjs';
 import { QA_APP_DIST, REPO_ROOT } from '../lib/paths.mjs';
 import { APP_PROXY, HOSTED_STAND_IN_PATH, LAB_ISSUER, LAB_LEGACY_ISSUER, PRODUCTION_ISSUER, PRODUCTION_LEGACY_ISSUER, SUPABASE_API_URL } from '../lib/lab-config.mjs';
 
@@ -159,10 +159,14 @@ function stampQaServiceWorker(buildId) {
       const swPath = path.join(QA_APP_DIST, 'sw.js');
       const manifestPath = path.join(QA_APP_DIST, '.vite', 'manifest.json');
       if (!existsSync(swPath) || !existsSync(manifestPath)) throw new Error('qa-lab: sw.js or the build manifest is missing from the QA build');
-      const sw = stampPrecache(readFileSync(swPath, 'utf8').replaceAll('__BUILD_ID__', buildId), computePrecacheUrls(JSON.parse(readFileSync(manifestPath, 'utf8'))));
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      // As vite.config.js: the precache list, then the PA/NP rule chunk list
+      // (verifyPrecache refuses an unstamped one; this build failed on main without it).
+      const sw = stampAppRules(stampPrecache(readFileSync(swPath, 'utf8').replaceAll('__BUILD_ID__', buildId), computePrecacheUrls(manifest)), computeAppRulesUrls(manifest));
       writeFileSync(swPath, sw);
       writeFileSync(path.join(QA_APP_DIST, 'version.json'), JSON.stringify({ build: buildId, qaLab: true }) + '\n');
       verifyPrecache(QA_APP_DIST);
+      verifyAppSplit(QA_APP_DIST);
     },
   };
 }

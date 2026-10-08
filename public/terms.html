@@ -82,6 +82,8 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
   section { padding: 20px 18px; }
 }
 </style>
+<!-- First-party visit beacon (scripts/visit-beacon.mjs): path and referrer only. -->
+<script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
 </head>
 <body><!--email_off-->
 

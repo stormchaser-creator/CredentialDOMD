@@ -43,7 +43,12 @@ const exec = promisify(execFile);
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const MEMBER = id(1), ADMIN = id(2), OTHER = id(3), BUYER = id(4), GIFTED = id(5), TRIAL = id(6);
 const TICKET = id(101), ADMIN_TICKET = id(102);
-const EARLIER = '2026-09-29T09:00:00Z'; // the last run, for the time-window rows
+// The last run, for the time-window rows: a day before this test runs. The
+// money parts look back LOOKBACK_DAYS from the database's own clock, so a
+// fixed date (it was 2026-09-29T09:00:00Z) put the paid rows, stamped two
+// hours before it, outside that window from 2026-10-06T07:00Z on, and five
+// tests failed on an unchanged tree.
+const EARLIER = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19) + 'Z';
 
 // Production shapes, trimmed to the columns the notifier reads.
 const BASE = `
@@ -389,6 +394,20 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     assert.doesNotMatch(JSON.stringify(again.map(r => r.key)), /re_Owner2/, 'no provider id in the key file');
     py(['remember', '--seen', seen], JSON.stringify(again));
     assert.equal(py(['format', '--seen', seen], JSON.stringify(await refundRows(iso(1), iso(61)))), '', 'and once');
+  });
+
+  // Signup review 2026-10-07: the signup funnel's steps are client events
+  // (kind 'info', message "Funnel: ...", src/utils/funnelEvents.js), one per
+  // step per page. They are for counting, not for the owner's phone: the
+  // alerts stay what they were, and every other client event or error still goes.
+  await t.test('signup funnel steps are not alerts; other client events and errors still are', async () => {
+    await pg.sql('create database funnel');
+    await pg.sql(BASE + CORE_ROWS + `insert into client_errors(auth_user_id, kind, message) values
+      ('user_synthetic1', 'info', 'Funnel: price shown'), ('user_synthetic1', 'info', 'Funnel: sent to Stripe Checkout'),
+      ('user_synthetic1', 'info', 'Page discarded by the browser'), ('user_synthetic1', 'error', 'Account load still waiting after 15 s (account).')`, 'funnel');
+    const rows = await pg.rows(py(['query', '--since', EARLIER, '--now', iso(60), '--present', '']), 'funnel');
+    assert.deepEqual(lines(rows, 'CLIENT EVENT').map(r => r.extra), ['info: Page discarded by the browser']);
+    assert.deepEqual(lines(rows, 'CLIENT ERROR').map(r => r.extra), ['error: Account load still waiting after 15 s (account).']);
   });
 
   await t.test('the query refuses a malformed last-run time and an unknown table name', () => {

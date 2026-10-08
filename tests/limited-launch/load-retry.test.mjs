@@ -395,3 +395,98 @@ test('(a) a record save in flight while Clerk replaces the session object (same 
   assert.equal(f.restRequests.length, 1);
   assert.equal(f.restRequests[0].method, 'PATCH');
 });
+
+// Signup review 2026-10-07: the profile row read had no deadline. One that
+// never answered left a new member on "Loading..." for good (past 2.5 minutes
+// on an iPhone; a reload loaded in 0.8 s). It now ends as a read with no
+// answer, is tried again, and the load is then marked transient, so
+// AppContext opens the device copy read-only and asks again on its own.
+const within = (promise, ms) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(Error(`still waiting after ${ms} ms`)), ms))]);
+test('a profile row read that never answers ends at its deadline, is tried again, and the load is marked transient', async () => {
+  const f = loadFixture({ edge: async () => Response.json(receipt()), rows: () => new Promise(() => {}) });
+  const outcome = await within(f.api.ensureProfile(OWNER, { ...FAST, readLimitMs: 20 }).then(() => 'loaded', error => error), 2000);
+  assert.equal(outcome.code, 'continuity_initialization_failed');
+  assert.equal(outcome.transient, true, 'a weak signal, not a refusal');
+  assert.equal(f.restRequests.length, 3, 'tried three times first');
+  assert.equal(f.api.LOAD_READ_LIMIT_MS, 10000, 'ten seconds a try in the app');
+});
+test('a profile row read that answers late but inside its deadline is used', async () => {
+  const f = loadFixture({ edge: async () => Response.json(receipt()),
+    rows: () => new Promise(resolve => setTimeout(() => resolve(Response.json([{ id: PROFILE_ID, auth_user_id: OWNER }])), 15)) });
+  const profile = await within(f.api.ensureProfile(OWNER, { ...FAST, readLimitMs: 500 }), 2000);
+  assert.equal(profile.id, PROFILE_ID);
+  assert.equal(f.restRequests.length, 1);
+});
+// loadFromSupabase reads through the module's shared client, which sends
+// with the page's fetch (the fixture's, which answers with `rows`).
+async function withSharedFetch(rows, run) {
+  return run(loadFixture({ edge: async () => Response.json(receipt()), rows: (n, request) => rows(n, request) }));
+}
+test('a records read that never answers ends the account read at its deadline as a timeout', async () => {
+  for (const stall of ['profile', 'table']) {
+    await withSharedFetch((n, request) => (stall === 'profile' || !request.url.includes('/profiles?'))
+      ? new Promise(() => {}) : Promise.resolve(Response.json({ id: PROFILE_ID, auth_user_id: OWNER })), async f => {
+      const outcome = await within(f.api.loadFromSupabase(OWNER, { readLimitMs: 20 }).then(() => 'loaded', error => error), 2000);
+      assert.equal(outcome.code, 'load_timeout', stall);
+      assert.ok(f.restRequests.length >= 1, `${stall}: the read went out`);
+    });
+  }
+  // A read that answers is unchanged.
+  await withSharedFetch((n, request) => Promise.resolve(Response.json(request.url.includes('/profiles?') ? { id: PROFILE_ID, auth_user_id: OWNER } : [])), async f => {
+    const value = await within(f.api.loadFromSupabase(OWNER, { readLimitMs: 500 }), 2000);
+    assert.equal(value._userId, PROFILE_ID);
+    assert.equal(value._errored.size, 0);
+  });
+});
+
+// Signup review 2026-10-07 (second pass): the deadline covered the whole
+// transfer, body included, so a large account on a slow but working link
+// (the owner's first page of case logs is about 800 KB) was cancelled while
+// its rows were still arriving, and every retry was cut off the same way.
+// The limit is now silence: it runs until the response arrives and starts
+// again with each piece of the body.
+const syntheticRows = count => Array.from({ length: count }, (_, i) => ({
+  id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, user_id: PROFILE_ID, created_at: '2026-01-01T00:00:00Z' }));
+// A 200 whose headers come at once and whose body arrives in `pieces`, one
+// every `gapMs`; with `stallAfter`, the body stops arriving after that many.
+function streamed(value, { pieces = 8, gapMs, stallAfter = Infinity }) {
+  const bytes = encoder.encode(JSON.stringify(value)), step = Math.ceil(bytes.length / pieces);
+  return new Response(new ReadableStream({ async start(controller) {
+    for (let i = 0; i < pieces; i++) {
+      if (i >= stallAfter) return; // never closes
+      await new Promise(resolve => setTimeout(resolve, gapMs));
+      controller.enqueue(bytes.slice(i * step, (i + 1) * step));
+    }
+    controller.close();
+  } }), { status: 200, headers: { 'content-type': 'application/json' } });
+}
+test('a records read still receiving its body past the deadline is not cancelled: the limit is silence, not the whole transfer', async () => {
+  const rows = syntheticRows(40);
+  await withSharedFetch((n, request) => request.url.includes('/profiles?')
+    ? Promise.resolve(Response.json({ id: PROFILE_ID, auth_user_id: OWNER }))
+    : Promise.resolve(request.url.includes('/case_logs?') ? streamed(rows, { pieces: 8, gapMs: 40 }) : Response.json([])), async f => {
+    const started = Date.now();
+    // 8 pieces, 40 ms apart: about 320 ms in all, against a 100 ms limit.
+    const value = await within(f.api.loadFromSupabase(OWNER, { readLimitMs: 100 }), 3000);
+    assert.ok(Date.now() - started >= 250, 'the transfer took well past the limit');
+    assert.equal(value.caseLogs.length, rows.length, 'every row arrived');
+    assert.equal(value._errored.size, 0);
+  });
+});
+test('a records read whose body stops arriving is still cancelled at its deadline as a timeout', async () => {
+  await withSharedFetch((n, request) => request.url.includes('/profiles?')
+    ? Promise.resolve(Response.json({ id: PROFILE_ID, auth_user_id: OWNER }))
+    : Promise.resolve(request.url.includes('/case_logs?') ? streamed(syntheticRows(40), { pieces: 8, gapMs: 10, stallAfter: 3 }) : Response.json([])), async f => {
+    const started = Date.now();
+    const outcome = await within(f.api.loadFromSupabase(OWNER, { readLimitMs: 100 }).then(() => 'loaded', error => error), 3000);
+    assert.equal(outcome.code, 'load_timeout');
+    assert.ok(Date.now() - started < 1000, 'ended about one limit after the last piece');
+  });
+});
+test('a profile row read whose body arrives slowly past the deadline is used (the per-write client reports progress too)', async () => {
+  const f = loadFixture({ edge: async () => Response.json(receipt()),
+    rows: () => Promise.resolve(streamed([{ id: PROFILE_ID, auth_user_id: OWNER }], { pieces: 6, gapMs: 30 })) });
+  const profile = await within(f.api.ensureProfile(OWNER, { ...FAST, readLimitMs: 80 }), 3000);
+  assert.equal(profile.id, PROFILE_ID);
+  assert.equal(f.restRequests.length, 1, 'answered on the first try');
+});

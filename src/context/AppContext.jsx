@@ -474,8 +474,15 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const ownerId = user.id;
     let busy = false, lastAt = 0, onlineWhileBusy = false, stopped = false;
     const current = () => dataOwnerRef.current === ownerId && getActiveUserId() === ownerId && window.Clerk?.user?.id === ownerId;
+    // An account whose membership is pending (signed up, not paid) has no
+    // records to read again: its screen is the membership page, and each
+    // return to the front read about 40 empty tables (signup review
+    // 2026-10-07). Its membership check runs on resume by itself.
+    // (Guarded: tests run this effect alone, without the module's imports.)
+    const pendingAccount = () => typeof accessAuthority === "object" && accessAuthority?.state?.(ownerId)?.accessStatus === "pending";
     const refresh = async ({ force = false } = {}) => {
       if (busy || !current() || document.visibilityState === "hidden") return;
+      if (pendingAccount()) return;
       if (!force && Date.now() - lastAt < RESUME_REFRESH_MIN_GAP_MS) return;
       busy = true; lastAt = Date.now();
       try { await loadDataForUser(ownerId, { quiet: true }); } catch { /* quiet */ }
@@ -734,9 +741,13 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // A PA or NP: the rule data loads while the rest of this load runs.
           // (Guarded: tests run this function alone, without the module's imports.)
           if (typeof preloadAppRules === "function" && needsAppRules(sbData)) preloadAppRules();
-        } catch {
+        } catch (readError) {
           if (!current()) return;
-          throw accountRecordsLoadError();
+          // A read with no answer before its deadline (lib/supabase.js
+          // loadFromSupabase): a weak signal, not a refusal (transient below).
+          const stopped = accountRecordsLoadError();
+          if (readError?.code === "load_timeout") stopped.transient = true;
+          throw stopped;
         }
         setRecordsLoadIssue(null);
         if (sbData) {
@@ -1107,6 +1118,22 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         setProfileOwner(null);
         setIdentityWaiting({ accountId: authUserId, supportReference: ACCOUNT_RECORDS_SUPPORT_REFERENCE });
         reportUnlessLeaving(`Account records load used this device's copy, read-only (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}).`);
+        return;
+      }
+      // The records read had no answer before its deadline on a load that is
+      // not the retry (the first load after sign-up, on a weak signal): as for
+      // the identity check above, the account's own device copy opens
+      // read-only and the load is asked again on its own. It used to wait on
+      // "Loading..." for good when a read never answered (signup review
+      // 2026-10-07).
+      if (err.code === "account_records_unavailable" && err.transient === true) {
+        const supportReference = `${ACCOUNT_RECORDS_SUPPORT_REFERENCE}-TIMEOUT`;
+        accessAuthority.suspendWrites();
+        setProfileOwner(null);
+        setProfileIssue(null);
+        setIdentityWaiting({ accountId: authUserId, supportReference });
+        reportUnlessLeaving(`Account records load used this device's copy, read-only (${supportReference}).`);
+        if (current()) loadLocalData(authUserId, current, begun);
         return;
       }
       setIdentityWaiting(null);

@@ -30,6 +30,16 @@ const IS_DEV_CLERK_INSTANCE =
 // #/verify-email and #/factor-one belong to Clerk and must stay untouched.
 const isLegacyEntry = hash => hash === "#sign-in" || hash === "#sign-up";
 
+// Room kept for the offer box and Clerk's card before they arrive, so the
+// screen does not jump as each loads (signup review 2026-10-07: 162 px, a
+// layout shift of 0.4 on a phone). Heights as the live screen draws them
+// (WebKit, 2026-10-07): the offer box 186 px at 320 px wide, 147 px at 393,
+// 108 px on a desktop; the card 333 px at 320 wide, 309 px elsewhere.
+export function reservedAuthHeights(width) {
+  const w = Number.isFinite(width) ? width : 1024;
+  return { offer: w <= 360 ? 186 : w <= 480 ? 147 : 108, widget: w <= 360 ? 333 : 309 };
+}
+
 const HIDE_SOCIAL_ELEMENTS = IS_DEV_CLERK_INSTANCE
   ? {
       socialButtons: { display: "none" },
@@ -78,7 +88,9 @@ function AuthPage() {
   useOneTapEmailCode(widgetRef, entry.ready && !SMS_SIGN_IN_ENABLED);
   const T = THEMES.light;
   // Live public offer, or null. Null renders the screen exactly as it was.
-  const [offer, setOffer] = useState(null);
+  // Undefined while it loads: its room is kept, empty.
+  const [offer, setOffer] = useState(undefined);
+  const reserved = reservedAuthHeights(globalThis.window?.innerWidth);
   useEffect(() => { sendAuthVisit(); }, []);
   useEffect(() => {
     let alive = true;
@@ -136,10 +148,11 @@ function AuthPage() {
           </p>
         </div>
 
+        {offer === undefined && <div data-auth-offer-reserved="" aria-hidden="true" style={{ margin: "0 0 14px", minHeight: reserved.offer }} />}
         {offer && (
           <div data-auth-offer style={{
             margin: "0 0 14px", padding: "12px 14px", borderRadius: 12, textAlign: "center",
-            border: `1px solid ${T.accent}`, backgroundColor: T.card,
+            border: `1px solid ${T.accent}`, backgroundColor: T.card, minHeight: reserved.offer, boxSizing: "border-box",
           }}>
             <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: T.text, lineHeight: 1.4 }}>{offer.headline}</p>
             <p style={{ margin: "4px 0 0", fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{offer.status}</p>
@@ -150,7 +163,7 @@ function AuthPage() {
         </p>
 
         {/* Clerk widget */}
-        <div ref={widgetRef} style={{ display: "flex", justifyContent: "center" }}>
+        <div ref={widgetRef} data-auth-widget="" style={{ display: "flex", justifyContent: "center", minHeight: reserved.widget }}>
           {entry.ready && (
             <SignIn
               key={entry.version}

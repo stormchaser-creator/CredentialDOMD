@@ -18,7 +18,7 @@ function server({ oldCheck = false } = {}) {
   const db = {
     from() {
       const q = {
-        select() { return q; }, eq() { return q; }, gte() { return q; }, maybeSingle() { return q; },
+        select() { return q; }, eq() { return q; }, neq() { return q; }, gte() { return q; }, maybeSingle() { return q; },
         insert(row) {
           if (oldCheck && !['error', 'unhandledrejection', 'react'].includes(row.kind)) return Promise.resolve({ error: { code: '23514', message: 'violates check constraint "client_errors_kind_check"' } });
           inserts.push(row); return Promise.resolve({ error: null });

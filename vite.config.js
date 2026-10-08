@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
-import { computePrecacheUrls, computeAppRulesUrls, stampPrecache, stampAppRules, verifyPrecache } from './scripts/sw-precache.mjs'
+import { computePrecacheUrls, computeAppRulesUrls, stampPrecache, stampAppRules, verifyPrecache, verifyAppSplit } from './scripts/sw-precache.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -58,7 +58,8 @@ function assertPrecache() {
     apply: 'build',
     closeBundle() {
       const { count, entryAssets, appRules } = verifyPrecache(resolve(__dirname, 'dist'))
-      console.log(`[assert-precache] OK: ${count} precache URLs cover all ${entryAssets} entry assets; ${appRules} PA/NP rule file(s) for devices that need them`)
+      const { app } = verifyAppSplit(resolve(__dirname, 'dist'))
+      console.log(`[assert-precache] OK: ${count} precache URLs cover all ${entryAssets} entry assets; ${appRules} PA/NP rule file(s) for devices that need them; the app is its own precached chunk (${app})`)
     },
   }
 }

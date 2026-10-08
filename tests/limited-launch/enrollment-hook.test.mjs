@@ -10,7 +10,7 @@ import * as refreshFailure from '../../src/utils/accessRefreshFailure.js';
 const source = await readFile(new URL('../../src/hooks/useLimitedLaunchAccess.js', import.meta.url), 'utf8');
 const code = transformSync(source, { format: 'cjs' }).code;
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
-function fixture({ publicSignup = true, enabled = true, profileReady = true } = {}) {
+function fixture({ publicSignup = true, enabled = true, profileReady = true, state = () => null } = {}) {
   const cells = [], calls = [], effects = [], cleanups = [];
   let index = 0, accountId = 'user_syntheticA', readiness = profileReady;
   const f = { bootstrap: async () => ({}), entitlements: async () => ({ synthetic: true }) };
@@ -19,7 +19,7 @@ function fixture({ publicSignup = true, enabled = true, profileReady = true } = 
     useState(value) { const at = index++; if (!(at in cells)) cells[at] = value; return [cells[at], next => { cells[at] = typeof next === 'function' ? next(cells[at]) : next; }]; },
     useMemo: fn => fn(), useCallback: fn => fn, useEffect: fn => effects.push(fn),
   };
-  const authority = { reset: id => calls.push(['reset', id]), state: () => null, remembered: () => null, setRecheck: () => () => {},
+  const authority = { reset: id => calls.push(['reset', id]), state, remembered: () => null, setRecheck: () => () => {},
     accept: (id, value) => { calls.push(['accept', id, value]); return true; },
     suspendWrites: () => calls.push(['suspend']) };
   const imports = {
@@ -145,4 +145,43 @@ test('the gate shows an account-load stop in either mode, one paragraph per line
   assert.deepEqual(accessGateStatus({ enabled: true, error: 'Synthetic refusal', profileReady: false }), { lines: ['Synthetic refusal'], action: 'reload' });
   assert.deepEqual(accessGateStatus({ enabled: true, profileReady: false }), { lines: ['Your account setup could not finish. Reload to try again.'], action: 'reload' });
   assert.deepEqual(accessGateStatus({ enabled: true, profileReady: true }), { lines: ['Checking your membership…'], action: null });
+});
+
+// Signup review 2026-10-07: every load sent billing-entitlements twice. The
+// hook checks as the profile becomes ready, and App.jsx then called refresh,
+// which waits for that check and starts one more. App.jsx now calls ensure,
+// which joins a check in flight and asks nothing while the answer is fresh.
+test('ensure joins the check in flight; a tap (refresh) still asks once more', async () => {
+  const f = fixture({ publicSignup: false }), pending = deferred();
+  f.entitlements = () => pending.promise;
+  const first = f.value.ensure(), joined = f.value.ensure();
+  pending.resolve({ synthetic: true });
+  await Promise.all([first, joined]);
+  assert.equal(f.calls.filter(v => v[0] === 'entitlements').length, 1, 'one request for both');
+  // refresh, by contrast, asks for an answer given after it (a tap).
+  const g = fixture({ publicSignup: false }), slow = deferred();
+  g.entitlements = () => slow.promise;
+  const check = g.value.ensure(), tap = g.value.refresh();
+  slow.resolve({ synthetic: true });
+  await Promise.all([check, tap]);
+  assert.equal(g.calls.filter(v => v[0] === 'entitlements').length, 2);
+});
+
+test('ensure asks nothing while the answer is fresh', async () => {
+  const f = fixture({ publicSignup: false });
+  await f.value.ensure();
+  assert.equal(f.calls.filter(v => v[0] === 'entitlements').length, 1);
+  // The authority now holds a fresh answer for the account.
+  const fresh = { accessStatus: 'pending', needsRefresh: false };
+  const source2 = fixture({ publicSignup: false, state: () => fresh });
+  await source2.value.ensure();
+  assert.equal(source2.calls.filter(v => v[0] === 'entitlements').length, 0, 'fresh: nothing asked');
+  const stale = fixture({ publicSignup: false, state: () => ({ accessStatus: 'pending', needsRefresh: true }) });
+  await stale.value.ensure();
+  assert.equal(stale.calls.filter(v => v[0] === 'entitlements').length, 1, 'stale: asked');
+});
+
+test('after a load App.jsx joins the hook\'s check instead of starting a second', () => {
+  const effect = appSource.slice(appSource.indexOf('  useEffect(() => {\n    if (!loaded || !user) return;'), appSource.indexOf('touchLastSeen();'));
+  assert.match(effect, /if \(launchAccessEnabled && typeof limitedLaunch\.ensure === "function"\) void limitedLaunch\.ensure\(\);\n\s*else recheckAccess\(\);/);
 });

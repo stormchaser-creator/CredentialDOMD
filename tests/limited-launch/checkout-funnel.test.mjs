@@ -38,7 +38,7 @@ const quoteFor = (offerId = 'core') => ({
 
 const require = createRequire(import.meta.url);
 const built = await build({
-  stdin: { contents: 'export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as Notice} from "./src/components/shared/BillingReturnNotice.jsx"; export {useBillingReturn} from "./src/hooks/useBillingReturn.js";', resolveDir: fileURLToPath(new URL('../..', import.meta.url)) },
+  stdin: { contents: 'export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as Notice} from "./src/components/shared/BillingReturnNotice.jsx"; export {useBillingReturn} from "./src/hooks/useBillingReturn.js"; export {setFunnelReporter} from "./src/utils/funnelEvents.js";', resolveDir: fileURLToPath(new URL('../..', import.meta.url)) },
   bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react/jsx-runtime'], define: { 'import.meta.env': '{}' },
   plugins: [{ name: 'synthetic-funnel', setup(b) {
     b.onResolve({ filter: /context\/AppContext$/ }, () => ({ path: 'context', namespace: 'fixture' }));
@@ -50,7 +50,8 @@ const built = await build({
       client: 'export const createLimitedLaunchClient = () => globalThis.__funnel.client;',
       // As the real authority: no answer while Clerk reports another account or none.
       access: 'export const canReviewBillingOffer = (...args) => globalThis.__funnel.canReview(...args); export const renewalPaymentFailed = (...args) => globalThis.__funnel.renewal(...args); export const accessAuthority = { state: id => id === globalThis.__funnel.context.user.id && globalThis.window.Clerk?.user?.id === id ? globalThis.__funnel.context.limitedLaunch.access : null };',
-      report: 'export const reportError = (...args) => { globalThis.__funnel.reports.push(args); };',
+      // Funnel steps (kind "info", utils/funnelEvents.js) are kept apart from failure reports.
+      report: 'export const reportError = (...args) => { (args[1] === "info" ? globalThis.__funnel.steps : globalThis.__funnel.reports).push(args); };',
     }[path] }));
   } }],
 });
@@ -79,18 +80,20 @@ function runtime() {
 let active = runtime();
 const reactProxy = new Proxy({}, { get: (_, name) => active.hooks[name] });
 new Function('require', 'module', 'exports', built.outputFiles[0].text)(name => name === 'react' ? reactProxy : require(name), exported, exported.exports);
-const { Membership, Notice, useBillingReturn } = exported.exports;
+const { Membership, Notice, useBillingReturn, setFunnelReporter } = exported.exports;
 
 function fixture() {
   active = runtime();
-  const calls = [], redirects = [], reports = [];
+  const calls = [], redirects = [], reports = [], steps = [];
   const context = { user: { id: owner }, theme: THEME, isDesktop: false, manage() {},
     limitedLaunch: { enabled: true, publicSignupEnabled: true, access: snapshot(), refresh: async () => { calls.push(['refresh']); } } };
-  const state = { context, calls, reports, redirects, canReview: canReviewBillingOffer, renewal: renewalPaymentFailed, client: {
+  const state = { context, calls, reports, steps, redirects, canReview: canReviewBillingOffer, renewal: renewalPaymentFailed, client: {
     quote: async ({ offerId }) => { calls.push(['quote', offerId]); return quoteFor(offerId); },
     checkout: async input => { calls.push(['checkout', input]); return { url: 'https://checkout.stripe.com/c/pay/synthetic' }; },
   } };
   globalThis.__funnel = state;
+  // Each fixture is a new page: every step can be sent once again.
+  setFunnelReporter(null);
   globalThis.window = { Clerk: { user: { id: owner } }, location: { assign: url => redirects.push(url) } };
   state.render = () => { active.begin(); const outer = Membership({}); return outer.type(outer.props); };
   state.html = () => renderToStaticMarkup(state.render());
@@ -357,14 +360,14 @@ test('a failed Continue says why inside the offer, beside the button, and brings
     active.flush();
     assert.deepEqual(seen, [{ behavior: 'smooth', block: 'nearest' }], `${code}: scrolled into view`);
   }
-  // The page's own refusals keep the offer too: a review that expired before Continue.
+  // The page's own refusals keep the offer too: no fresh membership answer before Continue.
   const f = fixture();
-  f.client.quote = async ({ offerId }) => ({ ...quoteFor(offerId), expiresAt: '2000-01-01T00:00:00Z' });
   await reviewCore(f);
   tick(f);
+  f.context.limitedLaunch.access.needsRefresh = true;
   await button(f, 'Continue to secure payment').props.onClick();
-  assert.match(textOf(find(offerPanel(f), n => n.props?.role === 'alert')), /This offer has expired\./);
-  assert.deepEqual(f.reports.map(r => [r[0], r[2].phase]), [['Membership checkout stopped on the page (quote_expired)', 'client']]);
+  assert.match(textOf(find(offerPanel(f), n => n.props?.role === 'alert')), /Your membership could not be confirmed just now\./);
+  assert.equal(f.calls.filter(c => c[0] === 'checkout').length, 0, 'nothing sent');
   // Without an offer on screen the line stays at the top, and is brought into view there.
   const g = fixture();
   g.client.quote = async () => { throw Object.assign(Error('x'), { code: 'signup_disabled', httpStatus: 403, phase: 'http' }); };
@@ -609,4 +612,137 @@ test('a renewal that failed still shows a refund request on record, with the but
   assert.ok(f.calls.some(c => c[0] === 'status'), 'the record is looked for');
   assert.match(html, /Your refund request did not finish/);
   assert.match(html, /Finish refund/);
+});
+
+// Signup review 2026-10-07 (LimitedLaunchMembership.jsx:168, :177): Continue
+// was refused on the page whenever the review's expiresAt was past by this
+// device's clock. A phone clock 30 minutes fast could never pay, and a review
+// left open learned it had expired only after the tick and Continue. The
+// server decides on Continue now, and a review past its time is fetched again
+// when it is on screen again.
+function watchedPage(t) {
+  const listeners = {};
+  const add = (type, fn) => { (listeners[type] ||= new Set()).add(fn); };
+  const remove = (type, fn) => { listeners[type]?.delete(fn); };
+  globalThis.document = { visibilityState: 'visible', addEventListener: add, removeEventListener: remove };
+  Object.assign(globalThis.window, { addEventListener: add, removeEventListener: remove });
+  t.after(() => { delete globalThis.document; });
+  return { fire: type => [...(listeners[type] || [])].forEach(fn => fn({ type })) };
+}
+
+test('a phone clock 40 minutes fast still pays: the page never compares a review\'s expiry with this device\'s clock', async () => {
+  const f = fixture();
+  // Issued by the server 20 minutes ago (by its clock), shown on a device 40 minutes ahead.
+  f.client.quote = async ({ offerId }) => { f.calls.push(['quote', offerId]); return { ...quoteFor(offerId), expiresAt: new Date(Date.now() - 10 * 60 * 1000).toISOString() }; };
+  await reviewCore(f);
+  assert.ok(offerPanel(f), 'the review is on screen');
+  tick(f);
+  f.render();
+  await button(f, 'Continue to secure payment').props.onClick();
+  assert.equal(f.calls.filter(c => c[0] === 'checkout').length, 1, 'sent: the server decides');
+  assert.deepEqual(f.redirects, ['https://checkout.stripe.com/c/pay/synthetic']);
+});
+
+test('a review left open past its 30 minutes is fetched again when the page is back in front, or at its end while in view', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.parse('2030-10-01T12:00:00Z') });
+  const f = fixture();
+  const page = watchedPage(t);
+  f.client.quote = async ({ offerId }) => { f.calls.push(['quote', offerId]); return { ...quoteFor(offerId), expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() }; };
+  await reviewCore(f);
+  f.render(); active.flush();
+  assert.equal(quotes(f), 1);
+  tick(f);
+  // Away for 20 minutes: still the same review, still ticked.
+  globalThis.document.visibilityState = 'hidden';
+  t.mock.timers.tick(20 * 60 * 1000);
+  globalThis.document.visibilityState = 'visible';
+  page.fire('visibilitychange');
+  await settleTicks();
+  assert.equal(quotes(f), 1, 'inside its time nothing is asked');
+  // Away past its time: the end passes while hidden, and nothing is asked then.
+  globalThis.document.visibilityState = 'hidden';
+  t.mock.timers.tick(11 * 60 * 1000);
+  await settleTicks();
+  assert.equal(quotes(f), 1, 'a hidden page asks nothing');
+  globalThis.document.visibilityState = 'visible';
+  page.fire('visibilitychange');
+  await settleTicks();
+  assert.equal(quotes(f), 2, 'back in front: a fresh review');
+  f.render(); active.flush();
+  assert.ok(offerPanel(f), 'the fresh review is on screen');
+  assert.equal(find(f.render(), n => n.type === 'input' && n.props.type === 'checkbox').props.checked, false, 'its terms are confirmed again');
+  // In view at the end of its time: fetched again then.
+  t.mock.timers.tick(30 * 60 * 1000 + 100);
+  await settleTicks();
+  assert.equal(quotes(f), 3, 'at the end of its time, in view');
+});
+
+// Signup review 2026-10-07: back from Checkout's cancel link, the review opens
+// by itself and is scrolled into view, so on a phone the "Nothing was charged"
+// notice at the top of the page was out of sight. The same line is in the review.
+test('back from a canceled Checkout, the review itself says nothing was charged; otherwise it does not', async () => {
+  const f = fixture();
+  f.context.limitedLaunch.billingReturn = { kind: 'canceled', phase: 'canceled', round: 0, dismissed: false, dismiss() {} };
+  await reviewCore(f);
+  const panel = offerPanel(f);
+  assert.ok(panel, 'the review is open');
+  const line = find(panel, n => n.type === 'p' && n.props['data-billing-canceled'] === '');
+  assert.ok(line, 'the canceled line is inside the review');
+  assert.equal(textOf(line), BILLING_RETURN_COPY.canceled);
+  assert.equal(line.props.role, undefined, 'not announced twice');
+  // Dismissed, or any other return: not shown.
+  f.context.limitedLaunch.billingReturn = { kind: 'canceled', phase: 'canceled', round: 0, dismissed: true, dismiss() {} };
+  assert.ok(!find(offerPanel(f), n => n.props?.['data-billing-canceled'] === ''), 'dismissed: gone');
+  const g = fixture();
+  await reviewCore(g);
+  assert.ok(offerPanel(g));
+  assert.ok(!find(offerPanel(g), n => n.props?.['data-billing-canceled'] === ''), 'no return: not shown');
+});
+
+// Signup review 2026-10-07: an unticked Continue tap, the price panel and the
+// trip to Stripe left no record, so a buyer who stopped looked the same as a
+// page that stopped them. Each is now a funnel step, once per page, ID-free.
+const stepNames = f => f.steps.map(([, , extra]) => extra.step);
+const ID_SHAPED = /[0-9a-f]{8}-[0-9a-f]{4}-|cs_|checkout\.stripe\.com|user_|@/i;
+test('the funnel steps: page shown, price shown, Continue before the tick, sent to Checkout; once per page; ID-free', async () => {
+  const f = fixture();
+  await reviewCore(f);
+  f.render(); active.flush();
+  assert.deepEqual(stepNames(f), ['membership_page_shown', 'price_panel_shown']);
+  // The unticked Continue, by the button's wrapper and by the button itself.
+  find(f.render(), n => n.props?.['data-consent-gate'] === '').props.onClick();
+  await button(f, 'Continue to secure payment').props.onClick();
+  assert.deepEqual(stepNames(f), ['membership_page_shown', 'price_panel_shown', 'continue_tapped_unticked'], 'once per page');
+  tick(f);
+  f.render();
+  await button(f, 'Continue to secure payment').props.onClick();
+  assert.deepEqual(f.redirects, ['https://checkout.stripe.com/c/pay/synthetic']);
+  assert.deepEqual(stepNames(f), ['membership_page_shown', 'price_panel_shown', 'continue_tapped_unticked', 'checkout_redirected']);
+  for (const [message, kind, extra] of f.steps) {
+    assert.equal(kind, 'info', 'an event, not an error');
+    assert.match(message, /^Funnel: /);
+    assert.equal(extra.event, `funnel_${extra.step}`);
+    assert.ok(Object.keys(extra).every(k => ['event', 'step', 'pageSeconds', 'offer', 'phase', 'payFirst'].includes(k)), JSON.stringify(extra));
+  }
+  const price = f.steps[1][2];
+  assert.equal(price.offer, 'core');
+  assert.equal(price.phase, 'founding');
+  assert.equal(price.payFirst, true);
+  assert.equal(typeof price.pageSeconds, 'number');
+  assert.doesNotMatch(JSON.stringify(f.steps), ID_SHAPED, 'no id, email or Checkout address');
+  assert.deepEqual(f.reports, [], 'none of it is a failure report');
+});
+
+test('the return from Checkout is a funnel step too', async () => {
+  for (const kind of ['complete', 'canceled']) {
+    const steps = [];
+    setFunnelReporter((message, extra) => steps.push([message, extra]));
+    returnFixture(`?billing=${kind}`, snapshot()).render();
+    assert.deepEqual(steps.map(([, extra]) => extra.step), [`billing_return_${kind}`]);
+  }
+  const none = [];
+  setFunnelReporter((message, extra) => none.push(extra));
+  returnFixture('', snapshot()).render();
+  assert.deepEqual(none, []);
+  setFunnelReporter(null);
 });

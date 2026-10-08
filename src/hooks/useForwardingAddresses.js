@@ -43,7 +43,9 @@ export async function fetchForwardingAddresses() {
   }
 }
 
-export function useForwardingAddresses() {
+// `enabled` false (a pending account on the membership page, App.jsx): no
+// read at all, on mount or on focus, until it is true.
+export function useForwardingAddresses({ enabled = true } = {}) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -64,9 +66,10 @@ export function useForwardingAddresses() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { if (enabled) reload(); }, [reload, enabled]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const refresh = () => reload({ quiet: true });
     window.addEventListener("focus", refresh);
     window.addEventListener(FORWARDING_ADDRESSES_CHANGED_EVENT, refresh);
@@ -74,7 +77,7 @@ export function useForwardingAddresses() {
       window.removeEventListener("focus", refresh);
       window.removeEventListener(FORWARDING_ADDRESSES_CHANGED_EVENT, refresh);
     };
-  }, [reload]);
+  }, [reload, enabled]);
 
   // The event is what refreshes the list, here and in any other view of it
   // (the Requests header and the CME hint each name the confirmed addresses).

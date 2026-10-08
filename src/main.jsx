@@ -3,7 +3,7 @@ import { captureAppDeepLink } from "./utils/supportDeepLink.js";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ClerkProvider, useUser } from "@clerk/clerk-react";
-import App from "./App";
+import AuthGate from "./AuthGate.jsx";
 import { install as installErrorReporting, ErrorBoundary, setErrorUser, reportError } from "./lib/errorReport";
 import "./styles/base.css";
 import { sweepLapsedQueues, sweepSignOutIntents, watchSignOutIntents, sweepPendingOfflinePurges, releaseRecoveredContinuitySources } from "./utils/storageScope";
@@ -67,6 +67,7 @@ function ErrorUserSync() {
 }
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const CLERK_JS_VERSION = "5.128.0";
 
 if (!CLERK_PUBLISHABLE_KEY) {
   // Surface clearly in dev — production builds without a key are broken.
@@ -95,9 +96,15 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         signInFallbackRedirectUrl="/app/"
         signUpFallbackRedirectUrl="/app/"
         localization={SIGN_IN_LOCALIZATION}
+        // An exact clerk-js, not the "@5" tag: a fixed, long-cached address
+        // instead of a redirect the browser asks again about on every visit
+        // (signup review 2026-10-07). 5.128.0 is what "@5" served in production
+        // then; index.html preconnects to its host.
+        clerkJSVersion={CLERK_JS_VERSION}
       >
         <ErrorUserSync />
-        <App />
+        {/* The sign-in screen without the app; the app as its own chunk (AuthGate.jsx). */}
+        <AuthGate />
       </ClerkProvider>
     </ErrorBoundary>
   </React.StrictMode>

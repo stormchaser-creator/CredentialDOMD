@@ -64,3 +64,24 @@ test('every generated state guide ships the same beacon as the template', () => 
   for (const guide of guides) assert.equal(beaconOf(path.join('states', guide)), expected, guide);
   assert.equal(run(beaconOf(path.join('states', 'index.html')), { pathname: '/states/', search: '?src=li' })[1].r, 'https://www.linkedin.com/');
 });
+
+// Signup review 2026-10-07: five public pages sent no visit beacon (CME,
+// help, privacy, security, terms), so their visits were never counted. They
+// carry the same script now (scripts/visit-beacon.mjs), the generated ones
+// from their builders, and track_pv counts their paths
+// (migration 20261007120000_track_pv_public_pages.sql).
+test('the CME, help, privacy, security and terms pages send the same beacon, with their own path', async () => {
+  const { VISIT_BEACON_SOURCE } = await import('../scripts/visit-beacon.mjs');
+  assert.equal(beaconOf('index.html'), VISIT_BEACON_SOURCE, 'one script for every page');
+  for (const [page, pathname, sentPath] of [['cme.html', '/cme/', '/cme/'], ['help.html', '/help/', '/help/'], ['privacy.html', '/privacy', '/privacy'],
+    ['security.html', '/security', '/security'], ['terms.html', '/terms.html', '/terms']]) {
+    assert.equal(beaconOf(page), VISIT_BEACON_SOURCE, page);
+    const sent = run(beaconOf(page), { pathname, search: '?src=li' });
+    assert.deepEqual(sent, ['/api/pv', { p: sentPath, r: 'https://www.linkedin.com/' }], page);
+  }
+  // The app's own copies of the legal pages count under /app/.
+  for (const page of ['privacy.html', 'terms.html']) {
+    const copy = fs.readFileSync(path.join(root, '..', 'public', page), 'utf8');
+    assert.ok(copy.includes(`<script>${VISIT_BEACON_SOURCE}</script>`), `public/${page}`);
+  }
+});

@@ -150,6 +150,8 @@ function sdk() {
   const module = { exports: {} };
   const context = vm.createContext({ module, exports: module.exports, require: name => imports[name],
     window: { Clerk: clerk }, localStorage: storage, console: { warn() {}, error() {}, log() {} }, crypto, Date, Blob, atob,
+    // The account reads' deadline (lib/supabase.js readWithDeadline), as in a browser.
+    setTimeout, clearTimeout, AbortController,
     fetch: async (url, options) => {
       // A record write (the queue and replay tests), when a test answers them.
       if (f.write && options.method && options.method !== 'GET' && options.method !== 'HEAD') return f.write(String(url), options);

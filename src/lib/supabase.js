@@ -45,6 +45,41 @@ async function getClerkSupabaseToken() {
   }
 }
 
+// ─── Read progress ──────────────────────────────────────────
+// A read with a deadline (readWithDeadline) registers its abort signal here
+// with a callback that restarts its timer. The clients' fetch calls it when
+// the response arrives and again for each piece of the body as it comes in,
+// so the deadline measures silence, not the whole transfer: a large account
+// on a slow but working link keeps loading, and a read that stops answering
+// (before or during its body) is still cancelled.
+const readProgress = new WeakMap();
+function followBody(response, progress) {
+  let reader = null;
+  // A copy of the body, read only to see its pieces arrive; the request's own
+  // reader (postgrest-js) reads the original.
+  try { reader = response && response.body && typeof response.clone === "function" ? response.clone().body.getReader() : null; }
+  catch { reader = null; }
+  if (!reader) return;
+  const next = () => reader.read().then(({ done }) => {
+    if (done) return undefined;
+    progress();
+    return next();
+  }, () => undefined);
+  next();
+}
+function fetchReportingProgress(send) {
+  return (input, init) => {
+    const progress = init && init.signal ? readProgress.get(init.signal) : undefined;
+    const sent = send(input, init);
+    if (!progress) return sent;
+    return Promise.resolve(sent).then(response => {
+      progress();
+      followBody(response, progress);
+      return response;
+    });
+  };
+}
+
 // ─── Supabase Client ────────────────────────────────────────
 // `accessToken` callback is invoked on every request — supabase-js v2 calls
 // it before each fetch to attach the Authorization header. This is what
@@ -58,6 +93,9 @@ export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
         autoRefreshToken: false,
         detectSessionInUrl: false,
       },
+      // The account load's reads tell their deadline when an answer arrives
+      // (readWithDeadline below); every other request is sent unchanged.
+      global: { fetch: fetchReportingProgress((...args) => globalThis.fetch(...args)) },
     })
   : null;
 
@@ -122,7 +160,7 @@ function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = tr
       if (!token) throw new Error("The signed-in session is unavailable.");
       return token;
     },
-    global: { fetch: (...args) => { owner.check(); return globalThis.fetch(...args); } },
+    global: { fetch: fetchReportingProgress((...args) => { owner.check(); return globalThis.fetch(...args); }) },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   return owner;
@@ -1695,6 +1733,47 @@ function transientInitializationFailure(error) {
 // a server error. A denial (401/403) or a missing row is an answer.
 const transientReadFailure = result => !!result?.error && (!result.status || transientStatus(result.status));
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+// A read the account load waits on (the profile row, each table of records)
+// that has had no answer for this long ends as a failed one, with no answer
+// (status 0): its request is cancelled. With no limit, one read that never
+// answered (a captive portal, a cellular link that died mid-request) left
+// the first screen on "Loading..." for good, and nothing tried again (signup
+// review 2026-10-07: past 2.5 minutes on an iPhone; a reload loaded in 0.8 s).
+// "No answer" is silence: the limit runs until the response arrives, and
+// then starts again with each piece of the body (readProgress above). A read
+// still receiving its body on a slow link is never cut off for taking long;
+// one whose body stops arriving is. (The largest account's first page of
+// case logs is about 800 KB; on a weak link that takes well over 10 s.)
+export const LOAD_READ_LIMIT_MS = 10_000;
+export const LOAD_TIMEOUT_CODE = "load_timeout";
+function loadTimeoutError() {
+  const error = new Error("The account read had no answer and was cancelled.");
+  error.code = LOAD_TIMEOUT_CODE;
+  return error;
+}
+function readWithDeadline(build, limitMs = LOAD_READ_LIMIT_MS) {
+  const controller = new AbortController();
+  let timer, expire, settled = false;
+  const expired = new Promise(resolve => {
+    expire = () => {
+      controller.abort();
+      resolve({ data: null, error: { code: LOAD_TIMEOUT_CODE, message: "The read had no answer and was cancelled." }, status: 0, timedOut: true });
+    };
+  });
+  // Starts the limit again: at the start, and on each sign of an answer.
+  const arm = () => {
+    if (settled) return;
+    clearTimeout(timer);
+    timer = setTimeout(expire, limitMs);
+  };
+  arm();
+  readProgress.set(controller.signal, arm);
+  return Promise.race([Promise.resolve().then(() => build(controller.signal)), expired]).finally(() => {
+    settled = true;
+    clearTimeout(timer);
+    readProgress.delete(controller.signal);
+  });
+}
 async function withLoadRetries(owner, delays, run, transient) {
   for (let attempt = 0; ; attempt++) {
     let outcome;
@@ -1712,7 +1791,7 @@ async function withLoadRetries(owner, delays, run, transient) {
   }
 }
 
-export async function ensureProfile(userId, { isCurrent = () => true, retryDelaysMs = PROFILE_LOAD_RETRY_DELAYS_MS } = {}) {
+export async function ensureProfile(userId, { isCurrent = () => true, retryDelaysMs = PROFILE_LOAD_RETRY_DELAYS_MS, readLimitMs = LOAD_READ_LIMIT_MS } = {}) {
   const delays = Array.isArray(retryDelaysMs) ? retryDelaysMs : PROFILE_LOAD_RETRY_DELAYS_MS;
   if (!supabase || !userId) return null;
   const owner = writeContext(userId);
@@ -1786,8 +1865,10 @@ export async function ensureProfile(userId, { isCurrent = () => true, retryDelay
       throw error;
     }
   }
-  const lookup = () => writeRequest(owner, () => owner.db.from("profiles")
-    .select("*").eq("auth_user_id", userId).maybeSingle());
+  // No answer before the deadline is a read with no answer (status 0): tried
+  // again, then transient (AppContext opens the device copy and asks again).
+  const lookup = () => writeRequest(owner, () => readWithDeadline(signal => owner.db.from("profiles")
+    .select("*").eq("auth_user_id", userId).abortSignal(signal).maybeSingle(), readLimitMs));
   let existing;
   try { existing = await withLoadRetries(owner, delays, lookup, (result, threw) => !threw && transientReadFailure(result)); }
   catch (cause) {
@@ -1843,16 +1924,21 @@ export async function readAccountDataDeletion(authUserId) {
 }
 
 // ─── Load all data from Supabase ─────────────────────────────
-export async function loadFromSupabase(userId) {
+export async function loadFromSupabase(userId, { readLimitMs = LOAD_READ_LIMIT_MS } = {}) {
   if (!supabase || !userId) return null;
 
-  // Get profile by auth user id
-  const { data: profile } = await supabase
+  // Get profile by auth user id. Every read here has a deadline: one that
+  // never answers fails the load (AppContext), instead of holding the first
+  // screen on "Loading..." for good. A read cut off by it is a timeout, which
+  // the load treats as a weak signal, not a refusal.
+  const { data: profile, timedOut: profileTimedOut } = await readWithDeadline(signal => supabase
     .from("profiles")
     .select("*")
     .eq("auth_user_id", userId)
-    .maybeSingle();
+    .abortSignal(signal)
+    .maybeSingle(), readLimitMs);
 
+  if (profileTimedOut) throw loadTimeoutError();
   if (!profile) return null;
 
   const profileId = profile.id;
@@ -1867,17 +1953,20 @@ export async function loadFromSupabase(userId) {
   // two LIMIT/OFFSET queries, so a row in a tie at the 1,000 boundary could
   // come back on both pages or on neither. id (the primary key) breaks every
   // tie; duplicates are dropped as well, in case a row moved between pages.
+  const timedOutKeys = new Set();
   const fetchAll = async (key) => {
     const PAGE = 1000;
     let rows = [];
     for (let start = 0; ; start += PAGE) {
-      const { data, error } = await supabase
+      const { data, error, timedOut } = await readWithDeadline(signal => supabase
         .from(tableName(key))
         .select("*")
         .eq("user_id", profileId)
         .order("created_at", { ascending: false })
         .order("id", { ascending: true })
-        .range(start, start + PAGE - 1);
+        .range(start, start + PAGE - 1)
+        .abortSignal(signal), readLimitMs);
+      if (timedOut) timedOutKeys.add(key);
       if (error) return { data: rows.length ? rows : null, error };
       rows = rows.concat(data || []);
       if (!data || data.length < PAGE) {
@@ -1910,6 +1999,10 @@ export async function loadFromSupabase(userId) {
         })
     )
   );
+
+  // A table with no answer before the deadline: the read is incomplete, and
+  // a timeout (see above), not a failed read.
+  if (timedOutKeys.size) throw loadTimeoutError();
 
   const out = { settings, _userId: profileId, _errored: errored };
   for (const { key, rows } of results) {

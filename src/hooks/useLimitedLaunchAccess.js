@@ -115,6 +115,17 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
     entry.again ??= entry.promise.then(() => (generation.current === entry.turn ? check() : undefined));
     return entry.again;
   }, [active, check]);
+  // The page's own check once the account has loaded (App.jsx): the hook has
+  // usually started one as the profile became ready, so this joins it, and
+  // asks nothing while the answer is fresh. A tap still uses refresh. It used
+  // to be refresh, which waited for that first check and then sent a second
+  // billing-entitlements on every load (signup review 2026-10-07).
+  const ensure = useCallback(() => {
+    if (!active) return Promise.resolve();
+    const answer = accessAuthority.state(accountId);
+    if (answer && answer.needsRefresh !== true && (!flight.current || flight.current.turn !== generation.current)) return Promise.resolve();
+    return check();
+  }, [active, accountId, check]);
   useEffect(() => {
     if (!active) return;
     // Start the asynchronous fetch after mount; cleanup cancels an unstarted request.
@@ -228,5 +239,6 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
     publicSignupEnabled: PUBLIC_SELF_SERVICE_SIGNUP_ENABLED,
     enrollmentError: mine ? result.enrollmentError : null,
     refresh,
+    ensure,
   };
 }

@@ -4,10 +4,15 @@
     <meta charset="UTF-8" />
     <script id="https-redirect">if(location.protocol==="http:"&&location.hostname==="credentialdomd.com")location.replace(location.href.replace(/^http:/,"https:"))</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>CredentialDOMD — Credential tracking for physicians, by a physician</title>
+    <title>CredentialDOMD | Credential tracking for physicians, by a physician</title>
 
     <!-- Canonical -->
     <link rel="canonical" href="https://credentialdomd.com/" />
+
+    <!-- Clerk's script (clerk-js, pinned in src/main.jsx) and its API: the
+         connection opens while the app's own script loads. -->
+    <link rel="preconnect" href="https://clerk.credentialdomd.com" crossorigin />
+    <link rel="preconnect" href="https://clerk.credentialdomd.com" />
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
@@ -17,7 +22,7 @@
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://credentialdomd.com/" />
-    <meta property="og:title" content="CredentialDOMD — Credential tracking for physicians, by a physician" />
+    <meta property="og:title" content="CredentialDOMD | Credential tracking for physicians, by a physician" />
     <meta property="og:description" content="Track every license, DEA, board cert, and hospital privilege across all 50 states. Built by a neurosurgeon." />
     <meta property="og:image" content="https://credentialdomd.com/og-image.png" />
     <meta property="og:image:width" content="1200" />
@@ -36,7 +41,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="CredentialDOMD" />
-    <!-- iOS home-screen icon must be PNG — Safari ignores SVG here -->
+    <!-- iOS home-screen icon must be PNG: Safari ignores SVG here -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Favicon -->
@@ -49,12 +54,13 @@
       "@type": "Organization",
       "name": "CredentialDOMD",
       "url": "https://credentialdomd.com",
-      "logo": "https://credentialdomd.com/icons/icon-192.svg",
+      "logo": "https://credentialdomd.com/organization-logo.svg",
       "description": "Credential tracking for physicians, by a physician.",
       "founder": {
         "@type": "Person",
         "name": "Eric Whitney",
-        "honorificSuffix": "MD",
+        "url": "https://drericwhitney.com",
+        "honorificSuffix": "DO",
         "jobTitle": "Founder",
         "description": "Board-certified neurosurgeon"
       }

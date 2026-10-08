@@ -127,14 +127,18 @@ Deno.serve(async (req) => {
 
   // Naive per-IP cap: more than RATE_MAX_ROWS from the same hashed IP in the
   // window and we drop the row. A crash loop still leaves the first 30.
+  // Events (kind "info": the signup funnel's steps, a discarded page) and
+  // faults have a budget each, so a busy signup's steps never crowd out an
+  // error report from the same address, nor errors the steps (2026-10-07).
   const ip_hash = await ipHash(req);
   if (ip_hash) {
     const since = new Date(Date.now() - RATE_WINDOW_MIN * 60 * 1000).toISOString();
-    const { count } = await db
+    const recent = db
       .from("client_errors")
       .select("id", { count: "exact", head: true })
       .eq("ip_hash", ip_hash)
       .gte("created_at", since);
+    const { count } = await (kind === "info" ? recent.eq("kind", "info") : recent.neq("kind", "info"));
     if ((count ?? 0) >= RATE_MAX_ROWS) return json({ error: "Rate limited" }, 429);
   }
   // Global ceiling regardless of IP visibility: a scripted flood cannot fill

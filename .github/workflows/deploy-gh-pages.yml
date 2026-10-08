@@ -26,6 +26,7 @@ on:
       - 'scripts/generate-legal-pages.mjs'
       - 'scripts/help-videos.mjs'
       - 'scripts/https-redirect.mjs'
+      - 'scripts/visit-beacon.mjs'
       - 'scripts/public-launch-render.mjs'
       - 'scripts/watch-pages.mjs'
       # Server modules the app bundle imports from src/. Every file outside

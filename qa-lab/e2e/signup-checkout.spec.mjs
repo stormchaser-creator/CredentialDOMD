@@ -48,8 +48,9 @@ test('new signup: pending gate, $99 founding offer with Practice, checkout, acti
     // legacy (pre-migration) accounts, so a brand-new account correctly has none.
     const continuity = row(`select count(*)::int as n from public.clerk_continuity_accounts where target_subject = '${subject}' or source_subject = '${subject}'`);
     qa.check('no continuity row for a brand-new account (rows exist only for staged legacy accounts)', continuity?.n === 0, `${continuity?.n} row(s)`);
-    const errs = row(`select count(*)::int as n from public.client_errors where auth_user_id = '${subject}'`);
-    qa.check('no client_errors row for this account', (errs?.n ?? 0) === 0, `${errs?.n} row(s)`);
+    // The signup funnel's steps are events, not errors (kind 'info', "Funnel: ...", src/utils/funnelEvents.js).
+    const errs = row(`select count(*)::int as n from public.client_errors where auth_user_id = '${subject}' and not (kind = 'info' and message like 'Funnel: %')`);
+    qa.check('no client_errors row for this account (funnel steps aside)', (errs?.n ?? 0) === 0, `${errs?.n} row(s)`);
     await expect(gate).toBeVisible();
   });
 

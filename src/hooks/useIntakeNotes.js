@@ -49,7 +49,9 @@ export async function saveNote(note) {
  * after any note changes. A failed fetch keeps the last good rows.
  * `replace(note)` shows a changed note at once, before the save lands.
  */
-export function useIntakeNotes() {
+// `enabled` false (a pending account on the membership page, App.jsx): no
+// read, on mount or on focus, until it is true.
+export function useIntakeNotes({ enabled = true } = {}) {
   const [rows, setRows] = useState([]);
   const alive = useRef(true);
   const refresh = useCallback(() => {
@@ -60,6 +62,7 @@ export function useIntakeNotes() {
   }, []);
   useEffect(() => {
     alive.current = true;
+    if (!enabled) return () => { alive.current = false; };
     refresh();
     window.addEventListener("focus", refresh);
     window.addEventListener(INTAKE_NOTES_CHANGED_EVENT, refresh);
@@ -68,6 +71,6 @@ export function useIntakeNotes() {
       window.removeEventListener("focus", refresh);
       window.removeEventListener(INTAKE_NOTES_CHANGED_EVENT, refresh);
     };
-  }, [refresh]);
+  }, [refresh, enabled]);
   return { notes: rows, count: rows.length, refresh, replace };
 }

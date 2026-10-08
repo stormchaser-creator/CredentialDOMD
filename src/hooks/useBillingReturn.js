@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BILLING_RETURN_DELAYS_MS, clearBillingReturn, membershipLanded, readBillingReturn } from "../utils/billingReturn.js";
+import { reportFunnelStep } from "../utils/funnelEvents.js";
 
 /**
  * What the app tells a buyer back from Stripe (see utils/billingReturn.js).
@@ -17,6 +18,10 @@ export function useBillingReturn(limitedLaunch, accountId, { win = globalThis.wi
   const landed = state?.kind === "complete" && membershipLanded(access);
   const refresh = limitedLaunch?.refresh;
   const ready = !!limitedLaunch?.enabled && !!accountId && typeof refresh === "function";
+  // The return itself is a step of the signup funnel (utils/funnelEvents.js).
+  useEffect(() => {
+    if (state?.kind === "complete" || state?.kind === "canceled") reportFunnelStep(`billing_return_${state.kind}`);
+  }, [state?.kind]);
   // Canceled has nothing to wait for; complete waits until the purchase shows.
   useEffect(() => {
     if (state?.kind === "canceled" || landed) clearBillingReturn(win);

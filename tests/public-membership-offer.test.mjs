@@ -138,7 +138,8 @@ test('packaging config allows only the exact public endpoint and CSP permits onl
   for (const url of ['http://synthetic.supabase.co','https://evil.invalid','https://synthetic.supabase.co/path','https://user@synthetic.supabase.co','https://synthetic.supabase.co?key=secret']) assert.throws(()=>publicMembershipEndpoint(url));
   const source=await readFile(new URL('../landing/cme.html',import.meta.url),'utf8');
   const html=renderPublicLaunch(source,'cme',undefined,{offerEndpoint:endpoint});
-  assert.ok(html.includes(`connect-src ${endpoint};`));
+  // The page's own origin is there for its visit beacon (POST /api/pv, scripts/visit-beacon.mjs); nothing else.
+  assert.ok(html.includes(`connect-src 'self' ${endpoint};`));
   assert.ok(html.includes(`data-membership-endpoint="${endpoint}"`));
   assert.equal((html.match(/src="\/membership-offer.js"/g)||[]).length,1);
 });

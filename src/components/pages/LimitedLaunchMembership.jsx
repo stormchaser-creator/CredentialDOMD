@@ -12,6 +12,7 @@ import { createCheckoutFailureReporter } from "../../utils/checkoutFailure.js";
 import { BILLING_RETURN_COPY } from "../../utils/billingReturn.js";
 import RefundSection from "./RefundSection.jsx";
 import { payFirstMode } from "../../utils/payFirst.js";
+import { reportFunnelStep } from "../../utils/funnelEvents.js";
 
 const messages = {
   signup_disabled: "New membership enrollment is not open yet. Please check again later.",
@@ -40,6 +41,17 @@ const messages = {
   checkout_awaiting_settlement: BILLING_RETURN_COPY.membershipPending,
 };
 const messageFor = error => messages[error?.code] || "Membership could not be updated. Your saved records have not changed. Please try again.";
+// How long the server keeps a reviewed offer (billing-quote: 30 minutes, or
+// less when a free beta ends sooner). The page measures it from when the
+// review arrived, never by comparing expiresAt with this device's clock: a
+// phone clock 30 minutes fast could never pay, and one left on the review
+// learned it had expired only after ticking the box and pressing Continue
+// (signup review 2026-10-07). The server decides on Continue (quote_expired).
+const QUOTE_REVIEW_LIFETIME_MS = 30 * 60 * 1000;
+const reviewLifetime = quote => {
+  const left = Date.parse(quote?.expiresAt) - Date.now();
+  return Number.isFinite(left) && left > 0 ? Math.min(QUOTE_REVIEW_LIFETIME_MS, left) : QUOTE_REVIEW_LIFETIME_MS;
+};
 const TICK_HINT = "Tick the box above to continue.";
 // Once per session per action and failure code, to the client error table.
 const reportCheckoutFailure = createCheckoutFailureReporter(reportError);
@@ -164,21 +176,21 @@ function MembershipForAccount({ accountId, onActivated }) {
   };
   const purchase = async () => {
     if (busy || !quote) return;
-    if (!consent) { setTickHintFor(quote.quoteId); return; }
-    if (Date.parse(quote.expiresAt) <= Date.now()) {
-      refusedHere("checkout", "quote_expired"); setConsent(false); setMessage(messages.quote_expired); return;
-    }
+    if (!consent) { tappedUnticked(); return; }
     const turn = ++request.current;
     setBusy(true); setMessage(null);
     try {
       const fresh = await freshAccess();
       if (!mine(turn)) return;
       if (!fresh) { refusedHere("checkout", "access_unconfirmed"); setMessage(messages.access_unconfirmed); return; }
-      if (!quoteMatchesBetaWindow(quote, fresh) || Date.parse(quote.expiresAt) <= Date.now()) { refusedHere("checkout", "quote_expired"); setConsent(false); setMessage(messages.quote_expired); return; }
+      if (!quoteMatchesBetaWindow(quote, fresh)) { refusedHere("checkout", "quote_expired"); setConsent(false); setMessage(messages.quote_expired); return; }
       if (!canReviewBillingOffer(fresh, quote.offerId)) { refusedHere("checkout", "offer_unavailable"); setConsent(false); setMessage(messages.offer_unavailable); return; }
       const result = await client.checkout({ quoteId: quote.quoteId, consentHash: quote.consentHash, consent: true });
       if (!mine(turn)) return;
-      if (current(turn) && currentlyPermitted(quote.offerId) && quoteMatchesBetaWindow(quote, accessAuthority.state(accountId))) window.location.assign(result.url);
+      if (current(turn) && currentlyPermitted(quote.offerId) && quoteMatchesBetaWindow(quote, accessAuthority.state(accountId))) {
+        reportFunnelStep("checkout_redirected", { offer: quote.offerId, phase: quote.pricePhase, payFirst });
+        window.location.assign(result.url);
+      }
       // A payment page was made but the answer changed meanwhile: it is not opened.
       else { refusedHere("checkout", "checkout_discarded"); setMessage(messages.access_unconfirmed); }
     } catch (error) {
@@ -197,6 +209,12 @@ function MembershipForAccount({ accountId, onActivated }) {
   const payFirst = payFirstMode(limitedLaunch, access, invitation);
   const payOffer = access?.checkoutResumeAvailable === true && access.checkoutResumeOfferId ? access.checkoutResumeOfferId : "core";
   const payFirstKey = payFirst && !settling && !quote && canReviewBillingOffer(shown, payOffer) ? `${accountId}:${payOffer}` : null;
+  // An unticked Continue: the hint, and the funnel step (once per page).
+  const tappedUnticked = () => {
+    if (!quote) return;
+    setTickHintFor(quote.quoteId);
+    reportFunnelStep("continue_tapped_unticked", { offer: quote.offerId, phase: quote.pricePhase, payFirst });
+  };
   const openedFor = useRef(null);
   useEffect(() => {
     if (!payFirstKey || openedFor.current === payFirstKey) return;
@@ -205,6 +223,57 @@ function MembershipForAccount({ accountId, onActivated }) {
     // review is this render's closure; the key alone decides when it runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payFirstKey]);
+  // A review whose time on the server has passed is fetched again as soon as
+  // it is on screen again: at the end of its time while the page is in view,
+  // or when the page comes back to the front (a phone tab left on the review).
+  // The new review asks for a new tick, as Refresh offer does. Never during a
+  // request (Continue, Refresh offer).
+  const reviewRef = useRef(null);
+  reviewRef.current = review;
+  const busyRef = useRef(false);
+  busyRef.current = busy;
+  const reviewedAt = useRef(null);
+  useEffect(() => {
+    reviewedAt.current = quote ? { at: Date.now(), lifetime: reviewLifetime(quote) } : null;
+  }, [quote]);
+  const liveReview = !!quote && limitedLaunch.enabled === true;
+  useEffect(() => {
+    if (!liveReview || typeof document === "undefined" || typeof window === "undefined" || typeof window.addEventListener !== "function") return undefined;
+    const clock = reviewedAt.current;
+    if (!clock) return undefined;
+    const offerId = quote.offerId;
+    const renew = () => {
+      if (reviewedAt.current !== clock || busyRef.current || document.visibilityState === "hidden") return;
+      if (Date.now() - clock.at < clock.lifetime) return;
+      void reviewRef.current?.(offerId);
+    };
+    const timer = setTimeout(renew, Math.max(0, clock.at + clock.lifetime - Date.now()) + 50);
+    document.addEventListener("visibilitychange", renew);
+    window.addEventListener("pageshow", renew);
+    window.addEventListener("focus", renew);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", renew);
+      window.removeEventListener("pageshow", renew);
+      window.removeEventListener("focus", renew);
+    };
+    // Each review on screen decides (a refresh can bring back the same id);
+    // the review function is read when it fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveReview, quote]);
+  // Signup funnel steps (utils/funnelEvents.js), once per page each: this
+  // page in front of a pending account (with the seconds since the page
+  // opened, the first load's time), and the price on screen.
+  const pendingHere = limitedLaunch.enabled === true && access?.accessStatus === "pending";
+  useEffect(() => {
+    if (pendingHere) reportFunnelStep("membership_page_shown", { phase: access?.pricePhase, payFirst });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingHere]);
+  const priceOnScreen = !!quote && !settling && canReviewBillingOffer(shown, quote.offerId) && quoteMatchesBetaWindow(quote, shown);
+  useEffect(() => {
+    if (priceOnScreen) reportFunnelStep("price_panel_shown", { offer: quote.offerId, phase: quote.pricePhase, payFirst });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceOnScreen]);
   if (!limitedLaunch.enabled) return null;
   const lifetime = access?.lifetime.credential || access?.lifetime.practice;
   // Founding Credential includes Practice while active: no trial and nothing to add.
@@ -238,6 +307,11 @@ function MembershipForAccount({ accountId, onActivated }) {
   const returning = limitedLaunch.billingReturn?.kind === "complete" && ["confirming", "delayed"].includes(limitedLaunch.billingReturn.phase);
   const permittedQuote = !!quote && !returning && !settling && canReviewBillingOffer(shown, quote.offerId) && quoteMatchesBetaWindow(quote, shown);
   const panelShown = permittedQuote && !lifetime && !scheduled;
+  // Back from Checkout's cancel link: the review opens by itself and is
+  // brought into view, which scrolled the notice at the top of the page out
+  // of sight on a phone (signup review 2026-10-07). The same line, inside the
+  // review, under its heading (not announced twice: the notice is the status).
+  const canceledReturn = limitedLaunch.billingReturn?.kind === "canceled" && limitedLaunch.billingReturn.phase === "canceled" && !limitedLaunch.billingReturn.dismissed;
   const deferredResumeAfterBeta = quote?.paymentTiming === "after_beta" && access?.freeBeta?.state === "expired";
   // A billing-quote deployed before 20260928190000 sends no practiceIncluded.
   // The migration ships first and the entitlement follows the price phase, so
@@ -315,6 +389,7 @@ function MembershipForAccount({ accountId, onActivated }) {
           </>}
     {panelShown && <section style={{ marginTop: 20, padding: 16, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12 }}>
       <h3 ref={offerHeading} tabIndex={-1} style={{ margin: "0 0 8px" }}>{quote.name}</h3>
+      {canceledReturn && <p data-billing-canceled="" style={{ margin: "0 0 8px", fontWeight: 600 }}>{BILLING_RETURN_COPY.canceled}</p>}
       <p><strong>{membershipPrice(quote.annualCents)} per year</strong></p>
       <p>100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals. Request a refund through Get help in the app or <a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>support@credentialdomd.com</a>.</p>
       {quote.paymentTiming === "after_beta" && <div>
@@ -334,7 +409,7 @@ function MembershipForAccount({ accountId, onActivated }) {
       </label>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 14 }}>
         {/* A disabled button takes no tap, so the tap lands on this wrapper. */}
-        <span data-consent-gate="" onClick={consent ? undefined : () => setTickHintFor(quote.quoteId)} style={{ display: "inline-flex", cursor: consent ? undefined : "not-allowed" }}>
+        <span data-consent-gate="" onClick={consent ? undefined : tappedUnticked} style={{ display: "inline-flex", cursor: consent ? undefined : "not-allowed" }}>
           <button style={continueStyle} disabled={busy || !consent} onClick={purchase}>{busy ? "Opening payment…" : quote.paymentTiming === "after_beta" ? "Continue to secure checkout" : "Continue to secure payment"}</button>
         </span>
         <button style={button} disabled={busy} onClick={() => review(quote.offerId)}>Refresh offer</button>

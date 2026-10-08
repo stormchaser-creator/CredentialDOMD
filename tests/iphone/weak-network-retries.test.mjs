@@ -129,3 +129,43 @@ test('back online during a read that sent the queue: no second read', async () =
   await settle();
   assert.equal(r.calls.length, 1);
 });
+
+// Signup review 2026-10-07: a records read that never answered held a new
+// member's first screen on "Loading..." for good. It now ends at its deadline
+// (lib/supabase.js, load_timeout), and a first load treats that as the weak
+// signal it is: the device copy opens read-only, the retry above keeps asking.
+test('a first load whose records read has no answer before its deadline opens the device copy read-only and keeps asking', async () => {
+  const f = load({ ensureProfile: async () => ({ id: 'profile-synthetic' }),
+    loadFromSupabase: async () => { throw Object.assign(Error('The account read had no answer and was cancelled.'), { code: 'load_timeout' }); } });
+  await f.loadDataForUser(OWNER);
+  await settle();
+  assert.equal(f.named('setIdentityWaiting').at(-1)?.accountId, OWNER, 'the retry is on');
+  assert.equal(f.named('setIdentityWaiting').at(-1)?.supportReference, `${ACCOUNT_RECORDS_SUPPORT_REFERENCE}-TIMEOUT`);
+  assert.deepEqual(f.named('setRecordsLoadIssue').filter(Boolean), [], 'no stop screen');
+  assert.equal(f.named('setProfileOwner').at(-1), null, 'no membership check over the device copy');
+  assert.ok(f.named('suspendWrites').length >= 1, 'read-only');
+  assert.ok(f.named('setLoaded').includes(true), 'the first screen leaves "Loading..."');
+  assert.deepEqual(f.named('report'), [`Account records load used this device's copy, read-only (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}-TIMEOUT).`]);
+  // Any other failed records read on a first load still stops with its screen.
+  const g = load({ ensureProfile: async () => ({ id: 'profile-synthetic' }), loadFromSupabase: async () => { throw Error('refused'); } });
+  await g.loadDataForUser(OWNER);
+  await settle();
+  assert.equal(g.named('setRecordsLoadIssue').at(-1)?.accountId, OWNER);
+});
+
+// Signup review 2026-10-07: a pending account (signed up, not paid) read
+// about 40 empty tables again on every return to the front. Its screen is the
+// membership page; the membership check runs on resume by itself.
+test('a pending account is not read again on return to the front; an active one is', async () => {
+  try {
+    globalThis.accessAuthority = { state: () => ({ accessStatus: 'pending' }) };
+    const pending = resume({ queued: 0 });
+    pending.fire('visibilitychange');
+    pending.fire('online');
+    assert.equal(pending.calls.length, 0, 'nothing read for a pending account');
+    globalThis.accessAuthority = { state: () => ({ accessStatus: 'active' }) };
+    const active = resume({ queued: 0 });
+    active.fire('visibilitychange');
+    assert.equal(active.calls.length, 1, 'an active account is read again');
+  } finally { delete globalThis.accessAuthority; }
+});

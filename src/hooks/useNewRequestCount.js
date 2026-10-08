@@ -89,7 +89,10 @@ export function useOpenRequests(userIdRef, ready = true) {
   }, [userIdRef]);
   useEffect(() => {
     alive.current = true;
-    if (ready) refresh();
+    // Not ready (still loading, or a pending account on the membership page,
+    // App.jsx): nothing is read, on focus either.
+    if (!ready) return () => { alive.current = false; };
+    refresh();
     window.addEventListener("focus", refresh);
     window.addEventListener(REQUEST_REPLIED_EVENT, refresh);
     window.addEventListener(REQUESTS_CHANGED_EVENT, refresh);
