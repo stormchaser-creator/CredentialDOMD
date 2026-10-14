@@ -19,7 +19,13 @@ export async function loadAuthOffer({
     // its truthful wording when checkout is paused or founding places are temporarily full.
     const view = await mod.fetchPublicOffer(new URL(OFFER_PATH, supabaseUrl).href, fetchImpl ? { fetchImpl } : undefined);
     if (typeof view?.heroHeadline !== "string" || typeof view?.status !== "string") return null;
-    return { headline: view.heroHeadline, status: view.status };
+    // The live price as the sign up line says it ("Join for $99 a year") and
+    // the annual renewal sentence, both from the same validated reply. An
+    // older module without them (or a paused offer) leaves them out.
+    const offer = { headline: view.heroHeadline, status: view.status };
+    if (typeof view.action === "string" && /^Join for \$\d+ a year$/.test(view.action)) offer.action = view.action;
+    if (typeof view.renewal === "string" && view.renewal) offer.renewal = view.renewal;
+    return offer;
   } catch {
     return null;
   }

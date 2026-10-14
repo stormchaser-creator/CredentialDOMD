@@ -1,4 +1,4 @@
-import { BILLING_CATALOG, validateCatalog, getBillingOffer, assertCatalogPrice } from './billingCatalog.mjs';
+import { BILLING_CATALOG, validateCatalog, getBillingOffer, assertCatalogPrice, CHECKOUT_PAYMENT_METHOD_TYPES } from './billingCatalog.mjs';
 
 class BillingError extends Error {
   constructor(status, code) { super(code); this.status = status; }
@@ -112,6 +112,8 @@ export function createBillingHandlers(deps, catalog = BILLING_CATALOG) {
     // uncertainty retains this attempt; it never creates another key.
     const session = await stripe.checkout.sessions.create({
       customer: customerId, mode: 'subscription', line_items: [{ price: prices.data[0].id, quantity: 1 }],
+      // Card (with Apple Pay and Google Pay) and Link only, never the Dashboard's list.
+      payment_method_types: [...CHECKOUT_PAYMENT_METHOD_TYPES],
       success_url: `${origin}/app/?billing=complete`, cancel_url: `${origin}/app/?billing=canceled`,
       client_reference_id: profile.id, metadata, subscription_data: { metadata },
     }, { idempotencyKey: `${catalog.app}:checkout:${claim.attempt_id}` });

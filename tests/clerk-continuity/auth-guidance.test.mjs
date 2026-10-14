@@ -85,7 +85,8 @@ test('legacy entry aliases normalize before the widget mounts while Clerk verifi
     const state = { retained: 'history state' }, changes = [], removed = [];
     const location = { hash, pathname: '/app/', search: '?return_to=%2Fapp%2F' };
     globalThis.window = { location,
-      addEventListener(name, listener) { assert.equal(name, 'hashchange'); handler = listener; },
+      // The chunk failure watch (utils/chunkRecovery.js) listens too.
+      addEventListener(name, listener) { if (['unhandledrejection', 'error'].includes(name)) return; assert.equal(name, 'hashchange'); handler = listener; },
       removeEventListener(name, listener) { removed.push([name, listener]); },
     };
     globalThis.history = { state, replaceState(savedState, title, url) {
@@ -129,7 +130,7 @@ test('legacy entry aliases normalize before the widget mounts while Clerk verifi
       location.hash = '#/factor-one'; handler();
       assert.equal(widgetKey(), afterSignUpAlias, 'back into a provider-owned factor step keeps the widget');
       cleanup.forEach(fn => fn());
-      assert.deepEqual(removed, [['hashchange', handler]]);
+      assert.deepEqual(removed.filter(([name]) => name === 'hashchange'), [['hashchange', handler]]);
     } finally {
       if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow;
       if (previousHistory === undefined) delete globalThis.history; else globalThis.history = previousHistory;

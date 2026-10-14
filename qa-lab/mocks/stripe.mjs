@@ -195,6 +195,9 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
       subscription: null, invoice: null, currency: 'usd', amount_subtotal: due, amount_total: due,
       success_url: p.success_url, cancel_url: p.cancel_url || null, url: `https://checkout.stripe.com/c/pay/${id}`,
       payment_method_collection: p.payment_method_collection || 'always', payment_method_types: arr(p.payment_method_types),
+      // after_expiration.recovery, as Stripe returns it: the link appears when the session expires.
+      after_expiration: bool(p.after_expiration?.recovery?.enabled) ? { recovery: { enabled: true, allow_promotion_codes: bool(p.after_expiration.recovery.allow_promotion_codes) ?? false, url: null, expires_at: null } } : null,
+      recovered_from: null, customer_email_prefilled: customer.email || null,
       custom_text: p.custom_text ? { submit: p.custom_text.submit || null, shipping_address: null, terms_of_service_acceptance: null, after_submit: null } : { submit: null, shipping_address: null, terms_of_service_acceptance: null, after_submit: null },
       _qa: { items: items.map((i) => ({ price: i.price.id, quantity: i.quantity })), subscriptionData: { metadata: sd.metadata || {}, billing_cycle_anchor: anchor ?? null, proration_behavior: sd.proration_behavior || null } },
     };
@@ -206,7 +209,10 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
   function expireSession(id, livemode) {
     const session = get('sessions', 'checkout session', id, livemode);
     if (session.status !== 'open') throw stripeError(400, `This Checkout Session is not open (status: ${session.status}).`);
-    store.update(() => { session.status = 'expired'; });
+    store.update(() => {
+      session.status = 'expired';
+      if (session.after_expiration?.recovery?.enabled) Object.assign(session.after_expiration.recovery, { url: `https://buy.stripe.com/r/test_${randomAlnum(24)}`, expires_at: session.created + 30 * 86400 });
+    });
     return publicView(session);
   }
 
@@ -337,6 +343,15 @@ export function createStripeMock({ store, secrets, supabaseUrl, appOrigin, log =
     });
     api('POST', '/v1/customers', ({ req, p, livemode }) => idempotent(req, () => createCustomer(p, livemode)));
     api('GET', '/v1/customers/:id', ({ params: { id }, p, livemode }) => expand(get('customers', 'customer', id, livemode), p.expand));
+    // limited-checkout prefills the verified email on a customer that has none (feat/funnel).
+    api('POST', '/v1/customers/:id', ({ params: { id }, p, livemode }) => {
+      const customer = get('customers', 'customer', id, livemode);
+      store.update(() => {
+        if (typeof p.email === 'string') customer.email = p.email;
+        if (p.metadata && typeof p.metadata === 'object') customer.metadata = { ...(customer.metadata || {}), ...p.metadata };
+      });
+      return publicView(customer);
+    });
     api('GET', '/v1/products/:id', ({ params: { id }, livemode }) => publicView(get('products', 'product', id, livemode)));
     api('GET', '/v1/prices', ({ p, livemode }) => {
       const keys = arr(p.lookup_keys);

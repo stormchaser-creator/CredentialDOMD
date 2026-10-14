@@ -134,14 +134,14 @@ test('the sign-in screen keeps room for the offer box and Clerk\'s card while th
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', built.outputFiles[0].text)(name => (name === 'react' ? React : require(name)), mod, mod.exports);
   const { default: Page, reservedAuthHeights } = mod.exports;
-  assert.deepEqual(reservedAuthHeights(320), { offer: 186, widget: 333 });
-  assert.deepEqual(reservedAuthHeights(393), { offer: 147, widget: 309 });
-  assert.deepEqual(reservedAuthHeights(1280), { offer: 108, widget: 309 });
+  assert.deepEqual(reservedAuthHeights(320), { offer: 292, widget: 333 });
+  assert.deepEqual(reservedAuthHeights(393), { offer: 234, widget: 309 });
+  assert.deepEqual(reservedAuthHeights(1280), { offer: 176, widget: 309 });
   const previous = globalThis.window;
   try {
     globalThis.window = { location: { hash: '' }, innerWidth: 393 };
     const html = renderToStaticMarkup(React.createElement(Page));
-    assert.match(html, /<div data-auth-offer-reserved="" aria-hidden="true" style="margin:0 0 14px;min-height:147px"><\/div>/, 'the offer box\'s room, empty, while it loads');
+    assert.match(html, /<div data-auth-offer-reserved="" aria-hidden="true" style="margin:0 0 14px;min-height:234px"><\/div>/, 'the offer box\'s room, empty, while it loads');
     assert.match(html, /data-auth-widget="" style="[^"]*min-height:309px/, 'the card\'s room');
   } finally { globalThis.window = previous; }
 });

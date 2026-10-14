@@ -539,6 +539,9 @@ verify_jwt = false
 [functions.report-error]
 verify_jwt = false
 
+[functions.owner-notify]
+verify_jwt = false
+
 [functions.send-guide]
 verify_jwt = false
 

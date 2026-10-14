@@ -73,9 +73,10 @@ test('quote price comes from protected eligibility; bundle is never discounted',
     const bundle=await(await h.quote(request({offerId:'core_locum'}))).json();assert.equal(bundle.annualCents,24500);assert.equal(bundle.practiceTrialDays,0);assert.equal(bundle.practiceIncluded,true);
   }
 });
-test('new pending invitee buys the first paid annual term with card and no Stripe trial',async()=>{
+test('new pending invitee buys the first paid annual term with a saved payment method and no Stripe trial',async()=>{
   const f=fixture();assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,200);
-  const [,args,opts]=f.calls.find(c=>c[0]==='checkout');assert.equal(args.payment_method_collection,'always');assert.deepEqual(args.payment_method_types,['card']);assert.equal(args.mode,'subscription');assert.deepEqual(args.line_items,[{price:'price_Annual',quantity:1}]);assert.equal(args.subscription_data.trial_period_days,undefined);assert.equal(args.metadata.price_phase,'founding');assert.equal(opts.idempotencyKey,`credentialdomd:checkout:${f.q.attempt_id}`);
+  // Card (Apple Pay and Google Pay show under it) and Link, set on the session, never the Dashboard's list (funnel 2026-10-14).
+  const [,args,opts]=f.calls.find(c=>c[0]==='checkout');assert.equal(args.payment_method_collection,'always');assert.deepEqual(args.payment_method_types,['card','link']);assert.equal(args.mode,'subscription');assert.deepEqual(args.line_items,[{price:'price_Annual',quantity:1}]);assert.equal(args.subscription_data.trial_period_days,undefined);assert.equal(args.metadata.price_phase,'founding');assert.equal(opts.idempotencyKey,`credentialdomd:checkout:${f.q.attempt_id}`);
 });
 test('lifetime, revoked and deleted accounts cause no Stripe/card creation',async()=>{
   for(const alter of[f=>f.eligibility.state='lifetime_access_already_granted',f=>f.profile.access_status='revoked',f=>f.profile.deleted_at='2026-01-01']){
@@ -334,7 +335,7 @@ test('active historical beta explicitly opts in with card, zero now and original
     assert.equal(preview.annualCents,offerId==='core'?9900:24500);
     assert.equal((await h.checkout(paidRequest())).status,200);
     const [,args]=f.calls.find(c=>c[0]==='checkout');
-    assert.equal(args.mode,'subscription');assert.equal(args.payment_method_collection,'always');assert.deepEqual(args.payment_method_types,['card']);
+    assert.equal(args.mode,'subscription');assert.equal(args.payment_method_collection,'always');assert.deepEqual(args.payment_method_types,['card','link']);
     assert.equal(args.subscription_data.billing_cycle_anchor,f.anchor);assert.equal(args.subscription_data.proration_behavior,'none');
     assert.equal(args.subscription_data.trial_end,undefined);assert.equal(args.subscription_data.trial_period_days,undefined);
     assert.equal(args.metadata.billing_start_at,String(f.anchor));assert.equal(args.line_items[0].price,'price_Annual');
@@ -797,4 +798,122 @@ test('classic mid-year cancellation: only that exact shape relaxes the anchor or
     const f=deferredFixture();markDeferredPaid(f);markClassicPaidCancel(f,{invoice:'credit'});f.deps.log=()=>{};if(undo) f.sub.cancel_at=null;alter(f);
     assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,503,`${name} ${undo}`);assert.equal(f.calls.some(c=>c[0]==='settle'),false,name);
   }
+});
+
+// Funnel 2026-10-14: a 2 hour Checkout, wallets, the verified email
+// prefilled, and Stripe's recovery link kept when the session expires.
+test('a Checkout lasts 2 hours from the quote, never past eligibility, and the 30 minute floor still holds',async()=>{
+  const f=fixture();assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,200);
+  const [,args]=f.calls.find(c=>c[0]==='checkout');assert.equal(args.expires_at,Math.floor((now+2*3600000)/1000));
+  const g=fixture();g.eligibility.expires_at=new Date(now+3600000).toISOString();
+  assert.equal((await createLimitedLaunchHandlers(g.deps,config).checkout(paidRequest())).status,200);
+  assert.equal(g.calls.find(c=>c[0]==='checkout')[1].expires_at,Math.floor((now+3600000)/1000));
+  const h=fixture();h.eligibility.expires_at=new Date(now+1000000).toISOString();
+  const refused=await createLimitedLaunchHandlers(h.deps,config).checkout(paidRequest());
+  assert.equal(refused.status,409);assert.equal((await refused.json()).error,'checkout_needs_reconciliation');
+});
+test('a recovery link is asked for only when the Checkout holds no founding place',async()=>{
+  const founding=fixture();founding.q.public_founding_slot=7;
+  assert.equal((await createLimitedLaunchHandlers(founding.deps,config).checkout(paidRequest())).status,200);
+  assert.equal(founding.calls.find(c=>c[0]==='checkout')[1].after_expiration,undefined,'a founding place is released at expiry: no link that pays $99 past it');
+  for(const phase of['earlybird','standard']){
+    const f=fixture('core',phase);f.q.public_founding_slot=null;
+    assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,200);
+    assert.deepEqual(f.calls.find(c=>c[0]==='checkout')[1].after_expiration,{recovery:{enabled:true,allow_promotion_codes:false}});
+    assert.equal(f.calls.find(c=>c[0]==='checkout')[1].allow_promotion_codes,undefined,'no promotion codes on the session either');
+  }
+});
+test('the verified email is prefilled on a customer with none, never replacing one, and its failure never stops Checkout',async()=>{
+  const f=fixture();const updates=[];f.stripe.customers.update=async(...args)=>{updates.push(args);return{};};
+  f.deps.checkoutEmail=async(profileId,subject)=>{assert.equal(profileId,f.profile.id);assert.equal(subject,'user_a');return 'member@example.invalid';};
+  assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,200);
+  assert.deepEqual(updates,[['cus_A',{email:'member@example.invalid'}]]);
+  assert.ok(f.calls.findIndex(c=>c[0]==='checkout')>=0);
+  // A customer that already has an email keeps it.
+  const g=fixture();const kept=[];g.stripe.customers.update=async(...args)=>{kept.push(args);};g.deps.checkoutEmail=async()=>'other@example.invalid';
+  const retrieve=g.stripe.customers.retrieve;g.stripe.customers.retrieve=async(...args)=>({...await retrieve(...args),email:'saved@example.invalid'});
+  assert.equal((await createLimitedLaunchHandlers(g.deps,config).checkout(paidRequest())).status,200);assert.deepEqual(kept,[]);
+  // No verified address, a malformed one, or a failure: Checkout opens anyway and asks for it.
+  for(const answer of[async()=>null,async()=>'not an email',async()=>{throw Error('clerk down');}]){
+    const h=fixture();const none=[];const logs=[];h.stripe.customers.update=async(...args)=>{none.push(args);};h.deps.checkoutEmail=answer;h.deps.log=e=>logs.push(e);
+    assert.equal((await createLimitedLaunchHandlers(h.deps,config).checkout(paidRequest())).status,200);assert.deepEqual(none,[]);
+    assert.ok(!JSON.stringify(logs).includes('@'),'no address in a log');
+  }
+});
+const expiredSession=(f,patch={})=>({id:'cs_Expired',status:'expired',payment_status:'unpaid',subscription:null,mode:'subscription',livemode:false,customer:'cus_A',client_reference_id:f.profile.id,
+  metadata:{app:config.app,catalog_version:config.version,pricing_policy_version:config.policyVersion,checkout_attempt_id:f.q.attempt_id,profile_id:f.profile.id,clerk_user_id:'user_a',offer_id:'core',price_phase:f.q.price_phase},
+  after_expiration:{recovery:{enabled:true,url:'https://buy.stripe.com/r/test_synthetic123',allow_promotion_codes:false,expires_at:Math.floor(now/1000)+30*86400}},...patch});
+test('checkout.session.expired keeps the recovery link on its attempt, sends nothing, and a failure never changes the answer',async()=>{
+  const f=fixture('core','earlybird');const recorded=[];
+  f.stripe.checkout.sessions.retrieve=async()=>expiredSession(f);f.event.type='checkout.session.expired';f.event.data.object={id:'cs_Expired'};
+  f.deps.store.recordCheckoutRecovery=async(...args)=>{recorded.push(args);return true;};
+  const res=await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true));
+  assert.equal(res.status,200);
+  assert.deepEqual(recorded,[['cs_Expired',false,f.q.attempt_id,'https://buy.stripe.com/r/test_synthetic123',new Date((Math.floor(now/1000)+30*86400)*1000).toISOString()]]);
+  // A link that is not Stripe's, a session still payable, or no link: nothing recorded.
+  for(const patch of[{after_expiration:{recovery:{enabled:true,url:'https://evil.example/r/x',expires_at:1}}},{after_expiration:null},{status:'open'},{payment_status:'paid'}]){
+    const g=fixture('core','earlybird');const none=[];g.stripe.checkout.sessions.retrieve=async()=>expiredSession(g,patch);g.event.type='checkout.session.expired';g.event.data.object={id:'cs_Expired'};
+    g.deps.store.recordCheckoutRecovery=async(...args)=>{none.push(args);};
+    assert.equal((await createLimitedLaunchHandlers(g.deps,config).webhook(request({},true))).status,200);assert.deepEqual(none,[]);
+  }
+  // A database failure is logged and the founding release still runs.
+  const h=fixture();h.q.public_founding_slot=3;const released=[];const logs=[];h.deps.log=e=>logs.push(e);
+  h.stripe.checkout.sessions.retrieve=async()=>expiredSession(h,{metadata:{...expiredSession(h).metadata,price_phase:'founding'}});h.event.type='checkout.session.expired';h.event.data.object={id:'cs_Expired'};
+  h.deps.store.recordCheckoutRecovery=async()=>{throw Error('db down');};h.deps.store.releaseFoundingCheckout=async(...args)=>{released.push(args);return true;};
+  assert.equal((await createLimitedLaunchHandlers(h.deps,config).webhook(request({},true))).status,200);
+  assert.equal(released.length,1);assert.ok(logs.some(l=>l.code==='checkout_recovery_unrecorded'));
+});
+test('a payment through a recovery link is counted once against the session it came from, and settles as before',async()=>{
+  const f=fixture();const counted=[];f.deps.store.recordCheckoutRecovered=async(...args)=>{counted.push(args);return true;};
+  f.event.type='checkout.session.completed';f.event.data.object={id:'cs_Recovered',mode:'subscription',subscription:f.sub.id,recovered_from:'cs_Expired',metadata:{app:config.app}};
+  assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,200);
+  assert.deepEqual(counted,[['cs_Expired',false,'cs_Recovered']]);assert.ok(f.calls.some(c=>c[0]==='settle'));
+  // Not recovered, or another app's session: nothing counted.
+  for(const object of[{id:'cs_B',mode:'subscription',subscription:f.sub.id,recovered_from:null,metadata:{app:config.app}},{id:'cs_C',mode:'subscription',subscription:f.sub.id,recovered_from:'cs_Expired',metadata:{app:'other'}}]){
+    const g=fixture();const none=[];g.deps.store.recordCheckoutRecovered=async(...args)=>{none.push(args);};g.event.type='checkout.session.completed';g.event.data.object=object;
+    await createLimitedLaunchHandlers(g.deps,config).webhook(request({},true));assert.deepEqual(none,[]);
+  }
+  // A failed count never stops settlement.
+  const h=fixture();h.deps.store.recordCheckoutRecovered=async()=>{throw Error('db down');};h.deps.log=()=>{};h.event.type='checkout.session.completed';h.event.data.object={id:'cs_Recovered',mode:'subscription',subscription:h.sub.id,recovered_from:'cs_Expired',metadata:{app:config.app}};
+  assert.equal((await createLimitedLaunchHandlers(h.deps,config).webhook(request({},true))).status,200);assert.ok(h.calls.some(c=>c[0]==='settle'));
+});
+test('a saved Checkout about to end is replaced in one supersede, not resumed; one with time left resumes',async()=>{
+  for(const [minutesLeft,replaced] of [[10,true],[16,false]]) {
+    const f=fixture();f.q.public_founding_slot=7;
+    const saved={id:'cs_Saved',status:'open',customer:'cus_A',subscription:null,livemode:false,mode:'subscription',payment_status:'unpaid',client_reference_id:f.profile.id,metadata:f.sub.metadata,url:'https://checkout.stripe.com/c/saved',expires_at:Math.floor(now/1000)+minutesLeft*60};
+    let state=structuredClone(saved);
+    f.stripe.checkout.sessions.retrieve=async()=>structuredClone(state);
+    f.stripe.checkout.sessions.list=async()=>({data:[structuredClone(state)],has_more:false});
+    f.stripe.checkout.sessions.expire=async id=>{f.calls.push(['expire',id]);state={...state,status:'expired'};return structuredClone(state);};
+    f.deps.store.claimLimitedCheckout=async()=>({state:'existing',attempt_id:f.q.attempt_id,offer_id:'core',session_id:'cs_Saved',quote:structuredClone(f.q)});
+    const fresh={...f.q,attempt_id:'10000000-0000-4000-8000-000000000009'};
+    f.deps.store.supersedeCheckout=async(...args)=>{f.calls.push(['supersede',...args]);return{state:'claimed',attempt_id:fresh.attempt_id,token:'lease',quote:fresh};};
+    const r=await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest());
+    assert.equal(r.status,200);
+    const {url}=await r.json();
+    if(replaced){
+      assert.equal(url,'https://checkout.stripe.com/c/synthetic','a new payment page');
+      assert.deepEqual(f.calls.filter(c=>c[0]==='expire').map(c=>c[1]),['cs_Saved']);
+      const sup=f.calls.find(c=>c[0]==='supersede');
+      assert.equal(sup[4],f.q.attempt_id);assert.deepEqual(sup[5].session_ids,['cs_Saved']);
+      assert.equal(f.calls.find(c=>c[0]==='checkout')[2].idempotencyKey,`credentialdomd:checkout:${fresh.attempt_id}`);
+    } else {
+      assert.equal(url,saved.url);
+      assert.equal(f.calls.some(c=>['expire','supersede','checkout'].includes(c[0])),false);
+    }
+  }
+});
+test('a saved Checkout about to end with a subscription, or a scheduled purchase, is resumed as before',async()=>{
+  const f=fixture();
+  const saved={id:'cs_A',status:'open',customer:'cus_A',subscription:'sub_A',livemode:false,metadata:f.sub.metadata,url:'https://checkout.stripe.com/c/saved',expires_at:Math.floor(now/1000)+60};
+  f.stripe.subscriptions.list=async()=>({data:[{id:'sub_A',status:'incomplete'}],has_more:false});
+  f.stripe.checkout.sessions.retrieve=async()=>saved;
+  f.stripe.checkout.sessions.expire=async()=>{throw Error('unexpected');};
+  f.deps.store.claimLimitedCheckout=async()=>({state:'existing',attempt_id:f.q.attempt_id,offer_id:'core',session_id:'cs_A',quote:f.q});
+  assert.deepEqual(await(await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).json(),{url:saved.url});
+  const g=fixture();g.q.billing_start_at=new Date(now+86400000).toISOString();
+  g.stripe.checkout.sessions.retrieve=async()=>({...saved,subscription:null});
+  g.stripe.checkout.sessions.expire=async()=>{throw Error('unexpected');};
+  g.deps.store.claimLimitedCheckout=async()=>({state:'existing',attempt_id:g.q.attempt_id,offer_id:'core',session_id:'cs_A',quote:g.q});
+  assert.deepEqual(await(await createLimitedLaunchHandlers(g.deps,config).checkout(paidRequest())).json(),{url:saved.url});
 });

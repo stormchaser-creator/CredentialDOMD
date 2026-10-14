@@ -54,3 +54,13 @@ export function validateBillingRuntime({ mode, secretKey, webhookSecret, portalC
   if (!/^bpc_[A-Za-z0-9]+$/.test(portalConfigurationId || '')) throw new Error('Reviewed Stripe portal configuration is missing');
   return mode;
 }
+
+/**
+ * The payment methods every Credential Checkout offers, set on the session
+ * rather than left to the Stripe Dashboard (funnel 2026-10-14). Hosted
+ * Checkout shows Apple Pay and Google Pay under 'card'; 'link' is Stripe
+ * Link. Nothing delayed or asynchronous (bank debits and the like) can
+ * appear, so a completed Checkout is always a settled card payment.
+ * Dashboard: Apple Pay / Google Pay wallets are on by default; Link must be enabled.
+ */
+export const CHECKOUT_PAYMENT_METHOD_TYPES = Object.freeze(['card', 'link']);

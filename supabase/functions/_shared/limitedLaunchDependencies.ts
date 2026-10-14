@@ -82,7 +82,18 @@ export function limitedLaunchDependencies() {
     send: welcome,
     log: welcomeConsoleLog,
   });
-  return { ...base, welcome, welcomeSweep,
+  // The address Checkout shows, prefilled (limited-checkout): the identity
+  // provider's verified one, as the welcome email uses. profiles.verified_email
+  // (written only by clerk-webhook), else Clerk's verified primary. Never the
+  // editable profiles.email. Null when neither is verified.
+  const checkoutEmail = async (profileId: string, subject: string) => {
+    const row = await checked(db().from('profiles').select('verified_email').eq('id', profileId).eq('auth_user_id', subject).maybeSingle()) as { verified_email?: string | null } | null;
+    if (row?.verified_email) return row.verified_email;
+    const user = await clerkUser(subject, 5000);
+    const primary = (user.email_addresses || []).find((a: { id?: string }) => a.id === user.primary_email_address_id);
+    return primary?.verification?.status === 'verified' && typeof primary.email_address === 'string' ? primary.email_address : null;
+  };
+  return { ...base, welcome, welcomeSweep, checkoutEmail,
     // The hook secret pg_net callers present (x-hook-secret): the refund sweep's, as the welcome sweep's.
     hookSecret: () => Deno.env.get('WELCOME_HOOK_SECRET') || '',
     verifiedEmails: async (subject: string) => {
@@ -138,6 +149,10 @@ export function limitedLaunchDependencies() {
       recordRefund: async (request: string, token: string, step: string, refundId: string | null, status: string | null, code: string | null) => (await checked(db().rpc('limited_refund_record', { p_id: request, p_token: token, p_step: step, p_refund_id: refundId, p_refund_status: status, p_error: code }))) === true,
       confirmRefund: (charge: string, live: boolean, refundId: string, status: string, amountRefunded: number) => checked(db().rpc('limited_refund_confirm', { p_charge_id: charge, p_livemode: live, p_refund_id: refundId, p_refund_status: status, p_amount_refunded: amountRefunded })),
       updateRefund: (charge: string, live: boolean, refundId: string, status: string, code: string | null) => checked(db().rpc('limited_refund_update', { p_charge_id: charge, p_livemode: live, p_refund_id: refundId, p_refund_status: status, p_error: code })),
+      // An expired Checkout's recovery link, and a payment made through one
+      // (20261014100000_checkout_recovery.sql). Nothing is sent from here.
+      recordCheckoutRecovery: (session: string, live: boolean, attempt: string, url: string, expiresAt: string) => checked(db().rpc('record_checkout_recovery', { p_session_id: session, p_livemode: live, p_attempt_id: attempt, p_recovery_url: url, p_recovery_expires_at: expiresAt })),
+      recordCheckoutRecovered: (recoveredFrom: string, live: boolean, session: string) => checked(db().rpc('record_checkout_recovered', { p_recovered_from: recoveredFrom, p_livemode: live, p_session_id: session })),
       settleLimited: async (args: Record<string, unknown>, quote: string, proof: unknown) => {
         const result = await checked(db().rpc('settle_limited_billing_subscription', { p_args: args, p_quote_id: quote, p_paid_proof: proof }));
         if (!['applied', 'duplicate'].includes(result as string)) throw Error('Limited billing settlement failed');

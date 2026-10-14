@@ -21,9 +21,11 @@ for (const phase of ['founding', 'earlybird', 'standard']) {
     for (const text of [view.status, view.action]) assert.doesNotMatch(text, /[-–—]/, 'public copy has no hyphens or dashes');
   });
 
-  test(`${phase}, open: the button and the guarantee line are unchanged`, () => {
+  test(`${phase}, open: the button says the live price; the guarantee line is unchanged`, () => {
     const view = offerPresentation(offer(phase, 'available'));
-    assert.equal(view.action, 'Create your account');
+    // Funnel 2026-10-14: the price before the account, from the validated reply.
+    assert.equal(view.action, `Join for $${offer(phase, 'available').annualCents / 100} a year`);
+    assert.doesNotMatch(view.action, /[-–—]/);
     assert.equal(view.status, 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.');
   });
 }

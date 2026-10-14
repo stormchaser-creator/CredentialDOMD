@@ -40,10 +40,16 @@ test('each current-offer element follows all phases and later failures retain th
 
 test('public phase updates use only validated annual prices and distinguish capacity holds from a sales pause', () => {
   for (const [phase,amount] of [['founding',99],['earlybird',149],['standard',199]]) {
-    assert.equal(offerPresentation(offer(phase)).action, 'Create your account');
+    // Funnel 2026-10-14: the signup button names the live annual price.
+    assert.equal(offerPresentation(offer(phase)).action, `Join for $${amount} a year`);
+    assert.equal(offerPresentation(offer(phase)).renewal, `$${amount} at checkout, then $${amount} each year while this subscription remains active. Cancel before renewal to avoid the next annual charge.`);
     assert.match(offerPresentation(offer(phase)).reviewAction, new RegExp(amount));
   }
   assert.match(offerPresentation(offer('founding','temporarily_full')).status, /temporarily unavailable/);
+  // No price button or renewal line when nothing can be paid today.
+  assert.equal(offerPresentation(offer('founding','temporarily_full')).action, 'Create your account');
+  assert.equal(offerPresentation(offer('founding','temporarily_full')).renewal, null);
+  assert.equal(offerPresentation(offer('earlybird','paused')).renewal, null);
   assert.match(offerPresentation(offer('earlybird','paused')).status, /checkout is paused/);
   for (const patch of [{schemaVersion:2},{phase:'<img src=x>'},{annualCents:1},{annualCents:14900},
     {checkoutEnabled:'true'},{availability:'unknown'},{checkoutEnabled:false},{availability:'paused'},
@@ -142,4 +148,20 @@ test('packaging config allows only the exact public endpoint and CSP permits onl
   assert.ok(html.includes(`connect-src 'self' ${endpoint};`));
   assert.ok(html.includes(`data-membership-endpoint="${endpoint}"`));
   assert.equal((html.match(/src="\/membership-offer.js"/g)||[]).length,1);
+});
+
+test('every signup button says the live price once confirmed, and goes back to the plain label when it cannot be', async () => {
+  const dom = root(); let current = offer();
+  const refresh = createOfferUpdater(dom, endpoint, { fetchImpl: async () => { if (current instanceof Error) throw current; return Response.json(current); } });
+  await refresh();
+  assert.equal(dom.actions[0].textContent, 'Join for $99 a year');
+  current = offer('earlybird'); await refresh();
+  assert.equal(dom.actions[0].textContent, 'Join for $149 a year');
+  // Unconfirmed: the last price stays on the plan cards, never on the button.
+  current = Error('offline'); await refresh();
+  assert.equal(dom.actions[0].textContent, 'Create your account');
+  assert.equal(dom.nodes.price[0].textContent, '$149');
+  // The static page's own label before any answer (scripts/public-launch-render.mjs) is the plain one.
+  const html = renderPublicLaunch(await readFile(new URL('../landing/index.html', import.meta.url), 'utf8'), 'home');
+  assert.doesNotMatch(html, /Join for \$\d+/, 'no price is hardcoded on a button');
 });

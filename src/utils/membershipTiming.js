@@ -71,3 +71,27 @@ export function scheduledMembershipCopy(scheduled) {
   }
   return `You opted in to ${scheduled.offerId === "core" ? "Credential" : "Credential + Practice"} at ${membershipPrice(scheduled.annualCents)} per year. Your first annual charge and paid year are scheduled to start on ${membershipDate(scheduled.startsAt)}. Manage or cancel this scheduled purchase before then in the billing portal.`;
 }
+
+/** A calendar date only (no time), in the viewer's time zone. */
+export const membershipDay = value => new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+
+/**
+ * The review's renewal line: the date and amount of the first renewal of the
+ * offer on screen. A purchase now renews one year after it is paid (today, if
+ * paid now; the date is this device's, as a reader expects); a purchase
+ * scheduled for a beta's end renews one year after that server date. Null
+ * for anything else. Display only: Stripe sets the real date at payment.
+ */
+export function reviewRenewalCopy(quote, now = Date.now()) {
+  if (!quote || !Number.isSafeInteger(quote.annualCents) || quote.annualCents <= 0) return null;
+  const start = quote.paymentTiming === "after_beta" ? Date.parse(quote.firstChargeAt)
+    : quote.paymentTiming === "now" || quote.paymentTiming === undefined ? now : NaN;
+  if (!Number.isFinite(start)) return null;
+  // A year on in UTC, as Stripe counts its anchor; a February 29 start renews
+  // on February 28, the last day of that month, as Stripe does.
+  const renews = new Date(start);
+  const month = renews.getUTCMonth();
+  renews.setUTCFullYear(renews.getUTCFullYear() + 1);
+  if (renews.getUTCMonth() !== month) renews.setUTCDate(0);
+  return `Renews on ${membershipDay(renews)} at ${membershipPrice(quote.annualCents)} a year, unless you cancel before then.`;
+}

@@ -116,7 +116,10 @@ const reviewCore = async f => {
   const before = quotes(f);
   f.render(); active.flush(); await settleTicks();
   if (quotes(f) > before) return;
-  await (button(f, 'Complete payment') || button(f, 'Refresh offer')).props.onClick();
+  // The review has no Refresh offer button (funnel 2026-10-14): an offer
+  // already on screen is the review.
+  const open = button(f, 'Complete payment');
+  if (open) await open.props.onClick();
 };
 
 test('an unticked Continue looks unavailable, and a tap on it says to tick the box instead of doing nothing', async () => {
@@ -222,9 +225,13 @@ test('a checkout failure is reported once per session per code, with nothing abo
   assert.deepEqual(extra, { event: 'membership_checkout_failed', action: 'checkout', phase: 'http', during: null, httpStatus: 503, code: 'billing_unavailable' });
   const payload = JSON.stringify(f.reports);
   for (const secret of [owner, quoteFor().quoteId, quoteFor().consentHash, 'checkout.stripe.com']) assert.ok(!payload.includes(secret), secret);
+  // A capacity refusal at Continue closes the review; the next one is refused at the quote.
+  f.client.checkout = async () => { f.calls.push(['checkout']); throw Object.assign(Error('x'), { code: 'founding_capacity_pending', httpStatus: 409, phase: 'http' }); };
+  tick(f);
+  await button(f, 'Continue to secure payment').props.onClick();
   f.client.quote = async () => { throw Object.assign(Error('x'), { code: 'founding_capacity_pending', httpStatus: 409, phase: 'http' }); };
   await reviewCore(f);
-  assert.deepEqual(f.reports.map(r => r[0]), ['Membership checkout failed (billing_unavailable)', 'Membership quote failed (founding_capacity_pending)']);
+  assert.deepEqual(f.reports.map(r => r[0]), ['Membership checkout failed (billing_unavailable)', 'Membership checkout failed (founding_capacity_pending)', 'Membership quote failed (founding_capacity_pending)']);
   const direct = [];
   const report = createCheckoutFailureReporter((...args) => direct.push(args));
   assert.equal(report('checkout', { code: 'quote_expired' }), true);
@@ -377,13 +384,12 @@ test('a failed Continue says why inside the offer, beside the button, and brings
   assert.ok(top?.props.ref, 'the top line can be scrolled to');
 });
 
-test('Refresh offer on a stale answer asks for a fresh one, then quotes; with none it says so instead of doing nothing', async () => {
+test('a review on a stale answer asks for a fresh one, then quotes; with none it says so instead of doing nothing', async () => {
   const f = fixture();
-  await reviewCore(f);
-  tick(f);
+  // The answer went stale before the page opened the review by itself.
   f.context.limitedLaunch.access.needsRefresh = true;
-  await button(f, 'Refresh offer').props.onClick();
-  assert.deepEqual(f.calls, [['quote', 'core'], ['refresh']], 'a fresh answer was asked for; no quote without one');
+  f.render(); active.flush(); await settleTicks();
+  assert.deepEqual(f.calls, [['refresh']], 'a fresh answer was asked for; no quote without one');
   assert.match(f.html(), /Your membership could not be confirmed just now\./);
   assert.deepEqual(f.reports.map(r => [r[0], r[2].phase]), [['Membership quote stopped on the page (access_unconfirmed)', 'client']]);
   // Paying stays reachable on the last answer; a tap refreshes first and then quotes.
@@ -391,14 +397,16 @@ test('Refresh offer on a stale answer asks for a fresh one, then quotes; with no
   assert.equal(review.props.disabled, false);
   f.context.limitedLaunch.refresh = async () => { f.calls.push(['refresh']); f.context.limitedLaunch.access.needsRefresh = false; };
   await review.props.onClick();
-  assert.deepEqual(f.calls.slice(2), [['refresh'], ['quote', 'core']]);
+  assert.deepEqual(f.calls.slice(1), [['refresh'], ['quote', 'core']]);
   assert.match(f.html(), /Continue to secure payment/);
-  assert.equal(button(f, 'Refresh offer').props.disabled, false, 'not left busy');
-  // A fresh answer that no longer allows the offer says so.
+  assert.equal(button(f, 'Refresh offer'), undefined, 'one button in the review');
+  // A fresh answer at Continue that no longer allows the offer says so.
   f.context.limitedLaunch.access.needsRefresh = true;
   f.context.limitedLaunch.refresh = async () => { f.calls.push(['refresh']); Object.assign(f.context.limitedLaunch.access, { needsRefresh: false, checkoutEligible: false }); };
-  await button(f, 'Refresh offer').props.onClick();
-  assert.equal(f.calls.filter(c => c[0] === 'quote').length, 2);
+  tick(f);
+  await button(f, 'Continue to secure payment').props.onClick();
+  assert.equal(f.calls.filter(c => c[0] === 'quote').length, 1);
+  assert.equal(f.calls.filter(c => c[0] === 'checkout').length, 0, 'nothing sent');
   assert.match(f.html(), /This offer is no longer available for this account\./);
 });
 
@@ -745,4 +753,50 @@ test('the return from Checkout is a funnel step too', async () => {
   returnFixture('', snapshot()).render();
   assert.deepEqual(none, []);
   setFunnelReporter(null);
+});
+
+// Funnel 2026-10-14: a lighter review. One screen: the price, the renewal date
+// and amount, the unchanged consent text and box, one button, and the
+// guarantee beside it.
+test('the review is one screen: price, renewal date and amount, consent, one button with the guarantee beside it', async () => {
+  const f = fixture();
+  f.render(); active.flush(); await settleTicks();
+  const panel = offerPanel(f);
+  const text = textOf(panel);
+  assert.match(text, /\$99\.00 per year/);
+  const year = new Date().getFullYear() + 1;
+  assert.match(text, new RegExp(`Renews on [A-Za-z]+ \\d{1,2}, ${year} at \\$99\\.00 a year, unless you cancel before then\\.`));
+  assert.ok(text.indexOf('per year') < text.indexOf('Renews on'), 'the renewal under the price');
+  assert.match(text, /Synthetic server-reviewed annual renewal terms\./, 'the consent text, as the server sent it');
+  assert.match(text, /I have reviewed this offer and agree to the payment and renewal terms above\./, 'the box, unchanged');
+  const buttons = [];
+  const visit = n => { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(visit); if (n.type === 'button') buttons.push(textOf(n)); visit(n.props?.children); };
+  visit(panel);
+  assert.deepEqual(buttons, ['Continue to secure payment'], 'one button');
+  // The guarantee sits in the button's own row.
+  const row = find(panel, n => n.type === 'div' && find(n.props?.children, c => 'data-consent-gate' in (c?.props || {})) && find(n.props?.children, c => 'data-review-guarantee' in (c?.props || {})));
+  assert.ok(row, 'the guarantee beside the pay button');
+  assert.match(textOf(row), /100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals\./);
+  // Above the review, one line instead of the long introduction.
+  const page = f.html();
+  assert.match(page, /Complete your payment to open your account\./);
+  assert.doesNotMatch(page, /Your account opens as soon as payment completes/);
+  assert.equal((page.match(/money-back guarantee/g) || []).length, 1, 'the guarantee once on the screen');
+  // Disclosure wording is never hidden: the founding sentence stays, as it read before.
+  assert.match(page, /Viewing an offer does not reserve a founding place\./);
+});
+
+test('the renewal line: a year after paying now, a year after a scheduled first charge, nothing otherwise', async () => {
+  const { reviewRenewalCopy } = await import('../../src/utils/membershipTiming.js');
+  const now = Date.parse('2026-10-14T15:00:00Z');
+  assert.match(reviewRenewalCopy({ annualCents: 9900, paymentTiming: 'now' }, now), /^Renews on October 1[45], 2027 at \$99\.00 a year, unless you cancel before then\.$/);
+  assert.match(reviewRenewalCopy({ annualCents: 14900, paymentTiming: 'after_beta', firstChargeAt: '2026-11-20T12:00:00Z' }, now), /November 20, 2027 at \$149\.00 a year/);
+  assert.equal(reviewRenewalCopy({ annualCents: 9900, paymentTiming: 'after_beta', firstChargeAt: null }, now), null);
+  assert.equal(reviewRenewalCopy({ annualCents: 0, paymentTiming: 'now' }, now), null);
+  assert.equal(reviewRenewalCopy(null, now), null);
+  // A leap day purchase renews on February 28, as Stripe does, not March 1.
+  const day = s => reviewRenewalCopy({ annualCents: 9900, paymentTiming: 'now' }, Date.parse(s)).match(/^Renews on (.+) at /)[1];
+  const local = iso => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  assert.equal(day('2028-02-29T12:00:00Z'), local('2029-02-28T12:00:00Z'));
+  assert.equal(day('2027-03-01T12:00:00Z'), local('2028-03-01T12:00:00Z'));
 });

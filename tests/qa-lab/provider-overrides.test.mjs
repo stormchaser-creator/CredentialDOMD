@@ -76,6 +76,7 @@ const OVERRIDES = [
   ['send-welcome/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['send-packet-email/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['forwarding-address/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
+  ['owner-notify/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['build-backup/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['_shared/credentialPortalDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['_shared/supportDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],

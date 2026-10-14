@@ -201,6 +201,16 @@ test('mock Stripe: the real SDK can run the limited checkout exactly as the func
   const other = await stripe.checkout.sessions.create({ customer: customer.id, mode: 'subscription', line_items: [{ price: prices.data[0].id, quantity: 1 }], success_url: 'https://credentialdomd.com/app/', expires_at: Math.floor(Date.now() / 1000) + 3600 });
   assert.equal((await stripe.checkout.sessions.expire(other.id)).status, 'expired');
   await assert.rejects(stripe.checkout.sessions.retrieve('cs_live_missing'), /No such checkout session/);
+  // feat/funnel: the verified email set on the customer, and a recovery link once a session asked for one expires.
+  assert.equal((await stripe.customers.update(customer.id, { email: 'member@qa.credentialdomd.test' })).email, 'member@qa.credentialdomd.test');
+  assert.equal((await stripe.customers.retrieve(customer.id)).email, 'member@qa.credentialdomd.test');
+  const recoverable = await stripe.checkout.sessions.create({ customer: customer.id, mode: 'subscription', line_items: [{ price: prices.data[0].id, quantity: 1 }], success_url: 'https://credentialdomd.com/app/',
+    expires_at: Math.floor(Date.now() / 1000) + 7200, after_expiration: { recovery: { enabled: true, allow_promotion_codes: false } } });
+  assert.deepEqual(recoverable.after_expiration.recovery, { enabled: true, allow_promotion_codes: false, url: null, expires_at: null });
+  const lapsed = await stripe.checkout.sessions.expire(recoverable.id);
+  assert.match(lapsed.after_expiration.recovery.url, /^https:\/\/buy\.stripe\.com\/r\//);
+  assert.equal(lapsed.after_expiration.recovery.expires_at, recoverable.created + 30 * 86400);
+  assert.equal(other.after_expiration, null, 'no link unless asked for');
 });
 
 test('Stripe form parameters decode the way Stripe decodes them', () => {

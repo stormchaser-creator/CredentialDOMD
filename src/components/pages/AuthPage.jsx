@@ -5,6 +5,7 @@ import { AsclepiusIcon } from "../shared/Icons";
 import { SMS_SIGN_IN_ENABLED } from "../../utils/signInMethods";
 import { loadAuthOffer } from "../../utils/authOffer";
 import { sendAuthVisit } from "../../utils/visitBeacon";
+import { watchChunkFailures, chunkRecoveryStep, CHUNK_RETRY_DELAY_MS } from "../../utils/chunkRecovery.js";
 
 /**
  * Auth landing page — wraps Clerk's unified <SignIn withSignUp /> component
@@ -34,10 +35,12 @@ const isLegacyEntry = hash => hash === "#sign-in" || hash === "#sign-up";
 // screen does not jump as each loads (signup review 2026-10-07: 162 px, a
 // layout shift of 0.4 on a phone). Heights as the live screen draws them
 // (WebKit, 2026-10-07): the offer box 186 px at 320 px wide, 147 px at 393,
-// 108 px on a desktop; the card 333 px at 320 wide, 309 px elsewhere.
+// 108 px on a desktop; the card 333 px at 320 wide, 309 px elsewhere. With
+// the price line and the renewal sentence (funnel 2026-10-14, measured the
+// same way): 292 px, 234 px and 176 px.
 export function reservedAuthHeights(width) {
   const w = Number.isFinite(width) ? width : 1024;
-  return { offer: w <= 360 ? 186 : w <= 480 ? 147 : 108, widget: w <= 360 ? 333 : 309 };
+  return { offer: w <= 360 ? 292 : w <= 480 ? 234 : 176, widget: w <= 360 ? 333 : 309 };
 }
 
 const HIDE_SOCIAL_ELEMENTS = IS_DEV_CLERK_INSTANCE
@@ -92,6 +95,25 @@ function AuthPage() {
   const [offer, setOffer] = useState(undefined);
   const reserved = reservedAuthHeights(globalThis.window?.innerWidth);
   useEffect(() => { sendAuthVisit(); }, []);
+  // A Clerk script chunk lost on the way (2026-10-10, "Loading chunk 1192
+  // failed" on an iPhone): the form never mounted and the screen stayed
+  // empty. Mounting it again fetches the chunk again; a second failure, or
+  // one after the form is up, shows a way out instead (utils/chunkRecovery.js).
+  const [chunkNotice, setChunkNotice] = useState(false);
+  const chunkFailures = useRef(0);
+  useEffect(() => {
+    let timer;
+    const stop = watchChunkFailures(() => {
+      chunkFailures.current += 1;
+      const formShown = !!widgetRef.current?.querySelector?.("input, textarea, select");
+      if (chunkRecoveryStep(chunkFailures.current, formShown) === "remount") {
+        clearTimeout(timer);
+        timer = setTimeout(() => setEntry(previous => ({ ready: true, version: previous.version + 1 })), CHUNK_RETRY_DELAY_MS);
+      } else setChunkNotice(true);
+    });
+    return () => { clearTimeout(timer); stop(); };
+  }, []);
+  const retryForm = () => { setChunkNotice(false); setEntry(previous => ({ ready: true, version: previous.version + 1 })); };
   useEffect(() => {
     let alive = true;
     loadAuthOffer({ supabaseUrl: import.meta.env?.VITE_SUPABASE_URL }).then(o => { if (alive) setOffer(o); });
@@ -154,7 +176,10 @@ function AuthPage() {
             margin: "0 0 14px", padding: "12px 14px", borderRadius: 12, textAlign: "center",
             border: `1px solid ${T.accent}`, backgroundColor: T.card, minHeight: reserved.offer, boxSizing: "border-box",
           }}>
+            {offer.action && <p data-auth-offer-action="" style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: T.text, lineHeight: 1.3 }}>{offer.action}</p>}
             <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: T.text, lineHeight: 1.4 }}>{offer.headline}</p>
+            {/* The annual amount and that it renews, before an account is made (funnel 2026-10-14). */}
+            {offer.renewal && <p data-auth-offer-renewal="" style={{ margin: "4px 0 0", fontSize: 12.5, color: T.text, lineHeight: 1.5 }}>{offer.renewal}</p>}
             <p style={{ margin: "4px 0 0", fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{offer.status}</p>
           </div>
         )}
@@ -162,6 +187,15 @@ function AuthPage() {
           Already have an account? Use the same email address.
         </p>
 
+        {chunkNotice && (
+          <div data-auth-chunk-notice="" role="alert" style={{ margin: "0 0 14px", padding: "12px 14px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: T.card, textAlign: "center" }}>
+            <p style={{ margin: "0 0 10px", fontSize: 14, color: T.text, lineHeight: 1.5 }}>Part of the sign in form did not load. Check your connection, then try again.</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              <button type="button" onClick={retryForm} style={{ minHeight: 44, padding: "10px 16px", borderRadius: 10, border: "none", background: T.accent, color: "#fff", fontWeight: 700, fontSize: 15, fontFamily: "inherit", cursor: "pointer" }}>Try again</button>
+              <button type="button" onClick={() => window.location.reload()} style={{ minHeight: 44, padding: "10px 16px", borderRadius: 10, border: `1px solid ${T.border}`, background: T.card, color: T.text, fontWeight: 600, fontSize: 15, fontFamily: "inherit", cursor: "pointer" }}>Reload page</button>
+            </div>
+          </div>
+        )}
         {/* Clerk widget */}
         <div ref={widgetRef} data-auth-widget="" style={{ display: "flex", justifyContent: "center", minHeight: reserved.widget }}>
           {entry.ready && (

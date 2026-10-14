@@ -1,7 +1,7 @@
 import { LIMITED_LAUNCH, limitedOffer, assertLimitedPrice, validateLimitedConfig } from './limitedLaunchCatalog.mjs';
 import { verifiedLimitedPayment, deferredOpeningInvoice, anchorResetInvoice, paidYearCovers } from './limitedLaunchPurchase.mjs';
 import { limitedBillingTiming, assertDeferredSubscription, deferredCheckoutMessage, deferredResumedAfterAnchor } from './limitedBillingTiming.mjs';
-import { BILLING_CATALOG } from './billingCatalog.mjs';
+import { BILLING_CATALOG, CHECKOUT_PAYMENT_METHOD_TYPES } from './billingCatalog.mjs';
 import { createBillingHandlers } from './billingHandlers.mjs';
 import { expiredFoundingCheckoutProof } from './foundingCheckout.mjs';
 
@@ -67,6 +67,32 @@ export function failureLog(route, trace, status, code, error) {
     if (Number.isInteger(error?.statusCode) && error.statusCode >= 100 && error.statusCode <= 599) entry.causeStatus = error.statusCode;
   }
   return entry;
+}
+
+// How long a Checkout stays open (expires_at). Stripe allows 30 minutes to 24 hours.
+export const CHECKOUT_LIFETIME_MS = 2 * 60 * 60 * 1000;
+// A saved Checkout with less than this left is replaced rather than resumed.
+export const CHECKOUT_RESUME_MIN_MS = 15 * 60 * 1000;
+/**
+ * Whether a Checkout gets a Stripe recovery link when it expires
+ * (after_expiration.recovery). Not one that holds a founding place: the link
+ * makes a copy of the session with the same $99 price and metadata, but the
+ * expiry releases the place (release_expired_founding_checkout), so a payment
+ * through it would be a 101st founding price past the cap, and its settlement
+ * refuses ("founding allocation missing"): paid, with the account still
+ * closed. Such a buyer finishes joining in the app, where the offer is
+ * confirmed again before Checkout.
+ */
+export function checkoutRecoverable(quote) {
+  return quote?.public_founding_slot == null;
+}
+/** The recovery link of an expired session as Stripe returns it, or null. */
+export function checkoutRecovery(session) {
+  const recovery = session?.after_expiration?.recovery;
+  if (!recovery || recovery.enabled !== true || typeof recovery.url !== 'string' || recovery.url.length > 2048
+    || !/^https:\/\/(?:buy|checkout)\.stripe\.com\/[A-Za-z0-9_\-/.?=&%]+$/.test(recovery.url)
+    || !Number.isSafeInteger(recovery.expires_at) || recovery.expires_at <= 0) return null;
+  return { url: recovery.url, expiresAt: new Date(recovery.expires_at * 1000).toISOString() };
 }
 
 /** New routes; source defaults OFF. All provider/store I/O is injected for local tests. */
@@ -285,24 +311,35 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
         if (claim.offer_id !== data.offerId) refuse(409, 'checkout_offer_already_selected');
         if (unfinished.length && id(prior.subscription) !== unfinished[0].id) refuse(409, 'subscription_already_exists');
         if (!/^https:\/\/checkout\.stripe\.com\//.test(prior.url || '')) refuse(503, 'checkout_unavailable');
-        return reply(200, { url: prior.url });
+        // A saved Checkout about to end (2 hour lifetime): the buyer would
+        // meet a payment page that expires while they fill it in. It is
+        // expired and replaced the way a switched offer is (supersede: one
+        // transaction retires it and claims again, so a founding place is
+        // kept). Not a scheduled purchase's, nor one with a subscription.
+        const nearlyOver = !unfinished.length && claim.quote?.billing_start_at == null && Number.isFinite(Date.parse(claim.quote?.created_at))
+          && Number.isSafeInteger(prior.expires_at) && prior.expires_at * 1000 < (deps.now?.() ?? Date.now()) + CHECKOUT_RESUME_MIN_MS;
+        if (!nearlyOver) return reply(200, { url: prior.url });
+        claim = await supersede(stripe, customer, profile, live, { attempt_id: claim.attempt_id, state: 'open', session_id: claim.session_id, created_at: claim.quote.created_at }, data, trace);
+        trace.phase = 'claim';
+        if (claim.state === 'existing') refuse(503, 'checkout_pending');
+      } else {
+        if (unfinished.length) refuse(409, 'subscription_already_exists');
+        if (!['expired', 'complete'].includes(prior.status)) refuse(503, 'checkout_unavailable');
+        trace.phase = 'close_attempt';
+        let closed = false;
+        if (prior.status === 'expired' && claim.quote?.public_founding_slot) {
+          const proof = expiredFoundingCheckoutProof(prior, claim.quote, account, config);
+          if (!await deps.store.releaseFoundingCheckout(profile.id, profile.auth_user_id, live, claim.attempt_id, proof)) refuse(503, 'checkout_pending');
+          // The release already marked the attempt expired; closing it again
+          // finds no open attempt and would fail the retry it just made possible.
+          closed = true;
+        }
+        if (!closed) await deps.store.closeCheckout(profile.id, live, claim.attempt_id, prior.status);
+        // A completed session whose subscription has ended (none is unfinished,
+        // checked above) is history: the member claims again, on this request.
+        trace.phase = 'claim';
+        claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
       }
-      if (unfinished.length) refuse(409, 'subscription_already_exists');
-      if (!['expired', 'complete'].includes(prior.status)) refuse(503, 'checkout_unavailable');
-      trace.phase = 'close_attempt';
-      let closed = false;
-      if (prior.status === 'expired' && claim.quote?.public_founding_slot) {
-        const proof = expiredFoundingCheckoutProof(prior, claim.quote, account, config);
-        if (!await deps.store.releaseFoundingCheckout(profile.id, profile.auth_user_id, live, claim.attempt_id, proof)) refuse(503, 'checkout_pending');
-        // The release already marked the attempt expired; closing it again
-        // finds no open attempt and would fail the retry it just made possible.
-        closed = true;
-      }
-      if (!closed) await deps.store.closeCheckout(profile.id, live, claim.attempt_id, prior.status);
-      // A completed session whose subscription has ended (none is unfinished,
-      // checked above) is history: the member claims again, on this request.
-      trace.phase = 'claim';
-      claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
     }
     if (unfinished.length) refuse(409, 'subscription_already_exists');
     if (claim.state === 'quote_expired') refuse(409, 'quote_expired');
@@ -332,15 +369,32 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const metadata = { app: config.app, profile_id: profile.id, clerk_user_id: profile.auth_user_id, offer_id: offer.id, catalog_version: config.version, pricing_policy_version: config.policyVersion, price_phase: offer.pricePhase, checkout_attempt_id: claim.attempt_id };
     if (billingAnchor !== null) metadata.billing_start_at = String(billingAnchor);
     // Stable expiry derives from durable quote creation, not a retry's wall clock.
-    const expiresAt = Math.floor(Math.min(Date.parse(q.created_at) + 86400000, Date.parse(eligibility.expires_at)) / 1000);
+    // Two hours, not Stripe's default 24 (funnel 2026-10-14): an unpaid
+    // Checkout ends sooner, its founding place is released sooner, and the
+    // expiry event arrives while a reminder can still help.
+    const expiresAt = Math.floor(Math.min(Date.parse(q.created_at) + CHECKOUT_LIFETIME_MS, Date.parse(eligibility.expires_at)) / 1000);
     if (!Number.isSafeInteger(expiresAt) || expiresAt < Math.floor((deps.now?.() ?? Date.now()) / 1000) + 1800) refuse(409, 'checkout_needs_reconciliation');
     if (billingAnchor !== null && billingAnchor * 1000 <= (deps.now?.() ?? Date.now())) refuse(409, 'quote_expired');
+    // The verified email, prefilled: Checkout shows the customer's email and
+    // a customer made here had none, so the buyer typed it. Only an empty
+    // one is filled, never a different one replaced. Best effort: without it
+    // Checkout asks for the email as before.
+    if (!customer.email && deps.checkoutEmail) {
+      trace.phase = 'customer_email';
+      try {
+        const email = await deps.checkoutEmail(profile.id, profile.auth_user_id);
+        if (typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254) await stripe.customers.update(customer.id, { email });
+      } catch (e) { try { log(failureLog('checkout', trace, 200, 'customer_email_unavailable', e)); } catch { /* A log must never change the answer. */ } }
+    }
     trace.phase = 'create_session';
     const session = await stripe.checkout.sessions.create({
-      customer: customer.id, mode: 'subscription', line_items: [{ price: price.id, quantity: 1 }], payment_method_collection: 'always', payment_method_types: ['card'],
+      // Card (with Apple Pay and Google Pay) and Link, set here, never left
+      // to the Dashboard: nothing delayed can appear (CHECKOUT_PAYMENT_METHOD_TYPES).
+      customer: customer.id, mode: 'subscription', line_items: [{ price: price.id, quantity: 1 }], payment_method_collection: 'always', payment_method_types: [...CHECKOUT_PAYMENT_METHOD_TYPES],
       success_url: `${origin}/app/?billing=complete`, cancel_url: `${origin}/app/?billing=canceled`, expires_at: expiresAt,
       client_reference_id: profile.id, metadata, subscription_data: { metadata, ...(billingAnchor !== null ? { billing_cycle_anchor: billingAnchor, proration_behavior: 'none' } : {}) },
       ...(billingAnchor !== null ? { custom_text: { submit: { message: deferredCheckoutMessage(q) } } } : {}),
+      ...(checkoutRecoverable(q) ? { after_expiration: { recovery: { enabled: true, allow_promotion_codes: false } } } : {}),
     }, { idempotencyKey: `${config.app}:checkout:${claim.attempt_id}` });
     if (session.livemode !== live || !/^https:\/\/checkout\.stripe\.com\//.test(session.url || '') || !session.id) refuse(503, 'checkout_unavailable');
     trace.phase = 'save_session';
@@ -461,6 +515,17 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       if (session.id !== eventSession.id) refuse(503, 'checkout_unavailable');
       if (session.metadata?.app !== config.app || session.metadata.catalog_version !== config.version) return reply(200, { received: true });
       if (session.status !== 'expired' || session.payment_status !== 'unpaid' || session.subscription !== null) return reply(200, { received: true });
+      // Its recovery link, kept on the attempt for a later "finish joining"
+      // email (nothing is sent here). Best effort: a failure never holds up
+      // the founding release below, and Stripe sends the event again only
+      // on an error answer.
+      const recovery = checkoutRecovery(session);
+      if (recovery && deps.store.recordCheckoutRecovery) {
+        trace.phase = 'record_recovery';
+        try { await deps.store.recordCheckoutRecovery(session.id, live, session.metadata.checkout_attempt_id, recovery.url, recovery.expiresAt); }
+        catch (e) { try { log(failureLog('webhook', trace, 200, 'checkout_recovery_unrecorded', e)); } catch { /* A log must never change the answer. */ } }
+        trace.phase = 'expired_session';
+      }
       const account = await deps.store.accountByCustomer(id(session.customer), live);
       const q = await deps.store.quoteByAttempt(session.metadata?.checkout_attempt_id);
       if (!q?.public_founding_slot) return reply(200, { received: true });
@@ -539,6 +604,15 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const obj = event.data.object;
     const subId = event.type.startsWith('customer.subscription.') ? obj.id : id(obj.subscription) || id(obj.parent?.subscription_details?.subscription);
     if (!subId || (event.type.startsWith('checkout.') && obj.mode !== 'subscription')) return reply(200, { received: true });
+    // A payment made through a recovery link: counted against the expired
+    // session it came from (recovered_from). Best effort, before settlement,
+    // so a duplicate delivery counts it once (the ledger keys on the session).
+    if (event.type === 'checkout.session.completed' && obj.metadata?.app === config.app && deps.store.recordCheckoutRecovered
+      && /^cs_[A-Za-z0-9_]+$/.test(obj.recovered_from || '') && /^cs_[A-Za-z0-9_]+$/.test(obj.id || '')) {
+      trace.phase = 'record_recovered';
+      try { await deps.store.recordCheckoutRecovered(obj.recovered_from, live, obj.id); }
+      catch (e) { try { log(failureLog('webhook', trace, 200, 'checkout_recovered_unrecorded', e)); } catch { /* A log must never change the answer. */ } }
+    }
     trace.phase = 'subscription';
     const stripe = deps.stripe();
     const sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });

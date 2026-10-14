@@ -4,7 +4,7 @@ import { inlineLinkTap } from "../shared/actionButton";
 import { createLimitedLaunchClient } from "../../utils/limitedLaunchClient.js";
 import { readLaunchInvitation, clearLaunchInvitation } from "../../utils/launchInvitation.js";
 import { accessAuthority, canReviewBillingOffer, renewalPaymentFailed } from "../../utils/limitedLaunchAccess.js";
-import { membershipDate, membershipPrice, membershipRenewalCopy, quoteMatchesBetaWindow, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
+import { membershipDate, membershipPrice, membershipRenewalCopy, quoteMatchesBetaWindow, reviewRenewalCopy, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 import { REFUND_COPY } from "../../content/refundCopy.js";
 import { reportError } from "../../lib/errorReport.js";
@@ -183,7 +183,9 @@ function MembershipForAccount({ accountId, onActivated }) {
       const fresh = await freshAccess();
       if (!mine(turn)) return;
       if (!fresh) { refusedHere("checkout", "access_unconfirmed"); setMessage(messages.access_unconfirmed); return; }
-      if (!quoteMatchesBetaWindow(quote, fresh)) { refusedHere("checkout", "quote_expired"); setConsent(false); setMessage(messages.quote_expired); return; }
+      // No Refresh offer button in the review: an expired one closes, and the
+      // page's own review button (Complete payment, Review ... offer) opens a fresh one.
+      if (!quoteMatchesBetaWindow(quote, fresh)) { refusedHere("checkout", "quote_expired"); setConsent(false); setQuote(null); setMessage(messages.quote_expired); return; }
       if (!canReviewBillingOffer(fresh, quote.offerId)) { refusedHere("checkout", "offer_unavailable"); setConsent(false); setMessage(messages.offer_unavailable); return; }
       const result = await client.checkout({ quoteId: quote.quoteId, consentHash: quote.consentHash, consent: true });
       if (!mine(turn)) return;
@@ -318,6 +320,8 @@ function MembershipForAccount({ accountId, onActivated }) {
   // a founding Credential quote includes Practice; the consent text beside it
   // says the same.
   const quotePracticeIncluded = quote?.practiceIncluded ?? (quote?.offerId === "core" && quote?.pricePhase === "founding");
+  // The first renewal's date and amount, under the price (utils/membershipTiming.js).
+  const reviewRenewal = panelShown ? reviewRenewalCopy(quote) : null;
   return <section style={{ color: T.text, lineHeight: 1.6 }} aria-label="Membership">
     <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>Your membership</h2>
     {message && !panelShown && <p ref={messageLine} role="status">{message}</p>}
@@ -366,7 +370,10 @@ function MembershipForAccount({ accountId, onActivated }) {
             {invitation && access?.invitationActivationEnabled !== true && !limitedLaunch.publicSignupEnabled && <p>Invitation activation is not open yet. Please check again later.</p>}
             {access?.accessStatus !== "pending" && <RefundSection carry={refundCarry} />}
             {payFirst ? <div>
-              <p><strong>Complete your payment to open your account.</strong> Your account opens as soon as payment completes; nothing in it is available before then. Every membership has a 100% money-back guarantee on your most recent annual payment.</p>
+              {/* With the review open, one screen: the review says the price, renewal and guarantee (funnel 2026-10-14). */}
+              {panelShown ? <p><strong>Complete your payment to open your account.</strong></p>
+                : <p><strong>Complete your payment to open your account.</strong> Your account opens as soon as payment completes; nothing in it is available before then. Every membership has a 100% money-back guarantee on your most recent annual payment.</p>}
+              {/* Disclosure wording is never hidden: shown with the review open too. */}
               {access?.pricePhase === "founding" && <p>{MEMBERSHIP_COPY.credentialPrices} Viewing an offer does not reserve a founding place.</p>}
               {!(access?.billingEnabled && (access?.checkoutEligible || resumeOffer)) && <p>Payment is not open for this account right now. Please check again later. Nothing has been charged.</p>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -390,8 +397,8 @@ function MembershipForAccount({ accountId, onActivated }) {
     {panelShown && <section style={{ marginTop: 20, padding: 16, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12 }}>
       <h3 ref={offerHeading} tabIndex={-1} style={{ margin: "0 0 8px" }}>{quote.name}</h3>
       {canceledReturn && <p data-billing-canceled="" style={{ margin: "0 0 8px", fontWeight: 600 }}>{BILLING_RETURN_COPY.canceled}</p>}
-      <p><strong>{membershipPrice(quote.annualCents)} per year</strong></p>
-      <p>100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals. Request a refund through Get help in the app or <a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>support@credentialdomd.com</a>.</p>
+      <p style={{ margin: "0 0 4px" }}><strong style={{ fontSize: 22 }}>{membershipPrice(quote.annualCents)} per year</strong></p>
+      {reviewRenewal && <p data-review-renewal="" style={{ margin: "0 0 12px" }}>{reviewRenewal}</p>}
       {quote.paymentTiming === "after_beta" && <div>
         {deferredResumeAfterBeta
           ? <p><strong>Your original beta has ended.</strong> Completing this saved Checkout collects {membershipPrice(quote.annualCents)} for the paid year starting on <time dateTime={quote.firstChargeAt}>{membershipDate(quote.firstChargeAt)}</time>. This resumes your existing checkout; it does not start a second purchase. If you already completed it, check your membership again instead.</p>
@@ -412,7 +419,11 @@ function MembershipForAccount({ accountId, onActivated }) {
         <span data-consent-gate="" onClick={consent ? undefined : tappedUnticked} style={{ display: "inline-flex", cursor: consent ? undefined : "not-allowed" }}>
           <button style={continueStyle} disabled={busy || !consent} onClick={purchase}>{busy ? "Opening payment…" : quote.paymentTiming === "after_beta" ? "Continue to secure checkout" : "Continue to secure payment"}</button>
         </span>
-        <button style={button} disabled={busy} onClick={() => review(quote.offerId)}>Refresh offer</button>
+        {/* The guarantee beside the one button (funnel 2026-10-14). A review
+            whose time ran out is fetched again by itself (above), so there is
+            no separate Refresh offer button. */}
+        <p data-review-guarantee="" style={{ flex: "1 1 220px", margin: 0, fontSize: isDesktop ? 13 : 14, lineHeight: 1.5, color: T.textMuted }}>
+          100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals. Request a refund through Get help in the app or <a href="mailto:support@credentialdomd.com" style={{ color: T.accent, ...inlineLinkTap }}>support@credentialdomd.com</a>.</p>
         {/* Danger red meets 4.5:1 on the panel in both themes; the warning amber did not in light. */}
         {tickHintFor === quote.quoteId && !consent && <span role="status" style={{ color: T.danger, fontSize: isDesktop ? 14 : 16, fontWeight: 600 }}>{TICK_HINT}</span>}
         {/* Why Continue did not open payment, next to it, not at the top of the page. */}

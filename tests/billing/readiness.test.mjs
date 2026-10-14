@@ -107,6 +107,8 @@ test('valid checkout uses server-owned customer, annual catalog price and subscr
   assert.equal(args.customer, 'cus_member_a'); assert.equal(args.metadata.profile_id, 'member-a');
   assert.deepEqual(args.subscription_data.metadata, args.metadata); assert.equal(args.metadata.clerk_user_id, 'user_member_a');
   assert.equal(args.subscription_data.trial_period_days, undefined); assert.equal(options.idempotencyKey, 'credentialdomd:checkout:attempt_a');
+  // Card (with Apple Pay and Google Pay) and Link only, never the Dashboard's list (funnel 2026-10-14).
+  assert.deepEqual(args.payment_method_types, ['card', 'link']);
   assert.equal(args.success_url, 'https://credentialdomd.com/app/?billing=complete');
 });
 test('portal refuses an account whose Stripe ownership metadata does not match', async () => {
