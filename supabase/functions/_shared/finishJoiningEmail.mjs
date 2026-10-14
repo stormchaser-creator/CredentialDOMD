@@ -7,6 +7,13 @@
 // message without a real unsubscribe link and a real mailing address, so it
 // cannot go out with the placeholder in it.
 //
+// Unsubscribe: a sender builds each message with prepareFinishJoiningEmail,
+// which asks whether the profile opted out (public.email_opted_out, list
+// signup_reminders) and makes nothing for one that did, then signs the
+// profile's own unsubscribe link (emailUnsubscribe.mjs) and returns the
+// List-Unsubscribe and List-Unsubscribe-Post headers to send with it. The
+// link opens the email-unsubscribe function through credentialdomd.com/api.
+//
 // Sequence: about 1 hour, 24 hours and 72 hours after the account was made
 // while it is still pending. It stops for good once the account has paid or
 // the person unsubscribed, and never sends two steps at once.
@@ -15,6 +22,8 @@
 // link, unless the caller has one it may use. A founding Checkout gets no
 // recovery link (limitedLaunchHandlers checkoutRecoverable): its $99 place is
 // released at expiry, so the offer is confirmed again in the app first.
+
+import { SIGNUP_REMINDERS, listUnsubscribeHeaders, unsubscribeUrl as signedUnsubscribeUrl } from './emailUnsubscribe.mjs';
 
 /** OFF. Turning this on is Eric's decision, after he approves the wording. */
 export const FINISH_JOINING_EMAIL_ENABLED = false;
@@ -123,4 +132,25 @@ export function draftFinishJoiningEmail({ step, firstName = '', annualCents, fin
     `CredentialDOMD, ${mailingAddress}`,
   ].join('\n');
   return { subject: bodies.subject, text };
+}
+
+/** The opt out list these reminders belong to (email_opt_outs.list). */
+export const FINISH_JOINING_OPT_OUT_LIST = SIGNUP_REMINDERS;
+
+/**
+ * One step for one profile, ready to hand to the email provider, or null when
+ * the profile opted out. isOptedOut(profileId, list) is the sender's database
+ * check (public.email_opted_out) and is required: anything but false skips
+ * the message, and a check that throws sends nothing. secret is
+ * EMAIL_UNSUBSCRIBE_SECRET. The returned headers go on the message as they
+ * are (Resend: the headers field of POST /emails); without them Gmail and
+ * Yahoo show no unsubscribe button of their own.
+ */
+export async function prepareFinishJoiningEmail({ profileId, step, firstName = '', annualCents, finishUrl = APP_URL, mailingAddress, secret, unsubscribeBase, isOptedOut } = {}) {
+  if (typeof isOptedOut !== 'function') throw Error('An opt out check is required');
+  const list = FINISH_JOINING_OPT_OUT_LIST;
+  const url = await signedUnsubscribeUrl({ profileId, list, secret, ...(unsubscribeBase ? { base: unsubscribeBase } : {}) });
+  if (await isOptedOut(profileId, list) !== false) return null;
+  const email = buildFinishJoiningEmail({ step, firstName, annualCents, finishUrl, unsubscribeUrl: url, mailingAddress });
+  return { ...email, unsubscribeUrl: url, headers: listUnsubscribeHeaders(url) };
 }

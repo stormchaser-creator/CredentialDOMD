@@ -17,8 +17,16 @@ message until a real unsubscribe link and a real mailing address are given.
 
 1. The wording below (each sentence can change).
 2. The physical mailing address for the footer (required for commercial email).
-3. The unsubscribe page: it does not exist yet. It must work without signing in
-   and stop every later step.
+3. The unsubscribe page: built, not deployed (branch feat/unsubscribe). Each
+   message gets its own signed link,
+   `https://credentialdomd.com/api/unsubscribe?t=<token>`, with no email or
+   name in it, plus `List-Unsubscribe` and `List-Unsubscribe-Post` headers so
+   Gmail and others can show their own one click button. The page works
+   without signing in; one press records the opt out in `email_opt_outs`, and
+   `prepareFinishJoiningEmail` makes no message for anyone who opted out.
+   Deploy before any send: migration `20261014130000_email_opt_outs.sql`, the
+   secret `EMAIL_UNSUBSCRIBE_SECRET`, the `email-unsubscribe` function
+   (`--no-verify-jwt`), then the Worker in `cloudflare/credentialdomd-api`.
 4. Whether it is sent at all, and from which address (whit@credentialdomd.com
    relays replies to Eric's inbox).
 5. The link. The draft links to the app (`/app/`), where the person signs in,

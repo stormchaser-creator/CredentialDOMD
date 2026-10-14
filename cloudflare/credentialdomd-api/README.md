@@ -11,6 +11,7 @@ Cloudflare (this copy was pulled from the deployed script and then changed).
 | `POST /api/waitlist-attempt` | `waitlist_attempt` | 15 / 10 min       | 60 / 10 min   |
 | `POST /api/pv`               | `track_pv`         | 60 / 10 min       | see below     |
 | `GET /api/confirm-forwarding` | proxies the `forwarding-address` function's GET | 20 / 10 min | 24 h single-use token |
+| `GET, POST /api/unsubscribe` | proxies the `email-unsubscribe` function | 120 / 10 min | signed token, one opt out per profile and list |
 
 The DB caps live in `supabase/migrations/20260816_ratelimit.sql` and are the
 real ceiling on how many Resend welcome emails can be provoked. The Worker
@@ -37,6 +38,14 @@ from a hospital mailbox meets the same content filters this relay exists for.
 The Worker keeps no copy of the token and logs nothing. All three outcomes
 (confirmed, expired, unknown token) come back as HTTP 200 with a page, on
 purpose: a guessed link learns nothing.
+
+`/api/unsubscribe` (2026-10-14) is the unsubscribe link in reminder emails
+and their `List-Unsubscribe` header. It forwards `?t=` and, on a POST, the form
+body and its content type to `functions/v1/email-unsubscribe`. GET returns the
+page with one button and records nothing (mail scanners fetch links); the
+button's POST and the mail provider's RFC 8058 one click POST record the opt
+out. A one click answer stays `text/plain`; everything else is served as
+`text/html`. Deploy the Worker after the migration and the function.
 
 Status codes seen by the landing page: 200 ok, 400 bad address, 409 already
 on the list, 413 body too large, 429 throttled (Worker or DB), 404 unknown path.

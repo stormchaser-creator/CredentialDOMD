@@ -31,6 +31,13 @@
 // they do not submit forms. So this relay must forward POST as well, or the
 // button on the page it serves has nowhere to go.
 //
+// 2026-10-14: also carries /api/unsubscribe, the unsubscribe link in reminder
+// emails (supabase/functions/email-unsubscribe), for the same HTML reason.
+// GET renders a page with one button and records nothing; POST is the button
+// (token in the form) or the mail provider's RFC 8058 one click (token in the
+// query, List-Unsubscribe=One-Click in the body). The query and the body are
+// forwarded as they arrived and nothing is kept.
+//
 // Per-IP limit is an in-memory Map per isolate: best-effort only. Cloudflare
 // runs many isolates across many POPs and recycles them, so a determined
 // client can exceed it; the DB caps are the real ceiling. Good enough to
@@ -148,9 +155,57 @@ async function confirmForwarding(request, url) {
   });
 }
 
+/**
+ * The unsubscribe link, proxied so its page renders as HTML. The function's
+ * status and content type come back unchanged (a one click POST is answered in
+ * plain text); anything else is served as the page.
+ */
+async function unsubscribe(request, url) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  // One click POSTs come from the mail provider's servers, many people per IP.
+  if (rateLimited(`/api/unsubscribe|${ip}`, 120, Date.now())) {
+    return new Response("rate limited", { status: 429, headers: { "Retry-After": "600" } });
+  }
+  const token = url.searchParams.get("t") || "";
+  if (token.length > 120) return new Response("bad request", { status: 400 });
+  const target = `${FUNCTIONS}/email-unsubscribe${token ? `?t=${encodeURIComponent(token)}` : ""}`;
+  let r;
+  if (request.method === "POST") {
+    const type = request.headers.get("Content-Type") || "";
+    if (!/^(application\/x-www-form-urlencoded|multipart\/form-data)/i.test(type)) {
+      return new Response("unsupported media type", { status: 415 });
+    }
+    const body = await request.text();
+    if (body.length > 2048) return new Response("too large", { status: 413 });
+    r = await fetch(target, { method: "POST", headers: { "Content-Type": type, Accept: "text/html" }, body });
+  } else {
+    r = await fetch(target, { headers: { Accept: "text/html" } });
+  }
+  const plain = (r.headers.get("Content-Type") || "").toLowerCase().startsWith("text/plain") && request.method === "POST";
+  return new Response(await r.text(), {
+    status: r.status,
+    headers: {
+      "Content-Type": plain ? "text/plain; charset=utf-8" : "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      "X-Robots-Tag": "noindex",
+      "X-Content-Type-Options": "nosniff",
+      // The function's own policy (no script, the form posts only to this origin).
+      ...(r.headers.get("Content-Security-Policy") ? { "Content-Security-Policy": r.headers.get("Content-Security-Policy") } : {}),
+    },
+  });
+}
+
 export default {
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/unsubscribe") {
+      const m = request.method;
+      // Same as confirm-forwarding: a person opening a link, the form on the
+      // page it returns, and the mail provider's server. No CORS.
+      if (m !== "GET" && m !== "HEAD" && m !== "POST") return new Response("not found", { status: 404 });
+      return await unsubscribe(request, url);
+    }
     if (url.pathname === "/api/confirm-forwarding") {
       const m = request.method;
       // No CORS headers and no OPTIONS: this path is reached by a person
