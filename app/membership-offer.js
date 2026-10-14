@@ -29,7 +29,7 @@ const RATE_LOCKS = Object.freeze({
 // Founding Credential includes Practice, so while founding lasts the $245
 // package is a later price, not a plan beside the $99 one.
 const BUNDLE_LABELS = Object.freeze({ founding: ' / year, after founding', later: ' / year total' });
-const FALLBACK = Object.freeze({ action: 'Create your account', reviewAction: 'See membership plans',
+const FALLBACK = Object.freeze({ action: 'Create your account', renewal: null, reviewAction: 'See membership plans',
   status: 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.',
   headline: 'First 100 paid founding memberships: $99/year', price: '$99', priceLabel: ' / year, founding rate for the first 100 paid members',
   heroHeadline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
@@ -56,7 +56,19 @@ export function offerPresentation(value) {
     : value.availability === 'temporarily_full'
       ? 'Founding checkout is temporarily unavailable. Creating an account does not reserve a place.'
       : 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.';
-  return { action: paused ? 'Create your account for later' : 'Create your account', reviewAction: value.phase === 'founding' ? 'See the $99 founding plan' : `See the ${rate} plan`, status,
+  // The signup buttons say the live annual price while it can be bought now
+  // (funnel 2026-10-14: the price used to appear only after an account was
+  // made). Paused and temporarily full keep their own words: no price can be
+  // paid today. The amount is the validated annualCents above, never a literal.
+  const dollars = `$${value.annualCents / 100}`;
+  const open = value.availability === 'available';
+  return { action: paused ? 'Create your account for later' : open ? `Join for ${dollars} a year` : 'Create your account',
+    // One line beside the sign up form: the annual amount and that it renews,
+    // in the words of the reviewed checkout consent ("due now, then ... each
+    // year while this subscription remains active. Cancel before renewal to
+    // avoid the next annual charge."). Null when nothing can be paid today.
+    renewal: open ? `${dollars} at checkout, then ${dollars} each year while this subscription remains active. Cancel before renewal to avoid the next annual charge.` : null,
+    reviewAction: value.phase === 'founding' ? 'See the $99 founding plan' : `See the ${rate} plan`, status,
     heroHeadline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid members, Practice included while you are a member' : ''}`,
     heroNote: value.phase === 'standard' ? 'One annual membership for your credentials, CME and professional records.' : `Your $${value.annualCents / 100} annual rate stays locked for life while membership remains active.`,
     headline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid founding members, Practice included while you are a member' : ''}.`,
