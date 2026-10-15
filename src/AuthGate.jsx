@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import AuthPage from "./components/pages/AuthPage.jsx";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
+import { recoverStartupModule } from "./utils/startupModule.js";
 import { readLastIdentity } from "./utils/offlineSession";
 import { stashAppDeepLink, takeAppDeepLink } from "./utils/supportDeepLink.js";
 
@@ -20,7 +21,19 @@ import { stashAppDeepLink, takeAppDeepLink } from "./utils/supportDeepLink.js";
 // deploy that replaced it while this page sat open) is fetched again before
 // the error screen.
 export const loadApp = () => import("./App.jsx").catch(() => new Promise(resolve => setTimeout(resolve, 1000)).then(() => import("./App.jsx")));
-const App = lazy(loadApp);
+const App = lazy(() => loadApp().catch(error => {
+  // Prefetch failures never reload a visitor who is entering their email.
+  // This catch runs only while mounting the root App; no workspace exists yet.
+  const recovering = recoverStartupModule(error, {
+    storage: { getItem: key => sessionStorage.getItem(key), setItem: (key, value) => sessionStorage.setItem(key, value) },
+    reload: () => window.location.reload(), online: navigator.onLine,
+    build: import.meta.url,
+  });
+  // Keep Suspense while navigation starts. If a host refuses the reload,
+  // fall back to the existing error screen instead of waiting forever.
+  if (recovering) return new Promise((_, reject) => setTimeout(() => reject(error), 5000));
+  throw error;
+}));
 export const APP_PREFETCH_DELAY_MS = 1500;
 
 const knownMember = () => { try { return !!readLastIdentity(); } catch { return false; } };

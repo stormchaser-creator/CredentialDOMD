@@ -187,10 +187,22 @@ def read_private(path):
         return handle.read().decode('utf-8', 'replace')
 
 
+def write_all(fd, data):
+    remaining = memoryview(data)
+    while remaining:
+        try:
+            written = os.write(fd, remaining)
+        except InterruptedError:
+            continue
+        if written <= 0:
+            raise OSError(errno.EIO, 'private file write made no progress')
+        remaining = remaining[written:]
+
+
 def append_private(path, text):
     fd = open_private(path, os.O_WRONLY | os.O_APPEND, create=True)
     try:
-        os.write(fd, text.encode())
+        write_all(fd, text.encode())
         os.fsync(fd)
     finally:
         os.close(fd)
@@ -200,11 +212,19 @@ def write_private(path, text):
     temporary = f'{path}.{os.getpid()}.tmp'
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:
-        os.write(fd, text.encode())
-        os.fsync(fd)
+        try:
+            write_all(fd, text.encode())
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(temporary, path)
     finally:
-        os.close(fd)
-    os.replace(temporary, path)
+        # Only reached after this invocation created the exclusive temporary.
+        # Preserve the previous state on write, sync or replacement failure.
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
 
 
 # ─── The ticket runner's alert queue ───────────────────────────────────────
