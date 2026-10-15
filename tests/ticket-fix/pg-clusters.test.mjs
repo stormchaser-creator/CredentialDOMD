@@ -20,9 +20,11 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { acquirePgSlot, withSlotWait, defaultSlotDir } from '../helpers/pg-slot.mjs';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
-import { sandboxAvailable, shortTmpRoot, RUN_PG_SLOTS } from '../../scripts/ticket-fix/sandbox.mjs';
-import { stopRecordedClusters, processCommand } from '../../scripts/ticket-fix/pg-clusters.mjs';
+import { sandboxAvailable, sandboxProfile, SANDBOX_EXEC, shortTmpRoot, RUN_PG_SLOTS } from '../../scripts/ticket-fix/sandbox.mjs';
+import { stopRecordedClusters, processCommand, removeOrphanSemaphores } from '../../scripts/ticket-fix/pg-clusters.mjs';
 import { launch } from '../../scripts/ticket-fix/worker.mjs';
+import { prepareSemaphoreObserver, semaphoreSets, cleanObservedSemaphoreFixture } from '../helpers/pg-semaphore-observer.mjs';
+const requiresSysvSemaphores = process.platform === 'darwin';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const url = file => pathToFileURL(path.resolve(HERE, file)).href;
@@ -104,17 +106,33 @@ console.log('init ' + init.pid);
 init.on('exit', (code, signal) => console.log('initdb-exit ' + code + ' ' + signal));
 process.stdin.on('data', d => { if (String(d).includes('release')) { s.release(); console.log('released'); process.exit(0); } });`;
 async function orphan(t, { alive = false } = {}) {
+  if (requiresSysvSemaphores) prepareSemaphoreObserver();
   for (let attempt = 0; attempt < 8; attempt++) {
     const root = scratch(t, 'pg-orphan-');
     const data = path.join(root, 'data'), pool = path.join(root, 'slots');
     const c = child(process.execPath, ['--input-type=module', '-e', OWNER({ data, alive })], { PG_TEST_SLOT_DIR: pool, PG_TEST_SLOTS: '1' }, { detached: true });
     t.after(() => { try { process.kill(-c.proc.pid, 'SIGKILL'); } catch { /* gone */ } });
     const init = Number(await c.line('init '));
-    let keys = null, caught = false;
+    let keys = null, caught = false, recordedInode = null, semaphores = [];
+    t.after(async () => {
+      // Own process groups only. This also runs after the old-source assertion
+      // fails; the cleanup binary was compiled before starting any PostgreSQL.
+      for (const pid of alive ? [init, c.proc.pid] : [c.proc.pid]) {
+        try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ }
+      }
+      await until(() => !running(init) && !running(c.proc.pid), 10000);
+      if (requiresSysvSemaphores && recordedInode) {
+        const clean = () => { cleanObservedSemaphoreFixture(recordedInode); return semaphoreSets(recordedInode).length === 0; };
+        assert.equal(await until(clean, 10000), true, 'the test cleanup leaves no own semaphore after a failed counterfactual');
+        t.diagnostic(JSON.stringify({ cleanupDataInode: recordedInode, remainingSemaphoreIds: [] }));
+      }
+    });
     for (const end = Date.now() + 20000; Date.now() < end && !c.output().includes('initdb-exit');) {
       const ino = inodeOf(data);
-      if (ino !== null) keys = keysOf(ino);
+      if (ino !== null) { keys = keysOf(ino); recordedInode = String(ino); }
       if (keys && segmentsOf(keys).some(s => s.nattch > 0)) {
+        semaphores = requiresSysvSemaphores ? semaphoreSets(recordedInode).filter(s => s.nsems === 20 && s.marker === 537) : [];
+        if (requiresSysvSemaphores && !semaphores.length) { await sleep(5); continue; }
         try { process.kill(alive ? -init : -c.proc.pid, 'SIGKILL'); caught = true; } catch { /* ended meanwhile */ }
         break;
       }
@@ -126,7 +144,11 @@ async function orphan(t, { alive = false } = {}) {
     // Whatever a failed assertion leaves, this test removes.
     t.after(() => { for (const s of left) if (segments().some(x => x.id === s.id && x.nattch === 0)) ipcrm(s.id); });
     if (!left.length) { try { process.kill(-c.proc.pid, 'SIGKILL'); } catch { /* gone */ } continue; }
-    return { c, root, data, pool, keys, ids: left.map(s => s.id) };
+    if (requiresSysvSemaphores) {
+      assert.ok(semaphoreSets(recordedInode).length > 0, 'actual SIGKILL left the recorded PostgreSQL semaphore sets');
+      t.diagnostic(JSON.stringify({ ownedDataInode: recordedInode, orphanSemaphoreIds: semaphores.map(s => s.id) }));
+    }
+    return { c, root, data, pool, keys, inode: recordedInode, semaphores, ids: left.map(s => s.id) };
   }
   throw Error('could not catch an initdb backend attached to its segment');
 }
@@ -146,6 +168,7 @@ s = pg_slot.acquire(label='py-reclaimer', timeout=30); print('got', s.name); s.r
     const r = await py.done;
     assert.equal(r.code, 0, r.out + r.err);
     assert.deepEqual(present(o.ids), [], 'python removed the orphaned segment before it took the slot');
+    if (requiresSysvSemaphores) assert.deepEqual(semaphoreSets(o.inode), [], 'python also removed all recorded orphan semaphore sets');
     o = await orphan(t);
     await o.c.done;
   }
@@ -154,6 +177,7 @@ s = pg_slot.acquire(label='py-reclaimer', timeout=30); print('got', s.name); s.r
   const s = await acquirePgSlot(null, { dir: o.pool, slots: 1, timeoutMs: 30000 });
   s.release();
   assert.deepEqual(present(o.ids), [], 'node removed the orphaned segment before it took the slot');
+  if (requiresSysvSemaphores) assert.deepEqual(semaphoreSets(o.inode), [], 'node also removed all recorded orphan semaphore sets');
 });
 
 test('an owner whose initdb was killed removes the orphaned segment when it gives its slot back', { skip: pgSkip(), timeout: withSlotWait(120000) }, async t => {
@@ -164,6 +188,26 @@ test('an owner whose initdb was killed removes the orphaned segment when it give
   o.c.proc.stdin.write('release\n');
   await o.c.line('released', 30000);
   assert.deepEqual(present(o.ids), [], 'release() removed the segment its killed initdb left');
+  if (requiresSysvSemaphores) assert.deepEqual(semaphoreSets(o.inode), [], 'release also removed all recorded orphan semaphore sets');
+});
+
+test('the scoped semaphore helper compiles and removes only the orphan inside the gates sandbox', {
+  skip: pgSkip() || !requiresSysvSemaphores || (sandboxAvailable() ? false : 'macOS gates sandbox unavailable'), timeout: withSlotWait(120000),
+}, async t => {
+  const cover = await acquirePgSlot(null, { label: 'pg-clusters.test sandbox semaphore' });
+  t.after(() => cover.release());
+  const o = await orphan(t);
+  await o.c.done;
+  const tmp = scratch(t, 'pg-semaphore-gates-');
+  const profile = path.join(tmp, 'gate.sb');
+  fs.writeFileSync(profile, sandboxProfile({ kind: 'gates', home: os.homedir(), writable: [tmp] }));
+  const helper = fileURLToPath(new URL('../../scripts/ticket-fix/pg-semaphores.py', import.meta.url));
+  const r = spawnSync(SANDBOX_EXEC, ['-f', profile, '/usr/bin/python3', helper, o.inode], {
+    env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', TMPDIR: tmp + '/' }, encoding: 'utf8', timeout: 30000,
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout).sort((a,b) => a-b), o.semaphores.map(s => s.id).sort((a,b) => a-b), 'the real sandbox removed exactly its recorded orphan sets');
+  assert.deepEqual(semaphoreSets(o.inode), []);
 });
 
 // A cluster a gate's test started, whose test process was then killed with
@@ -210,12 +254,19 @@ test('a runner stopped by a signal stops the clusters its gates left running, an
   assert.equal(running(postmaster), true, 'the postmaster outlived its test process');
   const keys = keysOf(ino);
   assert.ok(segmentsOf(keys).some(s => s.nattch > 0), 'and holds its segment');
+  if (requiresSysvSemaphores) {
+    const liveSets = semaphoreSets(ino);
+    assert.ok(liveSets.length > 0);
+    assert.deepEqual(removeOrphanSemaphores([ino]), [], 'the helper refuses a live owned PostgreSQL cluster');
+    assert.deepEqual(semaphoreSets(ino), liveSets, 'all live cluster semaphore identities remain');
+  }
   // The shell's 3-hour alarm.
   driver.proc.kill('SIGALRM');
   const end = await driver.done;
   assert.equal(end.code, 142, driver.output());
   assert.equal(await until(() => !running(postmaster), 20000), true, 'the stop handler stopped the cluster its records named');
   assert.deepEqual(segmentsOf(keys), [], 'and its segment is free');
+  if (requiresSysvSemaphores) assert.deepEqual(semaphoreSets(ino), [], 'the stopped owned cluster has no semaphore residue');
   assert.equal(fs.existsSync(pool), false, 'the run\'s slot directory is gone');
   assert.equal(fs.existsSync(tmp), false, 'so is the gate\'s temporary directory, with the data directory');
 });
@@ -249,7 +300,9 @@ test('a new run stops the clusters a SIGKILLed runner left and removes its slot 
   const next = runSlotDir();
   t.after(() => fs.rmSync(next, { recursive: true, force: true }));
   assert.equal(await until(() => !running(postmaster), 20000), true, 'the dead runner\'s cluster was stopped');
-  assert.deepEqual(segmentsOf(keysOf(ino)), [], 'its segment is free');
+  // The postmaster can exit before its remaining backends detach. Observe
+  // completion of this owned cluster's cleanup, without touching other IPC.
+  assert.equal(await until(() => segmentsOf(keysOf(ino)).length === 0, 20000), true, 'its segment is free');
   assert.equal(fs.existsSync(pool), false, 'the dead runner\'s slot directory was removed');
   assert.equal(fs.existsSync(deadTmp), false, 'so was its temporary directory');
   assert.equal(fs.existsSync(liveTmp), true, 'a live runner\'s stays');

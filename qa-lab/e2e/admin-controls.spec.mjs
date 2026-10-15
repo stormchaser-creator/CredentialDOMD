@@ -16,8 +16,18 @@ async function openAdmin(page, section) {
 }
 async function findAccount(page, text) {
   await openAdmin(page, 'Accounts');
-  await page.getByRole('searchbox', { name: 'Search loaded accounts' }).fill(text);
-  await sleep(800);
+  // Reopening Admin mounts the page again: the Accounts list renders once, then its section
+  // read starts and the list is replaced when it lands. A search typed in between was lost and
+  // the first "Pause access" on the unfiltered list was another member's (2026-10-01, after
+  // Refresh). Type once the read has landed, and again if the box was emptied.
+  const box = page.getByRole('searchbox', { name: 'Search loaded accounts' });
+  for (let i = 0; i < 5; i++) {
+    await page.getByText(/Account records: \d+ loaded/).first().waitFor({ timeout: 20000 }).catch(() => {});
+    await page.getByText(/^(Loading|Refreshing)…$/).first().waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+    await box.fill(text);
+    await sleep(800);
+    if ((await box.inputValue().catch(() => '')) === text) return;
+  }
 }
 
 test('owner controls: pause and restore access, lifetime grant, view as member, owner message', {
@@ -95,11 +105,17 @@ test('owner controls: pause and restore access, lifetime grant, view as member, 
   }, { soft: true });
 
   await qa.feature('AUTH-008', 'The paused member sees the "Access paused" screen', async () => {
+    const faultSince = new Date().toISOString();
     await t.page.reload();
     await sleep(6000);
     const seen = (await t.page.locator('body').innerText()).replace(/\s+/g, ' ');
-    await t.page.screenshot({ path: (await qa.shot('member sees paused')).replace(/\.png$/, '-member.png') });
+    await qa.shot('member sees paused', t.page);
     qa.check('the member sees a paused-access screen, not the app', /paused/i.test(seen) && !/Search everything, or ask Vera/.test(seen), seen.slice(0, 200));
+    const reports = await waitFor('the revoked enrollment refusal report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${member.user.id}' and message = 'Membership enrollment failed (http:403:membership_unavailable)'`);
+      return found.length ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(reports, { message: 'Membership enrollment failed (http:403:membership_unavailable)', kind: 'error', authUserId: member.user.id, count: 1, reason: 'AUTH-008 deliberately paused this member through the admin control, then reloaded their page to verify the refused enrollment and paused screen.' });
   }, { soft: true });
 
   await qa.feature('ADMIN-001', 'Restore (Approve) the paused member\'s access', async () => {
@@ -194,7 +210,7 @@ test('owner controls: pause and restore access, lifetime grant, view as member, 
     await goTab(t.page, 'Home');
     const card = t.page.getByText('QA hello from the owner').first();
     const shown = await card.waitFor({ timeout: 20000 }).then(() => true, () => false);
-    await t.page.screenshot({ path: (await qa.shot('member home message')).replace(/\.png$/, '-member.png') });
+    await qa.shot('member home message', t.page);
     qa.check('the message shows on Home', shown);
     if (!shown) return;
     await card.click();

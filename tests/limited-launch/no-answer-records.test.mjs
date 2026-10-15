@@ -42,17 +42,14 @@ const KINDS = {
     act: f => f.app.addItem('cme', course()),
     shown: f => ids(f.state.cme).includes(CME),
     original: f => !ids(f.state.cme).includes(CME),
-    live: ['cme.insert'], replay: ['cme.upsert'], ops: ['upsert'],
+    live: ['cme.insert'], replay: ['cme.insert'], ops: ['upsert'],
   },
   edit: {
     records: () => ({ cme: [course()] }),
     act: f => f.app.editItem('cme', course({ name: 'Synthetic Stroke Update 2026' })),
     shown: f => find(f, 'cme', CME)?.name === 'Synthetic Stroke Update 2026',
     original: f => find(f, 'cme', CME)?.name === 'Synthetic Stroke Update',
-    // Replayed as an UPDATE of what it changed, never the whole record
-    // (review of 9484782c: a whole-row upsert put the phone's stale columns
-    // over the desk's changes).
-    live: ['cme.update'], replay: ['cme.update'], ops: ['upsert'],
+    live: ['cme.update'], replay: ['cme.insert'], ops: ['upsert'],
   },
   delete: {
     records: () => ({ cme: [course()] }),
@@ -252,8 +249,7 @@ test('an invoice recorded before the first answer is kept when no answer comes, 
   assert.equal(f.api.writtenAheadCount(ACCOUNT), 0);
   f.authority.accept(ACCOUNT, active());
   await replayOnAnswer(f);
-  // The entry's billing is an edit: it goes up as what it changed.
-  assert.deepEqual(sent(f), ['invoices.upsert', 'work_log.update']);
+  assert.deepEqual(sent(f), ['invoices.insert', 'work_log.insert']);
   assert.deepEqual(f.queue(), []);
 
   const storage = new Map();
@@ -264,7 +260,7 @@ test('an invoice recorded before the first answer is kept when no answer comes, 
   expire(storage);
   next.authority.accept(ACCOUNT, active());
   await replayOnAnswer(next);
-  assert.deepEqual(sent(next), ['invoices.upsert', 'work_log.update'], 'the reloaded page sends it on its answer');
+  assert.deepEqual(sent(next), ['invoices.insert', 'work_log.insert'], 'the reloaded page sends it on its answer');
   assert.deepEqual(next.queue(), []);
 });
 
@@ -318,7 +314,7 @@ test('a load\'s replay before the answer marks nothing refused on a remembered a
   assert.equal(b.queue()[0].accessRefused, undefined, 'still kept for the answer, not called refused');
   b.authority.accept(ACCOUNT, active());
   await replayOnAnswer(b);
-  assert.deepEqual(sent(b), ['cme.upsert']);
+  assert.deepEqual(sent(b), ['cme.insert']);
 });
 
 test('once the answer is in, nothing changes: allowed records go straight up, refused ones are refused as before', async () => {

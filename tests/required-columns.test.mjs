@@ -35,9 +35,11 @@ for (const [key, field] of Object.entries(TYPE_AND_CATEGORY)) {
     // A row already stuck in a device's queue from before this fix.
     f.values.set('ops:user_syntheticA', JSON.stringify([{ op: 'upsert', collectionKey: key, payload: { id: `${key}-3`, [field]: null }, ts: 1, queueId: 'q' }]));
     await f.api.replayPendingOps('profileA', 'user_syntheticA');
-    const rows = f.requests.flatMap((r) => [].concat(r.value));
+    const rows = f.requests.filter(r => ['insert', 'upsert'].includes(r.method)).flatMap((r) => [].concat(r.value));
     assert.equal(rows.length, 3);
     for (const row of rows) assert.equal(row[snake(field)], 'Other', `${row.id}: ${JSON.stringify(row)}`);
+    assert.equal(f.requests.filter(r => r.method === 'select').length, 1, 'replay checks for an existing row before inserting');
+    assert.deepEqual(f.queue(), [], 'the acknowledged replay leaves no stranded record');
   });
 
   test(`${key}: an edit that clears ${field} leaves the column out instead of sending null`, async () => {

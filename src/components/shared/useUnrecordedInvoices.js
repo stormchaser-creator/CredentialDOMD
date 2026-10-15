@@ -162,7 +162,7 @@ export default function useUnrecordedInvoices(invoices, { kind, contractId = nul
   // One whose share sheet on this page still has the file (Mail open over the
   // app while a cover note is written) is not unrecorded yet: counted only
   // once the sheet answers, or on a page that never saw it answer.
-  const count = list.filter(n => !shareInFlight(n.number)).length;
+  const count = list.filter(n => !shareInFlight(n.number, account)).length;
   useEffect(() => { left.current = count; });
   const any = count > 0;
   // A note that never became an invoice is reported (the event and a count)

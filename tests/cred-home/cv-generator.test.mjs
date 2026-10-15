@@ -44,7 +44,7 @@ test('a failed copy says it failed', async () => {
 // courses, work, training, insurance and references. The Locum tile then
 // said "Add credentials first" with an import prompt to a member with
 // records, and Copy and Save PDF exported a CV with only its header.
-const mountRecording = async (data) => {
+const mountRecording = async (data, pdfResult = 'download') => {
   const calls = [];
   const m = await mountComponent('src/components/features/CVGenerator.jsx', {
     app: { data, theme: {} },
@@ -52,7 +52,7 @@ const mountRecording = async (data) => {
       cvContent: await import('../../src/utils/cvContent.js'),
       shareText: await import('../../src/utils/shareText.js'),
       helpers: { copyToClipboard: async (t) => { calls.push(['copy', t]); return true; } },
-      cvPdf: { shareCvPdf: async () => { calls.push(['pdf']); return 'download'; } },
+      cvPdf: { shareCvPdf: async (...args) => { calls.push(['pdf', args[2]]); return pdfResult; } },
     },
   });
   const button = (re) => m.nodes().find(n => n.type === 'button' && re.test(m.text(n)));
@@ -63,6 +63,22 @@ const PUBLICATIONS_ONLY = {
   publications: [{ id: 'p', citation: 'Synthetic A. A synthetic paper. J Synth. 2020.' }],
   memberships: [{ id: 'm', organization: 'Synthetic Society', role: 'Member' }],
 };
+
+test('Save PDF selects file-only saving; formatted sharing stays separate and neither confirms delivery or saving', async () => {
+  for (const result of ['share', 'download']) {
+    const { m, calls, button } = await mountRecording(PUBLICATIONS_ONLY, result);
+    await button(/^Save PDF$/).props.onClick();
+    assert.equal(calls.at(-1)[0], 'pdf');
+    assert.deepEqual(Object.keys(calls.at(-1)[1]), ['filesOnly']);
+    assert.equal(calls.at(-1)[1].filesOnly, true);
+    assert.match(m.pageText(), result === 'share' ? /File saving requested\. Confirm the save/ : /PDF download requested\. Confirm saving/);
+    assert.doesNotMatch(m.pageText(), /PDF downloaded\.|PDF saved\./);
+    await button(/^Share with message$/).props.onClick();
+    assert.equal(calls.at(-1)[0], 'pdf');
+    assert.equal(calls.at(-1)[1].filesOnly, false);
+    if (result === 'share') assert.match(m.pageText(), /Sharing requested\. Finish sending/);
+  }
+});
 
 test('a record with publications only: the Locum Tenens tile names what that CV lists, not "Add credentials first"', async () => {
   const { m, button } = await mountRecording(PUBLICATIONS_ONLY);

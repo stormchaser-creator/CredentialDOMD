@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 export const KEY_SPAN = 10;
 // The slots of one run's slot directory (sandbox.mjs runSlotDir, slotEnv):
@@ -133,6 +134,16 @@ export function removeOrphanSegments(inodes, { segments = sysvSegments, remove =
   return removed;
 }
 
+// PostgreSQL also leaves SysV semaphore sets after SIGKILL. Cleanup visits only
+// the same recorded directory inodes, and the native helper checks the exact
+// PG marker, owner, dead creator/all users and unchanged cells before removal.
+export function removeOrphanSemaphores(inodes) {
+  if (!Array.isArray(inodes) || !inodes.length || inodes.length > 64 || inodes.some(i => typeof i !== 'string' || !INODE.test(i))) return [];
+  const result = spawnSync('python3', [fileURLToPath(new URL('./pg-semaphores.py', import.meta.url)), ...inodes], { encoding: 'utf8', env: { ...TOOL_ENV, TMPDIR: os.tmpdir() }, timeout: 30000, maxBuffer: 65536 });
+  if (result.status !== 0) return [];
+  try { const ids = JSON.parse(result.stdout); return Array.isArray(ids) && ids.every(Number.isInteger) ? ids : []; } catch { return []; }
+}
+
 // A process's command line from /bin/ps, or null (the host can always run
 // it; inside the runner's sandbox the setuid ps does not run).
 export function processCommand(pid) {
@@ -199,6 +210,8 @@ export function stopRecordedClusters(dir, { waitMs = STOP_WAIT_MS, budgetMs = LO
     try { process.kill(pid, 'SIGQUIT'); stopped.push(pid); } catch { /* gone meanwhile */ }
   }
   for (const until = Date.now() + waitMs; stopped.some(running) && Date.now() < until;) sleepSync(50);
-  const segments = removeOrphanSegments([...new Set(records.flatMap(clusterInodes))]);
+  const inodes = [...new Set(records.flatMap(clusterInodes))];
+  const segments = removeOrphanSegments(inodes);
+  removeOrphanSemaphores(inodes);
   return { stopped, running: stopped.filter(running), segments };
 }

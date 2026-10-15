@@ -269,7 +269,7 @@ for (const name of ['Work log', 'Days & call', 'Expenses']) {
     inputOf(m, 'Invoice number').props.onChange({ target: { value: number } });
     tap(m, t => t === 'Record as sent', 'Record as sent'); await settle();
     assert.deepEqual(recorded(m).map(i => i.number), [number], 'recorded once under that number');
-    const owedBefore = S.owedStamps('');
+    const owedBefore = S.owedStamps('user_synthetic');
     assert.ok(owedBefore.some(o => o.number === number && o.shared === false), 'the record\'s unstamp waits for the record');
     const stampsBefore = stamps.length;
 
@@ -277,8 +277,8 @@ for (const name of ['Work log', 'Days & call', 'Expenses']) {
     assert.equal(recorded(m).length, 1, 'not recorded twice');
     assert.equal(stamps.slice(stampsBefore).some(([n, on]) => n === number && on), false, 'not stamped as shared again');
     assert.equal(srv.rows.has(number), false, 'the server holds no stamp');
-    assert.ok(S.owedStamps('').some(o => o.number === number && o.shared === false), 'the unstamp still waits');
-    assert.ok(!S.invoiceNotes('').some(n => n.number === number), 'no note on the device');
+    assert.ok(S.owedStamps('user_synthetic').some(o => o.number === number && o.shared === false), 'the unstamp still waits');
+    assert.ok(!S.invoiceNotes('user_synthetic').some(n => n.number === number), 'no note on the device');
 
     // Deleted on another device: nothing here asks about it again.
     const again = withServer(s.mount({ ...s.seed(), invoices: [] }), srv);
@@ -306,7 +306,7 @@ test('Expenses: No, closed, then another device records that number, then the la
   sh.answer(); await settle(); await wait(5); await settle();
   assert.deepEqual(recorded(m), [], 'nothing recorded here');
   assert.equal(stamps.length, before, 'no stamp sent again');
-  assert.ok(!S.invoiceNotes('').some(n => n.number === number), 'no note');
+  assert.ok(!S.invoiceNotes('user_synthetic').some(n => n.number === number), 'no note');
 });
 
 test('the late send after No and a close still keeps its note when nothing recorded the number (must still pass)', async () => {
@@ -344,7 +344,7 @@ async function refusedHere(name) {
   sh.answer(); await settle(); await wait(20); await settle();
   assert.equal(recorded(m).length, 0, 'the record was refused');
   assert.ok(JSON.stringify(m.storage.unrecordedInvoices || []).includes(number), 'the refused record is kept on the device');
-  assert.ok(S.invoiceNotes('').some(n => n.number === number && n.refused), 'and kept with the handoff notes');
+  assert.ok(S.invoiceNotes('user_synthetic').some(n => n.number === number && n.refused), 'and kept with the handoff notes');
   return { s, m, srv, number };
 }
 
@@ -358,7 +358,7 @@ test('Expenses: a refused record recorded on another device, then deleted there,
   synced.render(); await settle(); synced.render(); await settle();
   assert.ok(!shown(synced).includes(number), 'hidden while it is on the Invoices tab');
   assert.ok(!JSON.stringify(synced.storage.unrecordedInvoices || []).includes(number), 'the kept note is dropped, not only hidden');
-  assert.ok(!S.invoiceNotes('').some(n => n.number === number), 'the handoff note is dropped too');
+  assert.ok(!S.invoiceNotes('user_synthetic').some(n => n.number === number), 'the handoff note is dropped too');
   await wait(5); await settle();
   assert.equal(srv.rows.has(number), false, 'its share stamp goes once the record is there');
 

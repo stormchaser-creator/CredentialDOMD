@@ -221,7 +221,7 @@ for (const name of ['Work log', 'Days & call', 'Expenses']) {
     assert.deepEqual(recorded(m), [], 'the closed preview records nothing');
     assert.deepEqual(stamps.map(([, on]) => on), [true, false, true], 'stamped as shared again');
     assert.equal(srv.rows.has(number), true, 'the server holds the stamp');
-    assert.ok(S.invoiceNotes('').some(n => n.number === number && n.handed), 'the device holds the note');
+    assert.ok(S.invoiceNotes('user_synthetic').some(n => n.number === number && n.handed), 'the device holds the note');
     assert.ok(reminds(m, number), 'the reminder asks');
 
     await tap(m, t => t === YES, YES); await settle();
@@ -242,7 +242,7 @@ for (const name of ['Work log', 'Days & call', 'Expenses']) {
     sh.answer(); await settle(); await wait(5); await settle();
     assert.equal(recorded(m).length, 1, 'not recorded twice');
     assert.equal(stamps.length, before, 'no stamp sent again');
-    assert.ok(!S.invoiceNotes('').some(n => n.number === number), 'no note');
+    assert.ok(!S.invoiceNotes('user_synthetic').some(n => n.number === number), 'no note');
   });
 
   test(`${name}: the preview closed without No, then the sheet reports the send: the note it already had stays, stamped once (must still pass)`, async () => {
@@ -379,8 +379,8 @@ test('Work log opened on another agreement: an invoice from Synthetic Hospital i
 test('Home and the Invoices tab list every unanswered invoice with the screen that answers it', async () => {
   fresh();
   const at = new Date().toISOString();
-  S.keepInvoiceNote('', { number: 'INV-20260910-07', sentAt: at, kind: 'INV', contractId: 'c-s', total: 2000, days: ['2026-09-05'], handed: true });
-  S.keepInvoiceNote('', { number: 'EXP-20260910-03', sentAt: at, kind: 'EXP', contractId: null, total: 38.5, expenseIds: ['x2'], handed: true });
+  S.keepInvoiceNote('user_synthetic', { number: 'INV-20260910-07', sentAt: at, kind: 'INV', contractId: 'c-s', total: 2000, days: ['2026-09-05'], handed: true });
+  S.keepInvoiceNote('user_synthetic', { number: 'EXP-20260910-03', sentAt: at, kind: 'EXP', contractId: null, total: 38.5, expenseIds: ['x2'], handed: true });
   const opened = [];
   const card = mount(UnansweredInvoices, { data: { locumContracts: [STIPEND], invoices: [] }, props: { onOpen: (n) => opened.push(n.number) } });
   const text = shown(card);
@@ -417,16 +417,16 @@ for (const name of Object.keys(SCREENS)) {
     assert.deepEqual(recorded(m).map(i => i.number), [number], 'recorded on the device');
     assert.deepEqual(stamps.map(([, on]) => on), [true], 'the stamp stays: the record has not reached the server');
     assert.equal(srv.rows.has(number), true);
-    assert.deepEqual(S.owedStamps(''), [{ number, shared: false }], 'the unstamp is owed');
+    assert.deepEqual(S.owedStamps('user_synthetic'), [{ number, shared: false }], 'the unstamp is owed');
     assert.ok(asked.includes(number), 'the server was asked for the invoice');
     assert.ok(!reminds(m, number), 'this device shows no reminder: it is recorded here');
 
     // The record lands (the next load replays it); the next resend clears the stamp.
     there = true;
-    await S.refreshInvoiceNotes(''); await settle();
+    await S.refreshInvoiceNotes('user_synthetic'); await settle();
     assert.deepEqual(stamps.map(([, on]) => on), [true, false]);
     assert.equal(srv.rows.has(number), false);
-    assert.deepEqual(S.owedStamps(''), []);
+    assert.deepEqual(S.owedStamps('user_synthetic'), []);
   });
 }
 
@@ -435,7 +435,7 @@ test('the unstamp after a record: a read without a session is not an answer; Mar
   mount(WorkLog, { data: {} });
   withServer({}, srv);
   const asked = invoicesOnServer(() => ({ data: null, error: { message: 'No signed-in session to read this with.', code: '' } }));
-  S.keepInvoiceNote('acct', { number: 'INV-20260910-21', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s', handed: true });
+  (globalThis.__screen.activeUserId = 'acct', S.keepInvoiceNote)('acct', { number: 'INV-20260910-21', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s', handed: true });
   S.forgetInvoiceNote('acct', 'INV-20260910-21', { unstamp: true, recordedAs: 'A-17' });
   await settle();
   assert.deepEqual(asked, ['A-17'], 'asked about the number it was recorded under');
@@ -480,19 +480,19 @@ for (const name of Object.keys(SCREENS)) {
     sh.abort(); await settle();
     await tap(m, t => t === YES, YES); await settle();
     assert.deepEqual(recorded(m).map(i => i.number), [number]);
-    assert.deepEqual(S.owedStamps(''), [{ number, shared: true }, { number, shared: false }], 'the share stamp is still owed beside the unstamp');
+    assert.deepEqual(S.owedStamps('user_synthetic'), [{ number, shared: true }, { number, shared: false }], 'the share stamp is still owed beside the unstamp');
 
     // The network is back before the record's own write lands.
     srv.down = false;
-    await S.refreshInvoiceNotes(''); await settle();
+    await S.refreshInvoiceNotes('user_synthetic'); await settle();
     assert.equal(srv.rows.has(number), true, 'the server holds the share stamp: the Mac sees it went');
     assert.deepEqual((await srv.listShared()).data.map(r => r.number), [number]);
-    assert.deepEqual(S.owedStamps(''), [{ number, shared: false }]);
+    assert.deepEqual(S.owedStamps('user_synthetic'), [{ number, shared: false }]);
 
     there = true;
-    await S.refreshInvoiceNotes(''); await settle();
+    await S.refreshInvoiceNotes('user_synthetic'); await settle();
     assert.equal(srv.rows.has(number), false, 'cleared once the record is there');
-    assert.deepEqual(S.owedStamps(''), []);
+    assert.deepEqual(S.owedStamps('user_synthetic'), []);
     assert.deepEqual(stamps.filter(x => x[2] !== 'failed').map(([, on]) => on), [true, false], 'in that order');
   });
 }
@@ -500,7 +500,7 @@ for (const name of Object.keys(SCREENS)) {
 test('No after a failed share stamp still takes both back at once (must still pass)', async () => {
   fresh(); const srv = flakyServer();
   withServer(mount(WorkLog, { data: {} }), srv);
-  S.handOffInvoice('acct', { number: 'INV-20260910-31', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s' });
+  (globalThis.__screen.activeUserId = 'acct', S.handOffInvoice)('acct', { number: 'INV-20260910-31', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s' });
   await settle();
   assert.deepEqual(S.owedStamps('acct'), [{ number: 'INV-20260910-31', shared: true }]);
   srv.down = false;
@@ -525,16 +525,16 @@ test('Invoices tab: an invoice deleted before its record reached the server take
   await settle();
   assert.ok(tab.calls.some(c => c[0] === 'delete' && c[1] === 'invoices'), 'deleted');
   assert.equal(srv.rows.has(number), false, 'the stamp is gone');
-  assert.deepEqual(S.owedStamps(''), []);
+  assert.deepEqual(S.owedStamps('user_synthetic'), []);
   assert.deepEqual((await srv.listShared()).data, [], 'no device lists it again');
-  assert.ok(!S.invoiceNotes('').some(n => n.number === number));
+  assert.ok(!S.invoiceNotes('user_synthetic').some(n => n.number === number));
 });
 
 test('a deleted invoice typed into Mark as sent releases the unstamp waiting for it, and a refused delete sends nothing', async () => {
   fresh(); const srv = server();
   withServer(mount(WorkLog, { data: {} }), srv);
   invoicesOnServer(() => ({ data: false, error: null }));
-  S.handOffInvoice('acct', { number: 'INV-20260910-41', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s' });
+  (globalThis.__screen.activeUserId = 'acct', S.handOffInvoice)('acct', { number: 'INV-20260910-41', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s' });
   await settle();
   S.forgetInvoiceNote('acct', 'INV-20260910-41', { unstamp: true, recordedAs: 'A-17' });
   await settle();
@@ -572,7 +572,7 @@ test('Work log: "Show <agreement>" switches for this visit only; the next visit 
   assert.equal(again.storage.lastContract, 'c-o');
 
   // Answered; the next visit to Work opens where it would have.
-  S.forgetInvoiceNote('', number);
+  S.forgetInvoiceNote('user_synthetic', number);
   const next = withServer(mount(WorkLog, { data: s.seed(), storage: again.storage }), srv);
   next.render(); await settle();
   assert.equal(picked(next), 'c-o');

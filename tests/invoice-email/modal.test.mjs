@@ -173,6 +173,65 @@ async function openFromResend(ctx) {
   return { invoices, modal };
 }
 
+for (const clipboardThrows of [false, true]) {
+  test(`resending an expense invoice with receipts ${clipboardThrows ? "survives a throwing clipboard getter" : "still reports a confirmed cover copy"}`, async () => {
+    const env = fakeWorld();
+    const ctx = context(env, {
+      invoices: [expenseInvoice()],
+      travelExpenses: [{ id: IDS.expAir, invoiceId: IDS.invoice }],
+      documents: [{
+        id: IDS.docAir, name: "airfare.pdf", type: "application/pdf", linkedTo: `travelExpenses:${IDS.expAir}`,
+        data: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\n% synthetic airfare").toString("base64")}`,
+      }],
+    });
+    const saved = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    const shares = [];
+    const copies = [];
+    let clipboardReads = 0;
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: {
+      get clipboard() {
+        clipboardReads += 1;
+        if (clipboardThrows) throw Error("clipboard access denied");
+        return { writeText: async (text) => copies.push(text) };
+      },
+      canShare: ({ files }) => files.length === 2,
+      share: async (payload) => shares.push(payload),
+    } });
+    try {
+      await withApp(env, ctx, async (invocations) => {
+        const invoices = harness("Invoices", {});
+        button(invoices.render(), "Resend").props.onClick({ stopPropagation() {} });
+        await flush();
+        const chooser = find(invoices.render(), (n) => typeof n.props?.onPick === "function");
+        assert.ok(chooser, "the physician can choose PDF for the existing invoice");
+        chooser.props.onPick("pdf");
+        await flush();
+        assert.equal(clipboardReads, 1);
+        assert.equal(shares.length, 1, "the invoice and receipt reach the share sheet");
+        assert.equal(invocations.length, 0, "this local share does not call the email provider");
+        assert.equal(ctx.calls.length, 0, "a resend does not rewrite invoice or payment records");
+        assert.equal(shares[0].files.length, 2);
+        assert.equal(shares[0].files[1].name, "airfare.pdf");
+        assert.match(shares[0].text, /The receipt is attached\./);
+        const pdf = pdfText(Buffer.from(await shares[0].files[0].arrayBuffer()).toString("base64"));
+        assert.match(pdf, /aisle seat . receipt attached/);
+        assert.match(pdf, /^receipt on file$/m, "the missing hotel receipt is never claimed as attached");
+        const shown = textOf(invoices.render());
+        assert.match(shown, /Resent with 1 receipt attached\./);
+        assert.equal(copies.length, clipboardThrows ? 0 : 1);
+        if (clipboardThrows) assert.doesNotMatch(shown, /cover letter is on your clipboard/);
+        else {
+          assert.match(shown, /cover letter is on your clipboard/);
+          assert.doesNotMatch(copies[0], /receipts? (?:is |are )?attached/i, "the pre-share cover remains count-free");
+        }
+      });
+    } finally {
+      if (saved) Object.defineProperty(globalThis, "navigator", saved);
+      else delete globalThis.navigator;
+    }
+  });
+}
+
 test("Send by email: what the screen shows is what the billing office gets, line breaks and all", async () => {
   const env = fakeWorld();
   const ctx = context(env, { invoices: [workInvoice()], locumContracts: [contract("billing@hospital.example")] });

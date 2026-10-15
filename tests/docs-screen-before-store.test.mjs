@@ -4,6 +4,7 @@
 // re-upload replayed, and the chart stayed on the server behind a tombstone.
 // Driven through the real DocumentsSection with a stubbed scanner. Synthetic
 // files only.
+import * as documentDuplicate from '../src/utils/documentDuplicate.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as phiGuard from '../src/utils/phiGuard.js';
@@ -39,6 +40,7 @@ async function upload(result, { canAdd = true, file = pdf(), confirm = undefined
   const view = await mountComponent('src/components/features/DocumentsSection.jsx', {
     app,
     modules: {
+      documentDuplicate, storageScope: { localWriteGuard: () => () => true },
       phiGuard, spreadsheetGuard: guard, customCategories, credentialTypes, inboxDocs, contractsForDate, syncRules,
       aiClient: { useAiAvailable: () => true, describeAiStatus: () => 'AI is off.' },
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },
@@ -101,7 +103,7 @@ test('DOCS-001: a file the browser typed as "" is stored with the type its name 
 });
 
 // ── SYNC-013: a file missing from the account is said, and can be replaced ──
-async function listDocs(documents, { uploaded = 'user_synthetic/doc-m', uploadError = null, scan = null, quota = { ok: true }, globals = {}, confirm = undefined, stored = {} } = {}) {
+async function listDocs(documents, { uploaded = 'user_synthetic/doc-m', uploadError = null, scan = null, quota = { ok: true }, globals = {}, confirm = undefined, stored = {}, download = null } = {}) {
   const calls = [];
   let state = { settings: { apiKey: 'synthetic-key' }, documents, licenses: [], privileges: [], insurance: [], cme: [], healthRecords: [], education: [],
     locumContracts: [], travelExpenses: [], deductibles: [], customCategories: [], customRecords: [] };
@@ -113,13 +115,14 @@ async function listDocs(documents, { uploaded = 'user_synthetic/doc-m', uploadEr
       updateSection: (key, fn) => { calls.push(['updateSection', key]); state = { ...state, [key]: fn(state[key]) }; return true; },
       setData: (fn) => { calls.push(['setData']); state = typeof fn === 'function' ? fn(state) : fn; return true; } },
     modules: {
+      documentDuplicate, storageScope: { localWriteGuard: () => () => true },
       phiGuard, spreadsheetGuard: guard, customCategories, credentialTypes, inboxDocs, contractsForDate, syncRules, documentBytes, storedDuplicate,
       aiClient: { useAiAvailable: () => true, describeAiStatus: () => '' },
       storageQuota: { checkStorageQuota: (docs, files) => { calls.push(['quota', docs.map((d) => d.id), files.length]); return quota; } }, officeText: { isOfficeFile: () => false, UPLOAD_ACCEPT: '*' },
       documentScanner: { CV_DOC_TYPE: 'cv', OTHER_DOC_TYPE: 'other',
         analyzePDF: async () => { calls.push(['read']); return scan; }, analyzeDocument: async () => { calls.push(['read']); return scan; } },
       supabase: { supabase: {}, uploadDocumentFile: async (doc, auth, profile) => { calls.push(['upload', doc.id, auth, profile, !!doc.data]); if (uploadError) throw uploadError; return uploaded; },
-        downloadDocumentBlob: async (path) => { calls.push(['download', path]); return path in stored ? new Blob([stored[path]]) : null; } },
+        downloadDocumentBlob: async (path, options) => { calls.push(['download', path]); const result = download ? await download(path) : path in stored ? new Blob([stored[path]]) : new Blob(['%PDF-1.4 different']); return options?.detail && result instanceof Blob ? { blob: result } : result; } },
       limitedLaunchAccess: { alertWriteRefused: () => calls.push(['alertWriteRefused']), scopesForWrite: () => 'credential' },
     },
     globals,
@@ -245,6 +248,21 @@ test('SYNC-013: a file given again that cannot be read says so and changes nothi
   const names = run.calls.map((c) => c[0]);
   assert.equal(names.includes('updateSection') || names.includes('upload'), false);
   assert.match(run.view.pageText(), expected);
+});
+
+test('SYNC-013: renamed replacement bytes already belonging to another stored document are refused before reading or saving', async () => {
+  const { names, stored, page } = await uploadAgain(pdf('renamed.pdf'), { download: async () => ({ blob: pdf('other.pdf') }) });
+  assert.equal(stored, false);
+  assert.equal(names.includes('read'), false);
+  assert.match(page, /"renamed\.pdf" is already stored as another document/);
+});
+
+test('SYNC-013: unreadable duplicate candidates keep replacement source and record unchanged', async () => {
+  const { names, stored, page, state } = await uploadAgain(pdf('renamed.pdf'), { download: async () => ({ failed: true }) });
+  assert.equal(stored, false);
+  assert.equal(names.includes('read'), false);
+  assert.match(page, /existing file could not be checked for duplicates/);
+  assert.deepEqual(state().documents, missing());
 });
 
 test('SYNC-013: a credential given again is read, screened, then stored', async () => {

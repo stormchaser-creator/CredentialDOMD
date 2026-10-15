@@ -26,7 +26,7 @@ test('home and Vera: search opens a record, Vera answers, notification center, a
   tag: ['@HOME-008', '@VERA-001', '@NOTIFY-002', '@HOME-015'],
 }, async ({ page, qa }) => {
   test.setTimeout(6 * 60 * 1000);
-  const { profile } = await newMember(page, { firstName: 'Harper', lastName: 'Home' });
+  const { profile } = await newMember(page, { firstName: 'Harper', lastName: 'Home', profession: 'MD' });
   await openCredentials(page, 'Licenses');
   await page.getByRole('button', { name: 'Add' }).first().click();
   const dlg = page.getByRole('dialog', { name: 'Add' });

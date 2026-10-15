@@ -8,6 +8,15 @@ export default defineConfig([
   // qa-lab/.generated holds the QA lab's build output and generated files.
   globalIgnores(['dist', 'qa-lab/.generated']),
   {
+    files: ['qa-lab/e2e/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node, ...globals.browser },
+    },
+    rules: { 'no-undef': 'error' },
+  },
+  {
     files: ['**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,

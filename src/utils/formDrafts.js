@@ -276,6 +276,8 @@ export async function formDraftTabsAlive(tabs, { waitMs = 250 } = {}) {
  * changed from the record it opened from, or the whole form for an Add),
  * { waiting: true } (a draft for a record not on screen yet: ask again when
  * the records come from a real read), { none: true } or { stopped: true }.
+ * `peek: true` inspects the same candidate without pruning or claiming its
+ * slot, so startup navigation leaves it for the screen that will restore it.
  * At once when no other page has to be asked (the form opens on the first
  * render, as it always did), otherwise as a promise.
  */
@@ -311,19 +313,19 @@ export function pickFormDraft(options) {
   })();
 }
 
-function chooseFormDraft(drafts, { slotFor, records = [], held = records, recordsRead = false }) {
+function chooseFormDraft(drafts, { slotFor, records = [], held = records, recordsRead = false, peek = false }) {
   let waiting = false;
   for (const d of drafts) {
     const draft = d.value;
     const editing = draft.editId ? (records || []).find(x => x?.id === draft.editId) : null;
     if (draft.editId && !editing) {
       if (!(held || []).some(x => x?.id === draft.editId)) {
-        if (recordsRead) clearFormDraft(d.slot); else waiting = true;
+        if (recordsRead) { if (!peek) clearFormDraft(d.slot); } else waiting = true;
       }
       continue;
     }
     // Now this page's draft: the page that wrote it is gone.
-    if (d.slot !== slotFor(draft.editId)) clearFormDraft(d.slot);
+    if (!peek && d.slot !== slotFor(draft.editId)) clearFormDraft(d.slot);
     const opened = draft.base && typeof draft.base === "object" ? draft.base : null;
     // What the draft changed from the record it opened from; a draft with no
     // base (an Add, or an earlier build's edit) is laid over whole.
@@ -334,12 +336,13 @@ function chooseFormDraft(drafts, { slotFor, records = [], held = records, record
     // opened again saying "Restored what you were typing" (review of
     // release/goal2, 2026-10-02: CME has no details view, so reading an entry
     // opens its Edit form).
-    const untouched = opened ? !Object.keys(changed).length : Object.values(changed).every(blankValue);
+    const untouched = (opened ? !Object.keys(changed).length : Object.values(changed).every(blankValue))
+      && !draft.extra?.attachedDocs?.length;
     if (untouched) {
-      clearFormDraft(d.slot);
+      if (!peek) clearFormDraft(d.slot);
       continue;
     }
-    return { restore: { editing: editing || null, changed } };
+    return { restore: { editing: editing || null, changed, ...(draft.extra ? { extra: draft.extra } : {}) } };
   }
   return waiting ? { waiting: true } : { none: true };
 }

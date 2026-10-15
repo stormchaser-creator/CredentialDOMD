@@ -35,7 +35,7 @@
  * Gemini-only users never download that chunk.
  */
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 const ENV = import.meta.env || {};
 const SUPABASE_URL = ENV.VITE_SUPABASE_URL || "";
@@ -205,12 +205,63 @@ let statusFetchedThisLoad = false;
 let statusInflight = null;
 let statusRetryTimer = null;
 let statusRetries = 0;
-// Set while a transient refusal's retry is pending. Render-time gates
-// (aiAvailable, anthropicAvailable) re-fetch whenever this load is unchecked,
-// and a refused load stays unchecked, so without this every render during an
-// outage would ask the proxy again. They wait for the retry instead; a forced
-// fetch (Settings) still goes through.
-let statusBackingOff = false;
+let statusTransientRetries = 0;
+let statusProfile = null;
+let statusGeneration = 0;
+let statusController = null;
+let statusSubscribers = 0;
+
+// A Clerk session can exist before initialize-clerk-profile has committed.
+// Only the app's successful current-account profile load opens status reads.
+// All callers (subscriptions, imperative reads and timer retries) share this
+// guard; holding just one component's subscription would leave other callers
+// able to race initialization.
+function currentStatusProfile(profile, generation = statusGeneration) {
+  return !!profile?.ready && statusProfile === profile && generation === statusGeneration
+    && typeof window !== "undefined" && window.Clerk?.user?.id === profile.accountId;
+}
+
+/** Display authority is also actor-bound before React commits the next lifecycle effect. */
+export function sharedAiStatusIsCurrent() {
+  return currentStatusProfile(statusProfile) && !!window.Clerk?.session;
+}
+
+const unreadySharedAiStatus = Object.freeze({
+  shared: false, used: 0, limit: SHARED_DAILY_LIMIT, reason: null,
+  anthropicShared: false, anthropicUsed: 0, anthropicLimit: SHARED_DAILY_LIMIT, unlimited: false,
+  monthSpentUsd: 0, monthCappedUsd: null, monthGeminiUsd: null,
+  budgetSoftUsd: 0, budgetHardUsd: 0, overSoft: false, overHard: false, checkedAt: 0,
+});
+
+function retireStatusWork() {
+  statusGeneration += 1;
+  statusController?.abort();
+  statusController = null;
+  statusInflight = null;
+  if (statusRetryTimer) clearTimeout(statusRetryTimer);
+  statusRetryTimer = null;
+  statusFetchedThisLoad = false;
+  statusRetries = 0;
+  statusTransientRetries = 0;
+}
+
+/** Register the actual profile readiness; the returned cleanup owns only this registration. */
+export function registerSharedAiProfile(accountId, ready) {
+  const profile = { accountId: typeof accountId === "string" ? accountId : null, ready: ready === true };
+  statusProfile = profile;
+  resetSharedAiStatus();
+  if (statusSubscribers && currentStatusProfile(profile)) fetchSharedAiStatus();
+  return () => {
+    if (statusProfile !== profile) return;
+    statusProfile = null;
+    resetSharedAiStatus();
+  };
+}
+
+/** The profile-owning app lifecycle, separate from any individual status subscriber. */
+export function useSharedAiProfile(accountId, ready) {
+  useEffect(() => registerSharedAiProfile(accountId, ready), [accountId, ready]);
+}
 
 /**
  * GET ai-proxy → { shared, used_today, limit, unlimited, anthropic_shared,
@@ -222,55 +273,66 @@ let statusBackingOff = false;
  * cache) unless `force` is set. Safe to call from anywhere; never throws.
  */
 export async function fetchSharedAiStatus({ force = false } = {}) {
+  const profile = statusProfile;
+  const generation = statusGeneration;
+  if (!currentStatusProfile(profile, generation)) return sharedAiStatus;
   if (statusInflight) return statusInflight;
-  if (statusFetchedThisLoad && !force) return sharedAiStatus;
-  if (statusBackingOff && !force) return sharedAiStatus;
-  statusInflight = (async () => {
+  if ((statusFetchedThisLoad || statusRetryTimer) && !force) return sharedAiStatus;
+  const controller = new AbortController();
+  const session = window.Clerk?.session;
+  statusController = controller;
+  const current = () => currentStatusProfile(profile, generation) && !controller.signal.aborted
+    && window.Clerk?.session === session;
+  const pending = (async () => {
     if (!PROXY_URL) {
       setSharedAiStatus({ shared: false, anthropicShared: false, reason: "not_configured", checkedAt: Date.now() });
       statusFetchedThisLoad = true;
       return sharedAiStatus;
     }
     const token = await getClerkToken();
+    if (!current()) return sharedAiStatus;
     if (!token) {
       // Not signed in yet (Clerk still booting, or the sign-in page). Leave
       // the cache alone and try again shortly; the sign-in race is the
       // common case on a cold load.
-      scheduleStatusRetry();
+      scheduleStatusRetry(2500, profile, generation);
       return sharedAiStatus;
     }
     let res;
     try {
-      res = await fetch(PROXY_URL, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
+      res = await fetch(PROXY_URL, { method: "GET", headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
     } catch {
+      if (!current()) return sharedAiStatus;
       setSharedAiStatus({ reason: sharedAiStatus.shared ? sharedAiStatus.reason : "offline", checkedAt: Date.now() });
-      scheduleStatusRetry(15000);
+      scheduleStatusRetry(15000, profile, generation);
       return sharedAiStatus;
     }
-    // A refusal that clears on its own (the proxy's membership check or its
-    // accounting could not answer) is not an answer. Read the code before
-    // marking this load as checked: the status GET is the call that seeds
-    // every render-time gate, so marking it checked on a transient refusal
-    // left shared AI off until a reload, and the retry timer below (which
-    // only fires while the load is unchecked) did nothing. The proxy sends
-    // these at 429 (access_policy_unavailable since 2026-10-01); a 503 with
-    // the same code is survived the same way. Keep the last-known fields.
-    let failBody;
+    if (!current()) return sharedAiStatus;
+    let retryTransient = false;
+    // Membership/accounting refusals are temporary at either 429 or 503.
+    // Keep the last answer and recheck once, respecting Retry-After. The
+    // pending timer also holds render-time gates; every continuation remains
+    // bound to the same initialized profile and Clerk session.
     if (!res.ok) {
+      let failBody;
       try { failBody = await res.json(); } catch { failBody = null; }
+      if (!current()) return sharedAiStatus;
       if (isTransientProxyCode(proxyCodeOf(failBody))) {
         setSharedAiStatus({ checkedAt: Date.now() });
-        const wait = retryAfterSeconds(res, failBody);
-        statusBackingOff = scheduleStatusRetry(wait ? wait * 1000 : 15000);
+        if (statusTransientRetries < 1) {
+          statusTransientRetries += 1;
+          const wait = retryAfterSeconds(res, failBody);
+          retryTransient = scheduleStatusRetry(wait ? wait * 1000 : 15000, profile, generation);
+        }
+        statusFetchedThisLoad = !retryTransient;
         return sharedAiStatus;
       }
     }
-    statusFetchedThisLoad = true;
-    statusRetries = 0;
-    statusBackingOff = false;
     if (res.ok) {
       let body = null;
       try { body = await res.json(); } catch { body = null; }
+      if (!current()) return sharedAiStatus;
+      statusTransientRetries = 0;
       const limit = Number(body?.limit) || SHARED_DAILY_LIMIT;
       setSharedAiStatus({
         shared: !!body?.shared,
@@ -308,23 +370,27 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
       // we last knew rather than flipping features off on a hiccup.
       setSharedAiStatus({ checkedAt: Date.now() });
     }
+    statusFetchedThisLoad = !retryTransient;
+    statusRetries = 0;
     return sharedAiStatus;
-  })().finally(() => { statusInflight = null; });
-  return statusInflight;
+  })().finally(() => {
+    if (statusInflight === pending) statusInflight = null;
+    if (statusController === controller) statusController = null;
+  });
+  statusInflight = pending;
+  return pending;
 }
 
 // Waiting for Clerk to produce a session is a no-network check, so polling
 // is cheap; still back off so a signed-out tab is not busy for nothing.
-// Returns true when a retry is pending after the call.
-function scheduleStatusRetry(delay = 2500) {
+function scheduleStatusRetry(delay = 2500, profile = statusProfile, generation = statusGeneration) {
+  if (!currentStatusProfile(profile, generation)) return false;
   if (statusRetryTimer) return true;
-  if (typeof window === "undefined") return false;
   const wait = Math.min(delay * Math.max(1, statusRetries), 15000);
   statusRetries += 1;
   statusRetryTimer = setTimeout(() => {
     statusRetryTimer = null;
-    statusBackingOff = false;
-    if (!statusFetchedThisLoad) fetchSharedAiStatus();
+    if (currentStatusProfile(profile, generation) && !statusFetchedThisLoad) fetchSharedAiStatus();
   }, wait);
   return true;
 }
@@ -351,16 +417,16 @@ export function noteMembershipStatus(accessStatus) {
   const becameActive = active && membershipActive !== true;
   if (typeof accessStatus === "string") membershipActive = active;
   if (!becameActive || (!statusFetchedThisLoad && !statusInflight)) return null;
+  const profile = statusProfile;
+  const generation = statusGeneration;
   const settled = statusInflight || Promise.resolve(sharedAiStatus);
-  return settled.then(() => (sharedAiStatus.reason === "pending" ? fetchSharedAiStatus({ force: true }) : sharedAiStatus))
+  return settled.then(() => (currentStatusProfile(profile, generation) && sharedAiStatus.reason === "pending" ? fetchSharedAiStatus({ force: true }) : sharedAiStatus))
     .catch(() => sharedAiStatus);
 }
 
 /** Forget the fetched status (call on sign-out so the next user re-checks). */
 export function resetSharedAiStatus() {
-  statusFetchedThisLoad = false;
-  statusRetries = 0;
-  statusBackingOff = false;
+  retireStatusWork();
   membershipActive = null;
   setSharedAiStatus({
     shared: false, used: 0, reason: null, anthropicShared: false, anthropicUsed: 0, unlimited: false,
@@ -510,11 +576,15 @@ export function opusUnavailableReason() {
 // object only when something changed, so the snapshot reference is stable.
 function subscribeSharedAi(onChange) {
   if (typeof window === "undefined") return () => {};
+  statusSubscribers += 1;
   window.addEventListener(SHARED_AI_EVENT, onChange);
   fetchSharedAiStatus();
-  return () => window.removeEventListener(SHARED_AI_EVENT, onChange);
+  return () => {
+    statusSubscribers -= 1;
+    window.removeEventListener(SHARED_AI_EVENT, onChange);
+  };
 }
-const getSharedAiSnapshot = () => sharedAiStatus;
+const getSharedAiSnapshot = () => sharedAiStatusIsCurrent() ? sharedAiStatus : unreadySharedAiStatus;
 
 /** Live shared-AI status; re-renders when the cached status changes. */
 export function useSharedAiStatus() {

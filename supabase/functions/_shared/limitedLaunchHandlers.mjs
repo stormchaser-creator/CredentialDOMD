@@ -109,7 +109,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     deps.assertConfigured();
     return deps.mode === 'live';
   };
-  const log = deps.log || (entry => console.error(JSON.stringify(entry)));
+  const log = deps.log || ((entry, level = 'error') => console[level === 'info' ? 'info' : 'error'](JSON.stringify(entry)));
   // Every refusal and failure is logged once with a fixed code and the phase
   // it stopped in, so a checkout that never reached Stripe can be told apart
   // from one Stripe refused. Nothing about who: no ids, emails or messages.
@@ -409,13 +409,20 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
   // read under the lease is the one settled. Returns { state: 'duplicate' }
   // for an event already applied, else { state: 'settled', welcome } where
   // welcome is the subscription whose first paid period this settled.
-  async function settleSubscription(stripe, live, first, event, trace) {
+  async function settleSubscription(stripe, live, first, event, trace, { retryBusy = false } = {}) {
     const subId = first.id;
     if (first.metadata?.catalog_version !== config.version) refuse(409, 'subscription_catalog_mismatch');
     const account = await deps.store.accountByCustomer(id(first.customer), live);
     if (!account || account.profile_id !== first.metadata.profile_id) refuse(409, 'subscription_owner_mismatch');
     trace.phase = 'reconcile';
-    const lease = await deps.store.claimReconcile(account.profile_id, live, account.stripe_customer_id, event.id);
+    let lease = await deps.store.claimReconcile(account.profile_id, live, account.stripe_customer_id, event.id);
+    // A refund can overlap an invoice or cancellation webhook for this same
+    // account. Give that short lease one chance to finish before deferring.
+    // Retry only the claim: money actions and settlement writes never repeat.
+    if (retryBusy && lease.state === 'busy') {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      lease = await deps.store.claimReconcile(account.profile_id, live, account.stripe_customer_id, event.id);
+    }
     if (lease.state === 'duplicate') return { state: 'duplicate' };
     if (lease.state !== 'claimed') refuse(503, 'billing_reconciliation_pending');
     let welcome = null;
@@ -1040,7 +1047,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     // event settles the same state, so the refund goes ahead.
     trace.phase = 'settle';
     try {
-      await settleSubscription(stripe, live, sub.metadata ? sub : await stripe.subscriptions.retrieve(request.subscription_id), { id: `evt_refund${request.id.replaceAll('-', '')}`, created: Math.floor((deps.now?.() ?? Date.now()) / 1000) }, trace);
+      await settleSubscription(stripe, live, sub.metadata ? sub : await stripe.subscriptions.retrieve(request.subscription_id), { id: `evt_refund${request.id.replaceAll('-', '')}`, created: Math.floor((deps.now?.() ?? Date.now()) / 1000) }, trace, { retryBusy: true });
     } catch (e) { try { log({ ...failureLog(name, trace, 200, 'refund_settlement_deferred', e), event: 'refund_settlement_deferred' }); } catch { /* A log must never change the answer. */ } }
     // 3. Refund the charge in full, once.
     trace.phase = 'refund';
@@ -1179,7 +1186,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
   const refundSweep = async req => {
     const answer = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
     if (req.method !== 'POST') return answer(405, { error: 'method_not_allowed' });
-    const note = entry => { try { log({ event: 'limited_refund_sweep', ...entry }); } catch { /* A log must never change the answer. */ } };
+    const note = (entry, level = 'error') => { try { log({ event: 'limited_refund_sweep', ...entry }, level); } catch { /* A log must never change the answer. */ } };
     // Closed with billing off, as every route is, before anything else.
     let live;
     try { live = mode(); } catch (e) { const state = e instanceof Refusal ? e.message : 'billing_unavailable'; return answer(503, { state }); }
@@ -1211,7 +1218,10 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       outcomes[result] = (outcomes[result] || 0) + 1;
     }
     const summary = { state: 'ready', requests: charges.length, outcomes, deferred };
-    if (charges.length) note(summary);
+    // Only a fully completed batch is informational. Deferred work, unknown
+    // outcomes and requests needing a person keep their existing error level.
+    const completed = deferred === 0 && outcomes.refunded === charges.length && Object.keys(outcomes).length === 1;
+    if (charges.length) note(summary, completed ? 'info' : 'error');
     return answer(200, summary);
   };
   // limited-refund's entry: the sweep arrives with an x-hook-secret header (a

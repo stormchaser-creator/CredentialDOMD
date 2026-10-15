@@ -1,7 +1,69 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { describeSyncIssues } from "../../utils/syncIssues.js";
 import { actionButtonStyle } from "./actionButton.js";
+import { discardRecovery, onRecoveryChange, readRecovery, recoveryDownload, recoveryFailureFor, RECOVERY_BASE, RECOVERY_GENERATION, stableJson } from "../../utils/syncRecovery.js";
+import { localFence } from "../../utils/storageScope.js";
+
+function RecoveryNotice() {
+  const { user, theme: T, isDesktop } = useApp();
+  const accountId = user?.id;
+  const [stored, setState] = useState({ owner: null, fence: null, entries: [], error: null });
+  // A different member's first render must not expose the previous member's
+  // entries while this component waits for its effect to refresh.
+  const state = stored.owner === accountId && stored.fence === localFence(accountId) ? stored : { entries: [], error: null };
+  useEffect(() => {
+    const refresh = changed => {
+      if (changed && changed !== accountId) return;
+      if (!accountId) { setState({ owner: null, fence: null, entries: [], error: null }); return; }
+      const owner = { owner: accountId, fence: localFence(accountId) };
+      try { setState({ ...owner, entries: readRecovery(accountId), error: recoveryFailureFor(accountId) }); }
+      catch (error) { setState({ ...owner, entries: [], error: error.message }); }
+    };
+    const storage = event => { if (event.key?.startsWith(RECOVERY_BASE) || event.key === RECOVERY_GENERATION) refresh(); };
+    refresh(); const stop = onRecoveryChange(refresh);
+    window.addEventListener("storage", storage);
+    return () => { stop(); window.removeEventListener("storage", storage); };
+  }, [accountId]);
+  const download = entryId => {
+    try {
+      const blob = new Blob([JSON.stringify(recoveryDownload(accountId, entryId), null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob), link = document.createElement("a");
+      link.href = url; link.download = "CredentialDOMD recovery copies (KEEP PRIVATE).json";
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (error) { setState(s => ({ ...s, error: error.message })); }
+  };
+  if (!state.entries.length && !state.error) return null;
+  const button = actionButtonStyle(T, { primary: false, isDesktop });
+  const show = (key, value) => key === "data" && typeof value === "string" && value.startsWith("data:")
+    ? "File contents retained in the download"
+    : value == null || value === "" ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value);
+  return <aside data-sync-recovery="" role="status" aria-live="polite" style={{ padding: 16, marginBottom: 14, background: T.card, color: T.text, border: `1px solid ${T.danger}`, borderRadius: 12 }}>
+    <strong>Saved copies need your review</strong>
+    {state.error && <p role="alert">{state.error}</p>}
+    {state.entries.length > 0 && <>
+      <p>Different versions from this device and your account are kept here for review and will not be sent automatically. Download both copies before signing out. The account copy below is what was read when the difference was found.</p>
+      {state.entries.map(entry => {
+        const fields = [...new Set([...Object.keys(entry.local || {}), ...Object.keys(entry.cloud || {})])].filter(key => !["id", "userId", "createdAt", "updatedAt"].includes(key)
+          && stableJson(entry.local?.[key]) !== stableJson(entry.cloud?.[key]));
+        const title = entry.local?.name || entry.local?.title || entry.local?.number || entry.collectionKey.replace(/([a-z])([A-Z])/g, "$1 $2");
+        return <details key={entry.entryId} style={{ margin: "12px 0" }}>
+          <summary style={{ minHeight: 32, padding: "8px 0", cursor: "pointer" }}>Review {String(title)}</summary>
+          <div style={{ overflowX: "auto", margin: "12px 0" }}><table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse" }}>
+            <thead><tr><th>Field</th><th>Saved on this device</th><th>Read from your account</th></tr></thead>
+            <tbody>{fields.map(key => <tr key={key}><th scope="row" style={{ padding: 8 }}>{key.replace(/([a-z])([A-Z])/g, "$1 $2")}</th><td style={{ padding: 8, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{show(key, entry.local?.[key])}</td><td style={{ padding: 8, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{show(key, entry.cloud?.[key])}</td></tr>)}</tbody>
+          </table></div>
+          <button type="button" style={button} onClick={() => download(entry.entryId)}>Download both copies</button>{" "}
+          <button type="button" style={button} onClick={() => {
+            if (!window.confirm("Remove this saved recovery copy from this device? Your account record will not change. Download the copies first if you may need them.")) return;
+            try { discardRecovery(accountId, entry.entryId); } catch (error) { setState(s => ({ ...s, error: error.message })); }
+          }}>Remove saved copy</button>
+        </details>;
+      })}
+    </>}
+  </aside>;
+}
 import { reloadPage } from "../../utils/pageLeave.js";
 
 /**
@@ -14,7 +76,7 @@ import { reloadPage } from "../../utils/pageLeave.js";
  * ones, why in plain words, and opens each so it can be fixed and saved again.
  * Shown on every tab, because it is a failed save, not account chrome.
  */
-export default function SyncIssuesNotice() {
+function SavedWriteIssuesNotice() {
   const { syncIssues, pendingWrites, awaitingAccessWrites, accessRefusedWrites, offlineMode, offlineCopyStale, deviceOnlyUnsaved, data, theme: T, isDesktop, navigate } = useApp();
   const lines = useMemo(() => describeSyncIssues(syncIssues, data), [syncIssues, data]);
   // Offline, the offline banner already says changes are waiting.
@@ -116,4 +178,8 @@ export default function SyncIssuesNotice() {
       {deviceOnly}
     </aside>
   );
+}
+
+export default function SyncIssuesNotice() {
+  return <><RecoveryNotice /><SavedWriteIssuesNotice /></>;
 }

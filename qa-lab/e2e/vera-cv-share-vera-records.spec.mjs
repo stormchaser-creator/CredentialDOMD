@@ -22,7 +22,7 @@ test('Vera files a document, creates and updates records, opens one, renames a d
   tag: ['@VERA-002', '@VERA-004', '@VERA-005', '@VERA-011', '@VERA-007'],
 }, async ({ page, qa }) => {
   test.setTimeout(9 * 60 * 1000);
-  const { profile } = await newMember(page, { firstName: 'Vera', lastName: 'Recordkeeper' });
+  const { profile } = await newMember(page, { firstName: 'Vera', lastName: 'Recordkeeper', profession: 'MD' });
   const pid = profile.id;
   const tag = runTag();
 

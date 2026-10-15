@@ -18,6 +18,8 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
+import { createRecordAcknowledgements } from '../../src/utils/recordAcknowledgements.js';
+import { recoveryFor } from '../sync-recovery-fixture.mjs';
 import * as access from '../../src/utils/limitedLaunchAccess.js';
 import * as syncRules from '../../src/utils/syncRules.js';
 import { LOCAL_ONLY_SETTINGS } from '../../src/constants/defaults.js';
@@ -60,7 +62,7 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
       const operation = { table, filters: [] };
       const q = { then: (resolve, reject) => execute(operation).then(resolve, reject) };
       for (const method of ['insert', 'update', 'upsert', 'delete', 'select']) q[method] = (value, options) => { if (!operation.method) { operation.method = method; operation.value = value; if (options !== undefined) operation.options = options; } else if (method === 'select') operation.returning = value ?? '*'; return q; };
-      for (const method of ['eq', 'order', 'range', 'in']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
+      for (const method of ['eq', 'is', 'order', 'range', 'in']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
       q.maybeSingle = q.single = () => q;
       // The real builder's: a request the caller may cancel (a settings save that had no answer).
       q.abortSignal = signal => { operation.signal = signal; return q; };
@@ -69,12 +71,13 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
   }
   const imports = {
     '@supabase/supabase-js': { createClient }, '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS }, '../utils/syncRules.js': syncRules,
-    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => ACCOUNT,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
-      // The queue's write (storageScope makes room first in the app).
-      setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/storageScope.js': { localWriteGuard: () => () => true, BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => ACCOUNT,
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null, setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/recordAcknowledgements.js': createRecordAcknowledgements({ activeAccount: () => ACCOUNT, fenceFor: () => null, copyCurrent: () => true, receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null, write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } }),
+    '../utils/syncRecovery.js': recoveryFor(values, () => ACCOUNT),
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
-    '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': {}, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
+    '../utils/continuityRecovery.js': {}, '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
+    '../utils/dataDeletion.js': {}, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, allowsSettingsChange: (value, a = authority) => access.allowsSettingsChange(value, a), membershipWriteError: access.membershipWriteError },
   };
@@ -162,6 +165,7 @@ function fixture({ records = {}, settings = { name: 'Synthetic Physician' }, onR
   return f;
 }
 
+const snake = value => Object.fromEntries(Object.entries(value).map(([key, item]) => [key.replace(/[A-Z]/g, c => '_' + c.toLowerCase()), item]));
 const invoice = (over = {}) => ({ id: 'inv-synthetic-1', number: 'INV-20260929-01', contractId: 'contract-synthetic', totalAmount: 1234.5,
   entryIds: ['work-synthetic-1'], method: 'share-pdf', sentAt: '2026-09-29T11:00:00.000Z', paidAt: null, ...over });
 
@@ -205,7 +209,7 @@ test('concurrent saves share one check, and each record goes up in the order it 
   assert.deepEqual(f.writes(), []);
   f.checks[0].answer(active());
   await settle();
-  const sent = f.writes().map(op => `${op.method} ${op.table} ${op.value?.id ?? ''}`.trim());
+  const sent = f.writes().map(op => `${op.method} ${op.table} ${op.value?.id ?? op.filters.find(([method, key]) => method === 'eq' && key === 'id')?.[2] ?? ''}`.trim());
   assert.deepEqual([...sent].sort(), [
     'insert cme cme-synthetic-1',
     'insert invoices inv-synthetic-1',
@@ -260,7 +264,7 @@ test('a failed check within the grace keeps the save, queues it for replay, and 
   await settle();
   assert.equal(f.checks.length, 2);
   await f.wait(access.ACCESS_VERIFY_TIMEOUT_MS ?? 12000);
-  assert.equal(f.queue().length, 2, 'a check that never answers queues too');
+  assert.equal(f.queue().length, 1, 'the causal edit is kept with the add while the check cannot answer');
   // Replay before an answer sends nothing: it waits for one.
   await f.api.replayPendingOps(PROFILE, ACCOUNT, { tombstones: new Set() });
   assert.deepEqual(f.writes(), []);
@@ -269,8 +273,8 @@ test('a failed check within the grace keeps the save, queues it for replay, and 
   await settle();
   await f.api.replayPendingOps(PROFILE, ACCOUNT, { tombstones: new Set() });
   const sent = f.writes();
-  assert.deepEqual(sent.map(op => `${op.method} ${op.table} ${op.value.id}`), ['upsert invoices inv-synthetic-1', 'upsert invoices inv-synthetic-1']);
-  assert.equal(sent[1].value.paid_at, '2026-09-29T12:00:00.000Z', 'the edit lands last');
+  assert.deepEqual(sent.map(op => `${op.method} ${op.table} ${op.value.id}`), ['insert invoices inv-synthetic-1']);
+  assert.equal(sent[0].value.paid_at, '2026-09-29T12:00:00.000Z', 'the edit lands last');
   assert.deepEqual(f.queue(), []);
 });
 
@@ -401,6 +405,61 @@ const wireReporter = page => {
 };
 const setupFlush = () => ({ setupState: { startedAt: '2026-09-30T19:00:05.000Z', progress: { done: 1, total: 6 } } });
 
+test('automatic Setup bookkeeping on a confirmed read-only membership produces no failed-save report or write', async () => {
+  const f = fixture(); f.authority.accept(ACCOUNT, revoked());
+  assert.equal(f.app.updateSettings(setupFlush(), { automaticSetup: true }), false);
+  await settle();
+  assert.deepEqual(f.reports, []);
+  assert.deepEqual(f.alerts, []);
+  assert.deepEqual(f.writes(), []);
+  assert.equal(f.state.settings.setupState, undefined);
+});
+
+test('without a membership check, automatic setup is quiet while manual and mixed changes explain the refusal', async () => {
+  const f = fixture(); f.authority.reset(ACCOUNT); f.authority.setRecheck(null);
+  assert.equal(f.authority.settingsStatus(setupFlush()).reason, 'not_connected');
+  assert.equal(f.app.updateSettings(setupFlush(), { automaticSetup: true }), false);
+  await settle();
+  assert.deepEqual(f.reports, []);
+  assert.deepEqual(f.alerts, []);
+  assert.deepEqual(f.writes(), []);
+  assert.equal(f.state.settings.setupState, undefined);
+  for (const [patch, options] of [[setupFlush(), {}], [{ name: 'Synthetic changed name' }, {}], [{ ...setupFlush(), name: 'Synthetic changed name' }, { automaticSetup: true }]]) {
+    const manual = fixture(); manual.authority.reset(ACCOUNT); manual.authority.setRecheck(null);
+    assert.equal(manual.app.updateSettings(patch, options), false);
+    assert.deepEqual(manual.alerts, [access.NOT_CONNECTED_MESSAGE]);
+    assert.deepEqual(manual.writes(), []);
+  }
+});
+
+test('automatic Setup bookkeeping saves for an active member and does not queue disposable counts after a failed check', async () => {
+  const activeMember = fixture();
+  assert.equal(activeMember.app.updateSettings(setupFlush(), { automaticSetup: true }), true);
+  await settle();
+  assert.equal(activeMember.state.settings.setupState.progress.done, 1);
+  assert.ok(activeMember.writes().some(op => op.table === 'profiles'));
+  const reconnecting = fixture(); reconnecting.authority.suspendWrites({ checkFailed: true });
+  assert.equal(reconnecting.app.updateSettings(setupFlush(), { automaticSetup: true }), true);
+  await settle();
+  assert.equal(reconnecting.checks.length, 1);
+  reconnecting.checks[0].fail();
+  await settle();
+  assert.equal(reconnecting.state.settings.setupState.progress.done, 1);
+  assert.deepEqual(reconnecting.queue(), [], 'derived counts can be recomputed; they must not overwrite newer task choices on replay');
+});
+
+test('manual Setup drafts and profile changes still report read-only refusals, including a mixed payload marked automatic', () => {
+  for (const [patch, options] of [[setupFlush(), {}], [{ name: 'Synthetic changed name' }, {}], [{ ...setupFlush(), name: 'Synthetic changed name' }, { automaticSetup: true }]]) {
+    const f = fixture(); f.authority.accept(ACCOUNT, revoked());
+    assert.equal(f.app.updateSettings(patch, options), false);
+    assert.ok(f.reports.some(report => report.message === 'Save refused (read_only, settings)'));
+    assert.deepEqual(f.writes(), []);
+  }
+  const stopped = fixture(); stopped.authority.suspendWrites();
+  assert.equal(stopped.app.updateSettings(setupFlush(), { automaticSetup: true }), false);
+  assert.ok(stopped.reports.some(report => report.message === 'Save refused (suspended, settings)'), 'a real unresolved load failure keeps its existing reporting behavior');
+});
+
 test('a reload that cuts off the reconcile load does not report the Setup flush it refuses as a lost save', () => {
   const f = fixture();
   const page = leavingPage();
@@ -480,10 +539,10 @@ test('replay does not send a queued write a newer save of the same record replac
   const f = fixture({
     records: { invoices: [invoice()] },
     onRequest: async op => {
-      if (op.table === 'cme' && op.method === 'upsert') await gate;
+      if (op.table === 'cme' && op.method === 'insert') await gate;
       if (op.table === 'deleted_items' && op.method === 'select') return { data: [], error: null };
       // An update of a row that exists answers with that row.
-      if (op.method === 'update' && op.returning) return { data: [{ id: op.filters.find(([m, c]) => m === 'eq' && c === 'id')?.[2] }], error: null };
+      if (op.method === 'update' && op.returning) return { data: [{ ...snake(invoice()), ...op.value }], error: null };
       return { error: null };
     },
   });
@@ -511,12 +570,14 @@ test('replay does not send a queued write a newer save of the same record replac
 // AppContext's replay on a fresh answer, cut from the source (the effect and
 // the replayKeptSaves it calls), with this device's deletion bookkeeping as
 // the test sets it.
-const answerTrigger = `${between('  // Saves kept on this device for want of a membership answer go up', '  // ─── Load data when user changes')}
+const answerTrigger = `${between('  function replayKeptSaves(', '  // Delete All My Data on another device since')}
+${between('  // Saves kept on this device for want of a membership answer go up', '  // ─── Load data when user changes')}
 ${between('  // Saves kept on this device for want of a membership answer (queued', '  // The membership check answered and allows changes')}`;
 function watchAnswers(f, over = {}) {
   const seen = { loads: [], stampReads: 0 };
   vm.runInNewContext(answerTrigger, {
-    useEffect: fn => fn(), offlineMode: false, user: { id: ACCOUNT }, accessAuthority: f.authority, userIdRef: { current: PROFILE },
+    useEffect: fn => { seen.stop = fn(); }, offlineMode: false, user: { id: ACCOUNT }, accessAuthority: f.authority, userIdRef: { current: PROFILE },
+    pendingOpCount: () => f.queue().length,
     dataOwnerRef: { current: ACCOUNT }, getActiveUserId: () => ACCOUNT, listTombstones: f.api.listTombstones, replayPendingOps: f.api.replayPendingOps, onWrittenAheadFreed: f.api.onWrittenAheadFreed,
     awaitingAccessOpCount: () => f.queue().filter(op => op.awaitingAccess === true).length, pendingOpCount: () => f.queue().length,
     replayingRef: { current: null }, loadOwesRef: { current: null },
@@ -549,7 +610,7 @@ test('a fresh answer replays the saves kept for want of one, without waiting for
   f.authority.accept(ACCOUNT, active());
   await settle();
   assert.equal(seen.stampReads, 1, 'the deletion stamp is read first, as on a load');
-  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table}`), ['upsert invoices']);
+  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table}`), ['insert invoices']);
   assert.deepEqual(f.queue(), []);
   assert.deepEqual(seen.loads, []);
 });
@@ -567,7 +628,7 @@ test('a kept save another page left behind is replayed when its lock grace runs 
   assert.deepEqual(f.writes(), [], 'nothing sent before');
   freed(ACCOUNT);
   await settle();
-  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table}`), ['upsert invoices']);
+  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table}`), ['insert invoices']);
   assert.deepEqual(f.queue(), []);
   assert.deepEqual(seen.loads, []);
 });
@@ -597,7 +658,7 @@ test('a fresh answer never replays kept saves over Delete All My Data run on ano
   offline = false;
   g.authority.accept(ACCOUNT, active());
   await settle();
-  assert.deepEqual(g.writes().map(op => `${op.method} ${op.table}`), ['upsert invoices'], 'the same stamp as the load: sent');
+  assert.deepEqual(g.writes().map(op => `${op.method} ${op.table}`), ['insert invoices'], 'the same stamp as the load: sent');
 
   // Another tab on this device purged since these records loaded (its fence
   // moved): nothing is sent, no request is needed, and the account loads again.
@@ -641,7 +702,7 @@ test('saves kept under a failed check, then refused by a read-only answer, are m
   f.authority.accept(ACCOUNT, active());
   await settle();
   const sent = f.writes().map(op => `${op.method} ${op.table}`);
-  assert.ok(sent.includes('upsert invoices') && sent.includes('delete cme') && sent.includes('upsert deleted_items'), sent.join(', '));
+  assert.ok(sent.includes('insert invoices') && sent.includes('delete cme') && sent.includes('upsert deleted_items'), sent.join(', '));
   assert.deepEqual(f.queue(), []);
 });
 
@@ -668,12 +729,10 @@ test('a live edit made while replay is sending an older queued copy of the same 
     records: { invoices: [invoice()] },
     onRequest: async op => {
       if (op.table === 'deleted_items' && op.method === 'select') return { data: [], error: null };
-      // The replayed copy is slow (a document's file uploads first). It is an
-      // UPDATE of what it changed now, as the live edit is (review of
-      // 9484782c), so it is told by its value.
-      if (op.table === 'invoices' && op.value?.paid_at === '2026-09-29T12:00:00.000Z') await gate;
-      if (op.table === 'invoices') landed.push(`${op.method} ${op.value?.paid_at}`);
-      if (op.method === 'update' && op.returning) return { data: [{ id: op.filters.find(([m, c]) => m === 'eq' && c === 'id')?.[2] }], error: null };
+      // The replayed copy is slow (a document's file uploads first).
+      if (op.table === 'invoices' && op.method === 'insert') await gate;
+      if (op.table === 'invoices' && op.method !== 'select') landed.push(`${op.method} ${op.value?.paid_at}`);
+      if (op.method === 'update' && op.returning) return { data: [{ ...Object.fromEntries(Object.entries(invoice()).map(([key, value]) => [key.replace(/[A-Z]/g, m => '_' + m.toLowerCase()), value])), ...op.value, id: op.filters.find(([m, c]) => m === 'eq' && c === 'id')?.[2] }], error: null };
       return { error: null };
     },
   });
@@ -693,7 +752,7 @@ test('a live edit made while replay is sending an older queued copy of the same 
   release();
   await replay;
   await settle();
-  assert.deepEqual(landed, ['update 2026-09-29T12:00:00.000Z', 'update 2026-09-29T13:00:00.000Z'], 'the newer copy lands last');
+  assert.deepEqual(landed, ['insert 2026-09-29T12:00:00.000Z', 'update 2026-09-29T13:00:00.000Z'], 'the newer copy lands last');
   assert.deepEqual(f.queue(), []);
 });
 
@@ -707,9 +766,9 @@ test('replay that reaches a queued copy while a live edit of that record is in f
     onRequest: async op => {
       if (op.table === 'deleted_items' && op.method === 'select') return { data: [], error: null };
       if (op.table === 'invoices' && op.method === 'update') await editGate;
-      if (op.table === 'invoices' && op.method === 'upsert') await copyGate;
-      if (op.table === 'invoices') landed.push(`${op.method} ${op.value?.paid_at}`);
-      if (op.method === 'update' && op.returning) return { data: [{ id: op.filters.find(([m, c]) => m === 'eq' && c === 'id')?.[2] }], error: null };
+      if (op.table === 'invoices' && op.method === 'insert') await copyGate;
+      if (op.table === 'invoices' && op.method !== 'select') landed.push(`${op.method} ${op.value?.paid_at}`);
+      if (op.method === 'update' && op.returning) return { data: [{ ...snake(invoice()), ...op.value }], error: null };
       return { error: null };
     },
   });
@@ -851,7 +910,6 @@ test('QA3 review: a Credential-only member\'s document saves kept during a faile
   f.authority.accept(ACCOUNT, credentialOnly());
   await settle();
   const sent = f.writes().map(op => `${op.method} ${op.table || op.bucket}`);
-  // The rename goes up as what it changed (review of 9484782c).
   for (const write of ['update documents', 'remove documents', 'delete documents', 'upsert deleted_items']) assert.ok(sent.includes(write), `${write}: ${sent.join(', ')}`);
   assert.deepEqual(f.queue(), [], 'nothing is stranded in the queue');
   assert.equal(f.reports.some(r => r.extra.event === 'write_refused'), false, 'a paying member is not reported refused');
@@ -876,8 +934,16 @@ function lockManager() {
 test('QA3 review: in two tabs, replay never sends a queued copy the other tab\'s newer edit replaced, and one tab replays a queue at a time', async () => {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
+  let cloudInvoice = { user_id: PROFILE, ...Object.fromEntries(Object.entries(invoice()).map(([key, value]) => [key.replace(/[A-Z]/g, m => '_' + m.toLowerCase()), value])) };
   const onRequest = async op => {
-    if (op.table === 'cme' && op.method === 'upsert') await gate;
+    if (op.table === 'invoices' && op.method === 'select') return { data: cloudInvoice, error: null };
+    if (op.table === 'invoices' && op.method === 'update') {
+      const matches = op.filters.every(([kind, key, value]) => kind === 'is' ? cloudInvoice[key] == null : cloudInvoice[key] === value);
+      if (!matches) return { data: [], error: null };
+      cloudInvoice = { ...cloudInvoice, ...op.value };
+      return { data: [{ ...cloudInvoice }], error: null };
+    }
+    if (op.table === 'cme' && op.method === 'insert') await gate;
     if (op.table === 'deleted_items' && op.method === 'select') return { data: [], error: null };
     if (op.method === 'update' && op.returning) return { data: [{ id: op.filters.find(([m, c]) => m === 'eq' && c === 'id')?.[2] }], error: null };
     return { error: null };
@@ -901,13 +967,18 @@ test('QA3 review: in two tabs, replay never sends a queued copy the other tab\'s
   await settle();
   assert.deepEqual(b.writes(), [], 'tab B sends nothing tab A is sending');
   // The member edits the invoice in tab B, and that newer full row lands.
+  cloudInvoice.paid_at = '2026-09-29T12:00:00.000Z';
   b.app.editItem('invoices', { ...b.state.invoices[0], paidAt: '2026-09-29T13:00:00.000Z' });
   await settle();
   assert.deepEqual(b.writes().map(op => `${op.method} ${op.table} ${op.value.paid_at}`), ['update invoices 2026-09-29T13:00:00.000Z']);
   release();
   await replay;
-  assert.deepEqual(a.writes().filter(op => op.table === 'invoices'), [], 'tab A never sends the older copy over it');
+  assert.equal(cloudInvoice.paid_at, '2026-09-29T13:00:00.000Z', 'tab A cannot replace the newer value');
+  assert.ok(a.writes().filter(op => op.table === 'invoices').every(op => op.method === 'update' && op.filters.some(([kind, key]) => kind === 'is' && key === 'paid_at')), 'any old attempt requires its observed prior value atomically');
   assert.deepEqual(a.queue(), []);
+  const copies = recoveryFor(browser.storage, () => ACCOUNT).readRecovery(ACCOUNT);
+  assert.equal(copies[0].local.paidAt, '2026-09-29T12:00:00.000Z');
+  assert.equal(copies[0].cloud.paidAt, '2026-09-29T13:00:00.000Z');
 });
 
 test('QA3 review: an invoice that already went out keeps its record, and its entries stay billed, when the check its recording starts answers read-only', async () => {
@@ -938,7 +1009,7 @@ test('QA3 review: an invoice that already went out keeps its record, and its ent
   const seen = watchAnswers(f);
   f.authority.accept(ACCOUNT, active());
   await settle();
-  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table} ${op.value.id}`).sort(), ['update work_log work-synthetic-1', 'upsert invoices inv-synthetic-1']);
+  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table} ${op.value.id}`).sort(), ['insert invoices inv-synthetic-1', 'insert work_log work-synthetic-1']);
   assert.deepEqual(f.queue(), []);
   assert.deepEqual(seen.loads, []);
   // Anything else kept under that check is still taken back.
@@ -963,7 +1034,7 @@ test('QA3 review: a star that lands while replay is under way is not undone by t
   const f = fixture({
     records: { cme: [{ id: 'cme-x', title: 'Synthetic X', favorite: false }] },
     onRequest: async op => {
-      if (op.table === 'cme' && op.method === 'upsert' && op.value.id === 'cme-first') await gate;
+      if (op.table === 'cme' && op.method === 'insert' && op.value.id === 'cme-first') await gate;
       return answerRows(op);
     },
   });
@@ -1015,8 +1086,90 @@ test('QA3 review: replay that reaches a record while a star of it is in flight w
   releaseStar();
   await replay;
   const sent = f.writes().filter(op => op.table === 'cme');
-  assert.deepEqual(sent.map(op => op.method), ['update', 'update']);
-  assert.ok(!('favorite' in sent[1].value) || sent[1].value.favorite === true, 'never the value from before the star');
-  assert.equal(sent[1].value.title, 'Synthetic X renamed');
+  assert.deepEqual(sent.map(op => op.method), ['update', 'insert']);
+  assert.equal(sent[1].value.favorite, true, 'the created row carries the landed star');
   assert.deepEqual(f.queue(), []);
+});
+
+
+// A transport failure uses the same durable queue without awaitingAccess.
+// The access hook already checks on online/focus/visibility return; its fresh
+// answer must wake both kinds of queued writes.
+async function networkQueuedSave(f) {
+  await keptSave(f);
+  f.values.set(`ops:${ACCOUNT}`, JSON.stringify(f.queue().map(op => ({ ...op, awaitingAccess: false }))));
+}
+
+test('a reconnect answer replays ordinary network-failed saves without reloading', async () => {
+  const f = fixture();
+  await networkQueuedSave(f);
+  const seen = watchAnswers(f);
+  f.authority.accept(ACCOUNT, active());
+  f.authority.accept(ACCOUNT, active());
+  await settle();
+  assert.equal(seen.stampReads, 1, 'overlapping answers share one guarded replay');
+  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table}`), ['insert invoices']);
+  assert.deepEqual(f.queue(), []);
+  assert.deepEqual(seen.loads, []);
+  seen.stop();
+});
+
+test('a reconnect answer leaves an empty queue alone', async () => {
+  const f = fixture();
+  const seen = watchAnswers(f);
+  f.authority.accept(ACCOUNT, active());
+  await settle();
+  assert.equal(seen.stampReads, 0);
+  assert.deepEqual(f.writes(), []);
+  seen.stop();
+});
+
+test('ordinary offline saves cannot replay across deletion, account change, or effect disposal', async t => {
+  for (const reason of ['deleted remotely', 'purged locally', 'account changed', 'unmounted']) {
+    await t.test(reason, async () => {
+      const f = fixture();
+      await networkQueuedSave(f);
+      let release;
+      const gate = new Promise(resolve => { release = resolve; });
+      const owner = { current: ACCOUNT };
+      const seen = watchAnswers(f, {
+        dataOwnerRef: owner,
+        localCopyCurrent: () => reason !== 'purged locally',
+        readAccountDataDeletion: async () => {
+          await gate;
+          return reason === 'deleted remotely' ? '2026-09-29T12:30:00.000+00:00' : null;
+        },
+      });
+      f.authority.accept(ACCOUNT, active());
+      await settle();
+      if (reason === 'account changed') owner.current = 'user_SyntheticGateB';
+      if (reason === 'unmounted') seen.stop();
+      release();
+      await settle();
+      assert.deepEqual(f.writes(), [], reason);
+      assert.equal(f.queue().length, 1, 'no replay removed the pending copy');
+      assert.deepEqual(seen.loads, ['deleted remotely', 'purged locally'].includes(reason) ? [ACCOUNT] : []);
+      seen.stop();
+    });
+  }
+});
+
+test('a failed reconnect deletion check preserves ordinary edits for the next answer', async () => {
+  const f = fixture();
+  await networkQueuedSave(f);
+  let failed = true;
+  const seen = watchAnswers(f, { readAccountDataDeletion: async () => {
+    if (failed) throw new Error('synthetic reconnect transport failure');
+    return null;
+  } });
+  f.authority.accept(ACCOUNT, active());
+  await settle();
+  assert.deepEqual(f.writes(), []);
+  assert.equal(f.queue().length, 1);
+  failed = false;
+  f.authority.accept(ACCOUNT, active());
+  await settle();
+  assert.deepEqual(f.writes().map(op => `${op.method} ${op.table}`), ['insert invoices']);
+  assert.deepEqual(f.queue(), []);
+  seen.stop();
 });

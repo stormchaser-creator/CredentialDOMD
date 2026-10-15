@@ -17,6 +17,7 @@ try {
   S = await loadScreens([
     'export { AppInner } from "./src/App.jsx";',
     'export { default as LocumDashboard } from "./src/components/features/locum/LocumDashboard.jsx";',
+    'export { setActiveUserId } from "./src/utils/storageScope.js";',
     'export { keepInvoiceNote, _resetInvoiceHandoff } from "./src/utils/invoiceHandoff.js";',
   ].join(' '), { expose: { 'src/App.jsx': ['AppInner'] }, real: ['lib/supabase', 'utils/storageScope', 'utils/privateVault'], clerk: true });
 } finally {
@@ -50,7 +51,7 @@ const noop = () => {};
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
 test('Home says an invoice from Synthetic Mountain went to the share sheet unanswered, with the way to answer it', () => {
-  S._resetInvoiceHandoff();
+  S._resetInvoiceHandoff(); S.setActiveUserId('user_synthetic');
   S.keepInvoiceNote('user_synthetic', { number: 'INV-20260930-02', sentAt: '2026-09-30T18:00:00Z', kind: 'INV', contractId: 'K2', total: 1760, days: ['2026-09-29'], handed: true });
   const html = renderScreen(S.AppInner, { app: app(), props: { tab: 'home', setTab: noop, subPage: null, setSubPage: noop, navRecord: null } });
   const t = text(html);
@@ -60,7 +61,7 @@ test('Home says an invoice from Synthetic Mountain went to the share sheet unans
 });
 
 test('Home says nothing once that invoice is recorded (must still pass)', () => {
-  S._resetInvoiceHandoff();
+  S._resetInvoiceHandoff(); S.setActiveUserId('user_synthetic');
   S.keepInvoiceNote('user_synthetic', { number: 'INV-20260930-02', sentAt: '2026-09-30T18:00:00Z', kind: 'INV', contractId: 'K2', total: 1760, handed: true });
   const a = app();
   a.data.invoices = [{ id: 'i2', number: 'INV-20260930-02', contractId: 'K2', totalAmount: 1760 }];
@@ -69,7 +70,7 @@ test('Home says nothing once that invoice is recorded (must still pass)', () => 
 });
 
 test('Practice opened for an invoice lands Work on the agreement it went out from', () => {
-  S._resetInvoiceHandoff();
+  S._resetInvoiceHandoff(); S.setActiveUserId('user_synthetic');
   const html = renderScreen(S.LocumDashboard, { app: app(), props: { initialSub: 'work', openContract: 'K2', onFocusConsumed: noop }, storage: { lastContract: 'K1' } });
   assert.match(html, /<option value="K2" selected="">Synthetic Mountain/);
   const plain = renderScreen(S.LocumDashboard, { app: app(), props: { initialSub: 'work', onFocusConsumed: noop }, storage: { lastContract: 'K1' } });

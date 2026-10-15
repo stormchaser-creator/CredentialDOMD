@@ -1,3 +1,4 @@
+import { copyInvoiceHandoff } from "../helpers/copy-invoice-handoff.mjs";
 // Sixth review of the IndexedDB offline copy (54dc8227): two windows of one
 // account, and a roll forward after a rollback. Each finding is reproduced
 // against the REAL storage.js, storageScope.js and offlineStore.js, loaded
@@ -62,7 +63,9 @@ async function openWindow(U) {
     .replace('from "./heldChanges.js"', `from ${JSON.stringify(srcUrl('./heldChanges.js'))}`)
     .replace('from "./loadRebase.js"', `from ${JSON.stringify(srcUrl('./loadRebase.js'))}`);
   writeFileSync(join(dir, 'storageScope.js'), scopeSource);
+  copyInvoiceHandoff(dir);
   writeFileSync(join(dir, 'offlineStore.js'), readFileSync(resolve(root, 'src/utils/offlineStore.js'), 'utf8'));
+  writeFileSync(join(dir, 'syncRecovery.js'), readFileSync(resolve(root, 'src/utils/syncRecovery.js'), 'utf8'));
   const scopeUrl = pathToFileURL(join(dir, 'storageScope.js')).href;
   writeFileSync(join(dir, 'storage.mjs'), patchStorage(scopeUrl));
   const scope = await import(scopeUrl);

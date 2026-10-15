@@ -1,3 +1,4 @@
+import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 // CME Credits against the rules: the transcript PDF (one state, then a picker
 // with two states and a board), the compliance cards against the database,
 // the desk table grouped by each state's cycle against Home, a conditional
@@ -8,7 +9,7 @@ import {
   chooseFiles, goTab, newMember, openCredentials, openMore, row, sleep, syntheticPng, tableRow, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import {
-  addCme, addLicense, day, dbWait, download, fillField, openAdd, pdfText, saveDialog, stubExternalPages,
+  addCme, addLicense, day, dbWait, download, fillField, openAdd, pdfText, saveDialog, shareSheet, shared, stubExternalPages,
 } from './support/cred-helpers.mjs';
 import { CME_PROVIDERS } from '../../src/constants/cmeProviders.js';
 
@@ -97,6 +98,7 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
     await waitForMemberApp(page);
     await openCredentials(page, 'CME Credits');
     await sleep(3000);
+    await checkNoUnexpectedRecovery(page, qa, 'CME compliance records after reload');
     // Always through the picker since 7047ba2c, even for one state: the certificates are fetched
     // while it is open, so the tap that builds the PDF keeps its user gesture.
     await page.getByRole('button', { name: 'Transcript PDF' }).click();
@@ -112,7 +114,7 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
     await page.keyboard.press('Escape').catch(() => {});
     const pdf = await pdfText(buffer);
     const t = pdf.text;
-    qa.check('the file is the Ohio transcript', /^CME-Transcript-OH-\d{4}-\d{2}-\d{2}\.pdf$/.test(name) && /Ohio medical license renewal/.test(t), name);
+    qa.check('the file is the Ohio transcript', /^(CME-Transcript-OH-\d{4}-\d{2}-\d{2}|CME Transcript, Ohio, [^/]+)\.pdf$/.test(name) && /Ohio medical license renewal/.test(t), name);
     qa.check('it prints the cycle window and the requirements', /REQUIREMENTS/.test(t) && /2-year cycle ending at license expiration/.test(t) && /50/.test(t), t.slice(0, 400));
     qa.check('every entry in the window is listed (2), none outside it', /CME ACTIVITIES IN WINDOW \(2\)/.test(t) && /QA Neurosurgery Board Review/.test(t) && /QA Spine Trauma Update/.test(t) && !/QA Older Skull Base Course/.test(t) && !/QA Undated Grand Rounds/.test(t), t.match(/CME ACTIVITIES IN WINDOW \(\d+\)/)?.[0]);
     const embedded = /File: qa-trauma-certificate\.png/.test(t);
@@ -127,6 +129,33 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
         severity: 'medium',
       });
     }
+
+    // Native Files saves title/text as a second unnamed item. The dedicated
+    // save action must hand over only files, and keep ordinary Mail sharing.
+    await shareSheet(page);
+    await page.getByRole('button', { name: 'Transcript PDF', exact: true }).click();
+    const savePicker = page.getByRole('dialog', { name: 'Transcript PDF' });
+    await savePicker.waitFor({ timeout: 10000 });
+    const saveAction = savePicker.getByRole('button', { name: 'Save PDF', exact: true });
+    await saveAction.click();
+    const saveBox = await saveAction.boundingBox();
+    qa.check('Save PDF is explicitly selected and has a44px tap target', await saveAction.getAttribute('aria-pressed') === 'true' && saveBox?.height >=44);
+    await savePicker.getByRole('button', { name: /^Ohio \(OH\)/ }).click();
+    await waitFor('file-only transcript handoff', async () => (await shared(page))[0] || null, { timeoutMs: 15000 });
+    const saved = (await shared(page))[0];
+    qa.check('Save PDF carries one named PDF and no unwanted title/text file', saved.files.length ===1 && saved.files[0].type === 'application/pdf' && saved.files[0].size >0 && !saved.title && !saved.text, saved);
+    qa.check('saved transcript uses a fresh timestamped filename', /\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.pdf$/.test(saved.files[0].name), saved.files[0].name);
+    await savePicker.waitFor({ state: 'hidden', timeout: 10000 });
+    qa.check('the app requests file saving without claiming it completed', /File saving requested\. Confirm the save in the device dialog\./.test(await page.locator('main, body').first().innerText()));
+    await page.getByRole('button', { name: 'Transcript PDF', exact: true }).click();
+    await savePicker.waitFor({ timeout: 10000 });
+    qa.check('reopening restores the ordinary message-share action', await savePicker.getByRole('button', { name: 'Share with message', exact: true }).getAttribute('aria-pressed') === 'true');
+    await savePicker.getByRole('button', { name: /^Ohio \(OH\)/ }).click();
+    await waitFor('ordinary transcript share', async () => (await shared(page))[1] || null, { timeoutMs: 15000 });
+    const messageShare = (await shared(page))[1];
+    qa.check('ordinary sharing retains its title and formatted message', !!messageShare.title && !!messageShare.text && messageShare.files.length ===1 && messageShare.files[0].name !== saved.files[0].name, messageShare);
+    await shareSheet(page, { absent: true });
+
   }, { soft: true });
 
   // A second state (its window reaches the older course) and a board certification.
@@ -202,8 +231,25 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
     const opened = await picker.waitFor({ timeout: 10000 }).then(() => true, () => false);
     qa.check('with two states the picker opens', opened);
     if (!opened) return;
+    // Certificate preparation changes each option's readiness text. Establish
+    // the ready baseline before comparing it across layout changes.
+    await waitFor('all transcript choices to finish certificate preparation', async () => (
+      /getting the certificates ready/.test(await picker.innerText()) ? null : true
+    ), { timeoutMs: 30000, intervalMs: 100 });
     const text = await picker.innerText();
+    const originalViewport = page.viewportSize();
+    try {
+      for (const width of [600, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.waitForFunction((desktop) => !!document.querySelector('.cmd-content-area') === desktop, width >= 1024);
+        await picker.getByRole('button', { name: /Colorado \(CO\)/ }).waitFor();
+        qa.check(`the transcript picker keeps its choices after resizing to ${width}px`, (await picker.innerText()) === text, (await picker.innerText()).slice(0, 500));
+      }
+    } finally {
+      if (originalViewport) await page.setViewportSize(originalViewport);
+    }
     await qa.shot('transcript picker');
+    qa.check('the transcript picker remains open after its screenshot', await picker.isVisible());
     qa.check('the picker lists each state with its window and entry count', /Ohio \(OH\)[\s\S]*2 entries in window/.test(text) && /Colorado \(CO\)[\s\S]*3 entries in window/.test(text), text.slice(0, 500));
     const boardListed = /Board continuing certification/i.test(text) && /Neurological Surgery/.test(text);
     qa.check('the picker lists the board the CME page shows a Board MOC card for (ABNS)', boardListed, text.slice(0, 600));
@@ -218,7 +264,7 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
     }
     const { name, buffer } = await download(page, picker.getByRole('button', { name: /Colorado \(CO\)/ }));
     const t = (await pdfText(buffer)).text;
-    qa.check('picking Colorado builds its transcript with its 3 entries in window', /CME-Transcript-CO-/.test(name) && /Colorado medical license renewal/.test(t) && /CME ACTIVITIES IN WINDOW \(3\)/.test(t) && /QA Older Skull Base Course/.test(t), t.match(/CME ACTIVITIES IN WINDOW \(\d+\)/)?.[0]);
+    qa.check('picking Colorado builds its transcript with its 3 entries in window', /^CME(-Transcript-CO-| Transcript, Colorado, )/.test(name) && /Colorado medical license renewal/.test(t) && /CME ACTIVITIES IN WINDOW \(3\)/.test(t) && /QA Older Skull Base Course/.test(t), t.match(/CME ACTIVITIES IN WINDOW \(\d+\)/)?.[0]);
     if (boardListed) {
       await page.getByRole('button', { name: 'Transcript PDF' }).click();
       await picker.waitFor({ timeout: 10000 });
@@ -244,6 +290,7 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
     await openCredentials(page, 'CME Credits');
     const sel = page.getByRole('combobox', { name: QUESTION }).first();
     qa.check('after a reload the answer is still Yes and the requirement still shown', (await sel.inputValue()) === 'Yes' && /Pain Management\s*0\/20 hrs/.test(await complianceCard(page, 'OH')));
+    await checkNoUnexpectedRecovery(page, qa, 'CME conditional topic after reload');
     await qa.shot('conditional topic answered');
   }, { soft: true });
 
@@ -380,6 +427,7 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
     await openCredentials(page, 'Find CME');
     const browse = page.getByRole('button', { name: 'Browse All Providers' });
     const compliant = await browse.waitFor({ timeout: 10000 }).then(() => true, () => false);
+    await checkNoUnexpectedRecovery(page, qa, 'CME fully compliant records');
     await qa.shot('find cme fully compliant');
     qa.check('For You says "Fully Compliant" and offers "Browse All Providers"', compliant && /Fully Compliant/.test(await page.locator('main, body').first().innerText()));
     if (compliant) {

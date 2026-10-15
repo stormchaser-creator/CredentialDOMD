@@ -94,6 +94,10 @@ export function functionsEnv({ mockPort, appPort, overrides = process.env, secre
     WELCOME_HOOK_SECRET: vault.welcome_hook_secret,
     CREDENTIAL_PORTAL_SECRET: s.credentialPortalSecret,
     ERROR_IP_PEPPER: s.errorIpPepper,
+    EMAIL_UNSUBSCRIBE_SECRET: s.emailUnsubscribeSecret,
+    // A genuine HTTPS action in the local profile. The local Worker relay
+    // adapts this origin to its own app origin for plain-HTTP browser tests.
+    EMAIL_UNSUBSCRIBE_BASE: `https://127.0.0.1:${appPort + 5}/api/unsubscribe`,
     // The lab app server relays /api/confirm-forwarding the way production's Cloudflare worker does.
     FORWARDING_CONFIRM_BASE: `http://127.0.0.1:${appPort}/api/confirm-forwarding`,
   };

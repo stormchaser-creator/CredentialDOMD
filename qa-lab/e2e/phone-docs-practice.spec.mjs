@@ -272,7 +272,10 @@ for (const width of [375, 390]) {
         await sleep(400);
         await sub('Invoices').tap();
         await sleep(800);
-        const card = page.getByText(/^INV-/).first();
+        // The card is the tap target (its own onClick), not the number's text: since release/goal5
+        // (aa12a8c1) the number is a span of its own in a wrapping row, 21 px tall; before, this
+        // locator measured the number row, 43 px only because the badge split onto a second line.
+        const card = page.getByText(/^INV-/).first().locator('xpath=ancestor::div[contains(@style,"cursor: pointer")][1]');
         file(await auditScreen(qa, page, 'Invoices', {
           allowSmall: known,
           primary: [['Record payment', page.getByRole('button', { name: /Record payment/ }).first()], ['Resend', page.getByRole('button', { name: /Resend/ }).first()], ['invoice card', card]],

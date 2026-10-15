@@ -20,6 +20,9 @@ import { repairStoredIds } from '../../src/utils/idRepair.js';
 import { generateId } from '../../src/utils/helpers.js';
 import { applyHeldQueue } from '../../src/utils/heldChanges.js';
 import { localChangesSince, rebaseLocalChanges } from '../../src/utils/loadRebase.js';
+import { createSyncRecovery } from '../../src/utils/syncRecovery.js';
+import { createRecordAcknowledgements, isAcknowledgedRecordCopy } from '../../src/utils/recordAcknowledgements.js';
+import { fixture as persistenceFixture } from './persistence-fixture.mjs';
 import { storedFileOf } from '../../src/utils/documentBytes.js';
 
 const { BASE_KEYS, WIPE_SEEN_KEY, localFence, adoptLocalFence, localCopyCurrent } = storageScope;
@@ -59,12 +62,13 @@ const onScreen = () => ({ settings: { name: 'Synthetic Race' }, licenses: [lic(L
  * "tables" just after the tables were read, "ledger" while the deletion
  * ledger is read. The debounced cache write for it has not fired yet.
  */
-function reload({ memory = onScreen(), device = onScreen(), cloud = onScreen(), change = null, when = 'tables', tombstones = [], profile = {}, under } = {}) {
-  storage.clear();
+function reload({ memory = onScreen(), device = onScreen(), cloud = onScreen(), change = null, when = 'tables', tombstones = [], profile = {}, under, recoveryGate = null, collectionKeys = KEYS, prepareReceipts = async () => new Set() } = {}) {
+  storage.clear(); storageScope.setActiveUserId(OWNER);
   adoptLocalFence(OWNER);
   if (device) storage.setItem(`${BASE_KEYS.data}:${OWNER}`, JSON.stringify(device));
   const calls = [], states = [];
   const record = (name, extra = {}) => calls.push({ name, ...extra });
+  const recovery = createSyncRecovery({ storage: () => storage });
   const dataRef = { current: memory };
   const dataOwnerRef = { current: OWNER };
   const land = () => { if (change) dataRef.current = change(structuredClone(dataRef.current)); };
@@ -72,7 +76,7 @@ function reload({ memory = onScreen(), device = onScreen(), cloud = onScreen(), 
     offlineMode: false, window: { Clerk: { user: { id: OWNER } } },
     userIdRef: { current: PROFILE }, dataOwnerRef, dataLoadGeneration: { current: 1 }, dataRef,
     loadedDeletionRef: { current: under === undefined ? { owner: OWNER, stamp: null, fence: localFence(OWNER) } : under },
-    DEFAULT_DATA: { settings: {}, licenses: [], customCategories: [], documents: [] }, COLLECTION_KEYS: KEYS,
+    DEFAULT_DATA: { settings: {}, ...Object.fromEntries(collectionKeys.map(key => [key, []])) }, COLLECTION_KEYS: collectionKeys,
     WIPE_SEEN_KEY, lsGet: storageScope.lsGet, getActiveUserId: () => OWNER, localFence, adoptLocalFence, localCopyCurrent,
     repairStoredIds, generateId, BASE_KEYS, lsGetJSON: storageScope.lsGetJSON, lsSetJSON: storageScope.lsSetJSON, pendingOpCount: storageScope.pendingOpCount,
     // The purge, as far as this load sees it: the device copy goes and the stamp is noted.
@@ -105,6 +109,9 @@ function reload({ memory = onScreen(), device = onScreen(), cloud = onScreen(), 
     withLocalOnlySettings: settings => settings, hasLegacyStorage: () => false, adoptLegacyStorage: () => null,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [], reconcileDocumentLinks,
     applyHeldQueue, localChangesSince, rebaseLocalChanges,
+    prepareRecordAcknowledgements: prepareReceipts, isAcknowledgedRecordCopy, recordContent: persistenceFixture().api.recordContent,
+    preserveRecovery: async options => { record('recovery'); if (recoveryGate) await recoveryGate(options); return recovery.preserveRecovery(options); },
+    loadData: async id => JSON.parse(storage.getItem(`${BASE_KEYS.data}:${id}`)),
     accessAuthority: { suspendWrites: () => record('suspendWrites') },
     setData: value => { states.push(value); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },
@@ -120,6 +127,31 @@ function reload({ memory = onScreen(), device = onScreen(), cloud = onScreen(), 
 }
 
 const addLicence = d => ({ ...d, licenses: [...d.licenses, lic(NEW_LIC, { updatedAt: undefined })] });
+
+for (const changedLocally of [false, true]) {
+  test(`reload after invoice save before cache debounce: ${changedLocally ? 'a real unsent edit keeps its recovery copy' : 'the preceding confirmed cache needs no recovery'}`, async () => {
+    const values = new Map();
+    const api = createRecordAcknowledgements({ activeAccount: () => OWNER, fenceFor: () => null,
+      copyCurrent: (_owner, fence) => fence === null, receiptBase: 'acks', queueBase: 'ops',
+      read: (base, owner) => values.get(`${base}:${owner}`) ?? null,
+      write: (base, text, owner) => { values.set(`${base}:${owner}`, text); return true; } });
+    const item = { id: L3, description: 'Confirmed consult', invoiceId: null, updatedAt: EARLIER };
+    const linked = { ...item, invoiceId: CAT, updatedAt: LATER };
+    const scope = { accountId: OWNER, fence: null };
+    for (const saved of [item, linked]) {
+      await api.acknowledgeRecordWrite(api.captureRecordWrite({ ...scope, collectionKey: 'workLog', item: saved }), { serverVersion: saved.updatedAt });
+    }
+    const localItem = changedLocally ? { ...item, description: 'Unsent correction', updatedAt: LATEST } : item;
+    const device = { ...onScreen(), workLog: [localItem] }, cloud = { ...onScreen(), workLog: [linked] };
+    const f = reload({ memory: device, device, cloud, collectionKeys: [...KEYS, 'workLog'], prepareReceipts: api.prepareRecordAcknowledgements });
+    await f.loadDataForUser(OWNER);
+    assert.equal(f.named('recovery').length, changedLocally ? 1 : 0);
+    assert.equal(f.shown().workLog[0].invoiceId, CAT, 'the confirmed account invoice link remains visible');
+    assert.equal(f.cached().workLog[0].invoiceId, CAT, 'the persisted cache catches up to the confirmed account row');
+    assert.deepEqual(f.pushed('workLog'), [], 'neither the old copy nor recovery is sent back to the account');
+    assert.equal(await api.expectedRecordVersion({ ...scope, collectionKey: 'workLog', previous: localItem }), null, 'a preserved predecessor or unsent edit supplies no current write version');
+  });
+}
 
 for (const when of ['tables', 'ledger']) {
   test(`reconcile race (${when}): a licence added while the load reads stays on screen and in the device copy`, async () => {
@@ -244,6 +276,63 @@ test('rebaseLocalChanges: settings typed meanwhile are laid over; a missing chan
   assert.deepEqual(out.settings, { name: 'B', theme: 'dark' });
   assert.equal(rebaseLocalChanges(read, localChangesSince(base, base)), read);
   assert.equal(rebaseLocalChanges(read, localChangesSince(null, now)), read);
+});
+
+
+const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test('merge integration: a purge during the deletion read stops hydration and self-heal when no recovery rows exist', async () => {
+  const cloud = onScreen(); cloud.licenses = cloud.licenses.filter(item => item.id === L1);
+  let purgedUnder;
+  const f = reload({ cloud, when: 'ledger', change: data => {
+    storageScope.advanceLocalFence(OWNER);
+    purgedUnder = localFence(OWNER);
+    storage.removeItem(`${BASE_KEYS.data}:${OWNER}`);
+    return data;
+  } });
+  await f.loadDataForUser(OWNER);
+  assert.equal(f.named('recovery').length, 0, 'neither same-content nor cloud-absent rows require recovery');
+  assert.equal(f.states.length, 0, 'the stale load cannot replace the state after a purge');
+  assert.deepEqual(f.pushed('licenses'), [], 'the stale local-only licence cannot be inserted');
+  assert.equal(f.cached(), null, 'the purged device cache stays empty');
+  assert.equal(localFence(OWNER), purgedUnder, 'the stale load cannot adopt a new fence');
+});
+
+test('merge integration: live changes made during each delayed recovery survive hydration, caching and link repair', { timeout: 5000 }, async () => {
+  const cloud = onScreen();
+  cloud.licenses = cloud.licenses.map(item => ({ ...item, notes: 'Cloud-only field' }));
+  const gates = [deferred(), deferred()], entered = [deferred(), deferred()]; let gate = 0;
+  const f = reload({ cloud, recoveryGate: () => { const index = gate++; entered[index].resolve(); return gates[index].promise; } });
+  const loading = f.loadDataForUser(OWNER);
+  await entered[0].promise; assert.equal(gate, 1);
+  f.dataRef.current = { ...addLicence(f.dataRef.current), settings: { name: 'Typed during first capture' },
+    documents: [{ id: DOC, name: 'New file during recovery', data: 'data:text/plain;base64,YQ==', linkedTo: `licenses:${NEW_LIC}` }] };
+  gates[0].resolve(); await entered[1].promise; assert.equal(gate, 2);
+  f.dataRef.current = { ...f.dataRef.current, settings: { name: 'Typed during second capture' },
+    licenses: f.dataRef.current.licenses.filter(item => item.id !== L2).map(item => item.id === L1 ? { ...item, name: 'Edited during second capture', favorite: true, updatedAt: LATER } : item) };
+  gates[1].resolve(); await loading;
+  assert.deepEqual(ids(f.shown().licenses), [L1, NEW_LIC].sort());
+  const edited = f.shown().licenses.find(item => item.id === L1);
+  assert.equal(edited.name, 'Edited during second capture'); assert.equal(edited.favorite, true);
+  assert.equal(edited.notes, 'Cloud-only field');
+  assert.equal(f.shown().settings.name, 'Typed during second capture');
+  assert.equal(f.shown().documents[0].linkedTo, `licenses:${NEW_LIC}`);
+  assert.deepEqual(f.cached(), f.shown(), 'the same rebased snapshot is cached');
+  assert.deepEqual(f.pushed('licenses'), [], 'a stale cached row never races the live saves');
+  assert.equal(f.named('sbUpdate').length, 0, 'link sweep leaves the newly added target');
+  assert.equal(f.named('upload').length, 0, 'the new file stays with its own upload');
+});
+
+test('merge integration: failed delayed recovery falls back without dropping changes made during that wait', async () => {
+  const cloud = onScreen(); cloud.licenses[0] = { ...cloud.licenses[0], notes: 'Different cloud' };
+  const wait = deferred(), f = reload({ cloud, recoveryGate: () => wait.promise });
+  const loading = f.loadDataForUser(OWNER); await tick();
+  f.dataRef.current = addLicence(f.dataRef.current);
+  wait.reject(Object.assign(Error('Synthetic recovery storage refusal'), { code: 'sync_recovery_unavailable' }));
+  await loading; await tick();
+  assert.deepEqual(ids(f.shown().licenses), [L1, L2, NEW_LIC].sort());
+  assert.deepEqual(f.pushed('licenses'), []);
 });
 
 // Link audit, 2026-10-01: the app back in front reads the account again

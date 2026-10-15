@@ -1,3 +1,4 @@
+import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 // Billing beyond the first purchase: the founding price agreeing across the
 // landing page, the in-app quote and Checkout (and all three moving to $149 at
 // the founding cap, simulated in a rolled-back transaction), an expired offer
@@ -6,10 +7,14 @@
 // Practice trial and what happens when the trial ends, and a free-beta member
 // who buys a membership that starts when the beta ends.
 import { test } from './support/fixtures.mjs';
+import { readFileSync } from 'node:fs';
+import { LAB_SECRETS_JSON } from '../lib/paths.mjs';
+import { APP_PUBLIC_ORIGIN } from '../lib/lab-config.mjs';
+import { installBillingBodyObserver } from './support/billing-response-body.mjs';
 import { guardContext, watchPage } from './support/fixtures.mjs';
 import {
   LAB_EMAIL_DOMAIN, accessSnapshot, createPhysician, field, goTab, lab, labExec, landing, letters, mockApi, newMember, openCredentials, openMore,
-  pendingOps, profileOf, restAs, row, rows, signIn, sleep, stamp, stripeFor, syncWarnings, syntheticPdf, chooseFiles, tableRow, waitFor,
+  openOfferReview, pendingOps, profileOf, restAs, row, rows, signIn, sleep, stamp, stripeFor, syncWarnings, syntheticPdf, chooseFiles, tableRow, waitFor,
   waitForCheckoutEvents, waitForMemberApp, waitForProfile,
 } from './support/lab.mjs';
 import { cancelSubscription, ensureFoundingPlaces, publicOffer, routePublicSite, sealBetaCohort, setTrialEnd, startPublicSite } from './support/bill-admin-support-public-helpers.mjs';
@@ -21,11 +26,31 @@ test.afterAll(async () => { await site?.close(); });
 // The product's support mailbox, built so no address sits in this public file.
 const SUPPORT_MAILBOX = ['support', 'credentialdomd.com'].join('@');
 const membership = (page) => page.getByRole('region', { name: 'Membership' });
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, ' ');
+// The membership card says "Checking your membership…" until a fresh load's first answer
+// (release/goal ef193e78); a read waits for the card to answer, up to 15 s.
+const text = async (loc) => {
+  let t = '';
+  for (let i = 0; i < 30; i++) {
+    t = (await loc.innerText()).replace(/\s+/g, ' ');
+    if (!t.includes('Checking your membership…')) return t;
+    await sleep(500);
+  }
+  return t;
+};
 /** The browser's own rendering of a server date, as membershipDate() formats it. */
 const shownDate = (page, iso) => page.evaluate((v) => new Date(v).toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' }), iso);
-/** The quote the app received (billing-quote), captured from the network. */
-const nextQuote = (page) => page.waitForResponse((r) => r.url().endsWith('/functions/v1/billing-quote') && r.request().method() === 'POST', { timeout: 60000 }).then((r) => r.json()).catch(() => null);
+// This file alone observes the app's own bounded reader, without rereading,
+// replaying or replacing the native response. Other journeys remain unchanged.
+const billingBodies = new WeakMap();
+test.beforeEach(async ({ page }) => {
+  const key = JSON.parse(readFileSync(LAB_SECRETS_JSON, 'utf8')).signingKey;
+  billingBodies.set(page, await installBillingBodyObserver(page, { origin: lab().urls.apiOrigin,
+    jwk: { kty: key.kty, kid: key.kid, n: key.n, e: key.e }, issuer: lab().issuer, authorizedParty: APP_PUBLIC_ORIGIN }));
+});
+test.afterEach(async ({ page }) => { billingBodies.get(page)?.stop(); billingBodies.delete(page); });
+const nextBilling = (page, user, path, statuses = [200]) => billingBodies.get(page).next(`/functions/v1/${path}`, user.id, statuses);
+/** The exact quote the app received, captured at its native reader's EOF. */
+const nextQuote = (page, user) => nextBilling(page, user, 'billing-quote').then(response => response.json());
 async function expireCheckout(sessionId) { return mockApi(`/qa/stripe/checkout/${encodeURIComponent(sessionId)}/expire`, { method: 'POST', body: {} }).catch((e) => ({ error: e.message })); }
 
 /**
@@ -80,13 +105,14 @@ test('founding price: landing, in-app quote and Checkout agree; the cap moves al
     const landingHero = (await vp.locator('[data-membership-hero-headline]').first().innerText()).trim();
     await visitor.close();
     qa.check('the landing page shows the same price as the offer', landingPrice === `$${offer.annualCents / 100}` && landingHero.includes(`$${offer.annualCents / 100}/year`), `${landingPrice} | ${landingHero}`);
-    // In the app, as the unpaid signup.
+    // In the app, as the unpaid signup. Pay first opens the offer's review by itself, so the
+    // quote is awaited from before the sign-in.
+    const got = nextQuote(page, user);
     await signIn(page, user);
     qa.check('the new signup lands on the membership gate', (await landing(page)) === 'gate');
     const gate = await text(membership(page));
     qa.check('the gate names the founding price the offer reports', offer.phase !== 'founding' || /\$99/.test(gate), gate.slice(0, 240));
-    const got = nextQuote(page);
-    await page.getByRole('button', { name: 'Review Credential offer' }).click();
+    await openOfferReview(page);
     quote = await got;
     await page.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 60000 });
     const review = await text(membership(page));
@@ -126,60 +152,81 @@ test('expired offer review: Checkout refused; Refresh clears consent', {
   test.setTimeout(15 * 60 * 1000);
   await ensureFoundingPlaces(2);
   const user = await createPhysician({ firstName: 'Evan', lastName: `Expiry ${letters()}` });
+  // Pay first opens the offer's review by itself: its quote is awaited from before the sign-in.
+  const firstQuote = nextQuote(page, user);
   await signIn(page, user);
   await landing(page);
   const pid = profileOf(user.id).id;
   const attempts = () => rows(`select attempt_id, state from public.billing_checkout_attempts where profile_id = '${pid}'`);
 
-  await qa.feature('BILL-013', 'The review states its expiry; past it (device clock) Continue refuses and says to review a fresh offer', async () => {
-    const got = nextQuote(page);
-    await page.getByRole('button', { name: 'Review Credential offer' }).click();
-    const quote = await got;
+  let currentReviewQuote;
+  // fix/signup (2026-10-07): the device clock no longer refuses Continue (a
+  // phone clock 30 minutes fast could never pay); the server decides on
+  // Continue (quote_expired, the next stretch), and a review past its time is
+  // fetched again when the page comes back to the front, asking for a new tick.
+  await qa.feature('BILL-013', 'The review states its expiry; past it on the device clock, the page fetches the review again on return to the front and asks for a new tick; nothing is opened', async () => {
+    const faultSince = new Date().toISOString();
+    await openOfferReview(page);
+    const quote = await firstQuote;
     await page.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 60000 });
     const review = await text(membership(page));
     const preview = row(`select expires_at from public.limited_billing_previews where id = '${quote?.quoteId}'`);
     const expected = await page.evaluate((v) => new Date(v).toLocaleString(), quote?.expiresAt);
     qa.check('"This review expires at <time>" matches the stored preview (30 minutes)', review.includes(`This review expires at ${expected}`) && Math.abs(Date.parse(preview?.expires_at) - Date.parse(quote?.expiresAt)) < 1000, `${expected} vs ${preview?.expires_at}`);
     await membership(page).getByRole('checkbox').check();
-    // The tab is left open past the expiry: the device clock moves 31 minutes on.
+    // The tab is left open past the expiry: the device clock moves 31 minutes on, and the page comes back to the front.
+    const renewed = nextQuote(page, user);
     await page.clock.setFixedTime(new Date(Date.parse(quote.expiresAt) + 60e3));
-    await page.getByRole('button', { name: 'Continue to secure payment' }).click();
-    const msg = page.getByText('This offer has expired. Review a fresh offer and confirm its terms before continuing.');
-    const said = await msg.first().waitFor({ timeout: 15000 }).then(() => true, () => false);
-    await qa.shot('expired review refused');
-    qa.check('Continue refuses and says the offer expired and to review a fresh one', said);
-    qa.check('consent is cleared', !(await membership(page).getByRole('checkbox').isChecked().catch(() => false)));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    const fresh = await Promise.race([renewed, sleep(20000).then(() => null)]);
+    currentReviewQuote = fresh;
+    await sleep(800);
+    await qa.shot('expired review fetched again');
+    qa.check('the review is fetched again (a new quote)', !!fresh?.quoteId && fresh.quoteId !== quote.quoteId, `${quote?.quoteId} -> ${fresh?.quoteId}`);
+    qa.check('consent is cleared (the new review asks for a new tick)', !(await membership(page).getByRole('checkbox').isChecked().catch(() => false)));
+    qa.check('the review is still on screen with Continue', await page.getByRole('button', { name: 'Continue to secure payment' }).isVisible().catch(() => false));
     qa.check('no Checkout opened and no checkout attempt was created', !page.url().includes('/qa/stripe/hosted/') && attempts().length === 0, attempts());
     await page.clock.setFixedTime(new Date());
+    const staleReports = rows(`select id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Membership checkout stopped on the page (quote_expired)'`);
+    qa.check('returning to an expired review refreshes it without claiming a checkout failure before Continue was clicked', staleReports.length === 0);
   }, { soft: true });
 
   await qa.feature('BILL-013', 'An offer that expired on the server (the clock agrees on the device) is refused by limited-checkout; nothing is created', async () => {
-    const got = nextQuote(page);
-    await page.getByRole('button', { name: 'Refresh offer' }).click();
-    const quote = await got;
+    const faultSince = new Date().toISOString();
+    const quote = currentReviewQuote;
+    if (!quote?.quoteId) throw new Error('Automatic quote renewal did not produce the review required for the server expiry control.');
     await sleep(800);
-    qa.check('Refresh offer shows a fresh quote with the current price and consent cleared', !!quote?.quoteId && !(await membership(page).getByRole('checkbox').isChecked()) && (await text(membership(page))).includes(`$${(quote.annualCents / 100).toFixed(2)} per year`), quote && { phase: quote.pricePhase, cents: quote.annualCents });
+    qa.check('Automatic renewal shows a fresh quote with the current price and consent cleared', !!quote?.quoteId && !(await membership(page).getByRole('checkbox').isChecked()) && (await text(membership(page))).includes(`$${(quote.annualCents / 100).toFixed(2)} per year`), quote && { phase: quote.pricePhase, cents: quote.annualCents });
     // The review ages past its expiry on the server only (the device would still allow it).
     labExec(`update public.limited_billing_previews set expires_at = now() - interval '1 second' where id = '${quote.quoteId}'`);
     await membership(page).getByRole('checkbox').check();
-    const checkout = page.waitForResponse((r) => r.url().endsWith('/functions/v1/limited-checkout'), { timeout: 60000 }).catch(() => null);
-    await page.getByRole('button', { name: 'Continue to secure payment' }).click();
-    const res = await checkout;
+    const checkout = nextBilling(page, user, 'limited-checkout', [200, 401, 409]);
+    const res = await qa.intentionalEdgeRequest('expired_checkout', 'BILL-013 deliberately expires this quote on the server and verifies 409 quote_expired without a checkout.', async () => {
+      await page.getByRole('button', { name: 'Continue to secure payment' }).click();
+      return checkout;
+    });
     const body = res ? await res.json().catch(() => null) : null;
     const said = await page.getByText(/This offer has expired\. Review a fresh offer/).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
     await qa.shot('server expired refused');
     qa.check('limited-checkout answers 409 quote_expired', res?.status() === 409 && JSON.stringify(body).includes('quote_expired'), `${res?.status()} ${JSON.stringify(body)}`);
     qa.check('the member is told the offer expired, and the stale review is withdrawn', said && !(await page.getByRole('button', { name: 'Continue to secure payment' }).count()));
     qa.check('no billing_checkout_attempts row and no consented quote from the expired review', attempts().length === 0 && !row(`select 1 as x from public.limited_billing_quotes where clerk_subject = '${user.id}'`), attempts());
+    const reports = await waitFor('the deliberate expired-offer report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Membership checkout failed (quote_expired)'`);
+      return found.length ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(reports, { message: 'Membership checkout failed (quote_expired)', kind: 'error', authUserId: user.id, count: 1, reason: 'BILL-013 deliberately expired this quote in the local database, then clicked Continue and verified HTTP 409 quote_expired without a checkout attempt.' });
   }, { soft: true });
 
   await qa.feature('BILL-013', 'A fresh review can be confirmed and opens Checkout', async () => {
-    await page.getByRole('button', { name: /Review Credential offer|Resume checkout/ }).first().click();
+    // Pay first: the withdrawn review leaves Complete payment (the review opens by itself once per page load).
+    await page.getByRole('button', { name: /Review Credential offer|Resume checkout|^Complete payment$/ }).first().click();
     await page.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 60000 });
     qa.check('the fresh review starts unticked', !(await membership(page).getByRole('checkbox').isChecked()));
     await membership(page).getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Continue to secure payment' }).click();
-    const opened = await page.getByTestId('qa-stripe-pay').waitFor({ timeout: 60000 }).then(() => true, () => false);
+    const pay = page.getByTestId('qa-stripe-pay');
+    const opened = await pay.waitFor({ timeout: 60000 }).then(() => true, () => false);
     qa.check('Checkout opens from the fresh review', opened && attempts().length === 1, attempts());
     if (opened) await expireCheckout(new URL(page.url()).pathname.split('/').pop());
   }, { soft: true });
@@ -288,8 +335,12 @@ test('membership ends: read-only archive, downloads, no edits; buying again', {
     const archive = await page.getByRole('heading', { name: 'Credential saved records' }).waitFor({ timeout: 30000 }).then(() => true, () => false);
     await qa.shot('credential archive');
     qa.check('Credentials shows "Credential saved records" (read-only)', archive);
+    await checkNoUnexpectedRecovery(page, qa, 'membership-ended credential archive');
     const body = await page.locator('main').first().innerText().catch(() => page.locator('body').innerText());
     qa.check('the archive lists the license', body.includes(licNumber) || body.includes('QA Archive License'));
+    const licenseSummary = page.locator('.cmd-archive details').filter({ hasText: licNumber }).locator('summary');
+    qa.check('the saved license archive title is exactly State Medical License, OH',
+      await licenseSummary.count() === 1 && await licenseSummary.getByText('State Medical License, OH', { exact: true }).isVisible());
     qa.check('Protected Identity is never listed in the archive', !/Protected Identity|QA archive identity record/.test(body));
     const editButtons = await page.locator('main').first().getByRole('button', { name: /^(Add|Edit|Delete|Save|Upload|\+)/ }).count();
     qa.check('no add, edit, delete or upload buttons in the archive', editButtons === 0, `${editButtons}`);
@@ -318,6 +369,7 @@ test('membership ends: read-only archive, downloads, no edits; buying again', {
   await qa.feature('BILL-009', 'Practice archive: the invoice PDF downloads; no logging or payment controls', async () => {
     await goTab(page, 'Practice');
     const archive = await page.getByRole('heading', { name: 'Practice saved records' }).waitFor({ timeout: 30000 }).then(() => true, () => false);
+    await checkNoUnexpectedRecovery(page, qa, 'membership-ended practice archive');
     await qa.shot('practice archive');
     qa.check('Practice shows "Practice saved records" (read-only)', archive);
     qa.check('no "Log past time", "Add Agreement" or payment buttons', !(await page.getByRole('button', { name: /Log past time|Add Agreement|Record payment|Mark paid|Invoice \d/ }).count()));
@@ -341,9 +393,12 @@ test('membership ends: read-only archive, downloads, no edits; buying again', {
     if (await nameInput.count()) {
       const disabled = await nameInput.isDisabled().catch(() => false);
       if (!disabled) {
+        const faultSince = new Date().toISOString();
         await nameInput.fill('Alex Changed While Read Only');
         await nameInput.blur();
         await sleep(2500);
+        const reports = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Save refused (read_only, settings)'`);
+        if (reports.length) qa.intentionalClientErrors(reports, { message: 'Save refused (read_only, settings)', kind: 'error', authUserId: user.id, count: 1, reason: 'BILL-009 deliberately attempted one name edit after membership ended and verified the profile did not change; only the report before reloading is claimed.' });
       }
       await page.reload(); await waitForMemberApp(page);
       await openMore(page, 'Profile & settings');
@@ -384,16 +439,24 @@ test('membership ends: read-only archive, downloads, no edits; buying again', {
     await openMore(page, 'Profile & settings');
     const card = membership(page);
     await card.getByRole('button', { name: 'Review Credential offer' }).waitFor({ timeout: 30000 });
-    const got = page.waitForResponse((r) => r.url().endsWith('/functions/v1/billing-quote') && r.request().method() === 'POST', { timeout: 60000 }).catch(() => null);
+    const got = nextBilling(page, user, 'billing-quote');
     await card.getByRole('button', { name: 'Review Credential offer' }).click();
     const res = await got;
-    const quote = res ? await res.json().catch(() => null) : null;
+    let quote = res ? await res.json().catch(() => null) : null;
     const opened = await card.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 30000 }).then(() => true, () => false);
+    if (!quote && res) {
+      // Playwright could not read this response's body under load (2026-10-01: the browser had
+      // it, the trace kept no body, res.json() failed). The quote the app received is the one it
+      // stored and shows: its phase and price from the stored row, its trial from the review.
+      const stored = row(`select price_phase, annual_cents from public.limited_billing_quotes where profile_id = '${profileOf(user.id)?.id}' order by created_at desc limit 1`);
+      const trial = (await text(card)).match(/(\d+)-day Practice trial/);
+      if (stored) quote = { pricePhase: stored.price_phase, annualCents: Number(stored.annual_cents), practiceTrialDays: trial ? Number(trial[1]) : null, read: 'stored row and review text' };
+    }
     await qa.shot('returning buyer quote');
     qa.check('the returning buyer\'s quote is the standard price, $199.00 per year, with a 30-day Practice trial', opened && quote?.pricePhase === 'standard' && quote?.annualCents === 19900 && quote?.practiceTrialDays === 30, quote && { phase: quote.pricePhase, cents: quote.annualCents, trialDays: quote.practiceTrialDays });
     if (!opened) return;
     await card.getByRole('checkbox').check();
-    const co = page.waitForResponse((r) => r.url().endsWith('/functions/v1/limited-checkout'), { timeout: 60000 }).catch(() => null);
+    const co = nextBilling(page, user, 'limited-checkout', [200, 401, 409]);
     await card.getByRole('button', { name: 'Continue to secure payment' }).click();
     const coRes = await co;
     const toCheckout = await page.getByTestId('qa-stripe-pay').waitFor({ timeout: 30000 }).then(() => true, () => false);
@@ -429,11 +492,12 @@ test('early-bird Credential: 30-day Practice trial, then Practice read-only', {
   let pid;
 
   await qa.feature('BILL-012', 'Credential at the early-bird price: the quote and the membership card state a 30-day Practice trial, with no automatic charge', async () => {
+    // Pay first opens the offer's review by itself: its quote is awaited from before the sign-in.
+    const got = nextQuote(page, user);
     await signIn(page, user);
     qa.check('the invited physician lands on the membership gate', (await landing(page)) === 'gate');
     pid = profileOf(user.id).id;
-    const got = nextQuote(page);
-    await page.getByRole('button', { name: 'Review Credential offer' }).click();
+    await openOfferReview(page);
     const quote = await got;
     await page.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 60000 });
     const review = await text(membership(page));
@@ -454,6 +518,9 @@ test('early-bird Credential: 30-day Practice trial, then Practice read-only', {
     await page.goto(lab().urls.app);
     await waitForMemberApp(page);
     await openMore(page, 'Profile & settings');
+    // A fresh load's first membership answer can land after Profile opens (2026-10-01: the card
+    // was read 64 ms before it); the card says it is checking until then.
+    await membership(page).getByText(/membership is active/).first().waitFor({ timeout: 15000 }).catch(() => {});
     const cardText = await text(membership(page));
     const expected = trial ? await shownDate(page, trial.ends_at) : '';
     await qa.shot('trial card');
@@ -556,7 +623,7 @@ test('a free-beta member buys a membership that starts when the beta ends', {
   let sessionId;
   await qa.feature('BILL-011', 'The offer quote says $0 now and names the first charge date = the beta end', async () => {
     const card = membership(page);
-    const got = nextQuote(page);
+    const got = nextQuote(page, user);
     await card.getByRole('button', { name: 'Review Credential offer' }).click();
     const quote = await got;
     await card.getByRole('button', { name: 'Continue to secure checkout' }).waitFor({ timeout: 60000 });

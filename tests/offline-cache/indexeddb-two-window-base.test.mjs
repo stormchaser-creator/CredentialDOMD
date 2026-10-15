@@ -13,6 +13,7 @@
 //
 // Synthetic accounts only: no real names, numbers or records.
 import test from 'node:test';
+import { copyInvoiceHandoff } from '../helpers/copy-invoice-handoff.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
@@ -54,6 +55,8 @@ async function openWindow(U) {
     .replace('from "./pausedApplicationRecords.js"', `from ${JSON.stringify(srcUrl('./pausedApplicationRecords.js'))}`)
     .replace('from "./heldChanges.js"', `from ${JSON.stringify(srcUrl('./heldChanges.js'))}`)
     .replace('from "./loadRebase.js"', `from ${JSON.stringify(srcUrl('./loadRebase.js'))}`);
+  copyInvoiceHandoff(dir);
+  writeFileSync(join(dir, 'syncRecovery.js'), readFileSync(resolve(root, 'src/utils/syncRecovery.js'), 'utf8'));
   writeFileSync(join(dir, 'storageScope.js'), scopeSource);
   writeFileSync(join(dir, 'offlineStore.js'), readFileSync(resolve(root, 'src/utils/offlineStore.js'), 'utf8'));
   const scopeUrl = pathToFileURL(join(dir, 'storageScope.js')).href;

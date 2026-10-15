@@ -1,3 +1,4 @@
+import { writeClipboardText } from "./clipboard.js";
 // Extension spelled out so pure-node test scripts can import this module
 // (Vite resolves either way; node's ESM loader needs the ".js").
 import { CERTIFICATION_TYPE, isInherentlyNonExpiringLicense } from "../constants/credentialTypes.js";
@@ -449,6 +450,9 @@ export function titleWithType(title, type) {
   return wordLead ? full : `${lead}, ${full}`;
 }
 
+/** Compatibility name for the card detail formatter. */
+export const cardTitleDetail = titleAfterType;
+
 /** describeItem with its separators written as commas, for plain text and pickers. */
 export function plainLabel(item, physicianName, sectionKey) {
   if (!item) return "";
@@ -630,16 +634,7 @@ export function describeItem(item, physicianName, sectionKey) {
 // is the one deliberate copy of an SSN and does not use this.)
 export async function copyToClipboard(raw) {
   const text = scrubSsn(raw);
-  try { await navigator.clipboard.writeText(text); return true; }
-  catch {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.cssText = "position:fixed;left:-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    try { return document.execCommand("copy"); }
-    finally { document.body.removeChild(ta); }
-  }
+  return writeClipboardText(text);
 }
 
 export const STATUS_COLORS = {

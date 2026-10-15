@@ -271,7 +271,7 @@ for (const name of Object.keys(SCREENS)) {
     assert.deepEqual(recorded(m), []);
     assert.match(shown(m), new RegExp(`Did ${number} go out\\?`));
     assert.doesNotMatch(shown(m), /Nothing was recorded/);
-    assert.ok(S.invoiceNotes('').some(n => n.number === number), 'the note stays on the device');
+    assert.ok(S.invoiceNotes('user_synthetic').some(n => n.number === number), 'the note stays on the device');
     assert.equal(srv.rows.has(number), true, 'the server keeps the stamp');
     assert.deepEqual(stamps.map(x => x[1]), [true], 'no unstamp');
     assert.ok(reports.includes('invoice_share_aborted_after_handoff'));
@@ -356,7 +356,7 @@ test('a stamp the server could not take is sent again on a timer until it lands,
   S._setHandoffTimes({ graceMs: 5, waitMs: 60000, reportMs: 5, retryMs: 10, retryMaxMs: 40 });
   globalThis.__screen = { markShared: srv.markShared, listShared: srv.listShared };
   srv.offline = true;
-  S.handOffInvoice('acct', { number: 'INV-20260910-41', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s', total: 100, days: ['2026-09-05'] });
+  S.handOffInvoice('user_synthetic', { number: 'INV-20260910-41', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s', total: 100, days: ['2026-09-05'] });
   await settle();
   assert.equal(srv.rows.size, 0);
   await wait(35); await settle();
@@ -376,7 +376,7 @@ test('a stamp owed while offline also goes the moment the device is back online 
   setGlobal('window', { ...globalThis.window, addEventListener: (t, fn) => listeners.set(t, fn), removeEventListener() {} });
   globalThis.__screen = { markShared: srv.markShared, listShared: srv.listShared };
   srv.offline = true;
-  S.handOffInvoice('acct', { number: 'INV-20260910-42', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s', total: 100, days: [] });
+  S.handOffInvoice('user_synthetic', { number: 'INV-20260910-42', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s', total: 100, days: [] });
   await settle();
   srv.offline = false;
   listeners.get('online')?.();
@@ -384,7 +384,7 @@ test('a stamp owed while offline also goes the moment the device is back online 
   assert.equal(srv.rows.has('INV-20260910-42'), true, 'online: sent');
 
   srv.offline = true;
-  S.handOffInvoice('acct', { number: 'INV-20260910-43', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s', total: 100, days: [] });
+  S.handOffInvoice('user_synthetic', { number: 'INV-20260910-43', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-s', total: 100, days: [] });
   await settle();
   srv.offline = false;
   page.back();

@@ -58,7 +58,7 @@ test('CV: read my CV, tick and save, read it again; generate the CV; the setup p
 }, async ({ page, context, qa }) => {
   test.setTimeout(9 * 60 * 1000);
   await installDeviceStandIns(context);
-  const { profile, user } = await newMember(page, { firstName: 'Casey', lastName: 'Curriculum' });
+  const { profile, user } = await newMember(page, { firstName: 'Casey', lastName: 'Curriculum', profession: 'MD' });
   const pid = profile.id;
   const tag = runTag();
   const cv = syntheticPdf(`QA synthetic curriculum vitae ${tag}`);
@@ -228,9 +228,25 @@ test('CV: read my CV, tick and save, read it again; generate the CV; the setup p
     const clip = (await deviceLog(page)).clipboard.at(-1) || '';
     qa.check('Copy confirms and the clipboard holds the Academic CV text (with its publications)', copyNote && clip.includes('Casey Curriculum') && clip.includes(`QA spine outcomes ${tag}`), clip.slice(0, 200));
     await page.getByRole('button', { name: 'Save PDF' }).click();
-    const pdfNote = await page.getByText(/PDF ready in the share sheet\.|PDF downloaded\./).waitFor({ timeout: 20000 }).then(() => true, () => false);
+    const pdfNote = await page.getByText(/File saving requested\. Confirm the save|PDF download requested\. Confirm saving/).waitFor({ timeout: 20000 }).then(() => true, () => false);
     const shared = (await deviceLog(page)).shared.at(-1);
     qa.check('Save PDF hands a PDF to the share sheet and says so', pdfNote && shared?.files?.[0]?.type === 'application/pdf' && shared.files[0].head === '%PDF-', JSON.stringify(shared?.files));
+    qa.check('Save PDF does not add a text item', !shared?.title && !shared?.text && shared?.files?.length === 1);
+    await page.getByRole('button', { name: 'Save PDF', exact: true }).click();
+    const repeated = await waitFor('the second CV PDF handoff', async () => {
+      const latest = (await deviceLog(page)).shared.at(-1);
+      return latest?.files?.[0]?.name !== shared.files[0].name ? latest : null;
+    }, { timeoutMs: 20000 });
+    qa.check('Repeated CV saving uses a fresh single PDF name', repeated?.files?.length === 1 && repeated.files[0].name !== shared.files[0].name && !repeated.text);
+    const message = page.getByRole('button', { name: 'Share with message', exact: true });
+    const box = await message.boundingBox();
+    qa.check('CV formatted sharing has a reachable touch target', box?.height >= 44);
+    await message.click();
+    const formatted = await waitFor('the formatted CV handoff', async () => {
+      const latest = (await deviceLog(page)).shared.at(-1);
+      return latest?.title && latest?.text ? latest : null;
+    }, { timeoutMs: 20000 });
+    qa.check('CV message sharing preserves the formatted body and PDF', !!formatted?.title && formatted?.text?.includes('Casey Curriculum') && formatted?.text?.includes('\n\n') && formatted?.files?.[0]?.head === '%PDF-');
   }, { soft: true });
 
   await qa.feature('SHARE-005', 'Setup packet: Download the packet (ZIP) and Send it', async () => {

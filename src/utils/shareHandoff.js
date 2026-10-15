@@ -91,7 +91,8 @@ export function watchShareUnanswered(onUnanswered, { graceMs = SHARE_ANSWER_GRAC
   return stop;
 }
 
-export async function shareAtHandoff(payload, { share, onHanded, onUndo, onUnanswered, watch = watchShareUnanswered, holdAlerts = holdWriteRefusalAlerts } = {}) {
+export async function shareAtHandoff(payload, { share, onHanded, onUndo, onUnanswered, watch = watchShareUnanswered, holdAlerts = holdWriteRefusalAlerts, isCurrent = () => true } = {}) {
+  if (!isCurrent()) return "cancelled";
   const send = share || ((p) => globalThis.navigator.share(p));
   // The sheet is asked for first, then onHanded runs in the same task. Run
   // before it, a write refused by the membership (read-only, the identity
@@ -114,16 +115,16 @@ export async function shareAtHandoff(payload, { share, onHanded, onUndo, onUnans
   let sent;
   try { sent = Promise.resolve(send(payload)); } catch (err) { sent = Promise.reject(err); }
   const held = holdAlerts();
-  try { onHanded?.(); } catch { /* the record is the screen's; the share is already asked for */ } finally { held.stop(); }
+  try { if (isCurrent()) onHanded?.(); } catch { /* the record is the screen's; the share is already asked for */ } finally { held.stop(); }
   let stopTelling = () => {};
-  const tell = () => { stopTelling(); held.show(); };
+  const tell = () => { stopTelling(); if (isCurrent()) held.show(); else held.drop(); };
   stopTelling = watch(tell, { waitMs: Infinity });
-  const stop = typeof onUnanswered === "function" ? watch(onUnanswered) : () => {};
+  const stop = typeof onUnanswered === "function" ? watch(() => { if (isCurrent()) onUnanswered(); }) : () => {};
   try {
     await sent;
     stop();
     tell();
-    return "shared";
+    return isCurrent() ? "shared" : "cancelled";
   } catch (err) {
     stop();
     stopTelling();
@@ -137,11 +138,11 @@ export async function shareAtHandoff(payload, { share, onHanded, onUndo, onUnans
     // (now, or when the check answers) leaves a send he cancelled in Send
     // history, and is said as any refused save is (review of 9484782c).
     if (!inDoubt) {
-      try { onUndo?.(outcome); } catch { /* as above */ }
+      try { if (isCurrent()) onUndo?.(outcome); } catch { /* as above */ }
       return outcome;
     }
     const undoHeld = holdAlerts();
-    try { onUndo?.(outcome); } catch { /* as above */ } finally { undoHeld.drop(); }
+    try { if (isCurrent()) onUndo?.(outcome); } catch { /* as above */ } finally { undoHeld.drop(); }
     return outcome;
   }
 }

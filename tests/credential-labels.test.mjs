@@ -169,17 +169,22 @@ test('alert and notification labels use the canonical label, never the physician
   assert.equal(plainLabel(DEA[2], PHYSICIAN, 'licenses'), 'DEA Registration, ND');
 });
 
-test('the notification message lists each DEA by type and state', async () => {
+test('the notification message lists each DEA by type and state', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 9, 14, 0, 30).getTime() });
   const require = createRequire(import.meta.url);
   const out = await build({ entryPoints: [`${root}src/utils/notifications.js`], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent' });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);
   // Local calendar dates: expirations count local days (src/utils/dateDays.js),
   // and a UTC date is a day ahead every evening in the US.
-  const past = (n) => localToday(new Date(Date.now() - n * 86400000));
-  const soon = (n) => localToday(new Date(Date.now() + n * 86400000));
+  // Advancing elapsed24-hour spans near midnight crosses DST onto the
+  // previous calendar date. Credentials use local calendar dates instead.
+  const dayOffset = n => { const day = new Date(); day.setDate(day.getDate() + n); return localToday(day); };
+  const past = n => dayOffset(-n);
+  const soon = n => dayOffset(n);
   const alerts = { expired: [{ ...DEA[0], _sec: 'licenses', expirationDate: past(3) }], soon: [{ ...DEA[1], _sec: 'licenses', expirationDate: soon(20) }], cmeIssues: [], effectiveFreqDays: 7 };
   const msg = mod.exports.buildNotificationMessage({ settings: SETTINGS }, alerts);
+  assert.equal(msg.body.split('\n')[0], 'CredentialDOMD Alert for Jordan A. Rivera, DO');
   assert.match(msg.body, /DEA Registration, CO/);
   assert.match(msg.body, /DEA Registration, CA/);
   assert.doesNotMatch(msg.body, /RIVERA, JORDAN|Jordan Alex Rivera DO/);

@@ -60,7 +60,7 @@ test('a share sheet that never answers: the packet is recorded, said, and Select
   await settle(); h.ui.render();
   assert.equal(h.shared.length, 1, 'the files went to the share sheet');
   assert.deepEqual(h.added.map(a => [a.key, a.item.itemName, a.item.method]), [['shareLog', 'Packet (2 documents)', 'share']]);
-  assert.match(h.ui.pageText(), /Sent 2 documents as one packet\./);
+  assert.match(h.ui.pageText(), /Sharing requested for 2 documents as one packet\. Delivery is not confirmed\./);
   assert.equal(h.button(/as one packet$/), undefined, 'no Send left on offer to tap twice');
   assert.ok(h.button('Select to send'), 'back out of Select');
 });

@@ -1,3 +1,4 @@
+import { copyInvoiceHandoff } from "../helpers/copy-invoice-handoff.mjs";
 // A build from before the IndexedDB store (7690ee85 and earlier) running on
 // a device this build has already migrated: a rollback, or a stale tab still
 // on the old bundle. That build knows only localStorage. It finds no copy of
@@ -40,7 +41,9 @@ async function launchThisBuild() {
     .replace('from "./pausedApplicationRecords.js"', `from ${srcUrl('./pausedApplicationRecords.js')}`)
     .replace('from "./heldChanges.js"', `from ${srcUrl('./heldChanges.js')}`)
     .replace('from "./loadRebase.js"', `from ${srcUrl('./loadRebase.js')}`));
+  copyInvoiceHandoff(dir);
   writeFileSync(join(dir, 'offlineStore.js'), readFileSync(resolve(root, 'src/utils/offlineStore.js'), 'utf8'));
+  writeFileSync(join(dir, 'syncRecovery.js'), readFileSync(resolve(root, 'src/utils/syncRecovery.js'), 'utf8'));
   const scopeUrl = JSON.stringify(pathToFileURL(join(dir, 'storageScope.js')).href);
   writeFileSync(join(dir, 'storage.mjs'), readFileSync(resolve(root, 'src/utils/storage.js'), 'utf8')
     .replace('import.meta.env.VITE_GEMINI_API_KEY || ""', '""')
@@ -53,8 +56,9 @@ async function launchThisBuild() {
   const store = await import(pathToFileURL(join(dir, 'offlineStore.js')).href);
   const storage = await import(pathToFileURL(join(dir, 'storage.mjs')).href);
   const deletion = await import(pathToFileURL(join(dir, 'dataDeletion.js')).href);
+  const recovery = await import(pathToFileURL(join(dir, 'syncRecovery.js')).href);
   store.setOfflineStoreFactory(idb);
-  return { scope, store, storage, deletion };
+  return { scope, store, storage, deletion, recovery };
 }
 
 const tick = () => new Promise(r => setImmediate(r));
@@ -370,4 +374,72 @@ test('a brand-new account on a device whose IndexedDB open never answers loads a
   assert.equal(receipt.read, true, 'nothing there, not "could not look"');
   assert.equal(counts.unread, false);
   a.scope.setActiveUserId(null);
+});
+
+
+test('an older-build deletion retires recovery snapshots and both receipt stores before returning a current empty read', async () => {
+  const U = 'user_syntheticOlderRecoveryDeletion', other = 'user_syntheticOtherRecoveryKept';
+  const first = await migrated(U);
+  first.scope.setActiveUserId(U); first.scope.adoptLocalFence(U);
+  const copy = { id: caseLog(1).id, notes: 'Synthetic unsent version' };
+  await first.recovery.preserveRecovery({ accountId: U, collectionKey: 'caseLogs', local: copy, cloud: { ...copy, notes: 'Synthetic cloud version' } });
+  const receiptKey = key(first.scope.BASE_KEYS.recordAcknowledgements, U);
+  assert.equal((await first.scope.writeOfflineText(receiptKey, '{"version":1,"records":{"synthetic":"hash"}}', first.scope.localWriteGuard(U))).saved, true);
+  ls.setItem(receiptKey, '{"version":1,"records":{"legacy":"hash"}}');
+  first.scope.setActiveUserId(other); first.scope.adoptLocalFence(other);
+  await first.recovery.preserveRecovery({ accountId: other, collectionKey: 'caseLogs', local: copy, cloud: null });
+  first.scope.setActiveUserId(null);
+  olderBuild.honorDeletion(U, '2026-09-30T19:00:00.000Z');
+  const next = await launchThisBuild(); next.scope.setActiveUserId(U);
+  const receipt = {};
+  assert.equal(await next.storage.readCachedData(U, receipt), null);
+  assert.equal(receipt.read, true, 'known deletion is prepared before the read guard, not mistaken for an intervening purge');
+  assert.deepEqual(next.recovery.readRecovery(U), []);
+  assert.equal(ls.getItem(receiptKey), null);
+  assert.equal(stored(next.scope.BASE_KEYS.recordAcknowledgements, U), null);
+  next.scope.setActiveUserId(other);
+  assert.equal(next.recovery.readRecovery(other).length, 1, 'another account recovery is preserved');
+  next.scope.setActiveUserId(null);
+});
+
+test('a refused old-build recovery purge cannot return a successful cache read or mark the deletion caught up', async () => {
+  const U = 'user_syntheticOlderRecoveryRefused';
+  const first = await migrated(U); first.scope.setActiveUserId(U); first.scope.adoptLocalFence(U);
+  await first.recovery.preserveRecovery({ accountId: U, collectionKey: 'caseLogs', local: caseLog(1), cloud: null });
+  first.scope.setActiveUserId(null);
+  const stamp = '2026-09-30T19:30:00.000Z'; olderBuild.honorDeletion(U, stamp);
+  const next = await launchThisBuild(); next.scope.setActiveUserId(U);
+  const setItem = ls.setItem.bind(ls);
+  ls.setItem = (k, v) => { if (k === next.recovery.RECOVERY_GENERATION) throw new Error('Synthetic refused recovery purge barrier'); return setItem(k, v); };
+  const receipt = {};
+  assert.equal(await next.storage.readCachedData(U, receipt), null);
+  assert.equal(receipt.read, false);
+  assert.equal(next.scope.offlineCopyUnread(U), true);
+  assert.notEqual(ls.getItem(key(next.scope.OFFLINE_WIPED_BASE, U)), stamp);
+  assert.equal(next.recovery.readRecovery(U).length, 1, 'failed purge leaves original copies intact for a later attempt');
+  ls.setItem = setItem;
+  assert.equal(await next.storage.readCachedData(U, receipt), null);
+  assert.equal(receipt.read, true);
+  assert.deepEqual(next.recovery.readRecovery(U), []);
+  next.scope.setActiveUserId(null);
+});
+
+for (const blockedBase of ['credentialdomd-offline-wiped', 'credentialdomd-offline-purge'])
+test(`an older-build deletion cannot expose old IndexedDB records if ${blockedBase} cannot be recorded`, async () => {
+  const U = `user_syntheticDeletionBarrier${blockedBase.endsWith('wiped') ? 'Wipe' : 'Purge'}`;
+  await migrated(U);
+  const stamp = '2026-09-30T20:00:00.000Z'; olderBuild.honorDeletion(U, stamp);
+  const next = await launchThisBuild(); next.scope.setActiveUserId(U);
+  const setItem = ls.setItem.bind(ls);
+  ls.setItem = (k, v) => { if (k === key(blockedBase, U)) throw new Error('Synthetic refused deletion marker'); return setItem(k, v); };
+  try {
+    const receipt = {};
+    assert.equal(await next.storage.readCachedData(U, receipt), null, 'no pre-deletion rows are handed to the load or self-heal');
+    assert.equal(receipt.read, false);
+  } finally { ls.setItem = setItem; }
+  const receipt = {};
+  assert.equal(await next.storage.readCachedData(U, receipt), null);
+  assert.equal(receipt.read, true, 'once markers fit, the read completes after catch-up');
+  assert.equal(stored(DATA, U), null);
+  next.scope.setActiveUserId(null);
 });

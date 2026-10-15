@@ -12,7 +12,7 @@
 import { test } from './support/fixtures.mjs';
 import { guardContext, watchPage } from './support/fixtures.mjs';
 import {
-  createPhysician, dismissInterruptions, field, homeTiles, lab, profileOf, row, rows, signIn, sleep, waitForMemberApp, waitForProfile,
+  createPhysician, dismissInterruptions, field, homeTiles, lab, profileOf, row, rows, signIn, sleep, waitFor, waitForMemberApp, waitForProfile,
 } from './support/lab.mjs';
 import {
   CHROME, PHONES, anyOf, auditDialog, auditScreen, backButton, barState, bottomBar, closeDialog, credentialsRow, exceptChrome, fileBugOnce,
@@ -79,7 +79,8 @@ for (const width of [375, 390]) {
         qa.check('a new physician lands on the membership gate', first.where === 'gate', first.seen.join(', '));
         const audit = await auditScreen(qa, page, 'gate', {
           primary: [
-            ['Review Credential offer', page.getByRole('button', { name: /Review .* offer/ }).first()],
+            // Pay first: the gate opens the offer's review by itself; its Continue is the primary control.
+            ['Continue to secure payment', page.getByRole('button', { name: /^Continue to secure payment$|^Complete payment$/ }).first()],
             ['Check access again', page.getByRole('button', { name: 'Check access again' })],
             ['Sign out', page.getByRole('button', { name: 'Sign out' })],
           ],
@@ -104,7 +105,7 @@ for (const width of [375, 390]) {
         const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
         const terms = page.getByRole('checkbox', { name: /agree to the payment and renewal terms/ });
         await auditScreen(qa, page, 'offer review', {
-          primary: [['terms checkbox (with its label)', terms], ['Continue to secure payment', proceed], ['Refresh offer', page.getByRole('button', { name: 'Refresh offer' })]],
+          primary: [['terms checkbox (with its label)', terms], ['Continue to secure payment', proceed]],
           allowSmall: /^button "(Check access again|Sign out)"$/,
         });
         qa.check('Continue is disabled before the terms are agreed', await proceed.isDisabled());
@@ -175,10 +176,17 @@ for (const width of [375, 390]) {
 
       await qa.feature('HOME-002', 'Get Started on the empty account opens Licenses with the Add form; closing leaves Licenses', async () => {
         await phoneTab(page, 'Home');
-        const card = page.getByText('Get Started', { exact: true }).locator('xpath=..');
-        const t = await tapTarget(card);
-        qa.check('the Get Started card is on screen and not covered', t.ok, `${t.size} ${t.why}`);
-        await card.tap();
+        // release/goal3 (35187499): a blank profession is asked on this card
+        // first ("Which license do you hold?"); MD saves it and opens Add.
+        const pick = page.getByRole('group', { name: /Which license do you hold\?/ });
+        const chips = (await pick.getByRole('button').allInnerTexts().catch(() => [])).map((x) => x.trim());
+        qa.check('the Get Started card asks the licence: MD, DO, PA, NP', JSON.stringify(chips) === '["MD","DO","PA","NP"]', chips.join(','));
+        const md = pick.getByRole('button', { name: 'MD', exact: true });
+        const t = await tapTarget(md);
+        qa.check('its MD button is on screen and not covered', t.ok, `${t.size} ${t.why}`);
+        await md.tap();
+        const saved = await waitFor('MD saved', async () => (profileOf(user.id)?.degree_type === 'MD' ? true : null), { timeoutMs: 15000 }).catch(() => false);
+        qa.check('MD is saved to the profile', saved);
         const dlg = page.getByRole('dialog', { name: 'Add' });
         const opened = await dlg.waitFor({ timeout: 10000 }).then(() => true, () => false);
         qa.check('the tap opens the license Add form', opened);

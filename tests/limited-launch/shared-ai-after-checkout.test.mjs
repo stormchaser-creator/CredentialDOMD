@@ -44,10 +44,11 @@ async function client(answers) {
   };
   const store = {};
   globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
-  globalThis.window = { Clerk: { session: { getToken: async () => 'synthetic-token' } } };
+  globalThis.window = { Clerk: { user: { id: 'user_synthetic_checkout' }, session: { getToken: async () => 'synthetic-token' } } };
   const file = path.join(CACHE, `aiClient.${++copies}.mjs`);
   writeFileSync(file, PATCHED);
   const m = await import(pathToFileURL(file).href);
+  m.registerSharedAiProfile('user_synthetic_checkout', true);
   return { m, asked };
 }
 

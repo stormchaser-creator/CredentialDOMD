@@ -24,7 +24,11 @@ test('intake: confirm a forwarding address, forward a document to docs@, an unco
     await box.locator('xpath=ancestor::div[.//button][1]').getByRole('button', { name: 'Add', exact: true }).click();
     const mail = await waitFor('the confirmation email', async () => (await emails({ to: forwarder }))[0] || null, { timeoutMs: 60000, intervalMs: 1000 }).catch(() => null);
     qa.check('a confirmation email goes to the new address', mail?.subject === 'Confirm this address for CredentialDOMD forwarding', mail?.subject || 'none');
-    qa.check('the app says nothing routes until it is confirmed', /Nothing is routed here until someone opens the link/.test(await page.locator('body').innerText()));
+    // forwarding-address sends the email before it answers, so the email can be
+    // captured before the app has the answer to show (2026-10-01: read 1 ms
+    // before the 1.4 s answer arrived). Wait for the app's line.
+    const pending = await page.getByText(/Nothing is routed here until someone opens the link/).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+    qa.check('the app says nothing routes until it is confirmed', pending);
     const waiting = row(`select verified_at from public.forwarding_addresses where user_id = '${profile.id}' and email = '${forwarder}'`);
     qa.check('forwarding_addresses row, not yet verified', !!waiting && !waiting.verified_at);
     const text = mail ? (await emailBody(mail.id)).text || '' : '';
@@ -38,7 +42,7 @@ test('intake: confirm a forwarding address, forward a document to docs@, an unco
     qa.check('the link opens a page with one Confirm button (nothing changes on open)', shown && !row(`select verified_at from public.forwarding_addresses where email = '${forwarder}'`).verified_at);
     if (shown) await confirm.click();
     await sleep(2500);
-    await tab.screenshot({ path: (await qa.shot('confirm page')).replace(/\.png$/, '-confirm.png') });
+    await qa.shot('confirm page', tab);
     await tab.close();
     const done = row(`select verified_at from public.forwarding_addresses where email = '${forwarder}'`);
     qa.check('pressing Confirm verifies the address', !!done?.verified_at);

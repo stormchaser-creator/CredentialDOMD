@@ -396,9 +396,9 @@ test('SYNC-015b: replay clears the queued markers first, so the restored record 
   const ledger = new Set([A]);
   await f.api.replayPendingOps('profileA', 'user_syntheticA', { tombstones: ledger });
   const wire = f.requests.map((r) => `${r.table}.${r.method}`);
-  assert.deepEqual(wire, ['deleted_items.delete', 'publications.upsert']);
+  assert.deepEqual(wire, ['deleted_items.delete', 'publications.select', 'publications.insert']);
   assert.deepEqual(JSON.parse(JSON.stringify(f.requests[0].filters)), [['eq', 'user_id', 'profileA'], ['in', 'item_id', [A]]]);
-  assert.equal(f.requests[1].value.updated_at, RESTORED_AT);
+  assert.equal(f.requests.find(r => r.method === 'insert').value.updated_at, RESTORED_AT);
   assert.equal(ledger.has(A), false);
   assert.deepEqual(f.queue(), [], 'both acknowledged');
   // A clear that fails again stays queued, and so does the row behind it.

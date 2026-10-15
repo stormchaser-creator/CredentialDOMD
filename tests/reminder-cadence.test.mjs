@@ -308,6 +308,8 @@ function createDb(tables, fail = [], { maxRows = 1000 } = {}) {
     not(c, op, v) { if (op !== 'is') throw new Error(`not.${op}`); this.filters.push(r => v === null ? r[c] != null : r[c] !== v); return this; }
     gte(c, v) { this.filters.push(r => r[c] != null && String(r[c]) >= String(v)); return this; }
     lte(c, v) { this.filters.push(r => r[c] != null && String(r[c]) <= String(v)); return this; }
+    gt(c, v) { this.filters.push(r => r[c] != null && String(r[c]) > String(v)); return this; }
+    limit(n) { this.pageLimit = n; return this; }
     run() {
       const rows = tables[this.table] ||= [];
       log.push({ table: this.table, op: this.op, payload: this.payload });
@@ -315,15 +317,26 @@ function createDb(tables, fail = [], { maxRows = 1000 } = {}) {
       if (this.op === 'select' && fail.includes(this.table)) return { data: null, error: { message: `${this.table} read failed` } };
       let hit = rows.filter(r => this.filters.every(f => f(r)));
       if (this.op === 'update') { for (const r of hit) Object.assign(r, this.payload); return { data: null, error: null }; }
-      if (this.orderBy) hit = [...hit].sort((a, b) => String(a[this.orderBy]).localeCompare(String(b[this.orderBy])));
+      if (this.orderBy) hit = [...hit].sort((a, b) => String(a[this.orderBy]) < String(b[this.orderBy]) ? -1 : String(a[this.orderBy]) > String(b[this.orderBy]) ? 1 : 0);
       const [from, to] = this.span || [0, Infinity];
       hit = hit.slice(from, Math.min(to + 1, from + maxRows));
       const pick = this.cols === '*' ? r => ({ ...r }) : r => Object.fromEntries(this.cols.split(',').map(c => c.trim()).map(c => [c, r[c] ?? null]));
-      return { data: hit.map(pick), error: null };
+      return { data: hit.slice(0, this.pageLimit ?? hit.length).map(pick), error: null };
     }
     then(res, rej) { try { res(this.run()); } catch (e) { rej(e); } }
   }
-  return { log, from: t => new Query(t) };
+  const frozen = new Map();
+  const db = { log, from: t => new Query(t), async rpc(name, args) {
+    if (name === 'reminder_queue_claim') return { data: tables.profiles.map(p => ({ id: p.id, profile_id: p.id, lease_token: 'synthetic-lease' })) };
+    if (name === 'reminder_queue_payload') { frozen.set(args.p_job, args.p_payload); return { data: args.p_payload }; }
+    if (name === 'reminder_queue_finish' && args.p_outcome === 'sent') {
+      const delivery = frozen.get(args.p_job), now = new Date().toISOString();
+      await db.from('profiles').update({ reminder_email_fingerprint: delivery.fingerprint, reminder_emailed_at: now, updated_at: now }).eq('id', args.p_job);
+      await db.from('notification_log').insert({ user_id: args.p_job, method: 'email', alert_count: delivery.count, date: now });
+    }
+    return { data: true };
+  } };
+  return db;
 }
 
 const sent = [];
@@ -351,7 +364,7 @@ async function runAt(iso, tables, { fail = [], maxRows } = {}) {
   mock.timers.setTime(at(iso));
   globalThis.__reminders.db = createDb(tables, fail, { maxRows });
   const res = await globalThis.__reminders.handler(new Request('https://fn.test/send-reminders', {
-    method: 'POST', headers: { 'x-hook-secret': HOOK, 'content-type': 'application/json' }, body: '{}',
+    method: 'POST', headers: { 'x-hook-secret': HOOK, 'content-type': 'application/json' }, body: JSON.stringify({ drain: true }),
   }));
   assert.equal(res.status, 200);
   const body = await res.json();
@@ -420,7 +433,7 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     const dea = { id: 'dea-snooze', user_id: uid(5), type: 'DEA Registration', state: 'ZZ', expiration_date: '2026-11-22' };
     const p = profile(5, { notify_freq_days: 30, snoozed_until: '2026-12-02T13:00:00.000Z',
       reminder_email_fingerprint: await reminderFingerprint([{ id: lic.id, exp: lic.expiration_date }]), reminder_emailed_at: '2026-11-02T13:00:05.000Z' });
-    const tables = { profiles: [p], licenses: [lic, dea], alert_acks: [{ user_id: uid(5), item_id: dea.id, until: '2026-11-15' }], notification_log: [] };
+    const tables = { profiles: [p], licenses: [lic, dea], alert_acks: [{ id: 'ack-5', user_id: uid(5), item_id: dea.id, until: '2026-11-15' }], notification_log: [] };
     const held = await runAt('2026-11-15T13:00:03.000Z', tables);
     assert.deepEqual(held.byProfile[uid(5)], { profile: uid(5), sent: false, reason: 'snoozed' }, 'the acknowledgement still holds: the snoozed list is unchanged');
     const due = await runAt('2026-11-16T13:00:03.000Z', tables);
@@ -442,7 +455,7 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     const emailed = await reminderFingerprint([{ id: lic.id, exp: lic.expiration_date, table: 'licenses' }, { id: dea.id, exp: dea.expiration_date, table: 'licenses' }]);
     const p = profile(8, { notify_freq_days: 30, snoozed_until: '2026-12-02T14:00:00.000Z', alerts_fingerprint: 'soon:licenses:2027-01-21',
       reminder_email_fingerprint: emailed, reminder_emailed_at: '2026-11-02T13:00:05.000Z' });
-    const tables = { profiles: [p], licenses: [lic, dea], alert_acks: [{ user_id: uid(8), item_id: dea.id, until: '2026-11-15' }], notification_log: [] };
+    const tables = { profiles: [p], licenses: [lic, dea], alert_acks: [{ id: 'ack-8', user_id: uid(8), item_id: dea.id, until: '2026-11-15' }], notification_log: [] };
     const held = await runAt('2026-11-03T13:00:03.000Z', tables);
     assert.deepEqual(held.byProfile[uid(8)], { profile: uid(8), sent: false, reason: 'snoozed' });
     const updates = held.log.filter(l => l.table === 'profiles' && l.op === 'update');
@@ -490,7 +503,7 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     const dea = { id: 'dea-nosnooze', user_id: uid(9), type: 'DEA Registration', state: 'ZZ', expiration_date: '2026-10-25' };
     const emailed = await reminderFingerprint([{ id: dea.id, exp: dea.expiration_date, table: 'licenses' }]);
     const p = profile(9, { notify_freq_days: 30, reminder_email_fingerprint: emailed, reminder_emailed_at: '2026-10-01T13:00:05.000Z' });
-    const tables = { profiles: [p], licenses: [dea], alert_acks: [{ user_id: uid(9), item_id: dea.id, until: '2026-10-19' }], notification_log: [] };
+    const tables = { profiles: [p], licenses: [dea], alert_acks: [{ id: 'ack-9', user_id: uid(9), item_id: dea.id, until: '2026-10-19' }], notification_log: [] };
     const none = await runAt('2026-10-02T13:00:03.000Z', tables);
     assert.deepEqual(none.byProfile[uid(9)], { profile: uid(9), sent: false, reason: 'nothing due' });
     assert.equal(tables.profiles[0].reminder_email_fingerprint, `${emailed.slice(0, 24)};`, 'the DEA is forgotten as told');
@@ -522,7 +535,7 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     assert.equal(entered.byProfile[uid(10)].sent, true, 'the passport enters the 90 day window under the snooze');
     const told = tables.profiles[0].reminder_email_fingerprint;
     const failed = await runAt('2026-10-03T13:00:03.000Z', tables, { fail: ['travel_docs'] });
-    assert.deepEqual(failed.byProfile[uid(10)], { profile: uid(10), sent: false, reason: 'snoozed' });
+    assert.deepEqual(failed.byProfile[uid(10)], { profile: uid(10), sent: false, error: 'records_unavailable' });
     assert.equal(failed.log.filter(l => l.op === 'update').length, 0, 'nothing narrowed on a partial read');
     assert.equal(tables.profiles[0].reminder_email_fingerprint, told);
     const full = await runAt('2026-10-04T13:00:03.000Z', tables);
@@ -611,7 +624,7 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
   // per member, one member at a time, and the edge runtime stopped it for CPU
   // time (WORKER_LIMIT) before the newest members; and the recipients read
   // returned at most PostgREST's 1,000 rows, so the rest were never read.
-  await t.test('every recipient past PostgREST\'s max_rows is reminded, with grouped reads', async () => {
+  await t.test('the dry run previews every recipient past PostgREST\'s max_rows, with grouped reads', async () => {
     sent.length = 0;
     const n = 1203;
     const profiles = [], licenses = [];
@@ -621,12 +634,23 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
       licenses.push({ id: `lic-g${i}`, user_id: uid(10000 + i), type: 'State Medical License', state: 'ZZ', expiration_date: '2026-11-21' });
     }
     const tables = { profiles, licenses, alert_acks: [], notification_log: [] };
-    const { body, log } = await runAt('2026-09-22T13:00:03.000Z', tables, { maxRows: 1000 });
+    // A preview reads the full inventory without sending. Real delivery is
+    // leased in batches of 20 and paced; reminder-dispatch.test.mjs proves
+    // that 1,205 recipients are queued, including those past max_rows.
+    mock.timers.setTime(at('2026-09-22T13:00:03.000Z'));
+    const db = createDb(tables, [], { maxRows: 1000 });
+    globalThis.__reminders.db = db;
+    const response = await globalThis.__reminders.handler(new Request('https://fn.test/send-reminders', {
+      method: 'POST', headers: { 'x-hook-secret': HOOK, 'content-type': 'application/json' }, body: JSON.stringify({ dry_run: true }),
+    }));
+    assert.equal(response.status, 200);
+    const body = await response.json(), log = db.log;
+    assert.equal(sent.length, 0, 'preview never sends an email');
     assert.equal(body.profiles, n, 'every recipient is read, not the first 1,000');
-    const mailed = new Set(sent.map(m => m.to[0]));
-    assert.equal(mailed.size, Math.ceil(n / 2), 'each member with a 90-day lead gets the license due in 60 days');
-    assert.ok(mailed.has(`member${10000 + n}@example.test`), 'the last recipient too');
-    assert.ok(!mailed.has('member10002@example.test'), 'a 30-day lead in the same group does not list it');
+    const previewed = new Set(body.results.filter(r => r.dry_run && r.count === 1).map(r => r.profile));
+    assert.equal(previewed.size, Math.ceil(n / 2), 'each member with a 90-day lead previews the license due in 60 days');
+    assert.ok(previewed.has(uid(10000 + n)), 'the last recipient too');
+    assert.ok(!previewed.has(uid(10002)), 'a 30-day lead in the same group does not list it');
     assert.equal(body.results.filter(r => r.sent === false && r.reason === 'nothing due').length, Math.floor(n / 2));
     const reads = log.filter(l => l.op === 'select');
     assert.ok(reads.filter(l => l.table === 'licenses').length <= 2 * Math.ceil(n / 100), `licenses read per group of members, not per member (${reads.filter(l => l.table === 'licenses').length})`);

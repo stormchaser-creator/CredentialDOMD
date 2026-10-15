@@ -114,4 +114,3 @@ export function topicPeriodLabel(period, cycleYears) {
  * and read as unmet.
  */
 export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-

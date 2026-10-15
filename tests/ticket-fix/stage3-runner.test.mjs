@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { sandboxProfile, sandboxAvailable, SANDBOX_EXEC } from '../../scripts/ticket-fix/sandbox.mjs';
 import { sandboxPolicy, EXIT, readField } from '../../scripts/ticket-fix/run.mjs';
 import { main as alert } from '../../scripts/ticket-fix/alert.mjs';
-import { attachRootPrefix } from '../../scripts/ticket-fix/attachments.mjs';
+import { createAttachmentRoot, attachmentScope, ATTACH_ROOT_PREFIX } from '../../scripts/ticket-fix/attachment-temp.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const sh = readFileSync(path.join(root, 'scripts/ticket-agent.sh'), 'utf8');
@@ -34,11 +34,11 @@ test('the shell: attachments are fetched by their own step with the database tok
   assert.equal((sh.match(/TICKET_RUN_KEY="\$RUN_KEY"/g) || []).length, 2, 'the download step gets no run key');
 });
 
-test('the shell: the attachment root lives next to the run directory, stale folders go under the lock, and each ticket\'s folder is removed after its run', () => {
+test('the shell: the attachment root lives next to the run directory, owned folders are reclaimed under the lock, and each ticket\'s folder is removed after its run', () => {
   const lock = sh.indexOf('if ! mkdir "$LOCK"');
-  const stale = sh.indexOf('for STALE in "${TMPDIR:-/tmp}"/credentialdomd-attachments.*(N/); do\n');
-  const make = sh.indexOf('ATTACH_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-attachments.$$.XXXXXX")');
-  assert.ok(lock > 0 && stale > lock && make > stale, 'removed only while this run holds the lock, before its own root exists');
+  const make = sh.indexOf('ATTACH_ROOT=$(node "$HOST/ticket-fix/attachment-temp.mjs" --repo "$REPO" --work "$WORK_STATE" --tmp "${TMPDIR:-/tmp}" --owner-pid "$$")');
+  assert.ok(lock > 0 && make > lock, 'owned-root cleanup and creation run only after the shell holds its lock');
+  assert.doesNotMatch(sh, /for STALE in[^\n]*credentialdomd-attachments/);
   assert.match(sh, /trap 'EXIT_RC=\$\?; [^']*\/bin\/rm -rf "\$RUN_DIR" "\$ATTACH_ROOT" "\$HOST_DIR";[^']*' EXIT/);
   assert.match(sh, /run.mjs" finish --run-file "\$RUN_FILE" --work "\$WORK_STATE" --repo "\$REPO" >> "\$LOG" 2>&1\n(?:\s*#[^\n]*\n)*\s+\/bin\/rm -rf "\$ATTACHMENTS"/);
   // The sessions' denial of credentialdomd-ticket-* must not cover the root.
@@ -48,26 +48,21 @@ test('the shell: the attachment root lives next to the run directory, stale fold
 // The hourly runner and npm test share the user's temporary directory: the
 // sweep removed a test's root mid-run and the run failed as host_failed
 // (merge.test.mjs, 2026-10-01). The real sweep, run here on a scratch TMPDIR.
-test('the shell: the sweep removes roots a dead process left and spares one a live process is using; the new root carries the runner\'s pid', { skip: existsSync('/bin/zsh') ? false : 'needs zsh' }, () => {
-  const start = sh.indexOf('for STALE in "${TMPDIR:-/tmp}"/credentialdomd-attachments.*(N/); do\n');
-  const make = sh.indexOf('ATTACH_ROOT=$(mktemp -d', start);
-  assert.ok(start > 0 && make > start);
-  const block = sh.slice(start, sh.indexOf('\n', make) + 1);
+test('owned attachment cleanup removes a dead owner in this scope and preserves live, legacy and other-tool roots', () => {
   const tmp = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'ticket-sweep-')));
   try {
-    const TICKET = '00000000-0000-4000-8000-000000004242';
+    const work = path.join(tmp, 'work'); mkdirSync(work);
+    const prefix = `${ATTACH_ROOT_PREFIX}${attachmentScope({ repo: root, work })}.`;
     const gone = spawnSync(process.execPath, ['-e', '0']).pid;
-    const names = { live: `${attachRootPrefix(process.pid)}live01`, dead: `${attachRootPrefix(gone)}dead01`, unnamed: 'credentialdomd-attachments.Ab12Cd', other: 'credentialdomd-ticket-context.Ab12Cd' };
-    for (const name of Object.values(names)) { mkdirSync(path.join(tmp, name, TICKET), { recursive: true }); writeFileSync(path.join(tmp, name, TICKET, 'att-1.png'), 'synthetic'); }
-    const r = spawnSync('/bin/zsh', ['-c', `RUN_DIR=/nonexistent LOCK=/nonexistent\n${block}print -r -- "$$ $ATTACH_ROOT"\n`], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', TMPDIR: tmp } });
-    assert.equal(r.status, 0, r.stderr);
-    const [pid, made] = r.stdout.trim().split(' ');
-    assert.ok(existsSync(path.join(tmp, names.live, TICKET, 'att-1.png')), 'a live process\'s root is in use and stays');
-    assert.ok(!existsSync(path.join(tmp, names.dead)), 'a dead process\'s root is removed');
-    assert.ok(!existsSync(path.join(tmp, names.unnamed)), 'a root that names no process is removed');
-    assert.ok(existsSync(path.join(tmp, names.other)), 'only attachment roots are swept');
+    const names = { live: `${prefix}${process.pid}.live01`, dead: `${prefix}${gone}.dead01`, unnamed: 'credentialdomd-attachments.Ab12Cd', other: 'credentialdomd-ticket-context.Ab12Cd' };
+    for (const name of Object.values(names)) { mkdirSync(path.join(tmp, name)); writeFileSync(path.join(tmp, name, 'synthetic.txt'), 'synthetic'); }
+    const made = createAttachmentRoot({ repo: root, work, tmp, ownerPid: process.pid });
+    assert.ok(existsSync(path.join(tmp, names.live)), 'the live owner stays');
+    assert.ok(!existsSync(path.join(tmp, names.dead)), 'only the proven dead owner in this scope goes');
+    assert.ok(existsSync(path.join(tmp, names.unnamed)), 'an unowned legacy root stays');
+    assert.ok(existsSync(path.join(tmp, names.other)), 'the other tool stays');
     assert.equal(path.dirname(made), tmp);
-    assert.ok(path.basename(made).startsWith(attachRootPrefix(pid)), path.basename(made));
+    assert.ok(path.basename(made).startsWith(`${prefix}${process.pid}.`));
     assert.ok(existsSync(made));
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });

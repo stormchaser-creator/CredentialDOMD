@@ -217,6 +217,20 @@ new-input promotion, and owner-decision waits. It does not exercise launchd or
 provider authentication. PostgreSQL startup may require local process permissions
 that permit shared memory; the database is always stopped in `finally`.
 
+Native PostgreSQL fixture cleanup also requires Python 3 and `/usr/bin/cc`
+(Xcode Command Line Tools on macOS). The fixed semaphore helper compiles in an
+invocation-private temporary directory, including inside the gates sandbox;
+its source and compiler are never selected from an environment variable. After
+a killed fixture, cleanup checks only the recorded data directory's next ten
+PostgreSQL semaphore keys, skips the IPC_PRIVATE key, and requires the exact
+20-entry/537 marker, current owner/creator UID, no waiters, all recorded PIDs
+confirmed absent, and two unchanged kernel snapshots. A live/reused PID, denied
+inspection, missing compiler, or key outside that bounded range is left alone;
+an empty cleanup result is not proof that the host has no stale resources.
+There is no host-wide semaphore sweep or system-limit change. The native
+`pg-clusters.test.mjs` controls require empty exact-fixture readbacks, and
+`pg-semaphores.test.mjs` checks refusal cases without creating host IPC objects.
+
 The installed-CLI contract test is separate from the full-host model shim. On
 2026-09-19 it exercised Claude Code **2.1.221** at the legacy runner's configured
 path, with the real support JSON Schema and one synthetic streaming response from
@@ -412,10 +426,8 @@ adds three host steps and changes what the worker returns.
    bytes decide the type (PNG, JPEG, GIF, WebP, HEIC/HEIF, PDF; anything else is refused),
    HEIC becomes PNG and images over 2000 px are shrunk with `/usr/bin/sips`, files over 10 MB
    are refused, and each file is written `att-<n>.<ext>` (0600) into
-   `$TMPDIR/credentialdomd-attachments.<pid>.XXXXXX/<ticket>/`, next to the run directory and
-   removed with it (and after each ticket's run). A later run removes a root a killed run
-   left behind, and spares one whose process (the `<pid>` in its name) is still alive: the
-   tests make roots there too. The host's manifest goes to
+   `$TMPDIR/credentialdomd-attachments-v2.<scope>.<pid>.XXXXXX/<ticket>/`, next to the run directory and
+   removed with it (and after each ticket's run). The host's manifest goes to
    `<run dir>/<ticket>-attachments.json`. The log carries the ticket id and storage path
    only. A failed download is `unavailable` with a reason, internal work for the next run,
    never a request to the customer.
@@ -552,3 +564,14 @@ reason, the run record, the log, the kept and redacted stderr after the run dire
 gone), `tests/ticket-fix/session-signal.test.mjs` (SIGALRM to `run.mjs work` during a
 hanging stand-in session: its stderr and the run record) and the merge re-review record in
 `tests/ticket-fix/merge.test.mjs`.
+
+
+Attachment temporary directories are scoped to the canonical checkout and work-state
+paths and the host process PID. Startup cleanup removes only this scope's real,
+same-owner directories when the owner PID is proven absent. Live, reused or
+uncheckable PIDs, other checkouts/work states, symlinks and legacy unowned roots
+are preserved. Unowned legacy leftovers require an operator to confirm they are
+abandoned before removal; the hourly lock alone is not proof. The new prefix is
+outside the old `credentialdomd-attachments.*` sweep, so a still-running older
+hourly installation cannot erase a new run's files. This source change does not
+update that installation or remove any existing temporary files by itself.

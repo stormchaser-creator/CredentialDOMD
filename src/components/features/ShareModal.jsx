@@ -15,27 +15,40 @@ import { downloadDocumentBlob } from "../../lib/supabase";
 import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
 
 function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare, onUnlogShare }) {
-  const { data, theme: T } = useApp();
+  const { data, user, theme: T } = useApp();
   const iS = useInputStyle();
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(null);
+  const copyAttempt = useRef(0);
   // What the SENDER needs to know after a send (never put in the message).
   // App keeps this sheet mounted and only toggles `open`, so a hint is tied
   // to the credential it was written for and cleared on close: credential
   // B's sheet must never say "the formatted letter is on your clipboard"
   // while the clipboard holds credential A's letter.
-  const hintKey = open && item ? String(item.id ?? "") : "";
+  const hintKey = open && item ? JSON.stringify([user?.id ?? null, section, item.id ?? null]) : "";
+  const scopeRef = useRef(null);
+  if (scopeRef.current?.key !== hintKey) scopeRef.current = { key: hintKey, live: true };
+  const scope = scopeRef.current;
+  const isCurrent = () => scope.live && scopeRef.current === scope;
   const [hintState, setHintState] = useState({ key: "", text: "" });
   const hintTimer = useRef(null);
+  useEffect(() => {
+    copyAttempt.current += 1;
+    setCopied(false);
+    setSent(null);
+    scope.live = true;
+    return () => { scope.live = false; copyAttempt.current += 1; clearTimeout(hintTimer.current); };
+  }, [hintKey]);
   const hint = hintState.key === hintKey ? hintState.text : "";
   const clearHint = () => { clearTimeout(hintTimer.current); setHintState({ key: "", text: "" }); };
   const flashHint = (msg) => {
+    if (!isCurrent()) return;
     clearTimeout(hintTimer.current);
     setHintState({ key: hintKey, text: msg });
-    hintTimer.current = setTimeout(() => setHintState({ key: "", text: "" }), 12000);
+    hintTimer.current = setTimeout(() => { if (isCurrent()) setHintState({ key: "", text: "" }); }, 12000);
   };
   const close = () => { clearHint(); onClose?.(); };
   // The linked files, resolved when the sheet opens. `doc.data` is stripped
@@ -72,6 +85,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare, onUn
 
   // Returns the entry's id, so a share the sheet says did not go can take it back.
   const log = (method, to) => {
+    if (!isCurrent()) return;
     const id = generateId();
     onLogShare?.({
       id,
@@ -83,7 +97,8 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare, onUn
     return id;
   };
 
-  // Send history for THIS credential — who it went to and when.
+  // Client handoffs cannot confirm delivery. Historical email rows also
+  // include server sends, so describe the request without guessing its path.
   const history = (data.shareLog || [])
     .filter((e) => e.itemId === item.id || (!e.itemId && e.itemName === (item.name || item.type || item.title || item.category)))
     .sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt));
@@ -93,6 +108,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare, onUn
   // send happens from their own account.
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
   const doShare = async () => {
+    if (!isCurrent()) return;
     // A button that says "Send with N documents attached" never sends the
     // letter alone: if any linked file is not in hand, or this browser cannot
     // share files, nothing opens and the sender is told why.
@@ -121,6 +137,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare, onUn
     // letter, line breaks and all.
     const blurb = scrubSsn(buildCredentialBlurb(item, section, data.settings, attach, note));
     const copied = attach ? await copyToClipboard(withDocs) : false;
+    if (!isCurrent()) return;
     // With no file the share text is written as sentences (credentialShareText):
     // the Gmail app collapsed the letter's lines and hyphen rules into one run.
     const text = credentialShareText(item, section, data.settings, { note });
@@ -133,33 +150,46 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare, onUn
     // sheet says it did not go.
     let logged = null;
     const outcome = await shareAtHandoff(payload, {
+      isCurrent,
       share: (p) => navigator.share(p),
       onHanded: () => {
         logged = log("share", email);
-        setSent("share"); setTimeout(() => setSent(null), 3000);
+        setSent("share"); setTimeout(() => { if (isCurrent()) setSent(null); }, 3000);
         if (copied) flashHint("The formatted letter is on your clipboard if you want to paste it over the short intro.");
       },
       onUndo: () => { if (logged) onUnlogShare?.(logged); setSent(null); clearHint(); },
     });
+    if (!isCurrent()) return;
     const notStarted = shareNotStartedMessage(outcome, "The share sheet could not send this. Try again, or use Email.");
     if (notStarted) flashHint(notStarted);
   };
 
   const doEmail = () => {
+    if (!isCurrent()) return;
     window.open(mailtoHref(email, subject, full), "_blank");
-    setSent("email"); setTimeout(() => setSent(null), 3000); log("email", email);
+    setSent("email"); setTimeout(() => { if (isCurrent()) setSent(null); }, 3000); log("email", email);
   };
 
   const doText = () => {
+    if (!isCurrent()) return;
     const { truncated, copied } = composeText(phone || "", full, { copyFullOnCut: true });
     clearHint();
     if (truncated) copied.then(ok => flashHint(smsCutNotice(ok)));
-    setSent("text"); setTimeout(() => setSent(null), 3000); log("text", phone);
+    setSent("text"); setTimeout(() => { if (isCurrent()) setSent(null); }, 3000); log("text", phone);
   };
 
   const doCopy = async () => {
-    await copyToClipboard(full);
-    setCopied(true); setTimeout(() => setCopied(false), 2500); log("clipboard");
+    if (!isCurrent()) return;
+    const attempt = ++copyAttempt.current;
+    setCopied(false);
+    clearHint();
+    const ok = await copyToClipboard(full);
+    if (!isCurrent() || attempt !== copyAttempt.current) return;
+    if (!ok) {
+      flashHint("Could not copy. This browser did not allow copying; select the credential text to copy it manually.");
+      return;
+    }
+    setCopied(true); setTimeout(() => { if (isCurrent()) setCopied(false); }, 2500); log("clipboard");
   };
 
   return (
@@ -252,16 +282,19 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare, onUn
       {history.length > 0 && (
         <div style={{ marginTop: 18 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 6, textTransform: "uppercase" }}>
-            Send history
+            Sharing activity
           </div>
+          <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.45 }}>
+            Mail, Messages and device sharing do not confirm delivery here. Finish sending in the app you choose.
+          </p>
           {history.slice(0, 8).map((e) => (
             <div key={e.id} style={{
-              display: "flex", justifyContent: "space-between", gap: 8,
+              display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8,
               padding: "7px 10px", border: `1px solid ${T.border}`, borderRadius: 8,
               marginBottom: 4, fontSize: 13, color: T.text,
             }}>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {e.method === "share" ? "Shared" : e.method === "email" ? "Emailed" : e.method === "text" ? "Texted" : "Copied"}
+              <span style={{ flex: "1 1 160px", overflowWrap: "anywhere" }}>
+                {e.method === "share" ? "Device share requested" : e.method === "email" ? "Email requested" : e.method === "text" ? "Text draft requested" : "Copied"}
                 {e.recipient ? ` to ${e.recipient}` : ""}
               </span>
               <span style={{ color: T.textMuted, flexShrink: 0 }}>

@@ -76,3 +76,14 @@ export function parallelSafe(env = process.env) {
 export function noRestart(env = process.env) {
   return parallelSafe(env);
 }
+
+/** Choose an explicit engine; a channel is meaningful only for Chromium. */
+export function browserSettings(env = process.env) {
+  const explicit = String(env.QA_BROWSER_ENGINE || '').trim().toLowerCase();
+  const alias = String(env.QA_ENGINE || '').trim().toLowerCase();
+  if (explicit && alias && explicit !== alias) throw new Error('QA_ENGINE and QA_BROWSER_ENGINE must agree');
+  const browserName = explicit || alias || 'chromium';
+  if (!['chromium', 'webkit', 'firefox'].includes(browserName)) throw new Error(`Unknown QA_BROWSER_ENGINE: ${browserName}`);
+  if (env.QA_BROWSER_CHANNEL && browserName !== 'chromium') throw new Error('QA_BROWSER_CHANNEL requires Chromium');
+  return { browserName, ...(env.QA_BROWSER_CHANNEL ? { channel: env.QA_BROWSER_CHANNEL } : {}) };
+}

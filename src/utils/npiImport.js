@@ -249,4 +249,3 @@ export function additionalStatesAfterImport(existingAdditional, primaryState, fo
   }
   return out;
 }
-

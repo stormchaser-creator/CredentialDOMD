@@ -17,6 +17,7 @@
 //   LIVE_CLI=1 node --test tests/ticket-fix/containment-live.test.mjs
 // It is skipped otherwise, including in CI.
 import test from 'node:test';
+import { ATTACH_ROOT_PREFIX } from '../../scripts/ticket-fix/attachment-temp.mjs';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, realpathSync, mkdtempSync, rmSync, chmodSync } from 'node:fs';
@@ -25,7 +26,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, removeSessionTemps } from '../../scripts/ticket-fix/worker.mjs';
 import { CHECKLIST_SCHEMA } from '../../scripts/ticket-fix/checklist.mjs';
-import { attachRootPrefix } from '../../scripts/ticket-fix/attachments.mjs';
 import { REVIEW_SCHEMA } from '../../scripts/ticket-fix/review.mjs';
 import { sandboxAvailable } from '../../scripts/ticket-fix/sandbox.mjs';
 import { RESULT_SCHEMA } from '../../scripts/ticket-agent-context.mjs';
@@ -112,7 +112,7 @@ async function fixture() {
   const outside = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'probe-outside-')));
   writeFileSync(path.join(outside, 'outside.txt'), 'OUTSIDE-MARKER synthetic\n');
   // Stage 3 (G6): this ticket's attachment folder, and another ticket's next to it.
-  const attachRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), attachRootPrefix())));
+  const attachRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), ATTACH_ROOT_PREFIX)));
   const attach = path.join(attachRoot, TICKET);
   const neighbour = path.join(attachRoot, '00000000-0000-4000-8000-000000000999');
   mkdirSync(attach, { mode: 0o700 }); mkdirSync(neighbour, { mode: 0o700 });

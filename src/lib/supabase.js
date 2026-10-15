@@ -4,10 +4,13 @@ import { createClient } from "@supabase/supabase-js";
 // written, which is what lets scripts/device-secrets.test.mjs import the real
 // redaction and the real hydration allowlist instead of a copy of them.
 import { STORAGE_KEY, LOCAL_ONLY_SETTINGS } from "../constants/defaults.js";
-import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId, adoptedLocalFence, localCopyCurrent, localFence, setItemMakingRoom } from "../utils/storageScope.js";
+import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId, localWriteGuard, adoptedLocalFence, localCopyCurrent, localFence, setItemMakingRoom } from "../utils/storageScope.js";
+import { captureRecordWrite, acknowledgeRecordWrite, expectedRecordVersion } from "../utils/recordAcknowledgements.js";
+import { preserveRecovery, stableJson, reportRecoveryFailure } from "../utils/syncRecovery.js";
 import { foundingFromProfile } from "../utils/founding.js";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
 import { createContinuityBinding, recoverContinuity, continuitySourceSubject, PRODUCTION_CLERK_ISSUER } from "../utils/continuityRecovery.js";
+import { registerInvoiceHandoffOwner } from "../utils/invoiceHandoff.js";
 import { accountDataDeletedAt, honorAccountDataDeletion } from "../utils/dataDeletion.js";
 import { getLockCode, saveLockCode, configureSecretContinuity } from "../utils/secretBox.js";
 import { profileInitializationError } from "../utils/profileIssueDiagnostics.js";
@@ -129,7 +132,7 @@ export function invalidateAccountWrites(accountId) {
 
 // Each write keeps its initiating identity through token minting, fetch, and
 // follow-up requests. A shared client would obtain the *new* session's token.
-function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = true } = {}) {
+function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = true, keepalive = false } = {}) {
   const accountId = authUserId;
   const writeGeneration = writeGenerations.get(accountId) || 0;
   const activeId = getActiveUserId();
@@ -160,7 +163,7 @@ function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = tr
       if (!token) throw new Error("The signed-in session is unavailable.");
       return token;
     },
-    global: { fetch: fetchReportingProgress((...args) => { owner.check(); return globalThis.fetch(...args); }) },
+    global: { fetch: fetchReportingProgress((input, init = {}) => { owner.check(); return globalThis.fetch(input, keepalive ? { ...init, keepalive: true } : init); }) },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   return owner;
@@ -470,6 +473,161 @@ function clientRow(collectionKey, item, mode = "insert") {
   // stripped from the cache) is given one rather than refused whole.
   if (collectionKey === "documents" && mode === "insert" && row.storage_path && !row.mime_type) row.mime_type = documentMime(item);
   return row;
+}
+
+// Only these writable columns are timestamptz in the captured public schema.
+// Date-only/text values and dates embedded inside JSON retain exact content.
+const TIMESTAMPTZ_RECORD_COLUMNS = {
+  customCategories: ["archived_at"], documents: ["uploaded_at"],
+  invoices: ["sent_at", "paid_at", "write_off_at"], notificationLog: ["date"],
+  shareLog: ["sent_at"], taskNotes: ["captured_at", "started_at", "completed_at"],
+  workLog: ["start_time", "end_time"],
+};
+function timestampContent(value) {
+  // Keep sub-millisecond precision: PostgreSQL stores six fractional digits,
+  // whereas Date.parse alone would collapse competing microsecond edits.
+  const match = typeof value === "string" && value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/);
+  if (match) {
+    const [, date, hour, minute, second, fraction = "", zone] = match;
+    const day = Date.parse(`${date}T00:00:00.000Z`);
+    const offset = zone === "Z" || (Number(zone.slice(1, 3)) <= 15 && Number(zone.slice(4)) <= 59);
+    if (Number.isFinite(day) && new Date(day).toISOString().slice(0, 10) === date
+      && Number(hour) < 24 && Number(minute) < 60 && Number(second) < 60 && offset) {
+      const milliseconds = Date.parse(`${date}T${hour}:${minute}:${second}.000${zone}`);
+      if (Number.isFinite(milliseconds)) return ["timestamptz", milliseconds, fraction.padEnd(6, "0")];
+    }
+  }
+  // Invalid/unknown values never normalize into a valid timestamp, even if
+  // their literal contents resemble this internal comparison representation.
+  return ["unparsed-timestamptz", value];
+}
+
+// Literal defaults from the captured public schema (2026-09-30): JSONB
+// containers and scalar constants. Dynamic defaults such as now() are not
+// inferred. Types and values were checked against the saved post-migration catalog.
+// An omitted field on a newly created form gets this exact value at INSERT.
+// Keep explicit null distinct; fields without a database default and unknown
+// fields never inherit an empty array/object from their apparent shape.
+const RECORD_COLUMN_DEFAULTS = {
+  licenses: { npi_imported: false, lifecycle_status: "active", date_unknown: false, no_expiration: false },
+  insurance: { lifecycle_status: "active", date_unknown: false },
+  privileges: { lifecycle_status: "active", date_unknown: false },
+  workHistory: { is_current: false, current: false },
+  locumContracts: {
+    hourly_rate: 0, call_hourly_rate: 0, increment_minutes: 15, min_call_minutes: 15,
+    call_stipend: 0, stipend_hours: 0, overage_hourly_rate: 0, orientation_fee: 0,
+    orientation_billed: false, orientation_hourly_rate: 0, split_at_day_start: false, day_start_hour: 7,
+  },
+  cme: { topics: [] }, healthRecords: { doses: [] },
+  customCategories: { fields: [], aliases: [] },
+  customRecords: { field_values: {}, document_ids: [] },
+  dutyDays: { worked_day: false, scholarly: false, amount: 0, placement_ok: false, custom_fields: {}, call_periods: [] },
+  invoices: { entry_ids: [], payments: [], day_over_min: {} },
+  memberships: { custom_fields: {} }, publications: { custom_fields: {} }, taskNotes: { custom_fields: {} },
+};
+function withRecordDefaults(collectionKey, row) {
+  for (const [key, value] of Object.entries(RECORD_COLUMN_DEFAULTS[collectionKey] || {})) {
+    if (row[key] === undefined) row[key] = value;
+  }
+  return row;
+}
+
+// Only SQL numeric columns from the captured public schema. Forms may retain
+// decimal strings while PostgREST returns JSON numbers. Compare their exact
+// decimal value without changing the write or its atomic old-value predicate.
+// Integer, text and nested JSON fields deliberately keep their existing rules.
+const NUMERIC_RECORD_COLUMNS = {
+  caseLogs: ["w_rvu"], cme: ["hours"], deductibles: ["amount"],
+  dutyDays: ["amount"], invoices: ["total_amount"], licenses: ["renewal_cost"],
+  locumContracts: ["hourly_rate", "call_hourly_rate", "call_stipend", "stipend_hours",
+    "overage_hourly_rate", "orientation_fee", "orientation_hourly_rate", "day_rate",
+    "scholarly_rate", "clinical_day_rate"],
+  memberships: ["cost"], scheduleDays: ["expected"], taxPayments: ["amount"],
+  travelExpenses: ["amount"],
+};
+function numericContent(value) {
+  const number = typeof value === "number";
+  // A rounded large JSON integer cannot prove an exact decimal string. Keep
+  // it distinct rather than manufacture precision the transport did not retain.
+  if ((!number && typeof value !== "string") || (number && (!Number.isFinite(value)
+    || (Number.isInteger(value) && !Number.isSafeInteger(value))))) {
+    return ["unparsed-numeric", typeof value, number ? String(value) : value];
+  }
+  // Do not accept Unicode spaces that JavaScript trim() would silently erase.
+  const text = number ? String(value) : value.replace(/^[\t\n\v\f\r ]+|[\t\n\v\f\r ]+$/g, "");
+  // Bound the exponent text; no expansion into a potentially enormous string.
+  // Parse the coefficient as text, never through Number/parseFloat: rounding
+  // 0.10000000000000001 into 0.1 would hide an actual content difference.
+  const match = text.match(/^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d{1,6}))?$/);
+  if (!match) return ["unparsed-numeric", typeof value, value];
+  const fraction = match[3] ?? match[4] ?? "";
+  const coefficient = ((match[2] || "") + fraction).replace(/^0+/, "");
+  if (!coefficient) return ["numeric", "", "0", "0"];
+  const digits = coefficient.replace(/0+$/, "");
+  const exponent = BigInt(match[5] || "0") - BigInt(fraction.length) + BigInt(coefficient.length - digits.length);
+  return ["numeric", match[1] === "-" ? "-" : "", digits, String(exponent)];
+}
+
+// Compare writable content, not transport timestamps or blank-vs-null form
+// values. Unknown nonempty fields remain part of the comparison.
+export function recordContent(collectionKey, item) {
+  const row = withRecordDefaults(collectionKey, clientRow(collectionKey, item || {}));
+  for (const key of ["created_at", "updated_at", "user_id"]) delete row[key];
+  for (const key of TIMESTAMPTZ_RECORD_COLUMNS[collectionKey] || []) {
+    if (row[key] != null) row[key] = timestampContent(row[key]);
+  }
+  for (const key of NUMERIC_RECORD_COLUMNS[collectionKey] || []) {
+    if (row[key] != null) row[key] = numericContent(row[key]);
+  }
+  for (const key of Object.keys(row)) if (row[key] == null || (key === "favorite" && row[key] === false)) delete row[key];
+  return stableJson(row);
+}
+
+// Structured columns in the deployed public schema (catalog 2026-09-30).
+// An array is not a PostgreSQL array by inference: these columns are JSONB,
+// including category fields/aliases and the values in custom records.
+const JSONB_RECORD_COLUMNS = {
+  licenses: ["custom_fields"], cme: ["topics", "custom_fields"], privileges: ["custom_fields"],
+  insurance: ["custom_fields"], healthRecords: ["doses", "custom_fields"], education: ["custom_fields"],
+  caseLogs: ["custom_fields"], workHistory: ["custom_fields"], peerReferences: ["custom_fields"],
+  malpracticeHistory: ["custom_fields"], locumContracts: ["coverage_periods", "custom_fields", "call_rate_grid"],
+  encounters: ["codes"], screenings: ["components", "custom_fields"], professionalPhotos: ["custom_fields"],
+  publications: ["custom_fields"], travelDocs: ["custom_fields"], travelExpenses: ["custom_fields"],
+  taskNotes: ["custom_fields"], dutyDays: ["custom_fields", "call_periods"], memberships: ["custom_fields"],
+  invoices: ["entry_ids", "lines", "payments", "day_over_min"],
+  customCategories: ["fields", "aliases", "custom_fields"],
+  customRecords: ["field_labels", "field_values", "custom_fields", "document_ids"],
+};
+
+// A narrow conditional write protects other devices' unrelated changes. The
+// old values are checked by the UPDATE itself, including when updated_at is
+// unchanged. Known JSONB values use exact serialized equality, never a
+// containment test. Unknown structured column types stay in recovery.
+function changedRecordPatch(collectionKey, item, previous) {
+  const before = clientRow(collectionKey, previous || {}, "update"), after = clientRow(collectionKey, item, "update"), patch = {};
+  // A complete same-record predecessor may predate the server's defaults.
+  // With no predecessor (or a different id), retain the old unknown/null
+  // predicate instead of inventing a base. Only supplied desired keys enter
+  // the patch, so this cannot clear an unrelated column omitted by a form.
+  if (previous?.id && previous.id === item.id) withRecordDefaults(collectionKey, before);
+  const jsonb = new Set(JSONB_RECORD_COLUMNS[collectionKey] || []);
+  for (const [key, value] of Object.entries(after)) {
+    if (["id", "user_id", "created_at", "updated_at"].includes(key) || stableJson(value ?? null) === stableJson(before[key] ?? null)) continue;
+    if (!jsonb.has(key) && ((value !== null && typeof value === "object") || (before[key] !== null && typeof before[key] === "object"))) return null;
+    patch[key] = value;
+  }
+  return { before, patch, jsonb };
+}
+function matchPreviousFields(query, { before, patch, jsonb }) {
+  for (const key of Object.keys(patch)) {
+    if (jsonb.has(key)) {
+      // PostgREST returns both SQL NULL and JSON null as JavaScript null.
+      // Match either representation atomically; both mean the same observed
+      // old value. Column names here come only from the schema registry above.
+      query = before[key] == null ? query.or(`${key}.is.null,${key}.eq.null`) : query.eq(key, JSON.stringify(before[key]));
+    } else query = before[key] == null ? query.is(key, null) : query.eq(key, before[key]);
+  }
+  return query;
 }
 
 // A share_log row cached or queued in an old shape is repaired here, on every
@@ -891,7 +1049,8 @@ export function clearDeviceKeys(authUserId) {
 // cached file, and replayed in order before the next merge.
 const pendingOpsSlot = (authUserId) =>
   authUserId ? `${BASE_KEYS.pendingOps}:${authUserId}` : null;
-const PENDING_OPS_CAP = 500;
+const queueWriter = crypto.randomUUID();
+let queueSequence = 0;
 
 // ─── Refused writes ──────────────────────────────────────────
 // A row the database refuses for a reason that never goes away (a blank
@@ -986,7 +1145,8 @@ function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
   let queueId = null;
   try {
     const cur = JSON.parse(localStorage.getItem(key) || "[]");
-    let arr = Array.isArray(cur) ? cur : [];
+    if (!Array.isArray(cur)) throw new Error("Unreadable pending writes");
+    let arr = cur;
     // A document's queued save carries its file. A second save of the same
     // document replaces the first instead of queueing the file again (two
     // copies of a 4 MB data URL filled an iPhone's storage); the file rides
@@ -996,21 +1156,43 @@ function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
     // membership answer (an edit whose UPDATE found no row because the add is
     // still queued): it waits for the same answer, and goes up with it.
     if (!meta.awaitingAccess && id && arr.some(o => o?.awaitingAccess === true && o.collectionKey === collectionKey && recordIdOf(o.payload) === id)) meta = { ...meta, ...AWAITING_ACCESS };
-    if (op === "upsert" && collectionKey === "documents" && id && arr.some(o => supersedes(o, collectionKey, id))) {
-      const bytes = payload.data || arr.filter(o => supersedes(o, collectionKey, id)).map(o => o.payload?.data).filter(Boolean).at(-1);
-      arr = arr.filter(o => !supersedes(o, collectionKey, id));
-      if (bytes && !payload.data) payload = { ...payload, data: bytes };
+    const order = meta.writeOrder || { writer: queueWriter, sequence: ++queueSequence };
+    if (op === "upsert" && id) {
+      const previous = arr.filter(o => o.op === "upsert" && supersedes(o, collectionKey, id) && o.writeOrder?.writer === order.writer);
+      const last = previous.at(-1);
+      if (last?.writeOrder.sequence > order.sequence && last.previousSnapshot === stableJson(payload)) {
+        // A previous-version hash resolved late. Preserve the newer desired
+        // row while supplying its first verified base, never the older edit.
+        if (!last.expectedBase) arr = arr.map(o => o === last ? { ...o,
+          expectedBase: meta.expectedBase || null, receiptBaseSnapshot: meta.receiptBaseSnapshot || null } : o);
+        localStorage.setItem(key, JSON.stringify(arr));
+        return;
+      }
+      const predecessor = last && meta.previousSnapshot === stableJson(last.payload) ? last : null;
+      if (predecessor) {
+        const bytes = payload.data || predecessor.payload?.data;
+        meta = { ...meta, expectedBase: predecessor.expectedBase || null,
+          // Keep the first causal base, not an intermediate unsent edit.
+          // Old queue entries without one remain unproven.
+          receiptBaseSnapshot: predecessor.receiptBaseSnapshot || null };
+        arr = arr.filter(o => o !== predecessor);
+        if (collectionKey === "documents" && bytes && !payload.data) payload = { ...payload, data: bytes };
+      }
     }
     // The scopes the write was decided on (recordContext), for replay.
     const scopes = op !== "settings" && Array.isArray(owner.scopes) && owner.scopes.length ? { scopes: owner.scopes } : {};
-    // An id the caller chose (writeAhead holds a lock named by it first).
+    // Documents never hash a server receipt, so their saves cannot resume in
+    // reversed digest order. Do not duplicate multi-megabyte file bytes in
+    // the predecessor metadata; the complete source stays in payload.
+    if (collectionKey === "documents") { meta = { ...meta }; delete meta.previousSnapshot; delete meta.receiptBaseSnapshot; delete meta.editBaseSnapshot; }
     queueId = typeof meta.queueId === "string" && meta.queueId ? meta.queueId : crypto.randomUUID();
-    arr.push({ op, collectionKey, payload, ts: Date.now(), queueId, ...scopes, ...meta });
-    // Bound the queue so one permanently-failing op can't grow without limit.
-    // A full localStorage first gives up the dead development-era copies.
-    setItemMakingRoom(key, JSON.stringify(arr.slice(-PENDING_OPS_CAP)));
+    arr.push({ op, collectionKey, payload, ts: Date.now(), queueId, ...scopes, ...meta, writeOrder: order });
+    // Never evict another unsent operation to make room. setItem is atomic:
+    // quota/malformed-storage failure leaves the complete previous queue.
+    setItemMakingRoom(key, JSON.stringify(arr));
   } catch (err) {
     queueId = null;
+    reportRecoveryFailure(owner.accountId, "This device could not keep a new unsent change. Existing queued changes were preserved. Keep this tab open and export your records before reloading or signing out.");
     // Storage full (a queued document carries its file): the write could not
     // be kept for another try. Said, never silent.
     if ((err?.name === "QuotaExceededError" || err?.code === 22) && op !== "settings") {
@@ -1032,9 +1214,8 @@ function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
 // same record removes them, and replay skips them for a tombstoned id.
 const RECORD_WRITE_OPS = new Set(["upsert", "favorite", "patch"]);
 // A restore's un-delete (clearTombstones) that could not reach the ledger is
-// queued too, as one op per collection holding its ids ({ ids }): one op per
-// record could push other queued writes past PENDING_OPS_CAP. A later delete
-// of one of those records takes it out of the op.
+// queued too, as one op per collection holding its ids ({ ids }), avoiding
+// a redundant operation per record. A later delete removes its id.
 const UNDELETE_OP = "untombstone";
 const undeleteIds = (op) => (Array.isArray(op?.payload?.ids) ? op.payload.ids : []);
 
@@ -1067,15 +1248,8 @@ function dropQueuedWrites(owner, collectionKey, id) {
   notifySync(owner.accountId);
 }
 
-/**
- * A full-row write of this record landed: the record's writes queued before
- * it (ts <= startedAt) are stale. A refused add the physician then fixed used
- * to stay queued after the fix landed: it failed on every load, was parked,
- * and listed the record as "Not saved to your account" for ever, and the one
- * retry each new app version gives a parked op could put its old values over
- * the fix. Writes queued after this one started are newer and are kept.
- */
-function dropSupersededWrites(owner, collectionKey, id, startedAt) {
+/** Keep independent variants; remove only identical or proven causal copies. */
+function dropSupersededWrites(owner, collectionKey, id, startedAt, confirmed, previous) {
   const slot = pendingOpsSlot(owner.accountId);
   if (!slot || !id) return;
   try {
@@ -1083,11 +1257,17 @@ function dropSupersededWrites(owner, collectionKey, id, startedAt) {
     if (!raw) return;
     const cur = JSON.parse(raw);
     if (!Array.isArray(cur)) return;
-    const kept = cur.filter(op => !(supersedes(op, collectionKey, id) && !(Number(op.ts) > startedAt)));
+    const kept = cur.filter(op => {
+      if (!supersedes(op, collectionKey, id) || Number(op.ts) > startedAt) return true;
+      const equivalent = confirmed && (collectionKey === "documents" ? stableJson(op.payload) === stableJson(confirmed)
+        : recordContent(collectionKey, op.payload) === recordContent(collectionKey, confirmed));
+      const causal = previous && op.writeOrder?.writer === queueWriter && stableJson(op.payload) === stableJson(previous);
+      return !equivalent && !causal;
+    });
     if (kept.length === cur.length) return;
     if (kept.length) localStorage.setItem(slot, JSON.stringify(kept));
     else localStorage.removeItem(slot);
-  } catch { return; /* storage unavailable: replay drops them once a later write lands */ }
+  } catch { return; /* storage unavailable: replay will compare or preserve the source */ }
   notifySync(owner.accountId);
 }
 
@@ -1125,7 +1305,7 @@ function withoutBilling(op) {
   if (Array.isArray(op.changed)) {
     const changed = op.changed.filter(k => k !== "invoiceId");
     if (!changed.length) return null;
-    return { ...op, changed, payload: { ...payload, invoiceId: null } };
+    return { ...op, changed, recordedElsewhere: true, payload: { ...payload, invoiceId: null } };
   }
   if (!op.changed && isStipendMarker(op.collectionKey, payload)) return null;
   const { invoiceId: _dropped, ...rest } = payload;
@@ -1191,9 +1371,30 @@ function takeRecordTurn(owner, collectionKey, id) {
 // the write landed and the error when it did not, so replay can drop only the
 // ops that landed, keep the rest, and tell a refusal from an outage.
 const UPLOAD_FAILED = Object.freeze({ code: "upload_failed", message: "Document file upload failed" });
-async function sbUpsertRow(userId, collectionKey, item, owner, queuedAt) {
+async function readCurrentRecord(userId, collectionKey, id, owner) {
+  const answer = await writeRequest(owner, () => owner.db.from(tableName(collectionKey)).select("*").eq("id", id).eq("user_id", userId).maybeSingle());
+  owner.check();
+  if (answer.error) throw answer.error;
+  if (Array.isArray(answer.data)) throw Error("Ambiguous current record");
+  return answer.data || null;
+}
+async function preserveRecordDifference(collectionKey, item, cloud, owner) {
+  const observed = cloud ? toCamelObj(cloud) : null;
+  if (observed) delete observed.userId;
+  await preserveRecovery({ accountId: owner.accountId, fence: owner.fence === undefined ? localFence(owner.accountId) : owner.fence,
+    collectionKey, local: item, cloud: observed, isCurrent: () => { owner.check(); return true; } });
+}
+async function acknowledgeSavedRecord(owner, collectionKey, item, saved, token) {
+  const confirmed = saved ? toCamelObj(saved) : null;
+  if (confirmed) delete confirmed.userId;
+  if (confirmed && recordContent(collectionKey, confirmed) === recordContent(collectionKey, item)) {
+    await acknowledgeRecordWrite(token, { serverVersion: confirmed.updatedAt, isCurrent: () => { owner.check(); return true; } });
+  }
+}
+async function sbUpsertRow(userId, collectionKey, item, owner, queuedAt, expectedBase) {
   if (!item?.id) return null; // nothing addressable — drop it
   const table = tableName(collectionKey);
+  const acknowledgement = captureRecordWrite({ accountId: owner.accountId, fence: owner.fence, collectionKey, item });
   const row = clientRow(collectionKey, item);
   row.user_id = userId;
   row.created_at = row.created_at || new Date().toISOString();
@@ -1202,6 +1403,30 @@ async function sbUpsertRow(userId, collectionKey, item, owner, queuedAt) {
   // than an edit made after it, and the self-heal then kept the old cloud
   // copy over the edit on every device.
   row.updated_at = row.updated_at || new Date(Number(queuedAt) || Date.now()).toISOString();
+  const readCurrent = () => readCurrentRecord(userId, collectionKey, item.id, owner);
+  const preserve = async cloud => { await preserveRecordDifference(collectionKey, item, cloud, owner); return null; };
+  const cloud = await readCurrent();
+  if (cloud) {
+    const camel = toCamelObj(cloud); delete camel.userId;
+    if (collectionKey === "documents" && (item.data || item.pendingUpload)) return preserve(cloud);
+    if (recordContent(collectionKey, item) === recordContent(collectionKey, camel)) {
+      await acknowledgeSavedRecord(owner, collectionKey, item, cloud, acknowledgement); return null;
+    }
+    // Only a base proven to be a previously read server row permits replay.
+    // Patch just changed writable fields; also compare those old values in
+    // the UPDATE itself, because client-written timestamps are not unique.
+    if (!expectedBase || collectionKey === "documents" || recordContent(collectionKey, expectedBase.record) !== recordContent(collectionKey, camel)) return preserve(cloud);
+    const change = changedRecordPatch(collectionKey, item, expectedBase.record);
+    if (!change) return preserve(cloud);
+    if (!Object.keys(change.patch).length) return null;
+    const update = matchPreviousFields(owner.db.from(table).update({ ...change.patch, updated_at: new Date().toISOString() })
+      .eq("id", item.id).eq("user_id", userId).eq("updated_at", expectedBase.version), change);
+    const result = await writeRequest(owner, () => update.select("*")); owner.check();
+    if (result.error) return result.error;
+    const saved = Array.isArray(result.data) && result.data.find(value => value?.id === item.id);
+    if (saved) { await acknowledgeSavedRecord(owner, collectionKey, item, saved, acknowledgement); return null; }
+    return preserve(await readCurrent());
+  }
   if (collectionKey === "documents" && item.data) {
     const path = await uploadForOwner(item, owner);
     if (!path) return UPLOAD_FAILED;
@@ -1209,7 +1434,23 @@ async function sbUpsertRow(userId, collectionKey, item, owner, queuedAt) {
     row.mime_type = documentMime(item);
     row.size_bytes = item.size || null;
   }
-  const { error } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
+  const { data, error } = await writeRequest(owner, () => owner.db.from(table).insert(row).select("*"));
+  owner.check();
+  if (error?.code === "23505") {
+    const raced = await readCurrent();
+    if (!raced) return error;
+    // Another replay may insert this exact copy after our absence read.
+    // Apply the same content check as the initial read before calling it a
+    // conflict; a different winner or unresolved local file still needs review.
+    const camel = toCamelObj(raced); delete camel.userId;
+    if (!(collectionKey === "documents" && (item.data || item.pendingUpload))
+      && recordContent(collectionKey, item) === recordContent(collectionKey, camel)) {
+      await acknowledgeSavedRecord(owner, collectionKey, item, raced, acknowledgement);
+      return null;
+    }
+    return preserve(raced);
+  }
+  if (!error) await acknowledgeSavedRecord(owner, collectionKey, item, Array.isArray(data) && data.find(value => value?.id === item.id), acknowledgement);
   return error || null;
 }
 // A star that matched no row did not land: the record's add has not reached
@@ -1319,17 +1560,41 @@ async function sbPatchRow(userId, collectionKey, item, owner) {
 // queued write) is created whole, as the upsert it used to be.
 async function sbEditRow(userId, collectionKey, item, owner, op) {
   if (!item?.id) return null;
+  // A durable edit needs its verified original server base after a reload.
+  // Changed-column metadata describes the intent; it is not a receipt.
+  // The sole narrow exception follows an authoritative invoice duplicate:
+  // preserve that invoice and compare each remaining changed field atomically.
+  if (collectionKey !== "documents" && !(INVOICE_BILLED.has(collectionKey) && op.recordedElsewhere === true)) {
+    return sbUpsertRow(userId, collectionKey, item, owner, op.ts, op.expectedBase);
+  }
+  let previous = null;
+  try { previous = JSON.parse(op.editBaseSnapshot || op.previousSnapshot || "null"); } catch { /* an old unproven queue copy */ }
+  const conditional = collectionKey !== "documents";
+  // Older queued shapes did not keep the values the edit started from.
+  // Retain differing copies for recovery rather than guessing those values.
+  if (conditional && previous?.id !== item.id) return sbUpsertRow(userId, collectionKey, item, owner, op.ts, op.expectedBase);
+  const change = conditional ? changedRecordPatch(collectionKey, item, previous) : null;
+  if (conditional && !change) return sbUpsertRow(userId, collectionKey, item, owner, op.ts, op.expectedBase);
   const row = clientRow(collectionKey, item, "update");
   delete row.user_id;
   delete row.created_at;
   narrowRow(row, op);
-  const readError = await rebasePackedColumns(owner, userId, collectionKey, row, op, item.id);
+  if (change) change.patch = { ...row };
+  const readError = await rebasePackedColumns(owner, userId, collectionKey, row, op, item.id, change);
+  if (readError?.code === "record_merge_conflict") {
+    const cloud = await readCurrentRecord(userId, collectionKey, item.id, owner);
+    if (cloud) { await preserveRecordDifference(collectionKey, item, cloud, owner); return null; }
+  }
   if (readError) return readError;
   row.updated_at = new Date().toISOString();
-  const { data, error } = await writeRequest(owner, () => owner.db.from(tableName(collectionKey))
-    .update(row).eq("id", item.id).eq("user_id", userId).select("id"));
+  let update = owner.db.from(tableName(collectionKey)).update(row).eq("id", item.id).eq("user_id", userId);
+  if (change) update = matchPreviousFields(update, change);
+  const { data, error } = await writeRequest(owner, () => update.select(conditional ? "*" : "id"));
   if (error) return error;
-  if (Array.isArray(data) && data.length === 0) return sbUpsertRow(userId, collectionKey, item, owner, op.ts);
+  if (Array.isArray(data) && data.length === 0) return sbUpsertRow(userId, collectionKey, item, owner, op.ts, op.expectedBase);
+  const saved = Array.isArray(data) && data.find(value => value?.id === item.id);
+  if (saved) await acknowledgeSavedRecord(owner, collectionKey, item, saved,
+    captureRecordWrite({ accountId: owner.accountId, fence: owner.fence, collectionKey, item }));
   return null;
 }
 
@@ -1410,6 +1675,7 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
   // tab purging the account's copy mid-replay (a data deletion) ends it: the
   // rest of these ops are writes from before that deletion.
   const fence = localFence(owner.accountId);
+  owner.fence = fence;
   const completed = new Set();
   // Failed ops stay queued with their attempt count and error code. A write
   // refused as permanent is parked after PERMANENT_RETRY_LIMIT attempts: kept,
@@ -1496,6 +1762,8 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
     if (op.accessRefused === true) allowedAgain.add(op.queueId);
     owner.check = op.op === "settings" ? () => guardSettings(owner, op.payload)
       : () => { owner.guard(); if (!writes()) throw membershipWriteError(); };
+    const membershipCheck = owner.check;
+    owner.check = () => { membershipCheck(); if (localFence(owner.accountId) !== fence) throw accountChangedError(); };
     let error = null;
     // This record's turn. A live save or star of it made while this is sent
     // waits for it to land, so the newer copy lands last. One already in
@@ -1516,7 +1784,24 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
       if (op.op === "patch" || isLegacyPartialDocument(op)) {
         error = await sbPatchRow(profileId, op.collectionKey, payload, owner);
       } else if (op.op === "upsert") {
-        const send = (o) => (Array.isArray(o.changed) ? sbEditRow(profileId, op.collectionKey, o.payload, owner, o) : sbUpsertRow(profileId, op.collectionKey, o.payload, owner, op.ts));
+        let expectedBase = current.expectedBase;
+        // The original save may have still been in flight when this offline
+        // edit queued. Its receipt can exist now. Only the exact first causal
+        // snapshot may acquire that verified base; never infer a legacy one.
+        if (!expectedBase && typeof current.receiptBaseSnapshot === "string") {
+          let previous;
+          try { previous = JSON.parse(current.receiptBaseSnapshot); } catch { /* retained as unknown */ }
+          if (previous?.id === payload?.id) expectedBase = await expectedRecordVersion({
+            accountId: owner.accountId, fence, collectionKey: op.collectionKey, previous,
+            isCurrent: () => { owner.check(); return true; },
+          });
+          owner.check();
+          const latest = queuedNow(op);
+          if (!latest || stableJson(latest.payload) !== stableJson(payload)) continue;
+          if (latest.expectedBase) expectedBase = latest.expectedBase;
+          else if (latest.receiptBaseSnapshot !== current.receiptBaseSnapshot) continue;
+        }
+        const send = (o) => (Array.isArray(o.changed) ? sbEditRow(profileId, op.collectionKey, o.payload, owner, { ...o, expectedBase }) : sbUpsertRow(profileId, op.collectionKey, o.payload, owner, op.ts, expectedBase));
         error = await send(current);
         // A row's invoice id refused, the row billed on an invoice another
         // device recorded first: the rest goes without it (or nothing).
@@ -1596,16 +1881,8 @@ async function replayForOwner(profileId, authUserId, tombstones = null) {
     if (!error) {
       completed.add(op.queueId);
       if (op.op !== "settings") noteWriteOutcome(owner, op.collectionKey, recordIdOf(op.payload), null);
-      // A full row landed: the same record's earlier queued rows and patches
-      // are stale (a refused add the physician has since fixed, say). They
-      // leave the queue now instead of failing, being parked and listing
-      // the record as not saved on every later load.
-      const id = recordIdOf(op.payload);
-      if (id && op.op === "upsert" && !isLegacyPartialDocument(op)) {
-        for (const earlier of ops.slice(0, index)) {
-          if (supersedes(earlier, op.collectionKey, id)) { completed.add(earlier.queueId); failed.delete(earlier.queueId); }
-        }
-      }
+      // Complete only this operation. Another writer's earlier same-record
+      // variant may have failed recovery and must remain available.
       continue;
     }
     const kind = op.op === "settings" ? classifyWriteError(error)
@@ -1811,6 +2088,7 @@ export async function ensureProfile(userId, { isCurrent = () => true, retryDelay
         (error, threw) => threw && transientInitializationFailure(error));
       owner.check();
       initializedProfileId = receipt.profileId;
+      registerInvoiceHandoffOwner(userId, initializedProfileId);
       configureSecretContinuity(null);
       let binding = null;
       boundContinuitySources.delete(userId);
@@ -1891,20 +2169,20 @@ export async function ensureProfile(userId, { isCurrent = () => true, retryDelay
     throw error;
   }
   if (existing.error) throw new Error("Your account could not be loaded. Please try again.");
-  if (existing.data) return existing.data;
+  if (existing.data) { registerInvoiceHandoffOwner(userId, existing.data.id); return existing.data; }
 
   // The disabled legacy path creates only an ordinary pending profile. When
   // continuity is enabled, the exact initialized row must already exist above.
   const { data: created, error } = await writeRequest(owner, () => owner.db
     .from("profiles").insert({ id: crypto.randomUUID(), auth_user_id: userId }).select().single());
   owner.check();
-  if (!error) return created;
+  if (!error) { registerInvoiceHandoffOwner(userId, created?.id); return created; }
   // A concurrent Clerk webhook may have created exactly this subject's row.
   // The retry retains the same account and session through token and fetch.
   if (error.code === "23505") {
     const again = await lookup();
     owner.check();
-    if (!again.error && again.data) return again.data;
+    if (!again.error && again.data) { registerInvoiceHandoffOwner(userId, again.data.id); return again.data; }
   }
   throw new Error("Your account could not be initialized. Please try again.");
 }
@@ -2564,7 +2842,7 @@ export async function uploadDocumentFile(item, authUserId, userId, { onHeld = nu
   if (error) { failedAs(kind); return null; }
   // Insert-only, and the row was there already: it stands as it is.
   if (insertOnly && Array.isArray(data) && data.length === 0) return null;
-  dropSupersededWrites(owner, "documents", item.id, startedAt);
+  dropSupersededWrites(owner, "documents", item.id, startedAt, item);
   return row.storage_path;
 }
 
@@ -2648,25 +2926,12 @@ export function allocateInvoiceNumberRpc(kind, day, atLeast) {
  * { data, error } (the request is sent once it is awaited or .then'd), or
  * null without a cloud client. See utils/invoiceHandoff.js.
  */
-export function markInvoiceNumberSharedRpc(number, { shared = true, contractId = null, sharedAt = null } = {}) {
+export function markInvoiceNumberSharedRpc(number, { shared = true, contractId = null, sharedAt = null } = {}, account = getActiveUserId(), isCurrent = () => true) {
   if (!supabase) return null;
-  return stampDb().rpc("mark_invoice_number_shared", { p_number: number, p_shared: shared, p_contract_id: contractId, p_shared_at: shared ? sharedAt || null : null });
-}
-
-// The stamp goes out as the file goes to the share sheet, and iOS can put the
-// page away for Mail or Gmail a moment later, or discard it there (the
-// owner's iPhone, 2026-10-02). Sent with keepalive, a request already on its
-// way finishes even if the page does not. Its own client, made on first use;
-// otherwise the shared one's settings.
-let stampClient = null;
-function stampDb() {
-  if (typeof fetch !== "function") return supabase;
-  stampClient ||= createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    accessToken: getClerkSupabaseToken,
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { fetch: (input, init = {}) => fetch(input, { ...init, keepalive: true }) },
-  });
-  return stampClient;
+  const owner = writeContext(account, { keepalive: true }), local = localWriteGuard(account);
+  owner.check = () => { owner.guard(); if (!local() || !isCurrent()) throw accountChangedError(); };
+  return writeRequest(owner, () => owner.db.rpc("mark_invoice_number_shared", { p_number: number, p_shared: shared, p_contract_id: contractId, p_shared_at: shared ? sharedAt || null : null }))
+    .then(result => { owner.check(); return result; });
 }
 
 // A call day (YYYY-MM-DD), and the one `by` days from it.
@@ -2704,9 +2969,13 @@ const dayShift = (day, by) => {
  * with nothing logged has no row of its own to ask about by id (review of
  * release/goal2, 2026-10-02).
  */
-export function readInvoiceRecordState(number, collectionKey, ids = [], profileId = null, stipend = null) {
+export function readInvoiceRecordState(number, collectionKey, ids = [], profileId = null, stipend = null, account = getActiveUserId()) {
+  if (typeof stipend === "string") { account = stipend; stipend = null; }
   if (!supabase) return null;
-  const db = memberDb();
+  const owner = writeContext(account), local = localWriteGuard(account);
+  owner.check = () => { owner.guard(); if (!local()) throw accountChangedError(); };
+  owner.check();
+  const db = owner.db;
   const n = String(number ?? "").trim();
   // ilike: the same number in any case (Mark as sent takes what is typed);
   // its wildcards are matched as themselves.
@@ -2731,6 +3000,7 @@ export function readInvoiceRecordState(number, collectionKey, ids = [], profileI
         .or(`call_day.in.(${days.join(",")}),and(call_day.is.null,date.gte.${dayShift(days[0], -1)},date.lte.${dayShift(days[days.length - 1], 1)})`)
       : Promise.resolve({ data: [], error: null }),
   ]).then(async ([inv, rows, dayRows]) => {
+    owner.check();
     const error = inv?.error || rows?.error || dayRows?.error || null;
     if (error) return { data: null, error };
     // Only rows it asked about that an invoice bills (the filters say so;
@@ -2749,6 +3019,7 @@ export function readInvoiceRecordState(number, collectionKey, ids = [], profileI
         if (!named?.error) numbers = new Map((named.data || []).map((r) => [String(r.id), r.number]));
       } catch { /* named as "another invoice" */ }
     }
+    owner.check();
     return {
       data: {
         numberTaken: (inv.data || []).length > 0,
@@ -2774,15 +3045,18 @@ export function readInvoiceRecordState(number, collectionKey, ids = [], profileI
  * cleared only once its record is there (utils/invoiceHandoff.js): until
  * then the stamp is the only trace on the server that it went.
  */
-export function readInvoiceNumberRecorded(number) {
-  const read = readInvoiceRecordState(number, null, [], null);
+export function readInvoiceNumberRecorded(number, account = getActiveUserId()) {
+  const read = readInvoiceRecordState(number, null, [], null, null, account);
   return read ? read.then((r) => (r.error ? { data: null, error: r.error } : { data: !!r.data?.numberTaken, error: null })) : null;
 }
 
 /** The account's numbers handed to the share sheet that no invoice carries yet: [{ number, shared_at, contract_id }]. */
-export function listSharedInvoiceNumbersRpc() {
+export function listSharedInvoiceNumbersRpc(account = getActiveUserId(), isCurrent = () => true) {
   if (!supabase) return null;
-  return supabase.rpc("list_shared_invoice_numbers");
+  const owner = writeContext(account), local = localWriteGuard(account);
+  owner.check = () => { owner.guard(); if (!local() || !isCurrent()) throw accountChangedError(); };
+  return writeRequest(owner, () => owner.db.rpc("list_shared_invoice_numbers"))
+    .then(result => { owner.check(); return result; });
 }
 
 /**
@@ -2944,6 +3218,7 @@ async function insertForOwner(userId, collectionKey, item, owner, ahead = null) 
   if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return null; }
   const startedAt = Date.now();
   const table = tableName(collectionKey);
+  const acknowledgement = captureRecordWrite({ accountId: owner.accountId, fence: owner.fence, collectionKey, item });
   // Without fields not in DB, or written only by the server
   const row = clientRow(collectionKey, item);
   row.user_id = userId;
@@ -2959,7 +3234,7 @@ async function insertForOwner(userId, collectionKey, item, owner, ahead = null) 
     row.mime_type = documentMime(item);
     row.size_bytes = item.size || null;
   }
-  let { error } = await writeRequest(owner, () => owner.db.from(table).insert(row));
+  let { data, error } = await writeRequest(owner, () => owner.db.from(table).insert(row).select("*"));
   owner.check();
   // Its own id already there: the record reached the cloud another way while
   // this insert was on its way (a load's self-heal push or file reconcile,
@@ -2967,10 +3242,19 @@ async function insertForOwner(userId, collectionKey, item, owner, ahead = null) 
   // duplicates another record" (review of 9484782c). An invoice number
   // another invoice carries is handled below.
   if (error && writeErrorCode(error) === "23505" && item?.id) {
-    const found = await writeRequest(owner, () => owner.db.from(table).select("id").eq("id", item.id).eq("user_id", userId).maybeSingle());
+    const found = await writeRequest(owner, () => owner.db.from(table).select("*").eq("id", item.id).eq("user_id", userId).maybeSingle());
     owner.check();
     const landed = Array.isArray(found?.data) ? found.data[0] : found?.data;
-    if (!found?.error && landed?.id === item.id) error = null;
+    if (!found?.error && landed?.id === item.id) {
+      const confirmed = toCamelObj(landed); delete confirmed.userId;
+      if (recordContent(collectionKey, item) === recordContent(collectionKey, confirmed)) {
+        error = null; data = [landed];
+      } else {
+        await preserveRecordDifference(collectionKey, item, landed, owner);
+        dropSupersededWrites(owner, collectionKey, item.id, startedAt, confirmed);
+        return null;
+      }
+    }
   }
   // Its number is another invoice's on the account (the server keeps one
   // invoice per number, migration 20261002030000): recorded on another
@@ -2987,7 +3271,9 @@ async function insertForOwner(userId, collectionKey, item, owner, ahead = null) 
     queuePendingOp("upsert", collectionKey, item, owner, failureMeta(error, kind));
     return null;
   }
-  dropSupersededWrites(owner, collectionKey, item.id, startedAt);
+  dropSupersededWrites(owner, collectionKey, item.id, startedAt, item);
+  const saved = Array.isArray(data) ? data.find(value => value?.id === item.id) : null;
+  await acknowledgeSavedRecord(owner, collectionKey, item, saved, acknowledgement);
   // A document's storage path, once its file and row both landed: the caller
   // records it so the cached copy can drop the bytes (utils/storage saveData).
   return row.storage_path || null;
@@ -3126,7 +3412,7 @@ export function rebasePacked(server, base, mine) {
 // The packed columns of an edit's row, rebased on the server's copy now.
 // Returns the read's error; no row leaves `row` as it is (the update then
 // finds no row and the whole record goes).
-async function rebasePackedColumns(owner, userId, collectionKey, row, meta, id) {
+async function rebasePackedColumns(owner, userId, collectionKey, row, meta, id, change = null) {
   const cols = packedColumns(collectionKey).filter(col => Object.hasOwn(row, col) && meta?.base && Object.hasOwn(meta.base, col));
   if (!cols.length) return null;
   const { data, error } = await writeRequest(owner, () => owner.db.from(tableName(collectionKey))
@@ -3134,7 +3420,21 @@ async function rebasePackedColumns(owner, userId, collectionKey, row, meta, id) 
   if (error) return error;
   const server = Array.isArray(data) ? data[0] : data;
   if (!server) return null;
-  for (const col of cols) row[col] = rebasePacked(server[col], meta.base[col], row[col]);
+  for (const col of cols) {
+    const before = meta.base[col], desired = row[col], current = server[col];
+    if (isPlainObject(desired) || (desired == null && isPlainObject(before))) {
+      const was = isPlainObject(before) ? before : {}, mine = isPlainObject(desired) ? desired : {}, theirs = isPlainObject(current) ? current : {};
+      for (const key of new Set([...Object.keys(was), ...Object.keys(mine)])) {
+        if (!sameColumnValue(mine[key], was[key]) && !sameColumnValue(theirs[key], was[key]) && !sameColumnValue(theirs[key], mine[key])) {
+          return { code: "record_merge_conflict", message: "This field changed elsewhere" };
+        }
+      }
+    }
+    row[col] = rebasePacked(current, before, desired);
+    // The merge uses the value just read, so the atomic predicate must match
+    // that value. A subsequent write by another device cannot be overwritten.
+    if (change) { change.before[col] = current; change.patch[col] = row[col]; }
+  }
   return null;
 }
 /**
@@ -3168,45 +3468,98 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, item, previous, true, authUserId, { keepOnRefusal });
   const retryOp = partial ? "patch" : "upsert";
-  // Queued, it keeps what it changed (editMeta), never the whole record.
-  const asQueued = () => (partial ? {} : editMetaFields(editMeta(owner, collectionKey, item, previous)));
-  const ahead = writeAheadRecord(owner, retryOp, collectionKey, item, asQueued());
+  // Reserve online call order before hashing a prior snapshot. An offline
+  // edit can still queue while an earlier online request is waiting.
+  const turn = supabase && userId ? takeRecordTurn(owner, collectionKey, item.id) : null;
+  const writeOrder = { writer: queueWriter, sequence: ++queueSequence };
+  const previousSnapshot = stableJson(previous);
+  const meta = partial ? null : editMeta(owner, collectionKey, item, previous);
+  const retryMeta = { ...editMetaFields(meta), expectedBase: null, writeOrder, previousSnapshot, editBaseSnapshot: previousSnapshot,
+    receiptBaseSnapshot: !partial && collectionKey !== "documents" && previous?.id === item.id ? previousSnapshot : null };
+  // Keep the member's copy before any digest or membership wait. The
+  // verified base is added to this same queue identity when it is known.
+  const ahead = writeAheadRecord(owner, retryOp, collectionKey, item, retryMeta);
   try {
-    if (owner.authorized && await heldForAccess(owner, ahead)) { if (!ahead) queuePendingOp(retryOp, collectionKey, item, owner, { ...heldMeta(owner), ...asQueued() }); return; }
-  } finally { if (ahead && !ahead.settled) { ahead.kept = true; settleWrittenAhead(owner, ahead); } }
-  if (!supabase || !userId) { queuePendingOp(retryOp, collectionKey, item, owner, asQueued()); return; }
-  // The record's add may still be uploading (a document is read before it is
-  // stored, so its card can be saved the moment the upload starts). Sent
-  // first, the UPDATE matched no row, the whole document (file included) was
-  // queued, and the add then landed with the values from before the edit.
-  // And a queued older copy of this record that replay is sending lands
-  // first. This edit's turn lasts until it has landed and taken the record's
-  // older queued copies out of the queue: a replay that reaches one of them
-  // meanwhile waits for it, then finds the copy gone (replayForOwner).
-  const turn = takeRecordTurn(owner, collectionKey, item.id);
-  try {
-    if (turn.ready) { await turn.ready; owner.check(); }
+    const expectedBase = partial ? null : await expectedRecordVersion({ accountId: owner.accountId, fence: owner.fence, collectionKey, previous,
+      isCurrent: () => { owner.check(); return true; } });
+    owner.check();
+    retryMeta.expectedBase = expectedBase;
+    if (expectedBase) retryMeta.receiptBaseSnapshot = null;
+    if (ahead) {
+      // Preserve the original payload, deciding lock and causal sequence.
+      // If storage refuses this refinement, the unproven source stays queued
+      // and replay retains both versions instead of guessing a safe base.
+      try {
+        const slot = pendingOpsSlot(owner.accountId);
+        const pending = JSON.parse(localStorage.getItem(slot) || "[]");
+        if (Array.isArray(pending) && pending.some(op => op.queueId === ahead.queueId)) {
+          const refined = { ...retryMeta };
+          if (collectionKey === "documents") { delete refined.previousSnapshot; delete refined.receiptBaseSnapshot; delete refined.editBaseSnapshot; }
+          localStorage.setItem(slot, JSON.stringify(pending.map(op => op.queueId === ahead.queueId ? { ...op, ...refined } : op)));
+        }
+      } catch { /* original complete copy remains */ }
+    }
+    if (owner.authorized && await heldForAccess(owner, ahead)) {
+      if (!ahead) queuePendingOp(retryOp, collectionKey, item, owner, { ...heldMeta(owner), ...retryMeta });
+      return;
+    }
+    if (!supabase || !userId) { queuePendingOp(retryOp, collectionKey, item, owner, retryMeta); return; }
+    // The record's add may still be uploading (a document is read before it is
+    // stored, so its card can be saved the moment the upload starts). Sent
+    // first, the UPDATE matched no row, the whole document (file included) was
+    // queued, and the add then landed with the values from before the edit.
+    // And a queued older copy of this record that replay is sending lands
+    // first. This edit's turn lasts until it has landed and taken the record's
+    // older queued copies out of the queue: a replay that reaches one of them
+    // meanwhile waits for it, then finds the copy gone (replayForOwner).
+    if (turn?.ready) { await turn.ready; owner.check(); }
     const table = tableName(collectionKey);
-    const row = clientRow(collectionKey, item, "update");
+    const acknowledgement = partial ? null : captureRecordWrite({ accountId: owner.accountId, fence: owner.fence, collectionKey, item });
+    const conditional = !partial && collectionKey !== "documents";
+    let patchBase = previous;
+    if (conditional) {
+      // Carry a proven earlier unsent edit into this causal save. An unknown
+      // predecessor remains queued unless the returned cloud row proves it
+      // landed; a successful narrow patch alone cannot clear it.
+      try {
+        const pending = JSON.parse(localStorage.getItem(pendingOpsSlot(owner.accountId)) || "[]");
+        const predecessor = Array.isArray(pending) && pending.findLast(op => op.op === "upsert" && supersedes(op, collectionKey, item.id)
+          && op.writeOrder?.writer === queueWriter && stableJson(op.payload) === previousSnapshot);
+        if (predecessor?.expectedBase?.record) patchBase = predecessor.expectedBase.record;
+      } catch { /* unreadable sources are retained, never guessed */ }
+    }
+    const change = conditional ? changedRecordPatch(collectionKey, item, patchBase) : null;
+    // No conditional match or unsupported field shape: retain both versions.
+    // A missing row leaves the complete source queued for safe insertion.
+    const preserveOrQueue = async () => {
+      try {
+        const cloud = await readCurrentRecord(userId, collectionKey, item.id, owner);
+        if (cloud) {
+          const observed = toCamelObj(cloud); delete observed.userId;
+          if (recordContent(collectionKey, item) !== recordContent(collectionKey, observed)) await preserveRecordDifference(collectionKey, item, cloud, owner);
+          return;
+        }
+      } catch (error) { owner.check(); noteWriteOutcome(owner, collectionKey, item.id, error); }
+      queuePendingOp(retryOp, collectionKey, item, owner, retryMeta);
+    };
+    if (conditional && !change) { await preserveOrQueue(); return; }
+    const row = conditional ? { ...change.patch } : clientRow(collectionKey, item, "update");
     delete row.user_id;
     delete row.created_at;
-    const meta = partial ? null : editMeta(owner, collectionKey, item, previous);
     narrowRow(row, meta);
-    const rebaseError = await rebasePackedColumns(owner, userId, collectionKey, row, meta, item.id);
+    const rebaseError = await rebasePackedColumns(owner, userId, collectionKey, row, meta, item.id, change);
     owner.check();
     if (rebaseError) {
+      if (rebaseError.code === "record_merge_conflict") { await preserveOrQueue(); return; }
       console.warn(`Failed to read ${collectionKey} before an edit:`, rebaseError.message);
-      queuePendingOp(retryOp, collectionKey, item, owner, { ...failureMeta(rebaseError), ...editMetaFields(meta) });
+      queuePendingOp(retryOp, collectionKey, item, owner, { ...failureMeta(rebaseError), ...retryMeta });
       return;
     }
     const startedAt = Date.now();
     row.updated_at = new Date(startedAt).toISOString();
-    let { data, error } = await writeRequest(owner, () => owner.db
-      .from(table)
-      .update(row)
-      .eq("id", item.id)
-      .eq("user_id", userId)
-      .select("id"));
+    let update = owner.db.from(table).update(row).eq("id", item.id).eq("user_id", userId);
+    if (conditional) update = matchPreviousFields(update, change);
+    let { data, error } = await writeRequest(owner, () => update.select(conditional ? "*" : "id"));
     owner.check();
     // Its invoice id refused: the row is on an invoice another device
     // recorded first, which stands. The rest of the edit goes without it;
@@ -3214,7 +3567,9 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
     if (error && invoiceGuardRefused(collectionKey, error) && Object.hasOwn(row, "invoice_id")) {
       const { invoice_id: _refused, ...rest } = row;
       if (Object.keys(rest).some(col => col !== "id" && col !== "updated_at")) {
-        ({ data, error } = await writeRequest(owner, () => owner.db.from(table).update(rest).eq("id", item.id).eq("user_id", userId).select("id")));
+        let other = owner.db.from(table).update(rest).eq("id", item.id).eq("user_id", userId);
+        if (conditional) other = matchPreviousFields(other, { ...change, patch: Object.fromEntries(Object.entries(change.patch).filter(([key]) => key !== "invoice_id")) });
+        ({ data, error } = await writeRequest(owner, () => other.select(conditional ? "*" : "id")));
         owner.check();
       } else { data = [{ id: item.id }]; error = null; }
       try { invoiceNumberConflict?.(); } catch { /* the next load reads it */ }
@@ -3224,8 +3579,8 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
     // lost; the queued add then replayed the old values. Queue the edit behind
     // the add, so replay ends on the edit.
     if (!error && Array.isArray(data) && data.length === 0) {
-      // A partial write cannot create the row; the record's own add carries it.
-      if (!partial) queuePendingOp("upsert", collectionKey, item, owner);
+      if (conditional) await preserveOrQueue();
+      else if (!partial) queuePendingOp("upsert", collectionKey, item, owner, retryMeta);
       return;
     }
     const kind = noteWriteOutcome(owner, collectionKey, item.id, error);
@@ -3234,12 +3589,21 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
       // Replay as an upsert: if the row was never inserted (a failed add), the
       // update would no-op, so upsert recovers both cases. A partial write
       // replays as a patch.
-      queuePendingOp(retryOp, collectionKey, item, owner, { ...failureMeta(error, kind), ...(partial ? {} : editMetaFields(editMeta(owner, collectionKey, item, previous))) });
+      queuePendingOp(retryOp, collectionKey, item, owner, { ...failureMeta(error, kind), ...retryMeta });
     } else if (!partial) {
-      // The whole record landed: its earlier queued writes are stale.
-      dropSupersededWrites(owner, collectionKey, item.id, startedAt);
+      const saved = Array.isArray(data) ? data.find(row => row?.id === item.id) : null;
+      const confirmed = saved ? toCamelObj(saved) : null;
+      if (confirmed) delete confirmed.userId;
+      const fullCopyLanded = !conditional || (confirmed && recordContent(collectionKey, confirmed) === recordContent(collectionKey, item));
+      dropSupersededWrites(owner, collectionKey, item.id, startedAt, conditional ? confirmed : item, fullCopyLanded ? previous : null);
+      if (saved && fullCopyLanded) {
+        await acknowledgeRecordWrite(acknowledgement, { serverVersion: confirmed?.updatedAt, isCurrent: () => { owner.check(); return true; } });
+      }
     }
-  } finally { turn.done(); }
+  } finally {
+    if (ahead && !ahead.settled) { ahead.kept = true; settleWrittenAhead(owner, ahead); }
+    turn?.done();
+  }
 }
 
 // A star is not an edit.
@@ -3328,7 +3692,7 @@ export async function deleteItem(userId, collectionKey, itemId, previous) {
 // error is classified (syncRules classifyWriteError: "transient", "denied"
 // or "permanent"), so a caller can tell the network from a refusal that
 // sending the row again cannot change (AppContext owedSync).
-export async function bulkSync(userId, collectionKey, items, authUserId, { onHeld = null, onFailed = null } = {}) {
+export async function bulkSync(userId, collectionKey, items, authUserId, { insertOnly = false, onHeld = null, onFailed = null } = {}) {
   if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = writeContext(authUserId);
   const previous = items.map(item => accessAuthority.previousRecord(collectionKey, item?.id, owner.accountId));
@@ -3344,6 +3708,25 @@ export async function bulkSync(userId, collectionKey, items, authUserId, { onHel
     return items.length;
   }
   if (!supabase || !userId || !items.length) return;
+  if (insertOnly) {
+    let failed = 0;
+    for (const item of items) {
+      try {
+        // The load observed this id missing, but another device may already
+        // have inserted it. The safe replay primitive never upserts over it.
+        const error = await sbUpsertRow(userId, collectionKey, item, owner, Date.now(), null);
+        owner.check();
+        if (error) throw error;
+        noteWriteOutcome(owner, collectionKey, item.id, null);
+      } catch (error) {
+        owner.check(); failed += 1;
+        const kind = noteWriteOutcome(owner, collectionKey, item.id, error);
+        try { onFailed?.(kind); } catch { /* diagnostics cannot stop other rows */ }
+        queuePendingOp("upsert", collectionKey, item, owner, failureMeta(error, kind));
+      }
+    }
+    return failed;
+  }
   const table = tableName(collectionKey);
   const startedAt = Date.now();
   const now = new Date(startedAt).toISOString();

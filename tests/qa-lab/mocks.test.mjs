@@ -126,6 +126,25 @@ test('mock Clerk: the Backend API needs the instance key and keeps the two insta
   assert.equal(legacy.data.email_addresses[0].email_address, 'qa-legacy-1@qa.credentialdomd.test', 'the seed\'s continuity member exists in the legacy instance');
 });
 
+test('mock Clerk: continuity can use the same email in separate instances, never twice within one instance', async () => {
+  const email = 'instance-bound@qa.credentialdomd.test';
+  const legacy = await call('/qa/users', { method: 'POST', body: { email, instance: 'legacy' } });
+  const live = await call('/qa/users', { method: 'POST', body: { email, instance: 'live' } });
+  assert.equal(legacy.status, 201); assert.equal(live.status, 201);
+  assert.notEqual(legacy.data.user.id, live.data.user.id);
+  for (const [instance, key, id] of [['live', secrets.clerk.secretKey, live.data.user.id], ['legacy', secrets.clerk.legacySecretKey, legacy.data.user.id]]) {
+    assert.equal((await call('/qa/users', { method: 'POST', body: { email, instance } })).status, 409);
+    const listed = await call(`/clerk/v1/users?email_address=${email}`, { headers: { Authorization: `Bearer ${key}` } });
+    assert.deepEqual(listed.data.map(u => u.id), [id]);
+  }
+  const other = await call('/qa/users', { method: 'POST', body: { email: 'instance-patch@qa.credentialdomd.test' } });
+  assert.equal((await call(`/qa/users/${other.data.user.id}`, { method: 'PATCH', body: { email } })).status, 409);
+  const legacyOnly = await call('/qa/users', { method: 'POST', body: { email: 'legacy-only@qa.credentialdomd.test', instance: 'legacy' } });
+  assert.equal(legacyOnly.status, 201);
+  assert.equal((await call(`/qa/users/${other.data.user.id}`, { method: 'PATCH', body: { email: 'legacy-only@qa.credentialdomd.test' } })).status, 200);
+  assert.equal((await call('/qa/sessions', { method: 'POST', body: { userId: legacy.data.user.id } })).status, 404);
+});
+
 test('mock Clerk: user.created and user.updated go to clerk-webhook, Svix-signed as Clerk signs them', async () => {
   const { data } = await call('/qa/users', { method: 'POST', body: { email: 'webhook@qa.credentialdomd.test' } });
   const created = await until(() => received.find((r) => r.name === 'clerk-webhook' && r.event?.data?.id === data.user.id && r.event.type === 'user.created'));
@@ -156,6 +175,7 @@ test('mock Stripe: the real SDK can run the limited checkout exactly as the func
   const again = await stripe.customers.create({ metadata: meta }, { idempotencyKey: `test:${profileId}:customer` });
   assert.equal(again.id, customer.id, 'an idempotency key returns the first result');
   assert.equal((await stripe.customers.retrieve(customer.id)).metadata.profile_id, profileId);
+  assert.equal((await stripe.customers.retrieve(customer.id)).balance, 0, 'a customer has a balance, 0 with no credit, as limited-refund reads it before a refund');
   assert.equal(customer.livemode, true, 'the lab key is a live-mode key, as production\'s billing mode');
   assert.deepEqual((await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 100 })).data, []);
 
@@ -251,6 +271,14 @@ test('mock Stripe: the hosted Pay button sends the browser back at once; the eve
   const { data } = await call('/qa/stripe/deliveries');
   const paid = data.deliveries.filter((d) => d.type === 'invoice.paid' && d.customer === customer.id).reverse();
   assert.deepEqual(paid.map((d) => [d.attempt, d.status, d.willRetry]), [[1, 503, true], [2, 200, false]]);
+  const audit = await call(`/qa/stripe/delivery-audit?since=${encodeURIComponent(new Date(started).toISOString())}`);
+  assert.equal(audit.status, 200);
+  assert.equal(audit.data.complete, true);
+  const audited = audit.data.deliveries.filter(d => d.event === paid[0].event);
+  assert.deepEqual(audited.map(d => [d.attempt, d.status, d.final]), [[1, 503, false], [2, 200, true]], 'the complete audit ties a rejected attempt to its accepted retry');
+  assert.equal((await call('/qa/stripe/delivery-audit?since=invalid')).status, 400);
+  const earlier = await call('/qa/stripe/delivery-audit?since=2020-01-01T00%3A00%3A00.000Z&until=2020-01-01T00%3A00%3A01.000Z');
+  assert.equal(earlier.data.complete, false, 'an old run before the journal existed is not certified');
 });
 
 test('mock Stripe: delivery plans are checked, and orders are what they say', async () => {
@@ -263,6 +291,122 @@ test('mock Stripe: delivery plans are checked, and orders are what they say', as
     assert.throws(() => deliveryPlan(bad), /./, JSON.stringify(bad));
   }
   assert.equal((await call('/qa/stripe/delivery-plan', { method: 'POST', body: { delayMs: 1 } })).status, 400, 'a plan names a session or the default');
+});
+
+test('mock Stripe: Cancel and get a refund runs as limited-refund runs it: the charge, an immediate cancel, one refund, and their events', async () => {
+  const port = Number(new URL(base).port);
+  const stripe = new Stripe(secrets.stripe.secretKey, { apiVersion: '2024-04-10', host: '127.0.0.1', port: String(port), protocol: 'http', maxNetworkRetries: 0 });
+  const offer = limitedOffer('core', 'founding', { core: secrets.stripe.coreProductId, core_locum: secrets.stripe.coreLocumProductId });
+  const price = (await stripe.prices.list({ lookup_keys: [offer.lookupKey], active: true, limit: 1 })).data[0];
+  const customer = await stripe.customers.create({ metadata: { app: LIMITED_LAUNCH.app } });
+  const session = await stripe.checkout.sessions.create({ customer: customer.id, mode: 'subscription', line_items: [{ price: price.id, quantity: 1 }],
+    success_url: `${APP_PUBLIC_ORIGIN}/app/?billing=complete`, expires_at: Math.floor(Date.now() / 1000) + 3600 });
+  const done = (await call(`/qa/stripe/checkout/${session.id}/complete`, { method: 'POST', body: {} })).data;
+
+  // What latestPayment reads: the paid invoice names its charge, and the charge is the whole payment.
+  const invoice = await stripe.invoices.retrieve(done.invoice.id, { expand: ['lines.data.price'] });
+  assert.match(invoice.charge, /^ch_[A-Za-z0-9]+$/);
+  const charge = await stripe.charges.retrieve(invoice.charge);
+  assert.equal(charge.customer, customer.id);
+  assert.equal(charge.invoice, invoice.id);
+  assert.equal(charge.amount, invoice.amount_paid);
+  assert.deepEqual([charge.livemode, charge.currency, charge.paid, charge.status, charge.disputed, charge.amount_refunded], [true, 'usd', true, 'succeeded', false, 0]);
+  await assert.rejects(stripe.charges.retrieve('ch_missing'), /No such charge/);
+
+  // Cancel now, no proration credit: the answer is the cancelled subscription, and the event follows.
+  const before = received.length;
+  const mine = () => received.slice(before).filter((r) => r.name === 'limited-stripe-webhook');
+  const key = `test:refund-cancel:${charge.id}:1`;
+  const cancelled = await stripe.subscriptions.cancel(done.subscription.id, { prorate: false, invoice_now: false }, { idempotencyKey: key });
+  assert.equal(cancelled.status, 'canceled');
+  assert.ok(cancelled.canceled_at > 0 && cancelled.ended_at > 0);
+  assert.equal(mine().length, 0, 'the event is not sent before the answer');
+  assert.equal((await stripe.subscriptions.cancel(done.subscription.id, { prorate: false, invoice_now: false }, { idempotencyKey: key })).id, cancelled.id, 'the same key answers the same');
+  assert.equal((await stripe.subscriptions.retrieve(done.subscription.id)).status, 'canceled');
+  const subs = (await call(`/qa/stripe/subscriptions?customer=${customer.id}`)).data.subscriptions;
+  assert.deepEqual([subs.length, subs[0].cancellation.prorate, subs[0].cancellation.invoiceNow, subs[0].cancellation.idempotencyKey], [1, false, false, key]);
+
+  // One full refund; a second (another key) is refused as Stripe refuses it; the same key replays the first.
+  const refundKey = `test:refund:${charge.id}:1`;
+  const refund = await stripe.refunds.create({ charge: charge.id, amount: charge.amount, reason: 'requested_by_customer', metadata: { app: LIMITED_LAUNCH.app } }, { idempotencyKey: refundKey });
+  assert.match(refund.id, /^re_[A-Za-z0-9]+$/);
+  assert.deepEqual([refund.charge, refund.amount, refund.currency, refund.status, refund.metadata.app], [charge.id, charge.amount, 'usd', 'succeeded', LIMITED_LAUNCH.app]);
+  assert.equal((await stripe.refunds.create({ charge: charge.id, amount: charge.amount }, { idempotencyKey: refundKey })).id, refund.id);
+  await assert.rejects(stripe.refunds.create({ charge: charge.id, amount: charge.amount }, { idempotencyKey: `test:refund:${charge.id}:2` }),
+    (e) => e.type === 'StripeInvalidRequestError' && e.code === 'charge_already_refunded');
+  const after = await stripe.charges.retrieve(charge.id);
+  assert.deepEqual([after.amount_refunded, after.refunded], [charge.amount, true]);
+  assert.deepEqual((await stripe.refunds.list({ charge: charge.id, limit: 100 })).data.map((r) => r.id), [refund.id]);
+  assert.equal((await stripe.refunds.retrieve(refund.id)).status, 'succeeded');
+  const lab = (await call(`/qa/stripe/refunds?customer=${customer.id}`)).data.refunds;
+  assert.deepEqual(lab.map((r) => [r.id, r.charge, r.invoice, r.amount, r.idempotencyKey]), [[refund.id, charge.id, invoice.id, charge.amount, refundKey]]);
+
+  // The two events follow, signed, each about its own object.
+  await until(() => mine().length >= 2, 15000);
+  const types = Object.fromEntries(mine().map((r) => [r.event.type, r.event]));
+  assert.equal(types['customer.subscription.deleted']?.data.object.id, done.subscription.id);
+  assert.equal(types['customer.subscription.deleted'].data.object.status, 'canceled');
+  assert.equal(types['charge.refunded']?.data.object.id, charge.id);
+  assert.equal(types['charge.refunded'].data.object.amount_refunded, charge.amount);
+  assert.equal(mine().length, 2, 'one event each; the replayed calls sent nothing');
+
+  // A scheduled purchase's $0 opening invoice has no charge.
+  const anchor = Math.floor(Date.now() / 1000) + 30 * 86400;
+  const deferred = await stripe.checkout.sessions.create({ customer: customer.id, mode: 'subscription', line_items: [{ price: price.id, quantity: 1 }],
+    subscription_data: { billing_cycle_anchor: anchor, proration_behavior: 'none' }, success_url: `${APP_PUBLIC_ORIGIN}/app/`, expires_at: Math.floor(Date.now() / 1000) + 3600 });
+  const zero = (await call(`/qa/stripe/checkout/${deferred.id}/complete`, { method: 'POST', body: { send: false } })).data;
+  assert.equal(zero.invoice.amount_paid, 0);
+  assert.equal(zero.invoice.charge, null);
+});
+
+test('mock Stripe: a refund made to fail once, one that fails after Stripe accepted it, and the owner refunding in the dashboard', async () => {
+  const port = Number(new URL(base).port);
+  // As the functions build it: one network retry, which Stripe-Should-Retry: false must stop.
+  const stripe = new Stripe(secrets.stripe.secretKey, { apiVersion: '2024-04-10', host: '127.0.0.1', port: String(port), protocol: 'http', maxNetworkRetries: 1 });
+  const offer = limitedOffer('core', 'founding', { core: secrets.stripe.coreProductId, core_locum: secrets.stripe.coreLocumProductId });
+  const price = (await stripe.prices.list({ lookup_keys: [offer.lookupKey], active: true, limit: 1 })).data[0];
+  const customer = await stripe.customers.create({ metadata: { app: LIMITED_LAUNCH.app } });
+  const session = await stripe.checkout.sessions.create({ customer: customer.id, mode: 'subscription', line_items: [{ price: price.id, quantity: 1 }],
+    success_url: `${APP_PUBLIC_ORIGIN}/app/?billing=complete`, expires_at: Math.floor(Date.now() / 1000) + 3600 });
+  const done = (await call(`/qa/stripe/checkout/${session.id}/complete`, { method: 'POST', body: {} })).data;
+  const chargeId = done.invoice.charge;
+  const before = received.length;
+  const mine = () => received.slice(before).filter((r) => r.name === 'limited-stripe-webhook');
+
+  assert.equal((await call('/qa/stripe/refund-failures', { method: 'POST', body: { charge: 'ch_missing' } })).status, 400, 'only a charge the mock holds');
+  assert.equal((await call('/qa/stripe/refund-failures', { method: 'POST', body: { charge: chargeId, status: 418 } })).status, 400);
+  const armed = await call('/qa/stripe/refund-failures', { method: 'POST', body: { charge: chargeId } });
+  assert.deepEqual([armed.status, armed.data.status, armed.data.type, armed.data.remaining], [200, 500, 'api_error', 1]);
+
+  // Fails once, as a 500 the SDK does not retry; the same key replays the error; the next key refunds.
+  const key1 = `test:refund:${chargeId}:1`;
+  await assert.rejects(stripe.refunds.create({ charge: chargeId, amount: 9900 }, { idempotencyKey: key1 }), (e) => e.type === 'StripeAPIError' && e.statusCode === 500);
+  const failures = (await call(`/qa/stripe/refund-failures?charge=${chargeId}`)).data.failures[chargeId];
+  assert.deepEqual([failures.remaining, failures.calls.length, failures.calls[0].idempotencyKey], [0, 1, key1], 'one armed failure consumed, with the attempt 1 key');
+  await assert.rejects(stripe.refunds.create({ charge: chargeId, amount: 9900 }, { idempotencyKey: key1 }), (e) => e.type === 'StripeAPIError', 'the same key replays the error');
+  assert.equal((await call(`/qa/stripe/refund-failures?charge=${chargeId}`)).data.failures[chargeId].calls.length, 1, 'a replay is not a new failure');
+  assert.equal((await stripe.charges.retrieve(chargeId)).amount_refunded, 0, 'nothing was refunded');
+  const refund = await stripe.refunds.create({ charge: chargeId, amount: 9900 }, { idempotencyKey: `test:refund:${chargeId}:2` });
+  assert.equal(refund.status, 'succeeded');
+  await until(() => mine().some((r) => r.event.type === 'charge.refunded'), 15000);
+
+  // Accepted, then failed: the money is back on the charge; charge.refund.updated then refund.failed.
+  const failed = (await call(`/qa/stripe/refunds/${refund.id}/fail`, { method: 'POST', body: {} })).data;
+  assert.deepEqual([failed.refund.status, failed.refund.failure_reason, failed.charge.amount_refunded, failed.charge.refunded], ['failed', 'expired_or_canceled_card', 0, false]);
+  assert.deepEqual(failed.deliveries.map((d) => [d.type, d.status]), [['charge.refund.updated', 200], ['refund.failed', 200]]);
+  assert.deepEqual(mine().filter((r) => /refund\.(updated|failed)$/.test(r.event.type)).map((r) => [r.event.type, r.event.data.object.id, r.event.data.object.status]),
+    [['charge.refund.updated', refund.id, 'failed'], ['refund.failed', refund.id, 'failed']]);
+  assert.equal((await stripe.refunds.retrieve(refund.id)).status, 'failed');
+  assert.equal((await call(`/qa/stripe/refunds/${refund.id}/fail`, { method: 'POST', body: {} })).status, 409, 'a refund fails once');
+
+  // The owner refunds it in the dashboard: no key, charge.refunded follows.
+  const dash = (await call(`/qa/stripe/charges/${chargeId}/refund`, { method: 'POST', body: {} })).data.refund;
+  assert.deepEqual([dash.status, dash.amount], ['succeeded', 9900]);
+  const lab = (await call(`/qa/stripe/refunds?charge=${chargeId}`)).data.refunds;
+  assert.deepEqual(lab.map((r) => [r.id, r.status, r.via, r.idempotencyKey]).sort(), [[dash.id, 'succeeded', 'dashboard', null], [refund.id, 'failed', 'api', `test:refund:${chargeId}:2`]].sort());
+  assert.deepEqual([(await stripe.charges.retrieve(chargeId)).amount_refunded], [9900]);
+  await until(() => mine().filter((r) => r.event.type === 'charge.refunded').length === 2, 15000);
+  assert.equal((await call(`/qa/stripe/refund-failures?charge=${chargeId}`, { method: 'DELETE' })).status, 200);
 });
 
 // ── Resend ───────────────────────────────────────────────────────────────────

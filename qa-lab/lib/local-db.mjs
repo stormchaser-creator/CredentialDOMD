@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { stackStatus } from './stack.mjs';
+import { instanceName, stackPorts } from './config.mjs';
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 /** The only query parameter a lab database URL may carry (libpq also reads host, hostaddr, port, service... from the query). */
@@ -49,10 +50,18 @@ export function connectionUrl(user = 'supabase_admin') {
   const base = cachedBase || (cachedBase = process.env.QA_LAB_DB_URL || supabaseStatus()?.DB_URL || null);
   if (!base) throw new Error('The local QA-lab stack is not running. Start it with `npm run qa:up`.');
   const c = localConnection(base);
+  assertInstanceDatabase(c);
   if (!/^[a-z_][a-z0-9_]*$/.test(user)) throw new Error(`refusing database user ${user}`);
   // Rebuilt from the checked parts: nothing of the caller's text is passed on as is.
   // The local image gives every login role the stack's database password.
   return `postgresql://${user}:${encodeURIComponent(c.password)}@${c.host}:${c.port}/${c.database}${c.sslmode ? `?sslmode=${c.sslmode}` : ''}`;
+}
+
+/** A named instance must never write a sibling lab through an inherited override. */
+export function assertInstanceDatabase(connection, { name = instanceName(), port = stackPorts().database } = {}) {
+  if (name && Number(connection.port) !== port) {
+    throw new Error(`refusing database port ${connection.port}: QA lab instance ${name} requires ${port}. Remove a stale QA_LAB_DB_URL override.`);
+  }
 }
 
 /**
@@ -110,7 +119,9 @@ export function localJson(sql, { user = 'supabase_admin' } = {}) {
 
 /** Runs a statement (or several) and returns psql's tuples-only output. */
 export function localExec(sql, { user = 'supabase_admin' } = {}) {
-  const r = spawnSync(psqlPath(), ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', sql, connectionUrl(user)], { encoding: 'utf8', env: env() });
-  if (r.status !== 0) throw new Error(`local statement failed: ${r.stderr.trim()}`);
+  // spawnSync's default 1 MiB cap killed psql with no stderr once the owner
+  // notifier's 7-day money events in a long-lived lab passed 1 MiB (OPS-014).
+  const r = spawnSync(psqlPath(), ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', sql, connectionUrl(user)], { encoding: 'utf8', env: env(), maxBuffer: 256 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`local statement failed: ${r.stderr.trim() || r.error?.message || `signal ${r.signal}`}`);
   return r.stdout.trim();
 }

@@ -144,3 +144,11 @@ test('step 3 describes reminders as the app has them: already on, to the profile
   // And the sender mails the profile Email.
   assert.match(src('supabase/functions/send-reminders/index.ts'), /to: \[p\.email\]/);
 });
+
+test('every offer welcomes physicians, PAs and NPs with profession-neutral license guidance', () => {
+  for (const variant of WELCOME_VARIANTS) for (const name of ['Jordan Rivera, MD', 'Quinn Rivera, PA', 'Nora Rivera, NP']) {
+    const text = body(variant, name);
+    assert.match(text, /1\. Add a license\. Open Credentials and add a professional license with its expiration date\./);
+    assert.doesNotMatch(text, /add your state medical license/i, 'PA and NP members must not be directed to add a physician-only license');
+  }
+});

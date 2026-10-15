@@ -8,7 +8,7 @@
 // because the functions check them (production identity reads require a
 // sk_live_ Clerk key); the mocks, not the prefix, decide what a key can do.
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { LAB_SECRETS_JSON, LOCAL_SECRETS_JSON } from './paths.mjs';
 
@@ -62,16 +62,30 @@ export function generateLabSecrets() {
     telegram: { botToken: `100000:${tag}${randomAlnum(30)}`, operatorId: '100000' },
     credentialPortalSecret: randomBytes(32).toString('base64url'),
     errorIpPepper: randomAlnum(40),
+    emailUnsubscribeSecret: randomBytes(32).toString('base64url'),
   };
 }
 
 /** Loads the lab secrets, creating them on first use. */
-export function labSecrets() {
-  if (existsSync(LAB_SECRETS_JSON)) return JSON.parse(readFileSync(LAB_SECRETS_JSON, 'utf8'));
-  mkdirSync(path.dirname(LAB_SECRETS_JSON), { recursive: true });
+export function labSecrets(file = LAB_SECRETS_JSON) {
+  if (existsSync(file)) {
+    const secrets = JSON.parse(readFileSync(file, 'utf8'));
+    // Add only the new local signing key; retain all existing identities/keys.
+    if (!secrets.emailUnsubscribeSecret) {
+      secrets.emailUnsubscribeSecret = randomBytes(32).toString('base64url');
+      const temporary = `${file}.new-${process.pid}-${randomAlnum(8)}`;
+      try {
+        writeFileSync(temporary, JSON.stringify(secrets, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+        renameSync(temporary, file);
+      } finally { rmSync(temporary, { force: true }); }
+      chmodSync(file, 0o600);
+    }
+    return secrets;
+  }
+  mkdirSync(path.dirname(file), { recursive: true });
   const secrets = generateLabSecrets();
-  writeFileSync(LAB_SECRETS_JSON, JSON.stringify(secrets, null, 2) + '\n', { mode: 0o600 });
-  chmodSync(LAB_SECRETS_JSON, 0o600);
+  writeFileSync(file, JSON.stringify(secrets, null, 2) + '\n', { mode: 0o600 });
+  chmodSync(file, 0o600);
   return secrets;
 }
 

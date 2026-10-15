@@ -7,6 +7,7 @@ import { test } from './support/fixtures.mjs';
 import {
   LAB_EMAIL_DOMAIN, emailBody, emails, goTab, newMember, row, rows, sleep, stamp, waitFor,
 } from './support/lab.mjs';
+import { pdfText } from './support/practice-helpers.mjs';
 
 const tab = (page, name) => page.getByRole('button', { name, exact: true }).first().click();
 
@@ -77,8 +78,15 @@ test('practice: agreement, logged time, invoice, email to billing, payment, dele
     await page.getByRole('button', { name: /PDF Polished invoice/ }).click();
     invoice = await waitFor('the invoice row', async () => row(`select * from public.invoices where user_id = '${profile.id}'`), { timeoutMs: 20000 }).catch(() => null);
     qa.check('an invoices row for $480 covering both entries', !!invoice && Number(invoice.total_amount) === 480 && (invoice.entry_ids || []).length === 2, invoice ? `${invoice.number} $${invoice.total_amount}` : 'none');
-    const billed = rows(`select invoice_id from public.work_log where user_id = '${profile.id}'`);
-    qa.check('both entries now point at the invoice', billed.every((e) => e.invoice_id === invoice?.id));
+    // The invoice insert and each work-entry link are separate acknowledged
+    // writes. Observing the invoice row does not prove the links have finished.
+    const entryIds = new Set(invoice?.entry_ids || []);
+    const billed = await waitFor('both work entries linked to this invoice', async () => {
+      const saved = rows(`select id, invoice_id from public.work_log where user_id = '${profile.id}'`);
+      return entryIds.size === 2 && saved.length === 2 && new Set(saved.map(e => e.id)).size === 2
+        && saved.every(e => entryIds.has(e.id) && e.invoice_id === invoice?.id) ? saved : null;
+    }, { timeoutMs: 20000, intervalMs: 100 }).catch(() => null);
+    qa.check('both entries now point at the invoice', !!billed, billed || 'Expected two distinct invoice entries to finish linking within 20 seconds');
   });
 
   await qa.feature('PRAC-004', 'Email the invoice to the billing office', async () => {
@@ -102,6 +110,11 @@ test('practice: agreement, logged time, invoice, email to billing, payment, dele
       const full = await emailBody(mail.id);
       qa.check('subject names the invoice and facility', full.subject.includes(invoice.number) && full.subject.includes('QA Mercy Hospital'), full.subject);
       qa.check('the PDF is attached', full.attachments.some((a) => a.filename.startsWith(`Invoice ${invoice.number}`) && a.filename.endsWith('.pdf') && (a.content_type || '').includes('pdf') && a.size > 1000), JSON.stringify(full.attachments.map((a) => [a.filename, a.size])));
+      const attachment = full.attachments.find((a) => a.filename.startsWith(`Invoice ${invoice.number}`) && a.filename.endsWith('.pdf'));
+      const attachmentText = attachment?.content ? await pdfText(attachment.content) : '';
+      qa.check('the attached PDF directs invoice questions to the physician and keeps the payer only in Bill to',
+        attachmentText.includes("Questions about this invoice:") && attachmentText.includes(user.email)
+          && attachmentText.split(billing).length - 1 === 1 && !attachmentText.includes('Please remit'), attachmentText);
       qa.check('a copy goes to the physician', full.cc.includes(user.email) || full.bcc.includes(user.email), `cc ${full.cc} bcc ${full.bcc}`);
       qa.check('replies go to the physician', full.reply_to.includes(user.email), full.reply_to.join(','));
       qa.check('the body states the total due', /\$480\.00/.test(full.text || full.html || ''));

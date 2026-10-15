@@ -274,6 +274,7 @@ import { meterUsage } from "../_shared/aiPricing.ts";
 // The support+<ticket id>@ reply address and the quote cut, shared with the
 // email that sets it (send-ticket-reply) so the two cannot drift apart.
 import { ticketFromSupportAddress, replyTextWithoutQuote } from "../_shared/ticketReplyEmail.ts";
+import { receivingMetadataJson } from "../_shared/receivingMetadata.mjs";
 import { homeScreenHint } from "../_shared/homeScreenHint.ts";
 import { withDegree } from "../_shared/app/utils/outgoingText.js";
 // The routing decision and the rules that hand a mailbox to an account are two
@@ -614,15 +615,15 @@ function guessMime(filename: string, fallback: string): string {
 const resendHeaders = { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" };
 
 async function getReceivedEmail(emailId: string, htmlFormat: "cid" | "data_uri" = "cid"): Promise<ReceivedEmail> {
-  const r = await fetch(`${RESEND_API}/emails/receiving/${encodeURIComponent(emailId)}?html_format=${htmlFormat}`, { headers: resendHeaders });
-  if (!r.ok) throw new Error(`retrieve received email ${emailId}: ${r.status} ${(await r.text()).slice(0, 200)}`);
-  return await r.json() as ReceivedEmail;
+  return await receivingMetadataJson(`${RESEND_API}/emails/receiving/${encodeURIComponent(emailId)}?html_format=${htmlFormat}`, {
+    headers: resendHeaders, label: `retrieve received email ${emailId}`,
+  }) as ReceivedEmail;
 }
 
 async function listAttachments(emailId: string): Promise<ReceivedAttachment[]> {
-  const r = await fetch(`${RESEND_API}/emails/receiving/${encodeURIComponent(emailId)}/attachments`, { headers: resendHeaders });
-  if (!r.ok) throw new Error(`list attachments ${emailId}: ${r.status} ${(await r.text()).slice(0, 200)}`);
-  const body = await r.json() as { data?: ReceivedAttachment[] };
+  const body = await receivingMetadataJson(`${RESEND_API}/emails/receiving/${encodeURIComponent(emailId)}/attachments`, {
+    headers: resendHeaders, label: `list attachments ${emailId}`,
+  }) as { data?: ReceivedAttachment[] };
   return body.data ?? [];
 }
 
@@ -685,28 +686,43 @@ async function sendEmail(payload: Record<string, unknown>): Promise<{ ok: boolea
 const PG_UNIQUE_VIOLATION = "23505";
 
 /**
- * Claim the message. Returns the ledger row id, or null when this message has
- * already been handled (finished, or another attempt is in flight).
+ * Only a confirmed terminal ledger row is a duplicate acknowledgement. An
+ * in-flight or uncertain claim must stay retryable: its first INSERT may have
+ * committed even when that worker never received the response or ran a route.
  */
+type ClaimResult = { state: "claimed"; id: string } | { state: "duplicate" } | { state: "busy" };
 async function claim(row: {
   message_id: string; email_id: string; from_addr: string; to_addr: string; subject: string; route: Route;
-}): Promise<string | null> {
+}): Promise<ClaimResult> {
   const { data, error } = await db.from("inbound_emails").insert(row).select("id").single();
-  if (!error && data) return (data as { id: string }).id;
-  if (error && error.code !== PG_UNIQUE_VIOLATION) throw new Error(`ledger insert: ${error.message}`);
+  if (!error) {
+    if (!data || typeof data.id !== "string" || !data.id) throw new Error("ledger insert: missing claim receipt");
+    return { state: "claimed", id: data.id };
+  }
+  if (error.code !== PG_UNIQUE_VIOLATION) throw new Error(`ledger insert: ${error.message}`);
 
-  // Duplicate delivery. Re-claim only a failed or stale attempt.
-  const { data: existing } = await db.from("inbound_emails")
-    .select("id, status, created_at, updated_at").eq("message_id", row.message_id).maybeSingle();
+  // Failed and expired attempts may be reclaimed; reading or writing the
+  // ledger unsuccessfully must never turn unfinished work into a webhook 200.
+  const { data: existing, error: lookupError } = await db.from("inbound_emails")
+    .select("id, status, updated_at").eq("message_id", row.message_id).maybeSingle();
+  if (lookupError) throw new Error(`ledger lookup: ${lookupError.message}`);
   const ex = existing as LedgerRow | null;
-  if (!ex) return null;
+  if (!ex || typeof ex.id !== "string" || !ex.id) throw new Error("ledger lookup: missing duplicate receipt");
+  if (["done", "unregistered", "rate_limited"].includes(ex.status)) return { state: "duplicate" };
+  if (ex.status !== "failed" && ex.status !== "processing") throw new Error("ledger lookup: unknown claim state");
+  const leaseAt = typeof ex.updated_at === "string" ? new Date(ex.updated_at).getTime() : NaN;
+  if (!Number.isFinite(leaseAt)) throw new Error("ledger lookup: invalid claim lease");
   const staleBefore = Date.now() - STALE_PROCESSING_MIN * 60 * 1000;
-  const stale = ex.status === "processing" && new Date(ex.created_at).getTime() < staleBefore;
-  if (ex.status !== "failed" && !stale) return null;
-  const { data: re } = await db.from("inbound_emails")
+  if (ex.status === "processing" && leaseAt >= staleBefore) return { state: "busy" };
+  const { data: re, error: reclaimError } = await db.from("inbound_emails")
     .update({ status: "processing", detail: null, updated_at: new Date().toISOString() })
-    .eq("id", ex.id).in("status", ["failed", "processing"]).eq("updated_at", ex.updated_at).select("id").maybeSingle();
-  return re ? (re as { id: string }).id : null;
+    .eq("id", ex.id).eq("status", ex.status).eq("updated_at", ex.updated_at).select("id").maybeSingle();
+  if (reclaimError) throw new Error(`ledger reclaim: ${reclaimError.message}`);
+  // Another worker changed the observed lease/state. A subsequent delivery
+  // can confirm completion; this delivery cannot acknowledge the winner.
+  if (!re) return { state: "busy" };
+  if (re.id !== ex.id) throw new Error("ledger reclaim: invalid claim receipt");
+  return { state: "claimed", id: re.id };
 }
 
 async function finish(id: string, status: "done" | "failed" | "unregistered" | "rate_limited", detail: string, extra: Record<string, unknown> = {}) {
@@ -3055,14 +3071,16 @@ Deno.serve(async (req) => {
     return json({ error: "ledger unavailable" }, 500);
   }
 
-  let ledgerId: string | null;
+  let claimed: ClaimResult;
   try {
-    ledgerId = await claim({ message_id: messageId, email_id: emailId, from_addr: from, to_addr: ourAddr, subject, route });
+    claimed = await claim({ message_id: messageId, email_id: emailId, from_addr: from, to_addr: ourAddr, subject, route });
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     return json({ error: "ledger unavailable" }, 500);
   }
-  if (!ledgerId) return json({ ok: true, duplicate: true });
+  if (claimed.state === "duplicate") return json({ ok: true, duplicate: true });
+  if (claimed.state === "busy") return json({ error: "processing in progress" }, 503);
+  const ledgerId = claimed.id;
 
   try {
     if (route === "cme") return await handleCme(ledgerId, emailId, from, subject, messageId);

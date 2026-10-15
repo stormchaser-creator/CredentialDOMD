@@ -1,0 +1,239 @@
+{
+  "scope": "Public writable scalar constant defaults from saved 2026-09-30 catalog, independently compared to operational-final catalog-after. Dynamic timestamp defaults, generated/server-owned fields and favorite (existing separate rule) excluded. Test metadata only.",
+  "columns": [
+    {
+      "collection": "dutyDays",
+      "table": "duty_days",
+      "column": "worked_day",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "dutyDays",
+      "table": "duty_days",
+      "column": "scholarly",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "dutyDays",
+      "table": "duty_days",
+      "column": "amount",
+      "default": "0",
+      "type": "numeric",
+      "nullable": true,
+      "value": 0
+    },
+    {
+      "collection": "dutyDays",
+      "table": "duty_days",
+      "column": "placement_ok",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "insurance",
+      "table": "insurance",
+      "column": "lifecycle_status",
+      "default": "'active'::text",
+      "type": "text",
+      "nullable": true,
+      "value": "active"
+    },
+    {
+      "collection": "insurance",
+      "table": "insurance",
+      "column": "date_unknown",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "licenses",
+      "table": "licenses",
+      "column": "npi_imported",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "licenses",
+      "table": "licenses",
+      "column": "lifecycle_status",
+      "default": "'active'::text",
+      "type": "text",
+      "nullable": true,
+      "value": "active"
+    },
+    {
+      "collection": "licenses",
+      "table": "licenses",
+      "column": "date_unknown",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "licenses",
+      "table": "licenses",
+      "column": "no_expiration",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "hourly_rate",
+      "default": "0",
+      "type": "numeric(10,2)",
+      "nullable": true,
+      "value": 0
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "call_hourly_rate",
+      "default": "0",
+      "type": "numeric(10,2)",
+      "nullable": true,
+      "value": 0
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "increment_minutes",
+      "default": "15",
+      "type": "integer",
+      "nullable": true,
+      "value": 15
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "min_call_minutes",
+      "default": "15",
+      "type": "integer",
+      "nullable": true,
+      "value": 15
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "call_stipend",
+      "default": "0",
+      "type": "numeric(10,2)",
+      "nullable": true,
+      "value": 0
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "stipend_hours",
+      "default": "0",
+      "type": "numeric(6,2)",
+      "nullable": true,
+      "value": 0
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "overage_hourly_rate",
+      "default": "0",
+      "type": "numeric(10,2)",
+      "nullable": true,
+      "value": 0
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "orientation_fee",
+      "default": "0",
+      "type": "numeric(10,2)",
+      "nullable": true,
+      "value": 0
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "orientation_billed",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "orientation_hourly_rate",
+      "default": "0",
+      "type": "numeric(10,2)",
+      "nullable": true,
+      "value": 0
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "split_at_day_start",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "day_start_hour",
+      "default": "7",
+      "type": "integer",
+      "nullable": true,
+      "value": 7
+    },
+    {
+      "collection": "privileges",
+      "table": "privileges",
+      "column": "lifecycle_status",
+      "default": "'active'::text",
+      "type": "text",
+      "nullable": true,
+      "value": "active"
+    },
+    {
+      "collection": "privileges",
+      "table": "privileges",
+      "column": "date_unknown",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "workHistory",
+      "table": "work_history",
+      "column": "is_current",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    },
+    {
+      "collection": "workHistory",
+      "table": "work_history",
+      "column": "current",
+      "default": "false",
+      "type": "boolean",
+      "nullable": true,
+      "value": false
+    }
+  ]
+}

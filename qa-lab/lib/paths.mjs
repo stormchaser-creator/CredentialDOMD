@@ -44,6 +44,15 @@ export const QA_APP_DIST = path.join(GENERATED_DIR, 'app-dist');
 export const LAB_LOG_DIR = path.join(GENERATED_DIR, 'logs');
 export const QA_VITE_CONFIG = path.join(QA_LAB_DIR, 'app', 'vite.config.mjs');
 
+// The iOS Simulator profile (npm run qa:sim): the lab over HTTPS, beside the running lab.
+export const SIM_DIR = path.join(GENERATED_DIR, 'sim');
+/** Its own build (the API proxy's https origin is baked in); never app-dist/, which the running lab serves. */
+export const SIM_APP_DIST = path.join(SIM_DIR, 'app-dist');
+/** What the last profile build was made for (ports, API origin, anon key hash). */
+export const SIM_BUILD_JSON = path.join(SIM_DIR, 'build.json');
+/** The running profile: process ids, ports, URLs. Written by qa:sim, removed by qa:sim:down. */
+export const SIM_RUNTIME_JSON = path.join(SIM_DIR, 'sim.json');
+
 // A release's own migrations on top of production's schema (release-migrations.mjs).
 /** The deploy plan a release branch carries; its "## Order" table orders the migrations. */
 export const DEPLOY_PLAN = path.join(REPO_ROOT, 'DEPLOY-PLAN.md');

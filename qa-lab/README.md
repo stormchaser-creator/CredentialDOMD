@@ -49,10 +49,10 @@ end to end:
    files then fail with "Cannot find package"), and a worktree that links or
    clones another checkout's `node_modules` has them only once that checkout
    has run `npm ci`.
-3. **The checklist** (optional, for names and priorities in `results.json`):
-   `features.json` is not in this repository. The runner reads `QA_FEATURES`, or
-   `../qa-data/features.json` beside the checkout. Without it every journey
-   still runs and reports by checklist id.
+3. **The checklist:** `qa-lab/checklist.json` contains the required operational
+   tasks, roles, steps and expected results. `QA_FEATURES` can select a different
+   manifest. Missing, empty or invalid manifests fail the run. A test tag alone
+   never counts as evidence; partial and blocked steps remain open.
 4. **Run.**
 
    ```sh
@@ -62,6 +62,8 @@ end to end:
    npm run qa:e2e -- practice              # journeys whose file name matches
    npm run qa:e2e -- --grep @CRED-001      # journeys tagged with a checklist id
    npm run qa:e2e -- --fresh               # rebuild the lab database first (empty, re-seeded)
+   npm run qa:verify                       # complete local regression run and searchable task report
+   npm run qa:report -- --results qa-lab/.generated/results.json
    ```
 
    Results: `qa-lab/.generated/results.json` (checklist id to pass / fail /
@@ -69,8 +71,10 @@ end to end:
    `npx playwright show-report qa-lab/.generated/e2e/html`. Several authors on
    one running lab: section "Several runs at once".
 
-**One lab per machine.** The Supabase CLI names the stack's containers and its
-database volume after the template's `project_id` (`credentialdomd-qa-lab`),
+**Separate labs for parallel authors.** Configure a named instance before
+starting a second checkout ([INSTANCES.md](INSTANCES.md)). The Supabase CLI
+names the stack's containers and database volume after its selected
+`project_id` (the default is `credentialdomd-qa-lab`),
 whichever checkout started it, while what the lab serves is that checkout's
 own: its `supabase/functions`, its lab keys (`.generated/lab-secrets.json`, the
 keys its mocks accept) and the vault values its database was built with
@@ -90,6 +94,38 @@ send). So:
   or `npm run qa:e2e -- --fresh`.
 - The journeys' results, screenshots, the mocks' state and the QA build are
   per checkout, under its own `qa-lab/.generated/`.
+
+**Repeatable verification.** Start a newly built preview with `npm run qa:lab`,
+then run `npm run qa:verify`. It runs Node unit/integration tests with bounded
+concurrency, the separate PostgreSQL suites, smoke checks and all browser
+journeys. It saves separate logs, JSON results and a self-contained searchable
+HTML task report under `.generated/verification/<timestamp>/`. `--out <path>`
+selects an output directory under `.generated/` or outside the repository.
+It refuses missing PostgreSQL tools and stale/unrecorded preview builds, records
+source fingerprints and does not restart another running lab. A source change
+during the run, a failed command or any open checklist item prevents a ready
+result. Intentional manual/private-inventory exclusions remain documented by
+the underlying test runners; a local pass is not production certification.
+
+For the complete local acceptance run on a host with Docker and the installed
+ticket-agent CLI, opt in to the disposable database, edge-clock, connection-pool
+and CLI containment fixtures:
+
+```sh
+LIVE_CLI=1 QA_JSON_POSTGREST=1 QA_EDGE_CLOCK_DOCKER=1 QA_MOCK_POOL_DOCKER=1 LC_ALL=C npm run qa:verify
+```
+
+Without those opt-ins, their tests report skips. Inspect the recorded test and
+skip counts before describing a run as complete. The flags exercise local
+fixtures; they do not authorize production writes or certify real-provider
+delivery. The separately documented private launch-inventory suites still
+require their own reviewed inputs.
+
+`npm run qa:report -- --results <one-run.json> --out <directory>` can regenerate
+the review for one explicit run. Never combine old passing results with a new
+partial run and present them as one verified revision. Auth, payment and email
+providers are local mocks; real delivery and provider-hosted screens need a
+separate authorized staging check. The lab does not deploy the fixes.
 
 **Which schema.** The lab runs production's schema as extracted (and, on a
 release branch, the release's migrations on top: section "A release branch").
@@ -128,6 +164,8 @@ npm run qa:smoke               # (second terminal) new test physician -> app -> 
 npm run qa:smoke -- --checkout #   ... and on through Checkout to an active membership
 npm run qa:cors                # every function the browser calls: its own CORS answers, cross-origin
 npm run qa:stripe -- complete --email someone@qa.credentialdomd.test   # pay an open checkout
+npm run qa:sim -- --device <udid> --open   # the lab over HTTPS for Mobile Safari in an iOS Simulator (section "The iOS Simulator profile")
+npm run qa:sim:down            #   ... stops that profile; the lab keeps running
 ```
 
 The stack alone (no mocks, no app):
@@ -177,6 +215,8 @@ instead of live production), `--verbose` (list every explained difference).
 | Mock server and its inbox (every email the edge functions send), step 2 | http://127.0.0.1:54380, inbox at `/qa/inbox` |
 | API proxy: the app's Supabase URL, another origin than the app, step 2 | http://127.0.0.1:54385 |
 | The app, QA-lab build, step 2 | http://127.0.0.1:54390/app/ |
+| iOS Simulator profile (`npm run qa:sim`): the app over HTTPS, its own build | https://127.0.0.1:54395/app/ |
+| iOS Simulator profile: the API proxy over HTTPS | https://127.0.0.1:54396 |
 | Shadow DB (for `supabase db diff`) | 54320 |
 
 Pooler (54329) and analytics (54327) are disabled. The edge-runtime inspector
@@ -206,6 +246,44 @@ container binding (its forwarder listens on `127.0.0.1:<port>`); check with
 app) bind `127.0.0.1` too. Never publish these ports, and never treat
 `postgres:postgres` as safe to expose: it is only acceptable because nothing
 outside this machine can connect.
+
+### Upstream connections in the local gateway
+
+The pinned local Kong 2.8.1 uses a fresh upstream connection for every request.
+A 20-second idle timeout did not eliminate the stale-connection failures seen
+in a separate full regression run. Startup disables the upstream pool only
+for the selected owned lab; it does not retry application writes. Existing
+idle and request-limit settings are preserved.
+
+The helper verifies the instance, loopback port, exact image and this
+checkout's edge-function mount, then changes the pool size to zero and reloads
+the exact container ID. It verifies every saved nonempty config line and the
+active Admin API values. Commands are bounded and errors do not print config
+or Admin API bodies. A wrong checkout or unsupported config fails closed.
+
+This reload happens before a run's health window. Reused E2E runs only verify
+settings and refuse an unsafe runtime; they do not repair it. Runtime/results
+retain a safe `gatewayKeepalive` receipt with the instance, container ID,
+image, three numeric settings and check time. This local correction is not
+production enablement or a waiver of any HTTP or health failure.
+
+### Request bodies in the local edge dispatcher
+
+The pinned CLI-generated Edge Runtime 1.74.2 dispatcher clones an unread
+request before forwarding it. Isolated synthetic deny/echo controls reproduced
+an early rejection hanging when the body arrives in parts; directly transferring
+the request body returned 401 and preserved the valid request's bytes and headers.
+Startup corrects only this exact reviewed dispatcher version. Function source,
+JWT verification, hook secrets and worker policy remain unchanged.
+
+The helper positively verifies the selected lab's checkout, image, network,
+mounts and configuration. It replaces only that owned edge container, preserving
+its environment, volumes, network and security settings, with rollback on failure.
+The corrected entrypoint survives a container restart; a CLI recreation is checked
+again at lab startup. An unknown version is refused. Reused E2E runs perform
+read-only hash checks and never repair the runtime during a health window.
+This is a local infrastructure correction; unchanged application refusal tests
+and strict health checks must still pass before results can be accepted.
 
 ## Production access: read-only, catalog only
 
@@ -360,6 +438,1679 @@ release's own: 1 table, 11 columns (10 new, `profiles.theme` default changed),
 policy, 1 table grant, 14 function grants. `qa:smoke` 9/9 and
 `qa:smoke -- --checkout` 15/15; `select public.prune_old_backups()` reached the
 lab's `prune-backups` through pg_net and the local gateway (200).
+
+### A fix branch's migration outside the plan
+
+release/qa1 is on `main` now, so `qa:release` refuses its plan ("already on
+main") and `qa:lab` applies nothing (`--if-planned`). A fix merged into the lab
+that adds a migration no plan lists (fix/reopen-primary-mail's
+`20260930051700_reopen_restores_primary_mailbox`, merged 2026-09-30) is applied
+by hand, exactly as `release-migrations.mjs` applies one: the file as it is,
+with the lab rewrite, as `postgres`, in one `psql -c` request, and any job it
+switched on switched off again:
+
+```sh
+node --input-type=module -e "
+const name = '20260930051700_reopen_restores_primary_mailbox';
+const { readFileSync } = await import('node:fs');
+const { labMigrationText } = await import('./qa-lab/lib/release-plan.mjs');
+const { runSqlRequest, localExec } = await import('./qa-lab/lib/local-db.mjs');
+const { localGatewayOrigin } = await import('./qa-lab/lib/config.mjs');
+const { sql } = labMigrationText(readFileSync('supabase/migrations/' + name + '.sql', 'utf8'), name, localGatewayOrigin());
+const r = runSqlRequest(sql, { user: 'postgres' }); if (!r.ok) { console.error(r.stderr); process.exit(1); }
+localExec('select cron.alter_job(jobid, active := false) from cron.job where active');"
+```
+
+It is not recorded in `qa_lab.release_migrations` (that table is the plan's,
+and `qa:parity` matches its delta against it), so `--fresh` or
+`qa:down -- --wipe` drops it: apply it again after a rebuild. The file is
+idempotent. `two-devices.spec.mjs` records SETTINGS-005 and INTAKE-002 as
+blocked, not failed, when the branch has the file and the database lacks it.
+
+### Result, 2026-09-30 16:14 UTC (fix/tap-text-links and fix/reopen-primary-mail merged)
+
+Both branches merged into lab/on-release (one conflict, `DutyLog.jsx`: the
+lab's `onBusyChange` prop kept, `isDesktop` taken for the phone tap floor);
+`tests/qa-lab`, `tests/accessibility`, the continuity entrypoint test and the
+phone layout test 154/154. `20260930051700` applied as above (0 rewrites, no
+job switched on); the lab restarted on the new build with the edge runtime
+restarted and the database kept. Parallel-safe runs, three workers each:
+
+| Run | Journeys | Result |
+|---|---|---|
+| phone and layout: every `phone-*`, `home-notify-nav`, `credentials-sections`, `bill-admin-support-public-site` | 16 | 16 passed, 0 bugs |
+| Practice (`practice*`), every `settings-auth-*`, `intake`, `sync-docs-intake-intake` | 29 | 29 passed, 0 bugs (AUTH-013 blocked: Clerk's own screens) |
+| `two-devices` with the new reopen check | 2 | 2 passed, 0 bugs |
+
+The new check (SETTINGS-005, INTAKE-002, at the end of the Delete All My Data
+journey): before the wipe the sign-in address is the account's provider claim;
+after the wipe and the sign-ins that follow, `account_deletions` holds one
+`restore_mailbox` answer, `claimed`, for this deletion's stamp; the claim is
+the account's again (provider proof, not closed) and `profiles.verified_email`
+is the address; a synthetic PDF forwarded from it to docs@ is routed to the
+account (`docs`/`done`) and stored as its document. The two accounts wiped by
+earlier runs today, before the migration, show what it catches: their sign-in
+addresses sit released (no profile), with no `verified_email` and no answer.
+
+### Result, 2026-09-30 18:15 UTC (fix/offline-cache-idb merged)
+
+fix/offline-cache-idb (ea619c52, 8f5df81d: the offline copy of the file, the
+Vera transcript and its archives move from localStorage to IndexedDB, database
+`credentialdomd-offline`, store `kv`, the same scoped keys) merged into
+lab/on-release without a conflict; the lab's switches and files are untouched;
+`tests/qa-lab`, `tests/offline-cache` and the notice test 141/141. The branch
+adds no migration and changes no function, so the lab was restarted on a new
+build (`npm run qa:lab`), database and edge runtime kept. The full suite
+(`npm test`) then failed one check, the same on the lab branch before the
+merge: `tests/helpers/pg-slot.test.mjs` requires every file that runs initdb to
+take a PostgreSQL test slot first, and the lab's own
+`tests/qa-lab/e2e-parallel.test.mjs` did not. It takes one now (and releases it
+after the cluster stops); `npm test` 4,199 passed, 0 failed, 3 skipped.
+
+**The new journeys, `offline-storage.spec.mjs`.**
+
+- *A 2,000-case-log account* (SYNC-007, SYNC-017, SYNC-005, AUTH-005,
+  SETTINGS-005). A new member is seeded straight into the lab database with
+  2,000 case logs (each with a synthetic operative summary of about 2,600
+  characters) and a typical rest: 6 licenses, 150 CME, 4 education, 5
+  privileges, 3 insurance, a contract with 400 work entries, 40 publications, 60
+  expenses. Then: every row loads (the rail counts 2,000; the device file holds
+  every section with the database's count); the file, 6.6 million characters,
+  is in IndexedDB and not in localStorage, localStorage stays small (634
+  characters in this run; the check allows 200,000), and there is no "storage is full" notice, no quota warning and no
+  `Offline copy not saved` report in `client_errors`; a license added in the
+  session reaches the IndexedDB copy, and after going offline and reloading the
+  read-only archive lists it beside all 2,000 case logs; Sign out leaves no
+  IndexedDB entry and no localStorage key of the account; signing in again
+  rebuilds the copy, and after Delete All My Data no IndexedDB or localStorage
+  entry of the account holds any deleted record (the reopened, empty account
+  writes a new file with no case logs).
+- *A device that ran the previous build* (SYNC-017). A clean browser is given
+  what the previous build kept in localStorage for an account (the file, as the
+  same JSON text, with a device-only Answer Bank record; a Vera transcript) and
+  signs in: both move to IndexedDB and leave localStorage, the Answer Bank shows
+  its one record, Vera opens on the transcript, the next launch offline shows
+  the moved copy (license and Answer Bank record), and another online load keeps
+  the record.
+
+**The constrained quota.** Chromium has no setting for localStorage's quota,
+and an init script that emulates one would test the emulation. Its own quota is
+fixed: 10 MiB counted in UTF-16, 5,242,880 characters for the origin (measured
+with this Chromium: 5,242,308 characters stored, more refused with
+`QuotaExceededError`, code 22). That is a 5 MB localStorage however a browser
+counts it, so the account is seeded past it, and the journey proves it: a probe
+write of the file's size to localStorage is refused with `QuotaExceededError`.
+WebKit's own accounting is not reproduced.
+
+**Negative control** (run once, not committed): the same journey against the
+pre-merge build (bfbd83c5, built into a scratch folder from `git archive` with
+the lab's QA config and served to the journey's browser by route interception
+on the app's own origin; service workers blocked, and Chromium's local network
+access checks off, because a routed document counts as a public page) fails
+where it should: "This device's storage is full, so its offline copy of your
+records could not be updated." on screen, "localStorage quota exceeded"
+warnings in the console, a device file with none of the 2,000 case logs, the license added in
+the session missing offline, no case logs in the offline archive, and nothing in
+`client_errors` (the owner's ticket: "Nothing reported it"). On the merged build
+every check passes.
+
+**Journeys that read the old localStorage cache**, updated. `support/lab.mjs`
+gains `offlineCopy` (an account's copy of one large store, read as the app reads
+it: localStorage first, then IndexedDB), `offlineKeysFor` and `localStorageUse`;
+they only read, and never open a database that does not exist (that would create
+it without its store). `device-sync` (AUTH-005) now checks the shared store: its
+"no IndexedDB database named for the account" check can no longer fail, since
+one database serves every account. `sync-docs-intake-sync-data` (SYNC-017, four
+large documents) reads the copy where the app keeps it and checks the notice.
+`cred-categories` (CRED-046) writes its Answer Bank record into the copy the app
+reads and reads it back from IndexedDB. `credentials-special` (CRED-005) also
+checks the IndexedDB copy for the SSN and date of birth in the clear.
+
+Parallel-safe runs, three workers each, A to C at the same time:
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `offline-storage`, `device-sync`, `two-devices`, `expenses-backup` (backup and restore) | 10 | 10 passed |
+| B: `settings-auth-access` | 6 | 6 passed (AUTH-013 blocked: Clerk's own screens) |
+| C: every `phone-*` | 8 | 8 passed |
+| D: the three updated journeys (SYNC-017 four large documents, CRED-046, CRED-005) | 3 | 3 passed |
+
+0 bugs, 0 zombie rows. Lab health: client error reports only from the failures
+`settings-auth-access` forces; edge-function lines are the busy
+`billing_reconciliation_pending` answers (retried and accepted), `report-error`,
+and the edge runtime's worker-shutdown messages.
+
+### Result, 2026-09-30 19:05 UTC (fix/offline-cache-idb second review merged)
+
+fix/offline-cache-idb's second review (7bdca10b: the home record is set only as
+an IndexedDB write commits and never removed on a failed open; a write that
+commits after another tab's Sign out is cancelled or purged; Sign out before any
+load asks the "could not be counted" question when the copy is unread;
+Protected Identity and the Answer Bank are read-only while the copy is unread;
+Vera's transcript read mid-session is merged by id) merged into lab/on-release
+without a conflict (c75ff78d). `tests/qa-lab`, `tests/offline-cache`, the
+three harness tests the commit touched 189/189, the notice test 9/9.
+No migration, no function change: the app was restarted on a new build
+(`npm run qa:lab`, build `20260930T1900-c75ff78d-qalab`, checked to carry the
+new read-only message), database and edge runtime kept.
+
+Parallel-safe runs, A to D at the same time, three workers each (B one):
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `offline-storage`, `device-sync`, `two-devices`, `expenses-backup` | 10 | 10 passed |
+| B: `settings-auth-access` | 6 | 6 passed (AUTH-013 blocked: Clerk's own screens) |
+| C: `sync-docs-intake-sync-data`, `cred-categories`, `credentials-special` (every journey in the three files) | 6 | 6 passed |
+| D: every `phone-*` | 8 | 8 passed |
+
+0 bugs, 0 zombie rows, no runaway PostgREST session. Edge-function lines as
+before. Client error reports: B's forced failures, and six
+`Save refused (suspended, settings)` rows, one each for six of the ten accounts
+the first wave created at once, 7 to 9 s after creation, while those journeys
+were leaving the membership gate for Checkout. No journey failed on them, and
+none of those accounts has the `Account load stopped` or `Account records load
+stopped` report that goes with the app's two hard write suspensions (both are
+sent through `reportUnlessLeaving`, which drops a report when the page is
+left). The row is not new: the lab holds 15 more since 12:17 UTC on three
+earlier builds (3cf6cc20, 33dc1b4e, 2490cca4). Which write is refused, and
+whether the page was leaving when it was, is not yet traced. (Traced since, and
+fixed in fix/pending-settings-refused: next section.)
+
+### Result, 2026-09-30 20:25 UTC (offline copy third review and fix/pending-settings-refused merged): stopped on a product bug
+
+fix/offline-cache-idb's third review (bbbda781) and fix/pending-settings-refused
+(9c9c502b) merged into lab/on-release without a conflict (bb118310, 8d587d26).
+The second branch fixes how one refusal is reported. A reload that cuts off the
+reconcile load stops writes, and the Setup board's pagehide flush then meets
+that stop. That "suspended" refusal now goes through `reportUnlessLeaving`, as
+the stop's own report does. `tests/qa-lab`, `tests/offline-cache`,
+`tests/limited-launch` and the abandoned-load test passed 697/697. After the lab
+fix below, `npm test` passed 4,227, with 0 failed and 3 skipped. The branches
+add no migration and change no function, so the app was restarted on a new
+build (`20260930T1951-8d587d26-qalab`), with the database and edge runtime kept.
+
+Parallel-safe runs, A to E at the same time, three workers each (B one):
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `offline-storage`, `device-sync`, `two-devices`, `expenses-backup` | 10 | 9 passed, 1 failed (a lab fault, fixed below); after the fix 10 passed |
+| B: `settings-auth-access` | 6 | 6 passed (AUTH-013 blocked: Clerk's own screens) |
+| C: `sync-docs-intake-sync-data`, `cred-categories`, `credentials-special` | 6 | 5 passed, 1 failed (the product bug below); `cred-categories` passed when run again |
+| D: every `phone-*` | 8 | 8 passed |
+| E: `signup-checkout`, `billing`, `billing-return` | 6 | 6 passed |
+
+**"Save refused (suspended, settings)": 0 rows** since the run started
+(20:01:41 UTC). In that window 56 accounts were created, and 53 of them paid and
+reopened the app after Checkout, the path that produced the 45 earlier rows.
+There was no "Save refused" row of any kind. Other client errors: the forced
+failures in B, plus two busy answers under five runs at once. One was
+bootstrap-launch-access `503 signup_unavailable` at a gate, which the gate
+retried. The other was initialize-clerk-profile's 503, and that journey
+reloaded and went on. There were 0 zombie rows and no runaway PostgREST
+session. Edge-function lines were as before.
+
+**Lab fault, fixed: offline, a new device opened the shell with no app**
+(`offline-storage`, SYNC-017, "a device that ran the previous build"). The page
+showed index.html's unstyled fallback text. The service worker served the
+precached shell, but the worker's cache did not match the shell's script and
+stylesheet requests. `vite preview` answers every request with `Vary: Origin`
+(its CORS middleware). The precache fetches the assets without an Origin header,
+and the page's `crossorigin` script and stylesheet requests send one, so the two
+never match. A matching copy is stored only by a page load that runs under the
+worker. With five runs at once, the second browser went offline 1.4 s after its
+first page load, before any load had run under the worker. A probe
+reproduced it every time. Production sends `Vary: Accept-Encoding` only (HEAD
+requests to credentialdomd.com/app/assets/, 2026-09-30), so the fault is the
+lab's. The served build now has no CORS middleware (`PREVIEW_CORS` in
+`qa-lab/app/vite.config.mjs`, pinned in `tests/qa-lab/lab-fidelity.test.mjs`).
+The same probe now opens the app offline after a single load, and run A
+passed 10 of 10 again. Nothing reads the app origin cross-origin.
+
+**Product bug: a record saved while the reconcile load is in flight disappears
+from the screen.** (`cred-categories`, the setup of CRED-047.) Every app open
+loads the account twice. The first load runs, and once the membership answer
+opens writes, the reconcile load runs (`src/context/AppContext.jsx:897-905`,
+`reconciledAccess`, `loadDataForUser` again, since e543ce73). The member app is
+already on screen and taking edits while that second load runs. The load reads
+every table (`:470`), then the device copy (`:498`), then the deletion ledger
+(`:535`). It then replaces the records in memory with what it read
+(`setData(merged)`, `:665`) and writes that over the device copy (`:670`).
+Consider a save that reaches the database after the load read its table, and is
+not yet in the device copy when the load reads that copy (the copy is written
+300 ms after a change). It is in neither read, so the replace drops it from the
+screen and from the device copy. The database row stays, and the next load
+shows the record again.
+
+- In the run: the account was created at 20:02:45 and, after Checkout, reopened
+  at 20:02:53.35. The reconcile load started at 53.81, read `custom_categories`
+  at 53.94 and the ledger at 54.07. The category was created (`POST
+  custom_categories`, 201) at 54.08. When the load landed, the screen said "This
+  category no longer exists. Its records are under Unsorted records." and the
+  rail no longer listed the category. `public.custom_categories` holds it, not
+  archived.
+- Reproduced on demand with a scratch script (not committed). The reconcile
+  load's ledger read was held back, as a slow connection would. Held 4 s, a
+  category created as the app opens is shown and then gone ("no longer
+  exists"), with its row in place. Held 8 s, a license added from Licenses is
+  shown and then gone, and it returns on the next reload. When the category read
+  is held instead, the 300 ms device-copy write lands before the load reads the
+  copy, and the self-heal pass puts the category back.
+- The bug does not come from today's merges. The replace dates from 5e43c3fa
+  and the reconcile load from e543ce73 (2026-09-20). The read order (tables,
+  device copy, ledger, replace) was the same before ea619c52. Neither merged
+  branch changes `loadDataForUser`. The window is as long as the reconcile load
+  takes: under a second in the lab, and longer on a phone with a slow
+  connection.
+
+Fixed on release/offline-fix (fix/reconcile-load-race) and held by a journey
+since: next section.
+
+### Result, 2026-09-30 21:20 UTC (release/offline-fix merged: the reconcile-load fix)
+
+release/offline-fix (76dcc17b) merged into lab/on-release (69d23054). It
+carries fix/offline-cache-idb's fourth review (458afdf7), fix/reconcile-load-race
+(5424e05b), fix/pending-settings-refused, and the fix made where they meet
+(76dcc17b: a load reads the IndexedDB copy only once the write it began with has
+landed). It is built on `main` (7690ee85), so `main`'s lab commits came with it:
+the checkout guard (`lib/checkout-guard.mjs`), provider overrides from the
+environment only, and the CallSync journey's synthetic facility. There were four
+conflicts, and each kept the lab's side. `.gitignore` held the same two entries
+in another order. `tests/qa-lab/e2e-parallel.test.mjs` took the same PostgreSQL
+slot; the lab's copy also labels it. `two-devices.spec.mjs` keeps the lab's
+reopen check and its imports. This README keeps the lab's result sections and
+takes `main`'s line on "Which schema". The lab's switches stay: `PREVIEW_CORS`
+is still false. The merge adds no migration and changes no function, so the app
+was restarted on a new build (`20260930T2118-69d23054-qalab`), with the database
+and edge runtime kept. `npm test` passed 4,271, with 0 failed and 3 skipped.
+
+**The reconcile repro is a journey now: `reconcile-load.spec.mjs`** (CRED-023,
+CRED-001). A new member opens the app. The journey holds the reconcile load's
+deletion-ledger read (the open's second `deleted_items?select=item_id`), as a
+slow connection would. While it is held, the member creates a custom category;
+on the next open, the member adds a license. The journey then lets the read go
+and watches the screen for 6 s. It checks:
+
+- the window really opened: the reconcile load read the record's table before
+  the save landed, and the save landed while the ledger read was held (the
+  times are in the evidence; in run A, `custom_categories` was read at +0.33 s,
+  the ledger read held at +0.34 s, the category saved at +0.53 s and the read
+  let go at +1.33 s);
+- the record stays on screen: the category's heading and its Credentials menu
+  entry, or the license under Licenses;
+- the account holds it once, and the device's IndexedDB copy holds it;
+- after a reload it is listed once and is still in the copy, with no write left
+  queued.
+
+Negative control: before the restart, the lab still served the build without
+the fix (`8d587d26`). The journey ran against it twice and failed where it
+should both times. The screen said "This category no longer exists", Licenses
+no longer listed the license, and neither record was in the IndexedDB copy.
+Every window check, the account rows and the reload checks passed, and the run
+recorded the two bugs. Against the new build it passes, alone and in run A
+below.
+
+Parallel-safe runs, A to F at the same time, three workers each (B one). The
+runner takes a file name as a pattern, so `billing.spec.mjs` also ran
+`bill-admin-support-public-billing` and `practice.spec.mjs` also ran
+`phone-docs-practice`:
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `reconcile-load`, `offline-storage`, `device-sync`, `two-devices`, `expenses-backup` | 11 | 11 passed |
+| B: `settings-auth-access` | 6 | 6 passed (AUTH-013 blocked: Clerk's own screens) |
+| C: `sync-docs-intake-sync-data`, `cred-categories`, `credentials-special` | 6 | 6 passed |
+| D: every `phone-*` | 8 | 8 passed |
+| E: `signup-checkout`, `billing`, `billing-return` (and `bill-admin-support-public-billing`) | 11 | 11 passed |
+| F: every `practice*` (and `phone-docs-practice`) | 15 | 15 passed |
+
+57 journeys, all passed; 0 bugs, 0 zombie rows, and no runaway PostgREST
+session. In the window, 62 accounts were created and 57 are active. There were
+12 client error reports, and each came from a journey that forces it or from a
+known lab condition:
+
+- the expired founding offer (`quote_expired`, 2);
+- the ended membership's refused name change (`Save refused (read_only, settings)`, 3);
+- the failures `settings-auth-access` forces: identity, enrollment and the
+  invitation link (6);
+- `practice-rvu`'s CPT copy (1). That journey's browser has no clipboard
+  permission, and `CPTLookup.jsx` does not catch the refused `writeText`. The
+  same row is in the lab 9 times since 12:30 UTC, on five builds.
+
+There was no "Save refused (suspended, ...)" row and no "Account records load
+stopped" row. The edge-function lines are the busy
+`billing_reconciliation_pending` answers (retried and accepted), `report-error`,
+and the expired offer's `quote_expired`.
+
+### Result, 2026-09-30 21:50 UTC (feat/pay-first-refund merged: pay first, and Cancel and get a refund)
+
+feat/pay-first-refund (013ec64f) merged into lab/on-release (412e4ae3) without
+a conflict; the lab's switches are untouched (`PREVIEW_CORS` still false). Owner
+request: an account that has not paid has no point given the money-back
+guarantee, and members cancel and get refunded from Profile under the unchanged
+terms. The branch adds the `limited-refund` function (`verify_jwt = false` in
+the stack template) and `20260930070000_limited_refunds`.
+
+- **The migration**, applied by hand as in "A fix branch's migration outside
+  the plan" (the file as it is, 0 rewrites, as `postgres`, one `psql -c`; no
+  job switched on). It is not recorded in `qa_lab.release_migrations`, so
+  `--fresh` or `qa:down -- --wipe` drops it: apply it again after a rebuild.
+  Without it every checkout fails, because `limited-checkout` now asks
+  `limited_refund_for_subscription` whether a refund is unfinished.
+- **The restart.** A function's `verify_jwt` reaches the edge runtime only when
+  its container is created (`SUPABASE_INTERNAL_FUNCTIONS_CONFIG`), so the stack
+  was stopped and started (`npm run qa:down`, data kept, then `npm run
+  qa:lab`), not only the app. Build `20260930T2132-1160c955-qalab`.
+- **The mock Stripe** now has what `limited-refund` calls: the paid invoice's
+  charge, `POST /v1/refunds` (once per charge), `DELETE /v1/subscriptions/:id`
+  with its event, and `/qa/stripe/refunds` (section "The mock server").
+- **Pay first in the journeys.** A new account's gate opens the offer review
+  by itself, so `payForMembership` goes through `openOfferReview`, and the
+  journeys that pressed "Review Credential offer" on a new account's gate
+  (`signup-checkout`, `billing`, `bill-admin-support-public-billing`,
+  `settings-auth-access`, `phone-home` and the phone helpers) now meet the open
+  review. `qa:smoke` too: 15/15 with `--checkout`.
+
+**New journeys, `pay-first-refund.spec.mjs`:**
+
+- *Pay first* (AUTH-001, AUTH-004, BILL-001, BILL-002, BILL-010). The visitor
+  signs up on the QA sign-in form and, with nothing pressed, the founding
+  offer's review is open ("Complete your payment to open your account.", the
+  guarantee, $99.00 per year, the refund terms). The only actions are paying
+  and leaving; there is no chooser and no app. `#credentials`, `#backups` and
+  `#support` keep the gate, the server refuses a license insert (403), and the
+  snapshot grants nothing. Tick and Continue open Checkout, and one consented
+  founding quote is recorded. After Cancel on the stand-in: "Checkout was
+  canceled. Nothing was charged.", the same offer's review, the guarantee, only
+  paying and leaving (also after a reload), no subscription, and no charge at
+  the mock. Paying from there reuses the same Checkout session and the account
+  opens.
+- *Cancel and get a refund* (BILL-007, BILL-005, BILL-009). The card offers
+  "Cancel and get a refund" beside "Manage paid subscription", with the terms.
+  The press quotes the latest invoice at 9900 cents: "We will refund $99.00,
+  your most recent annual membership payment, made on ...", and the confirm
+  button reads "Cancel membership and refund $99.00" (disabled until ticked).
+  Reviewing writes nothing. A second device opens the same confirmation first.
+  After the confirmation:
+  - The mock Stripe holds exactly one refund, of the subscription's latest
+    invoice's charge, 9900, keyed `credentialdomd:refund:<charge>:1`.
+  - The charge reads refunded in full, and the subscription was cancelled now,
+    `prorate` false, `invoice_now` false.
+  - `limited_refund_requests` holds one refunded row with the same charge and
+    refund, cancelled first.
+  - Stripe's `customer.subscription.deleted` and `charge.refunded` are
+    accepted (200).
+  - Access ends everywhere. `billing_subscriptions` reads canceled and not
+    active, the snapshot grants no writes, and the server refuses a license
+    insert (403). On this device Credentials and Practice are the read-only
+    saved records, and More has no Cancel Subscription. The other device is
+    read-only after a reload. The account stays (nothing is deleted).
+  - The other device's press answers the recorded outcome ("Refunded: $99.00").
+    So does a press at the function itself. Still one refund, and the row is
+    never worked on again (`attempts` 1).
+  - Profile shows the outcome on every later visit, with no refund button. The
+    paid founding place is kept, and joining again is quoted at $199.00.
+- *No refund button: a free-beta member* (BILL-011): no button on the card or
+  in More, and the function answers `404 no_paid_membership` to a quote and
+  `none` to a status. The lifetime gift has the same checks in
+  `admin-invite-gift.spec.mjs`, which also checks that the invitee meets pay
+  first.
+
+**By design (BILL-002):** back from an abandoned Checkout, the offer review
+reopens by itself. So the one action is its Continue to secure payment rather
+than a separate Complete payment button. `LimitedLaunchMembership.jsx` opens
+the review once per page load for a pay-first account ("Coming back from an
+abandoned Checkout lands here again with the same offer"). `payFirstMode`
+keeps an abandoned return in pay first. Complete payment shows only while no
+review is open.
+
+Parallel-safe runs, three workers each:
+
+| Run | Journeys | Result |
+|---|---|---|
+| R: `pay-first-refund`, `signup-checkout`, `billing`, `billing-return`, `admin-invite-gift` (anchored as `e2e/<file>`) | 11 | 11 passed |
+| O: `bill-admin-support-public-billing`, `settings-auth-access`, every `phone-*` | 19 | 19 passed (AUTH-013 blocked: Clerk's own screens) |
+
+0 bugs, 0 zombie rows, and no runaway PostgREST session. The client error
+reports are the ones the journeys force (`settings-auth-access`), the expired
+offer's `quote_expired`, and the ended membership's refused name change.
+Edge-function lines are the busy `billing_reconciliation_pending` answers
+(retried and accepted), the deliberate `no_paid_membership` refusals,
+`quote_expired` and the runtime's worker-shutdown messages. `npm test`: 4,330,
+with 4,327 passed, 0 failed and 3 skipped.
+
+### Result, 2026-09-30 23:00 UTC (feat/pay-first-refund review rounds merged: tickets, the sweep, unpaid renewals)
+
+feat/pay-first-refund (67e13649: 2e2fe964 and 67e13649 over 013ec64f) merged
+into lab/on-release (6907c040) without a conflict. It edits
+`20260930070000_limited_refunds` (a request already on record moves after a
+lifetime grant) and adds `20260930071000_limited_refund_support_tickets` (a
+trigger that opens one billing ticket in the member's name when a request
+needs a person) and `20260930072000_limited_refund_sweep` (`limited_refund_stalled`,
+`dispatch_limited_refund_sweep()` and the pg_cron job `limited-refund-sweep`).
+
+- **The migrations**, applied by hand as in "A fix branch's migration outside
+  the plan", in that order: `070000` again (the edited file; 0 rewrites),
+  `071000` (0 rewrites), `072000` (1 rewrite: the sweep's production URL
+  became the local gateway). The sweep job was switched off again (1 job);
+  no job is active. None is in `qa_lab.release_migrations`: apply all three
+  again after `--fresh` or `qa:down -- --wipe`.
+- **The restart.** `limited-refund` and the shared billing modules changed, and
+  the app changed, so the stack was stopped and started (`npm run qa:down`,
+  data kept, then `npm run qa:lab`) with no run in progress. Build
+  `20260930T2238-6907c040-qalab`.
+- **The mock Stripe** can now fail a refund (section "The mock server",
+  "Refunds that do not go through").
+
+**New journeys in `pay-first-refund.spec.mjs`:**
+
+- *A refund that fails at Stripe* (BILL-005, BILL-007, SUPPORT-002). The mock
+  answers the member's refund `500 api_error` once. The function answers `503
+  refund_pending`. The subscription is cancelled now (no proration), nothing
+  is refunded, and the one failed call carried the attempt 1 key. The ledger
+  holds one row: requested, cancelled, `refund_failed`, lease released,
+  attempt 1, linked to a ticket. `billing_subscriptions` is canceled and the
+  snapshot grants no writes. Profile says the membership is cancelled, a
+  ticket was opened in Get help, nothing is needed, and offers Finish refund.
+  There is exactly one support ticket in the member's name ("Your refund of
+  $99.00 will be finished for you": billing, high, open, the amount, the
+  payment date, cancelled and not refunded, no provider ids). The member reads
+  it with their own session and in Get help > Your tickets. The owner's
+  notifier query has no refund line yet; 16 minutes on it has exactly one,
+  `REFUND UNFINISHED`, "$99, cancelled, not refunded (refund_failed), row
+  <id>". Finish refund (after a reload) then refunds once: 200 refunded, one
+  refund at the mock with the attempt 2 key, the row refunded at attempt 2,
+  the same ticket resolved ("Refunded. ... Nothing more is needed."), and no
+  notifier line any more.
+- *refund.failed after Stripe accepted the refund* (BILL-005, SUPPORT-002).
+  A refund that finished with no person opens no ticket. The mock then fails
+  it (`expired_or_canceled_card`, the money back on the charge) and sends
+  `charge.refund.updated` and `refund.failed` (both 200). The row moves to
+  `needs_support` (refund failed, the reason, no refunded date, still
+  cancelled) with exactly one ticket; `refund.failed` delivered again opens
+  no second one. Status reads `needs_support` with its ticket; Profile says
+  so; Get help lists it once. The notifier query returns exactly one refund
+  line, `REFUND NEEDS SUPPORT`, "$99, needs support, refund failed
+  (expired_or_canceled_card), row <id>"; the ticket also has the notifier's
+  usual `TICKET` line (by design: the refund line is the owner's own alert
+  and still arrives when no ticket could be written). The owner then refunds
+  the charge in the dashboard stand-in: `charge.refunded` records the row
+  refunded with that refund, the ticket is resolved, still one ticket, and
+  the notifier line is gone.
+
+The notifier is only queried: `signup-notify.py probe`, `present` and `query`
+(the SQL `signup-notify.sh` sends), run read-only against the lab database as
+`postgres`. Nothing is formatted, remembered or sent.
+
+Parallel-safe runs, three workers each, at the same time:
+
+| Run | Journeys | Result |
+|---|---|---|
+| R: `pay-first-refund`, `signup-checkout`, `billing`, `billing-return`, `admin-invite-gift` (anchored as `e2e/<file>`) | 13 | 13 passed |
+| O: `bill-admin-support-public-billing`, `settings-auth-access`, every `phone-*` | 19 | 19 passed (AUTH-013 blocked: Clerk's own screens) |
+
+0 bugs, 0 zombie rows, and no runaway PostgREST session. Client error reports
+are the ones the journeys force (`settings-auth-access`), the expired offer's
+`quote_expired` and the ended membership's refused name change. Edge-function
+lines are the busy `billing_reconciliation_pending` answers (retried and
+accepted), the deliberate `no_paid_membership` refusals, the forced refund
+failure (`refund_retryable`, `refund_pending`) and `refund_needs_support`,
+`quote_expired`, the runtime's worker-shutdown messages, and one
+`billing_unavailable` in `limited-refund`'s membership read: the lab gateway's
+only 502 of the run ("upstream prematurely closed connection" from Kong on a
+reused PostgREST connection), a transport hiccup of the local stack.
+`npm test`: 4,370, with 4,367 passed, 0 failed and 3 skipped.
+
+### Result, 2026-09-30 23:20 UTC (release/offline-fix 11af0752 merged: the owner's upgrade)
+
+release/offline-fix at 11af0752 (the fifth and sixth offline-copy reviews,
+a restore whose Protected Identity this device cannot keep, and the CPT copy
+that no longer leaves an unhandled rejection) merged into lab/on-release
+(b6b450a9). Four conflicts, all in journeys, each resolved to keep both sides'
+checks: `cred-categories` seeds its Answer Bank record where the app keeps it
+(`support/device-store.mjs`), `credentials-special` scans both stores and keeps
+the non-vacuous IndexedDB check, `device-sync` keeps the IndexedDB file checks
+beside the release's key listing, and `sync-docs-intake-sync-data` reads the
+file with `readDeviceJSON` and keeps the storage-notice check. The lab's
+switches are untouched. `tests/qa-lab`, `tests/offline-cache` and the touched
+unit tests passed 271/271. No migration and no function change, so only the app
+was restarted on a new build (`20260930T2308-b6b450a9-qalab`), with no run in
+progress and the database and edge runtime kept.
+
+**The owner's upgrade, a third journey in `offline-storage.spec.mjs`**
+(SYNC-017, CRED-046, CRED-005, CRED-020, SYNC-005). A clean browser gets what
+the previous build kept in localStorage on the owner's phone. That is a
+1,450-case-log file of 4,859,852 characters with two Protected Identity records
+and three Answer Bank records, and a 160-message Vera transcript. Together they
+fill Chromium's 5,242,880-character quota to within 24 characters (measured
+with a probe write), which is less than the 60 the IndexedDB home record needs.
+The member then signs in on the new build:
+
+- the file and the transcript are in IndexedDB, whole, and gone from
+  localStorage, which is back to 540 characters; the home record is set;
+- there is no storage-full notice, no held-aside notice and no
+  `Offline copy not saved` report;
+- the Answer Bank shows its three records, and its editor is still paused, so
+  no Answer Bank entry can be added in the app; Protected Identity lists both
+  moved records;
+- a Protected Identity record (with a lock code) and a case log added after the
+  upgrade reach the IndexedDB copy, and the case log also reaches the account;
+- after a reload, all of it is listed (the rail counts 1,451 case logs) and in
+  the copy;
+- offline, the archive lists the new case log among 1,451 and the three Answer
+  Bank records. Protected Identity stays out of the read-only view by decision,
+  and it is in the device copy.
+
+**`practice-rvu.spec.mjs`, CPT copy.** With clipboard access refused, the tap
+now says what happened ("Copied to clipboard" in this Chromium, through the
+older copy command). No unhandled clipboard error and no `writeText`
+`client_errors` row came from it. With access granted, the tap copies 61343.
+The row that was in the lab 9 times on earlier builds did not appear.
+
+Parallel-safe runs, A to F at the same time, three workers each (B one):
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `reconcile-load`, `offline-storage` (three journeys), `device-sync`, `two-devices`, `expenses-backup` | 12 | 12 passed |
+| B: `settings-auth-access` | 6 | 6 passed (AUTH-013 blocked: Clerk's own screens) |
+| C: `sync-docs-intake-sync-data`, `cred-categories`, `credentials-special` | 6 | 6 passed |
+| D: every `phone-*` | 8 | 8 passed |
+| E: `signup-checkout`, `billing`, `billing-return` | 11 | 11 passed |
+| F: every `practice*` (and `phone-docs-practice`), `practice-rvu` included | 15 | 15 passed |
+
+58 journeys, all passed; 0 bugs, 0 zombie rows, no runaway PostgREST session.
+There were 17 `client_errors` rows in the window, from these runs' accounts:
+
+- 12 are what journeys force or known lab conditions: the ended membership's
+  name change (`Save refused (read_only, settings)`, 3), the expired offer
+  (`quote_expired`, 2), and the failures `settings-auth-access` forces
+  (identity, enrollment, founding capacity and the invitation link, 7);
+- 5 are new: `Save refused (no_answer, settings)`, one each for five accounts
+  (Dale Dayrate, Sam Schema, Nia Notice, Drew Device and Rhea Reconcile). Four
+  came in the first wave, 8 to 11 s after the account was created, on
+  `?billing=complete`, as `newMember` left that page for the app. The fifth came
+  on `/app/` in the reconcile journey. None came in the 21:20 run on 69d23054
+  under the same load. Between the two runs, the pay-first merges, which change
+  the billing return page, and this merge both landed. One such row is also on
+  33dc1b4e. A run of `device-sync`, `sync-docs-intake-sync-data` and
+  `practice-days` alone (9 journeys) produced none. The refusal is reported by
+  `reportWriteAccess` (`src/utils/limitedLaunchAccess.js:582`), and only
+  `suspended` is dropped on a page being left (`REPORTED_UNLESS_LEAVING`,
+  line 570). Whether the write is lost or the page was only being left is not
+  traced yet.
+
+`npm test`: 4,420, with 4,416 passed, 1 failed and 3 skipped. The one failure
+was `tests/work-log-schedule-default-live.test.mjs` ("Days & call holds its
+agreement while a day is open in it", `c-group` for `c-north`), under the six
+runs' load. It passed 5 of 5 times alone, and it passes on release/offline-fix.
+The merge does not touch it.
+
+### Result, 2026-09-30 23:55 UTC (feat/pay-first-refund review round 3 merged: the sweep journey, Support's label)
+
+feat/pay-first-refund at 32363101 (review round 3: a needs_support stop
+before the cancellation stays cancellable, tickets keep the owner's status,
+the automatic ticket reads as Support's) merged into lab/on-release
+(71270842) without a conflict.
+
+- **The migrations.** Round 3 edits `20260930070000`, `20260930071000` and
+  (comments only) `20260930072000`. All three were applied again by hand, in
+  that order, as in "A fix branch's migration outside the plan": 0, 0 and 1
+  rewrite (the sweep's URL is the local gateway,
+  `http://supabase_kong_credentialdomd-qa-lab:8000/functions/v1/limited-refund`).
+  One job was switched off again; no job is active.
+- **The restart.** `limited-refund`'s shared handlers and the app changed, so
+  with no run in progress the lab was stopped (Ctrl-C, `npm run qa:down`, data
+  kept) and started (`npm run qa:lab -- --quiet`). Build
+  `20260930T2344-71270842-qalab`.
+
+**New and changed checks in `pay-first-refund.spec.mjs`:**
+
+- *The refund sweep, run as pg_cron runs it* (BILL-005, BILL-007,
+  SUPPORT-002), a new journey with two members. Member A confirms Cancel and
+  get a refund and the mock fails the refund once: the request is requested,
+  cancelled, `refund_failed`, attempt 1, with its ticket.
+  `limited_refund_stalled` does not list it while fresh; its `updated_at` is
+  then moved back 11 minutes (setup, instead of waiting) and it is listed.
+  Member B opens the review (quoted $99.00) and presses Keep my membership.
+  - Refused, with the request untouched (attempt 1, the same `updated_at`, no
+    refund at the mock): no secret and an empty body (400 `invalid_request`,
+    the member route), no secret and `{action:'status'}` (401), a wrong or
+    empty `x-hook-secret` (401 `not_authorized`), a member's session token
+    with no secret (400) or asking for `{action:'sweep'}` (400), and a
+    member's token presented as the secret (401). None answers a sweep summary.
+  - The job's own command (`runCronJob('limited-refund-sweep')`, as its role,
+    committed) queues one POST to the local gateway with the hook secret and
+    `{}`. pg_net's answer: 200 `{"state":"ready","requests":1,"outcomes":{"refunded":1}}`.
+    Exactly one refund of A's charge at the mock, 9900, keyed attempt 2; the
+    row refunded with it, attempt 2, lease free, the same ticket, now resolved
+    ("Status: Refunded."); `charge.refunded` accepted; A's Profile shows
+    "Refunded: $99.00" with nothing pressed; no notifier line.
+  - A second run answers `requests: 0`; the row is exactly as the first left
+    it and the mock still holds one refund.
+  - B: no request row, the subscription active with no cancellation, nothing
+    refunded, `billing_subscriptions` active, Credential writes granted, and
+    Profile still offers Cancel and get a refund.
+  - Get help: A's refund ticket opens under "CredentialDOMD Support · <time>".
+    B's own ticket, inserted with B's session and claiming
+    `context_payload.source = 'limited_refund'` and A's request id, is stored
+    without either (`limited_refund_ticket_guard`) and opens under "You · <time>".
+- *A refund that fails at Stripe* and *refund.failed after Stripe accepted the
+  refund*: the ticket's opening text in Get help reads "CredentialDOMD Support",
+  not "You" (the label is read from the thread, in capitals as shown).
+- *refund.failed*: the notifier's needs_support key is now
+  `refund:<id>:needs_support:<12 hex digest>` (round 3 keys it by why and by
+  the refund it names, so a new reason is reported again). The journey
+  expected the old key and was updated; the line's text is unchanged.
+
+Parallel-safe runs, three workers each, at the same time (other workflows'
+runs were also on the lab):
+
+| Run | Journeys | Result |
+|---|---|---|
+| R: `pay-first-refund`, `signup-checkout`, `billing`, `billing-return`, `admin-invite-gift` (anchored as `e2e/<file>`) | 14 | 14 passed |
+| O: `bill-admin-support-public-billing`, `settings-auth-access`, every `phone-*` | 19 | 19 passed (AUTH-013 blocked: Clerk's own screens) |
+
+0 bugs, 0 zombie rows, no runaway PostgREST session. Edge-function lines are
+the busy `billing_reconciliation_pending` answers, the journeys' deliberate
+refusals (`invalid_request`, `unauthorized`, `no_paid_membership`), the forced
+refund failures (`refund_retryable`, `refund_pending`, `refund_needs_support`),
+`quote_expired`, and the sweep's one summary line (`limited_refund_sweep`,
+counts only). `npm test` (before the restart, on 71270842): 4,446, with 4,443
+passed, 0 failed and 3 skipped.
+
+### Result, 2026-09-30 23:55 UTC (the Mark as sent fix da183629 merged: an invoice noted before the share sheet)
+
+The Mark as sent fix (da183629, ticket "Invoicce": an invoice that went out
+from an iPhone was recorded nowhere, and Mark as sent would not record it
+either) merged into lab/on-release without a conflict (9152ceea). It adds
+`20260930230000_invoice_number_shared` (two columns on the number ledger,
+`mark_invoice_number_shared` and `list_shared_invoice_numbers`), which no plan
+lists, so it was applied by hand as in "A fix branch's migration outside the
+plan" (0 rewrites, no job switched on); `--fresh` or `qa:down -- --wipe`
+drops it. No function changed: the app was restarted on a new build, with no
+run in progress and the database and edge runtime kept.
+
+**`work-invoice-mark-sent.spec.mjs`** (PRAC-002, PRAC-016, SYNC-003,
+BILL-006): an account shaped like the one in the ticket, synthetic values only.
+One stipend agreement (call stipend covering the first hours, an after-stipend
+rate, an orientation rate, a 07:00 call-day start, three coverage blocks in
+America/Chicago) and 28 unbilled entries over its first three call days (2
+orientation, 3 rounding, 5 procedures, 17 short calls billed at the 15-minute
+minimum, several after midnight on the previous call day, and a sign-out),
+written into the lab database. Four journeys, each on a phone (390 x 844,
+touch, iPhone user agent) and at a desk (1280 x 900):
+
+- **localStorage full** (filled with a key the app never reads, to 24
+  characters or fewer free): Mark as sent with a typed number and a past sent
+  day records the invoice (`method` `marked`, `sent_at` local noon of that
+  day, the day picker's total, all 28 in `entry_ids`), all 28 `work_log` rows
+  carry its id, the Work log shows every entry BILLED (phone) or the number in
+  its Invoice status cell (desk) with nothing left to invoice, and a reload
+  (localStorage still full) keeps all of it; the Invoices tab lists it.
+- **The membership endpoint failing after an answer** (every
+  `billing-entitlements` request, preflight included, aborted as a dropped
+  connection; the phone's return to the app runs the check): Record as sent
+  is enabled and records at once on the device (the entries show billed); the
+  saves wait on the device ("kept on device awaiting membership check") for
+  the 30 s the endpoint stays down, and reach the account once the retry
+  schedule's next check answers, without a reload or another tap.
+- **The same endpoint failing from the page load** (no answer this session):
+  Record as sent is enabled; the tap says "Record as sent was refused.
+  Reconnecting, try again in a moment."; once the endpoint is back (40 s
+  after the load) the next tap records it.
+- **A share sheet that never answers, then a reload, on a full device:** the
+  PDF goes to the share sheet; a handoff note is in IndexedDB although
+  localStorage is full, and the server stamps the number (the contract id
+  only); back in front, the preview says the sheet has not answered, Mark as
+  sent stays enabled and nothing is recorded. After the reload the Work log
+  says the number went to the share sheet and is not recorded; Record it
+  checks the same three days for the same total and opens Mark as sent filled
+  in with that number and day; Record as sent records it, the banner goes,
+  no stamped number is left without an invoice, and a reload keeps it.
+
+Parallel-safe runs, three workers each:
+
+| Run | Journeys | Result |
+|---|---|---|
+| `work-invoice-mark-sent` | 8 | 8 passed |
+| every `practice*` and `phone-docs-practice` | 15 | 15 passed |
+
+0 bugs, 0 zombie rows, no runaway PostgREST session. The client error rows
+from these journeys are the ones they force: the failed membership checks,
+the saves kept on the device or refused (`no_answer`) during the outage, and
+the unanswered share sheet.
+
+### Result, 2026-10-01 01:20 UTC (release/offline-fix 1c062a39 merged): stopped on a product bug
+
+release/offline-fix at 1c062a39 (the seventh and eighth offline-copy reviews:
+one save at a time per key, a read records the copy's stamp, a queued save
+keeps the moment it was made) merged into lab/on-release (811739b4) without a
+conflict. Only `src/` and tests changed, so the app was restarted on a new
+build (`20261001T0047-811739b4-qalab`) with no run in progress.
+
+Parallel-safe runs, A to F at the same time, three workers each (B one), on
+that build:
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `reconcile-load`, `offline-storage`, `device-sync`, `two-devices`, `expenses-backup` | 12 | 12 passed |
+| B: `settings-auth-access` | 6 | 6 passed (AUTH-013 blocked: Clerk's own screens) |
+| C: `sync-docs-intake-sync-data`, `cred-categories`, `credentials-special` | 6 | 6 passed |
+| D: every `phone-*` | 8 | 8 passed |
+| E: `signup-checkout`, `billing`, `billing-return` | 11 | 10 passed, 1 failed (a journey race, fixed below) |
+| F: every `practice*` | 15 | 15 passed |
+
+0 bugs recorded by the journeys, 0 zombie rows, no runaway PostgREST session.
+The 17 `client_errors` rows in the window all came from these runs' accounts:
+
+- forced by journeys (12): the expired offer (`quote_expired`, 2, Evan
+  Expiry); the ended membership's name change (`Save refused (read_only,
+  settings)`, 3, Alex Archive); `settings-auth-access`'s forced failures
+  (Nia Notice offline, Ira Initfail's identity and enrollment, Una Enroll,
+  Ivy Invited's forced error and rejection, 7);
+- the product bug below (5): `Save refused (no_answer, settings)` for Dale
+  Dayrate, Nia Notice, Kit Categories and Drew Device on `?billing=complete`,
+  and Rhea Reconcile on `/app/`.
+
+**Journey race, fixed: AUTH-001's `verified_email` check read the profile
+once.** The clerk-webhook stamps it, and the app's initialize-clerk-profile can
+create the row first. On this run the webhook's first delivery got 503
+(`CONTINUITY_UNAVAILABLE`: its lookup of the user at the mock Clerk failed with
+"connection closed before message completed"), and the retry stamped the row
+2 s later, after the check had read it. The journey now waits for the stamp
+through the mock's retry schedule. The 503 itself is the keep-alive race
+between Deno's pooled connections and Node's 5 s `keepAliveTimeout`: the mock
+server now keeps idle connections for 10 minutes (`mocks/server.mjs`).
+
+**Journey race, fixed: AUTH-009 went offline while the previous check was
+settling.** In a rerun, the focus that should start a failing check joined the
+license's check, which had answered 0.24 s before the connection went
+(`useLimitedLaunchAccess` shares the check in flight). No check ran in 96 s
+offline, so no note appeared and the phone edit took the ordinary offline
+queue. The journey now focuses again, once a second, until a check has failed
+offline, and checks that one did. Rerun: 6 of 6 passed, the note after 32 s.
+
+**Lab conditions met while rerunning.** Founding places ran out after scratch
+probes (18 members within 15 minutes): `npm run qa:founding-reset -- --min-age
+0` with nothing running. `report-error` keeps 30 rows per hashed IP per 10
+minutes, and every lab browser shares one IP, so a run that starts within 10
+minutes of another run's 30 rows loses its own rows (429). Count rows only on
+a run that starts after a quiet 10 minutes.
+
+**Product bug: opening the app while the first membership answer is slow shows
+"Reconnecting, try again in a moment." to a member who changed nothing.** The
+Setup board writes `settings.setupState` by itself on a load (first render,
+the score, `lastTouched`, the Pro snapshot, the tier-1 stamp:
+`src/components/features/setup/useSetupState.js:127-199`;
+`src/components/features/SetupCard.jsx:45-47`), through a debounced queue
+flushed after 1.2 s, on unmount and on pagehide (`useSetupState.js:38-48`,
+`:218-226`). Before the first answer of the session, `updateSettings` refuses
+the write and, because access is verifying, calls `alertWriteRefused`
+(`src/context/AppContext.jsx:1339`), which reports `Save refused (no_answer,
+settings)` and shows the native alert (`src/utils/limitedLaunchAccess.js:615-623`).
+The flush has already cleared the queue (`useSetupState.js:41-44`), so the
+write is dropped. A scratch probe (not committed) reproduced it on demand:
+an active member reopens `/app/` with billing-entitlements held 8 s; two
+alerts, 1.5 s and 5.1 s after the open, and one report. The one `no_answer`
+report a rerun captured with its stack came from the unmount flush (React's
+effect cleanup, `flushSetupWrites`, `updateSettings`, `alertWriteRefused`) on a
+visible page. Not from today's merge: it changes none of these lines.
+
+### Result, 2026-10-01 01:30 UTC (feat/pay-first-refund review rounds 4 to 6 merged: the sweep follows a renewal, adopt, the refunded payment's ticket)
+
+feat/pay-first-refund at 3a0c6852 (6bcf4b5a, f25638f6 and 3a0c6852 over
+32363101: the sweep moves a request to a paid renewal, `limited_refund_follow`;
+a refunded or disputed payment never moves to it; `charge.refunded` of a
+renewal moves the request to it, `limited_refund_adopt`; the ticket of a
+payment with a refund on it says so) merged into lab/on-release (087901bc)
+without a conflict. The lab's switches are untouched.
+
+- **The migrations.** The rounds edit `20260930070000` (two new functions,
+  11 `limited_refund_%` functions now, as the deploy doc's smoke says) and
+  `20260930071000` (the ticket text). Both were applied again by hand, in that
+  order, as in "A fix branch's migration outside the plan": 0 and 0 rewrites.
+  `20260930072000` is unchanged and was not applied again; the sweep still
+  posts to the local gateway. No job is active (0 of 14); `anon` and
+  `authenticated` cannot execute `limited_refund_adopt` or
+  `limited_refund_follow`, `service_role` can.
+- **The restart.** `limited-refund`'s shared handlers and the app changed, so
+  with no run in progress the lab was stopped (SIGINT, `npm run qa:down`, data
+  kept) and started (`npm run qa:lab -- --quiet`). The build also carries the
+  Mark as sent hand-off merge (94a89b8e), which landed during the restart:
+  `20261001T0122-94a89b8e-qalab`.
+
+Parallel-safe runs, three workers each, at the same time:
+
+| Run | Journeys | Result |
+|---|---|---|
+| R: `pay-first-refund`, `signup-checkout`, `billing`, `billing-return`, `admin-invite-gift` (anchored as `e2e/<file>`) | 14 | 14 passed |
+| O: `bill-admin-support-public-billing`, `settings-auth-access`, every `phone-*` | 19 | 19 passed (AUTH-013 blocked: Clerk's own screens) |
+
+0 bugs, 0 zombie rows, no runaway PostgREST session. Client error reports are
+the ones the journeys force (`settings-auth-access`: identity, enrollment and
+the invitation link), the expired offer's `quote_expired` and the ended
+membership's `Save refused (read_only, settings)`; no `no_answer` row.
+Edge-function lines are the busy `billing_reconciliation_pending` answer, the
+journeys' deliberate refusals (`invalid_request`, `unauthorized`,
+`no_paid_membership`), the forced refund failure (`refund_retryable`,
+`refund_pending`), `refund_needs_support`, `quote_expired`, the sweep's one
+summary line and the runtime's worker-shutdown messages.
+
+**The ticket runner's context queries** (`scripts/ticket-agent-context.mjs`:
+`queueSQL`, `targetSQL`, `continuationSQL`, exactly as the module builds
+them), run against the lab database:
+
+- As they are, read only: the queue is empty (no ticket is approved and no
+  owner is an admin), and none of the 26 refund tickets the journeys opened is
+  selected by `targetSQL`.
+- In one transaction that is rolled back (nothing kept; checked afterwards):
+  an ordinary open ticket approved by the owner (`agent_approved_at`), and a
+  refund ticket (`source` `limited_refund`, kept by the guard, set open) whose
+  member is made an admin. The queue selects the ordinary ticket and not the
+  refund ticket; `targetSQL` and `continuationSQL` return the ordinary ticket
+  and nothing for the refund ticket under the admin rule. Once the owner
+  releases the refund ticket (`agent_approved_at`), both return it, as
+  `REFUND_HELD` intends.
+
+`npm test` (on 94a89b8e): 4,506, with 4,503 passed, 0 failed and 3 skipped.
+
+### Result, 2026-10-01 01:37 UTC (the Mark as sent hand-off reviews 22097a2c merged)
+
+The Mark as sent branch's three review rounds (ab5453bb, 386414df, 22097a2c:
+the hand-off note kept in IndexedDB beside localStorage, signed-out stamps,
+a late cancel, a late share stamp dated by its hand-off, the hand-off purge
+recorded, `delete-account` clearing the stamp on the ledger rows it keeps)
+merged into lab/on-release without a conflict (94a89b8e).
+
+- **The migration.** `20260930230000_invoice_number_shared` changed in place:
+  `mark_invoice_number_shared` takes a fourth argument, `p_shared_at` (the
+  device's hand-off time, held to the last 60 days and never later than now;
+  a stamp from before the account's data was last deleted is refused), and
+  the three-argument version is dropped so the PostgREST call is not
+  ambiguous. The file was applied again by hand as in "A fix branch's
+  migration outside the plan" (0 rewrites, no job switched on); the database
+  now has only `mark_invoice_number_shared(text, boolean, text, timestamptz)`.
+  PostgREST's DDL watch reloads its schema; `--fresh` or `qa:down -- --wipe`
+  drops it.
+- **The restart.** `delete-account` and the app changed. The lab was already
+  restarted on the merge by the refund run above (edge runtime started after
+  the merge, functions copy identical to `supabase/functions`, build
+  `20261001T0122-94a89b8e-qalab`), so no second restart was needed; the
+  migration was applied after it, with no run in progress.
+
+Parallel-safe runs, at the same time:
+
+| Run | Journeys | Result |
+|---|---|---|
+| `work-invoice-mark-sent` | 8 | 8 passed |
+| every `practice*` and `phone-docs-practice` | 15 | 15 passed |
+
+0 bugs, 0 zombie rows, no runaway PostgREST session. The client error rows
+are the ones these journeys force (the failed membership checks, the saves
+kept on the device or refused `no_answer` during the outage, the unanswered
+share sheet); the edge-function lines in the lab-wide window are the billing
+runs' busy `billing_reconciliation_pending` answer and the runtime's
+worker-shutdown messages. `npm test` (on 94a89b8e): 4,506, with 4,503 passed,
+0 failed and 3 skipped.
+
+### Result, 2026-10-01 02:35 UTC (the Mark as sent hand-off review round 4 and the purge fix 3f51d95a merged)
+
+The Mark as sent branch at 3f51d95a (99820877: a purge in one tab reaches every
+other open tab through a device-wide generation, a device-made number stamped
+late is dated by its hand-off day, the owed purge re-checked inside its
+transaction; 3f51d95a: the purge deletes the IndexedDB entry when its record
+cannot be kept; and the branch's merge of `main`'s IndexedDB copy and pay
+first, already in the lab) merged into lab/on-release (27fdf4fd). Three
+journeys conflicted (`credentials-special`, `device-sync`,
+`sync-docs-intake-sync-data`): the branch carries an earlier copy of the
+offline-copy checks and the lab side is a superset of it, so the lab side was
+kept.
+
+- **The migration.** `20260930230000_invoice_number_shared` changed again: the
+  device-made number's day is checked against the hand-off time (`v_at`), not
+  today. Applied again by hand as in "A fix branch's migration outside the
+  plan": 0 rewrites, 0 jobs active; the database has only
+  `mark_invoice_number_shared(text, boolean, text, timestamptz)`, with the new
+  body.
+- **The restart.** The app changed (`invoiceHandoff.js`,
+  `invoiceHandoffStore.js`), so with no run in progress the lab was stopped
+  (SIGINT, `npm run qa:down`, data kept) and started (`npm run qa:lab --
+  --quiet`). Build `20261001T0219-27fdf4fd-qalab`; the migration survived the
+  restart. Another checkout's lab (`credentialdomd-qa-lab-operational-final`,
+  its own stack and ports) was left alone.
+
+Parallel-safe runs, three workers each, at the same time:
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `work-invoice-mark-sent` | 8 | 8 passed |
+| B: every `practice*` and `phone-docs-practice` | 15 | 15 passed |
+| C: `offline-storage`, `reconcile-load`, `device-sync` | 7 | 6 passed, 1 failed (below); rerun 7 passed |
+| D: `pay-first-refund` | 6 | 6 passed (BILL-002 by design, as before) |
+
+**The one failure was the lab's stack.** `device-sync`'s AUTH-005/AUTH-002
+journey never reached its checks: `newMember`'s first landing stopped on "Your
+account identity could not be verified" (ID-INIT-UNAVAILABLE-H503) and waited
+120 s for the gate. Kong logged "upstream prematurely closed connection" and
+"connection reset by peer" from PostgREST on three requests in the same second
+(02:20:30, seven seconds into the four runs' first sign-ins, 50 s after
+PostgREST started); one was `initialize-clerk-profile`'s `clerk_continuity_candidate`
+call, which answered 502, so the function answered 503
+`continuity_unavailable`. PostgREST logged nothing. The same reused-connection
+502 as on 2026-09-30, not the product. `newMember` now taps Reload on that
+stop as `waitForMemberApp` already did (above). Checked on the real case: a
+probe journey answering the first `initialize-clerk-profile` 503
+`continuity_unavailable` printed the retry and reached the member app; the
+probe was not kept. The C rerun passed 7 of 7.
+
+**Client error rows** in the window (02:20 to 02:35): 15.
+
+- 14 forced by `work-invoice-mark-sent`, each at both viewports: the failed
+  membership check with the invoice and work log saves kept on the device
+  (3 rows each), the saves refused `no_answer` during the outage with its
+  failed check (3 rows each), and the unanswered share sheet (1 each).
+- 1 from the lab stall above (`Account load stopped
+  (ID-INIT-UNAVAILABLE-H503)`).
+
+The practice, offline-storage, reconcile-load, device-sync (rerun) and
+pay-first-refund journeys sent none. Two accounts were deleted by their journeys (02:21:05 and
+02:32:20), and `delete-account` removed any rows of theirs, as designed. 0 bugs, 0 zombie
+rows, no runaway PostgREST session. Edge-function lines are the busy
+`billing_reconciliation_pending` answers (retried and accepted), one
+`limited_billing_failure` 401 `unauthorized` on `quote` (phase `identity`), `welcome_email` disabled and the runtime's worker-boot lines.
+
+`npm test` (on 27fdf4fd plus the lab helper change): 4,510, with 4,506 passed,
+1 failed and 3 skipped. The failure is
+`tests/ticket-fix/session-signal.test.mjs` ("Unexpected end of JSON input"
+reading the reproduction session's `started` file, which the test reads as soon
+as it exists, while four journey runs and another lab loaded the machine); it
+passed 3 of 3 alone, and the merge changes nothing under `scripts/` or
+`tests/ticket-fix`.
+
+### Result, 2026-10-01 02:55 UTC (fix/no-answer-settings 4aaf0ca6 merged): stopped on a product bug
+
+fix/no-answer-settings at 4aaf0ca6 (settings saved before the page load's
+first membership answer are kept on the device and decided by that answer;
+the Setup board's own stamps are never alerted, never reported and never
+queued) merged into lab/on-release without a conflict (09992bb4). Only `src/`
+and tests changed, so with no run in progress the app was restarted on a new
+build (`20261001T0240-09992bb4-qalab`), database and edge runtime kept.
+
+**The new journey, `settings-auth-first-answer`** (AUTH-009): every
+billing-entitlements POST of the member's browser is held until 8 s after the
+first one, then goes on to the lab's function unchanged.
+
+- An active member reopens `/app/` (with `profiles.setup_state` cleared, so
+  the load stamps `startedAt` and the score). The member app opened 0.4 s
+  after the open; the phone edit in Profile & settings was made at 0.5 s and
+  written ahead (`awaitingAccess`); at 7 s the profile still had neither the
+  phone nor a board stamp. The answer came at 8.3 s; then the phone and the
+  stamps (`startedAt`, `progress` 1 of 17) reached the profile and nothing was
+  left queued. No native dialog; no `Save refused (no_answer` row, and the
+  browser sent no such report.
+- The membership ends while the app is closed (the browser still remembers an
+  active answer), then the same reopen and edit: once the answer comes, the
+  edit is taken back with the read-only message (`Your membership no longer
+  allows changes here, so your last change was not kept. ...`, the app's
+  `READ_ONLY_AFTER_CHECK_MESSAGE`, shown through `window.alert` as
+  `holdForAccess` does), the field shows the saved phone, nothing reaches the
+  profile or stays queued, and the refusal is reported `Save refused
+  (read_only, settings)`.
+- Once this browser has seen the ended membership, the same reopen and edit:
+  refused at once, nothing written ahead or saved, the field shows the saved
+  phone, no dialog (the page's "Your membership" card is the only notice).
+  It is reported as `Save refused (no_answer, settings)`: the product bug
+  below. This stretch fails on that check and records the bug (3 of 3 runs).
+
+Parallel-safe runs, A to E at the same time, three workers each:
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `settings-auth-first-answer`, `settings-auth-access` | 7 | 6 passed, 1 failed (the bug below; AUTH-013 blocked: Clerk's own screens) |
+| B: `signup-checkout`, `billing`, `billing-return` (anchored as `e2e/<file>`) | 6 | 6 passed |
+| C: every `phone-*` | 8 | 8 passed |
+| D: every `practice*` | 13 | 13 passed |
+| E: `offline-storage`, `reconcile-load`, `device-sync`, `two-devices` | 9 | 8 passed, 1 failed (a journey race, fixed below); rerun 9 passed |
+
+**Journey race, fixed: `reconcile-load` held the wrong ledger read.** It holds
+the second deletion-ledger GET it sees, taken to be the reconcile load's. On
+this run the page being left sent one at +0.01 s (its own reconcile load,
+still running when the journey navigated), so the new page's first load was
+held instead; nothing could be saved until the 60 s hold ran out (ledger reads
++0.01, +0.67, +60.77 s; the save +60.97 s). The hold now counts only reads
+sent after the new document's commit (`framenavigated` following a main-frame
+document request). Alone it passed 2 of 2 before and 2 of 2 after the change,
+and run E again passed 9 of 9.
+
+**Client error rows** in the window (02:41 to 02:54 UTC): 13.
+
+- Fay Firstanswer (this journey, three runs): `Save refused (read_only,
+  settings)` 3, forced (the ended membership's edit, as designed);
+  `Save refused (no_answer, settings)` 3, the product bug below.
+- `settings-auth-access`, forced: Ira Initfail's `Account load stopped
+  (ID-INIT-UNAVAILABLE).` 2 and `Membership enrollment failed
+  (network:membership_information_unavailable)` 1; Una Enroll's enrollment
+  failure 1; Ivy Invited's forced error and rejection 2 (token redacted).
+- Pat Preview: `Membership quote failed (membership_information_unavailable)`,
+  phase `network`, no HTTP status, at `?preview_tier=practice`: AUTH-017 walks
+  through four `?preview_tier=` URLs back to back, and the gate's offer quote
+  in flight was cut off by the next navigation. Journey-made, not a lost
+  quote.
+
+No `Save refused (no_answer` row from an active member and none from any
+other journey. 0 zombie rows, no runaway PostgREST session.
+
+**Product bug: a read-only member's settings edit before the first answer is
+reported as `no_answer`.** With no answer yet this session, `writeStatus`
+refuses with reason `no_answer` (`src/utils/limitedLaunchAccess.js:445`) even
+when the answer this device remembered already denies the scope, the case
+`:442-444` excludes from waiting. `updateSettings` then reports that reason as
+it is (`src/context/AppContext.jsx:1363`, through `writeRefusalReason`,
+`limitedLaunchAccess.js:616-623`). The member is not misled (the edit is
+refused, the field shows the saved value, no dialog), but the operator's row
+is the signature of the bug this branch fixed. Not from the merge: `:445` is
+the line as it was before 4c5883bb. Expected: `Save refused (read_only,
+settings)`.
+
+`npm test` (on 09992bb4 plus the two journey files): 4,537, with 4,534 passed,
+0 failed and 3 skipped.
+
+### Result, 2026-10-01 05:05 UTC (fix/no-answer-settings 340bbb8d merged): 59 of 59 pass
+
+fix/no-answer-settings at 340bbb8d (records added, edited, deleted or starred
+before the page load's first membership answer are kept and decided by it, as
+settings saves are; a device whose remembered answer already denies the scope
+refuses at once as `read_only`; a session that changes or ends while a change
+waits keeps its queued copy) merged into lab/on-release without a conflict
+(c7abdba1; `src/context/AppContext.jsx`, `src/lib/supabase.js`,
+`src/utils/limitedLaunchAccess.js` and two test files). Only `src/` and tests
+changed, so with no run in progress the app was restarted on a new build,
+database and edge runtime kept.
+
+**`settings-auth-first-answer`, extended** (AUTH-009; every billing-entitlements
+POST still held until 8 s after the first):
+
+- An active member reopens `/app/`, adds a license and changes another's
+  License # (about 1.0 s and 1.6 s after the open): both written ahead
+  (`awaitingAccess`), neither in `public.licenses` before the answer, both
+  there after it, nothing left queued, no native dialog, no `Save refused` row
+  or report.
+- The membership ends while the app is closed and this browser remembers it
+  active (the reopen before taught it otherwise, so the journey puts back the
+  remembered answer it read while active, from a page on the app's origin that
+  is not the app): the same two changes are taken back after the answer with
+  the read-only message, the screen shows neither, the database has neither,
+  nothing is queued, reported `Save refused (read_only, licenses)`.
+- Once the browser knows the membership ended, the settings edit is refused at
+  once and is now reported `Save refused (read_only, settings)` (the 02:55
+  bug, fixed by 433deb40). Credentials opens as the saved-records archive
+  during the held check (0.6 s), with no Add and no Edit: no record change can
+  be made, so nothing is written ahead, saved or reported, and no dialog.
+
+Parallel-safe runs, three workers each; wave 1 (A to D) then wave 2 (E to H):
+
+| Run | Journeys | Result |
+|---|---|---|
+| A: `settings-auth-first-answer`, `settings-auth-access` | 7 | 7 passed (AUTH-013 blocked: Clerk's own screens) |
+| B: `signup-checkout`, `billing`, `billing-return` | 6 | 6 passed |
+| C: `pay-first-refund` | 6 | 6 passed (BILL-002 by design) |
+| D: every `phone-*` | 8 | 8 passed |
+| E: every `practice*` | 13 | 13 passed |
+| F: `work-invoice-mark-sent` | 8 | 8 passed |
+| G: `offline-storage`, `reconcile-load`, `device-sync`, `two-devices` | 9 | 9 passed |
+| H: `cred-categories`, `credentials-special` | 2 | 2 passed |
+
+Two journey races were found on the way and fixed (each failed once under the
+parallel load, passed alone, and passed in the final run above):
+
+- **`cred-categories` CRED-046 wrote its Answer Bank record into a live app's
+  device copy.** The trace: the membership answer's second load (records read
+  +5.75 s, deletion ledger +5.86 s) was still running when the journey wrote
+  the copy (+5.863 s) and reloaded (+5.867 s); the load's own save of what it
+  had read landed after the write and dropped the injected record. A real
+  device holds the record before any load starts. The record is now written
+  from a page on the app's origin that is not the app, then the app is opened.
+- **`offline-storage` SYNC-017's first sign-in in a second browser** stopped on
+  `Account load stopped (ID-INIT-UNAVAILABLE-H503)`: Kong logged "upstream
+  prematurely closed connection" from PostgREST on
+  `rpc/initialize_clerk_profile` (502, so the function answered 503), the
+  lab's known reused-connection stall. That sign-in (and the upgrade
+  journey's) now taps Reload as the screen asks (`landingAfterStalls`), as
+  `newMember` does.
+
+The first-answer journey now also records `sinceFirstPostMs`: on the first
+loaded wave the app opened 5.6 s after the navigation and its first held check
+failed at the network level as the hold ended (the edge runtime logged early
+worker terminations), so the app kept both license changes on the device
+(`Save kept on device awaiting membership check (no_answer, licenses)`) and a
+later check saved them; every check passed. In the final run it was 8.03 s.
+
+**Client error rows** in the final run's windows: 23, all forced by journeys.
+
+- Wave 1 (04:50 to 04:54), 9: Fay Firstanswer's `Save refused (read_only,
+  settings)` 2 and `(read_only, licenses)` 1 (designed refusals); Ira
+  Initfail's `Account load stopped (ID-INIT-UNAVAILABLE).` 2 and enrollment
+  failure 1, Una Enroll's enrollment failure 1, Ivy Invited's forced error and
+  rejection 2 (token redacted).
+- Wave 2 (04:54 to 05:04), 14, all `work-invoice-mark-sent` (each at both
+  viewports): the endpoint failing after an answer (check failed, invoice and
+  work log kept `check_failed`: 3 each), the endpoint failing from the page
+  load (check failed, invoice and work log kept `no_answer`: 3 each; before
+  this merge these were `Save refused (no_answer, ...)`, now kept and
+  recorded once the endpoint is back, as the fix intends) and the unanswered
+  share sheet (1 each).
+
+No `Save refused (no_answer` row anywhere. 0 zombie rows, no runaway PostgREST
+session. `billing` recorded BILL-005 once in the first loaded wave (the card
+after a portal cancel at period end; known since step 3, a pass with the bug
+recorded) and not in the final run.
+
+**Product bug seen, not from the merge (low, cosmetic):** the saved-records
+archive titles a license "State Medical License, , CO" (and insurance
+"Malpractice, , QA Mutual"). `recordCard` strips the type from the title only
+when an em dash follows it (`src/utils/memberViewer.js:86-88`), but
+`describeItem` joins with ", " (`src/utils/helpers.js:461`), so `mainLine` is
+", CO" and `recordHeading` prefixes the type again
+(`src/utils/readOnlyArchive.js:77`). Same code on main 82a85dc0; the Member
+viewer shows `mainLine` (", CO") too (`MemberViewer.jsx:161`).
+
+`npm test` (on c7abdba1 plus the three journey files): 4,595, with 4,592
+passed, 0 failed and 3 skipped.
+
+### Result, 2026-10-01 06:00 UTC (release/goal merged: the full regression, pass 1): 63 of 63 pass
+
+release/goal 30f41ff7 (every sweep and limit branch) merged into lab/on-release
+(af4c2de1), its five new migrations applied by hand in file order
+(`20261001014500`, `014600`, `041500`, `052000`, `061700`; 0 rewrites, no job
+switched on); the stack stopped and started (functions changed). Every spec
+file in `e2e/` ran, parallel-safe, three workers per group, four groups at a
+time (A to M; places freed between waves with `qa:founding-reset`).
+
+**Product bug, fixed on release/goal (7d7d1430), merged (a88fb324):** the
+daily reminder email never reached the account-settings member (NOTIFY-001)
+or the ops-jobs one (OPS-001). With 1,387 recipients in the lab,
+send-reminders read nine queries per member, one member at a time, and the
+edge runtime stopped it for CPU time (`WORKER_LIMIT`, "CPU time soft limit
+reached") before the newest members; its recipients query also returned at
+most PostgREST's 1,000 rows. It now pages its recipients and reads each table
+once per group of 100 members (`_shared/reminderReads.mjs`), and
+`20261001080000_daily_reminders_timeout` (applied here by hand, 1 rewrite)
+gives `dispatch_daily_reminders()` a 120 s pg_net timeout. A dry run over
+1,440 recipients now answers 200 in about 1 s (it was 546 `WORKER_LIMIT`
+after 15 s). The merge's functions changed, so the stack was restarted again.
+
+**Lab and journey fixes** (lab code only):
+
+- `ops-app` OPS-014 compared the notifier's optional parts with a fixed 8; the
+  refund hand-off added a ninth (`limited_refund_requests`) on purpose. It
+  now reads the script's own `OPTIONAL` list.
+- `cred-privileges-education` CRED-004: since 2624bf40 a wrong lock code on a
+  new device is answered by a second prompt ("That lock code did not open this
+  password. Enter ..."), not an alert; either counts as the notice.
+- `bill-admin-support-public-site` PUBLIC-009: the public site redirected every
+  `/app/` page to the lab app's origin, which answers without CORS since
+  0221bfab, so `/app/sw.js` precaching `./` failed and its registration went
+  redundant. Only navigations are redirected now; the shell is served to the
+  worker's fetch, as on production's single origin.
+
+Failed once under four concurrent groups and passed on both reruns (journey
+races under load, not reproduced): `credentials-special` CRED-024 (the custom
+category's Add form closed 0.1 s after opening, 0.8 s after a reload, as the
+reopened page's second load landed), `cred-licenses` CRED-014 (the NPI
+panel's results reset 0.1 s after the lookup, with no request in flight),
+`admin-controls` (a 502 from the local database on the lab's own admin call,
+the known reused-connection stall).
+
+**Client error rows** 05:22 to 06:00 UTC: 45, all forced by journeys
+(settings-auth-first-answer, settings-auth-access, work-invoice-mark-sent at
+both viewports, ops-app OPS-008/014/015, sync-docs-intake-sync-load SYNC-004
+and SYNC-006, admin-controls' pause, public-billing's expired quote and
+read-only edit). No `Save refused (no_answer` row.
+
+### Result, 2026-10-01 13:40 UTC (release/goal final candidate 4bdc0217: the full regression, pass 1): not one clean full pass
+
+release/goal 53bb952e (fix/second-load-reset, the late billing and title
+fixes and their reviews) merged into lab/on-release (d7506af4). Of its
+migrations only `20261001081000_billing_cancel_at` was new to the lab
+database; applied by hand as above (0 rewrites, no job switched on).
+`20261001080000` was already there and unchanged. The stack was stopped and
+started for each merge that changed a function (07:38, 08:40); the app was
+rebuilt for the app-only merges (09:14, 09:56, 10:30). Every spec file in
+`e2e/` ran, parallel-safe, three workers per group, four groups at a time,
+places freed between waves; each product fix below was followed by another
+full pass, and every failure was reproduced or traced before it was
+classified.
+
+**Product bugs, fixed on release/goal** (each with a regression test; full
+suite 5,018 tests, 0 failed; build passes):
+
+- `88a68db2` ai-proxy answered a membership check that could not answer
+  (accessWriteDecision's 503 `access_policy_unavailable`) with 503, which the
+  app reads as "the shared key is not configured": the CME importer said "AI
+  is not switched on yet" and the device kept shared AI off, so the next
+  certificate scan never asked the AI (cred-cme-import CRED-010, CRED-031;
+  one gateway 502 on `credentialdo_service_write_snapshot`). Now 429 with
+  Retry-After, and the app reads the code as transient at any status.
+- `4414b3da` Documents saved a renamed copy of a stored document as a second
+  document when it was picked before the stored file's bytes were back after
+  a reload (documents DOCS-001). Same-size stored documents are fetched and
+  compared (utils/storedDuplicate.js). Reproduced with the download held.
+- `ef193e78` The membership card offered a purchase ("Choose whether to
+  purchase a membership ...") to a paid member until the session's first
+  answer arrived (public-billing BILL-012). It now says "Checking your
+  membership…" until then.
+- `4bdc0217` Setup's "Start from your CV" read a CV already in Files from
+  `doc.data` alone and said "That PDF could not be read" when its bytes were
+  still in Storage (vera-cv-share-cv CV-001). It now fetches them
+  (utils/storedBytes.js). Reproduced with the download held.
+
+**Lab and journey fixes** (lab code only): second-browser sign-ins reload a
+transient identity stop (cred-privileges-education, cred-cme-import,
+member-records); `localExec` reads past spawnSync's 1 MiB cap (ops-app
+OPS-014: the notifier's 7-day money events came to 1.10 MB); intake waits for
+the app's answer line; PUBLIC-006 counts its own views by a referrer domain
+of its own; cred-categories waits for its setup rows; card reads in
+public-billing and pay-first-refund wait for the card's first answer;
+AUTH-009 counts only requests its hold saw, accepts an archive shown before
+the check is sent, and starts once the browser remembers the paid
+membership; findAccount types after the Accounts read lands (a lost search
+paused another journey's member); payForMembership and newPhoneMember try a
+checkout refused with "Please try again" once; PRAC-002 waits for the entry
+links; BILL-012's rebuy quote survives an unreadable response body; OPS-009
+names failing harness tests; billing.spec waits for the card's first answer;
+CRED-031 follows a certificate tab opened at about:blank to its file (on a
+clean browser whose bytes are still downloading the app opens about:blank in
+the tap, as designed for Safari).
+
+**Status.** Every spec file passed on the final build (lab d93ff89a and the
+lab-only commits after it), alone and under four groups, but no full pass of
+all 64 files was clean: each of the six full passes (fr2, fr3, fr4, fr5, fr7,
+fr10) had one to four failures under load, each traced and fixed above or
+classified below. Not reproduced and not explained: OPS-014's `remember`
+step exited non-zero with no stderr once (passed 4 times since, alone and
+under load); SUPPORT-003's seen stamp was missing once (passed 3 times alone
+and once under load; the member browser's trace was not kept). From 13:20
+UTC an unrelated llama-server held about 1000% CPU on the Studio and member
+loads waited out the 120 s landing in three journeys.
+
+**The host.** Every PostgreSQL suite failed with "could not create
+semaphores: No space left on device": 4,341 System V semaphore sets of
+PostgreSQL clusters whose postmaster was gone filled SEMMNS. They were
+removed with PostgreSQL's own test (the set's marker semaphore holds 537 and
+its pid is not running); the two live clusters kept theirs. The suites leak
+about 20 to 50 sets per full run, so this will return.
+
+**The gateway stall.** Kong logged "upstream prematurely closed connection"
+or "connection reset by peer" from PostgREST 85 times from 08:40 to 12:00.
+Every 5xx the journeys met traced to one of those lines: a function's read
+answered 502, and initialize-clerk-profile (H503), billing-entitlements,
+bootstrap-launch-access (`signup_unavailable`), billing-quote and
+limited-checkout answered 503. A write that met it (licenses, deductibles)
+stayed queued on the device and was sent on the next load, as designed.
+
+**Client error rows** 07:39 to 12:45 UTC: all classified. Forced by journeys:
+the first-answer and archive read-only refusals, Initfail/Enroll/Invited, the
+outage and no-answer saves at both viewports, the share sheet, the forced
+load and render failures and the old build, the notifier and ops-jobs rows,
+the paused member's enrollment refusal, the expired quotes. Known lab
+condition, each matched to a gateway line (or, for the two 08:08 quote
+failures, to billing-quote's own `eligibility` failure log; that second's
+gateway log went with the 08:40 restart): 15 rows of H503, `http:503`,
+`signup_unavailable` and `billing_unavailable`. None unexplained. A stop the
+journey reloads within a second sends no row (the app reports after a
+second).
+
+### Result, 2026-10-01 19:35 UTC (release/goal final candidate aab35868: the full regression, pass 2): one clean full pass
+
+release/goal was already merged at 4bdc0217 and every release migration was in
+the lab database unchanged (each function body in `20261001014500` to
+`20261001081000` compared with `pg_proc`). Two product fixes followed and were
+merged (1f80c299, dd38d37a); `20261001090000_settle_paused_membership` was
+applied by hand the README way (0 rewrites, no job switched on). The stack was
+stopped and started for the edge runtime's out-of-memory kill (13:45), for the
+`_shared/clerkAuth.ts` merge (15:54), and once more before the last pass
+(19:13, the edge runtime had grown to 1.6 GB with 0.9 GB left in Docker's VM;
+two other checkouts' labs share it). Every spec file in `e2e/` ran in eleven
+full passes (p2a to p2k), parallel-safe, three workers per group, four groups
+at a time, places freed between waves, plus BILL-013 three times at once under
+the heaviest wave. p2k: all 64 files (and the three load groups), 5,731 checks, 0 failed (AUTH-013 blocked:
+Clerk's own screens), 0 gateway resets.
+
+**Product bugs, fixed on release/goal** (regression tests; full suite 5,038
+tests, 0 failed; build passes):
+
+- `35b28568` A Clerk key set that timed out (jose ERR_JWKS_TIMEOUT, under the
+  mock's stalls) or a failed profiles read made `clerkProfile` return null, and
+  every caller answered 401 to a valid token: two members' billing-entitlements
+  and ai-proxy calls at 15:20:45, and the app reads ai-proxy's 401 as signed
+  out and keeps shared AI off until the next load. Reproduced by pausing the
+  mock Clerk (401 after 5 s). Both now throw `ClerkAuthUnavailable` (500, the
+  billing functions' own 503, ai-proxy 429 `access_policy_unavailable`). Every
+  function bundling `_shared/clerkAuth.ts` (32) must be redeployed.
+- `aab35868` An event settled while an administrator had the account paused
+  (access_status 'revoked') wrote `membership_active` false, and Approve, which
+  changes no subscription, brought the paid member back read-only (SUPPORT-003's
+  seen stamp refused, here and in pass 1; the member had been paused while a
+  checkout event was still being retried). Reproduced in the billing chain
+  fixture. `20261001090000_settle_paused_membership` keeps a verified payment as
+  the membership for a paused account; a paused account still writes nothing.
+
+**Lab fixes.** The mock server wrote its 57 MB state synchronously on every
+change; under load its answers waited up to 10 s (Clerk tokens past the app's
+wait, Clerk's key set past jose's 5 s, Stripe calls behind limited-checkout past
+the app's 9 s): it now writes at most once a second. Kong reused keep-alive
+connections that PostgREST had closed, about once a minute (502 to the
+function, which answered 500 or 503): a 20 s idle timeout did not change the
+rate and was reverted; with no upstream keep-alive pool the same groups met
+none, so the lab's Kong now reloads with pool size 0. Journeys: the invite
+journey moves earlier lab invitations out of the 24-hour cap (the 21st run of
+the day met the product's own 429); ADMIN-003 moves earlier journeys' reports
+off the shared address (report-error's 30 per address in 10 minutes);
+`nextFunctionAnswer` reads billing-quote and limited-refund answers at the route
+(the app's abort after reading can leave Chrome with net::ERR_ABORTED and no
+body: BILL-013, BILL-007); SHARE-006 waits for the invite outbox to say sent;
+PRAC-025 follows a day whose save met a 502 to the next app open (the app says
+"1 change has not reached your account yet. It is sent again each time the app
+opens."); AUTH-009 acts once its held check is in flight; BILL-003's events land
+30 s after the return; CRED-031 counts a clean browser's tab that ends as a
+download; OPS-010 asks a dry run again after a 5xx; BILL-007 reopens Profile
+after a 5xx outcome read; the from-load outage journey waits for the first
+refused check; BILL-013 presses Continue again when Checkout is refused with
+"Please try again"; SETTINGS-011 waits for both licenses on the server; AUTH-006
+goes offline once the account load has settled. Each was reproduced (an
+injected delay, hold, 502, 503 or filled window) before and after the fix.
+
+**Observed, not changed:** a page left right after payment, before its first
+membership answer, leaves the device remembering the unpaid account's
+read-only answer; the next load refuses a write made before its first answer
+(Olive Compliance's board stamp, once in the day). Pass 1 recorded the same as
+designed.
+
+**Client error rows** 13:28 to 19:35 UTC, 687: all classified. Forced by
+journeys (quote_expired, the outage and no-answer saves, read-only refusals,
+the forced load and render failures, Initfail/Enroll/Invited, the paused
+member's 403, the share sheet, the notifier and ops-jobs rows, the old build),
+or by this pass's own reproductions (Fay Firstanswer 15:08 to 15:14, Casey
+Confirming 16:01 and 16:05, Evan Expiry 18:12). The other 24 transient rows
+(http:503, H503, checkout or quote without an answer, the two 401s, the
+documents member's INIT-UNAVAILABLE) came from the gateway resets, the mock's
+stalls or the key set timeout, each matched to a gateway line or a traced
+delay while the log was kept (the containers' logs go with each restart); none
+occurred in p2k, after both lab fixes.
+
+### Result, 2026-10-01 21:16 UTC (fix/load-retry cacd4415 merged: a resumed iPhone's load): 34 of 34 pass
+
+Live evidence (an installed iPhone app on iOS 18.7, build
+20261001T0244-82a85dc): "Membership check failed (response:200:
+membership_information_unavailable)" and, 224 ms later, "Account load stopped
+(ID-INIT-UNAVAILABLE)" with the Reload prompt, as iOS resumed the app. Clerk
+builds a new Session object for the same session on each client refresh, and
+the requests compared the object. fix/load-retry (c25c54ed, cacd4415) compares
+the session by id and user and tries a cut-off, timed-out or network-failed
+identity read again after 1 s and 3 s. Merged into lab/on-release (ef5278f5);
+the app was rebuilt with it at 20:20 (with release/goal d801d95c) and the lab
+restarted at 20:55 without a rebuild, for the mock Stripe customer balance
+(31ce883b) that d801d95c's refund credit guard reads.
+
+**The new journey, `settings-auth-resume`** (AUTH-002, AUTH-011; lab code only):
+the QA Clerk's `replaceSessionObject()` (section "The QA sign-in") swaps
+`window.Clerk.session` for a new object of the same session while
+initialize-clerk-profile's answer is at the browser's door, and again while a
+billing-entitlements answer is; the first billing-entitlements answer that
+comes back 200 is cut off halfway through its body. Checked: the account loads
+to the member app with no reload prompt; one identity read before the first
+membership check (a second one after the first accepted answer is AppContext's
+designed reconcile load, `reconciledAccess`, not a retry); the cut-off answer
+is reported `response:200` and the next check answers 200 under the replaced
+object; no "Account load stopped" sent or stored; a license added afterwards
+reaches the server with nothing queued. Then a real account switch: another
+physician signs in on the page while the first account's identity answer is at
+the door; the first account's read is not tried again, none of its records
+show, the page ends on the other physician's own gate, and the first account
+is unchanged on the server.
+
+**Control.** The same journey against a QA build of the lab without
+fix/load-retry (c1f202e9 with the merge reverted, served to that one browser
+only): the account fell back to the device copy ("Showing this device's copy.
+Reload to reconnect your account", "Account load used this device's copy
+(DATA-LOAD-LOCAL-PROFILE-UNKNOWN)"), no membership check ever ran, and a
+license could not be added. (A first control attempt that served the whole
+page by routing was discarded: Chrome's local network access refused every API
+call of a routed document, so it said nothing about the fix; the control then
+routed only the scripts.) The account switch passed on both builds.
+
+**Runs** (parallel-safe, beside another author's full regression on the same
+lab):
+
+| Group | Files | Result |
+|---|---|---|
+| A | settings-auth-resume, settings-auth-access, settings-auth-first-answer, settings-auth-profile | 10 of 10 passed (AUTH-013 blocked: Clerk's own screens) |
+| B | device-sync, offline-storage, two-devices | 8 of 8 |
+| C | signup-checkout, pay-first-refund | 8 of 8 (one by design, as before) |
+| D | phone-home, phone-docs-practice, phone-credentials, phone-settings-admin | 8 of 8 |
+
+Earlier attempts, each failure traced: at 20:38 the founding places ran out
+under seven groups at once (87 taken in 15 minutes; every B and C failure was
+the gate's "Founding checkout is temporarily unavailable"), C and D were then
+stopped by hand; at 20:46 four pay-first-refund journeys met limited-refund's
+503 `refund_unavailable` at `verify_credit` (the running mock's customers had
+no `balance`; fixed by 31ce883b, loaded at the 20:55 restart). Groups then ran
+one at a time, each started with at least 30 places free. The final pass
+(lr3, 21:05 to 21:16) ran every file above on one build: 34 of 34.
+
+**Client error rows** in the final pass, 10, all forced by journeys: AUTH-011's
+blocked identity read (ID-INIT-UNAVAILABLE-NETWORK, twice: the stop and the
+Reload while still blocked) and blocked enrollment (twice), AUTH-009's ended
+membership saves (read_only settings twice, licenses once), AUTH-015's two
+forced reports, and this journey's cut-off answer (response:200). Edge function
+lines: billing_reconciliation_pending (the held lease and concurrent events),
+pay-first-refund's forced refusals and Stripe 500, and the edge runtime's
+known teardown lines.
+
+### Result, 2026-10-01 21:43 UTC (release/goal d801d95c and 4602ece0 merged: the full regression after the sign-in and refund-credit fixes): one clean full pass
+
+release/goal d801d95c (1a6ebe35: transient sign-in checks answer 503
+`auth_unavailable` with the caller's CORS, the AI status GET retries a 429 or
+503, classic reset credits go to a person; d801d95c: the refund credit guard
+reads the customer's balance) merged into lab/on-release (c1f202e9), then the
+fix below (409ab7e7). No migration changed: every plan file is the one already
+in the lab database, and `20261001090000` was applied at aab35868. The stack
+was stopped and started for the merge (eleven functions and the shared
+modules changed), the app and mocks restarted for the mock fix, and the app
+rebuilt for the product fix, each with no run in progress. Every spec file in
+`e2e/` ran parallel-safe, three workers per group, three groups at a time,
+each group started only with at least 35 public founding places left. Pass
+g3: the 64 files in 13 groups, 144 journeys, 5,011 checks, 0 failed, 0 bugs
+(AUTH-013 blocked: Clerk's own screens); `settings-auth-resume.spec.mjs`
+(fix/load-retry's, committed by its author during the pass, 4ea6d47f) then ran
+on the same build: 1 of 1. All 65 files pass on build 409ab7e7. That build also carries fix/load-retry
+(c25c54ed, cacd4415, merged into the lab at ef5278f5), which is not on
+release/goal 4602ece0.
+
+**Product bug, fixed on release/goal** (`4602ece0`, regression test; full
+suite 5,064 tests, 0 failed; build passes): a refund press ends the paid
+membership, so the membership answer that follows moves the card to its
+unpaid branch, which mounted a new `RefundSection` with nothing in it. Until
+its own status read answered (or for good, if that read failed) the card
+offered a purchase ("Choose whether to purchase a membership") and said
+nothing about the refund just pressed (pay-first-refund, "a refund that fails
+at Stripe", BILL-005). Reproduced by holding the new section's status read
+6 s: the card showed only the purchase offer; after the fix it shows the
+unfinished refund, the press's alert and Finish refund. The page keeps a ref
+(`refundCarry`) the next section starts from; the same on More > Cancel
+Subscription.
+
+**Lab fix** (31ce883b): d801d95c reads the customer's `balance` before any
+refund (`outstandingCredit`); the mock Stripe's customers had none, so every
+refund answered 503 `refund_unavailable` at phase `verify_credit` (four
+pay-first-refund journeys). A mock customer now has `balance: 0`, and one
+saved before reads 0.
+
+**Explained, not product bugs.** Pass g1 ran four groups at a time while
+another author ran three groups on the same lab: the public founding places
+ran out (0 left; every place under 15 minutes old), the quote answered 409
+`founding_capacity_pending` ("Founding checkout is temporarily unavailable
+..."), and 22 journeys failed at the offer review (work-invoice-mark-sent 2,
+every `settings-auth-setup*`/`settings-auth-profile` journey, 16 in
+`sync-docs-intake-*`), plus home-notify-cme, whose `memberWithPlace` waited
+447 s for a place and ran out of its 8 minutes. Each failure's page shows that
+message. Passes g2 and g3 gate each group on the places left.
+
+**Client error rows** 21:16 to 21:43 UTC: every one forced by a journey
+(Lara Loadfail, Sasha Selfheal, Riley Errors, Ira Initfail, Una Enroll, Pat
+Preview, Remy Refused, Otto Outage and Nora Noanswer at both viewports, the
+read-only and outage saves, the share sheet, the forced render crash and old
+build, the notifier row, quote_expired). Function error lines: the webhook's
+`billing_reconciliation_pending` 503s (retried, as designed), the refund
+journeys' own refusals (400, 401, 404, the forced Stripe failure), the
+webhook's bad signature check, the sweep called without the hook secret, and
+the runtime's own lines. No `auth_unavailable`, no gateway reset.
+
+### Result, 2026-10-01 23:00 UTC (WebKit as the installed iPhone app: Credentials, Documents, Vera, CV import)
+
+Playwright's WebKit installed (`npx playwright install webkit`: WebKit 26.6,
+revision 2359, for 1.63). `qa-lab/e2e/webkit.config.mjs` runs any journey in
+WebKit without touching the Chromium configuration:
+`npm run qa:e2e -- -c qa-lab/e2e/webkit.config.mjs <file>.spec.mjs` (the
+runner's own `-c` comes first, so the later one is used). A journey with its
+own device keeps it; every other one runs as the installed app on an iPhone 15
+(393 x 852, touch, iOS 18.7 user agent), or at the desk in desktop Safari with
+`QA_WEBKIT_DESK=1`. `iphone-credentials-docs.spec.mjs` always runs in WebKit as
+the iPhone app with the iOS model of `support/ios.mjs` and judges by outcome.
+
+| Run (parallel-safe) | Journeys | Result |
+|---|---|---|
+| `phone-credentials` in WebKit (375 and 390) | 2 | every record saved, listed, reloaded, seen on a second phone, deleted; failed only the 32 px audit on every native `<select>` (21 to 25 px tall in this WebKit, see below) |
+| 12 desk files in WebKit (`documents`, `credentials-special`, `cred-categories`, `credentials-sections`, `cred-cme-*`, `vera-cv-share-*`, `home-vera`, `sync-docs-intake-docs`) | 17 | 13 passed; 4 failed on WebKit stand-in limits, not the product: no `download` event (WebKit has `navigator.share`, so the transcript goes to the share path), clipboard not readable by the journey, no fake camera for `getUserMedia`, a noise PNG's JPEG at 0.85 is 345 KB (the lab's 300 KB line) |
+| `iphone-credentials-docs` | 10 | 5 passed (records saved as he leaves the app, resumed from the back-forward cache or discarded; a weak launch then Protected Identity, a custom category and the Answer Bank; uploads with storage nearly full and one left mid-way; CV read while away; an iPad turned across 1024 px); 5 failed on product outcomes (below) |
+
+**Product outcome failures (each a share sheet that never answers, as in the
+installed iPhone app once Mail takes over).** Every send path records the send
+only after `await navigator.share()` resolves: Documents > Select to send
+(`DocumentsSection.jsx:264-283`: no share_log row, the screen stays in Select;
+a second tap says "Sharing failed. Try fewer or smaller files."), a credential's
+Send sheet (`ShareModal.jsx:118-122`: no Send history), Vera's send_packet
+(`AssistantSection.jsx:750-783`: no row, the card stays on "Working…"), Home's
+Renewal packet (`App.jsx:518-532`), Peer References > Send (`App.jsx:547-572`),
+and CME Credits > Transcript PDF (`CMESection.jsx:235-249`: "Building PDF",
+disabled, until a reload). After a discard none of them is recorded either. A
+Credentials form half typed is gone after iOS discards the app (no draft kept).
+The invoice path's fix (fix/invoice-ios-record, `invoiceHandoff.js`) is the
+pattern: note the send as the file is handed over, take it back on AbortError.
+
+**Native selects in this WebKit** render 21 to 25 px tall whatever their
+padding (`useInputStyle`, no `appearance: none`). Playwright's WebKit on macOS
+draws Mac form controls even with `isMobile`; whether iOS Safari draws them as
+short is not shown here, so no bug is filed.
+
+### Result, 2026-10-02 00:45 UTC (fix/invoice-ios-record d77dbf07 merged: the owner's invoice sequence on a phone)
+
+Live evidence (an installed iPhone app on iOS 18.7, build 0051d3c): at launch
+"Membership check failed (timeout:network:membership_information_unavailable)";
+the invoice preview reserved its number ten seconds later; the invoice went out
+through the share sheet and Mail sent it; nothing recorded it, the number's
+`shared_at` is NULL and every item stayed unbilled. fix/invoice-ios-record
+(6b4cd7dd, 7e00e298, d3a25152, d77dbf07) merged into lab/on-release (783ad965).
+Its six conflicts (DutyLog, Expenses, WorkLog, invoiceRecord, the component
+harness, one test) took the fix branch's side: those files are identical on
+lab/on-release and on main 0051d3c0, which the fix is built on. No migration or
+function changed: the app was stopped (SIGINT) and started again (`npm run
+qa:lab -- --quiet`, stack kept) with no run in progress; build
+`20261001T2349-783ad965-qalab`.
+
+**The owner's sequence** (`work-invoice-mark-sent.spec.mjs`, describe "the
+owner's sequence"; PRAC-002, PRAC-016, BILL-006, SYNC-003): on a phone (390 x
+844, touch, iPhone user agent; also in WebKit with `-c
+qa-lab/e2e/webkit.config.mjs`), the iOS model of `support/ios.mjs` for the page
+leaving the front, and a network model per request (`ownerNetwork`: the
+membership endpoint held 15 s, so the app gives up at 9 s, or every API request
+cut). On Days & call (a day-rate agreement: 12 past days invoiced, a later day
+left out), Work log (the stipend account above: 28 entries) and Expenses (four
+expenses to one agency, one to another left out), each twice (the share sheet
+then answers a send late, or the cancel iOS answers after Mail sent it):
+launch with the membership check timing out (the app's own report checked);
+the endpoint answers, the invoice is built (its number reserved on the server);
+the network drops as Send hands the PDF to a share sheet that does not answer
+(the stamp request cut, `shared_at` NULL, the stamp owed on the device); the
+page leaves the front; it comes back with the network back but the membership
+check timing out again; the stamp lands, dated when the file went; the preview
+asks "Did <number> go out?"; once the resume's check has timed out, one tap on
+"Yes, it was sent". Checked: every item billed on screen within a second, no
+question or alert, the sheet closes; the late answer records nothing twice and
+takes nothing back; once the endpoint answers, the invoice row (method
+`share-confirmed`, `sent_at` the hand-off moment, the total built, exactly the
+items that went in `entry_ids`, the item left out unbilled) reaches the server
+(7 to 10 s), one invoice on the account, the stamp cleared, nothing owed or
+noted on the device, the member's answer reported; a reload keeps it and asks
+nothing.
+
+**Control.** The same six journeys with `QA_INVOICE_CONTROL_DIST` set to a QA
+build of 31466687 (lab/on-release before the merge, the same `src/` as main
+0051d3c0), served to that browser only (entry script, assets, version.json;
+service workers blocked): all failed where the owner did. No "Did it go out?"
+on return, and after a reload the items still unbilled, the reminder showing
+the invoice as not recorded, and no invoice on the Invoices tab. The stamp
+landed in the control too (the old build resends it on return), so a NULL
+`shared_at` alone does not show the stamp never landed: the old build also
+clears it (`unstamp`) when the share sheet answers AbortError, which iOS does
+after Mail sends (6b4cd7dd).
+
+**The existing hand-off journey** changed with the design: the preview now asks
+"Did <number> go out?" (was "The share sheet has not said whether ..."), and
+after a reload the Work log's reminder asks the same with "Yes, it was sent",
+which records it in one tap (method `share-confirmed`), instead of Record it
+and Mark as sent (still offered for a note known only from the server).
+
+**Runs** (parallel-safe, three workers per group):
+
+| Group | Files | Result |
+|---|---|---|
+| A | `work-invoice-mark-sent` (14 journeys) | 14 of 14 (second run; first run below) |
+| B | every `practice*`, `phone-docs-practice`, `expenses-backup` | 18 of 18 (`ios-practice` skips in Chromium) |
+| C | `settings-auth-first-answer`, `settings-auth-resume`, `offline-storage` | 5 of 5 |
+| D | the owner's six in WebKit | 6 of 6 (second run) |
+
+First run of A and D: every product check passed; three Chromium and five
+WebKit owner journeys failed only on their client_errors checks. Cause:
+report-error keeps at most 30 rows per hashed IP in 10 minutes
+(`RATE_MAX_ROWS`), every lab browser is 127.0.0.1, and four groups forcing
+reports reached it; the traces show report-error answering 429 to the reports
+the app sent. The journeys now read what the app sent to report-error (and its
+answer) as well as the row. `ios-practice` in WebKit (outside this set) failed
+three journeys on the three product bugs it records, all open before this
+merge and unrelated to invoices (a discarded app loses a running timer on a
+full device, and a half-typed Log past time; a launch whose identity requests
+time out stops on "could not be verified").
+
+`npm test`: 5,159 tests, 5,156 pass, 3 skipped, 0 failed.
+
+### Result, 2026-10-08 05:00 UTC (fix/signup f68064fb merged: the signup fixes)
+
+fix/signup merged into lab/on-release (2b815aa6; one conflict, `qa-lab/app/vite.config.mjs`:
+the lab's per-checkout `outDir` kept, fix/signup's `verifyAppSplit` added). The
+stack was restarted from this checkout with the database kept;
+`20261007120000_track_pv_public_pages` applied by hand (section "A fix branch's
+migration outside the plan"). Journeys `signup-checkout`, `signup-fixes`,
+`billing*`, `bill-admin-support-public-billing`, `pay-first-refund` (pay first and
+the refund) and `signup-replay` (main path plus redirect-early/late, weaknet,
+resume, discard, skew31, stall70) in Chromium, WebKit desktop and WebKit iPhone 15,
+parallel-safe mode.
+
+- Signup itself passes in all three: public site, sign up, the review, Checkout,
+  Checkout's cancel link, the browser's Back, an expired Checkout session, a
+  return visit, a server-expired review refused and refreshed, payment, the
+  membership active and the member app open (replay: 39 to 42 s end to end).
+- Journey updates for fix/signup's design: BILL-013's device-clock stretch now
+  expects the review fetched again on return to the front (the device clock no
+  longer refuses Continue; the server decides); `signup-fixes` runs in the engine
+  the run asks for (it forced Chromium), clears the lab address's report-error
+  event budget before its funnel (every lab browser shares one address; 30
+  events per address per 10 minutes), and in WebKit does not look for
+  `checkout_redirected` (a beacon sent as the page navigates is dropped by
+  Playwright's WebKit when the context routes requests; plain WebKit delivers it).
+- Seen, not from fix/signup: the public page asks `public-membership-offer` twice
+  per load; the consent checkbox is 12 x 12 on a phone (its label text is
+  tappable); `billing.spec`'s ZIP export has no download event in WebKit; desk
+  journeys run at the iPhone size cannot find the desk navigation.
 
 ## Seed (`seed.sql`)
 
@@ -654,6 +2405,16 @@ happens). Now:
   (`auth.jwt() ->> 'sub'`) and the functions read. The local stack trusts that
   key (`auth.signing_keys_path` in the lab workdir, so its own anon and service
   keys are signed with it too); the functions fetch it from the mock's JWKS.
+- **A replaced session object, as Clerk makes one.** Clerk builds a new Session
+  object for the same session whenever it refreshes its client (the touch it
+  sends each time the page gets focus, as an iPhone resumes an installed app).
+  `window.Clerk.replaceSessionObject()` does the same for a journey: a new
+  object with the same session id and user, a new user object, listeners told;
+  nothing changes on the mock. As with Clerk, an older object of the session
+  that is still signed in keeps minting tokens; one of a session that ended or
+  was replaced by another sign-in gets none.
+  `window.Clerk.sessionObjectsReplaced` counts them
+  (`e2e/settings-auth-resume.spec.mjs`).
 - **Issuer and ids.** Issuer `https://clerk.qa.credentialdomd.test` (a reserved
   `.test` name, shaped like production's because the continuity tables only
   accept `https` issuers without a port). Subjects are `user_qa<24 letters and
@@ -838,8 +2599,43 @@ its catalogue from the repository's own `limitedLaunchCatalog.mjs` and
 checks. API: customers (create, retrieve), products, prices (list by
 `lookup_keys`/`active`/`product`, retrieve, `expand`), checkout sessions
 (create, list, retrieve, expire), subscriptions (list, retrieve, update, cancel),
-invoices, invoice items, billing portal configuration and sessions;
-`Idempotency-Key` is honoured.
+invoices, invoice items, charges (retrieve), refunds (create, list by `charge`,
+retrieve), billing portal configuration and sessions; `Idempotency-Key` is
+honoured.
+
+**Cancel and get a refund** (`limited-refund`, since feat/pay-first-refund). A
+paid first invoice names its charge (`ch_...`, the whole payment; a scheduled
+purchase's $0 opening invoice has none), which the function reads. `POST
+/v1/refunds` refunds what is left of a charge (or `amount`), once: a second
+full refund is refused `400 charge_already_refunded`, as Stripe refuses it, and
+the function then finds the first as the outcome. Card refunds are accepted at
+once (`succeeded`). `DELETE /v1/subscriptions/:id` cancels at once and keeps the
+`prorate` and `invoice_now` it was sent and the key. Each is followed 1.5 s
+later by the event Stripe sends for it through the API (`charge.refunded`,
+`customer.subscription.deleted`), retried until accepted, never before the
+answer, so the webhook meets the refund's own settlement and its reconcile
+lease as it would live.
+
+**Refunds that do not go through** (lab code only, for `pay-first-refund`):
+
+- `POST /qa/stripe/refund-failures {charge, times?, status?, type?, code?}`
+  arms the next `times` (default 1) `POST /v1/refunds` of that charge to fail,
+  by default `500 api_error`. The answer carries `Stripe-Should-Retry: false`
+  (the SDK the functions build, `maxNetworkRetries: 1`, would otherwise retry a
+  500 once), and the same `Idempotency-Key` replays the same error, as Stripe
+  saves a key's first answer. Nothing is refunded and no event follows. Armed
+  per charge, so parallel journeys are unaffected; `GET` lists what is armed
+  with each failed call and its key, `DELETE ?charge=` disarms.
+- `POST /qa/stripe/refunds/:id/fail {reason?}`: a refund Stripe accepted
+  fails afterwards (a closed card): `failed` with `failure_reason` (default
+  `expired_or_canceled_card`), the amount back off the charge's
+  `amount_refunded`, then `charge.refund.updated` and `refund.failed` sent to
+  `limited-stripe-webhook` one after the other, retried until accepted.
+- `POST /qa/stripe/charges/:id/refund {amount?}`: the owner refunding the
+  charge in the Stripe dashboard (no key, `via: "dashboard"` in
+  `/qa/stripe/refunds`), with `charge.refunded` a moment later.
+
+`tests/qa-lab/mocks.test.mjs` drives all three with the real SDK.
 
 **Webhook timing, as Stripe does it.** When the buyer presses Pay on the
 Checkout stand-in, the browser goes back to `success_url` **at once**, and the
@@ -871,10 +2667,11 @@ order and waits (retries included); `plan` in its body changes that.
 | `GET/POST/DELETE /qa/stripe/delivery-plan` | how the hosted Pay button delivers one session's events, or the default (above) |
 | `POST /qa/stripe/checkout/:id/expire`, `POST /qa/stripe/subscriptions/:id/cancel` `{atPeriodEnd}` | with `checkout.session.expired`, `customer.subscription.updated`/`deleted` |
 | `POST /qa/stripe/events/:id/resend`, `GET /qa/stripe/deliveries` | resend an event; every delivery and its answer, with the `object` and `customer` it was about |
+| `GET /qa/stripe/refunds` (`customer`, `charge`), `GET /qa/stripe/charges` (`customer`, `invoice`), `GET /qa/stripe/subscriptions` (`customer`, `subject`) | what was refunded (newest first, with the customer, invoice and `Idempotency-Key` of each), the charges, and the subscriptions with how each was cancelled through the API (`cancellation`: `prorate`, `invoiceNow`, key) |
 | `/qa/stripe/hosted/checkout/:id`, `/qa/stripe/hosted/portal/:token` | stand-ins for Stripe's hosted pages; the QA build sends the browser to them on the app's origin (`/__qa/mock/qa/stripe/hosted/...`), and their forms and redirects are relative, so they work there and straight on the mock |
 
 The same from a terminal: `npm run qa:stripe -- sessions | complete | plan |
-expire | cancel | resend | deliveries` (`--email`, `--subject`, `--latest`,
+expire | cancel | resend | deliveries | refunds` (`--email`, `--subject`, `--latest`,
 `--now`, `--no-events`, `--endpoint`; for `complete` and `plan`: `--concurrent` /
 `--sequential`, `--order`, `--delay MS`, `--drop TYPE`, `--default`, `--clear`;
 run it without arguments for the usage).
@@ -899,6 +2696,18 @@ case).
 | `GET /qa/inbox` | the inbox page (filter by address or subject; HTML bodies in a sandboxed frame) |
 | `GET /qa/emails` (`to`, `subject`, `since`, `tag`), `GET /qa/emails/:id`, `GET /qa/emails/:id/html`, `DELETE /qa/emails` | JSON API |
 | `POST /qa/inbound` `{from, to, subject, text, html, attachments: [{filename, content_type, content (base64)}]}` | mail arriving at an app address: stored for the Receiving API, then a Svix-signed `email.received` to `email-inbound` |
+| `GET /qa/inbound/:emailId/delivery` | retained delivery identity, payload/response hashes and the bounded attempt result; no signature headers or arbitrary response bodies |
+
+The inbound simulator makes one webhook attempt. A nested non-2xx or incomplete
+transport response returns outer HTTP502 with `{emailId, delivery}` so journey
+helpers fail at the delivery, instead of waiting for an absent processing row.
+A normal HTTP200 business refusal (for example, an unregistered sender) remains
+outer200. `inboundDeliveries` in the local mock state records the attempt before
+dispatch and its completion; interrupted evidence stays pending. Known fixed
+errors are retained; unknown response bodies are represented by shape and SHA256,
+without copying token-bearing gateway output. This is diagnostic evidence, not a
+health allowance or proof of successful processing. No automatic redelivery is
+performed here; real Resend's retry schedule is a separate provider behavior.
 
 **AI** (`mocks/ai.mjs`). `POST /anthropic/v1/messages`,
 `/anthropic/v1/messages/count_tokens`,
@@ -964,6 +2773,523 @@ schema is production's):
 - The app sends no email of its own on sign-up or payment (Stripe's receipts are
   Stripe's and are not reproduced). The founding welcome goes to waitlist leads
   only, and `send-welcome` holds it for owner review (`owner_review_required`).
+
+### The iOS Simulator profile (HTTPS): `npm run qa:sim`
+
+Mobile Safari in the iOS 27 Simulator loads the plain-HTTP lab page but
+upgrades every fetch it makes to TLS on the same port. The handshake fails
+(the Simulator's WebKit log: boringssl "bad protocol version",
+`NSURLErrorDomain -1200`), for `127.0.0.1` and `localhost` alike, and the QA
+sign-in says "The QA lab mock server is not answering: Load failed". The
+profile serves the running lab over HTTPS on ports of its own, beside it:
+
+```sh
+npm run qa:lab                                     # the lab, as always (leave it running)
+npm run qa:sim -- --device <udid> --open          # the profile; trust its CA in that Simulator and open the app there
+npm run qa:sim                                     # the profile only: no Simulator is changed (it lists the booted ones)
+npm run qa:sim -- --no-build                       # reuse the last profile build (same ports, same stack signing key)
+npm run qa:sim:down                                # stop the profile; the lab keeps running
+```
+
+Then use https://127.0.0.1:54395/app/ in the Simulator. Use `127.0.0.1`, not
+`localhost`: the profile's API proxy accepts that one app origin, as qa:lab's
+does. Name each Simulator by UDID (`xcrun simctl list devices booted`), never
+`booted`: other runs may have other Simulators up. `--device` may be repeated.
+
+| Piece | Where | What |
+|---|---|---|
+| App | https://127.0.0.1:54395 | `vite preview` with the same QA config (no CORS middleware, the `/api/*` relays), over TLS, serving the profile's own build in `.generated/sim/app-dist` (`QA_LAB_APP_DIST`): the API's origin is baked into the bundle, so the profile cannot reuse `app-dist/`, and it never writes there. `/__qa/mock` goes to the running lab's mock server. |
+| API | https://127.0.0.1:54396 | a second `lib/api-proxy.mjs`, over TLS (`--tls-cert`, `--tls-key`), straight to the gateway (54321), with the same two changes: the https app origin is presented as production's, and production's Allow-Origin is renamed back to it. qa:lab's proxy (54385) is not in the path: it renames only its own app origin and is never restarted for this. |
+| Mock | the lab's (54380) | Not restarted. Its hosted Stripe stand-ins send the browser back to the http app it was started with, so the profile's app server renames that origin to its own in those answers only (`Location`, the CSP `form-action`, the page's links: `rewriteMockAnswer` in `app/vite.config.mjs`). Pay on the stand-in returns to the https app. |
+
+**Certificates** (`lib/sim-tls.mjs`). One root CA per machine, and one leaf
+for `127.0.0.1`, `::1` and `localhost`, made with openssl (Homebrew's OpenSSL 3
+when present; macOS's own is LibreSSL) in
+`~/Library/Application Support/CredentialDOMD/qa-lab-ca/` (`QA_LAB_CA_DIR`
+overrides it): outside the repository, folder 0700, keys 0600, never printed
+(node reads a key only to check it matches its certificate). The CA carries
+critical name constraints (`127.0.0.0/8`, `::1`, `localhost`), so even a leaked
+CA key cannot vouch for any other host (a test signs a leaf for another host
+and `openssl verify` refuses it). The leaf lasts 180 days, under Apple's limits
+for TLS server certificates, and is made again within 30 days of its end, when
+the names change, or when the CA is made again. The CA is trusted only in the
+Simulators named with `--device` (`xcrun simctl keychain <udid> add-root-cert
+ca.pem`, the certificate, never a key), never in this Mac's keychain. After a
+Simulator is erased, run with `--device` again; a new CA (every 10 years, or
+after its folder is deleted) needs the same.
+
+**Running and stopping.** `qa:sim` refuses to start without this checkout's
+running lab (`.generated/lab.json`, its mock answering, the stack's anon key),
+picks the first free ports from 54395 and 54396 (never the lab's), builds,
+starts both servers detached and checks, over TLS trusting only the lab CA:
+`/app/` answers, `/__qa/mock/qa/users` answers through the app server, and a
+function preflight through the profile's API proxy comes back with the https
+app origin in `Access-Control-Allow-Origin`. `.generated/sim/sim.json` records
+the two process ids; `qa:sim:down` stops only those, checked by command line
+and port (the profile's `vite preview` has the same command line as the lab's
+but for `--port`). Logs: `.generated/logs/sim-app.log`, `sim-api.log`.
+
+**Limits.**
+
+- The profile serves the build it made when it started. After the lab is
+  restarted on a new build (a merge), run `npm run qa:sim:down && npm run qa:sim`.
+  If the lab moves to other ports, do the same.
+- The functions' environment still names the http app
+  (`FORWARDING_CONFIRM_BASE`), so a forwarding confirmation link in a captured
+  email opens the http app, which Mobile Safari cannot use; open it on the Mac.
+- `localhost` loads the page (the leaf covers it) but its API calls are refused
+  by the functions' CORS, as any foreign origin's are.
+
+### Result, 2026-10-01 23:10 UTC (iOS 27 Simulator, iPhone 18 Pro)
+
+- `xcrun simctl openurl <udid> https://127.0.0.1:54395/app/`: Mobile Safari
+  shows the QA sign-in with the lab's test physicians listed, where the http
+  lab showed "Load failed". The Simulator's WebKit log for the load: TLS 1.3
+  handshakes to 54395 completed, trustd's evaluations completed, no -1200 and
+  no handshake failure.
+- The API path, without touching the Simulator (sign-in needs a tap): headless
+  Chrome trusting only the profile leaf's key
+  (`--ignore-certificate-errors-spki-list`) created a test physician, signed in
+  on the https app, reached the pending membership gate (134 calls through
+  https://127.0.0.1:54396, none failed: `initialize-clerk-profile`, REST
+  reads, `ai-proxy`), continued to the Checkout stand-in on the https origin,
+  paid, came back to `https://127.0.0.1:54395/app/?billing=complete`, and the
+  membership turned active. Nothing left this machine. (A scratch script, not
+  committed.)
+- The lab was untouched: its mock, API proxy and app server kept their
+  processes and ports, `app-dist/` kept its build, and
+  `curl http://127.0.0.1:54390/__qa/mock/qa/users` answered 200 throughout.
+
+### Result, 2026-10-02 10:00 UTC (release/goal2 940ca370 merged: iPhone invoices, links, sent formatting)
+
+release/goal2 merged into lab/on-release without a conflict (7ff99940). Its
+migrations were applied by hand as in "A fix branch's migration outside the
+plan": `20261002030000_invoice_guards` and
+`20261002040000_invoice_emailed_stamp_on_record` (0 rewrites each, no job
+switched on); `20261001100000_support_receipt_get_help` refuses, as it is
+written to, because the support foundation (20260918090000) is in neither
+production nor the lab. Functions changed, so with no run in progress the lab
+was stopped (SIGINT, `npm run qa:down`, data kept) and started (`npm run
+qa:lab -- --quiet`); build `20261002T0758-c5e753d9-qalab`. The Simulator
+profile was rebuilt (`20261002T0809-c5e753d9-qalab`).
+
+New: `invoice-email-it.spec.mjs` (PRAC-004, PRAC-002): "Email it for me" on
+Days & call, Work log and Expenses on a phone, checked in the mock Resend
+capture (one email, subject with the number, text with paragraphs and an HTML
+part, copy and replies to the physician, "Invoice <number> from
+<physician>.pdf", the Expenses receipt sent by what it is) and the database
+(one invoice, method `emailed`, every previewed item on it, one confirmed
+send, the Emailed stamp). Passed in Chromium and in WebKit as the iPhone app.
+
+Journeys updated for release/goal2's deliberate changes: the More item "Get
+help", outgoing file names ("CME Transcript, Texas, <name>.pdf"), the reminder
+email's "More > Profile & settings", the owed stamps stored as `{ v, list }`,
+the unstamp after a record that waits for the record (seen 1 to 3 s later), a
+Send reply button disabled because its box is empty, and the restored Log past
+time form cancelled before the next step.
+
+Product outcome failures seen: Documents shows "Fetching the file from your
+account." indefinitely for a stored file after a reload (storage serves the
+bytes; documents, phone-docs-practice); a Credentials form half typed is not
+offered again after iOS discards the app (CRED-021, also on the build before);
+Setup > Expiration dates typing a year in desktop Safari (SETTINGS-010, also
+on the build before). Desk-only journeys cannot drive the phone layout
+(`goTab` needs the desk navigation), so they ran in WebKit at the desk
+(`QA_WEBKIT_DESK=1`).
+
+### Result, 2026-10-02 11:30 UTC (release/goal2 cec586d1 merged: stored file bytes, form drafts, Setup dates)
+
+The three product failures of the run above, each found to its mechanism
+first, fixed on release/goal2 (de2c1dd9, 361660ef, 4d692c7c, 71f2621e,
+cec586d1) and merged here (92f29681, f790951a); build
+`20261002T1113-f790951a-qalab`. Functions did not change: the lab was
+restarted for the app build only.
+
+- **Documents after a reload (DOCS-008, DOCS-009).** Reproduced with a probe
+  that held Storage's answer until the membership answer's second load had
+  read the documents table: stuck on "Fetching the file from your account."
+  every time on the build before. The download a screen asked for was tied to
+  the load current when it asked, and was thrown away once the second load
+  began; nothing asked again. New journey `documents-after-reload.spec.mjs`
+  (DOCS-008) is that probe with checks: passes in Chromium, in WebKit at the
+  desk and as the installed iPhone app.
+- **CRED-021.** Health Records, Screenings and CME have forms of their own,
+  which never kept a draft (CrudSection's did). `iphone-credentials-docs`
+  passes in WebKit, the discard included.
+- **SETTINGS-010.** This WebKit's date field takes digits into the month part
+  only and never moves on (a plain HTML date input too), so the journey's
+  digits reached no date; typed with slashes, the year's last digit crashed the
+  page on the build before (the row dropped while the field handled the
+  keystroke). The journey now types slashes in WebKit and catches a crash:
+  passes in WebKit at the desk and in Chromium.
+
+Two lab findings on the first merge were fixed before this build: a file
+read as a stream had no type, so a renamed copy was stored twice (DOCS-001),
+and a record closed while its file downloaded threw the download away
+(SYNC-013 on a slow second device).
+
+| Run | Journeys | Result |
+|---|---|---|
+| Chromium: documents, documents-after-reload, phone-docs-practice (375, 390), sync-docs-intake-docs, sync-docs-intake-sync-devices, vera-cv-share-cv, settings-auth-setup-records, the probe | 16 | all pass (29 checklist ids pass, SHARE-005 by design as before) |
+| WebKit desk and iPhone: documents, documents-after-reload (desk and iPhone), iphone-credentials-docs, settings-auth-setup-records, sync-docs-intake-sync-devices | 18 | all pass |
+| WebKit iPhone: iphone-owner-conditions, phone-docs-practice | 12 | owner conditions all pass (IOS-OFFLINE-1 blocked as before); phone-docs-practice fails only the 32 px audit on native selects, which this WebKit draws 21 to 25 px tall (see the WebKit result above) |
+
+### Result, 2026-10-02 13:10 UTC (release/goal2 91625bbd merged: review fixes, the full regression)
+
+release/goal2 91625bbd merged without a conflict (413417e3). No migration
+or function changed: with no run in progress the app was stopped (SIGINT)
+and started (`npm run qa:lab -- --quiet`, stack and database kept); build
+`20261002T1157-413417e3-qalab`. The Simulator profile was rebuilt
+(`20261002T1307-413417e3-qalab`) and opened in ACECF81B: the QA sign-in
+with the lab's test physicians listed. `npm test` on 91625bbd: 5,559 tests,
+5,555 pass, 4 skipped, 0 failed.
+
+Two journeys changed, each for something the release did on purpose:
+
+- `settings-auth-access` "account setup failure screen" (AUTH-011): 9580f781
+  opens the account's own device copy, read-only, with a notice, when the
+  identity check never connects, and asks again on its own; it used to stop
+  on "could not be verified ... Reload". The connection-failure stretch now
+  checks that: the notice with its support reference, the license from the
+  device copy on the read-only Credentials view, the same after a reload, the
+  report "Account load used this device's copy, read-only (REF)." and no
+  "stopped", and, once unblocked, the account back with no tap. The old stop
+  screen is checked with a server answer instead (409 `identity_conflict`):
+  Reload, the report "Account load stopped (REF)." (a reference may hold `_`:
+  `ID-INIT-IDENTITY_CONFLICT-H409`), one tap back to the license.
+- `vera-cv-share-send` (SHARE-004): the share stand-in records a share once it
+  has read each file's first bytes; a fetched copy is now a Blob read
+  asynchronously (24ac86c7), so the record lands a moment after "Sent". The
+  two packet checks wait for it (up to 10 s) instead of reading once; the
+  second also checks each file starts `%PDF-`. Probe: the three files were
+  handed over, typed `application/pdf`, read in 0 to 14 ms.
+
+| Run (parallel-safe) | Journeys | Result |
+|---|---|---|
+| Chromium, every journey | 182 | 172 pass, 7 skip, 3 fail; reruns: `phone-docs-practice` 375 (founding places held by the concurrent runs) passes, `settings-auth-access` and `vera-cv-share-send` pass after the changes above (7 of 7) |
+| WebKit iPhone: work-invoice-mark-sent, invoice-email-it, ios-practice, iphone-owner-conditions, iphone-credentials-docs, phone-docs-practice | 46 | 43 pass; the owner's sequence Work log (founding places, lab) passes on rerun (6 of 6); phone-docs-practice 375 and 390 fail only the 32 px audit on native selects (this WebKit draws them 25 px tall, as before) |
+| WebKit desk: documents*, settings-auth-*, support, sync-docs-intake-docs, vera-cv-share-*, offline-storage | 30 | 23 pass; settings-auth-setup-records failed once (the Setup tap left More on screen) and passes on rerun; 6 fail on WebKit lab limits as before: offline launches with service workers blocked (offline-storage, 3), Notification permission (SETTINGS-014), no fake camera (DOCS-005), a noise PNG's JPEG at 345 KB (DOCS-010) |
+
+Against the 940ca370 run: DOCS-008 and DOCS-009 (Documents after a reload),
+CRED-021 (the discarded form, WebKit), the Log past time discard, Get help
+on return (SUPPORT-001/002) and SETTINGS-010 in desktop Safari all pass now.
+
+Seen on the way, for the app: in the weak-signal state Credentials carries
+two notices that disagree ("Trying again on its own" over LaunchAccessNotice's
+"Showing this device's copy. Reload to reconnect your account", whose comment
+says nothing reloads on its own); the account did come back with no tap. And
+the device copy is written 300 ms after a change (AppContext save timer,
+52bf75de): a reload at once after adding a license read a copy without it
+(IndexedDB read before and after), so that launch on a weak signal showed
+"No saved records in this section" until the check answered. The record was
+on the server throughout.
+
+### Result, 2026-10-02 16:20 UTC (release/goal3 ab5224b3 merged: PA and NP members, the weak-signal fixes)
+
+release/goal3 ab5224b3 merged (513b4cea). Every conflict came from goal2
+reaching `main` as a squash (a6a00f5b) while this branch carried the
+release/goal2 history; the lab's product tree was goal2's, so every path
+outside the lab's own files (`qa-lab/`, `tests/qa-lab/`, `.gitignore`,
+`DEPLOY-PLAN.md`, `package.json`) took release/goal3's version, checked equal
+to release/goal3 after the merge. No migration. Functions changed
+(send-reminders, public-record, email-inbound, the credential portal,
+`_shared/requestPacket.ts`), so with no run in progress the lab was stopped
+(`npm run qa:sim:down`, `npm run qa:down`, data kept) and started (`npm run
+qa:lab -- --quiet`); build `20261002T1503-513b4cea-qalab`, every function
+served from this checkout. The Simulator profile was rebuilt
+(`20261002T1512-513b4cea-qalab`) and opened in ACECF81B (iOS 26, iPhone 16
+Pro): the QA sign-in over HTTPS with the lab's test physicians listed (a
+screenshot, no tap). `npm test` on ab5224b3: 5,858 tests, 5,854 pass, 4
+skipped, 0 failed.
+
+New: `profession-pa-np.spec.mjs`, the feat/np-pa lab journeys
+(`qa-evidence/np-pa-lab-20261002/harness`, 21ef10b1) brought in as lab specs,
+plus:
+
+- **A blank PA member on Home** (the paying PA's state: signed up on an
+  iPhone, profession blank, no records): the Get Started card asks "Which
+  license do you hold?" (MD, DO, PA, NP); one tap on PA saves
+  `profiles.degree_type` and opens Add with the PA list; her WI PA licence and
+  NCCPA certificate with their PDFs; a reload asks nothing again.
+- **email-inbound with the PA rules**: a forwarded request for "your Wisconsin
+  PA license", "your NCCPA certificate" and "your collaborative practice
+  agreement" (model reading scripted by quote) is filed as `state_license`
+  found with her WI licence PDF (not Pennsylvania), `board_cert` found with the
+  NCCPA PDF, `practice_agreement` missing; one receipt note to the requester;
+  Home's banner shows it.
+- **send-reminders for a PA and an NP** (the member's own run, captured by the
+  mock Resend): the licence due in 45 days carries "Board:" and the PA or
+  nursing board's page (`https://dsps.wi.gov/...physician-assistant-pa/`,
+  `https://idfpr.illinois.gov/profs/nursing.html`), never the medical board's
+  portal or the physician fee guide.
+- **the credential portal**: a private document invitation from a PA reads "A
+  physician assistant has invited you ..." (asked as CredentialPortalModal
+  would, from the page with her session; no screen mounts that modal).
+- public-record: `normalize.ts` builds the envelope in the journey from
+  synthetic raw NPPES and Medicare records (the registers are not mocked, so
+  the function's own fetches are not made here).
+
+Journeys changed for what the release did on purpose:
+
+- **The one-tap profession picker (35187499).** A member with no profession
+  is asked the licence before Vera answers or the CV reader reads. Every lab
+  physician is blank at signup, so the Vera and CV journeys now start from a
+  member who chose MD: `newMember`, `newPhoneMember` and `memberWithPlace`
+  take `{ profession }`, saved through PostgREST as the member
+  (`saveProfession`, what `updateSettings({ degreeType })` writes) before the
+  app opens again (home-vera, home-notify-nav, ops-app AI metering,
+  cred-caselogs-references, sync-docs-intake-sync-data, vera-cv-share-cv,
+  vera-cv-share-vera-chat, vera-cv-share-vera-records, iphone-credentials-docs
+  Vera and CV import). Get Started on an empty account (phone-home,
+  signup-checkout, HOME-002) taps MD on the card's picker, checks it is saved,
+  then the Add form.
+- **A blank member's first licence tab is "State Licenses" (5b2cc728)**:
+  phone-credentials CRED-026 taps that tab.
+- **Weak signal, one message (39aa743b)**: settings-auth-access AUTH-011
+  reloads at once after adding the license (the device copy now keeps it),
+  reads the new notice ("too weak to reach your account ... nothing to tap"),
+  and checks Credentials has no "Reload to reconnect", no Reload button, no
+  membership-expiry line and no "No saved records". sync-docs-intake-sync-load
+  SYNC-004 (the whole REST host unreachable) accepts this device's copy with
+  that notice, and checks the copy lists the publication.
+
+| Run (parallel-safe) | Journeys | Result |
+|---|---|---|
+| Chromium, every journey | 186 | 158 pass, 7 skip, 21 fail: 16 on the deliberate changes above, 3 ops-app on "Founding checkout is temporarily unavailable" (two runs at once, lab), 2 blank PA (the portal bug below); the 12 changed files rerun: 38 of 38 pass |
+| WebKit iPhone: work-invoice-mark-sent, invoice-email-it, ios-practice, iphone-owner-conditions, iphone-credentials-docs, phone-docs-practice, profession-pa-np | 50 | 45 pass; iphone-credentials-docs Vera and CV import (the picker) pass on rerun (2 of 2); phone-docs-practice 375 and 390 fail only the 32 px audit on native selects (25 px in this WebKit, as before); blank PA fails only the portal check below |
+| WebKit desk: documents*, settings-auth-*, support, sync-docs-intake-docs, vera-cv-share-* | 27 | 25 pass; 2 WebKit lab limits as before: Notification permission (SETTINGS-014), a noise PNG's JPEG at 345 KB (DOCS-010) |
+
+Product failure, recorded with `qa.bug` (NPPA-PORTAL): administrator access
+never shares a PA's or NP's state licence. `credential_portal_license_ok`
+(production's, `20260925040000_credential_portal_admin_access.sql:113`)
+matches physician licence types only: State Physician Assistant License, APRN
+License (NP), RN License, Prescriptive Authority and Practice Agreement are
+false (NCCPA and AANPCB certifications are true through "board"/"certif"), so
+`credential_portal_records` leaves those rows and their files out of standing
+grants and one-time invitations (409 `document_not_shareable`), while
+release/goal3 tells a PA or NP owner the Licenses section holds "Licenses, DEA
+and state controlled substance, certifications". Still open from feat/np-pa
+(low): the WI PA compliance card reads 12/30 with a check mark and never says
+the NCCPA certification is what meets it.
+
+The goal2 lab findings, checked: after a weak-signal launch Credentials shows
+the one notice (no "Reload to reconnect your account" under it), and a
+license added and reloaded at once is in the device copy on that launch.
+
+### Result, 2026-10-02 17:30 UTC (release/goal3 a6baccfa merged: administrator access shares PA and NP licences)
+
+release/goal3 a6baccfa merged (daf20962, no conflict); every path outside the
+lab's own files equals release/goal3. No `DEPLOY-PLAN.md`, so the new
+migration `20261002060000_credential_portal_app_licenses` was applied by hand
+as under "A fix branch's migration outside the plan" (0 rewrites, no job
+switched on; reapply after `--fresh` or `qa:down -- --wipe`). Probe before:
+`credential_portal_license_ok('State Physician Assistant License', ..)` and
+`('APRN License (NP)', ..)` false, `credential_portal_license_types()`
+missing; after: both true, `State Medical License` still true, a driver's
+licence under Certification and "Travel papers" under a PA licence still
+false; both functions execute for `service_role` only. The app (the
+certification line on the PA card) and `_shared/credentialPortalView.mjs`
+changed, so with no run in progress the Simulator profile and the lab were
+stopped (`qa:sim:down`, `qa:down`, data kept) and `qa:lab -- --quiet`
+started again on this checkout.
+
+Journey changes (`profession-pa-np.spec.mjs`):
+
+- **NPPA-ADMIN-ACCESS (new, blank PA)**: More > Administrator access, Licenses
+  only: the row reads "2 records, 2 files" with the PA hint ("PA licenses,
+  prescriptive authority, practice agreements, ... NCCPA certification");
+  "Preview as administrator" lists her WI PA licence and NCCPA certificate with
+  their PDFs; Send access link makes a standing grant
+  (`scope.sections = ["licenses"]`); the administrator, verified by emailed
+  code on the private page, sees both records and both PDFs, no "Dr.".
+- **NPPA-COMPLIANCE**: the WI PA card must say the NCCPA certification meets
+  the 30 hours (a check now, not only a recorded bug); it reads "Met by your
+  current NCCPA certification, which Wisconsin accepts in place of the logged
+  hours".
+
+| Run (parallel-safe) | Journeys | Result |
+|---|---|---|
+| Chromium: profession-pa-np, vera-cv-share-portal, vera-cv-share-send, vera-cv-share-cv, bill-admin-support-public-admin, bill-admin-support-public-site | 17 | 17 pass; 42 features pass, 0 fail, SHARE-005 by design as before; 0 bugs |
+| WebKit iPhone: profession-pa-np, iphone-credentials-docs, vera-cv-share-portal, vera-cv-share-send | 16 | 14 pass; 35 features pass, 0 fail; the two vera-cv-share desk journeys stop in `goTab` (desk navigation, no phone path: a lab limit, as on 2026-10-02 11:30) |
+| WebKit desk: vera-cv-share-portal, vera-cv-share-send | 2 | 2 pass (SHARE-001 to 004, 006) |
+
+NPPA-PORTAL is fixed: the blank PA's State Physician Assistant License is
+sent privately (credential-portal 201, was 409 `document_not_shareable`),
+`credential_portal_license_ok` is true for State Physician Assistant License,
+APRN License (NP), RN License, Prescriptive Authority and Practice Agreement,
+and the invitation reads "A physician assistant has invited you ...". The WI
+PA card finding (feat/np-pa, low) is fixed too. The MD administrator journey
+(SHARE-006, SHARE-001) still shares the MD's State Medical License and keeps
+Protected Identity out. `tests/qa-lab` and `tests/credential-portal`: 232 of
+232.
+
+### Result, 2026-10-02 18:50 UTC (release/goal3 b6a38878 merged: the 2026-09-25 name check kept, type patterns read as the app does)
+
+release/goal3 b6a38878 merged (0918823a, no conflict; three commits over
+a6baccfa: b6a38878, 009f6428, 3ada4e36); every path outside the lab's own
+files equals release/goal3. The edited
+`20261002060000_credential_portal_app_licenses` replaced the lab's earlier
+version as under "A fix branch's migration outside the plan": its rollback
+first (`docs/rollback/...rollback.sql`: `credential_portal_license_types()`
+dropped, a PA licence false), then the new file (0 rewrites each, no job
+switched on). The lab database is ICU (`en_US.UTF-8`, provider `i`), as
+production. The live body now equals the file's, byte for byte.
+
+| Probe (`credential_portal_license_ok`) | a6baccfa version | b6a38878 version |
+|---|---|---|
+| PA licence, APRN License (NP), RN License, Prescriptive Authority, Practice Agreement, State Medical License, NCCPA | true | true |
+| Certification "Driver's license"; PA licence "Travel papers" | false | false |
+| RN License (Multistate) "Travel nurse compact license"; Practice Agreement "Birth center collaborative agreement" | true | false (the accepted limitation: renaming shares it) |
+| `E'APRN\nlicense'`, `E'RN\nlicense'` | true | false |
+| `chr(31)||'RN License'` | true | false |
+| `chr(65279)||'RN License'` | false | true |
+| EXECUTE | postgres, service_role | postgres, service_role (anon and authenticated false) |
+
+`_shared/credentialPortalView.mjs` changed, so with no run in progress the
+Simulator profile and the lab were stopped (`qa:sim:down`, `qa:down`, data
+kept) and `qa:lab -- --quiet` started again (build
+`20261002T1835-0918823a-qalab`; edge runtime 18:35:38, its functions copy
+equal to the checkout's). The Simulator profile was not restarted.
+
+| Run (parallel-safe) | Journeys | Result |
+|---|---|---|
+| Chromium: profession-pa-np, vera-cv-share-portal, vera-cv-share-send, vera-cv-share-cv, bill-admin-support-public-admin, bill-admin-support-public-site | 17 | 17 pass; 42 features pass, 0 fail, SHARE-005 by design as before; 0 bugs |
+| WebKit iPhone: profession-pa-np, iphone-credentials-docs, vera-cv-share-portal, vera-cv-share-send | 16 | 14 pass; 35 features pass, 0 fail; the two vera-cv-share desk journeys stop in `goTab` (desk navigation, no phone path: a lab limit, as at 17:30) |
+| WebKit desk: vera-cv-share-portal, vera-cv-share-send | 2 | 2 pass (SHARE-001 to 004, 006) |
+
+NPPA-ADMIN-ACCESS passes in Chromium and WebKit iPhone: "2 records, 2
+files" with the PA hint, the preview lists the WI PA licence and NCCPA
+certificate with their PDFs, a standing grant (`scope.sections =
+["licenses"]`), and the administrator, verified by emailed code, sees both
+records and both PDFs, no "Dr.". NPPA-PORTAL: both sent privately
+(credential-portal 201), the invitation reads "A physician assistant has
+invited you ...". The MD journey (SHARE-006, SHARE-001) shares the MD's
+licence and file, never Protected Identity; a blank owner's Licenses hint
+now reads "Medical, PA, APRN and RN licenses, prescriptive authority,
+practice agreements, ..." (009f6428). Lab health: the mock Stripe's
+`billing_reconciliation_pending` 503s (retried by design), one
+`storage_full` client report (iphone-credentials-docs' storage-nearly-full
+journey), no runaway PostgREST session. `tests/credential-portal`,
+`tests/profession` and `tests/qa-lab` on 0918823a: 512 of 512.
+
+### Result, 2026-10-02 22:25 UTC (release/goal4 7ae24bea merged: one account load per launch, PA/NP rule data out of the entry bundle, page_discarded as info)
+
+release/goal4 7ae24bea merged (21549251). Every conflict came from goal3
+reaching release/goal4 as a squash (955b19a2) while this branch carried the
+release/goal3 history; every path outside the lab's own files took
+release/goal4's version and equals it after the merge. No `DEPLOY-PLAN.md`
+entry, so `20261002080000_client_events_info` was applied by hand as under
+"A fix branch's migration outside the plan" (0 rewrites, no job switched on;
+reapply after `--fresh` or `qa:down -- --wipe`): `client_errors_kind_check`
+takes `info`, `admin_attention_snapshot` counts faults only (EXECUTE: postgres
+only, as the file). report-error and the app changed, so with no run in
+progress the Simulator profile and the lab were stopped (`qa:sim:down`,
+`qa:down`, data kept) and `qa:lab -- --quiet` started again; build
+`20261002T2122-21549251-qalab`. Probe: report-error with `kind: "info"`
+answers 200 and stores an `info` row. `npm test` on 7ae24bea: 5,942 tests,
+5,937 pass, 4 skipped, 1 failed (`tests/ticket-fix/session-signal.test.mjs`,
+timing, while the lab build ran; 3 of 3 alone).
+
+Lab fix: the QA build failed ("precache verify: dist/sw.js still contains
+the rule chunk markers"). `qa-lab/app/vite.config.mjs` stamps `sw.js` itself
+and now also writes the PA/NP rule chunk list (`stampAppRules`,
+`computeAppRulesUrls`), as `vite.config.js` does since e1f4b4c9.
+
+Journeys changed for what the release did on purpose (e1f4b4c9: the
+membership answer reads the account again only when the load owes it):
+
+- `documents-after-reload` (DOCS-008) waited for a second documents read
+  that no longer comes, held the download 40 s and the card read "could not
+  be fetched ... Trying again". A plain reload now checks one documents read;
+  the held stretch fails the answer's deletion-stamp read
+  (`profiles?select=deleted_at,data_deleted_at`, `deletionSinceLoad`
+  "unread") so the owed second load runs, and holds the download past it.
+- `reconcile-load` (CRED-023, CRED-001) waited for the reconcile load's
+  ledger read. New stretch: a plain reopen sends one ledger read and one
+  licenses read. The race stretches fail the stamp read the same way, so the
+  owed second load's ledger read is held and the save lands inside it.
+
+| Run (parallel-safe) | Journeys | Result |
+|---|---|---|
+| Chromium, every journey | 186 | 177 pass, 7 skip, 2 fail: DOCS-008 and reconcile-load on the change above; both changed files rerun: 2 of 2 pass |
+| WebKit iPhone: work-invoice-mark-sent, invoice-email-it, ios-practice, iphone-owner-conditions, iphone-credentials-docs, phone-docs-practice, profession-pa-np | 50 | 48 pass; phone-docs-practice 375 and 390 fail only the 32 px audit on native selects (25 px in this WebKit, as before); IOS-OFFLINE-1 blocked as before; every NPPA feature passes |
+| WebKit desk: documents*, settings-auth-*, offline-storage | 18 | 13 pass; settings-auth-setup failed once (a 30 s wait in the first stretch, no check failed) and passes on rerun; 4 fail on WebKit lab limits as before: offline launches with service workers blocked (offline-storage, 3), Notification permission (SETTINGS-014); DOCS-008 with the new checks passes |
+
+Table reads per launch (`qa-lab/.generated/measure-goal4.mjs`, gitignored:
+one active MD member with two licences; a646c8b0 built and served on its own
+port and API proxy, the same database; the sign-in launch and three reopens):
+
+| Build | Chromium desk | WebKit iPhone 15 |
+|---|---|---|
+| before (a646c8b0) | 77 table GETs per launch, `licenses` read twice (about 130 to 450 ms apart), profiles 4, initialize-clerk-profile twice | 77, the same |
+| after (21549251) | 42 per launch (40 tables once, profiles 3), `licenses` once, initialize-clerk-profile once | 42, the same |
+
+No MD launch requested `appRulesData-*.js`. A page discarded by the browser
+reached `client_errors` as kind `info` during the runs.
+
+PA launch offline with the cached rule chunk (a PA member with a WI State
+Physician Assistant License and an NCCPA certificate, service worker
+allowed): the online launch fetched `appRulesData-CCPwlP85.js` once and the
+worker cached it in the build's cache, with the `__app-rules-wanted` flag.
+Offline launch: the chunk answered 200 from the service worker, no
+`app_rules` notice, Home showed "Wisconsin physician assistant license, Total
+logged: 0/30h, met by NCCPA certification". Must-fail control: the chunk
+deleted from Cache Storage, the same offline launch stops on "The PA and NP
+rules download once, the first time they are needed, and this device could
+not get them ... Try again". Chromium with `setOffline`; WebKit iPhone with
+the app server and API proxy stopped (connection refused), because this
+WebKit refuses any navigation once `setOffline` is on with a worker ("WebKit
+encountered an internal error"). In WebKit with the server down the member
+app took 7.3 s to show (navigator.onLine stays true, the membership check
+times out); Chromium offline 0.06 s.
+
+### Result, 2026-10-02 23:50 UTC (release/goal5 aa12a8c1 merged: the share question comes into view with its buttons, the badge on one line, the home-screen icon)
+
+release/goal5 aa12a8c1 merged (29600abc) without a conflict; every path
+outside the lab's own files equals release/goal5. goal5 is goal4 7ae24bea
+(squashed as 1afa4e5d) plus the home-screen icon (a49c9cab) and aa12a8c1. No
+migration or function changed, so with no run in progress the app was
+stopped (SIGINT) and started again (`npm run qa:lab -- --quiet`, stack and
+database kept); build `20261002T2301-29600abc-qalab`. `npm test` on the
+merge plus the journey changes below: 5,964 tests, 5,961 pass, 3 skipped, 0
+failed.
+
+Journey changes:
+
+- `work-invoice-mark-sent`: `askInView` measures "Did <number> go out?" as
+  the member sees it, nothing scrolled by the journey: the question and both
+  buttons wholly inside the viewport and every scroller that holds them, and
+  the point at the centre of each is that element (no top bar, tab bar or
+  dialog edge over it); polled 3 s; then a viewport-only screenshot
+  (`e2e/shots/in_view_<browser>_<screen>_<late>_390x844.png`). Checked in the
+  owner's six (the preview or sheet) and on the Work log's reminder after the
+  reload (phone and desk).
+- `phone-docs-practice` (PRAC-015): "invoice card" is now the card (its own
+  onClick), not `getByText(/^INV-/)`. Since aa12a8c1 the number is a span of
+  its own (120 x 21); at goal4 the locator measured the number row, 43 px
+  only because the badge split onto a second line, the defect aa12a8c1 fixes.
+
+| Run (parallel-safe) | Journeys | Result |
+|---|---|---|
+| WebKit iPhone: work-invoice-mark-sent, invoice-email-it, ios-practice, iphone-owner-conditions, profession-pa-np | 38 | 38 pass (67 features; IOS-OFFLINE-1 blocked as before) |
+| Chromium: every file matching `invoice` or `practice` | 39 | 30 pass, 7 skip (`ios-practice`), 2 fail: phone-docs-practice 375 and 390 on the card locator above; rerun with the fix: 2 of 2 |
+| WebKit, work-invoice-mark-sent with the in-view checks | 14 | 14 pass; the owner's six again after the control: 6 of 6 |
+| Chromium, work-invoice-mark-sent with the in-view checks, phone-docs-practice | 16 | 16 pass |
+
+In view at 390 x 844 (WebKit and Chromium alike, first look, 0.0 s): in the
+Days & call, Work log and Expenses previews the question at 587 to 608, Yes
+716 to 757, No 765 to 803, inside the dialog's scroller (82 to 827). The
+Work log reminder after the reload: buttons at 618 to 650 (WebKit) and 653
+to 685 (Chromium) of 844, clear of both bars; desk 1280 x 900 in view.
+
+**Control** (must fail): the owner's six in WebKit with
+`QA_INVOICE_CONTROL_DIST` set to a QA build of 29600abc with `src/` and
+`public/` of 21549251 (goal4, before aa12a8c1): Days & call and Expenses fail
+only the in-view check (Days: No at 821 to 859, past the dialog's 827;
+Expenses: the question at 824 and both buttons below the screen, under the
+dialog edge, after 3 s); the Work log's two pass in the control, its preview
+being short enough here. So the gate discriminates on Days & call and
+Expenses; the Work log preview is a must-pass case only.
 
 ## The journeys (step 3): the app used like a physician
 
@@ -1109,6 +3435,13 @@ Output (all under the gitignored `qa-lab/.generated/`):
   included), `checkoutAttempts(sessionId)`, and `holdReconcileLease(profileId)` /
   `releaseReconcileLease` (take the member's reconcile lease in the local
   database, as a concurrent event would, so the next event is refused busy).
+  Pay first (feat/pay-first-refund) opens a new account's offer review by
+  itself: `openOfferReview(page)` waits for it (Complete payment only when it
+  has not come; Review ... offer for an account that is not new) and
+  `payForMembership` goes through it; `PAY_FIRST_LINE` is the gate's line.
+  Cancel and get a refund: `limitedRefundAs(user, body)` (the function as the
+  member, with their own session token) and `stripeMoneyFor(customerId)` (the
+  mock Stripe's refunds, charges and subscriptions of a customer).
 - Each area's journeys have their own shared steps in
   `e2e/support/<area>-helpers.mjs` (credentials, practice, home and
   notifications, settings and sign-in, sync/documents/intake,
@@ -1504,6 +3837,16 @@ Phone layouts (375 x 812 and 390 x 844; none fixed on any branch except HOME-006
 | low | ADMIN-008 | Admin > Traffic history: Refresh is 28 px |
 | low | ADMIN-004 | Admin > Control history and Emails: bare 20 px buttons and 23 px disclosures |
 
+**Retention correction to the historical OPS-002 verdict below:** the date-only
+dispatcher was reachable through legacy or direct profile writes, and a due date
+was not sufficient evidence of an explicit deletion request. The current
+[retention change and local validation plan](../docs/CANCELLATION-RETENTION-CUTOVER.md)
+retires automatic deletion and rejects destructive hook calls before any
+footprint work. OPS-002 now checks retained records and file bytes, plus a
+separate explicit owner deletion control. The historical run results below are
+preserved as observations of their recorded source; they do not certify this
+new behavior.
+
 **Filed, then verified not to be product bugs** (kept here so they are not
 filed again). The journeys record the first five as `by_design`, with the reason
 in the evidence; the last three stay `fail`, because the checklist's expectation
@@ -1675,7 +4018,10 @@ sixth run.
   (`phone-helpers.mjs`); `waitForMemberApp` now does the same, at most twice,
   for those references only (`TRANSIENT_IDENTITY`; never for a closed account's
   ACCOUNT_UNAVAILABLE-H409), and prints each retry on the run's output; the
-  app's own report of the stop stays in `labHealth.clientErrors`.
+  app's own report of the stop stays in `labHealth.clientErrors`. Since
+  2026-10-01 `newMember`'s first landing does the same (`landingAfterStalls`:
+  `landing(page, { stalls: true })` answers `stalled` on those references
+  instead of waiting 120 s for `timeout`).
   Not filed as a product bug: these answers came from the local stack under
   three browsers' load (the edge runtime and its gateway), and the function does
   not log what it caught.
@@ -1721,8 +4067,11 @@ checked (each id's evidence names what was checked instead):
   (OPS-005) is not reached: production has that key paused and the lab mirrors
   its secret names.
 - **Phones are Chromium** with an iPhone user agent, touch and the phone's
-  viewport; WebKit (Safari) is not available, so Safari-only rendering and the
-  native camera input a phone opens (DOCS-005) are not covered.
+  viewport. WebKit runs (`webkit.config.mjs`) draw Mac form controls and have no
+  real iOS share sheet, so iOS Safari's own rendering and the native camera
+  input a phone opens (DOCS-005) are not covered by the journeys. Real Mobile
+  Safari can use the lab through the iOS Simulator profile (`npm run qa:sim`),
+  by hand or through a Simulator panel; no journey drives it.
 - **Time of day matters**: several bugs show only in the US evening (the UTC
   date is already tomorrow: PRAC-022, PRAC-027, the low PRAC-030) or after 12:00
   UTC (NOTIFY-001), so a run at another hour passes those checks.
@@ -1778,9 +4127,11 @@ checked (each id's evidence names what was checked instead):
 | `lib/config.mjs`, `lib/paths.mjs` | values from the stack template; paths via `fileURLToPath` |
 | `supabase-config.template.toml` | the lab's Supabase CLI config (migrations/seed off, analytics off, the lab token key, per-function `verify_jwt` as deployed); copied into `.generated/stack/`, never to `supabase/config.toml` |
 | `release-migrations.mjs`, `lib/release-plan.mjs` | `npm run qa:release`: a release branch's migrations in `DEPLOY-PLAN.md` order, checked with the plan's probes; the release's differences for `qa:parity` |
-| `lib/api-proxy.mjs` | the app's Supabase URL: a cross-origin proxy to the local gateway (Origin presented as production's, production's Allow-Origin renamed back) |
+| `lib/api-proxy.mjs` | the app's Supabase URL: a cross-origin proxy to the local gateway (Origin presented as production's, production's Allow-Origin renamed back); over TLS for the Simulator profile |
 | `cors-check.mjs` | `npm run qa:cors`: the CORS contract of every function the browser calls |
 | `lab.mjs` | `npm run qa:lab` |
+| `sim.mjs` | `npm run qa:sim` / `qa:sim:down`: the iOS Simulator profile (the running lab over HTTPS on its own ports, its own build, the CA trusted in the named Simulators) |
+| `lib/sim-tls.mjs` | the profile's root CA and leaf (openssl; outside the repository, name-constrained), and the Simulator trust step (`simctl keychain <udid> add-root-cert`) |
 | `smoke.mjs` | `npm run qa:smoke` (also exports `launchBrowser` and `labPage` for later runners) |
 | `stripe-cli.mjs` | `npm run qa:stripe` |
 | `stack-cli.mjs` | start/stop the stack from the lab workdir (`up.sh`, `down.sh`) |
@@ -1791,7 +4142,7 @@ checked (each id's evidence names what was checked instead):
 | `lib/functions-env.mjs` | the edge functions' environment and its guard |
 | `lib/app-env.mjs` | the QA build's `VITE_*` environment |
 | `lib/procs.mjs` | ports, child processes, waits |
-| `app/vite.config.mjs` | the QA-lab build: Clerk alias, issuer and hosted-page rewrites (`LAB_REWRITES`), app server, output folder |
+| `app/vite.config.mjs` | the QA-lab build: Clerk alias, issuer and hosted-page rewrites (`LAB_REWRITES`), app server, output folder (`QA_LAB_APP_DIST`, under `.generated/` only); for the Simulator profile, TLS (`QA_LAB_TLS_CERT`, `QA_LAB_TLS_KEY`) and the hosted stand-ins' origin renamed (`rewriteMockAnswer`) |
 | `app/clerk-shim.jsx`, `app/qa-clerk.js`, `app/QaSignIn.jsx` | the QA sign-in |
 | `mocks/server.mjs` | the mock server (`clerk.mjs`, `stripe.mjs`, `stripe-params.mjs`, `resend.mjs`, `ai.mjs`, `signing.mjs`, `store.mjs`, `http.mjs`) |
 | `e2e/run.mjs` | `npm run qa:e2e` (starts the lab if needed, `--fresh`, lab health, founding top-up before and during the run, parallel-safe mode) |
@@ -1802,7 +4153,7 @@ checked (each id's evidence names what was checked instead):
 | `e2e/support/fixtures.mjs`, `e2e/support/lab.mjs` | the journeys' fixtures (`qa.feature`, `check`, `bug`, `blocked`, `byDesign`) and shared steps |
 | `e2e/support/<area>-helpers.mjs` | each area's shared steps: `cred-`, `practice-`, `home-notify-`, `settings-auth-`, `sync-docs-intake-`, `vera-cv-share-`, `bill-admin-support-public-` (also builds and serves the public site), `ops-`, `phone-` (the phone sizes and layout audit) |
 | `e2e/support/results-reporter.mjs` | writes `.generated/results.json` (or the run's `QA_E2E_RESULTS` file) |
-| `.generated/` (gitignored) | `catalog.json`, `schema.sql`, `local-secrets.json`, `parity-report.txt`; step 2: `lab-secrets.json`, `stack/` (the CLI workdir: `supabase/config.toml` from the template, `signing_keys.json`, a `functions` link), `functions.env`, `lab.json`, `lab-ports.json`, `mocks/`, `app-dist/`, `logs/`, `smoke/`; step 3: `results.json`, `e2e/` |
+| `.generated/` (gitignored) | `catalog.json`, `schema.sql`, `local-secrets.json`, `parity-report.txt`; step 2: `lab-secrets.json`, `stack/` (the CLI workdir: `supabase/config.toml` from the template, `signing_keys.json`, a `functions` link), `functions.env`, `lab.json`, `lab-ports.json`, `mocks/`, `app-dist/`, `logs/`, `smoke/`, `sim/` (the Simulator profile's `app-dist/`, `build.json`, `sim.json`); step 3: `results.json`, `e2e/` |
 
 There is no `supabase/config.toml` (see "No `supabase/config.toml`" above):
 production deploys keep passing `--no-verify-jwt` as their docs say, and `db
@@ -1920,5 +4271,92 @@ On `main`:
   argument, JWKS only for `CLERK_ISSUER` or the production issuer), unrelated
   variables change no host, and no function names the lab.
 
+The iOS Simulator profile (offline: no Simulator, no stack):
+
+- `tests/qa-lab/sim-profile.test.mjs`: its ports are not the lab's; the CA and
+  leaf made with openssl in a temporary folder (chain verifies, the leaf covers
+  `127.0.0.1`, `::1` and `localhost`, lasts at most 200 days, keys 0600 in a
+  0700 folder, reused on the next start, made again near their end); negative
+  control: a leaf the CA signs for another host fails `openssl verify` (name
+  constraints); only the CA certificate goes to `simctl`, by UDID; the API
+  proxy over TLS renames the https app origin both ways and a client without
+  the CA is refused; the hosted stand-ins' origin rename (Location, CSP, links;
+  other origins and hop-by-hop headers); the profile's build (https API, its own
+  output folder, TLS when served, qa:lab's build unchanged) and its refusals;
+  `qa:sim:down` never matches the lab's own servers; `--no-build` keys on the
+  stack's signing key, not on the anon token `supabase status` mints anew.
+
 The journeys themselves (`*.spec.mjs`) need the running lab and are not part of
 `npm test`.
+
+
+### Additional browser engines
+
+The full local verification defaults to Chromium. After installing Playwright's engines,
+run a separate core pass with an explicit engine and a unique result file:
+
+```sh
+QA_BROWSER_ENGINE=webkit QA_E2E_RESULTS=qa-lab/.generated/runs/webkit-core.json QA_E2E_NO_RESTART=1 npm run qa:e2e -- '(^|/)multi-user-isolation\.spec\.mjs$' '(^|/)signup-checkout\.spec\.mjs$' '(^|/)billing\.spec\.mjs$'
+QA_BROWSER_ENGINE=firefox QA_E2E_RESULTS=qa-lab/.generated/runs/firefox-core.json QA_E2E_NO_RESTART=1 npm run qa:e2e -- '(^|/)multi-user-isolation\.spec\.mjs$' '(^|/)signup-checkout\.spec\.mjs$' '(^|/)billing\.spec\.mjs$'
+```
+
+Each report records its engine. A partial engine pass retains untested checklist items;
+it is not a substitute for the full run. `QA_BROWSER_CHANNEL` is supported only with
+Chromium. The loopback lab removes only the CSP `upgrade-insecure-requests` directive
+in its build so WebKit can use local HTTP. Production's HTTPS policy is unchanged.
+Verification output directories must be empty, preventing old results from being
+misattributed to a failed new attempt.
+
+
+### Combined operational QA snapshot
+
+For this branch's saved baseline and combined refund/delivery changes, follow
+[the local operational migration plan](operational-migration-plan.md) before
+starting the lab with `--no-release`. The default root deployment plan describes
+a separate production release and does not substitute for this local upgrade.
+The operational plan records its exact catalog baseline and Claude snapshot;
+review it again if either changes. `npm test` bounds file concurrency to six so
+parallel disposable database fixtures do not exhaust macOS shared-memory slots.
+
+### Named local instances
+
+The complete project id, including `credentialdomd-qa-lab-`, must be at most
+40 characters. Use a short name such as `combined-917`. The lab refuses a
+longer id before invoking the CLI, which otherwise silently shortens it and
+can select a different Docker network from the one bound to loopback.
+
+### Complete browser inventory and device evidence
+
+The default `npm run qa:e2e` suite includes the WebKit-only Practice scenarios
+in a separate `ios-practice-webkit` project, alongside the selected default
+browser and the iPhone scenarios that explicitly select WebKit. Every journey
+records its actual browser engine; `browserEngines` counts them in results.
+`QA_ENGINE` and `QA_BROWSER_ENGINE` are aliases and must agree if both are set.
+
+These iPhone scenarios model visibility changes, session replacement and
+network/storage failures in Playwright WebKit. Service workers are blocked
+there so requests remain inside the loopback routing guard. They do not prove
+native iOS share-sheet behavior or the installed offline shell. Actual iOS
+Simulator evidence, including the device, source and observations, is recorded
+separately; `npm run qa:sim` provides the optional HTTPS lab profile for it.
+
+
+### Complete signup replay coverage
+
+The standard signup replay suite runs the full path, early/late authentication
+redirects, a weak network, background/resume and page discard, device-clock
+skew, a profile read held for 70 seconds, a profile read that never answers,
+and a real offer left open beyond its 30-minute expiry. The real-expiry case
+uses about 33 minutes and has a 45-minute timeout. These are synthetic local
+accounts and checkout screens; the timed case does not make a real payment.
+
+`REPLAY_VARIANTS=main` selects the shorter main-path diagnostic run. It is not
+the complete replay verification. To state the complete selection explicitly:
+
+```sh
+REPLAY_VARIANTS=main,redirect-early,redirect-late,weaknet,resume,discard,idle31-real,skew31,stall70,stall-forever npm run qa:e2e -- signup-replay.spec.mjs
+```
+
+The PA/NP and signup/replay workflow checks are registered in the required
+feature manifest with stable numeric IDs. `legacyFeatureId` retains the labels
+used by earlier diagnosis captures.

@@ -51,7 +51,8 @@ const built = await build({
       // As the real authority: no answer while Clerk reports another account or none.
       access: 'export const canReviewBillingOffer = (...args) => globalThis.__funnel.canReview(...args); export const renewalPaymentFailed = (...args) => globalThis.__funnel.renewal(...args); export const accessAuthority = { state: id => id === globalThis.__funnel.context.user.id && globalThis.window.Clerk?.user?.id === id ? globalThis.__funnel.context.limitedLaunch.access : null };',
       // Funnel steps (kind "info", utils/funnelEvents.js) are kept apart from failure reports.
-      report: 'export const reportError = (...args) => { (args[1] === "info" ? globalThis.__funnel.steps : globalThis.__funnel.reports).push(args); };',
+      // These fixtures stay active; actual leave/stay behavior is exercised in checkout-abandoned-quote.test.mjs.
+      report: 'export const reportError = (...args) => { (args[1] === "info" ? globalThis.__funnel.steps : globalThis.__funnel.reports).push(args); }; export const reportUnlessLeaving = reportError;',
     }[path] }));
   } }],
 });
@@ -294,6 +295,17 @@ test('back from Stripe complete: payment received, a fresh answer on a backoff u
   assert.equal(r.refreshes.length, refreshed, 'no more checks once it landed');
   value.dismiss();
   assert.equal(r.render(), null);
+});
+
+test('a confirmed checkout stays settled when membership is later refunded', async () => {
+  const r = returnFixture('?billing=complete', { ...snapshot(), accessStatus: 'active', purchasedOfferId: 'core' });
+  assert.equal(r.render().phase, 'confirmed');
+  r.render();
+  r.launch.access = { ...snapshot(), accessStatus: 'inactive', purchasedOfferId: null };
+  assert.equal(r.render(), null, 'a completed checkout cannot become pending after cancellation');
+  const refreshed = r.refreshes.length;
+  await settle();
+  assert.equal(r.refreshes.length, refreshed, 'cancellation does not restart checkout polling');
 });
 
 test('back from Stripe canceled: nothing was charged, the address is cleaned at once and no check is made', async () => {

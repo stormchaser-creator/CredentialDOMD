@@ -14,26 +14,59 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { loadScreens, renderScreen } from './harness/component-harness.mjs';
+import { loadScreens, renderScreen as renderFixtureScreen } from './harness/component-harness.mjs';
 import { DEFAULT_DATA } from '../src/constants/defaults.js';
 import { THEMES } from '../src/constants/themes.js';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const SCREENS = [
   'export { AppInner } from "./src/App.jsx";',
+  'export * as aiStatusFixture from "./src/utils/aiClient.js";',
   'export { default as AdminDashboard } from "./src/components/pages/AdminDashboard.jsx";',
 ].join('\n');
-async function load(aiStatus) {
-  const stored = new Map([['credentialdomd-ai-shared', JSON.stringify({ shared: true, anthropicShared: true, limit: 200, checkedAt: 1, ...aiStatus })]]);
+const ACCOUNT = 'user_synthetic';
+const STATUS_URL = 'https://screen-status.synthetic.invalid/functions/v1/ai-proxy';
+const statusWindow = { Clerk: { user: { id: ACCOUNT }, session: { getToken: async ({ template }) => {
+  assert.equal(template, 'supabase'); return 'synthetic-screen-token';
+} } }, addEventListener() {}, removeEventListener() {}, dispatchEvent() {} };
+// SSR has no profile-owning effect. Establish that lifecycle explicitly, then
+// let the real AI client consume an in-memory server answer; a cache alone is
+// deliberately no longer administrator authority. No network call is made.
+async function load(aiStatus, { ready = true } = {}) {
+  const original = { localStorage: globalThis.localStorage, window: globalThis.window, fetch: globalThis.fetch };
+  const stored = new Map([['credentialdomd-ai-shared', JSON.stringify({ shared: true, unlimited: aiStatus.unlimited })]]);
   globalThis.localStorage = { getItem: k => stored.get(k) ?? null, setItem: (k, v) => stored.set(k, String(v)), removeItem: k => stored.delete(k) };
   try {
-    return await loadScreens(SCREENS, { expose: { 'src/App.jsx': ['AppInner'] }, real: ['lib/supabase', 'utils/storageScope', 'utils/privateVault'], clerk: true });
+    const screens = await loadScreens(SCREENS, {
+      expose: { 'src/App.jsx': ['AppInner'] }, real: ['lib/supabase', 'utils/storageScope', 'utils/privateVault'], clerk: true,
+      env: { VITE_SUPABASE_URL: 'https://screen-status.synthetic.invalid' },
+    });
+    globalThis.window = statusWindow;
+    let requests = 0;
+    globalThis.fetch = async (url, init) => {
+      assert.equal(url, STATUS_URL); assert.equal(init.method, 'GET');
+      assert.equal(init.headers.Authorization, 'Bearer synthetic-screen-token'); requests++;
+      return { ok: true, status: 200, json: async () => ({ shared: true, configured: true, allowed: true, anthropic_shared: true, limit: 200, unlimited: aiStatus.unlimited }) };
+    };
+    screens.aiStatusFixture.registerSharedAiProfile(ACCOUNT, ready);
+    await screens.aiStatusFixture.fetchSharedAiStatus();
+    assert.equal(requests, ready ? 1 : 0, 'only a current ready profile may consume a status answer');
+    assert.equal(screens.aiStatusFixture.sharedAiStatus.unlimited, ready && aiStatus.unlimited);
+    return screens;
   } finally {
-    delete globalThis.localStorage;
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete globalThis[key]; else globalThis[key] = value;
+    }
   }
 }
 const member = await load({ unlimited: false });
 const owner = await load({ unlimited: true });
+function renderScreen(Component, options, clerk = statusWindow.Clerk) {
+  const previousWindow = globalThis.window;
+  globalThis.window = { ...statusWindow, Clerk: clerk };
+  try { return renderFixtureScreen(Component, options); }
+  finally { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
+}
 
 const all = value => ({ read: value, write: value, export: value });
 function app({ isDesktop = false, access = { accessStatus: 'active', capabilities: { credential: all(true), practice: all(true) }, lifetime: { credential: false, practice: false }, freeBeta: { state: 'none' }, practiceTrial: { state: 'none' } }, launch = {} } = {}) {
@@ -121,4 +154,22 @@ test('ADMIN-001, 003, 004: no Admin screen draws a bare browser button, and none
   }
   const history = buttons(renderScreen(owner.AdminDashboard, { app: app(), props: {} }));
   assert.ok(history.every(b => b.style.padding !== undefined || b.style.border !== undefined), 'every rendered Admin button is styled');
+});
+
+
+test('a current ready account whose status says non-admin remains outside the Admin dashboard', () => {
+  const html = renderScreen(member.AdminDashboard, { app: app({ isDesktop: false }), props: {} });
+  assert.match(html, /Admin only\./);
+  assert.doesNotMatch(html, /Administration sections/);
+});
+
+
+test('cached admin status without profile readiness, a session or the same actor fails closed', async () => {
+  const notReady = await load({ unlimited: true }, { ready: false });
+  const denied = [
+    renderScreen(notReady.AdminDashboard, { app: app({ isDesktop: false }), props: {} }),
+    renderScreen(owner.AdminDashboard, { app: app({ isDesktop: false }), props: {} }, { ...statusWindow.Clerk, session: null }),
+    renderScreen(owner.AdminDashboard, { app: app({ isDesktop: false }), props: {} }, { ...statusWindow.Clerk, user: { id: 'user_different' } }),
+  ];
+  for (const html of denied) { assert.match(html, /Admin only\./); assert.doesNotMatch(html, /Administration sections/); }
 });

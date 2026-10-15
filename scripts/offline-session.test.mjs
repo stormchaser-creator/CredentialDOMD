@@ -7,6 +7,12 @@
 // session (never another account's namespace).
 // Run: node scripts/offline-session.test.mjs   (pure node, no test runner)
 
+// The sign-out purge also commits deletion of the independent invoice handoff
+// store. Use an actual in-memory IDB transaction path instead of claiming an
+// absent API proves an earlier browser database was removed.
+import { createMemoryIndexedDB } from "../tests/helpers/memory-indexeddb.mjs";
+globalThis.indexedDB = createMemoryIndexedDB();
+
 // localStorage + window shims must exist before the modules are imported
 // (module bodies don't read storage at import time, but every helper does).
 const store = new Map();

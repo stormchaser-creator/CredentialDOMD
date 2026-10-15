@@ -398,7 +398,8 @@ export function stateTranscriptModel(data, state, { certFiles = null, kind } = {
           ? `You may be exempt from the ${stateName} CME requirement: ${moc}. This transcript does not apply the exemption; confirm with the board and claim it on your renewal if it applies to you.`
           : "";
       })(),
-      req.notes && req.notes !== "Not specified" ? `State notes: ${plain(req.notes)}` : "",
+      (app ? comp.notes : req.notes) && (app ? comp.notes : req.notes) !== "Not specified"
+        ? `State notes: ${plain(app ? comp.notes : req.notes)}` : "",
     ].filter(Boolean),
   };
 }
@@ -532,7 +533,7 @@ function appRequirementRows(model) {
   if (comp.cat1Required > 0) {
     rows.push({ name: `Category 1 minimum`, rule: plain(comp.cat1Note), required: fmtHrs(comp.cat1Required), earned: fmtHrs(comp.cat1Earned), met: comp.cat1Met });
   }
-  if (comp.pharmacology?.required) {
+  if (comp.pharmacology?.required && !(comp.topicResults || []).some(t => t.measure === "pharmacology")) {
     rows.push({ name: "Pharmacology", rule: "", required: fmtHrs(comp.pharmacology.required), earned: fmtHrs(comp.pharmacology.earned), met: (comp.pharmacology.earned || 0) >= comp.pharmacology.required });
   }
   for (const t of comp.topicResults || []) {
@@ -928,7 +929,8 @@ const downloadFile = (file) => {
  * in front with the sheet still silent (utils/shareHandoff.js). A share
  * refused because another is still open throws an error named ShareBusy.
  */
-export async function shareTranscriptPdf(model, { onHanded, onUndo, onUnanswered } = {}) {
+export async function shareTranscriptPdf(model, { filesOnly = false, isCurrent = () => true, onHanded, onUndo, onUnanswered, onLateError } = {}) {
+  if (!isCurrent()) return null;
   const certFiles = pdfCertificateFiles(model);
   const nav = typeof navigator !== "undefined" ? navigator : null;
   const probe = new File([new Uint8Array([37, 80, 68, 70])], model.fileName, { type: "application/pdf" });
@@ -937,6 +939,7 @@ export async function shareTranscriptPdf(model, { onHanded, onUndo, onUnanswered
   const shareAll = certFiles.length > 0 && canShare([probe, ...certFiles]);
   const pdfDelivery = !certFiles.length ? "none" : shareAll ? "share" : shareOne ? "omitted" : "download";
   const prepared = await prepareCertificateImages({ ...model, pdfDelivery });
+  if (!isCurrent()) return null;
   const pdfOf = (m) => new File([buildTranscriptPdf(m).output("blob")], model.fileName, { type: "application/pdf" });
   const file = pdfOf(prepared);
   if (shareOne) {
@@ -946,17 +949,42 @@ export async function shareTranscriptPdf(model, { onHanded, onUndo, onUnanswered
       what: `${String(prepared.title || "CME Transcript").replace(/ Transcript$/, " transcript")}${prepared.subtitle ? ` for the ${prepared.subtitle}` : ""}`,
       settings: { name: p.name, degreeType: p.degree, npi: p.npi },
     });
-    const outcome = await shareAtHandoff({ title, text, files: pdfDelivery === "share" ? [file, ...certFiles] : [file] }, {
+    // Safari turns accompanying title/text into a separate unnamed text
+    // file in Save to Files. Explicit file saving must not create that item;
+    // ordinary sharing retains its formatted message for Mail and Gmail.
+    const files = pdfDelivery === "share" ? [file, ...certFiles] : [file];
+    const completion = shareAtHandoff(filesOnly ? { files } : { title, text, files }, {
+      isCurrent,
       share: (p) => nav.share(p),
       onHanded: () => onHanded?.({ method: "share", model: prepared }),
       onUndo, onUnanswered,
     });
+    let outcome;
+    if (typeof onHanded === "function") outcome = await completion;
+    else {
+      // Callers without a handoff callback still need a bounded answer when
+      // iOS leaves the share promise pending. Late failures never start a
+      // second send or an unexpected download.
+      let timer;
+      try { outcome = await Promise.race([completion, new Promise(resolve => { timer = setTimeout(() => resolve("pending"), 50); })]); }
+      finally { clearTimeout(timer); }
+      if (outcome === "pending") {
+        void completion.then(answer => {
+          if (!isCurrent() || answer === "shared" || answer === "cancelled") return;
+          const error = Object.assign(new Error(shareNotStartedMessage(answer)), { name: answer === "busy" ? "ShareBusy" : "ShareFailed" });
+          try { onLateError?.(error); } catch { /* a caller notification cannot reject the handoff */ }
+        });
+        return { method: "share", model: prepared };
+      }
+    }
+    if (!isCurrent()) return null;
     if (outcome === "shared") return { method: "share", model: prepared };
     if (outcome === "cancelled") return null;
     if (outcome === "busy") throw Object.assign(new Error(shareNotStartedMessage("busy")), { name: "ShareBusy" });
   }
   // Downloading. After a failed share the index was written for the share,
   // so it is rewritten for what this download can actually carry.
+  if (!isCurrent()) return null;
   let sent = prepared, sentFile = file;
   if (shareOne && certFiles.length) {
     const oneAtATime = downloadsOneAtATime(nav);

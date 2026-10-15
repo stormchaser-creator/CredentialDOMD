@@ -121,7 +121,7 @@ test('the env file is plain name=value lines', () => {
 test('the lab stack config: the template plus the function environment, nothing else', () => {
   const source = readFileSync(path.join(ROOT, 'qa-lab', 'supabase-config.template.toml'), 'utf8');
   const env = make();
-  const text = stackConfigText(env, source);
+  const text = stackConfigText(env, source, null); // the default instance; named overlays have their own suite
   assert.match(text, /^signing_keys_path = "\.\/signing_keys\.json"$/m);
   assert.match(text, /^sql_paths = \[\]$/m);
   assert.match(text, /^\[edge_runtime\.secrets\]$/m);

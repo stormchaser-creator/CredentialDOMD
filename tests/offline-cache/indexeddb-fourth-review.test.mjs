@@ -19,6 +19,9 @@
 //    would keep it.
 //
 // Synthetic accounts only: no real names, numbers or records.
+import * as acknowledgements from '../../src/utils/recordAcknowledgements.js';
+import { preserveRecovery } from '../../src/utils/syncRecovery.js';
+import { fixture as persistenceFixture } from '../limited-launch/persistence-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -123,6 +126,7 @@ function app(U, { offlineMode = false } = {}) {
     withLocalOnlySettings: s => s, hasLegacyStorage: scope.hasLegacyStorage, offlineCopyUnread: scope.offlineCopyUnread,
     adoptLegacyStorage: scope.adoptLegacyStorage, markOfflineCopyRead: scope.markOfflineCopyRead, cachedRecordsRef: { current: null }, adoptOfflineCopyRead: storage.adoptOfflineCopyRead, deviceOnlyForLoad: storage.deviceOnlyForLoad, offlineCopyUnchangedSinceKnown: storage.offlineCopyUnchangedSinceKnown, offlineCopyUnread: scope.offlineCopyUnread, deviceOnlyUnsavedState: storage.deviceOnlyUnsavedState,
     preservePausedApplicationRecords: paused.preservePausedApplicationRecords, pausedApplicationLinks: paused.pausedApplicationLinks, reconcileDocumentLinks,
+    prepareRecordAcknowledgements: acknowledgements.prepareRecordAcknowledgements, isAcknowledgedRecordCopy: acknowledgements.isAcknowledgedRecordCopy, preserveRecovery, recordContent: persistenceFixture().api.recordContent,
     applyHeldQueue: held.applyHeldQueue, localChangesSince: rebase.localChangesSince, rebaseLocalChanges: rebase.rebaseLocalChanges,
     accessAuthority: { suspendWrites() {} },
     setData: v => { states.push(typeof v === 'function' ? v(states.at(-1)) : v); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},

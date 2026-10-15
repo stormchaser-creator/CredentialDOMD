@@ -55,4 +55,3 @@ test('requests: a PA\'s and an NP\'s documents answer their asks, in both copies
   const mdCat = client.catalogueFromRows(docs, records);
   assert.deepEqual(client.matchAsk(client.classifyAsk('PA license'), mdCat, now), [], 'for an MD "PA license" is a Pennsylvania licence, and none is on file');
 });
-

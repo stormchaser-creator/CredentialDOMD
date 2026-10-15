@@ -25,7 +25,7 @@
 //
 // Plain text only. No em dashes (a test enforces it).
 
-export const WELCOME_EMAIL_VERSION = "2026-09-29-v2";
+export const WELCOME_EMAIL_VERSION = "2026-10-13-v3";
 // The product's Resend sender (send-reminders, build-backup and ticket replies
 // use the same address). Replies go to support, where help requests belong.
 export const WELCOME_EMAIL_FROM = "CredentialDOMD <whit@credentialdomd.com>";
@@ -67,7 +67,7 @@ export const welcomeVariantLabel = (variant) => MEMBERSHIP[variant]?.label || ""
 
 const STEPS = [
   "Three good first steps:",
-  "1. Add a license. Open Credentials and add your state medical license with its expiration date.",
+  "1. Add a license. Open Credentials and add a professional license with its expiration date.",
   "2. Upload a document in the app, or email it to docs@credentialdomd.com from the address you sign in with. To send from a different address, confirm it first in Profile & settings, under Email.",
   // Email reminders are on from the start (notifyEmail in defaults.js), so
   // "turn on" sent members to switch them off. They go to the Email on the

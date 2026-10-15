@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, memo } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { pushModal, popModal } from "../../utils/deskKeys";
@@ -21,8 +21,9 @@ import { SECTION_FIELDS } from "../../utils/sectionFields.js";
 const HEALTH_SCAN_KEYS = Object.freeze([...SECTION_FIELDS.healthRecords, "doses"]);
 import { attachExistingDoc } from "../../utils/docPrefill";
 import FollowUpHistory from "../shared/FollowUpHistory";
+import { createHealthRecordDraft } from "../../utils/healthRecordDraft.js";
+import { offlineCopyUnread } from "../../utils/storageScope.js";
 import useDocumentBytes, { useDocumentFileStatus } from "../shared/useDocumentBytes";
-import useRecordFormDraft, { DRAFT_RESTORED_NOTE } from "../shared/useRecordFormDraft";
 import { fileWaitLine, statusWithoutStore } from "../../utils/documentBytes";
 
 // A vaccine series by hand: a scan fills `doses`, and a member with AI off, or
@@ -43,16 +44,13 @@ function cleanDoses(doses) {
   });
 }
 
-// Rendered without the draft hook (a stand-in that returns nothing).
-const NO_DRAFT = Object.freeze({ clear: () => {} });
-
 // Two fields side by side. A plain 1fr track cannot shrink below a date
 // input's own minimum (about 189 px in Chrome), so on a phone the second date
 // ran off the dialog's right edge; minmax(0, 1fr) splits the width.
 const PAIR = "minmax(0, 1fr) minmax(0, 1fr)";
 
 function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone }) {
-  const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T, toggleFavorite, navigate } = useApp();
+  const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T, toggleFavorite, navigate, user, userIdRef, loadedFrom } = useApp();
   const starButton = (item) => {
     const on = item?.favorite === true;
     return (
@@ -66,10 +64,60 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
     );
   };
   const iS = useInputStyle();
-  const [showForm, setShowForm] = useState(false);
-  const [editItem, setEditItem] = useState(null);
-  const [form, setForm] = useState({});
-  const [attachedDocs, setAttachedDocs] = useState([]);
+  const owner = user?.id || null;
+  const profileId = userIdRef?.current;
+  const draftScopeRef = useRef(null);
+  if (!draftScopeRef.current || draftScopeRef.current.owner !== owner || draftScopeRef.current.profileId !== profileId) {
+    const store = owner ? createHealthRecordDraft({ accountId: owner }) : null;
+    const kept = store?.read();
+    const editing = kept?.editId ? (data.healthRecords || []).find(item => item.id === kept.editId) : null;
+    // Never turn an edit of a removed record into a new record silently.
+    const plain = !autoEditId && !autoViewId;
+    const restore = plain && kept && (!kept.editId || editing);
+    const changed = restore && kept.base ? Object.fromEntries(Object.entries(kept.form).filter(([k, v]) => JSON.stringify(v ?? null) !== JSON.stringify(kept.base[k] ?? null))) : kept?.form;
+    draftScopeRef.current = { owner, profileId, store, live: true, plain, restored: !!restore, restoring: false, state: {
+      showForm: !!restore, editItem: restore ? editing : null,
+      form: restore ? { ...(editing || {}), ...changed } : {}, attachedDocs: restore ? kept.attachedDocs : [], warning: "",
+      openedForm: restore ? null : {}, note: restore ? "Restored what you were typing before the app closed. Save it, or Cancel to discard it." : "",
+    } };
+  }
+  const draftScope = draftScopeRef.current;
+  const [, redrawDraft] = useState(0);
+  const currentDraft = () => draftScope.live && draftScopeRef.current === draftScope
+    && (!userIdRef || userIdRef.current === profileId) && (!draftScope.store || draftScope.store.current());
+  useEffect(() => { draftScope.live = true; return () => { draftScope.live = false; }; }, [draftScope]);
+  const updateDraft = useCallback(patch => {
+    if (!currentDraft()) return;
+    const next = { ...draftScope.state, ...patch };
+    if (patch.showForm === true && !draftScope.state.showForm && !patch.note) { next.openedForm = next.form; next.note = ""; }
+    if (next.showForm) {
+      const untouched = next.openedForm && JSON.stringify(next.form) === JSON.stringify(next.openedForm) && !next.attachedDocs.length;
+      const ok = untouched ? true : draftScope.store?.save({ form: next.form, attachedDocs: next.attachedDocs, editId: next.editItem?.id || null, base: next.editItem });
+      next.warning = owner && !ok ? "This draft could not be kept on this device. Keep this page open until you save it." : "";
+    } else { draftScope.store?.clear(draftScope.state.editItem?.id || null); next.warning = ""; next.note = ""; }
+    draftScope.state = next;
+    redrawDraft(n => n + 1);
+  }, [draftScope]);
+  const { showForm, editItem, form, attachedDocs, warning: draftWarning, note: draftNote } = draftScope.state;
+  useEffect(() => {
+    if (!draftScope.plain || draftScope.restored || draftScope.restoring || draftScope.state.showForm || !currentDraft()) return;
+    const recordsRead = loadedFrom === "cloud" || (loadedFrom === "local" && !offlineCopyUnread(owner));
+    const picked = draftScope.store?.pick({ records: data.healthRecords || [], recordsRead, stillWanted: () => currentDraft() && !draftScope.state.showForm });
+    const take = result => {
+      if (!currentDraft() || draftScope.state.showForm || result?.waiting || result?.stopped) return;
+      if (!result?.restore) return;
+      draftScope.restored = true;
+      const { editing, changed, extra } = result.restore;
+      updateDraft({ showForm: true, editItem: editing, form: { ...(editing || {}), ...changed }, attachedDocs: extra?.attachedDocs || [], openedForm: null,
+        note: "Restored what you were typing before the app closed. Save it, or Cancel to discard it." });
+    };
+    if (picked?.then) {
+      draftScope.restoring = true;
+      picked.then(take, () => {}).finally(() => { draftScope.restoring = false; });
+    } else take(picked);
+  }, [draftScope, data.healthRecords, loadedFrom, owner, updateDraft]);
+  const setForm = useCallback(value => updateDraft({ form: typeof value === "function" ? value(draftScope.state.form) : value }), [updateDraft]);
+  const setAttachedDocs = useCallback(value => updateDraft({ attachedDocs: typeof value === "function" ? value(draftScope.state.attachedDocs) : value }), [updateDraft]);
   const [filter, setFilter] = useState("all");
   // Tap-anywhere detail view — shows every field AND the source document
   // (the lab report or card the data came from); agencies want the paper,
@@ -123,29 +171,15 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
     return c;
   }, [items]);
 
-  // "Restored what you were typing..." on a form opened from a draft (CRED-021).
-  const [draftNote, setDraftNote] = useState(null);
-  const openAdd = useCallback(() => { setForm({ category: filter !== "all" ? filter : "" }); setEditItem(null); setAttachedDocs([]); setDraftNote(null); setShowForm(true); }, [filter]);
-  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setDraftNote(null); setShowForm(true); }, []);
+  const openAdd = useCallback(() => updateDraft({ form: { category: filter !== "all" ? filter : "" }, editItem: null, attachedDocs: [], showForm: true }), [filter, updateDraft]);
+  const openEdit = useCallback((item) => updateDraft({ form: { ...item }, editItem: item, attachedDocs: [], showForm: true }), [updateDraft]);
   useDeskAddShortcut(openAdd);
-  // What is typed into the open form outlives iOS discarding the app (CRED-021).
-  const draft = useRecordFormDraft({
-    slot: "crud:healthRecords", open: showForm, editing: editItem, form, records: items,
-    plain: !autoEditId && !autoViewId,
-    restore: ({ editing, changed }) => {
-      if (editing) openEdit(editing); else openAdd();
-      setForm(f => ({ ...f, ...changed }));
-      setDraftNote(DRAFT_RESTORED_NOTE);
-    },
-  }) || NO_DRAFT;
-  const closeForm = useCallback(() => {
-    draft.clear(editItem?.id);
-    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setDraftNote(null);
-  }, [draft, editItem?.id]);
+  const closeForm = useCallback(() => updateDraft({ showForm: false, editItem: null, form: {}, attachedDocs: [] }), [updateDraft]);
 
   const [reqError, setReqError] = useState(null);
 
   const handleSave = useCallback(() => {
+    if (!currentDraft()) return;
     // health_records.category is NOT NULL in the database: a record added
     // from the All tab on "Select category..." was refused whole and lived
     // on this device only. Checked on an edit too, where the blank option is
@@ -184,7 +218,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
       });
     }
     closeForm();
-  }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs, data.documents]);
+  }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs, data.documents, draftScope]);
 
   const handleDelete = useCallback((id) => deleteItem("healthRecords", id), [deleteItem]);
 
@@ -247,7 +281,8 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoFocusFi
 
       {/* Add/Edit Modal */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Health Record" : "Add Health Record"}>
-        {draftNote && <div role="status" style={{ fontSize: 13, fontWeight: 600, color: T.success || "#22c55e", marginBottom: 10 }}>{draftNote}</div>}
+        {draftNote && <p role="status" style={{ color: T.textMuted }}>{draftNote}</p>}
+        {draftWarning && <p role="alert" style={{ color: T.warning }}>{draftWarning}</p>}
         {editItem && <FollowUpHistory item={editItem} />}
         <Field label="Category *">
           <select required aria-required="true" value={form.category || ""} onChange={e => { setReqError(null); setForm(f => ({ ...f, category: e.target.value, type: "" })); }} style={{ ...iS, appearance: "auto" }}>

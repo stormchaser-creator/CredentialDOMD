@@ -412,6 +412,19 @@ def _stop_cluster(pid):
     return not running(pid)
 
 
+def _remove_orphan_semaphores(inodes):
+    # Same bounded native helper as the Node reclaimer. No host-wide scan.
+    if not inodes or len(inodes) > 64 or any(not isinstance(i, str) or not INODE.fullmatch(i) for i in inodes):
+        return []
+    helper = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'ticket-fix', 'pg-semaphores.py'))
+    try:
+        result = subprocess.run([sys.executable, helper, *inodes], text=True, capture_output=True, timeout=30)
+        ids = json.loads(result.stdout) if result.returncode == 0 else []
+        return ids if isinstance(ids, list) and all(type(i) is int for i in ids) else []
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+
+
 def _future(age_ms):
     """Dated in the future: more than the clock's granularity ahead."""
     return age_ms < -START_TOLERANCE_MS
@@ -435,6 +448,7 @@ def _reclaimable(seen):
     # The segments its backends orphaned, before the slot is anyone else's.
     try:
         _remove_orphan_segments(_cluster_inodes(record))
+        _remove_orphan_semaphores(_cluster_inodes(record))
     except Exception:  # best effort
         pass
     return True
@@ -612,6 +626,7 @@ class Slot:
                 _stop_cluster(pid)
             try:
                 _remove_orphan_segments(_cluster_inodes(self.record))
+                _remove_orphan_semaphores(_cluster_inodes(self.record))
             except Exception:  # best effort
                 pass
         def mine():

@@ -225,7 +225,7 @@ function oneEmailed(m, s, number, name) {
   const [inv] = all;
   assert.equal(inv.number, number, `${name}: under the previewed number`);
   assert.equal(inv.method, 'emailed', `${name}: recorded as emailed`);
-  assert.equal(inv.id, S.invoiceEmailKeys('', number).invoiceId, `${name}: under the id the server's ledger names`);
+  assert.equal(inv.id, S.invoiceEmailKeys('user_synthetic', number).invoiceId, `${name}: under the id the server's ledger names`);
   assert.equal(inv.totalAmount, s.total, `${name}: its total`);
   assert.deepEqual([...inv.entryIds].sort(), s.items, `${name}: exactly the previewed items`);
   assert.deepEqual((m.data[s.key] || []).filter(x => x.invoiceId === inv.id).map(x => x.id).sort(), s.items, `${name}: and they are billed`);
@@ -261,14 +261,14 @@ for (const name of Object.keys(SCREENS)) {
     const pdf = Buffer.from(mail.attachments[0].content, 'base64').toString('latin1');
     assert.ok(pdf.includes(number), 'the PDF carries this number');
     const ledger = env.world.ledger[0];
-    assert.equal(ledger.client_request_id, S.invoiceEmailKeys('', number).requestId, 'the number is the idempotency key');
+    assert.equal(ledger.client_request_id, S.invoiceEmailKeys('user_synthetic', number).requestId, 'the number is the idempotency key');
 
     const inv = oneEmailed(m, s, number, name);
     assert.equal(inv.sentAt, SENT_AT, 'dated at the send');
     assert.equal(emailModalEl(m), null, 'the email screen closed');
     assert.deepEqual(m.dialogs, [], 'no dialog: zero extra taps');
     assert.match(shown(m), new RegExp(`Invoice ${number} was emailed to ${(s.prefilled || TO).replace(/\./g, '\\.')}\\. A copy went to doc\\.verified@example\\.test\\. Replies come to you\\. It is on the Invoices tab as emailed`));
-    assert.equal(S.invoiceNotes('').some(n => n.number === number), false, 'no note left behind');
+    assert.equal(S.invoiceNotes('user_synthetic').some(n => n.number === number), false, 'no note left behind');
     assert.equal(stamps.some(([n, shared]) => n === number && shared), false, 'never noted on the server as maybe sent');
     assert.equal(srv.rows.size, 0);
   });
@@ -281,7 +281,7 @@ for (const name of Object.keys(SCREENS)) {
     assert.equal(env.world.mails.length, 0);
     assert.deepEqual(recorded(m), [], 'nothing recorded');
     assert.match(textOf(modal.render()), /The email was not sent\. Nothing went out\. Try again in a minute\./);
-    assert.equal(S.invoiceNotes('').some(n => n.number === number), false, 'no note: it did not go');
+    assert.equal(S.invoiceNotes('user_synthetic').some(n => n.number === number), false, 'no note: it did not go');
     assert.equal(stamps.length, 0, 'nothing told to the server');
     // The email screen closes, and so does the preview: the next one carries the same number.
     modalButton(modal, t => t === 'Cancel', 'Cancel').props.onClick();
@@ -319,13 +319,13 @@ for (const name of Object.keys(SCREENS)) {
     assert.equal(env.world.mails.length, 1, 'it did go');
     assert.deepEqual(recorded(m), [], 'not recorded on no answer');
     assert.match(textOf(modal.render()), /The connection dropped before the answer came back, so this email may have gone\. Tap Send again: if it went, it is not sent twice\./);
-    assert.ok(S.invoiceNotes('').some(n => n.number === number && n.via === 'email'), 'noted on the device while unknown');
+    assert.ok(S.invoiceNotes('user_synthetic').some(n => n.number === number && n.via === 'email'), 'noted on the device while unknown');
     await send(modal);
     assert.equal(env.world.mails.length, 1, 'not mailed twice');
     assert.equal(link.calls.filter(c => c.action === 'send').length, 2);
     assert.equal(new Set(link.calls.filter(c => c.action === 'send').map(c => c.requestId)).size, 1, 'one request id for one number');
     oneEmailed(m, s, number, name);
-    assert.equal(S.invoiceNotes('').some(n => n.number === number), false);
+    assert.equal(S.invoiceNotes('user_synthetic').some(n => n.number === number), false);
   });
 
   test(`${name}: share, AbortError, No, then Email it for me: the same number goes by email and is recorded once`, async () => {
@@ -368,7 +368,7 @@ for (const name of Object.keys(SCREENS)) {
     await settle(); await wait(20); await settle();
     assert.equal(recorded(m).length, 1, 'the late share answer records nothing more');
     assert.equal(env.world.mails.length, 1);
-    assert.equal(S.invoiceNotes('').some(n => n.number === number), false, 'and keeps no note');
+    assert.equal(S.invoiceNotes('user_synthetic').some(n => n.number === number), false, 'and keeps no note');
     assert.equal(srv.rows.has(number), false, 'nor a stamp');
   });
 }
@@ -380,7 +380,7 @@ test('an email that cannot be confirmed: the number is spent, the server is told
   assert.match(textOf(modal.render()), /could not be confirmed\. Check your copy at doc\.verified@example\.test before sending again\./);
   assert.deepEqual(recorded(m), []);
   assert.equal(srv.rows.has(number), true, 'noted on the server: every device asks');
-  const note = S.invoiceNotes('').find(n => n.number === number);
+  const note = S.invoiceNotes('user_synthetic').find(n => n.number === number);
   assert.equal(note?.via, 'email');
   modalButton(modal, t => t === 'Close', 'Close').props.onClick();
   await settle();
@@ -406,7 +406,7 @@ test('a lost answer and then Close: it may have gone, so the preview asks, the n
   assert.equal(srv.rows.has(number), true, 'the server is told it may have gone');
   // It may have gone: the device never issues the number again (invoiceNumber.js's spent list).
   const spent = JSON.parse(globalThis.sessionStorage.getItem('credentialdomd-spent-invoice-numbers') || '{}');
-  assert.ok((spent[''] || []).includes(number), 'spent');
+  assert.ok((spent['user_synthetic'] || []).includes(number), 'spent');
   s.close(m);
   await settle();
   assert.match(shown(m), new RegExp(`${number} was emailed without a confirmation Sep 10, 2026`));
@@ -465,7 +465,7 @@ test('the send cap and a CredentialDOMD address: refused, nothing recorded, and 
   await send(modal);
   assert.match(textOf(modal.render()), /Send limit reached \(30 emails per hour\)\. Try again later\./);
   assert.deepEqual(recorded(capped.m), []);
-  assert.equal(S.invoiceNotes('').length, 0);
+  assert.equal(S.invoiceNotes('user_synthetic').length, 0);
 
   const own = await setup('Work log');
   const modal2 = await openEmail(own.m);

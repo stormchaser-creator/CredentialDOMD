@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from './support/fixtures.mjs';
 import { readDeviceJSON, writeDeviceText } from './support/device-store.mjs';
 import {
-  clerkId, field, newMember, openCredentials, recordButtons, row, sleep, waitForMemberApp,
+  clerkId, field, lab, newMember, openCredentials, recordButtons, row, sleep, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import { fillForm, saveDialog } from './support/cred-helpers.mjs';
 
@@ -45,14 +45,17 @@ test('custom categories: rename, add a field, hide, unsorted records moved; the 
   await fillForm(d, [[/^Name/, 'QA Garage Permit'], ['Permit number', 'QA-PARK-12'], ['Lot', 'B']]);
   let r = await saveDialog(d);
   qa.check('setup: a record in QA Parking Permits', r.closed, r.refusal);
-  await sleep(2000);
-  const rec = row(`select id, category_id from public.custom_records where user_id = '${pid}' and name = 'QA Garage Permit'`);
+  // The screen shows a new record or category before its write lands (2026-10-01: the
+  // category's row was read 0.1 s before its 97 ms insert answered), so the rows are waited for.
+  const landed = (what, read) => waitFor(what, async () => read() || null, { timeoutMs: 15000 }).catch(() => null);
+  const rec = await landed('the QA Garage Permit row', () => row(`select id, category_id from public.custom_records where user_id = '${pid}' and name = 'QA Garage Permit'`));
   qa.check('setup: custom_records row', !!rec, rec);
   await recordButtons(page, 'QA Garage Permit').star.click();
   await sleep(1500);
   await createCategory(page, 'QA Locker Keys', '🔑', 'Locker number');
-  const parking = cat('QA Parking Permits');
-  const locker = cat('QA Locker Keys');
+  const parking = await landed('the QA Parking Permits row', () => cat('QA Parking Permits'));
+  const locker = await landed('the QA Locker Keys row', () => cat('QA Locker Keys'));
+  qa.check('setup: both categories are stored', !!parking && !!locker, { parking: !!parking, locker: !!locker });
 
   await qa.feature('CRED-047', 'Rename a category, add a field, hide it', async () => {
     await rail(page).getByRole('button', { name: /QA Parking Permits/ }).click();
@@ -156,13 +159,19 @@ test('custom categories: rename, add a field, hide, unsorted records moved; the 
     const id = await clerkId(page);
     // Where the app keeps it: the offline copy in IndexedDB (support/device-store.mjs).
     const deviceKey = `credentialdomd-data:${id}`;
+    // Written with the app closed (a page on the app's origin that is not the app): a load
+    // still running in the open app (the membership answer's second load) saves the records
+    // it read when it ends, over a copy written meanwhile. On a loaded lab that save landed
+    // after this write and took the injected record away (cred-categories, 2026-10-01 04:41).
+    await page.goto(new URL('/qa-lab-blank', lab().urls.appOrigin).href, { waitUntil: 'domcontentloaded' }).catch(() => {});
     const blob = (await readDeviceJSON(page, deviceKey)).value;
     blob.answerBank = [{ id: randomUUID(), question: 'QA synthetic question: hospital affiliations', answer: 'QA synthetic answer bank reply', createdAt: new Date().toISOString() }];
     await writeDeviceText(page, deviceKey, JSON.stringify(blob));
     const seeded = Object.keys(blob).length;
-    qa.check('lab setup: one Answer Bank record written to this account\'s device cache', seeded > 0);
+    qa.check('lab setup: one Answer Bank record written to this account\'s device cache (app closed)', seeded > 1 && ((await readDeviceJSON(page, deviceKey)).value.answerBank || []).length === 1);
     for (let i = 1; i <= 2; i++) {
-      await page.reload();
+      if (i === 1) await page.goto(lab().urls.app, { waitUntil: 'domcontentloaded' });
+      else await page.reload();
       await waitForMemberApp(page);
       await sleep(2000);
       await openCredentials(page, 'Answer Bank');

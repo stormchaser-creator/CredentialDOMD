@@ -27,10 +27,19 @@
 // permissive CORS, as hosted Supabase does.
 //
 //   node qa-lab/lib/api-proxy.mjs --port 54385 --app-origin http://127.0.0.1:54390
+//
+// The iOS Simulator profile (qa-lab/sim.mjs) runs a second one over TLS for its
+// HTTPS app origin, straight to the same gateway (the running proxy above
+// renames only its own app origin, and is never restarted for it):
+//
+//   node qa-lab/lib/api-proxy.mjs --port 54396 --app-origin https://127.0.0.1:54395 --tls-cert <leaf.pem> --tls-key <leaf.key>
 import http from 'node:http';
+import https from 'node:https';
+import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { APP_PUBLIC_ORIGIN, DEFAULT_API_PORT, SUPABASE_API_URL } from './lab-config.mjs';
 import { isMain } from './paths.mjs';
+import { pipeNativeSignedResponse, SIGNED_URL_ENDPOINTS } from './native-signed-urls.mjs';
 
 const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'host']);
 
@@ -57,31 +66,51 @@ export function returnResponseHeaders(headers, { appOrigin }) {
   return out;
 }
 
-export function createApiProxy({ port = DEFAULT_API_PORT, appOrigin, target = SUPABASE_API_URL, log = (m) => console.log(`[api] ${m}`) } = {}) {
-  if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(appOrigin || '')) throw new Error('the API proxy needs the lab app origin (http://127.0.0.1:<port>)');
+/** The lab app's origin on this machine: http (qa:lab) or https (the Simulator profile, qa:sim). */
+export const LAB_APP_ORIGIN = /^https?:\/\/127\.0\.0\.1:\d+$/;
+
+/**
+ * `tls` ({ key, cert }, PEM) serves the proxy over HTTPS for an https app
+ * origin (the Simulator profile); an https app origin needs it, since a page
+ * served over TLS would not call a plain-HTTP API.
+ */
+export function createApiProxy({ port = DEFAULT_API_PORT, appOrigin, target = SUPABASE_API_URL, tls = null, log = (m) => console.log(`[api] ${m}`) } = {}) {
+  if (!LAB_APP_ORIGIN.test(appOrigin || '')) throw new Error('the API proxy needs the lab app origin (http://127.0.0.1:<port>, or https:// for the Simulator profile)');
+  if (appOrigin.startsWith('https:') !== Boolean(tls)) throw new Error(tls ? 'a TLS API proxy serves an https lab app origin only' : 'an https lab app origin needs the API proxy over TLS (--tls-cert, --tls-key)');
   const upstream = new URL(target);
   if (!['127.0.0.1', 'localhost'].includes(upstream.hostname)) throw new Error(`refusing a gateway that is not this machine: ${upstream.hostname}`);
-  const server = http.createServer((req, res) => {
+  const handler = (req, res) => {
+    const endpoint = req.url.split('?')[0];
+    const headers = forwardRequestHeaders(req.headers, { appOrigin, target });
+    // Safari offers gzip/br. These two tiny JSON contracts need origin mapping
+    // before they reach the native browser; request plain bytes from the local
+    // gateway. File downloads and all other routes keep their normal encoding.
+    if (req.method === 'POST' && SIGNED_URL_ENDPOINTS.has(endpoint)) headers['accept-encoding'] = 'identity';
     const out = http.request({
       protocol: upstream.protocol, hostname: upstream.hostname, port: upstream.port, method: req.method, path: req.url,
-      headers: forwardRequestHeaders(req.headers, { appOrigin, target }),
+      headers,
     }, (up) => {
-      res.writeHead(up.statusCode || 502, returnResponseHeaders(up.headers, { appOrigin }));
-      up.pipe(res);
+      pipeNativeSignedResponse(up, res, {
+        endpoint, method: req.method,
+        apiOrigin: `${tls ? 'https' : 'http'}://127.0.0.1:${server.address().port}`,
+        headers: returnResponseHeaders(up.headers, { appOrigin }),
+      });
     });
     out.on('error', (e) => {
       log(`${req.method} ${req.url.split('?')[0]}: ${e.message}`);
       if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'text/plain' }); res.end(`qa-lab api proxy: ${e.message}`); } else res.destroy();
     });
     req.pipe(out);
-  });
+  };
+  const server = tls ? https.createServer({ key: tls.key, cert: tls.cert }, handler) : http.createServer(handler);
   return { server, listen: () => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); }) };
 }
 
 if (isMain(import.meta.url)) {
-  const { values } = parseArgs({ options: { port: { type: 'string' }, 'app-origin': { type: 'string' } } });
+  const { values } = parseArgs({ options: { port: { type: 'string' }, 'app-origin': { type: 'string' }, 'tls-cert': { type: 'string' }, 'tls-key': { type: 'string' } } });
   const port = Number(values.port || DEFAULT_API_PORT);
-  const proxy = createApiProxy({ port, appOrigin: values['app-origin'] });
-  proxy.listen().then(() => console.log(`[api] listening on http://127.0.0.1:${port} -> ${SUPABASE_API_URL} (browser origin ${values['app-origin']} presented as ${APP_PUBLIC_ORIGIN})`), (e) => { console.error(`[api] ${e.message}`); process.exit(1); });
+  const tls = values['tls-cert'] || values['tls-key'] ? { cert: readFileSync(values['tls-cert']), key: readFileSync(values['tls-key']) } : null;
+  const proxy = createApiProxy({ port, appOrigin: values['app-origin'], tls });
+  proxy.listen().then(() => console.log(`[api] listening on ${tls ? 'https' : 'http'}://127.0.0.1:${port} -> ${SUPABASE_API_URL} (browser origin ${values['app-origin']} presented as ${APP_PUBLIC_ORIGIN})`), (e) => { console.error(`[api] ${e.message}`); process.exit(1); });
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { proxy.server.close(); process.exit(0); });
 }

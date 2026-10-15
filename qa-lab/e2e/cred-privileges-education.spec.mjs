@@ -99,24 +99,31 @@ test('privileges keep an encrypted portal password; education and a professional
     const other = await secondBrowser();
     await allowClipboard(other.context);
     await signIn(other.page, user);
-    qa.check('the second browser opens the member app', (await landing(other.page)) === 'member');
+    // A first sign-in that stops on a transient identity answer is reloaded, as the screen asks.
+    const where = await landing(other.page);
+    qa.check('the second browser opens the member app', where === 'member', where);
     await openCredentials(other.page, 'Privileges');
     await other.page.getByText('QA Summit Medical Center').first().click();
     const view2 = other.page.getByRole('dialog').filter({ hasText: 'Portal password' }).last();
     await view2.waitFor({ timeout: 15000 });
     const alertsBefore = qa.report.dialogs.length;
     promptAnswers.push('wrong-code-9');
+    const promptsBefore = prompts.length;
     await view2.getByRole('button', { name: 'Show', exact: true }).click();
     await sleep(3000);
-    const asked = prompts.at(-1) || '';
-    const wrong = qa.report.dialogs.slice(alertsBefore).find((x) => /^alert:/.test(x)) || '';
+    const asked = prompts[promptsBefore] || '';
+    // Since 2624bf40 a wrong code is answered by asking again for the code set on the device
+    // where the password was saved ("That lock code did not open this password. Enter ..."); a
+    // native alert says it only when that second code is wrong too.
+    const wrong = [...prompts.slice(promptsBefore + 1).map((x) => `prompt: ${x}`), ...qa.report.dialogs.slice(alertsBefore).filter((x) => /^alert:/.test(x))]
+      .find((x) => /did not open this password/.test(x)) || '';
     qa.check('a new device asks for the lock code', /lock code/i.test(asked), asked);
     qa.check('a wrong lock code says so', /did not open this password/.test(wrong), wrong);
     qa.check('the wrong code reveals nothing', !(await view2.innerText()).includes(PASSWORD));
     promptAnswers.push(LOCK);
     await view2.getByRole('button', { name: 'Show', exact: true }).click();
     const opened = await view2.getByText(PASSWORD).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
-    await other.page.screenshot({ path: (await qa.shot('second browser password shown')).replace(/\.png$/, '-b.png') });
+    await qa.shot('second browser password shown', other.page);
     qa.check('the same lock code opens it on the second browser', opened);
     await other.page.keyboard.press('Escape');
   }, { soft: true });

@@ -87,7 +87,7 @@ test('a file that still fails after the retry is named, and Share 2 of 3 then se
   assert.match(v.pageText(), /Still could not download, so not shared: c-dea\.pdf\./);
   await approve(v, 'Share 2 of 3');
   assert.deepEqual(shared.map(f => f.name), ['a-license.pdf', 'b-diploma.pdf']);
-  assert.match(v.pageText(), /Sent 2 of 3\. Not sent: c-dea\.pdf\./);
+  assert.match(v.pageText(), /Sharing requested for 2 of 3\. Delivery is not confirmed\. Not sent: c-dea\.pdf\./);
 });
 
 test('when nothing downloaded, every Approve tries again rather than sending the member to Files', async () => {
@@ -168,7 +168,7 @@ test('a file linked to Protected Identity is said to be kept out on purpose, not
   assert.doesNotMatch(page, /Not on this device/);
   await approve(v, 'Share 1 of 2');
   assert.deepEqual(shared.map(f => f.name), ['a-license.pdf']);
-  assert.match(v.pageText(), /Sent 1 of 2\. Kept out on purpose \(Protected Identity\): p-passport\.pdf\./);
+  assert.match(v.pageText(), /Sharing requested for 1 of 2\. Delivery is not confirmed\. Kept out on purpose \(Protected Identity\): p-passport\.pdf\./);
   assert.doesNotMatch(v.pageText(), /Not sent/);
 });
 

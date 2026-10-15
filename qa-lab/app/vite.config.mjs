@@ -24,15 +24,24 @@
 //      on its own port (qa-lab/lib/api-proxy.mjs), cross-origin as live, so
 //      the browser enforces the functions' CORS headers.
 //   4. Output goes to qa-lab/.generated/app-dist, never dist/.
+//   5. The iOS Simulator profile (qa-lab/sim.mjs) builds into a folder of its
+//      own under .generated/ (QA_LAB_APP_DIST), and serves it over TLS
+//      (QA_LAB_TLS_CERT, QA_LAB_TLS_KEY) on its own port, with the API proxy's
+//      https origin baked in. The running mock server sends the hosted
+//      stand-ins' redirects to the plain-HTTP app it was started with
+//      (QA_LAB_MOCK_APP_ORIGIN); this server renames that origin to its own
+//      (QA_LAB_APP_ORIGIN) in those answers (rewriteMockAnswer).
 // It refuses to run unless VITE_QA_LAB=1 and the Supabase URL is this machine
 // on another origin than the app.
 import { defineConfig } from 'vite';
+import { createLocalUnsubscribeRelay } from '../lib/unsubscribe-relay.mjs';
+import http from 'node:http';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import baseConfig from '../../vite.config.js';
 import { computeAppRulesUrls, computePrecacheUrls, stampAppRules, stampPrecache, verifyAppSplit, verifyPrecache } from '../../scripts/sw-precache.mjs';
-import { QA_APP_DIST, REPO_ROOT } from '../lib/paths.mjs';
+import { GENERATED_DIR, QA_APP_DIST, REPO_ROOT } from '../lib/paths.mjs';
 import { APP_PROXY, HOSTED_STAND_IN_PATH, LAB_ISSUER, LAB_LEGACY_ISSUER, PRODUCTION_ISSUER, PRODUCTION_LEGACY_ISSUER, SUPABASE_API_URL } from '../lib/lab-config.mjs';
 
 const SHIM = fileURLToPath(new URL('./clerk-shim.jsx', import.meta.url));
@@ -48,6 +57,9 @@ export const HOSTED_STAND_IN = `((u) => { const m = /^https:\\/\\/(checkout|bill
 
 /** Module -> the production text it must contain, and what the lab build puts there instead (every occurrence). */
 export const LAB_REWRITES = Object.freeze({
+  // The lab serves loopback HTTP. WebKit otherwise upgrades these requests to
+  // HTTPS, where no lab listener exists. Keep the production CSP untouched.
+  'src/utils/appCsp.js': [['    "upgrade-insecure-requests",\n', '']],
   'src/utils/limitedLaunchClient.js': [[PRODUCTION_ISSUER, LAB_ISSUER], [PRODUCTION_LEGACY_ISSUER, LAB_LEGACY_ISSUER]],
   'src/utils/continuityRecovery.js': [[PRODUCTION_ISSUER, LAB_ISSUER], [PRODUCTION_LEGACY_ISSUER, LAB_LEGACY_ISSUER]],
   // Checkout (limited launch) and the billing portal.
@@ -57,6 +69,21 @@ export const LAB_REWRITES = Object.freeze({
     ['window.location.href = res.data.url', `window.location.href = ${HOSTED_STAND_IN}(res.data.url)`],
   ],
 });
+/**
+ * The served build answers without Vite's CORS middleware, as production's
+ * static host does. That middleware (on by default in `vite preview`) adds
+ * `Vary: Origin` to every response. Production's assets vary on
+ * Accept-Encoding only (checked 2026-09-30 with a HEAD request to credentialdomd.com/app/assets/).
+ * Under `Vary: Origin`, the service worker's precache (fetched without an
+ * Origin header) never matches the page's `crossorigin` script and stylesheet
+ * requests (sent with one), so a device that went offline before one page load
+ * ran under the worker opened an unstyled shell with no app. That was a lab-only
+ * failure, seen in offline-storage.spec.mjs SYNC-017. Nothing reads the app
+ * origin cross-origin: the API is the proxy's origin, and the mock's pages are
+ * proxied onto this one.
+ */
+export const PREVIEW_CORS = false;
+
 /** Kept for callers of the step-2 name. */
 export const ISSUER_REWRITES = LAB_REWRITES;
 
@@ -101,6 +128,7 @@ const RPC_ROUTES = {
 const readRequest = (req) => new Promise((resolve, reject) => { const chunks = []; req.on('data', (c) => chunks.push(c)); req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8'))); req.on('error', reject); });
 
 function gateway(anonKey) {
+  const unsubscribe = createLocalUnsubscribeRelay({ apiOrigin: SUPABASE_API_URL });
   const middleware = async (req, res, next) => {
     const url = new URL(req.url, 'http://lab.invalid');
     try {
@@ -116,6 +144,19 @@ function gateway(anonKey) {
         const r = await fetch(target, { method: post ? 'POST' : 'GET', headers: post ? { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'text/html' } : { Accept: 'text/html' }, body });
         res.writeHead(r.status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex' });
         return res.end(await r.text());
+      }
+      if (url.pathname === '/api/unsubscribe') {
+        const origin = process.env.QA_LAB_APP_ORIGIN || `http://127.0.0.1:${Number(process.env.QA_LAB_APP_PORT)}`;
+        const headers = new Headers();
+        // Node exposes HTTP/2 transport metadata as pseudo-headers. Fetch
+        // Headers accepts only ordinary HTTP field names.
+        for (const [name, value] of Object.entries(req.headers)) if (!name.startsWith(':') && typeof value === 'string') headers.set(name, value);
+        const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readRequest(req);
+        const r = await unsubscribe(new Request(`${origin}${url.pathname}${url.search}`, { method: req.method, headers, ...(body === undefined ? {} : { body }) }));
+        const answer = rewriteMockAnswer({ headers: Object.fromEntries(r.headers), body: Buffer.from(await r.text()) }, {
+          from: `https://127.0.0.1:${Number(new URL(process.env.QA_LAB_MOCK_APP_ORIGIN || origin).port) + 5}`, to: origin,
+        });
+        res.writeHead(r.status, answer.headers); return res.end(answer.body);
       }
       const route = RPC_ROUTES[url.pathname];
       if (route && req.method === 'POST') {
@@ -150,25 +191,100 @@ function proxies(mockUrl) {
   };
 }
 
-function stampQaServiceWorker(buildId) {
+function stampQaServiceWorker(buildId, outDir) {
   // The same stamping vite.config.js does for dist/, done for the lab's own output folder.
   return {
     name: 'qa-lab-stamp-sw',
     apply: 'build',
     closeBundle() {
-      const swPath = path.join(QA_APP_DIST, 'sw.js');
-      const manifestPath = path.join(QA_APP_DIST, '.vite', 'manifest.json');
+      const swPath = path.join(outDir, 'sw.js');
+      const manifestPath = path.join(outDir, '.vite', 'manifest.json');
       if (!existsSync(swPath) || !existsSync(manifestPath)) throw new Error('qa-lab: sw.js or the build manifest is missing from the QA build');
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
       // As vite.config.js: the precache list, then the PA/NP rule chunk list
-      // (verifyPrecache refuses an unstamped one; this build failed on main without it).
+      // (release/goal4 e1f4b4c9; verifyPrecache refuses an unstamped one).
       const sw = stampAppRules(stampPrecache(readFileSync(swPath, 'utf8').replaceAll('__BUILD_ID__', buildId), computePrecacheUrls(manifest)), computeAppRulesUrls(manifest));
       writeFileSync(swPath, sw);
-      writeFileSync(path.join(QA_APP_DIST, 'version.json'), JSON.stringify({ build: buildId, qaLab: true }) + '\n');
-      verifyPrecache(QA_APP_DIST);
-      verifyAppSplit(QA_APP_DIST);
+      writeFileSync(path.join(outDir, 'version.json'), JSON.stringify({ build: buildId, qaLab: true }) + '\n');
+      verifyPrecache(outDir);
+      verifyAppSplit(outDir);
     },
   };
+}
+
+/**
+ * Where the build goes: .generated/app-dist (qa:lab), or QA_LAB_APP_DIST, a
+ * folder under qa-lab/.generated/ (the Simulator profile's own build, so the
+ * running lab's files are never replaced under it).
+ */
+export function qaOutDir(env = process.env) {
+  if (!env.QA_LAB_APP_DIST) return QA_APP_DIST;
+  const out = path.resolve(REPO_ROOT, env.QA_LAB_APP_DIST);
+  const rel = path.relative(GENERATED_DIR, out);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`qa-lab: QA_LAB_APP_DIST must be a folder under qa-lab/.generated/ (got ${env.QA_LAB_APP_DIST})`);
+  return out;
+}
+
+const LOCAL_APP_ORIGIN = /^https?:\/\/127\.0\.0\.1:\d+$/;
+const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'upgrade', 'te', 'trailer', 'host']);
+
+/**
+ * The mock server's answer for a hosted stand-in, with the app origin the mock
+ * was started with (`from`) renamed to this server's (`to`): in Location and
+ * Content-Security-Policy (form-action) and in the page's links. Nothing else
+ * changes. Returns headers fit for HTTP/1.1 and HTTP/2 (no hop-by-hop names).
+ */
+export function rewriteMockAnswer({ headers, body }, { from, to }) {
+  if (!LOCAL_APP_ORIGIN.test(from) || !LOCAL_APP_ORIGIN.test(to)) throw new Error('qa-lab: the mock answer rewrite takes two lab app origins');
+  // A lab origin holds letters, digits, ':', '/' and '.'; the port must end where the origin does.
+  const re = new RegExp(from.replace(/[./]/g, '\\$&') + '(?![0-9])', 'g');
+  const swap = (v) => (typeof v === 'string' ? v.replace(re, to) : Array.isArray(v) ? v.map(swap) : v);
+  const out = {};
+  for (const [k, v] of Object.entries(headers || {})) {
+    const name = k.toLowerCase();
+    if (HOP_BY_HOP.has(name) || name.startsWith(':')) continue;
+    out[name] = ['location', 'content-security-policy', 'refresh'].includes(name) ? swap(v) : v;
+  }
+  let text = Buffer.isBuffer(body) ? body : Buffer.from(body || '');
+  if (/^text\/|json|javascript/.test(String(out['content-type'] || ''))) text = Buffer.from(swap(text.toString('utf8')), 'utf8');
+  out['content-length'] = String(text.length);
+  return { headers: out, body: text };
+}
+
+function mockOriginRewrite(mockUrl, from, to) {
+  // Only the hosted stand-ins name the app origin (stripe.mjs: their redirects, links and form-action).
+  const prefix = `${HOSTED_STAND_IN_PATH}/`;
+  const upstream = new URL(mockUrl);
+  const middleware = (req, res, next) => {
+    if (!req.url.startsWith(prefix)) return next();
+    const headers = {};
+    for (const [k, v] of Object.entries(req.headers)) if (!k.startsWith(':') && !HOP_BY_HOP.has(k) && k !== 'accept-encoding') headers[k] = v;
+    headers.host = upstream.host;
+    const out = http.request({ hostname: upstream.hostname, port: upstream.port, method: req.method, path: req.url.slice(APP_PROXY.mock.length), headers }, (up) => {
+      const chunks = [];
+      up.on('data', (c) => chunks.push(c));
+      up.on('end', () => {
+        const answer = rewriteMockAnswer({ headers: up.headers, body: Buffer.concat(chunks) }, { from, to });
+        res.writeHead(up.statusCode || 502, answer.headers);
+        res.end(answer.body);
+      });
+      up.on('error', () => res.destroy());
+    });
+    out.on('error', (e) => { if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'text/plain' }); res.end(`qa-lab mock proxy: ${e.message}`); } else res.destroy(); });
+    req.pipe(out);
+  };
+  return {
+    name: 'qa-lab-mock-origin',
+    configureServer(server) { server.middlewares.use(middleware); },
+    configurePreviewServer(server) { server.middlewares.use(middleware); },
+  };
+}
+
+/** TLS for the served build (the Simulator profile): QA_LAB_TLS_CERT and QA_LAB_TLS_KEY, both or neither. */
+function tlsOptions(env = process.env) {
+  if (!env.QA_LAB_TLS_CERT && !env.QA_LAB_TLS_KEY) return null;
+  if (!env.QA_LAB_TLS_CERT || !env.QA_LAB_TLS_KEY) throw new Error('qa-lab: QA_LAB_TLS_CERT and QA_LAB_TLS_KEY go together');
+  return { cert: readFileSync(env.QA_LAB_TLS_CERT), key: readFileSync(env.QA_LAB_TLS_KEY) };
 }
 
 export default defineConfig(({ command }) => {
@@ -181,7 +297,18 @@ export default defineConfig(({ command }) => {
   const port = Number(process.env.QA_LAB_APP_PORT);
   if (!Number.isInteger(port) || port <= 0) throw new Error('qa-lab: QA_LAB_APP_PORT must be the lab app port');
   // Cross-origin, as live: the browser must check the functions' CORS headers.
-  if (supabaseUrl.origin === `http://127.0.0.1:${port}` || supabaseUrl.origin === `http://localhost:${port}`) throw new Error('qa-lab: the Supabase URL must be the lab API proxy, another origin than the app (qa-lab/lib/api-proxy.mjs)');
+  if (['http', 'https'].some((scheme) => [`${scheme}://127.0.0.1:${port}`, `${scheme}://localhost:${port}`].includes(supabaseUrl.origin))) throw new Error('qa-lab: the Supabase URL must be the lab API proxy, another origin than the app (qa-lab/lib/api-proxy.mjs)');
+  const outDir = qaOutDir();
+  const tls = command === 'serve' ? tlsOptions() : null;
+  // The Simulator profile: served over TLS, its app origin, and the origin the running mock redirects to.
+  const appOrigin = process.env.QA_LAB_APP_ORIGIN || '';
+  const mockAppOrigin = process.env.QA_LAB_MOCK_APP_ORIGIN || '';
+  if (tls) {
+    if (appOrigin !== `https://127.0.0.1:${port}`) throw new Error(`qa-lab: served over TLS, QA_LAB_APP_ORIGIN must be https://127.0.0.1:${port}`);
+    if (supabaseUrl.protocol !== 'https:') throw new Error('qa-lab: served over TLS, the build must call an https API proxy (a page on https cannot call plain HTTP)');
+  }
+  if (mockAppOrigin && (!LOCAL_APP_ORIGIN.test(mockAppOrigin) || !LOCAL_APP_ORIGIN.test(appOrigin))) throw new Error('qa-lab: QA_LAB_MOCK_APP_ORIGIN and QA_LAB_APP_ORIGIN must be lab app origins (http(s)://127.0.0.1:<port>)');
+  const renameMockOrigin = command === 'serve' && mockAppOrigin && mockAppOrigin !== appOrigin ? [mockOriginRewrite(mockUrl, mockAppOrigin, appOrigin)] : [];
   const buildId = `${JSON.parse(baseConfig.define.__APP_BUILD_ID__)}-qalab`;
   const plugins = baseConfig.plugins.filter((p) => !(p && !Array.isArray(p) && ['stamp-build-id', 'assert-precache'].includes(p.name)));
   return {
@@ -189,12 +316,13 @@ export default defineConfig(({ command }) => {
     base: '/app/',
     // Only the environment qa:lab passes: no .env file (which may name production) is read.
     envDir: APP_DIR,
-    plugins: [...plugins, rewriteIssuers(command), gateway(process.env.VITE_SUPABASE_ANON_KEY || ''), stampQaServiceWorker(buildId)],
+    plugins: [...plugins, rewriteIssuers(command), gateway(process.env.VITE_SUPABASE_ANON_KEY || ''), ...renameMockOrigin, stampQaServiceWorker(buildId, outDir)],
     resolve: { alias: [{ find: /^@clerk\/clerk-react$/, replacement: SHIM }] },
     define: { ...baseConfig.define, __APP_BUILD_ID__: JSON.stringify(buildId) },
-    build: { outDir: QA_APP_DIST, emptyOutDir: true, manifest: true },
+    build: { outDir, emptyOutDir: true, manifest: true },
     server: { host: '127.0.0.1', port, strictPort: true, proxy: { ...(baseConfig.server?.proxy || {}), ...proxies(mockUrl) } },
-    preview: { host: '127.0.0.1', port, strictPort: true, proxy: proxies(mockUrl) },
+    // No CORS middleware on the served build (PREVIEW_CORS, below).
+    preview: { host: '127.0.0.1', port, strictPort: true, proxy: proxies(mockUrl), cors: PREVIEW_CORS, ...(tls ? { https: tls } : {}) },
     clearScreen: false,
   };
 });

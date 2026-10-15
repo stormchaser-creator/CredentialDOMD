@@ -1,3 +1,4 @@
+import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 // P0 journey: a full member keeps their licenses. Add (every kind the
 // checklist names), view, edit (including lifecycle status), star, attach a
 // file, delete (with its file, tombstoned), and after each write the
@@ -34,6 +35,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     await waitForMemberApp(page);
     const ok = await dbCheck();
     qa.check(`${what}: survives a reload and the database matches`, ok);
+    await checkNoUnexpectedRecovery(page, qa, `${what}, after reload`);
     protocol.push({ what, warnings: warnings.length, queue: queue.length, persisted: !!ok });
   };
 
@@ -118,6 +120,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await evidence('license expiring in 30 days added', () => !!byNumber(soonNumber));
     qa.check('four licenses saved in the database', licenses().length === 4, licenses().map((l) => l.license_number).join(', '));
+    await openCredentials(page, 'Licenses');
     await qa.shot('licenses table');
   });
 
@@ -246,6 +249,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
   await qa.feature('SYNC-003', 'A second, clean browser shows the same records', async () => {
     const other = await secondBrowser();
     await signIn(other.page, user);
+    // A first sign-in that stops on a transient identity answer is reloaded, as the screen asks.
     const where = await landing(other.page);
     qa.check('the second browser opens the member app', where === 'member', where);
     await openCredentials(other.page, 'Licenses');
@@ -254,6 +258,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     qa.check('every license in the database shows on the second browser', expected.every((n) => text.includes(n)), `db: ${expected.join(', ')}`);
     qa.check('the deleted license does not come back', !text.includes('QA-CO-2002'));
     qa.check('no "Account records" error screen', !/could not be loaded|Account records/i.test(text));
-    await other.page.screenshot({ path: await qa.shot('second browser licenses').then((p) => p.replace(/\.png$/, '-b.png')) });
+    await checkNoUnexpectedRecovery(other.page, qa, 'second browser licenses');
+    await qa.shot('second browser licenses', other.page);
   });
 });

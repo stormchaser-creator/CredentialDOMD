@@ -13,6 +13,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { LOCAL_SECRETS_JSON, SCHEMA_SQL, SEED_SQL, isMain } from './lib/paths.mjs';
 import { localExec, localJson, runSqlFile } from './lib/local-db.mjs';
 import { VAULT_HASHES_SQL, assertDatabaseIsOurs } from './lib/checkout-guard.mjs';
+import { instanceName, localGatewayOrigin } from './lib/config.mjs';
+
+/** Copied DDL must be regenerated locally before it can dispatch database hooks. */
+export function assertSchemaTargetsInstance(text, { gateway = localGatewayOrigin(), named = !!instanceName() } = {}) {
+  const marker = /^-- QA local gateway: (\S+)$/m.exec(text)?.[1];
+  const targets = [...text.matchAll(/https?:\/\/supabase_kong_[a-z0-9_-]+:\d+/g)].map(m => m[0]);
+  if ((named && !marker) || (marker && marker !== gateway) || targets.some(url => url !== gateway)) {
+    throw new Error('QA lab schema targets a different instance or lacks its gateway marker. Run node qa-lab/extract-schema.mjs --offline to regenerate it from this checkout\'s saved catalog before applying.');
+  }
+}
 
 /** The version seed.sql stamps into qa_lab.seed_version. */
 export function seedFileVersion(text = readFileSync(SEED_SQL, 'utf8')) {
@@ -57,6 +67,7 @@ function run(file, label) {
 export function apply({ seed = true, schema = true } = {}) {
   if (schema) {
     if (!existsSync(SCHEMA_SQL)) throw new Error(`${SCHEMA_SQL} is missing: run npm run qa:extract first`);
+    assertSchemaTargetsInstance(readFileSync(SCHEMA_SQL, 'utf8'));
     if (schemaApplied()) {
       assertBuiltHere();
       console.log('Schema already applied (qa_lab.applied exists); skipping. Rebuild with: npm run qa:down -- --wipe && npm run qa:up');

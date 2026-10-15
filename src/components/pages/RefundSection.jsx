@@ -30,31 +30,49 @@ export default function RefundSection({ paid = false, carry = null }) {
   const accountId = user?.id;
   // The refund makes several provider calls in a row: a longer wait than a quote.
   const client = useMemo(() => createLimitedLaunchClient({ accountId, timeoutMs: 30000 }), [accountId]);
-  // The server's last answer: a quote (available, resume) or an outcome.
-  const [view, setViewState] = useState(() => carry?.current?.view ?? null);
-  const [open, setOpen] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessageState] = useState(() => carry?.current?.message ?? null);
-  const setView = next => { setViewState(next); if (carry) carry.current = { ...carry.current, view: next }; };
-  const setMessage = next => { setMessageState(next); if (carry) carry.current = { ...carry.current, message: next }; };
+  // A page-level carry survives the paid/unpaid branch change, but belongs
+  // only to the account whose payment it describes.
+  const initial = () => ({ accountId, view: accountId && carry?.current?.accountId === accountId ? carry.current.view ?? null : null,
+    message: accountId && carry?.current?.accountId === accountId ? carry.current.message ?? null : null,
+    open: false, confirmed: false, busy: false });
+  const [stored, setStored] = useState(initial);
+  const scope = useRef({ accountId });
+  if (scope.current.accountId !== accountId) scope.current = { accountId };
+  const ownerScope = scope.current;
+  const state = stored.accountId === accountId ? stored : initial();
+  if (stored.accountId !== accountId) setStored(state);
+  const { view, message, open, confirmed, busy } = state;
+  const update = patch => {
+    if (scope.current !== ownerScope) return;
+    setStored(previous => ({ ...(previous.accountId === accountId ? previous : initial()), ...patch }));
+    if (carry && (Object.hasOwn(patch, "view") || Object.hasOwn(patch, "message"))) {
+      const previous = carry.current?.accountId === accountId ? carry.current : { accountId };
+      carry.current = { ...previous, ...(Object.hasOwn(patch, "view") ? { view: patch.view } : {}),
+        ...(Object.hasOwn(patch, "message") ? { message: patch.message } : {}) };
+    }
+  };
+  const setView = view => update({ view });
+  const setMessage = message => update({ message });
+  const setOpen = open => update({ open });
+  const setConfirmed = confirmed => update({ confirmed });
+  const setBusy = busy => update({ busy });
   const turn = useRef(0);
   useEffect(() => () => { turn.current++; }, []);
+  const mine = at => scope.current === ownerScope && turn.current === at;
   const lookForRecord = !paid && !!accountId && limitedLaunch?.enabled === true && limitedLaunch.access?.accessStatus === "active";
   useEffect(() => {
     if (!lookForRecord) return undefined;
     let current = true;
+    const at = turn.current;
     client.refundStatus().then(answer => {
-      if (!current || answer.state === "none") return;
-      setViewState(answer);
-      if (carry) carry.current = { ...carry.current, view: answer };
+      if (!current || !mine(at) || answer.state === "none") return;
+      setView(answer);
     }).catch(() => { /* Nothing on record to show. */ });
     return () => { current = false; };
   }, [lookForRecord, client, carry]);
 
-  const mine = at => turn.current === at;
   const review = async () => {
-    if (busy) return;
+    if (busy || scope.current !== ownerScope) return;
     const at = ++turn.current;
     setBusy(true); setMessage(null); setConfirmed(false);
     try {
@@ -66,7 +84,7 @@ export default function RefundSection({ paid = false, carry = null }) {
     finally { if (mine(at)) setBusy(false); }
   };
   const refund = async () => {
-    if (busy || !confirmed || !view) return;
+    if (busy || !confirmed || !view || scope.current !== ownerScope) return;
     const at = ++turn.current;
     setBusy(true); setMessage(null);
     try {
@@ -81,11 +99,11 @@ export default function RefundSection({ paid = false, carry = null }) {
     } finally {
       if (mine(at)) setBusy(false);
       // The membership answer follows the cancellation; ask for it either way.
-      try { await limitedLaunch?.refresh?.(); } catch { /* The access hook reports its own failures. */ }
+      try { if (mine(at)) await limitedLaunch?.refresh?.(); } catch { /* The access hook reports its own failures. */ }
     }
   };
 
-  if (!limitedLaunch?.enabled || (!paid && !view && !message)) return null;
+  if (!accountId || !limitedLaunch?.enabled || (!paid && !view && !message)) return null;
   const size = isDesktop ? 14 : 16;
   const button = { border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 9, padding: "11px 14px", cursor: busy ? "wait" : "pointer", fontSize: size, minHeight: 44, fontFamily: "inherit" };
   const danger = confirmed ? { ...button, border: "none", background: T.danger, color: "#fff", fontWeight: 700 } : { ...button, background: T.neutralDim, color: T.textDim, cursor: "not-allowed" };

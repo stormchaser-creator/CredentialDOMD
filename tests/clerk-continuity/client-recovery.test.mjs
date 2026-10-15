@@ -79,7 +79,7 @@ test('copies eligible slots only, retains every source, and journals digests bef
     // veraProfessionLater (Vera's "Not now" to the profession choice) joined
     // later too: the new account is simply asked. appRulesHint (goal4) is a
     // loading hint the new account's first load writes again.
-    if (base === BASE_KEYS.lastIdentity || base === BASE_KEYS.accessAnswer || base === BASE_KEYS.unrecordedInvoices || base === BASE_KEYS.contractPick || base === BASE_KEYS.formDrafts || base === BASE_KEYS.veraProfessionLater || base === BASE_KEYS.appRulesHint) assert.equal(f.values.has(f.target(base)), false);
+    if (base === BASE_KEYS.lastIdentity || base === BASE_KEYS.accessAnswer || base === BASE_KEYS.unrecordedInvoices || base === BASE_KEYS.contractPick || base === BASE_KEYS.recordAcknowledgements || base === BASE_KEYS.formDrafts || base === BASE_KEYS.veraProfessionLater || base === BASE_KEYS.appRulesHint) assert.equal(f.values.has(f.target(base)), false);
     else assert.equal(f.values.get(f.target(base)), before.get(f.source(base)));
   }
   assert.equal(f.writes[0].key, continuityJournalKey(f.binding));
@@ -466,17 +466,17 @@ test('unreadable retirement storage fails recovery before adapter reads or write
   assert.equal(f.effects.length, 0);
 });
 
-test('ordinary accounts keep the previous best-effort purge behavior when marker storage is blocked', async () => {
+test('ordinary account purge stops before deleting its source when the recovery generation cannot persist', async () => {
   const f = fixture('user_UnrelatedKnownContinuity'), ordinary = 'user_OrdinaryWithoutContinuity';
   f.values.set(`${BASE_KEYS.data}:${ordinary}`, 'ordinary-cache');
   f.values.set(f.source(BASE_KEYS.data), 'unrelated-legacy');
   f.localStorage.getItem = () => { throw new Error('blocked'); };
   f.localStorage.setItem = () => { throw new Error('blocked'); };
-  await purgeForSignOut(ordinary);
-  assert.equal(f.values.has(`${BASE_KEYS.data}:${ordinary}`), false);
+  await assert.rejects(purgeForSignOut(ordinary));
+  assert.equal(f.values.get(`${BASE_KEYS.data}:${ordinary}`), 'ordinary-cache');
   assert.equal(f.values.get(f.source(BASE_KEYS.data)), 'unrelated-legacy');
   assert.equal(f.effects.some(effect => effect.kind === 'set'), false);
-  assert.equal(f.effects.some(effect => effect.kind === 'nativeRemove' && effect.key === `${BASE_KEYS.data}:${ordinary}`), true);
+  assert.equal(f.effects.some(effect => effect.kind === 'nativeRemove' && effect.key === `${BASE_KEYS.data}:${ordinary}`), false);
 });
 
 test('a present malformed retirement marker still denies recovery after a reload', async () => {

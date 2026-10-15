@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { edgeErrorMessage } from "../../utils/edgeError";
+import { copyToClipboard } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
@@ -1098,9 +1099,11 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
   const { activeEmails, guideOnly, joined: alreadyJoined, waiting, visible: visibleRows } = view;
   const leadEmails = new Set(rows.map(r => (r.email || "").toLowerCase()));
   const orphanAttempts = attempts.filter(a => !leadEmails.has((a.email || "").toLowerCase()));
-  const copyAll = () => {
+  const copyAll = async () => {
+    setInviteMsg("");
     const text = view.contactable.map(r => `${r.name || ""} <${r.email}>`).join(", ");
-    try { navigator.clipboard.writeText(text); } catch { /* older browser */ }
+    const copied = await copyToClipboard(text);
+    setInviteMsg(copied ? "Waiting emails copied." : "Could not copy the emails. Select the addresses and copy them manually.");
   };
   return (
     <div>

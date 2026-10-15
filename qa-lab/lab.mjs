@@ -37,12 +37,20 @@ import { writeFunctionsEnv } from './lib/functions-env.mjs';
 import { qaAppEnv } from './lib/app-env.mjs';
 import { localExec } from './lib/local-db.mjs';
 import { resolveLabPorts, startChild, stopChild, waitFor } from './lib/procs.mjs';
+import { instanceName, localMailOrigin, localStudioOrigin, projectId } from './lib/config.mjs';
+import { captureSource } from './lib/source-evidence.mjs';
 
 const VITE = path.join(REPO_ROOT, 'node_modules', '.bin', 'vite');
 
 export function readRuntime() {
   if (!existsSync(LAB_RUNTIME_JSON)) return null;
-  try { return JSON.parse(readFileSync(LAB_RUNTIME_JSON, 'utf8')); } catch { return null; }
+  let runtime;
+  try { runtime = JSON.parse(readFileSync(LAB_RUNTIME_JSON, 'utf8')); } catch { return null; }
+  if ((runtime.projectId && runtime.projectId !== projectId()) || (runtime.urls?.api && runtime.urls.api !== SUPABASE_API_URL)
+      || (instanceName() && runtime.projectId !== projectId())) {
+    throw new Error('QA lab runtime belongs to a different instance; restore its instance.json before stopping it, or use a separate checkout.');
+  }
+  return runtime;
 }
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
@@ -172,14 +180,22 @@ export async function runLab(argv = process.argv.slice(2)) {
 
     const appEnv = { ...qaAppEnv({ appPort, apiPort, anonKey: status.ANON_KEY }), QA_LAB_MOCK_URL: mockUrl };
     let app;
+    let buildSource = null;
+    const buildEvidenceFile = path.join(QA_APP_DIST, 'qa-build-source.json');
     if (values.dev) {
       step(`starting the app (vite dev server, QA-lab mode) on ${appOrigin}/app/`);
       app = startChild('app', VITE, ['--config', QA_VITE_CONFIG], { env: appEnv, cwd: REPO_ROOT, quiet: values.quiet });
     } else {
       if (!values['no-build'] || !existsSync(path.join(QA_APP_DIST, 'index.html'))) {
         step('building the app in QA-lab mode (production mode, QA sign-in)');
+        const beforeBuild = captureSource();
         const r = spawnSync(VITE, ['build', '--config', QA_VITE_CONFIG, '--logLevel', 'warn'], { env: appEnv, cwd: REPO_ROOT, stdio: values.quiet ? 'ignore' : 'inherit' });
         if (r.status !== 0) throw new Error('the QA-lab app build failed');
+        buildSource = captureSource();
+        if (beforeBuild.appFingerprint !== buildSource.appFingerprint) throw new Error('app source changed during the QA build; rebuild after editing finishes');
+        writeFileSync(buildEvidenceFile, JSON.stringify(buildSource) + '\n');
+      } else if (existsSync(buildEvidenceFile)) {
+        buildSource = JSON.parse(readFileSync(buildEvidenceFile, 'utf8'));
       }
       step(`serving the QA-lab build on ${appOrigin}/app/`);
       app = startChild('app', VITE, ['preview', '--config', QA_VITE_CONFIG], { env: appEnv, cwd: REPO_ROOT, quiet: values.quiet });
@@ -193,8 +209,11 @@ export async function runLab(argv = process.argv.slice(2)) {
     if (preflight.headers.get('access-control-allow-origin') !== appOrigin) throw new Error(`a function preflight through the API proxy did not come back with the function's own CORS headers (Access-Control-Allow-Origin: ${preflight.headers.get('access-control-allow-origin')}); see qa-lab/README.md "CORS"`);
 
     const runtime = {
+      projectId: projectId(), instance: instanceName(),
+      buildSource,
+      gatewayKeepalive: status.QA_GATEWAY_KEEPALIVE,
       pid: process.pid, startedAt: new Date().toISOString(), mode: values.dev ? 'dev' : 'preview', appPort, mockPort, apiPort, issuer: LAB_ISSUER,
-      urls: { app: `${appOrigin}/app/`, appOrigin, mock: mockUrl, inbox: `${mockUrl}/qa/inbox`, apiOrigin, api: SUPABASE_API_URL, studio: 'http://127.0.0.1:54323', mailpit: 'http://127.0.0.1:54324' },
+      urls: { app: `${appOrigin}/app/`, appOrigin, mock: mockUrl, inbox: `${mockUrl}/qa/inbox`, apiOrigin, api: SUPABASE_API_URL, studio: localStudioOrigin(), mailpit: localMailOrigin() },
       productionOrigin: APP_PUBLIC_ORIGIN,
       functionsEnv: Object.keys(fnEnv),
     };

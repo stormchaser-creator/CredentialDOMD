@@ -30,12 +30,12 @@ function server(f, table, rows, { offline = () => false, uniqueOther = null } = 
     if (op.method === 'select') {
       const row = db.get(id);
       if (!row) return { error: null, data: null };
-      return { error: null, data: Object.fromEntries(String(op.value).split(',').map(c => [c, row[c]])) };
+      return { error: null, data: op.value === '*' ? { ...row } : Object.fromEntries(String(op.value).split(',').map(c => [c, row[c]])) };
     }
     if (op.method === 'update') {
       if (!db.has(id)) return { error: null, data: [] };
       db.set(id, { ...db.get(id), ...op.value });
-      return { error: null, data: [{ id }] };
+      return { error: null, data: op.returning === '*' ? [{ ...db.get(id) }] : [{ id }] };
     }
     if (op.method === 'upsert') { db.set(op.value.id, { ...(db.get(op.value.id) || {}), ...op.value }); return { error: null }; }
     if (op.method === 'insert') {
@@ -64,14 +64,14 @@ test('a failed edit is queued as what it changed, and its replay leaves the desk
   db.set('lic-1', { ...db.get('lic-1'), expiration_date: '2028-12-31', favorite: true, updated_at: '2026-10-01T11:00:00.000Z' });
   offline = false;
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  const sent = f.requests.filter(r => r.table === 'licenses' && r.method !== 'select').at(-1);
-  assert.equal(sent.method, 'update', 'an UPDATE, not an upsert of every column');
-  assert.deepEqual(Object.keys(sent.value).sort(), ['id', 'notes', 'updated_at']);
   const row = db.get('lic-1');
-  assert.equal(row.notes, 'phone note');
+  assert.equal(row.notes, null, 'an unverified offline base cannot overwrite the account');
   assert.equal(row.expiration_date, '2028-12-31', 'the desk renewal stands');
   assert.equal(row.favorite, true, 'the desk star stands');
-  assert.ok(row.updated_at > '2026-10-01T11:00:00.000Z', 'dated as it lands, so no device takes it for older than the desk copy');
+  const copies = f.recovery.readRecovery('user_syntheticA');
+  assert.equal(copies.length, 1, 'the unsent intent is retained for explicit recovery');
+  assert.equal(copies[0].local.notes, 'phone note');
+  assert.equal(copies[0].cloud.expirationDate, '2028-12-31');
   assert.deepEqual(f.queue(), []);
 });
 
@@ -82,7 +82,7 @@ test('a queued edit whose row does not exist yet is created whole, as before', a
   await f.api.updateItem('profileA', 'licenses', { ...license, notes: 'phone note' }, license, 'user_syntheticA');
   offline = false;
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  assert.deepEqual(f.requests.filter(r => r.table === 'licenses').slice(-2).map(r => r.method), ['update', 'upsert']);
+  assert.deepEqual(f.requests.filter(r => r.table === 'licenses').slice(-2).map(r => r.method), ['select', 'insert']);
   assert.equal(db.get('lic-1').name, 'QA license');
   assert.equal(db.get('lic-1').notes, 'phone note');
   assert.deepEqual(f.queue(), []);
@@ -92,12 +92,13 @@ test('a live edit made while an earlier one is queued sends both changes, and on
   const f = fixture();
   let offline = true;
   server(f, 'licenses', [licenseRow], { offline: () => offline });
+  await f.acknowledgements.prepareRecordAcknowledgements(null, { licenses: [license] }, { accountId: 'user_syntheticA', fence: null });
   const first = { ...license, notes: 'phone note' };
   await f.api.updateItem('profileA', 'licenses', first, license, 'user_syntheticA');
   offline = false;
   await f.api.updateItem('profileA', 'licenses', { ...first, number: 'Q-200' }, first, 'user_syntheticA');
   const update = f.requests.filter(r => r.table === 'licenses' && r.method === 'update').at(-1);
-  assert.deepEqual(Object.keys(update.value).sort(), ['id', 'notes', 'number', 'updated_at']);
+  assert.deepEqual(Object.keys(update.value).sort(), ['notes', 'number', 'updated_at']);
   assert.deepEqual(f.queue(), [], 'the landed edit carried the queued one, which leaves the queue');
 });
 
@@ -112,8 +113,8 @@ test('an edit held for a membership answer is queued as what it changed and goes
   f.authority.accept(ACCOUNT, active());
   await replayOnAnswer(f);
   const [sent] = f.writes();
-  assert.equal(sent.method, 'update');
-  assert.deepEqual(Object.keys(sent.value).sort(), ['id', 'name', 'updated_at'], 'never the hours the desk may have changed');
+  assert.equal(sent.method, 'insert', 'this permission fixture has no stored cloud row');
+  assert.equal(sent.value.name, 'Synthetic Stroke Update 2026', 'the held source is inserted intact');
   assert.deepEqual(f.alerts, []);
 });
 
@@ -159,7 +160,8 @@ test('a queued change to one field is merged the same way when it replays', asyn
   db.set('rec-1', { ...db.get('rec-1'), field_values: { carrier: 'Desk Carrier', policy_number: 'P1' } });
   offline = false;
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  assert.deepEqual(plain(db.get('rec-1').field_values), { carrier: 'Desk Carrier', policy_number: 'P2' });
+  assert.deepEqual(plain(db.get('rec-1').field_values), { carrier: 'Desk Carrier', policy_number: 'P1' });
+  assert.equal(f.recovery.readRecovery('user_syntheticA')[0].local.fieldValues.policy_number, 'P2', 'the unverified edit remains available for review');
   assert.deepEqual(f.queue(), []);
 });
 
@@ -182,7 +184,8 @@ test('an archive of a locum contract queued offline keeps the note the desk chan
   db.set('lc-1', { ...db.get('lc-1'), custom_fields: { note: 'desk new' } });
   offline = false;
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  assert.deepEqual(plain(db.get('lc-1').custom_fields), { note: 'desk new', archivedAt: '2026-10-01T10:00:00.000Z' });
+  assert.deepEqual(plain(db.get('lc-1').custom_fields), { note: 'desk new' });
+  assert.equal(f.recovery.readRecovery('user_syntheticA')[0].local.customFields.archivedAt, '2026-10-01T10:00:00.000Z', 'the unsent archive intent is retained');
   assert.deepEqual(f.queue(), []);
 });
 

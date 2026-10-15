@@ -24,7 +24,19 @@ serve(createSelfServiceSignupHandler({
     if (!response.ok) throw Error('Clerk identity unavailable');
     return response.json();
   },
-  enroll: (profile: string, subject: string, live: boolean, mailbox: string) => checked(database().rpc('bootstrap_limited_signup', {
-    p_profile_id: profile, p_clerk_subject: subject, p_livemode: live, p_verified_primary_email: mailbox,
-  })),
+  enroll: async (profile: string, subject: string, live: boolean, mailbox: string) => {
+    const client = database();
+    const args = Object.freeze({ p_profile_id: profile, p_clerk_subject: subject, p_livemode: live, p_verified_primary_email: mailbox });
+    let result = await client.rpc('bootstrap_limited_signup', args);
+    // Only this transaction is replay-safe: profile/mailbox locks and unique
+    // enrollment/grant keys preserve a committed first call without restarting
+    // beta, claiming another gift or creating billing. Every attempt rechecks
+    // current ownership, revocation and policy; consume the second answer.
+    if (result.error && [502, 503, 504].includes(result.status)) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // Bound recovery lock/transport waiting without changing the first call.
+      result = await client.rpc('bootstrap_limited_signup', args).abortSignal(AbortSignal.timeout(5000));
+    }
+    return checked(Promise.resolve(result));
+  },
 }));

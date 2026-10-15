@@ -43,10 +43,22 @@ test('membership check notices: reconnecting while checks fail, Try again, Check
   await qa.feature('AUTH-009', 'Offline while signed in: the note appears only once the check keeps failing; a save is kept on this device and syncs when the check answers; back online it clears by itself', async () => {
     await openSettings(page);
     const t0 = Date.now();
+    let failedChecks = 0;
+    const countFailed = (r) => { if (r.url().includes('/functions/v1/billing-entitlements') && r.method() === 'POST') failedChecks += 1; };
+    page.on('requestfailed', countFailed);
     await context.setOffline(true);
     // Coming back to the app (focus) asks for a fresh answer, which now fails and is retried.
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await sleep(4000);
+    // A focus that lands while the check before it is still settling joins that check
+    // (useLimitedLaunchAccess shares the one in flight), which answered before the
+    // connection went: no check fails and nothing retries. Seen on 2026-10-01 at 01:09 UTC,
+    // 0.25 s after the license's check answered. So focus again until one has failed.
+    for (let i = 0; i < 10 && failedChecks === 0; i++) {
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await sleep(1000);
+    }
+    page.off('requestfailed', countFailed);
+    qa.check('a membership check was tried offline and failed', failedChecks > 0, `${failedChecks} failed check(s)`);
+    await sleep(3000);
     const early = await page.getByText(RECONNECTING).count();
     qa.check('no note for the first failed checks (a single slow resume says nothing)', early === 0, `${early} note(s) after 4 s`);
     const note = page.getByRole('status').filter({ hasText: RECONNECTING });
@@ -133,7 +145,7 @@ test('membership check notices: reconnecting while checks fail, Try again, Check
     const checking = other.page.getByRole('status').filter({ hasText: /Checking membership\.|Reconnecting to your account\./ });
     const shown = await checking.waitFor({ timeout: 30000 }).then(() => true, () => false);
     const txt = shown ? (await checking.innerText()).replace(/\s+/g, ' ') : '';
-    await other.page.screenshot({ path: (await qa.shot('checking membership')).replace(/\.png$/, '-second.png') });
+    await qa.shot('checking membership', other.page);
     qa.check('the saved records show with a "Checking membership." note', shown && /Checking membership\./.test(txt), txt.slice(0, 160));
     await other.page.unroute(fn('billing-entitlements'));
     const again = checking.getByRole('button', { name: /Check again|Try again/ });
@@ -151,12 +163,79 @@ test('account setup failure screen: a readable message and a working Try again; 
   const { user } = await newMember(page, { firstName: 'Ira', lastName: 'Initfail' });
   await addLicenseByHand(page, 'QA-INIT-1', 'UT');
   const before = profileOf(user.id);
-  const since = nowSql();
 
-  await qa.feature('AUTH-011', 'initialize-clerk-profile blocked: a message under the logo and Reload; unblocked, one tap reaches Home with every record', async () => {
-    const sent = [];
-    page.on('request', (r) => { if (r.url().includes('/functions/v1/report-error') && r.method() === 'POST') sent.push({ body: r.postData() || '', response: r.response() }); });
+  const sent = [];
+  page.on('request', (r) => { if (r.url().includes('/functions/v1/report-error') && r.method() === 'POST') sent.push({ body: r.postData() || '', response: r.response() }); });
+
+  // release/goal2 9580f781 changed this on purpose: an identity check with no
+  // answer at all (every try failed to connect or timed out) is a weak signal,
+  // not an identity problem. The account's own device copy opens read-only with
+  // a notice, and the check is asked again on its own; it used to stop on "could
+  // not be verified ... Reload". A server's answer about the identity still
+  // stops there (the next stretch).
+  await qa.feature('AUTH-011', 'initialize-clerk-profile never connects: this device\'s copy opens read-only with a notice; unblocked, it recovers on its own', async () => {
+    // release/goal3 39aa743b: leaving the page hands the save under way to this
+    // build's own localStorage copy at once, so a reload straight after adding the
+    // license keeps it in the device copy (on goal2 the copy was written 300 ms
+    // after a change and a reload at once read a copy without it: the weak launch
+    // said "No saved records in this section"). So this stretch reloads at once.
+    const sinceWeak = nowSql();
+    const firstWeak = sent.length;
     await page.route(fn('initialize-clerk-profile'), (r) => r.abort('failed'));
+    const notice = page.locator('[data-identity-waiting]');
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await notice.waitFor({ timeout: 90000 });
+      const msg = (await notice.innerText()).replace(/\s+/g, ' ');
+      await qa.shot('identity check never connects');
+      // release/goal3 39aa743b reworded it on purpose: one message, nothing to tap.
+      qa.check('a readable notice that the connection is too weak, with a support reference (not "Checking your membership…", not a stop screen)', /too weak to reach your account/.test(msg) && /nothing to tap/.test(msg) && /Support reference: [A-Z0-9-]+/.test(msg) && !/could not be verified/.test(await bodyText(page)), msg.slice(0, 260));
+      // Read-only, so Credentials is the saved-records view (ReadOnlyRecords), not the section tables.
+      await openCredentials(page);
+      const listed = await page.getByRole('heading', { name: /^Licenses \(1\)$/i }).waitFor({ timeout: 20000 }).then(() => true, () => false);
+      await qa.shot('identity check never connects, Credentials');
+      const credsText = (await page.locator('main').innerText().catch(() => bodyText(page))).replace(/\s+/g, ' ');
+      qa.check('the records saved on this device show, read-only (the license added just before the reload)', listed && !/No saved records in this section/.test(credsText), credsText.slice(0, 300));
+      // goal2 lab finding: "Trying again on its own" sat over "Showing this device's copy. Reload to reconnect your account".
+      const page1 = await bodyText(page);
+      qa.check('one message on Credentials: no "Reload to reconnect", no Reload button, no membership-expiry line', !/Reload to reconnect|Showing this device's copy\./.test(page1)
+        && !(await page.getByRole('button', { name: 'Reload', exact: true }).count())
+        && !/Membership expiry does not delete your data/.test(page1)
+        && (await page.locator('[data-identity-waiting]').count()) === 1, (page1.match(/.{0,80}(Reload|device's copy|Membership expiry).{0,80}/) || [''])[0]);
+      const navigated = await Promise.all([page.waitForEvent('domcontentloaded', { timeout: 30000 }).then(() => true, () => false), page.reload()]).then(([n]) => n);
+      const again = await notice.waitFor({ timeout: 90000 }).then(() => true, () => false);
+      qa.check('a reload while still blocked shows the same notice and the records (never an endless check)', navigated && again && !/Checking your membership…/.test(await bodyText(page)), (await bodyText(page)).slice(0, 200));
+      await page.unroute(fn('initialize-clerk-profile'));
+      // No tap: the app asks again on its own (5, 15, 30, 60, then every 120 s).
+      const recovered = await notice.waitFor({ state: 'detached', timeout: 150000 }).then(() => true, () => false);
+      await openCredentials(page, 'Licenses').catch(() => {});
+      qa.check('unblocked, with no tap, the notice goes and the account opens with the license', recovered && await tableRow(page, 'QA-INIT-1').isVisible().catch(() => false), recovered ? '' : (await bodyText(page)).slice(0, 200));
+    } finally {
+      await page.unroute(fn('initialize-clerk-profile')).catch(() => {});
+    }
+    const used = sent.slice(firstWeak).filter((x) => /Account load used this device's copy, read-only/.test(x.body));
+    const statuses = await Promise.all(used.map(async (x) => (await x.response.catch(() => null))?.status() ?? null));
+    qa.check('the app reports the read-only device copy with a support reference only', used.length > 0 && used.every((x) => /"message":"Account load used this device's copy, read-only \([A-Z0-9_-]+\)\."/.test(x.body)), `${used.length} report(s), statuses ${statuses.join(', ')}`);
+    const stoppedReports = sent.slice(firstWeak).filter((x) => /Account load stopped/.test(x.body));
+    qa.check('no "Account load stopped" for a check that never connected', stoppedReports.length === 0, `${stoppedReports.length}`);
+    const reports = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${sinceWeak}' and auth_user_id = '${user.id}' and message like 'Account load used this device''s copy, read-only%'`);
+    if (statuses.length && statuses.every((st) => st === 429)) {
+      qa.blocked('AUTH-011', 'report-error answered 429 (its cap is 30 rows per hashed IP per 10 minutes, and every journey on the shared lab reports from 127.0.0.1); the report payload was checked in the browser instead of the stored client_errors row.');
+    } else qa.check('client_errors records the read-only device copy', reports.length > 0 && reports.every((r) => /^Account load used this device's copy, read-only \([A-Z0-9_-]+\)\.$/.test(r.message)), JSON.stringify(reports.slice(0, 3)));
+    if (reports.length) qa.intentionalClientErrors(reports, {
+      message: "Account load used this device's copy, read-only (ID-INIT-UNAVAILABLE-NETWORK).", kind: 'error', authUserId: user.id, count: 2,
+      reason: 'AUTH-011 deliberately aborted every identity request across two page loads; the exact account device copy stayed read-only and recovered automatically once the route was unblocked.' });
+    const after = profileOf(user.id);
+    qa.check('the profiles row is unchanged (same id, still active)', after.id === before.id && after.access_status === 'active' && after.auth_user_id === before.auth_user_id);
+  }, { soft: true });
+
+  await qa.feature('AUTH-011', 'initialize-clerk-profile answers with an identity conflict: a message under the logo and Reload; unblocked, one tap reaches Home with every record', async () => {
+    const since = nowSql();
+    const first = sent.length;
+    // The function's own answer for an identity it cannot resolve (409 identity_conflict).
+    await page.route(fn('initialize-clerk-profile'), (r) => (r.request().method() === 'OPTIONS' ? r.fallback() : r.fulfill({
+      status: 409, contentType: 'application/json', headers: { 'access-control-allow-origin': lab().urls.appOrigin }, body: '{"error":"identity_conflict"}',
+    })));
     try {
       await page.reload({ waitUntil: 'domcontentloaded' });
       const status = page.getByRole('status').first();
@@ -184,42 +263,56 @@ test('account setup failure screen: a readable message and a working Try again; 
       // Never leave the profile step blocked for the next stretch.
       await page.unroute(fn('initialize-clerk-profile')).catch(() => {});
     }
-    const stops = sent.filter((x) => /Account load stopped/.test(x.body));
+    const stops = sent.slice(first).filter((x) => /Account load stopped/.test(x.body));
     const statuses = await Promise.all(stops.map(async (x) => (await x.response.catch(() => null))?.status() ?? null));
-    qa.check('the app reports the stop with a support reference only', stops.length > 0 && stops.every((x) => /"message":"Account load stopped \([A-Z0-9-]+\)\."/.test(x.body)), `${stops.length} report(s), statuses ${statuses.join(', ')}`);
-    const reports = rows(`select message from public.client_errors where created_at > '${since}' and auth_user_id = '${user.id}' and message like 'Account load stopped%'`);
+    qa.check('the app reports the stop with a support reference only', stops.length > 0 && stops.every((x) => /"message":"Account load stopped \([A-Z0-9_-]+\)\."/.test(x.body)), `${stops.length} report(s), statuses ${statuses.join(', ')}`);
+    const reports = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${since}' and auth_user_id = '${user.id}' and message like 'Account load stopped%'`);
     if (statuses.length && statuses.every((st) => st === 429)) {
       qa.blocked('AUTH-011', 'report-error answered 429 (its cap is 30 rows per hashed IP per 10 minutes, and every journey on the shared lab reports from 127.0.0.1); the report payload was checked in the browser instead of the stored client_errors row.');
-    } else qa.check('client_errors records the stop', reports.length > 0 && reports.every((r) => /^Account load stopped \([A-Z0-9-]+\)\.$/.test(r.message)), JSON.stringify(reports.slice(0, 3)));
+    } else qa.check('client_errors records the stop', reports.length > 0 && reports.every((r) => /^Account load stopped \([A-Z0-9_-]+\)\.$/.test(r.message)), JSON.stringify(reports.slice(0, 3)));
+    if (reports.length) qa.intentionalClientErrors(reports, { message: 'Account load stopped (ID-INIT-IDENTITY_CONFLICT-H409).', kind: 'error', authUserId: user.id, count: 2, reason: 'AUTH-011 deliberately returned 409 identity_conflict across two page loads to verify the stop screen and Reload; removing the route restored the exact account and its license.' });
     const after = profileOf(user.id);
     qa.check('the profiles row is unchanged (same id, still active)', after.id === before.id && after.access_status === 'active' && after.auth_user_id === before.auth_user_id);
   }, { soft: true });
 
   await qa.feature('AUTH-011', 'bootstrap-launch-access blocked: a member still opens the app', async () => {
+    const faultSince = nowSql();
     await page.route(fn('bootstrap-launch-access'), (r) => r.abort('failed'));
     await page.reload({ waitUntil: 'domcontentloaded' });
     const where = await landing(page);
     await sleep(2000);
     const msg = await bodyText(page);
     qa.check('the full member reaches the app (enrollment is not needed for a member)', where === 'member' && !/Checking your membership…/.test(msg), where);
+    const reports = await waitFor('the deliberately blocked enrollment report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Membership enrollment failed (network:membership_information_unavailable)'`);
+      return found.length ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(reports, { message: 'Membership enrollment failed (network:membership_information_unavailable)', kind: 'error', authUserId: user.id, count: 1, reason: 'AUTH-011 deliberately aborted bootstrap-launch-access for this existing member and verified that saved records remain available.' });
     await page.unroute(fn('bootstrap-launch-access'));
   }, { soft: true });
 
   await qa.feature('AUTH-011', 'bootstrap-launch-access blocked for a new signup: the gate says so and "Check membership again" recovers', async () => {
     const other = await secondBrowser();
     const person = await createPhysician({ firstName: 'Una', lastName: 'Enroll' });
+    const faultSince = nowSql();
     await other.page.route(fn('bootstrap-launch-access'), (r) => r.abort('failed'));
     await signIn(other.page, person);
     const where = await landing(other.page);
     await sleep(3000);
     const gate = other.page.getByRole('region', { name: 'Membership' });
     const txt = (await gate.innerText().catch(() => bodyText(other.page))).replace(/\s+/g, ' ');
-    await other.page.screenshot({ path: (await qa.shot('enrollment failed gate')).replace(/\.png$/, '-signup.png') });
+    await qa.shot('enrollment failed gate', other.page);
     const recheck = other.page.getByRole('button', { name: /Check membership again|Check access again/ }).first();
     qa.check('the new signup sees the gate with a readable message and a retry button (not an endless check)', where === 'gate' && await recheck.isVisible().catch(() => false) && !/Checking your membership…$/.test(txt), `${where}: ${txt.slice(0, 200)}`);
+    const reports = await waitFor('the new signup enrollment fault report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${person.id}' and message = 'Membership enrollment failed (network:membership_information_unavailable)'`);
+      return found.length ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(reports, { message: 'Membership enrollment failed (network:membership_information_unavailable)', kind: 'error', authUserId: person.id, count: 1, reason: 'AUTH-011 deliberately aborted bootstrap-launch-access for this new signup and verified its retry screen.' });
     await other.page.unroute(fn('bootstrap-launch-access'));
     await recheck.click();
-    const offer = await other.page.getByRole('button', { name: /Review .* offer/ }).first().waitFor({ timeout: 30000 }).then(() => true, () => false);
+    // Pay first: the offer's review opens by itself (Complete payment until it has).
+    const offer = await other.page.getByRole('button', { name: /Review .* offer|^Continue to secure payment$|^Complete payment$/ }).first().waitFor({ timeout: 30000 }).then(() => true, () => false);
     qa.check('after unblocking, the retry shows the membership offer', offer);
     qa.check('the new profile is pending, as any signup', profileOf(person.id)?.access_status === 'pending');
     await other.context.close();
@@ -301,15 +394,17 @@ test('invitation link: captured before sign-in, removed from the address bar, ke
     const gate = (await page.getByRole('region', { name: 'Membership' }).innerText()).replace(/\s+/g, ' ');
     await qa.shot('gate with invitation token');
     qa.check('access_policy_settings.limited_invitation_enabled is off, as at launch', policy?.limited_invitation_enabled === false, JSON.stringify(policy));
-    qa.check('no "Activate my invitation" while activation is off; the public offer is shown instead', !(await page.getByRole('button', { name: 'Activate my invitation' }).count()) && /Review .* offer|Choose whether to purchase/.test(gate), gate.slice(0, 200));
+    qa.check('no "Activate my invitation" while activation is off; the public offer is shown instead', !(await page.getByRole('button', { name: 'Activate my invitation' }).count()) && /Review .* offer|Choose whether to purchase|Complete your payment to open your account/.test(gate), gate.slice(0, 200));
     qa.check('the profile stays pending (a link grants nothing by itself)', profileOf(person.id)?.access_status === 'pending');
     // Public signup writes its own self_service enrollment row (origin self_service); a reviewed invitation is never consumed.
     const inv = rows(`select origin, claimed_at from public.limited_billing_invitations where clerk_subject = '${person.id}' or lower(email) = '${invitee}'`);
     qa.check('no reviewed invitation was consumed by this account (only the public self-service enrollment)', inv.every((r) => r.origin === 'self_service'), JSON.stringify(inv));
-    qa.blocked('AUTH-007', 'Invitation activation is switched off in production (access_policy_settings.limited_invitation_enabled = false, invitations OFF at launch) and the lab mirrors it; turning the shared switch on would change every other journey\'s gate, and invitations are issued only by the operator SQL prepare_limited_billing_invitations (no admin screen). The gate correctly offers no activation.');
+    qa.blocked('AUTH-007', 'Invitation activation is disabled by both the built-in launch configuration and the local policy setting. The normal app correctly offers no activation, and changing the database switch alone cannot enable this route. Enabled invitation handler and SQL paths have separate fixture coverage; the ordinary app activation journey is not exercised in this build.');
   }, { soft: true });
 
   await qa.feature('AUTH-015', 'A client error carrying the token is reported with it redacted', async () => {
+    qa.allowPageError(`QA forced error while opening /app/#launch_invite=${token}`);
+    qa.allowPageError(`QA forced rejection {"launch_invite":"${token}"}`);
     const sent = [];
     page.on('request', (r) => { if (r.url().includes('/functions/v1/report-error') && r.method() === 'POST') sent.push({ body: r.postData() || '', response: r.response() }); });
     await page.evaluate((t) => {
@@ -318,9 +413,9 @@ test('invitation link: captured before sign-in, removed from the address bar, ke
     }, token);
     await sleep(1500);
     const reported = await waitFor('the forced reports', async () => {
-      const r = rows(`select message, stack, url from public.client_errors where created_at > '${since}' and message like 'QA forced%'`);
+      const r = rows(`select id, kind, auth_user_id, message, stack, url from public.client_errors where created_at > '${since}' and auth_user_id = '${person.id}' and message like 'QA forced%'`);
       return r.length >= 2 ? r : null;
-    }, { timeoutMs: 15000, intervalMs: 1000 }).catch(() => rows(`select message, stack, url from public.client_errors where created_at > '${since}' and message like 'QA forced%'`));
+    }, { timeoutMs: 15000, intervalMs: 1000 }).catch(() => rows(`select id, kind, auth_user_id, message, stack, url from public.client_errors where created_at > '${since}' and auth_user_id = '${person.id}' and message like 'QA forced%'`));
     const forced = sent.filter((x) => /QA forced/.test(x.body));
     const statuses = await Promise.all(forced.map(async (x) => (await x.response.catch(() => null))?.status() ?? null));
     qa.check('the browser sent both reports with the token replaced by "[redacted]"', forced.length >= 2 && forced.every((x) => /\[redacted\]/.test(x.body) && !x.body.includes(token)), `${forced.length} sent; statuses ${statuses.join(', ')}`);
@@ -329,6 +424,10 @@ test('invitation link: captured before sign-in, removed from the address bar, ke
     } else {
       qa.check('both forced errors reached client_errors', reported.length >= 2, `${reported.length} row(s); statuses ${statuses.join(', ')}`);
       qa.check('each stored report shows "[redacted]" where the token was', reported.length > 0 && reported.every((r) => /\[redacted\]/.test(r.message)), reported.map((r) => r.message).join(' | ').slice(0, 300));
+      for (const [kind, message] of [['error', 'QA forced error while opening /app/#launch_invite=[redacted]'], ['unhandledrejection', 'QA forced rejection {"launch_invite":"[redacted]"}']]) {
+        const observed = reported.filter(report => report.kind === kind);
+        if (observed.length) qa.intentionalClientErrors(observed, { message, kind, authUserId: person.id, count: 1, reason: 'AUTH-015 deliberately raised one error and one promise rejection containing a synthetic invitation to verify redaction.' });
+      }
     }
     const leaks = rows(`select id from public.client_errors where message like '%${token}%' or coalesce(stack, '') like '%${token}%' or coalesce(url, '') like '%${token}%'`);
     qa.check('the token text is nowhere in client_errors', leaks.length === 0, `${leaks.length} row(s)`);
@@ -424,15 +523,7 @@ test('pre-cutover member: the continuity binding attaches the new Clerk subject 
     let person;
     if (acct.state === 'prepared') {
       // The member's first sign-in under the new Clerk, with the same verified address.
-      try {
-        person = await createPhysician({ firstName: 'Legacy', lastName: 'Member', email: acct.verified_primary_email });
-      } catch (e) {
-        if (/email_taken/.test(String(e.message))) {
-          qa.blocked('AUTH-014', `The browser half cannot run in the lab: the mock Clerk keeps one address book for both of its instances (qa-lab/mocks/clerk.mjs normalizeEmail refuses an address any test physician holds, legacy instance included), so the seeded legacy member's address (${acct.verified_primary_email}) cannot also be created on the live instance, which is exactly what a pre-cutover member signing in under the production Clerk is. The binding itself is exercised above on the local database.`);
-          return;
-        }
-        throw e;
-      }
+      person = await createPhysician({ firstName: 'Legacy', lastName: 'Member', email: acct.verified_primary_email });
     } else {
       // Already bound by an earlier run: sign in again as the bound account.
       const users = (await mockApi('/qa/users')).users || [];

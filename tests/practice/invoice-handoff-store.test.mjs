@@ -16,8 +16,8 @@ import { loadScreens } from '../harness/component-harness.mjs';
 // Synthetic accounts, numbers and amounts only.
 
 const S = await loadScreens([
-  'export {handOffInvoice, keepInvoiceNote, forgetInvoiceNote, invoiceNotes, refreshInvoiceNotes, watchUnanswered, shareInFlight, _resetInvoiceHandoff, setInvoiceHandoffReporter, _setHandoffTimes} from "./src/utils/invoiceHandoff.js";',
-  'export {purgeForSignOut, purgeAfterSessionEnd, setInvoiceHandoffPurge, BASE_KEYS} from "./src/utils/storageScope.js";',
+  'export {handOffInvoice, keepInvoiceNote, forgetInvoiceNote, invoiceNotes, refreshInvoiceNotes, watchUnanswered, shareInFlight, _resetInvoiceHandoff, setInvoiceHandoffReporter, _setHandoffTimes, sweepPendingInvoiceHandoffPurges} from "./src/utils/invoiceHandoff.js";',
+  'export {purgeForSignOut, purgeAfterSessionEnd, setInvoiceHandoffPurge, setActiveUserId, BASE_KEYS} from "./src/utils/storageScope.js";',
   'export {HANDOFF_DB_NAME, HANDOFF_STAMPS_BASE, HANDOFF_PURGE_BASE, handoffKey, purgeHandoffStores, sweepHandoffPurges} from "./src/utils/invoiceHandoffStore.js";',
 ].join(' '), { real: ['utils/storageScope'] });
 
@@ -70,7 +70,8 @@ function indexedDb({ hang = false, hangFirst = false } = {}) {
 function device({ full = false, hang = false, hangFirst = false } = {}) {
   const d = { session: webStorage({ full }), local: webStorage({ full }), idb: indexedDb({ hang, hangFirst }) };
   setGlobal('sessionStorage', d.session); setGlobal('localStorage', d.local); setGlobal('indexedDB', d.idb);
-  setGlobal('window', { sessionStorage: d.session });
+  setGlobal('window', { sessionStorage: d.session, Clerk: { user: { id: ACCOUNT }, session: { user: { id: ACCOUNT } } } });
+  S.setActiveUserId(ACCOUNT);
   return d;
 }
 const reports = [];
@@ -82,11 +83,11 @@ function fresh(opts) {
   globalThis.__screen = {};
   return device(opts);
 }
-const handoffKeys = (store) => [...store.map.keys()].filter(k => k.startsWith('credentialdomd-invoice-handoff'));
+const handoffKeys = (store) => [...store.map.keys()].filter(k => k.startsWith('credentialdomd-invoice-handoff') && k !== 'credentialdomd-invoice-handoff-v1-generation');
 const note = (number, total) => ({ number, sentAt: '2026-09-30T15:00:00.000Z', kind: number.slice(0, 3), contractId: number.startsWith('INV') ? 'c-synthetic' : null, total, periodStart: '2026-09-28', periodEnd: '2026-09-29' });
 
 test('Sign out and Delete All My Data remove the hand-off notes from every store and the page; a session that merely ended keeps them', async () => {
-  assert.match(MAIN, /^setInvoiceHandoffPurge\(purgeHandoffStores\);$/m, 'main.jsx hands the purge to storageScope at launch');
+  assert.match(MAIN, /^sweepHandoffPurges\(\)\.catch/m, 'launch completes any stored handoff purge');
   const dev = fresh();
   await S.handOffInvoice(ACCOUNT, note('EXP-20260930-01', 123.45)).durable;
   await S.handOffInvoice(ACCOUNT, note('INV-20260930-02', 2000)).durable;
@@ -307,8 +308,9 @@ test('a Sign out whose IndexedDB half never opens is recorded: the next page nev
   S._resetInvoiceHandoff();
   dev.idb.hangNow = false;
   await S.sweepHandoffPurges();
+  await S.sweepPendingInvoiceHandoffPurges();
   assert.equal(dev.idb.rows.has(key), false, 'swept at launch');
-  assert.deepEqual([...dev.local.map.keys()].filter(k => k.startsWith('credentialdomd-invoice-handoff')), [], 'nothing of the account is left');
+  assert.deepEqual([...dev.local.map.keys()].filter(k => k.startsWith('credentialdomd-invoice-handoff') && k !== 'credentialdomd-invoice-handoff-v1-generation'), [], 'nothing of the account is left');
   assert.match(MAIN, /^sweepHandoffPurges\(\)\.catch\(\(\) => \{\}\);$/m, 'main.jsx sweeps at launch');
 });
 

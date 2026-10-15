@@ -18,7 +18,7 @@ import { describeAccessRefreshFailure } from "./accessRefreshFailure.js";
 
 const ACTIONS = new Set(["quote", "checkout", "activate"]);
 
-export function createCheckoutFailureReporter(report) {
+export function createCheckoutFailureReporter(report, { reportQuoteReadFailure = report } = {}) {
   const sent = new Set();
   return (action, error) => {
     if (!ACTIONS.has(action)) return false;
@@ -30,7 +30,14 @@ export function createCheckoutFailureReporter(report) {
     sent.add(key);
     try {
       const label = failure.phase === "client" ? `Membership ${action} stopped on the page (${code})` : `Membership ${action} failed (${code})`;
-      report(label, "error", { event: "membership_checkout_failed", action, ...failure, code });
+      // A quote is only a read. A fetch interrupted as its page leaves must
+      // not become an owner failure; active-page failures still report.
+      // Real server refusals and payment submissions retain immediate diagnostics.
+      const quoteRead = action === "quote" && failure.phase === "network" && failure.httpStatus === null;
+      const extra = { event: "membership_checkout_failed", action, ...failure, code };
+      if (quoteRead && reportQuoteReadFailure !== report) {
+        reportQuoteReadFailure(label, "error", extra, { onDropped: () => { sent.delete(key); } });
+      } else report(label, "error", extra);
     } catch { /* Reporting must never change what the buyer sees. */ }
     return true;
   };

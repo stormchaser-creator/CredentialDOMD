@@ -22,6 +22,8 @@ import { createAccessAuthority, allowsSettingsChange, membershipWriteError } fro
 import { profileInitializationError, profileSupportReference } from '../../src/utils/profileIssueDiagnostics.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 import * as syncRules from '../../src/utils/syncRules.js';
+import { recoveryFor } from '../sync-recovery-fixture.mjs';
+import { createRecordAcknowledgements } from '../../src/utils/recordAcknowledgements.js';
 import { LOCAL_ONLY_SETTINGS } from '../../src/constants/defaults.js';
 
 const OWNER = 'user_syntheticA', OTHER = 'user_syntheticB';
@@ -147,11 +149,19 @@ function loadFixture({ edge, rows } = {}) {
   const clerk = { user: { id: OWNER }, session: clerkSession('sess_A1', OWNER) };
   const authority = createAccessAuthority({ enabled: false, currentAccount: () => actor });
   const f = { edgeRequests: [], restRequests: [], logs: [], edge, rows };
+  const values = new Map();
+  const acknowledgements = createRecordAcknowledgements({ activeAccount: () => actor, fenceFor: () => null,
+    copyCurrent: () => true, receiptBase: 'acks', queueBase: 'ops',
+    read: (base, id) => values.get(`${base}:${id}`) ?? null,
+    write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } });
   const imports = {
+    '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
+    '../utils/recordAcknowledgements.js': acknowledgements,
+    '../utils/syncRecovery.js': recoveryFor(values, () => actor, () => null),
     '@supabase/supabase-js': { createClient },
     '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS },
     '../utils/syncRules.js': syncRules,
-    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
+    '../utils/storageScope.js': { localWriteGuard: () => () => true, BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
       adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
       // The queue's write (storageScope makes room first in the app).
       setItemMakingRoom: (key, value) => values.set(key, value) },
@@ -170,8 +180,7 @@ function loadFixture({ edge, rows } = {}) {
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, allowsSettingsChange: value => allowsSettingsChange(value, authority), membershipWriteError },
   };
   const module = { exports: {} };
-  const values = new Map();
-  const context = vm.createContext({ module, exports: module.exports, require: name => imports[name],
+  const context = vm.createContext({ module, exports: module.exports, require: name => { if (!imports[name]) throw Error(`Unexpected import ${name}`); return imports[name]; },
     window: { Clerk: clerk },
     localStorage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) },
     fetch: async (url, options) => {

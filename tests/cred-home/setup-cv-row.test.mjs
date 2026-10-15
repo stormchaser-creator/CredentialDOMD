@@ -73,3 +73,39 @@ test('the CV review writes the stamp through the setup queue, never straight int
   assert.doesNotMatch(save, /updateSettings\(\{ setupState/);
   assert.doesNotMatch(src, /"cvImported"/);
 });
+
+test('automatic setup bookkeeping is marked separately; either ordering of a manual draft keeps the entire batch manual', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const writes = [], updateSettings = (patch, options) => writes.push({ patch, options });
+  const automatic = () => Q.commitSetupState(st => ({ ...st, progress: { done: 1, total: 3 } }), { updateSettings, userId: 'u-automatic', automatic: true });
+  const manual = () => Q.commitSetupState(st => withTask(st, 'dea', 'skipped', { now: new Date(AT) }), { updateSettings, userId: 'u-automatic' });
+  automatic(); t.mock.timers.tick(1300);
+  assert.equal(writes[0].options.automaticSetup, true);
+  for (const mutations of [[automatic, manual], [manual, automatic]]) {
+    writes.length = 0;
+    for (const mutate of mutations) mutate();
+    t.mock.timers.tick(1300);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].options.automaticSetup, false, 'an automatic update cannot hide a refused manual draft');
+    assert.equal(writes[0].patch.setupState.tasks.dea.s, 'skipped');
+    assert.equal(writes[0].patch.setupState.progress.done, 1);
+  }
+  writes.length = 0;
+  automatic(); t.mock.timers.tick(1300);
+  assert.equal(writes[0].options.automaticSetup, true, 'the completed manual batch does not taint later automatic work');
+});
+
+test('an account switch flushes the old manual batch before marking the new account automatic', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const writes = [];
+  Q.commitSetupState(st => withCvImported(st, AT), { userId: 'old-account', updateSettings: (patch, options) => writes.push({ owner: 'old', patch, options }) });
+  Q.commitSetupState(st => ({ ...st, startedAt: AT }), { userId: 'new-account', automatic: true, updateSettings: (patch, options) => writes.push({ owner: 'new', patch, options }) });
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].owner, 'old');
+  assert.equal(writes[0].options.automaticSetup, false);
+  assert.equal(writes[0].patch.setupState.cvImportedAt, AT);
+  t.mock.timers.tick(1300);
+  assert.equal(writes[1].owner, 'new');
+  assert.equal(writes[1].options.automaticSetup, true);
+  assert.equal(writes[1].patch.setupState.cvImportedAt, null);
+});

@@ -10,15 +10,36 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
-import { runOutputs } from './support/run-options.mjs';
+import { browserSettings, runOutputs } from './support/run-options.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = runOutputs();
+const ENGINE = browserSettings();
+const DEVICE = { chromium: 'Desktop Chrome', webkit: 'Desktop Safari', firefox: 'Desktop Firefox' }[ENGINE.browserName];
+
+// QA_ENGINE is an alias for QA_BROWSER_ENGINE. The runner and reporter use
+// the same selection; incompatible aliases fail before a journey starts.
+const IPHONE = /^iphone$/i.test(String(process.env.QA_DEVICE || '').trim());
+if (IPHONE && ENGINE.browserName === 'firefox') throw new Error('QA_DEVICE=iphone requires Chromium or WebKit');
+const IPHONE_15 = { ...devices['iPhone 15'], userAgent: devices['iPhone 15'].userAgent.replace('17_5', '18_7').replace(/Version\/[\d.]+/, 'Version/18.7'), viewport: { width: 393, height: 852 }, screen: { width: 393, height: 852 } };
+delete IPHONE_15.defaultBrowserType;
+const engineUse = {
+  ...(IPHONE ? IPHONE_15 : { ...devices[DEVICE], viewport: { width: 1280, height: 900 } }),
+  ...ENGINE,
+};
 
 export default defineConfig({
   testDir: HERE,
   testMatch: /.*\.spec\.mjs$/,
   outputDir: OUT.artifacts,
+  // WebKit-only Practice scenarios run in the default complete suite too;
+  // they must never be silently skipped under the Chromium default.
+  projects: [
+    { name: ENGINE.browserName, testIgnore: '**/ios-practice.spec.mjs' },
+    { name: 'ios-practice-webkit', testMatch: '**/ios-practice.spec.mjs', use: {
+      ...IPHONE_15, browserName: 'webkit', channel: undefined, serviceWorkers: 'block',
+    } },
+  ],
   timeout: 6 * 60 * 1000,
   expect: { timeout: 30000 },
   fullyParallel: false,
@@ -30,15 +51,12 @@ export default defineConfig({
     [path.join(HERE, 'support', 'results-reporter.mjs'), { outputFile: OUT.results }],
   ],
   use: {
-    ...devices['Desktop Chrome'],
-    viewport: { width: 1280, height: 900 },
-    // Playwright's own Chromium; QA_BROWSER_CHANNEL=chrome uses the installed Google Chrome instead.
-    ...(process.env.QA_BROWSER_CHANNEL ? { channel: process.env.QA_BROWSER_CHANNEL } : {}),
+    ...engineUse,
     headless: !process.env.QA_HEADED,
     actionTimeout: 30000,
     navigationTimeout: 60000,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
-    serviceWorkers: 'allow',
+    serviceWorkers: ENGINE.browserName === 'webkit' ? 'block' : 'allow',
   },
 });

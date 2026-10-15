@@ -33,7 +33,7 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { sharedAiStatus, useSharedAiStatus, setAiStatusDisplay } from "../utils/aiClient";
+import { sharedAiStatus, sharedAiStatusIsCurrent, useSharedAiStatus, useSharedAiProfile, setAiStatusDisplay } from "../utils/aiClient";
 import { accessAuthority } from "../utils/limitedLaunchAccess.js";
 import { adminPreviewActive, adminPreviewSource, adminPreviewStore } from "../utils/adminPreview.js";
 
@@ -44,7 +44,7 @@ import { adminPreviewActive, adminPreviewSource, adminPreviewStore } from "../ut
  * as isAdminUser(user) keep working.
  */
 export function isAdminUser() {
-  return !!sharedAiStatus?.unlimited;
+  return sharedAiStatusIsCurrent() && !!sharedAiStatus?.unlimited;
 }
 
 /**
@@ -73,7 +73,8 @@ setAiStatusDisplay(status => (status.unlimited && adminPreviewActive(globalThis.
  * (a preview stored in this tab applies only once the server says admin).
  * Called where the access snapshot is computed (useSubscription).
  */
-export function useAdminPreviewRefresh() {
+export function useAdminPreviewRefresh(accountId, profileReady) {
+  useSharedAiProfile(accountId, profileReady);
   useSyncExternalStore(adminPreviewStore.subscribe, adminPreviewStore.version, adminPreviewStore.version);
   useSharedAiStatus();
 }

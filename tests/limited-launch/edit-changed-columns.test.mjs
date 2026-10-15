@@ -27,7 +27,7 @@ test('a field the edit did change goes up, and so does clearing one', async () =
   assert.ok('number' in f.requests[0].value && !f.requests[0].value.number, 'the cleared number is sent');
 });
 
-test('with no record to compare with, or a queued write of the record waiting, the whole record goes as before', async () => {
+test('an unproven queued copy is retained while a live edit sends only its observed change', async () => {
   const f = fixture();
   await f.api.updateItem('profileA', 'licenses', { ...stale, notes: 'x' }, null, 'user_syntheticA');
   assert.equal(f.requests[0].value.name, 'QA original name');
@@ -37,7 +37,8 @@ test('with no record to compare with, or a queued write of the record waiting, t
   const before = { ...stale, name: 'QA offline name' };
   await g.api.updateItem('profileA', 'licenses', { ...before, notes: 'y' }, before, 'user_syntheticA');
   const update = g.requests.find(r => r.method === 'update');
-  assert.equal(update.value.name, 'QA offline name', 'the queued change rides with this edit');
+  assert.ok(!('name' in update.value), 'an unproven old queued name must not overwrite the cloud');
+  assert.ok(g.queue().some(op => op.queueId === 'q-1'), 'the older copy remains recoverable');
 });
 
 test('an edit whose row the server does not have yet still queues the whole record', async () => {

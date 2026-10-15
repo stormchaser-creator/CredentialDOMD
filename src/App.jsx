@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from "react";
 import { AppProvider, useApp, useNotifications } from "./context/AppContext";
 import {
   HomeIcon, ScanIcon, CredsIcon, MoreIcon,
@@ -91,6 +91,7 @@ import { claimBetaAccess, touchLastSeen, supabase, downloadDocumentBlob } from "
 import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut, useAuth, useUser } from "@clerk/clerk-react";
 import { evaluateOfflineFallback, CLERK_LOAD_TIMEOUT_MS } from "./utils/offlineSession";
+import { createHealthRecordDraft } from "./utils/healthRecordDraft.js";
 import {
   STATES, CASE_CATEGORIES, CASE_CATEGORY_GROUPS,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
@@ -301,6 +302,48 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   const [caseLogYearPick, setCaseLogYear] = useState(null);
   const [caseDraft, setCaseDraft] = useState(null);
   const { data, loaded, appRulesLaunchFailed, retryAppRules, recordsLoadIssue, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, updateSettings, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
+  const phoneContentRef = useRef(null);
+  // Each section opens at its heading. Keep this scroller mounted so saves,
+  // background refreshes and modal drafts retain their current position.
+  useLayoutEffect(() => {
+    if (!isDesktop && phoneContentRef.current) phoneContentRef.current.scrollTop = 0;
+  }, [tab, subPage, user?.id, isDesktop]);
+  const draftResumeOwner = useRef(null);
+  useEffect(() => {
+    if (!loaded || !authChecked || credentialReadOnly || !user?.id || !userIdRef?.current) return;
+    if (draftResumeOwner.current === user.id) return;
+    // Respect navigation and deep links instead of pulling an active reader
+    // back to an unfinished form after the asynchronous page-liveness check.
+    if (tab !== "home" || navRecord || window.location.hash) { draftResumeOwner.current = user.id; return; }
+    const owner = user.id, profileId = userIdRef.current;
+    const store = createHealthRecordDraft({ accountId: owner });
+    const legacy = store?.read();
+    if (legacy && (!legacy.editId || data.healthRecords?.some(item => item.id === legacy.editId))) {
+      draftResumeOwner.current = owner;
+      setTab("credentials"); setSubPage("healthRecords");
+      return;
+    }
+    let live = true;
+    const wanted = () => live && userIdRef.current === profileId && !window.location.hash;
+    const take = result => {
+      if (!wanted() || result?.waiting || result?.stopped) return;
+      draftResumeOwner.current = owner;
+      if (result?.restore) { setTab("credentials"); setSubPage("healthRecords"); }
+    };
+    // The live form writes the shared, page-aware ledger, not the old
+    // session-only slot. Peek without moving its draft: Health Records must
+    // still find and claim it after this navigation. Another live tab's form
+    // remains in that tab, and an edit waits for its record to be read.
+    const picked = store?.pick({ peek: true, records: data.healthRecords || [], recordsRead: false, stillWanted: wanted });
+    if (picked?.then) picked.then(take, () => {}); else take(picked);
+    return () => { live = false; };
+  }, [loaded, authChecked, credentialReadOnly, user?.id, tab, navRecord, data.healthRecords, userIdRef, setTab, setSubPage]);
+  const shareOwner = userIdRef?.current ?? user?.id;
+  const shareScopeRef = useRef(null);
+  if (!shareScopeRef.current || shareScopeRef.current.owner !== shareOwner) shareScopeRef.current = { owner: shareOwner, live: true };
+  const shareScope = shareScopeRef.current;
+  const currentShare = () => shareScope.live && shareScopeRef.current === shareScope && (userIdRef?.current ?? user?.id) === shareOwner;
+  useEffect(() => { shareScope.live = true; return () => { shareScope.live = false; }; }, [shareScope]);
   const defaultCaseYear = useMemo(() => defaultCaseLogYear(data.caseLogs), [data.caseLogs]);
   const caseLogYear = caseLogYearPick ?? defaultCaseYear;
   // Admin, from public.app_admins by way of ai-proxy's status GET. A hook, so
@@ -627,6 +670,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // `kind` is a PA's or NP's card licence ("aprn", "rn", "pa"); a physician's
   // card passes none and gets the state's medical licence transcript.
   const sendRenewalPacket = useCallback(async (st, kind) => {
+    if (!currentShare()) return;
     const model = kind ? stateTranscriptModel(data, st, { certFiles: packetCerts, kind }) : stateTranscriptModel(data, st, { certFiles: packetCerts });
     if (model.error) { window.alert(model.error); return; }
     // Logged as the file goes to the share sheet (a desktop download is not
@@ -636,9 +680,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     // out (HOME-017). Which ones is known before the sheet opens; it is said
     // once he is back (an alert before the share would spend the tap).
     let logId = null, missingNote = "", told = false;
-    const tell = () => { if (missingNote && !told) { told = true; window.alert(missingNote); } };
+    const tell = () => { if (currentShare() && missingNote && !told) { told = true; window.alert(missingNote); } };
     try {
       const sent = await shareTranscriptPdf(model, {
+        isCurrent: currentShare,
         onHanded: ({ model: going }) => {
           logId = generateId();
           addItem("shareLog", { id: logId, itemId: null, itemName: `${st} renewal packet`, section: "cme", method: "share", recipient: "", sentAt: new Date().toISOString() });
@@ -647,14 +692,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
         onUndo: () => { if (logId) deleteItem("shareLog", logId); logId = null; missingNote = ""; },
         onUnanswered: tell,
       });
+      if (!currentShare()) return;
       // From what was actually sent (see shareTranscriptPdf), not the model
       // before the build.
       if (sent?.method === "download") missingNote = certificatesNotIncludedMessage(sent.model);
       if (sent) tell();
     } catch (err) {
+      if (!currentShare()) return;
       if (err?.name !== "AbortError") window.alert(err?.name === "ShareBusy" ? err.message : `Could not build the transcript PDF: ${err.message}`);
     }
-  }, [data, addItem, deleteItem, packetCerts]);
+  }, [data, addItem, deleteItem, packetCerts, shareScope]);
 
   const openShare = useCallback((item, section) => {
     // Sharing sends email through the cloud; offline it cannot go anywhere.
@@ -670,6 +717,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // reference — the same one-share-carries-everything shape as the document
   // packet send, just as a text list since references have no files.
   const shareManyReferences = useCallback(async (refs) => {
+    if (!currentShare()) return;
     if (offlineMode) { window.alert("You're offline. Sharing needs a connection. Try again once you're back online."); return; }
     if (!refs.length) return;
     // No file rides along. The share text is written as sentences with a
@@ -696,10 +744,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       // and a list that went was never recorded (CRED-043).
       let logId = null;
       const outcome = await shareAtHandoff({ title: referencesShareTitle(data.settings, refs.length), text: shareText }, {
+        isCurrent: currentShare,
         share: (p) => navigator.share(p),
         onHanded: () => { logId = logRefs("share"); },
         onUndo: () => { if (logId) deleteItem("shareLog", logId); logId = null; },
       });
+      if (!currentShare()) return;
       const notStarted = shareNotStartedMessage(outcome, "Sharing did not complete. Try again or use Vera's Copy draft button.");
       if (notStarted) window.alert(notStarted);
       return;
@@ -707,9 +757,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     try {
       if (!await copyToClipboard(full)) throw new Error("Copy failed");
     } catch { window.alert("Copy did not complete. Use Vera's reference draft to select and copy the text."); return; }
+    if (!currentShare()) return;
     logRefs("clipboard");
     window.alert("The reference list has been copied. Paste it into an email or text.");
-  }, [data.settings, offlineMode, addItem, deleteItem]);
+  }, [data.settings, offlineMode, addItem, deleteItem, shareScope]);
 
   const linkedDocs = useMemo(() => {
     if (!shareItem || !shareSection) return [];
@@ -2659,12 +2710,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // Rename lost what the member had typed (QA CRED-024, CRED-014).
   const renderCredentials = () => {
     const section = renderCredSection(subPage);
-    if (isDesktop || section) {
-      const deskSub = subPage || "licenses";
-      const activeRailId = deskSub.startsWith("findCme:") ? "findCme" : deskSub;
-      return (
-        <div style={isDesktop ? { display: "flex", gap: 24, alignItems: "flex-start" } : undefined}>
-            {isDesktop ? <nav style={{ ...deskRailStyle(240), display: "flex", flexDirection: "column", gap: 14 }}>
+    const deskSub = subPage || "licenses";
+    const activeRailId = deskSub.startsWith("findCme:") ? "findCme" : deskSub;
+    // Keep the active section under the same parent when the viewport changes.
+    // Moving it between desktop and phone trees discards open editors and drafts.
+    return (
+      <div style={isDesktop ? { display: "flex", gap: 24, alignItems: "flex-start" } : undefined}>
+          {isDesktop && <nav style={{ ...deskRailStyle(240), display: "flex", flexDirection: "column", gap: 14 }}>
             <button onClick={() => openSetup(null)} style={{
               display: "flex", alignItems: "center", gap: 8, width: "100%",
               padding: "8px 10px", borderRadius: 10, cursor: "pointer",
@@ -2707,13 +2759,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                 </div>
               </div>
             ))}
-          </nav> : null}
-          <div style={isDesktop ? { flex: 1, minWidth: 0 } : undefined}>{section || renderCredSection(deskSub)}</div>
-        </div>
-      );
-    }
-    return (
-      <div>
+          </nav>}
+          <div style={isDesktop ? { flex: 1, minWidth: 0 } : undefined}>
+          {section || (isDesktop ? renderCredSection(deskSub) : <div>
         <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>Credentials</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <button onClick={() => openSetup(null)} className="cmd-card-hover" style={{
@@ -2771,6 +2819,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
             );
           })}
         </div>
+          </div>)}
+          </div>
       </div>
     );
   };
@@ -3235,7 +3285,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       backgroundColor: T.bg, minHeight: "100vh", position: "relative",
     } : {
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      backgroundColor: T.bg, height: "100vh", maxWidth: 480, margin: "0 auto", position: "relative",
+      backgroundColor: T.bg, height: "100dvh", maxWidth: 480, margin: "0 auto", position: "relative",
       // Phone content scrolls in its own div below, not the document. Keeping
       // html/body from ever scrolling removes the rubber-band/momentum-scroll
       // bounce that drags a `position: fixed` bottom bar along with it on iOS
@@ -3262,7 +3312,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
 
       {isDesktop
         ? <div className="cmd-content-area">{shellBody}</div>
-        : <div style={{ height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>{shellBody}</div>}
+        : <div ref={phoneContentRef} style={{ height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>{shellBody}</div>}
 
       {/* ─── BOTTOM TAB BAR (phone only) ───────────────── */}
       {!isDesktop && <div style={{

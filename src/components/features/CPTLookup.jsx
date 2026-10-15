@@ -42,6 +42,7 @@ function CPTLookup() {
   // insecure context) rejects the write: said on the row, never an
   // unhandled rejection or a "Copied" that is not true.
   const [copied, setCopied] = useState(null);
+  const copyAttempt = useRef(0);
 
   const debounceRef = useRef(null);
 
@@ -50,6 +51,7 @@ function CPTLookup() {
     setAiResults(null);
     setAiError(null);
     setExpanded(null);
+    setCopied(null);
 
     clearTimeout(debounceRef.current);
     if (!q.trim()) {
@@ -94,9 +96,12 @@ function CPTLookup() {
   }, [query, results, data.settings]);
 
   const copyCode = useCallback((code) => {
+    const attempt = ++copyAttempt.current;
     setExpanded(prev => prev === code ? null : code);
     setCopied({ code, ok: null });
-    const settle = (ok) => setCopied(prev => (prev?.code === code && prev.ok === null ? { code, ok } : prev));
+    // Reopening the same row may start another permission request before
+    // the first settles. Only this attempt may report its result.
+    const settle = (ok) => setCopied(prev => (copyAttempt.current === attempt && prev?.code === code && prev.ok === null ? { code, ok } : prev));
     let copying;
     try { copying = copyToClipboard(code); } catch { copying = Promise.resolve(false); }
     Promise.resolve(copying).then((ok) => settle(ok === true), () => settle(false));
@@ -219,6 +224,7 @@ function CPTLookup() {
           {aiError}
         </div>
       )}
+
 
       {/* Confidence indicator */}
       {confidence !== "none" && results.length > 0 && (

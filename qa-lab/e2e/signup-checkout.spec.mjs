@@ -1,21 +1,34 @@
 // P0 journey: a new physician signs up, meets the pending membership gate,
-// reviews the $99 founding offer (Practice included), pays on the lab's
+// where pay first opens the $99 founding offer's review by itself (Practice
+// included; feat/pay-first-refund), pays on the lab's
 // Checkout stand-in, and ends as an active member with Credential and
 // Practice. The welcome email is captured only when the owner has turned it
 // on (Admin > Emails): off, nothing is sent; on, exactly one welcome.
 //
 // Serial: the second journey turns the welcome email on, which is lab-wide.
 import { test, expect } from './support/fixtures.mjs';
+import { readFileSync } from 'node:fs';
+import { LAB_SECRETS_JSON } from '../lib/paths.mjs';
+import { APP_PUBLIC_ORIGIN } from '../lib/lab-config.mjs';
+import { verifiedMembershipSubject } from './support/membership-responses.mjs';
+import { verifyProfileReadySignup, verifiedSignupSessionSubject } from './support/profile-ready-signup.mjs';
+import { WELCOME_EMAIL_VERSION } from '../../src/utils/welcomeEmail.js';
 import {
-  LAB_EMAIL_DOMAIN, accessSnapshot, createPhysician, letters, emails, emailBody, labExec, landing, lab, makeAdmin, mockApi,
-  newMember, profileOf, replayStripeEvent, restAs, row, rows, signIn, sleep, stamp, stripeFor, waitFor, waitForCheckoutEvents, waitForMemberApp, waitForProfile,
+  LAB_EMAIL_DOMAIN, PAY_FIRST_LINE, accessSnapshot, createPhysician, letters, emails, emailBody, labExec, landing, lab, makeAdmin, mockApi,
+  newMember, openOfferReview, profileOf, replayStripeEvent, restAs, row, rows, signIn, sleep, stamp, stripeFor, waitFor, waitForCheckoutEvents, waitForMemberApp, waitForProfile,
 } from './support/lab.mjs';
 
 // Tests in a file run in order in one worker (fullyParallel is off); a failure does not skip the next.
 
 const welcomeOff = () => labExec('update public.welcome_email_settings set enabled = false, updated_at = now() where singleton');
 
-test('new signup: pending gate, $99 founding offer with Practice, checkout, active member', {
+// This one journey holds the native initialization request with Playwright.
+// WebKit bypasses route interception once a service worker controls the page;
+// block it only for this instrumented readiness test. The next signup and the
+// dedicated worker/PWA journeys retain the standard service-worker behavior.
+const profileReadinessTest = test.extend({ serviceWorkers: 'block' });
+
+profileReadinessTest('new signup: pending gate, $99 founding offer with Practice, checkout, active member', {
   tag: ['@AUTH-001', '@AUTH-003', '@AUTH-004', '@BILL-001', '@BILL-003', '@BILL-006', '@HOME-002'],
 }, async ({ page, qa }) => {
   // The welcome email is off, as in production (2026-09-29).
@@ -31,19 +44,37 @@ test('new signup: pending gate, $99 founding offer with Practice, checkout, acti
     await page.getByTestId('qa-create-first').fill('Avery');
     await page.getByTestId('qa-create-last').fill(`Signup ${t.slice(-4)}`);
     await page.getByTestId('qa-create-email').fill(local);
-    await page.getByTestId('qa-create-submit').click();
+    const runtime = lab();
+    const key = JSON.parse(readFileSync(LAB_SECRETS_JSON, 'utf8')).signingKey;
+    // Only public fields enter the verifier; no token/key is recorded in evidence.
+    const jwk = { kty: key.kty, n: key.n, e: key.e, kid: key.kid };
+    const readinessActor = await verifyProfileReadySignup(page, qa, {
+      submit: async () => { await page.getByTestId('qa-create-submit').click(); },
+      expectedEmail: email,
+      origins: [...new Set([runtime.urls.apiOrigin, runtime.urls.api, runtime.urls.appOrigin].filter(Boolean))],
+      verifyInitializationActor: async (request, actor) => verifiedSignupSessionSubject(await request.headerValue('authorization'), { jwk, issuer: runtime.issuer, authorizedParty: APP_PUBLIC_ORIGIN, sessionId: actor.sessionId }),
+      verifyAiActor: async request => verifiedMembershipSubject(await request.headerValue('authorization'), { jwk, issuer: runtime.issuer }),
+    });
     const where = await landing(page);
     await qa.shot('pending gate');
     qa.check('lands on "Your membership" (pending gate)', where === 'gate', where);
     const gate = page.getByRole('region', { name: 'Membership' });
-    qa.check('the gate offers the founding Credential membership', await page.getByRole('button', { name: 'Review Credential offer' }).isVisible());
+    // Pay first: no chooser; the founding Credential offer's review opens by itself.
+    const opened = await page.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 60000 }).then(() => true, () => false);
+    const gateText = (await gate.innerText()).replace(/\s+/g, ' ');
+    qa.check('pay first: the gate opens the founding Credential offer\'s review by itself', opened && gateText.includes(PAY_FIRST_LINE) && /Credential \$99\.00 per year/.test(gateText) && !/Review Credential offer/.test(gateText), gateText.slice(0, 200));
     qa.check('the gate has "Check access again" and "Sign out"', await page.getByRole('button', { name: 'Check access again' }).isVisible() && await page.getByRole('button', { name: 'Sign out' }).isVisible());
     const users = (await mockApi('/qa/users')).users;
     subject = users.find((u) => u.email === email)?.id;
     qa.check('the mock Clerk holds the new physician', !!subject, email);
+    qa.check('the delayed-readiness requests belonged to that exact created physician', subject === readinessActor);
     const profile = await waitForProfile(subject, () => true, 30000).catch(() => null);
     qa.check('profiles row created with access_status pending', profile?.access_status === 'pending', profile ? `access ${profile.access_status}` : 'no profile');
-    qa.check('verified_email stamped from the sign-in identity', profile?.verified_email === email, profile?.verified_email || 'empty');
+    // The stamp is the clerk-webhook's; the app's own initialize-clerk-profile can
+    // create the row first, and a refused delivery is retried (as Clerk does), so
+    // wait out the mock's retry schedule (2 s, 10 s, 30 s) for it.
+    const stamped = subject ? await waitForProfile(subject, (p) => !!p.verified_email, 45000).catch(() => profileOf(subject)) : null;
+    qa.check('verified_email stamped from the sign-in identity', stamped?.verified_email === email, stamped?.verified_email || 'empty');
     // The checklist expects a clerk_continuity_accounts row; the design only stages rows for
     // legacy (pre-migration) accounts, so a brand-new account correctly has none.
     const continuity = row(`select count(*)::int as n from public.clerk_continuity_accounts where target_subject = '${subject}' or source_subject = '${subject}'`);
@@ -64,7 +95,13 @@ test('new signup: pending gate, $99 founding offer with Practice, checkout, acti
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.getByTestId('qa-signin').waitFor({ timeout: 60000 });
     qa.check('sign out returns to the sign-in card', true);
-    const leftovers = await page.evaluate((id) => Object.keys(localStorage).filter((k) => k.includes(id)), subject);
+    // The sign-in view can appear while account-scoped IndexedDB/Cache
+    // deletion is still finishing. Its purge barrier prevents stale async
+    // work from restoring data. Require the whole purge to finish.
+    const leftovers = await waitFor('the signed-out account device purge to complete', async () => {
+      const keys = await page.evaluate((id) => Object.keys(localStorage).filter((k) => k.includes(id)), subject);
+      return keys.length === 0 ? keys : null;
+    }, { timeoutMs: 20000, intervalMs: 100 });
     qa.check('no device data left for that account', leftovers.length === 0, leftovers.join(', '));
     await signIn(page, user);
     qa.check('signing back in returns to the gate', (await landing(page)) === 'gate');
@@ -91,7 +128,8 @@ test('new signup: pending gate, $99 founding offer with Practice, checkout, acti
   await qa.feature('BILL-001', 'Review the founding offer and reach Checkout', async () => {
     await page.goto(lab().urls.app, { waitUntil: 'domcontentloaded' });
     await landing(page);
-    await page.getByRole('button', { name: 'Review Credential offer' }).click();
+    // Pay first: the review opens by itself.
+    qa.check('the offer review opens by itself, nothing pressed', await openOfferReview(page));
     const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
     await proceed.waitFor({ timeout: 60000 });
     const text = (await page.getByRole('region', { name: 'Membership' }).innerText()).replace(/\s+/g, ' ');
@@ -100,7 +138,7 @@ test('new signup: pending gate, $99 founding offer with Practice, checkout, acti
     qa.check('the consent text says Practice is included', /Includes Practice for as long as this membership remains active/.test(text));
     qa.check('the terms say USD 99 due now, then each year', /USD 99 due now, then USD 99 each year/.test(text));
     qa.check('Continue stays disabled until the terms are agreed', await proceed.isDisabled());
-    await page.getByRole('button', { name: 'Refresh offer' }).click().catch(() => {});
+    qa.check('the review has one payment action and no separate refresh button', await page.getByRole('button', {name:'Refresh offer'}).count() === 0);
     await proceed.waitFor({ timeout: 30000 });
     await page.getByRole('checkbox', { name: /agree to the payment and renewal terms/ }).check();
     qa.check('Continue is enabled once the terms are agreed', await proceed.isEnabled());
@@ -161,11 +199,19 @@ test('new signup: pending gate, $99 founding offer with Practice, checkout, acti
     await qa.shot('practice tab');
   });
 
+  // release/goal3 (35187499, the one-tap profession picker): an empty account
+  // whose profession is blank (every new signup) is asked "Which license do
+  // you hold?" on the Get Started card; a choice saves it and opens the Add
+  // form of that profession's list. It used to read "Add your medical license
+  // to begin tracking credentials" and open the form on a tap.
   await qa.feature('HOME-002', 'Get Started card on an empty account', async () => {
     await page.getByRole('navigation').first().getByRole('button', { name: /^Home$/ }).click();
-    const card = page.getByText('Add your medical license to begin tracking credentials');
-    qa.check('Home shows the Get Started card', await card.isVisible());
-    await card.click();
+    const pick = page.getByRole('group', { name: /Which license do you hold\?/ });
+    qa.check('Home shows the Get Started card asking the licence (MD, DO, PA, NP)', await page.getByText('Get Started', { exact: true }).isVisible()
+      && JSON.stringify((await pick.getByRole('button').allInnerTexts()).map((t) => t.trim())) === '["MD","DO","PA","NP"]');
+    await pick.getByRole('button', { name: 'MD', exact: true }).click();
+    const md = await waitFor('MD saved', async () => (row(`select degree_type from public.profiles where auth_user_id = '${subject}'`)?.degree_type === 'MD' ? true : null), { timeoutMs: 15000 }).catch(() => false);
+    qa.check('MD is saved to the profile (profiles.degree_type)', md);
     const dialog = page.getByRole('dialog', { name: 'Add' });
     const opened = await dialog.waitFor({ timeout: 15000 }).then(() => true, () => false);
     qa.check('Get Started opens Credentials > Licenses with the Add form open', opened && await page.getByRole('heading', { name: 'Licenses' }).isVisible());
@@ -201,6 +247,8 @@ test('welcome email on: the owner approves it in Admin > Emails, the next paid m
       await region.getByText(/^(Off\.|On\.|On, but)/).first().waitFor({ timeout: 20000 }).catch(() => {});
       qa.check('the section loads its settings (no "settings missing")', !(await region.getByText(/settings missing/i).count()));
       qa.check('it starts Off', await region.getByText('Off.', { exact: false }).count() > 0);
+      const previewText = await region.innerText();
+      qa.check('the reviewed welcome wording fits MD, DO, PA and NP members', previewText.includes('add a professional license with its expiration date') && !previewText.includes('add your state medical license'));
       const approve = region.getByRole('button', { name: 'Approve and turn on' });
       qa.check('"Approve and turn on" is disabled until the wording is confirmed as read', await approve.isDisabled());
       await region.getByRole('checkbox', { name: /I have read the subject/ }).check();
@@ -208,7 +256,7 @@ test('welcome email on: the owner approves it in Admin > Emails, the next paid m
       await region.getByText('On.', { exact: true }).waitFor({ timeout: 30000 }).catch(() => {});
       await qa.shot('welcome email on');
       const settings = row('select enabled, approved_version, approved_fingerprint is not null as fp from public.welcome_email_settings');
-      qa.check('welcome_email_settings enabled with an approval', settings.enabled === true && settings.fp === true, settings);
+      qa.check('welcome_email_settings enabled with an approval of this exact version', settings.enabled === true && settings.fp === true && settings.approved_version === WELCOME_EMAIL_VERSION, settings);
       const approvals = rows("select action from public.welcome_email_approvals order by created_at desc limit 1");
       qa.check('the approval is recorded (welcome_email_approvals)', approvals.length === 1, approvals);
     });
@@ -222,6 +270,7 @@ test('welcome email on: the owner approves it in Admin > Emails, the next paid m
         const body = await emailBody(mail.id);
         qa.check('it is the founding version (Credential and Practice)', /founding member/.test(body.text || '') && /Credential and Practice/.test(body.text || ''), (body.text || '').slice(0, 160));
         qa.check('it greets the member by name', /Hi Welcome,/.test(body.text || ''), (body.text || '').slice(0, 40));
+        qa.check('the delivered welcome uses the reviewed profession-neutral first step', (body.text || '').includes('add a professional license with its expiration date') && !/add your state medical license/i.test(body.text || ''));
         qa.check('from CredentialDOMD, reply to support', /credentialdomd\.com/.test(body.from) && body.reply_to.some((r) => /support@credentialdomd\.com/.test(r)), `${body.from} / ${body.reply_to}`);
       }
       const sends = rows(`select status, variant from public.welcome_email_sends where profile_id = '${member.profile.id}'`);

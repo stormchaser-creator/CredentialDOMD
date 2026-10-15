@@ -78,7 +78,7 @@ export function beginRecordCheck({ number, invoices = [], items = [], ids = [], 
   const here = localAnswer({ number, invoices, items, ids });
   if (here) return here;
   let call = null;
-  try { call = typeof read === "function" ? read(String(number ?? "").trim(), [...want]) : null; } catch { call = null; }
+  try { call = typeof read === "function" ? read(String(number ?? "").trim(), [...want]) : null; } catch { return { state: "unknown", billedIds: [], billedOn: {} }; }
   if (!call || typeof call.then !== "function") return { state: "free", billedIds: [], billedOn: {} };
   let timer;
   return Promise.race([

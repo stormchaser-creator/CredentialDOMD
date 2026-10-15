@@ -24,6 +24,9 @@
 //     through settle_limited_billing_subscription, which raises "founding
 //     allocation missing" once the member's place is gone.
 // A member whose place was freed keeps their paid membership in the lab.
+// Native/manual accounts named native-* are kept regardless of age. Their
+// simulator journeys can span hours; freeing the allocation would prevent
+// later cancellation webhooks from settling that membership.
 //
 // The LOCAL lab database only: qa-lab/lib/local-db.mjs refuses any other host,
 // and the statement refuses a database without the lab's seed (qa_lab.seed_version).
@@ -63,6 +66,11 @@ with freed as (
   delete from public.limited_founding_slots
    where promise_email is null
      and created_at < clock_timestamp() - make_interval(mins => ${age})
+     and not exists (
+       select 1 from public.profiles p
+       where p.id = limited_founding_slots.profile_id
+         and lower(p.email) like 'native-%@qa.credentialdomd.test'
+     )
   returning livemode, state
 )
 select json_build_object(

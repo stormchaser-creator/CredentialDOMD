@@ -7,7 +7,7 @@ import { accessAuthority, canReviewBillingOffer, renewalPaymentFailed } from "..
 import { membershipDate, membershipPrice, membershipRenewalCopy, quoteMatchesBetaWindow, reviewRenewalCopy, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 import { REFUND_COPY } from "../../content/refundCopy.js";
-import { reportError } from "../../lib/errorReport.js";
+import { reportError, reportUnlessLeaving } from "../../lib/errorReport.js";
 import { createCheckoutFailureReporter } from "../../utils/checkoutFailure.js";
 import { BILLING_RETURN_COPY } from "../../utils/billingReturn.js";
 import RefundSection from "./RefundSection.jsx";
@@ -54,7 +54,7 @@ const reviewLifetime = quote => {
 };
 const TICK_HINT = "Tick the box above to continue.";
 // Once per session per action and failure code, to the client error table.
-const reportCheckoutFailure = createCheckoutFailureReporter(reportError);
+const reportCheckoutFailure = createCheckoutFailureReporter(reportError, { reportQuoteReadFailure: reportUnlessLeaving });
 // A refusal the page made itself: no request was sent, or its answer was not used.
 const refusedHere = (action, code) => reportCheckoutFailure(action, { code, phase: "client" });
 
@@ -261,7 +261,6 @@ function MembershipForAccount({ accountId, onActivated }) {
     };
     // Each review on screen decides (a refresh can bring back the same id);
     // the review function is read when it fires.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveReview, quote]);
   // Signup funnel steps (utils/funnelEvents.js), once per page each: this
   // page in front of a pending account (with the seconds since the page

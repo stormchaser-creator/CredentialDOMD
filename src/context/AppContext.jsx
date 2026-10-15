@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo, u
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { accessAuthority, accessVerifying, alertWriteRefused, dataChangeStatus, holdForAccess, reportWriteAccess, scopesForWrite, setWriteAccessReporter, settleWriteAccess, writeRefusalReason } from "../utils/limitedLaunchAccess.js";
 import { applyHeldQueue, changesBetween, revertChanges } from "../utils/heldChanges.js";
+import { prepareRecordAcknowledgements, isAcknowledgedRecordCopy } from "../utils/recordAcknowledgements.js";
+import { preserveRecovery, readRecovery, purgeRecovery } from "../utils/syncRecovery.js";
 import { localChangesSince, rebaseLocalChanges } from "../utils/loadRebase.js";
 import { beginLoadOwes, firstAnswerPlan, layWithheldSaves, readAfterReplay, replayLeftUnsent } from "../utils/loadOwes.js";
 import { needsAppRules, preloadAppRules, loadAppRules, rememberAppRulesOnDevice, withoutAppRuleNeeds } from "../utils/appRules.js";
@@ -60,6 +62,7 @@ import {
   setWriteRejectionReporter,
   onSyncChange,
   syncIssuesFor,
+  recordContent,
   writtenAheadCount,
   onWrittenAheadFreed,
 } from "../lib/supabase";
@@ -358,14 +361,15 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   useEffect(() => {
     if (offlineMode || !user?.id || !accessAuthority.enabled) return undefined;
     const ownerId = user.id;
+    let listening = true;
     // Also run when a save another page of this browser wrote ahead turns
     // out to have no live page behind it after a replay here left it to that
     // page (lib/supabase.js onWrittenAheadFreed): the page this one reloaded
     // flushed it at pagehide, and it would otherwise wait for the next answer.
-    const replay = (accountId) => { if (accountId === ownerId) replayKeptSaves(ownerId); };
+    const replay = (accountId) => { if (listening && accountId === ownerId) replayKeptSaves(ownerId, { all: true, isCurrent: () => listening }); };
     const stopAnswers = accessAuthority.onAnswer(replay);
     const stopFreed = onWrittenAheadFreed(replay);
-    return () => { stopAnswers?.(); stopFreed(); };
+    return () => { listening = false; stopAnswers?.(); stopFreed(); };
   }, [offlineMode, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Load data when user changes (sign in / sign out) ─────
@@ -801,6 +805,13 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
             } catch { /* keep local */ }
           }
 
+          // Exact copies already saved successfully are not dirty edits,
+          // even when this device's clock was ahead when it saved them.
+          // Resolve hashes before the deletion read/rebase, and abandon a
+          // load superseded while they waited. Unknown copies keep recovery.
+          const acknowledgedCopies = await prepareRecordAcknowledgements(local, sbData, { accountId: authUserId, fence: loadedUnder.fence, isCurrent: current });
+          if (!current() || !localCopyCurrent(authUserId, loadedUnder.fence)) return;
+
           // Settings the cloud has no column for (LOCAL_ONLY_SETTINGS in
           // lib/supabase.js) come back from the merge above as undefined,
           // because loadFromSupabase can only rebuild what the profile row
@@ -822,11 +833,6 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           try { tombstones = await listTombstones(profileId); }
           catch { if (!current()) return; throw accountRecordsLoadError(); }
           if (!current()) return;
-          // Nothing below waits: what the member changed since this load
-          // began is complete here. The self-heal leaves those records to
-          // their own writes (a copy of them in the device copy may be older,
-          // or deleted since), and they are laid over the read below.
-          const sinceStart = changesSinceLoadBegan(authUserId, begun, loadedUnder);
           if (tombstones.size > 0) {
             for (const key of COLLECTION_KEYS) {
               if (merged[key]?.length) merged[key] = merged[key].filter(x => !tombstones.has(x?.id));
@@ -854,6 +860,33 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // Keep only this account's cached rows, respecting the deletion
           // ledger, before the merged snapshot replaces its local cache.
           merged = preservePausedApplicationRecords(merged, local, tombstones);
+
+          // A timestamp cannot tell an old legacy cache from an unsent edit.
+          // Preserve both differing unknown copies before replacing either.
+          // Recovery entries never replay; the account version stays visible.
+          const recoveryCopies = new Set();
+          for (const key of COLLECTION_KEYS) {
+            if (key === "documents") continue;
+            const cloudById = new Map((merged[key] || []).map(x => [x?.id, x]));
+            for (const item of local?.[key] || []) {
+              const cloud = cloudById.get(item?.id);
+              if (!cloud || tombstones.has(item.id) || heldQueue.deleted.has(item.id)
+                || isAcknowledgedRecordCopy(acknowledgedCopies, key, item.id)
+                || recordContent(key, item) === recordContent(key, cloud)) continue;
+              await preserveRecovery({ accountId: authUserId, fence: loadedUnder.fence, collectionKey: key,
+                local: item, cloud, isCurrent: current });
+              if (!current() || !localCopyCurrent(authUserId, loadedUnder.fence)) return;
+              recoveryCopies.add(JSON.stringify([key, item.id]));
+            }
+          }
+
+          // Recovery capture also waits. Read the current in-memory changes
+          // only after every recovery await, before the synchronous self-heal,
+          // rebase and hydration below. Saves made during hashing must stay.
+          // The deletion read may also outlive a purge even when no recovery
+          // row needed an await, so fence the entire commit boundary again.
+          if (!current() || !localCopyCurrent(authUserId, loadedUnder.fence)) return;
+          const sinceStart = changesSinceLoadBegan(authUserId, begun, loadedUnder);
 
           if (local) {
             // Self-healing sync: any item that exists on this device but not
@@ -952,6 +985,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
                   }
                   continue;
                 }
+                // Every existing non-document row is now either known clean,
+                // equivalent, or durably protected above. None needs an
+                // automatic full-row write based on a client timestamp.
+                if (key !== "documents" || isAcknowledgedRecordCopy(acknowledgedCopies, key, x.id) || recoveryCopies.has(JSON.stringify([key, x.id]))) continue;
                 // A local edit whose cloud write failed is newer than the cloud
                 // row; push it so the edit isn't silently reverted on next load.
                 const localT = x.updatedAt ? Date.parse(x.updatedAt) : 0;
@@ -984,7 +1021,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
                 merged[key] = [...byId.values()];
               }
               if (toPush.length > 0) {
-                owedSync(owes, notes => bulkSync(profileId, key, toPush, authUserId, notes));
+                owedSync(owes, notes => bulkSync(profileId, key, toPush, authUserId, { ...notes, insertOnly: key !== "documents" }));
                 pushed += toPush.length;
               }
             }
@@ -1370,10 +1407,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // stamp, the ledger or the network), { stale } (a newer load took over).
   // `all` while another replay of this account runs: this one waits for it,
   // then runs on what is left.
-  function replayKeptSaves(ownerId, { all = false } = {}) {
+  function replayKeptSaves(ownerId, { all = false, isCurrent = () => true } = {}) {
     if (!ownerId) return null;
     const running = replayingRef.current;
-    if (running?.owner === ownerId) return all ? running.run.then(() => replayKeptSaves(ownerId, { all })) : null;
+    if (running?.owner === ownerId) return all ? running.run.then(() => isCurrent() ? replayKeptSaves(ownerId, { all, isCurrent }) : null) : null;
     const waiting = awaitingAccessOpCount(ownerId);
     if (waiting === 0 && !(all && pendingOpCount(ownerId) > 0)) return null;
     // Every kept save is marked refused already and this answer allows no
@@ -1382,7 +1419,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       && !["credential", "practice"].some(scope => accessAuthority.allows(scope, "write", ownerId))) return null;
     const profileId = userIdRef.current;
     const under = loadedDeletionRef.current?.owner === ownerId ? loadedDeletionRef.current : null;
-    const current = () => dataOwnerRef.current === ownerId && getActiveUserId() === ownerId
+    const current = () => isCurrent() && dataOwnerRef.current === ownerId && getActiveUserId() === ownerId
       && userIdRef.current === profileId && loadedDeletionRef.current === under;
     if (!profileId || !under || !current()) return null;
     // This device purged since these records loaded (another tab honored a
@@ -1547,6 +1584,10 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         ? `You have ${pending} change${pending === 1 ? "" : "s"} made offline that have not synced yet. Signing out now discards them permanently. Reconnect first to keep them. Sign out anyway?`
         : `You have ${pending} change${pending === 1 ? "" : "s"} that have not reached the cloud yet. Signing out now discards them permanently. Reload the app first to retry them. Sign out anyway?`
     )) return;
+    let recoveryCount;
+    try { recoveryCount = readRecovery(ownerId).length; }
+    catch (error) { window.alert(error.message); return; }
+    if (recoveryCount > 0 && !window.confirm(`Signing out erases ${recoveryCount} saved recovery ${recoveryCount === 1 ? "copy" : "copies"} kept only on this device. Download them from the recovery notice first. Sign out anyway?`)) return;
     // A running Work timer is kept only on this device (WorkLog.jsx, under
     // BASE_KEYS.timer), and the purge removes it with its start time, so the
     // time it has run is lost unless Stop & Log saves it as an entry first.
@@ -1561,7 +1602,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     }
     // Persist retirement before clearing anything. A failure leaves the user
     // signed in with their in-memory data and actionable explanation intact.
-    try { retireContinuityRecovery(ownerId); }
+    try { retireContinuityRecovery(ownerId); purgeRecovery(ownerId); }
     catch (error) { window.alert(error.message); return; }
     // Deliberate: Clerk's session-end listener (here and in other tabs) must
     // purge everything, not keep what it keeps for an expired session. The
@@ -1982,14 +2023,15 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return guardedSetData(d => ({ ...d, [key]: updater(d[key]) }), { section: key, keepOnRefusal });
   }, [guardedSetData]);
 
-  // `automatic`: nobody did this (the Setup board's own stamps). Like a
-  // "seen" timestamp, it is never said: no alert, and a refusal is not
-  // reported either. A save made before the page load's first membership
-  // answer is not refused: it is kept on this device and decided by that
-  // answer (settingsStatus "verify"; guardedSetData, saveSettings).
-  const updateSettings = useCallback((updates, { automatic = false } = {}) => {
-    const quiet = automatic === true || !Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"));
-    if (accessAuthority.enabled && accessAuthority.settingsStatus(updates).status === "refuse") {
+  const updateSettings = useCallback((updates, { automaticSetup = false, automatic = false } = {}) => {
+    // Only derived Setup bookkeeping is automatic. A member's edit, or a
+    // stopped account load, must still report why it could not be saved.
+    const backgroundSetup = (automaticSetup === true || automatic === true)
+      && Object.keys(updates || {}).length === 1 && Object.hasOwn(updates, "setupState");
+    const decision = accessAuthority.enabled ? accessAuthority.settingsStatus(updates) : null;
+    const quiet = !Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"))
+      || (backgroundSetup && (!decision || decision.status !== "refuse" || ["read_only", "no_answer", "not_connected"].includes(decision.reason)));
+    if (decision?.status === "refuse") {
       if (!quiet) {
         // Refused only because membership is being re-checked: say so. A
         // read-only membership is shown on the page already; it is reported.
@@ -2003,7 +2045,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // it goes up later as what it changed, not whole over a newer copy.
     const previous = updates && Object.hasOwn(updates, "setupState") ? { setupState: dataRef.current?.settings?.setupState ?? null } : null;
     if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }), { section: "settings", quiet })) return false;
-    sbSaveSettings(userIdRef.current, updates, user?.id, { automatic: automatic === true, previous }).then(result => {
+    sbSaveSettings(userIdRef.current, updates, user?.id, { automatic: backgroundSetup, previous }).then(result => {
       // An address another account holds is refused and everything else
       // saved (saveSettings). Put back the address the profile still holds,
       // unless something newer was typed meanwhile, and say why.

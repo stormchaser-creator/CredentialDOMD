@@ -1,0 +1,47 @@
+{
+  "reason": "Existing QA wording qualifies what the cited California guide does not specify; no MD/DO compliance engine or renewal calculation changes.",
+  "entries": [
+    {
+      "key": "view:CA:MD:State Medical License",
+      "originalHash": "f9abf41ef6f667a56a2d6da9022d9b1f1b93e0169f1960ff34ca7f7963ac283e",
+      "reviewedHash": "f3815078340a4fda1d515bed3408c671bd26615e1c11b8b51f750399c52a3293",
+      "view": {
+        "alternativeBoard": null,
+        "board": "Medical Board of California",
+        "cycleFull": "Biennial (2 years), both MD (MBC) and DO (OMBC)",
+        "cycleShort": "Biennial (2 years)",
+        "due": "MD: license expires at 11:59 p.m. on the last day of the month in which the license was originally issued, every two years (not birth month). Initial MD licenses issued on or after January 1, 2024 get a 26-month first cycle, then revert to 24 months. DO: biennial cycle renewed through BreEZe; the cited OMBC pages state the two-year period runs between the prior and current expiration dates but do not explicitly publish the anchor rule (issuance month vs other), so that detail is left unstated rather than guessed.",
+        "fee": "MD active: $1,206 total ($1,151 base plus mandatory $25 Steven M. Thompson Physician Corps Loan Repayment fee plus $30 CURES fee). DO active: $455 (includes $25 per B&P Code 2436.5 and $30 CURES per B&P Code 208); DO inactive: $325 (includes the $25 fee, no CURES)",
+        "feeCaption": "last researched Aug 2026, confirm with the board",
+        "guide": "https://credentialdomd.com/states/california",
+        "isDea": false,
+        "portal": "https://www.breeze.ca.gov/datamart/loginCADCA.do",
+        "portalLabel": "Renew at Medical Board of California",
+        "showPortalOnLine": true,
+        "unknownDORoute": false,
+        "urgent": true
+      }
+    },
+    {
+      "key": "view:CA:DO:State Medical License (DO)",
+      "originalHash": "918ff4b29f829fe7d28845fe4bba7ce364490a7a7f55f31c4421756929c88b9f",
+      "reviewedHash": "7ba5d4e2be4649f3000323ca3dfc473de10ce370594c8b4ae57b4bd1bfeb9764",
+      "view": {
+        "alternativeBoard": null,
+        "board": "Osteopathic Medical Board of California",
+        "cycleFull": "Biennial (2 years), both MD (MBC) and DO (OMBC)",
+        "cycleShort": "Biennial (2 years)",
+        "due": "MD: license expires at 11:59 p.m. on the last day of the month in which the license was originally issued, every two years (not birth month). Initial MD licenses issued on or after January 1, 2024 get a 26-month first cycle, then revert to 24 months. DO: biennial cycle renewed through BreEZe; the cited OMBC pages state the two-year period runs between the prior and current expiration dates but do not explicitly publish the anchor rule (issuance month vs other), so that detail is left unstated rather than guessed.",
+        "fee": "MD active: $1,206 total ($1,151 base plus mandatory $25 Steven M. Thompson Physician Corps Loan Repayment fee plus $30 CURES fee). DO active: $455 (includes $25 per B&P Code 2436.5 and $30 CURES per B&P Code 208); DO inactive: $325 (includes the $25 fee, no CURES)",
+        "feeCaption": "last researched Aug 2026, confirm with the board",
+        "guide": "https://credentialdomd.com/states/california",
+        "isDea": false,
+        "portal": "https://www.ombc.ca.gov/",
+        "portalLabel": "Renew at Osteopathic Medical Board of California",
+        "showPortalOnLine": true,
+        "unknownDORoute": false,
+        "urgent": true
+      }
+    }
+  ]
+}

@@ -77,7 +77,9 @@ function createQaClerk() {
       id: apiSession.id, status: 'active', lastActiveAt: new Date(apiSession.lastActiveAt), expireAt: new Date(apiSession.expireAt), abandonAt: new Date(apiSession.expireAt),
       user: null, publicUserData: { identifier: apiUser.email_addresses[0]?.email_address || null, firstName: apiUser.first_name, lastName: apiUser.last_name, imageUrl: apiUser.image_url, userId: apiUser.id },
       async getToken(options = {}) {
-        if (clerk.session !== session) return null;
+        // As Clerk's: an object of the session that is still signed in mints tokens, even
+        // after Clerk replaced it with a newer object of the same session (replaceSessionObject).
+        if (clerk.session?.id !== session.id) return null;
         const template = options?.template || '';
         const cached = cache.get(template);
         if (cached && !options.skipCache && cached.expMs - EARLY_REFRESH_MS > Date.now()) return cached.jwt;
@@ -89,7 +91,7 @@ function createQaClerk() {
             return jwt;
           })
           .catch((error) => {
-            if (error.status === 401 && clerk.session === session) { writeCookie(null); setSignedIn(null, null); }
+            if (error.status === 401 && clerk.session?.id === session.id) { writeCookie(null); setSignedIn(null, null); }
             if (error.status === 404) throw error; // unknown template, as Clerk
             return null;
           })
@@ -106,6 +108,7 @@ function createQaClerk() {
     const reload = async () => {
       const fresh = await qaApi(`/qa/sessions/${encodeURIComponent(session.id)}`);
       session.user = userResource(fresh.user, reload);
+      if (signedInAs && clerk.session?.id === session.id) signedInAs = { ...signedInAs, apiUser: fresh.user };
       if (clerk.session === session) { clerk.user = session.user; emit(); }
       return session.user;
     };
@@ -113,7 +116,10 @@ function createQaClerk() {
     return session;
   }
 
+  // The Backend API shapes the current session was built from (replaceSessionObject).
+  let signedInAs = null;
   function setSignedIn(apiSession, apiUser) {
+    signedInAs = apiSession ? { apiSession, apiUser } : null;
     const session = apiSession ? makeSession(apiSession, apiUser) : null;
     clerk.session = session;
     clerk.user = session ? session.user : null;
@@ -163,8 +169,30 @@ function createQaClerk() {
     if (target && typeof location !== 'undefined' && location.pathname + location.search !== target) location.assign(target);
   }
 
+  /**
+   * Journeys only: what Clerk does whenever it refreshes its client (the touch it sends each
+   * time the page gets focus, as an iPhone resumes an installed app): window.Clerk.session
+   * becomes a NEW Session object of the same session (same id, same user), with a new user
+   * object, and listeners are told. Nothing changes on the mock: the session is the same one.
+   * Returns { id, userId, replaced } or null when signed out.
+   */
+  function replaceSessionObject() {
+    const current = clerk.session;
+    if (!current || !signedInAs) return null;
+    const apiSession = { ...signedInAs.apiSession, lastActiveAt: new Date().toISOString() };
+    const apiUser = signedInAs.apiUser;
+    signedInAs = { apiSession, apiUser };
+    const next = makeSession(apiSession, apiUser);
+    clerk.session = next;
+    clerk.user = next.user;
+    clerk.client = { sessions: [next], activeSessions: [next], lastActiveSessionId: next.id };
+    clerk.sessionObjectsReplaced = (clerk.sessionObjectsReplaced || 0) + 1;
+    emit();
+    return { id: next.id, userId: next.user.id, replaced: next !== current };
+  }
+
   Object.assign(clerk, {
-    load, signInAs, signOut,
+    load, signInAs, signOut, replaceSessionObject,
     setAfterSignOutUrl(url) { clerk._afterSignOutUrl = url; },
     addListener(listener) {
       listeners.add(listener);

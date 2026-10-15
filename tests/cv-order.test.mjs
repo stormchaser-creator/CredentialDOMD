@@ -46,12 +46,15 @@ test('CRED-039: a stored 0 shows as 0, not blank', () => {
   assert.equal(input(m.render(), 'sortOrder').props.value, 0);
 });
 
-test('CRED-039: the write path rounds an integer column, so a queued decimal lands', async () => {
+test('CRED-039: insert, conditional update and bulk write normalize the integer column', async () => {
   const f = fixture();
-  await f.api.insertItem('profileA', 'publications', { id: 'p1', name: 'Synthetic', sortOrder: '1.5' });
-  await f.api.updateItem('profileA', 'publications', { id: 'p1', name: 'Synthetic', sortOrder: 'first' }, null, 'user_syntheticA');
+  const previous = { id: 'p1', name: 'Synthetic', sortOrder: '1.5' };
+  await f.api.insertItem('profileA', 'publications', previous);
+  await f.api.updateItem('profileA', 'publications', { ...previous, sortOrder: 'first' }, previous, 'user_syntheticA');
   await f.api.bulkSync('profileA', 'customCategories', [{ id: 'c1', name: 'Synthetic', sortOrder: '3' }], 'user_syntheticA');
-  assert.equal(f.requests[0].value.sort_order, 2);
-  assert.equal(f.requests[1].value.sort_order, null);
-  assert.equal(f.requests[2].value[0].sort_order, 3);
+  assert.equal(f.requests.find(request => request.method === 'insert').value.sort_order, 2);
+  const update = f.requests.find(request => request.method === 'update');
+  assert.equal(update.value.sort_order, null);
+  assert.ok(update.filters.some(([method, column, value]) => method === 'eq' && column === 'sort_order' && value === 2));
+  assert.equal(f.requests.find(request => request.method === 'upsert').value[0].sort_order, 3);
 });

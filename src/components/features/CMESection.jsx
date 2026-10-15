@@ -87,7 +87,12 @@ const IN_CYCLE_FIRST = [CYCLE_ORDER.in];
 const NO_DRAFT = Object.freeze({ clear: () => {} });
 
 function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoViewId, onAutoViewDone, autoEditId, onAutoEditDone }) {
-  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop, toggleFavorite } = useApp();
+  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop, toggleFavorite, userIdRef } = useApp();
+  const shareScopeRef = useRef(null);
+  if (!shareScopeRef.current || shareScopeRef.current.owner !== userIdRef?.current) shareScopeRef.current = { owner: userIdRef?.current, live: true };
+  const shareScope = shareScopeRef.current;
+  const currentShare = () => shareScope.live && shareScopeRef.current === shareScope && userIdRef?.current === shareScope.owner;
+  useEffect(() => { shareScope.live = true; return () => { shareScope.live = false; }; }, [shareScope]);
   const iS = useInputStyle();
   // The addresses cme@ actually accepts mail from, the same list the Requests
   // header names. Empty is a real answer and the hint says so rather than
@@ -108,6 +113,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
   // open by default there; on phone they stay behind the toggle as before.
   const [showCompliance, setShowCompliance] = useState(() => !!isDesktop);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [transcriptAction, setTranscriptAction] = useState("share");
   const [showImport, setShowImport] = useState(false);
   const [transcriptBusy, setTranscriptBusy] = useState(false);
   // Certificate bytes fetched when the picker opens (doc id -> { data } or
@@ -291,33 +297,43 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
   }, [showTranscript, transcriptCards, data, certFiles]);
 
   const runTranscript = useCallback(async (model) => {
+    if (!currentShare()) return;
     if (!model || model.error) { flash(model?.error || "Nothing to put in a transcript yet."); return; }
     setTranscriptBusy(true);
     try {
+      const saving = transcriptAction === "save";
+      // A fresh export never collides with an earlier saved transcript.
+      // Leave the normal share filename and email message unchanged.
+      const selectedModel = saving ? { ...model, fileName: model.fileName.replace(/\.pdf$/i, ` ${new Date().toISOString().replace(/[:.]/g, "-")}.pdf`) } : model;
       // The message comes from what was actually sent: a photo this device
       // could not convert, or PDFs the share sheet could not carry, are only
       // known once the transcript is built. Said, and the picker closed and
       // free, as the file goes to the share sheet: on the iPhone app the
       // sheet often never answers once Mail takes over, and CME Credits sat
       // on a disabled "Building PDF" until the app was reloaded (CRED-011).
-      const sent = await shareTranscriptPdf(model, {
+      const sent = await shareTranscriptPdf(selectedModel, {
+        filesOnly: saving,
+        isCurrent: currentShare,
         onHanded: ({ model: going }) => {
           const missing = certificatesNotIncludedMessage(going);
-          flash(`Transcript PDF is in the share sheet.${missing ? ` ${missing}` : ""}`);
+          if (saving) flash(`File saving requested. Confirm the save in the device dialog.${missing ? ` ${missing}` : ""}`);
+          else flash(`Transcript sharing requested. Delivery is not confirmed.${missing ? ` ${missing}` : ""}`);
           setShowTranscript(false);
           setTranscriptBusy(false);
         },
         onUndo: () => setNote(""),
       });
+      if (!currentShare()) return;
       const missing = sent ? certificatesNotIncludedMessage(sent.model) : "";
-      if (sent?.method === "download") flash(`${model.fileName} downloaded.${missing ? ` ${missing}` : ""}`);
+      if (sent?.method === "download") flash(`${sent.model.fileName} downloaded.${missing ? ` ${missing}` : ""}`);
       if (sent) setShowTranscript(false);
     } catch (err) {
+      if (!currentShare()) return;
       flash(err?.name === "ShareBusy" ? err.message : `Couldn't build the transcript: ${err.message}`);
     } finally {
-      setTranscriptBusy(false);
+      if (currentShare()) setTranscriptBusy(false);
     }
-  }, [flash]);
+  }, [flash, shareScope, transcriptAction]);
 
   const openTranscript = useCallback(() => {
     const boards = boardTranscriptOptions(data);
@@ -330,6 +346,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     // it and the share sheet keeps its user gesture. Only the certificates
     // of entries inside the windows on offer are fetched, not every CME
     // certificate ever saved; one already fetched is not fetched again.
+    setTranscriptAction("share");
     setShowTranscript(true);
     const docs = certificateDocsForModels([
       ...transcriptCards.map(({ st, kind }) => stateTranscriptModel(data, st, { certFiles, kind })),
@@ -492,7 +509,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
       </div>
 
       <div style={{ fontSize: 13, color: T.textDim, marginBottom: 4 }}>
-        {data.cme.length} entries &middot; {totalHours} total hours
+        {data.cme.length} {data.cme.length === 1 ? 'entry' : 'entries'} &middot; {totalHours} total hours
       </div>
       {/* Certificate intake by email. The hint names only addresses that have
           passed the mailbox challenge, or the account address when the
@@ -521,6 +538,12 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
 
       {/* Transcript picker: which state renewal or board the PDF is for */}
       <Modal open={showTranscript} onClose={() => setShowTranscript(false)} title="Transcript PDF" width={460}>
+        <p style={{ fontSize: 13, color: T.textMuted, marginTop: 0 }}>Choose an action, then select a renewal below.</p>
+        <div role="group" aria-label="Transcript action" style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {[["share", "Share with message"], ["save", "Save PDF"]].map(([action, label]) => (
+            <button key={action} type="button" aria-pressed={transcriptAction === action} disabled={transcriptBusy} onClick={() => setTranscriptAction(action)} style={{ flex: 1, minHeight: 44, padding: "8px 10px", borderRadius: 8, border: `1px solid ${transcriptAction === action ? T.accent : T.border}`, backgroundColor: transcriptAction === action ? T.accentGlow : "transparent", color: T.text, cursor: transcriptBusy ? "wait" : "pointer" }}>{label}</button>
+          ))}
+        </div>
         <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12 }}>
           One PDF per renewal: {appProfession ? "your details and the license" : "physician and license details"}, the cycle window, each requirement with hours earned, and every {ce} entry in the window. Certificate images are added as pages and PDF certificates go as separate files in the same share. Boards audit renewals; hospital reappointment asks for the same summary.
         </div>

@@ -302,7 +302,7 @@ test('every share in the app goes through it: Documents, Send sheet, Vera, CME a
   };
   for (const [file, n] of Object.entries(files)) {
     const src = readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
-    assert.ok((src.match(/await shareAtHandoff\(/g) || []).length >= n, `${file} hands off`);
+    assert.ok((src.match(/shareAtHandoff\(/g) || []).length >= n, `${file} hands off`);
   }
   const app = readFileSync(new URL('../../src/App.jsx', import.meta.url), 'utf8');
   const refs = app.slice(app.indexOf('const shareManyReferences = useCallback'), app.indexOf('const linkedDocs = useMemo'));

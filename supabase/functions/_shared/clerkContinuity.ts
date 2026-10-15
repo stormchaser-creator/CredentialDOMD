@@ -56,7 +56,7 @@ export function isDeletionStamp(value: unknown): value is string {
 }
 
 export async function initializeProductionProfile(
-  db: { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }> },
+  db: { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown; status?: number }> },
   identity: { subject: string; email: string; updatedMs: number; checkedAt: string },
   issuer: string,
   options: { sourceSecret?: string; sourceIssuer?: string; transport?: typeof fetch } = {},
@@ -68,7 +68,16 @@ export async function initializeProductionProfile(
     if (!Number.isFinite(observed) || observed < Date.now()-300000 || observed > Date.now()+10000) throw new Error("production_identity_unavailable");
   };
   assertFresh();
-  const candidate = await db.rpc("clerk_continuity_candidate", { p_target_subject: identity.subject, p_verified_primary_email: identity.email, p_target_issuer: issuer });
+  const candidateArgs = { p_target_subject: identity.subject, p_verified_primary_email: identity.email, p_target_issuer: issuer };
+  let candidate = await db.rpc("clerk_continuity_candidate", candidateArgs);
+  // A gateway may lose its connection before this read-only lookup answers.
+  // Retry once for explicit transient gateway responses. Authorization,
+  // identity refusals and the later initializing write are never retried here.
+  if (candidate.error && [502, 503, 504].includes(candidate.status || 0)) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assertFresh();
+    candidate = await db.rpc("clerk_continuity_candidate", candidateArgs);
+  }
   if (candidate.error) throw new Error("continuity_unavailable");
   let sourceProof = null;
   if (candidate.data && typeof candidate.data === "object" && !Array.isArray(candidate.data)) {

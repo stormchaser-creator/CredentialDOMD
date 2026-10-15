@@ -1,7 +1,7 @@
 import { complianceListFor, alertingStates } from "./compliance";
 import { appCardTitle } from "./cmePresentation.js";
-import { getItemLabel, formatDate, mailtoHref } from "./helpers";
-import { scrubSsn } from "./outgoingText.js";
+import { getItemLabel, formatDate, mailtoHref, copyToClipboard } from "./helpers";
+import { scrubSsn, withDegree } from "./outgoingText.js";
 import { smsBody, alertTextBody, alertCutNotice } from "./shareText";
 import { isAlertable } from "./lifecycle";
 import { reminderLeadDays } from "./reminderPreferences.js";
@@ -172,7 +172,7 @@ export function buildNotificationMessage(data, alerts) {
   const fmtDate = (d) => formatDate(d);
 
   const lines = [];
-  lines.push(`CredentialDOMD Alert for ${name}${deg ? `, ${deg}` : ""}`);
+  lines.push(`CredentialDOMD Alert for ${withDegree(name, deg)}`);
   lines.push(`Report generated: ${fmtDate(now)}`);
   // ASCII rule, not a box-drawing glyph: Mail renders "\u2550" in a wide symbol
   // font that wraps onto its own line on an iPhone (see invoiceCover.js TEXT_RULE).
@@ -263,9 +263,7 @@ export function composeText(phone, raw, { copyFullOnCut = false } = {}) {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const { text, truncated } = smsBody(body);
   let copied = Promise.resolve(false);
-  if (truncated && copyFullOnCut && navigator.clipboard?.writeText) {
-    copied = navigator.clipboard.writeText(String(body)).then(() => true, () => false);
-  }
+  if (truncated && copyFullOnCut) copied = copyToClipboard(body);
   window.open(
     `sms:${cleaned}${isIOS ? "&body=" : "?body="}${encodeURIComponent(text)}`,
     "_blank"
@@ -285,9 +283,7 @@ export function composeText(phone, raw, { copyFullOnCut = false } = {}) {
 export function textAlert(phone, body, onCut) {
   const { text, truncated } = alertTextBody(body);
   let copied = Promise.resolve(false);
-  if (truncated && navigator.clipboard?.writeText) {
-    copied = navigator.clipboard.writeText(scrubSsn(String(body))).then(() => true, () => false);
-  }
+  if (truncated) copied = copyToClipboard(body);
   composeText(phone, text);
   if (truncated && onCut) copied.then((ok) => onCut(alertCutNotice(ok)));
   return { truncated, copied };

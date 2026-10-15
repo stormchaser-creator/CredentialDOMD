@@ -1,6 +1,6 @@
 import { DEFAULT_DATA } from "../constants/defaults";
 import { BASE_KEYS, scopedKey, purgeForSignOut, localCopyCurrent, hydrateOfflineStores, readOfflineFile, writeOfflineText,
-  localWriteGuard, storageRefusalKind, reportStorageRefusal, offlineCopyUnread, getActiveUserId, offlineWriteStamp,
+  localWriteGuard, storageRefusalKind, reportStorageRefusal, offlineCopyUnread, markOfflineCopyUnread, prepareOfflineRead, getActiveUserId, offlineWriteStamp,
   deviceOnlySectionsOf, sameDeviceOnlySections, rebaseDeviceOnlySections, holdDeviceOnlyChanges, heldDeviceOnlyChanges,
   withHeldDeviceOnlyChanges, releaseHeldDeviceOnlyChanges, setBeforeDeviceOnlyTrim, writeOwnLocalCopy, rewriteLocalCopy,
   saveStopGuard, holdsDeviceOnlyChangesHere, takeReleasedHoldHere, spillOfflineText, markOfflineCopyBehind,
@@ -80,13 +80,27 @@ export async function readCachedData(userId, receipt = null) {
   const read = receipt && typeof receipt === "object" ? receipt : {};
   read.read = false; read.token = null;
   if (!key) return null;
+  // Finish synchronous preparation for a deletion an older build honored
+  // before taking this read's epoch. No bytes are read before the guard.
+  const stale = () => { markOfflineCopyUnread(userId, read); return null; };
+  if (!prepareOfflineRead(userId)) return stale();
+  // Hold the read's original purge boundary through every await. A fresh
+  // guard taken after reading would allow old bytes to be written back by
+  // the sanitizer after Sign out or Delete All My Data had removed them.
+  const current = localWriteGuard(userId, { adopted: false });
+  // A different account's purge also changes the shared generation. Its
+  // cancellation cannot make this account's unread file appear empty: keep
+  // the ordinary unread barrier until a later load reads and shows it.
   try { await hydrateOfflineStores(userId); } catch { /* the stores stay where they are */ }
+  if (!current()) return stale();
   try {
     const found = await readOfflineFile(userId, read);
+    if (!current()) return stale();
     // That read gives a failed IndexedDB open a second try. When it opened,
     // the transcript and archives the hydration above could not read are
     // read now, before anything renders (a no-op once they all were).
     if (read.read) { try { await hydrateOfflineStores(userId); } catch { /* next call */ } }
+    if (!current()) return stale();
     if (!found) {
       storedText.delete(key);
       read.sections = deviceOnlySectionsOf(null);
@@ -105,9 +119,10 @@ export async function readCachedData(userId, receipt = null) {
     // adopts as the copy its records are based on (adoptOfflineCopyRead).
     read.sections = deviceOnlySectionsOf(blob);
     if (read.read && read.token) readCopies.set(read.token, { stamp: read.stamp ?? null, sections: read.sections });
-    if (!changed) storedText.set(key, { text: found.text, current: localWriteGuard(userId, { adopted: false }) });
+    if (!changed) storedText.set(key, { text: found.text, current });
     if (changed) {
       const text = JSON.stringify(blob);
+      if (!current()) return stale();
       if (found.where === "local") {
         // Put back where it was read, as this build's own copy: it holds
         // what the IndexedDB copy held too (storageScope.js readOfflineText).
@@ -115,9 +130,10 @@ export async function readCachedData(userId, receipt = null) {
       } else {
         // The stored copy itself, cleaned: written even while an earlier
         // load's unread mark stands (readToken).
-        try { await writeOfflineText(key, text, localWriteGuard(userId, { adopted: false }), { readToken: read.token }); } catch { /* unavailable */ }
+        try { await writeOfflineText(key, text, current, { readToken: read.token }); } catch { /* unavailable */ }
       }
     }
+    if (!current()) return stale();
     // Protected Identity and Answer Bank changes a save could not store (a
     // session that ended, a store that would not open), laid over the read:
     // shown and saved with the rest by the load that reads them.

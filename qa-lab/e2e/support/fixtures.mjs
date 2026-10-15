@@ -16,11 +16,28 @@
 //     qa-lab/.generated/results.json.
 import { test as base, expect } from '@playwright/test';
 import { lab, shot as takeShot } from './lab.mjs';
+import { allowPageError, unexpectedPageErrors } from './browser-errors.mjs';
+import { clientErrorClaims } from '../../lib/health-claims.mjs';
+import { observeIntentionalEdgeRequest } from './edge-health.mjs';
+import { observeRefundWebhookFault } from './refund-webhook-health.mjs';
+import { observeMembershipResponses, finishMembershipResponses } from './membership-responses.mjs';
+import { webkitLabInitScript } from './ios.mjs';
 
 const LOCAL = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
-export function guardContext(context, report) {
+export async function guardContext(context, report) {
   const rt = lab();
+  // WebKit only (webkit.config.mjs): the lab's plain-http loopback and the installed iPhone app (support/ios.mjs).
+  if (context.browser()?.browserType().name() === 'webkit') {
+    await context.addInitScript(webkitLabInitScript);
+    // WebKit has no clipboard permissions to grant (Playwright: "Unknown permission: clipboard-write");
+    // its clipboard answers a tap without one.
+    if (!context.__qaGrant) {
+      const grant = context.grantPermissions.bind(context);
+      context.__qaGrant = grant;
+      context.grantPermissions = (permissions, options) => grant(permissions.filter((p) => !/^clipboard-/.test(p)), options);
+    }
+  }
   return context.route('**/*', (route) => {
     const url = new URL(route.request().url());
     if (url.protocol === 'data:' || url.protocol === 'blob:' || LOCAL.has(url.hostname)) return route.continue();
@@ -28,7 +45,9 @@ export function guardContext(context, report) {
     // (http://kong:8000, the stack's internal Docker host; production's is the public project
     // URL). Serve them from the local gateway instead, as the browser would reach production's.
     if (url.hostname === 'kong') {
-      return route.fetch({ url: `${rt.urls.api}${url.pathname}${url.search}` }).then((response) => route.fulfill({ response }), () => route.abort('failed'));
+      // Keep this a browser-native response: fulfilling a buffered navigation
+      // makes WebKit lose its download event even when the ZIP returned 200.
+      return route.continue({ url: `${rt.urls.api}${url.pathname}${url.search}` });
     }
     report.external.push(`${route.request().method()} ${url.origin}${url.pathname}`);
     return route.abort('blockedbyclient');
@@ -40,6 +59,7 @@ export function watchPage(page, report) {
   // context.on('page') and the page fixture both see the first page: watch it once.
   if (watched.has(page)) return;
   watched.add(page);
+  observeMembershipResponses(page, report, lab());
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') report.console.push(`${m.type()}: ${m.text().slice(0, 400)}`); });
   page.on('pageerror', (e) => report.pageErrors.push(String(e.message).slice(0, 400)));
   page.on('response', (r) => {
@@ -59,6 +79,10 @@ export function watchPage(page, report) {
 const newReport = () => ({ external: [], console: [], pageErrors: [], httpErrors: [], dialogs: [] });
 
 export const test = base.extend({
+  _browserEvidence: [async ({ browserName }, use, testInfo) => {
+    testInfo.annotations.push({ type: 'qa-browser', description: JSON.stringify({ name: browserName }) });
+    await use();
+  }, { auto: true }],
   report: async ({}, use) => { await use(newReport()); },
 
   context: async ({ context, report }, use) => {
@@ -75,8 +99,8 @@ export const test = base.extend({
   /** A second, clean browser (no storage shared with `page`), guarded the same way. */
   secondBrowser: async ({ browser, report }, use) => {
     const contexts = [];
-    await use(async () => {
-      const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await use(async ({ serviceWorkers = 'allow' } = {}) => {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers });
       await guardContext(context, report);
       const page = await context.newPage();
       watchPage(page, report);
@@ -103,7 +127,7 @@ export const test = base.extend({
           const failed = current.checks.filter((c) => !c.ok);
           record('qa-feature', { id, title, status: failed.length ? 'fail' : 'pass', checks: current.checks, shots: current.shots, ms: Date.now() - started });
         } catch (e) {
-          const s = await takeShot(page, `${testInfo.titlePath.slice(1).join(' ')} ${id} error`.slice(0, 120), testInfo).catch(() => null);
+          const s = await takeShot(page, `${id} error`, testInfo).catch(() => null);
           if (s) current.shots.push(s);
           record('qa-feature', { id, title, status: 'fail', checks: current.checks, shots: current.shots, error: String(e.message || e).split('\n').slice(0, 6).join('\n'), ms: Date.now() - started });
           if (!soft) throw e;
@@ -131,19 +155,42 @@ export const test = base.extend({
        * Use it only for a verdict reached by reading the code, never to quiet a failing check.
        */
       byDesign(id, finding, why) { record('qa-feature', { id, title: finding, status: 'by_design', reason: why, checks: [], shots: current?.shots.slice(-1) || [] }); },
-      async shot(name) {
-        const s = await takeShot(page, `${testInfo.titlePath.slice(1).join(' ')} ${name}`.slice(0, 140), testInfo);
+      async shot(name, targetPage = page) {
+        const s = await takeShot(targetPage, name, testInfo);
         current?.shots.push(s);
         return s;
       },
       /** How the next native dialogs are answered: fn(dialog) -> 'accept' | 'dismiss' (null restores accept). */
       onDialog(fn) { report.onDialog = fn; },
+      allowPageError(message, maxCount = 1) { allowPageError(report, message, maxCount); },
+      /** Only call after verifying a deliberately injected fault's persisted rows. */
+      intentionalClientErrors(rows, expected) {
+        for (const claim of clientErrorClaims(rows, expected)) record('qa-health-client', claim);
+      },
+      /** Capture a real response and its unique raw Docker error, never an aggregate allowance. */
+      async intentionalEdgeRequest(kind, reason, action) {
+        const observed = await observeIntentionalEdgeRequest(kind, reason, action, {
+          recordRequest: request => record('qa-health-edge-request', request),
+        });
+        record('qa-health-edge-claim', observed.claim);
+        return observed.response;
+      },
+      async intentionalRefundFailure(expected) {
+        const observed = await observeRefundWebhookFault(lab().urls.mock, expected, {
+          recordRequest: request => record('qa-health-edge-request', request),
+        });
+        record('qa-health-edge-claim', observed.claim);
+        return observed.response;
+      },
       report,
     };
     await use(qa);
+    await finishMembershipResponses(report);
+    for (const observation of report.membershipResponses || []) record('qa-membership-response', observation);
     await testInfo.attach('browser-report.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
     // Nothing may leave this machine.
     expect.soft(report.external, 'requests to hosts other than this machine').toEqual([]);
+    expect.soft(unexpectedPageErrors(report), 'unexpected browser exceptions').toEqual([]);
   },
 });
 

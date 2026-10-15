@@ -2,7 +2,7 @@ import { useState, memo, useCallback } from "react";
 import { composeText } from "../../utils/notifications";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
-import { mailtoHref } from "../../utils/helpers";
+import { copyToClipboard, mailtoHref } from "../../utils/helpers";
 import { peerHeadsUp, smsCutNotice } from "../../utils/shareText";
 import { TAP_MIN, CARD_ACTION_GAP } from "../shared/actionButton.js";
 
@@ -20,6 +20,7 @@ function PeerNotify({ peer }) {
   const { data, theme: T } = useApp();
   const [show, setShow] = useState(null); // "email" | "text" | null
   const [cutNote, setCutNote] = useState("");
+  const [copyNotice, setCopyNotice] = useState("");
 
   // The wording lives in shareText.peerHeadsUp (pure, unit-tested). With no
   // name on the profile there is no draft: it used to go out signed
@@ -28,6 +29,7 @@ function PeerNotify({ peer }) {
   const { emailSubject = "", emailBody = "", textBody = "" } = draft || {};
 
   const handleEmail = useCallback(() => {
+    setCopyNotice("");
     if (!draft) { setCutNote(NEEDS_NAME); return; }
     if (peer.email) {
       window.open(mailtoHref(peer.email, emailSubject, emailBody));
@@ -37,6 +39,7 @@ function PeerNotify({ peer }) {
   }, [draft, peer.email, emailSubject, emailBody]);
 
   const handleText = useCallback(() => {
+    setCopyNotice("");
     if (!draft) { setCutNote(NEEDS_NAME); return; }
     if (peer.phone) {
       const cleaned = peer.phone.replace(/\D/g, "");
@@ -47,8 +50,11 @@ function PeerNotify({ peer }) {
     }
   }, [draft, peer.phone, textBody]);
 
-  const handleCopy = useCallback((text) => {
-    navigator.clipboard?.writeText(text);
+  const handleCopy = useCallback(async (text) => {
+    setCopyNotice("");
+    const copied = await copyToClipboard(text);
+    setCopyNotice(copied ? "Copied to clipboard." : "Could not copy. Select the draft and copy it manually.");
+    if (copied) setShow(null);
   }, []);
 
   return (
@@ -63,8 +69,11 @@ function PeerNotify({ peer }) {
       </div>
       {cutNote && <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>{cutNote}</div>}
 
+      {copyNotice && !show && <div role="status">{copyNotice}</div>}
+
       {/* Show draft in modal when no email/phone */}
       <Modal open={show === "email"} onClose={() => setShow(null)} title="Email Draft">
+        {copyNotice && <div role="status">{copyNotice}</div>}
         <div style={{ fontSize: 13, color: T.textDim, marginBottom: 8 }}>
           {peer.email ? `To: ${peer.email}` : "No email on file. Copy this draft and send it yourself."}
         </div>
@@ -83,7 +92,7 @@ function PeerNotify({ peer }) {
             padding: "10px 16px", borderRadius: 10, border: `1px solid ${T.border}`,
             backgroundColor: "transparent", color: T.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}>Close</button>
-          <button onClick={() => { handleCopy(emailBody); setShow(null); }} style={{
+          <button onClick={() => handleCopy(emailBody)} style={{
             padding: "10px 16px", borderRadius: 10, border: "none",
             backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}>Copy to Clipboard</button>
@@ -91,6 +100,7 @@ function PeerNotify({ peer }) {
       </Modal>
 
       <Modal open={show === "text"} onClose={() => setShow(null)} title="Text Draft">
+        {copyNotice && <div role="status">{copyNotice}</div>}
         <div style={{ fontSize: 13, color: T.textDim, marginBottom: 8 }}>
           {peer.phone ? `To: ${peer.phone}` : "No phone on file. Copy this draft and send it yourself."}
         </div>
@@ -106,7 +116,7 @@ function PeerNotify({ peer }) {
             padding: "10px 16px", borderRadius: 10, border: `1px solid ${T.border}`,
             backgroundColor: "transparent", color: T.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}>Close</button>
-          <button onClick={() => { handleCopy(textBody); setShow(null); }} style={{
+          <button onClick={() => handleCopy(textBody)} style={{
             padding: "10px 16px", borderRadius: 10, border: "none",
             backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}>Copy to Clipboard</button>

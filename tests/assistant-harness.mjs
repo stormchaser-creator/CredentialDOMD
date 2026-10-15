@@ -1,3 +1,4 @@
+import * as deviceShare from '../src/utils/deviceShare.js';
 // Mounts Vera (src/components/features/AssistantSection.jsx) with synthetic
 // hooks (tests/component-harness.mjs): the model turn, the transcript store
 // and the app context are fakes; the pure helpers are the real modules.
@@ -38,7 +39,7 @@ export const baseData = over => ({
 export async function mountVera({ rec = recorder(), data = {}, props = {}, turn = async () => ({ reply: 'OK', actions: [] }), saved = [], modules = {}, app = {}, globals = {}, device = {} } = {}) {
   const store = { chat: saved, archives: [] };
   const turns = [];
-  const ui = await mountComponent('src/components/features/AssistantSection.jsx', {
+  const ui = await mountComponent(process.env.ASSISTANT_SOURCE || 'src/components/features/AssistantSection.jsx', {
     app: {
       data: baseData(data), theme: {}, userIdRef: { current: 'profile-synthetic' }, allTrackedStates: [],
       addItem: rec.fn('addItem', true), editItem: rec.fn('editItem', true), deleteItem: rec.fn('deleteItem', true), navigate: rec.fn('navigate'),
@@ -46,7 +47,7 @@ export async function mountVera({ rec = recorder(), data = {}, props = {}, turn 
     },
     props,
     modules: {
-      helpers, customCategories, shareText, docLabel, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors, shareHandoff, professions, compliance,
+      helpers, customCategories, shareText, deviceShare, docLabel, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors, shareHandoff, professions, compliance,
       referenceDraft,
       assistant: { assistantTurn: async (args) => { turns.push(args); return turn(args); }, buildSnapshot: () => ({}), splitFields: sectionFields.splitFields },
       // The transcript and archives are the IndexedDB-backed stores, read and

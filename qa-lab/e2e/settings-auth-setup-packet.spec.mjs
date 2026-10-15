@@ -122,7 +122,11 @@ test('setup packet: CME drawer, headshot, capture run, public-record fill; each 
   await qa.feature('SETTINGS-011', 'Capture run: a copy for the first license, skip the second, stop the run', async () => {
     await addLicense('QA-RUN-OR1', 'OR');
     await addLicense('QA-RUN-ID1', 'ID');
-    const lics = rows(`select id, license_number from public.licenses where user_id = '${profile.id}' order by license_number`);
+    // The form closes when the license is on this device; its save reaches the server a moment
+    // later (2026-10-01, full regression pass 2: the first POST took 704 ms under load and the
+    // rows were read before either had landed). The run starts from both rows.
+    const licensesNow = () => rows(`select id, license_number from public.licenses where user_id = '${profile.id}' order by license_number`);
+    const lics = await waitFor('both licenses on the server', async () => { const r = licensesNow(); return r.length === 2 ? r : null; }, { timeoutMs: 20000, intervalMs: 300 }).catch(() => licensesNow());
     qa.check('two licenses on file for the run', lics.length === 2, JSON.stringify(lics));
     await openRow(page, 'Copies of your license and DEA');
     await page.getByRole('button', { name: 'Start the run' }).click();

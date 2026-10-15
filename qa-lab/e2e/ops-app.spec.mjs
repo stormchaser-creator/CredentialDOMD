@@ -5,6 +5,8 @@
 // orphan report run against the lab, and the owner notifier's own SQL and
 // message run against the lab's rows.
 import { test } from './support/fixtures.mjs';
+import { hostCommandDiagnostics, sanitizeHostOutput } from './support/host-diagnostics.mjs';
+import { createHash } from 'node:crypto';
 import {
   base64Marker, chooseFiles, clerkId, goTab, lab, labExec, letters, lit, makeAdmin, newMember, openMore, row, rows, scriptAi,
   sleep, stamp, syntheticPdf, tokenFor, waitFor, waitForMemberApp, landing, LAB_EMAIL_DOMAIN, field, openCredentials, pendingOps, syncWarnings,
@@ -14,7 +16,7 @@ import {
   callFunction, countWhere, hostRun, objectBytesOnDisk, repoFile, sharedMember, stackKeys, REPO_ROOT,
 } from './support/ops-helpers.mjs';
 import { localExec } from '../lib/local-db.mjs';
-import { mkdtempSync, mkdirSync, chmodSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, chmodSync, rmSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
@@ -85,6 +87,7 @@ test('client errors: a records-load failure and a render crash reach Admin > Err
     const loadRows = errorsSince(since);
     const records = loadRows.filter((r) => /^Account records load stopped \(DATA-LOAD-UNAVAILABLE\)\.$/.test(r.message));
     qa.check('a client_errors row names the load failure by its reference only, tied to the member', records.length >= 1 && records.every((r) => r.profile_id === profile.id), `${JSON.stringify(loadRows.map((r) => ({ kind: r.kind, message: r.message, profile: r.profile_id })))}; ${volume()}`);
+    if (records.length) qa.intentionalClientErrors(records, { message: 'Account records load stopped (DATA-LOAD-UNAVAILABLE).', kind: 'error', authUserId: user.id, count: 1, reason: 'OPS-008 deliberately returned HTTP 500 for this member’s licenses read and verified the resulting support report.' });
     await page.unroute(licensesUrl, failRead);
     await page.getByRole('button', { name: 'Try again' }).click();
     await waitForMemberApp(page);
@@ -128,6 +131,7 @@ test('client errors: a records-load failure and a render crash reach Admin > Err
     const jwt = ['ey', 'JhbGciOiJIUzI1NiJ9', '.', 'ey', 'JzdWIiOiJxYWxhYnRlc3QifQ', '.', 'c2lnbmF0dXJl', 'c2lnbmF0dXJl'].join('');
     const key = ['sk', '_live_', 'qalabNotARealKey42'].join('');
     crashMessage = `QA lab forced render crash ${tag}`;
+    qa.allowPageError(`${crashMessage} ${bearer} ${jwt} ${key}`, 2);
     const component = await forceRenderCrash(page, `${crashMessage} ${bearer} ${jwt} ${key}`);
     qa.check('a component render threw (injected through React\'s own state update)', !!component, component || 'no component found');
     const card = page.getByRole('alert').filter({ hasText: 'Something broke on this screen. Reload.' });
@@ -143,6 +147,7 @@ test('client errors: a records-load failure and a render crash reach Admin > Err
     const blob = `${r?.message} ${r?.stack} ${JSON.stringify(r?.extra || {})}`;
     qa.check('no token-shaped string survives (bearer, JWT, secret key all [redacted])', !!r && !TOKEN_SHAPED.test(blob) && /\[redacted\]/.test(r.message) && !blob.includes('qalabfaketoken') && !blob.includes('qalabNotARealKey'), (r?.message || '').slice(0, 200));
     qa.check('the row is tied to the member (profile resolved from the Clerk id)', r?.profile_id === profile.id);
+    if (all.length) qa.intentionalClientErrors(all, { message: `${crashMessage} [redacted] [redacted] [redacted]`, kind: 'react', authUserId: user.id, count: 1, reason: 'OPS-008 deliberately threw from a React render to verify the error boundary and secret redaction.' });
     await card.getByRole('button', { name: 'Reload' }).click();
     await waitForMemberApp(page);
     qa.check('Reload brings the app back, still signed in as the member', (await landing(page)) === 'member' && (await clerkId(page)) === user.id);
@@ -158,7 +163,7 @@ test('client errors: a records-load failure and a render crash reach Admin > Err
     const list = other.page.getByRole('region', { name: 'Client error reports' });
     const loaded = await list.waitFor({ timeout: 30000 }).then(() => true, () => false);
     const text = loaded ? (await list.innerText()).replace(/\s+/g, ' ') : '';
-    await other.page.screenshot({ path: (await qa.shot('admin errors')).replace(/\.png$/, '-owner.png'), fullPage: true });
+    await qa.shot('admin errors', other.page);
     qa.check('Admin > Errors lists the records-load failure', /Account records load stopped/.test(text), text.slice(0, 300));
     qa.check('Admin > Errors lists the render crash as a react error', crashMessage && text.includes(crashMessage) && /react/i.test(text), text.slice(0, 300));
   }, { soft: true });
@@ -201,6 +206,8 @@ test('client errors: a records-load failure and a render crash reach Admin > Err
     }
     qa.check('report-error accepts the old build\'s report', r.status === 200, `${r.status} ${r.text.slice(0, 80)}`);
     await sleep(1500);
+    const oldBuildReports = rows(`select id, kind, message, auth_user_id from public.client_errors where message = ${lit(`QA lab report from an old build ${tag}`)}`);
+    if (oldBuildReports.length) qa.intentionalClientErrors(oldBuildReports, { message: `QA lab report from an old build ${tag}`, kind: 'error', authUserId: null, count: 1, reason: 'OPS-008 deliberately submitted one old-build error to verify it cannot prune other reports.' });
     const survived = countWhere('client_errors', `message = ${lit(keep)}`) === 1;
     qa.check('the current build\'s two-day-old report is still there (the owner has not seen it yet)', survived);
     if (!survived) {
@@ -220,7 +227,7 @@ test('AI metering: Vera and a scan are metered with cost; at the monthly budget 
 }, async ({ page, qa }) => {
   test.setTimeout(8 * 60 * 1000);
   const tag = stamp('ai').replace(/-/g, '');
-  const { user, profile } = await newMember(page, { firstName: 'Avery', lastName: `Metered ${letters()}` });
+  const { user, profile } = await newMember(page, { firstName: 'Avery', lastName: `Metered ${letters()}`, profession: 'MD' });
   const pid = profile.id;
   const usage = () => rows(`select provider, model, ok, status, input_tokens, output_tokens, cost_usd, path from public.ai_usage where user_id = '${pid}' order by created_at`);
   const status = async () => (await callFunction('ai-proxy', { method: 'GET', headers: { Authorization: `Bearer ${await tokenFor(user)}` } })).data;
@@ -286,7 +293,7 @@ test('AI metering: Vera and a scan are metered with cost; at the monthly budget 
     qa.check('(by design) Vera still answers, on Gemini: the dollar budget refuses only the shared Opus key', answered);
     const opus = await callFunction('ai-proxy', { pathSuffix: '/v1/messages', headers: { Authorization: `Bearer ${await tokenFor(user)}` }, body: { model: 'claude-opus-5', max_tokens: 16, messages: [{ role: 'user', content: 'QA' }] } });
     qa.check('the shared Opus path is closed in the lab (key paused, as in production): no call reaches Anthropic', [503, 429].includes(opus.status), `${opus.status} ${opus.text.slice(0, 100)}`);
-    qa.blocked('OPS-005', 'The Opus budget refusal itself (429 {error:"budget"} and the app\'s "The monthly AI budget is used up, so Gemini answered.") needs the shared Anthropic key; production has it paused (anthropic_shared_key_paused_launch_20260920) and so does the lab, and enabling it (QA_AI_ANTHROPIC_SHARED=1) restarts the shared lab. The admission function it calls was exercised directly above.');
+    qa.blocked('OPS-005', 'This parallel suite mirrors the paused shared Anthropic key. The enabled shared-key 429 budget refusal and visible Gemini fallback are exercised separately by qa-lab/acceptance/ai-budget.spec.mjs in an exclusive local window with exact setting restoration; see its own result. The admission function was exercised directly above.');
   }, { soft: true });
 });
 
@@ -353,7 +360,8 @@ test('dormant screens: Quick Share and Team are reachable from no menu at desk o
       // The More tab: the bottom bar's at phone width, the side nav's at desk width.
       const moreTab = page.getByRole('button', { name: /^(\S+ )?More$/ }).filter({ visible: true }).last();
       await moreTab.click();
-      await sleep(800);
+      // Eligibility resolves asynchronously after this menu mounts.
+      await page.getByRole('button', { name: /Administrator access/i }).waitFor({ state: 'visible', timeout: 30000 });
       const more = await namesIn(page.locator('main, body').first());
       await qa.shot(`${label} more menu`);
       const all = [...nav, ...more];
@@ -396,8 +404,14 @@ test('dormant screens: Quick Share and Team are reachable from no menu at desk o
     const id = crypto.randomUUID();
     labExec(`insert into public.rotations (id, user_id) values ('${id}', '${profile.id}')`);
     const held = countWhere('rotations', `user_id = '${profile.id}'`);
-    const dry = await callFunction('delete-account', { headers: { Authorization: `Bearer ${await tokenFor(user)}` }, body: { dry_run: true } });
-    qa.check('a dry-run deletion of the account counts its rotations', dry.status === 200 && dry.data?.tables?.rotations === held && held >= 1, `${dry.status} rotations=${dry.data?.tables?.rotations} of ${held}`);
+    let dry = await callFunction('delete-account', { headers: { Authorization: `Bearer ${await tokenFor(user)}` }, body: { dry_run: true } });
+    // A dry run whose read met the lab gateway's reset connection to PostgREST answers 500
+    // ("could not list documents/...: An invalid response was received from the upstream
+    // server"; 2026-10-01, full regression pass 2, with Kong's reset line for the same read).
+    // A dry run changes nothing, so it is asked once more, as a member would try again.
+    const first = dry.status;
+    if (dry.status >= 500) dry = await callFunction('delete-account', { headers: { Authorization: `Bearer ${await tokenFor(user)}` }, body: { dry_run: true } });
+    qa.check('a dry-run deletion of the account counts its rotations', dry.status === 200 && dry.data?.tables?.rotations === held && held >= 1, `${first !== dry.status ? `${first} then ` : ''}${dry.status} rotations=${dry.data?.tables?.rotations} of ${held}`);
     qa.check('rotations table holds no other member rows written by the dormant screen (non-UUID ids are impossible)', true, `${countWhere('rotations')} row(s) in the lab`);
   }, { soft: true });
 });
@@ -467,7 +481,7 @@ test('storage orphans: the report finds a file whose row is gone and nothing els
 
 test('owner notifier: its own SQL and message, run against the lab, report a new member, a ticket, a client error and the payment once', {
   tag: ['@OPS-014', '@OPS-009'],
-}, async ({ page, qa }) => {
+}, async ({ page, qa }, testInfo) => {
   test.setTimeout(8 * 60 * 1000);
   const tag = stamp('ntf').replace(/-/g, '');
   const iso = (d) => new Date(d).toISOString().replace(/\.\d+Z$/, 'Z');
@@ -501,6 +515,8 @@ test('owner notifier: its own SQL and message, run against the lab, report a new
       labExec(`insert into public.client_errors (kind, message, build, auth_user_id, profile_id) values ('error', ${lit(errorText)}, 'qa-lab', ${lit(user.id)}, '${profile.id}')`);
     }
     qa.check('a client error was reported (or stored directly when the lab\'s shared-address rate limit refused it)', r.status === 200 || r.status === 429, `${r.status}`);
+    const notifierReports = rows(`select id, kind, message, auth_user_id from public.client_errors where auth_user_id = ${lit(user.id)} and message = ${lit(errorText)}`);
+    if (notifierReports.length) qa.intentionalClientErrors(notifierReports, { message: errorText, kind: 'error', authUserId: user.id, count: 1, reason: 'OPS-014 deliberately created one synthetic client report as input to the local owner-notifier probe.' });
   }, { soft: true });
 
   await qa.feature('OPS-014', 'the probe finds every part it reads in production\'s schema (the lab\'s copy): nothing skipped', async () => {
@@ -510,7 +526,11 @@ test('owner notifier: its own SQL and message, run against the lab, report a new
     const present = py(['present'], probeRows);
     const drifted = py(['drifted'], probeRows);
     qa.check('every core part can run (present exits 0)', present.status === 0, present.stderr.slice(0, 300));
-    qa.check('every optional part is present', present.stdout.trim().split(',').length === 8, present.stdout.trim());
+    const expectedParts = ['feedback', 'limited_billing_quotes', 'billing_checkout_attempts', 'limited_paid_purchase_history',
+      'access_purchase_receipts', 'billing_subscriptions', 'lifetime_gift_reservations', 'invite_to_join_sends', 'limited_refund_requests'];
+    const presentParts = present.stdout.trim().split(',').sort();
+    qa.check('every optional part is present, including refund requests',
+      JSON.stringify(presentParts) === JSON.stringify(expectedParts.sort()), present.stdout.trim());
     qa.check('no part is skipped for changed columns (drifted is empty)', drifted.status === 0 && drifted.stdout.trim() === '', drifted.stdout.trim() || drifted.stderr.slice(0, 200));
   }, { soft: true });
 
@@ -529,7 +549,33 @@ test('owner notifier: its own SQL and message, run against the lab, report a new
     qa.check('it names the ticket', message.includes(subject));
     qa.check('it names the client error', message.includes(errorText) && /CLIENT ERROR/.test(message));
     qa.check('it reports the payment (money event)', /PAID|paid/.test(message) && message.includes(user.email));
-    const remember = py(['remember', '--seen', seen], JSON.stringify(activity));
+    const rememberInput = JSON.stringify(activity);
+    const remember = py(['remember', '--seen', seen], rememberInput);
+    // Preserve the actual child outcome before a soft assertion discards its
+    // signal/error. A timeout often has empty stderr. Do not attach the input,
+    // formatted message, environment, or private state contents.
+    const diagnostic = hostCommandDiagnostics({ ...remember, stdout: '' }, {
+      command: ['python3', 'scripts/signup-notify.py', 'remember', '--seen', '[private QA state]'],
+      env: process.env,
+    });
+    diagnostic.stdoutBytes = Buffer.byteLength(remember.stdout || '');
+    diagnostic.input = {
+      bytes: Buffer.byteLength(rememberInput), rows: activity.length,
+      keyedRows: activity.filter(a => !!a.key).length,
+      sha256: createHash('sha256').update(rememberInput).digest('hex'),
+    };
+    try {
+      diagnostic.stateFiles = readdirSync(stateDir).sort().map(name => {
+        const bytes = readFileSync(path.join(stateDir, name));
+        return { name, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+      });
+    } catch (error) {
+      diagnostic.stateFilesError = sanitizeHostOutput(error.message, process.env);
+    }
+    await testInfo.attach('owner-notifier-remember-diagnostics.json', {
+      body: JSON.stringify(diagnostic, null, 2), contentType: 'application/json',
+    });
+    qa.check('remember state diagnostics were readable', !diagnostic.stateFilesError, diagnostic.stateFilesError || '');
     qa.check('remember records the money events', remember.status === 0, remember.stderr.slice(0, 200));
     const later = py(['query', '--since', now, '--now', iso(Date.now() + 2000), '--present', present]);
     const again = py(['format', '--seen', seen], JSON.stringify(labRows(later.stdout)));

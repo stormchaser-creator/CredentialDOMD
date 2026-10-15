@@ -3,6 +3,7 @@
 // browser), the support-access grant, and the daily email reminder that a
 // license expiring soon produces (the cron job's dispatch run by hand).
 import { test } from './support/fixtures.mjs';
+import { settleReminderQueue } from './support/ops-helpers.mjs';
 import {
   emailBody, emails, field, goTab, labExec, landing, newMember, openCredentials, openMore, profileOf, row, rows, signIn, sleep,
   waitFor, waitForMemberApp,
@@ -124,6 +125,8 @@ test('settings: setup card, profile and reminder settings persist, support acces
     qa.check('email reminders are on for the member (the default)', profileOf(user.id).notify_email === true);
     // What the send-reminders-daily cron job runs.
     labExec('select public.dispatch_daily_reminders()');
+    const delivery = await settleReminderQueue(profile.id);
+    qa.check('the durable reminder job reached sent', delivery.status === 'sent', delivery);
     const mail = await waitFor('the reminder email', async () => (await emails({ to: user.email })).find((m) => !/Welcome/.test(m.subject)) || null, { timeoutMs: 60000, intervalMs: 1500 }).catch(() => null);
     qa.check('one reminder email to the member', !!mail, mail?.subject || 'none');
     if (mail) {

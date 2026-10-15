@@ -5,7 +5,7 @@
 import { test } from './support/fixtures.mjs';
 import { scanDevice } from './support/device-store.mjs';
 import {
-  field, newMember, openCredentials, pendingOps, recordButtons, row, rows, sleep, tombstones, waitForMemberApp,
+  clerkId, field, newMember, offlineKeysFor, openCredentials, pendingOps, recordButtons, row, rows, sleep, tombstones, waitForMemberApp,
 } from './support/lab.mjs';
 
 // Synthetic identifiers only: SSN area 000 is never issued.
@@ -57,6 +57,9 @@ test('protected identity stays on the device and encrypted; a custom category ho
     // Both stores: the offline copy of the file lives in IndexedDB (support/device-store.mjs).
     const stored = await scanDevice(page, [SSN, DOB]);
     qa.check('neither localStorage nor IndexedDB holds the SSN or date of birth in the clear', stored.length === 0, stored.join(', '));
+    const offline = await offlineKeysFor(page, await clerkId(page), { find: [SSN, DOB] });
+    const clear = offline.idb.filter((e) => e.found.length).map((e) => e.key);
+    qa.check('the offline store (IndexedDB) never holds the SSN or date of birth in the clear', clear.length === 0 && offline.idb.length > 0, clear.join(', ') || `${offline.idb.length} entries of the account`);
     const inDb = [...tablesContaining(SSN), ...tablesContaining('QA liability application')];
     qa.check('no database table holds the record or the SSN', inDb.length === 0, JSON.stringify(inDb));
     qa.check('no network request carried the SSN or date of birth', sent.length === 0, sent.join(', '));

@@ -72,6 +72,11 @@ const slimForArchive = (msgs) =>
  */
 function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest }) {
   const { data, addItem, editItem, deleteItem, updateSettings, allTrackedStates, userIdRef, navigate, theme: T, isDesktop, appRulesWaiting, recordsWithAppRules } = useApp();
+  const shareScopeRef = useRef(null);
+  if (!shareScopeRef.current || shareScopeRef.current.owner !== userIdRef?.current) shareScopeRef.current = { owner: userIdRef?.current, live: true };
+  const shareScope = shareScopeRef.current;
+  const currentShare = () => shareScope.live && shareScopeRef.current === shareScope && userIdRef?.current === shareScope.owner;
+  useEffect(() => { shareScope.live = true; return () => { shareScope.live = false; }; }, [shareScope]);
   const iS = useInputStyle();
   // The Opus badge says what answers: Claude only when "Vera answers with"
   // is Claude Opus AND Opus is reachable (own key, or the shared one), as
@@ -669,6 +674,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   // `released`: called when the card no longer needs to look busy before the
   // action returns (a packet handed to a share sheet that may never answer).
   const performAction = useCallback(async (msgId, idx, { released = () => {} } = {}) => {
+    if (!currentShare()) return;
     const msg = msgs.find(x => x.id === msgId);
     const action = msg?.actions?.[idx];
     if (!action || action.done) return;
@@ -885,6 +891,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         // note goes on the clipboard (src/utils/shareText.js).
         const { title, note: packetNote, blurb } = veraPacketShareText(action.coverNote, data.settings, files.length);
         try { await copyToClipboard(packetNote); } catch { /* clipboard unavailable */ }
+        if (!currentShare()) return;
         let shared = false, handedLog = null;
         if (navigator.canShare && navigator.canShare({ files })) {
           // Recorded and done as the files go to the share sheet
@@ -892,7 +899,8 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           // answers once Mail takes over, and the packet that went had no
           // record while its card stayed on a disabled "Working…" for good.
           // Taken back only when the sheet says it did not go.
-          const outcome = await shareAtHandoff({ title, text: blurb, files }, {
+          void shareAtHandoff({ title, text: blurb, files }, {
+            isCurrent: currentShare,
             share: (p) => navigator.share(p),
             onHanded: () => {
               handedLog = generateId();
@@ -903,21 +911,29 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                 section: "documents", method: "share", recipient: action.summary || "",
                 sentAt: new Date().toISOString(),
               });
-              markAction(msgId, idx, { done: true, error: null });
+              markAction(msgId, idx, { done: true, error: null, note: "Sharing requested. Delivery is not confirmed." });
+              if (docs.length < packet.total) {
+                const missing = [...packet.missing, ...packet.failed.map(file => file.name)];
+                setErr([
+                  `Sharing requested for ${docs.length} of ${packet.total}. Delivery is not confirmed.`,
+                  missing.length ? `Not sent: ${missing.join(", ")}.` : "",
+                  packet.withheld.length ? `Kept out on purpose (Protected Identity): ${packet.withheld.join(", ")}.` : "",
+                ].filter(Boolean).join(" "));
+              }
               released();
             },
             onUndo: () => {
               if (handedLog) deleteItem("shareLog", handedLog);
               handedLog = null;
-              markAction(msgId, idx, { done: false });
+              markAction(msgId, idx, { done: false, note: null });
             },
+          }).then(outcome => {
+            if (!currentShare() || outcome === "shared" || outcome === "cancelled") return;
+            markAction(msgId, idx, { done: false, error: shareNotStartedMessage(outcome), note: null });
           });
-          if (outcome === "cancelled") return; // user closed the sheet
-          if (outcome === "busy") throw new Error(shareNotStartedMessage(outcome));
-          shared = outcome === "shared";
-          // Otherwise desktop browsers often refuse file shares ("Permission
-          // denied"): fall through to the download path below.
+          return;
         }
+        if (!currentShare()) return;
         if (!shared) {
           const standalone = window.navigator.standalone === true
             || window.matchMedia?.("(display-mode: standalone)")?.matches;
@@ -925,6 +941,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           // Desktop fallback: download every file and put the cover note on
           // the clipboard, ready to paste into an email.
           try { await copyToClipboard(packetNote); } catch { /* clipboard unavailable */ }
+          if (!currentShare()) return;
           for (const f of files) {
             const url = URL.createObjectURL(f);
             const a = document.createElement("a");
@@ -933,18 +950,11 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           }
           setErr(`This browser can't attach files to a share sheet, so the ${files.length} documents are downloading instead (allow multiple downloads if asked). The cover note is on your clipboard, ready to paste into your email.`);
         }
-        // A download (no share sheet) is recorded here; a share was at hand-off.
-        if (!handedLog) {
-          addItem("shareLog", {
-            id: generateId(), itemId: null, itemName: `Vera packet (${docs.length} files)`,
-            section: "documents", method: "share", recipient: action.summary || "",
-            sentAt: new Date().toISOString(),
-          });
-        }
+        note = shared ? "Sharing requested. Delivery is not confirmed." : "Files downloaded; delivery is not confirmed.";
         if (docs.length < packet.total) {
           const notSent = [...packet.missing, ...packet.failed.map(f => f.name)];
           setErr([
-            `Sent ${docs.length} of ${packet.total}.`,
+            `${shared ? "Sharing requested for" : "Downloading"} ${docs.length} of ${packet.total}. Delivery is not confirmed.`,
             notSent.length ? `Not sent: ${notSent.join(", ")}.` : "",
             packet.withheld.length ? `Kept out on purpose (Protected Identity): ${packet.withheld.join(", ")}.` : "",
           ].filter(Boolean).join(" "));
@@ -960,19 +970,23 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         // plain download as the desktop fallback — same split as packets.
         let shared = false;
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          if (!currentShare()) return;
           // Done, and the card free, as the file goes to the share sheet: on
           // the iPhone app the sheet often never answers once Mail or Files
           // takes over, and the card stayed on "Working…" (as the packet did).
           const { title: shareTitle, text } = fileShareText({ what: `${label.toLowerCase()} export`, settings: data.settings });
-          const outcome = await shareAtHandoff({ title: shareTitle, text, files: [file] }, {
+          void shareAtHandoff({ title: shareTitle, text, files: [file] }, {
+            isCurrent: currentShare,
             share: (p) => navigator.share(p),
-            onHanded: () => { markAction(msgId, idx, { done: true, error: null }); released(); },
-            onUndo: () => markAction(msgId, idx, { done: false }),
+            onHanded: () => { markAction(msgId, idx, { done: true, error: null, note: "Sharing requested. Delivery is not confirmed." }); released(); },
+            onUndo: () => markAction(msgId, idx, { done: false, note: null }),
+          }).then(outcome => {
+            if (!currentShare() || outcome === "shared" || outcome === "cancelled") return;
+            markAction(msgId, idx, { done: false, error: shareNotStartedMessage(outcome), note: null });
           });
-          if (outcome === "cancelled") return; // user closed the sheet
-          if (outcome === "busy") throw new Error(shareNotStartedMessage(outcome));
-          shared = outcome === "shared";
+          return;
         }
+        if (!currentShare()) return;
         if (!shared) {
           const url = URL.createObjectURL(file);
           const a = document.createElement("a");
@@ -1002,7 +1016,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         markAction(msgId, idx, { error: e3.message });
       }
     }
-  }, [msgs, addItem, editItem, deleteItem, data, logToCloud, markAction, userIdRef, cloudFiles, activePackets, retryCloudFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [msgs, addItem, editItem, deleteItem, data, logToCloud, markAction, userIdRef, cloudFiles, activePackets, retryCloudFiles, shareScope]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // One run per card at a time: a second tap while the first is still
   // waiting (a slow create-ticket, an open share sheet) used to run the whole

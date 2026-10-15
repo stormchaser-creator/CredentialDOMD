@@ -1,4 +1,4 @@
-// Operations journeys, part 1: the scheduled jobs, the daily account deletion,
+// Operations journeys, part 1: the scheduled jobs, retained account data,
 // the hook secret that authenticates the database's calls to the functions,
 // and the deployed functions nothing calls.
 //
@@ -11,7 +11,7 @@
 // recorded (cron's own "succeeded" means only that the SQL ran).
 //
 // Shared-lab safety: a job whose effect reaches every account (the monthly
-// backup emails every member, the deletion job wipes accounts) is run with its
+// backup emails every member) is run with its
 // transaction rolled back, which shows exactly what it would dispatch without
 // sending anything, and its request is then sent for this journey's own
 // fixture only, byte for byte as the job builds it. Jobs that only prune aged
@@ -22,7 +22,7 @@ import {
   tokenFor, waitFor, waitForMemberApp, lab, LAB_EMAIL_DOMAIN, landing,
 } from './support/lab.mjs';
 import {
-  callFunction, countWhere, cronJobs, labHookSecret, netResponses, objectBytesOnDisk, repoFile, runCronJob, uploadObject, REPO_ROOT,
+  callFunction, countWhere, cronJobs, labHookSecret, netResponses, objectBytesOnDisk, repoFile, runCronJob, settleReminderQueue, uploadObject, stackKeys, REPO_ROOT,
 } from './support/ops-helpers.mjs';
 import { deployedFunctions, verifyJwtFunctions, browserCalledFunctions } from '../cors-check.mjs';
 import { readdirSync, existsSync, statSync } from 'node:fs';
@@ -45,7 +45,7 @@ function sendAsJob(url, body, timeoutMs) {
   return Number(out.split('\n').filter(Boolean).at(-1));
 }
 
-const CHECKLIST_JOBS = ['send-reminders-daily', 'monthly-backup', 'prune-backups', 'delete-cancelled-accounts', 'send-guide-sweep', 'credential-portal-prune',
+const CHECKLIST_JOBS = ['send-reminders-daily', 'drain-reminder-emails', 'limited-refund-sweep', 'monthly-backup', 'prune-backups', 'delete-cancelled-accounts', 'send-guide-sweep', 'credential-portal-prune',
   'prune-ai-reservations', 'prune-ai-usage', 'prune-assistant-log', 'prune-client-errors', 'prune-page-visits'];
 
 test('scheduled jobs: each command runs as pg_cron would, the functions it calls answer 2xx, and each prune keeps only what it should', {
@@ -64,6 +64,8 @@ test('scheduled jobs: each command runs as pg_cron would, the functions it calls
     qa.check('every command is a single "select public.<function>()" (no inline SQL, no literal secret)', jobs.every((j) => /^\s*select\s+public\.[a-z_]+\(\)\s*;?\s*$/i.test(j.command)), jobs.map((j) => `${j.jobname}: ${j.command.trim()}`).join(' | '));
     qa.check('every schedule is a 5-field cron expression', jobs.every((j) => j.schedule.trim().split(/\s+/).length === 5), jobs.map((j) => `${j.jobname} ${j.schedule}`).join(' | '));
     qa.check('the lab keeps every job inactive (the lab design: run by hand, never under other journeys)', jobs.every((j) => j.active === false));
+    const refund = jobs.find(j => j.jobname === 'limited-refund-sweep');
+    qa.check('the refund sweep retains its ten-minute schedule and dispatcher', refund?.schedule === '5,15,25,35,45,55 * * * *' && /^select public\.dispatch_limited_refund_sweep\(\);?$/.test(refund?.command || ''), refund);
     qa.blocked('OPS-001', 'Run history (7 runs in 7 days per daily job, failed runs, the 5-of-7 prune-ai-reservations count) lives in production\'s cron.job_run_details and net._http_response; the lab\'s jobs are inactive by design and the lab may read only production\'s catalog.');
   }, { soft: true });
 
@@ -149,9 +151,12 @@ test('scheduled jobs: each command runs as pg_cron would, the functions it calls
     await dlg.waitFor({ state: 'detached' });
     await waitFor('the license in the cloud', async () => countWhere('licenses', `user_id = '${pid}' and license_number = ${lit(`QA-CRON-${tag.slice(-6)}`)}`) === 1, { timeoutMs: 30000 });
     const r = runCronJob('send-reminders-daily');
-    qa.check('the command ran and queued one request to send-reminders with the hook secret', r.ok && r.requests.length === 1 && /\/functions\/v1\/send-reminders$/.test(r.requests[0].url) && r.requests[0].hookSecret, JSON.stringify(r.requests.map((q) => ({ url: q.url, secret: q.hookSecret, timeout: q.timeout }))));
+    const queued = row(`select id,status from public.reminder_email_queue where profile_id='${pid}' and reminder_day=(now() at time zone 'UTC')::date`);
+    qa.check('the daily command persisted this member’s job; any drain request uses the protected hook', r.ok && !!queued && r.requests.length <= 1 && r.requests.every(q => /\/functions\/v1\/send-reminders$/.test(q.url) && q.hookSecret && q.body?.drain === true), JSON.stringify({ queued, requests: r.requests.map(q => ({ url: q.url, secret: q.hookSecret, timeout: q.timeout })) }));
     const [answer] = await netResponses(r.requests.map((q) => q.id));
-    qa.check(`send-reminders answered 2xx within the job's pg_net timeout (${r.requests[0]?.timeout} ms)`, ok2xx(answer), brief(answer));
+    if (r.requests.length) qa.check(`send-reminders answered 2xx within the job's pg_net timeout (${r.requests[0]?.timeout} ms)`, ok2xx(answer), brief(answer));
+    const delivery = await settleReminderQueue(pid);
+    qa.check('the member’s durable reminder job reached sent', delivery.status === 'sent', delivery);
     const mail = await waitFor('the reminder email', async () => (await emails({ to: user.email })).find((m) => /renew|expir|due|reminder/i.test(m.subject)) || null, { timeoutMs: 120000, intervalMs: 2000 }).catch(() => null);
     qa.check('the member got the reminder email', !!mail, mail?.subject || `none within 2 minutes (reminder_emailed_at ${profileOf(user.id)?.reminder_emailed_at})`);
     if (answer?.timed_out) {
@@ -194,10 +199,10 @@ test('scheduled jobs: each command runs as pg_cron would, the functions it calls
     }
   }, { soft: true });
 
-  await qa.feature('OPS-001', 'delete-cancelled-accounts: the request it would send (rolled back; OPS-002 runs the deletion)', async () => {
+  await qa.feature('OPS-001', 'retired account-deletion dispatcher runs without sending anything', async () => {
     const dry = runCronJob('delete-cancelled-accounts', { commit: false });
-    qa.check('the command ran (rolled back)', dry.ok, dry.error || '');
-    qa.check('each request names delete-account, carries the hook secret, dry_run false, requested_by scheduled, a 120 s timeout', dry.requests.every((q) => /\/functions\/v1\/delete-account$/.test(q.url) && q.hookSecret && q.body?.dry_run === false && q.body?.requested_by === 'scheduled' && q.timeout === 120000), `${dry.requests.length} request(s) ${JSON.stringify(dry.requests.map((q) => q.body)).slice(0, 200)}`);
+    qa.check('the retained cron command runs and returns zero', dry.ok && dry.result === '0', dry.error || dry.result);
+    qa.check('no destructive deletion request is enqueued', dry.requests.length === 0, `${dry.requests.length} request(s)`);
   }, { soft: true });
 
   await qa.feature('OPS-001', 'send-guide-sweep: a requested state guide is emailed and stamped', async () => {
@@ -246,14 +251,24 @@ test('scheduled jobs: each command runs as pg_cron would, the functions it calls
     const [answer] = await netResponses(r.requests.map((q) => q.id));
     qa.check('the sweep answered 2xx with counts only', ok2xx(answer) && /"state"/.test(answer?.content || '') && !/@|sub_/.test(answer?.content || ''), brief(answer));
   }, { soft: true });
+
+  await qa.feature('OPS-001', 'limited-refund-sweep: the scheduled request reaches its protected handler and returns outcome counts', async () => {
+    const r = runCronJob('limited-refund-sweep');
+    qa.check('the dispatcher queued one protected refund sweep with a 60 s timeout', r.ok && r.requests.length === 1 && /\/functions\/v1\/limited-refund$/.test(r.requests[0].url) && r.requests[0].hookSecret && r.requests[0].timeout === 60000 && JSON.stringify(r.requests[0].body) === '{}', r.error || '');
+    const [answer] = await netResponses(r.requests.map(q => q.id), { timeoutMs: 75000 });
+    let data = null;
+    try { data = JSON.parse(answer?.content || ''); } catch { /* The assertion reports malformed replies. */ }
+    const values = Object.values(data?.outcomes || {});
+    const countsOnly = data && Object.keys(data).sort().join(',') === 'deferred,outcomes,requests,state' && data.outcomes !== null && typeof data.outcomes === 'object' && !Array.isArray(data.outcomes);
+    qa.check('the sweep answered 2xx with bounded counts, no member/payment identifiers', ok2xx(answer) && countsOnly && data.state === 'ready' && Number.isInteger(data.requests) && data.requests >= 0 && data.requests <= 10 && Number.isInteger(data.deferred) && data.deferred >= 0 && values.every(n => Number.isInteger(n) && n >= 0) && values.reduce((sum, n) => sum + n, data.deferred) === data.requests && !/@|cus_|sub_|ch_|in_/.test(answer?.content || ''), brief(answer));
+  }, { soft: true });
 });
 
-test('cancelled-account deletion: only accounts past their deletion date are wiped; a paying member never is', {
+test('cancellation retains records and files; scheduled deletion is refused while explicit owner deletion remains available', {
   tag: ['@OPS-002'],
 }, async ({ page, qa }) => {
   test.setTimeout(10 * 60 * 1000);
-  // E: a paying member with a record.
-  const { user: payer, profile: payerProfile } = await newMember(page, { firstName: 'Paige', lastName: `Paying ${letters()}` });
+  const { user: payer, profile: payerProfile } = await newMember(page, { firstName: 'Paige', lastName: `Retained ${letters()}` });
   await openCredentials(page, 'Licenses');
   await page.getByRole('button', { name: 'Add' }).first().click();
   const dlg = page.getByRole('dialog', { name: 'Add' });
@@ -263,72 +278,117 @@ test('cancelled-account deletion: only accounts past their deletion date are wip
   await field(dlg, /^Expires/).fill(day(300));
   await dlg.getByRole('button', { name: 'Add' }).click();
   await dlg.waitFor({ state: 'detached' });
-  await waitFor('the license in the cloud', async () => countWhere('licenses', `user_id = '${payerProfile.id}'`) === 1, { timeoutMs: 30000 });
-  // C: an account that cancelled 8 days ago, deletion date passed yesterday.
-  const cancelled = await createPhysician({ firstName: 'Cora', lastName: `Cancelled ${letters()}` });
-  const cProfile = await waitFor('C profile', async () => profileOf(cancelled.id), { timeoutMs: 30000 });
-  labExec(`update public.profiles set cancelled_at = now() - interval '8 days', data_deletion_date = now() - interval '1 day' where id = '${cProfile.id}'`);
-  // D: already wiped after its date.
-  const wiped = await createPhysician({ firstName: 'Dana', lastName: `Wiped ${letters()}` });
-  const dProfile = await waitFor('D profile', async () => profileOf(wiped.id), { timeoutMs: 30000 });
-  labExec(`update public.profiles set data_deletion_date = now() - interval '2 days', deleted_at = now() - interval '1 day' where id = '${dProfile.id}'`);
+  await waitFor('the license in the cloud', async () => countWhere('licenses', `user_id = '${payerProfile.id}'`) === 1);
 
-  const scope = () => {
-    const dry = runCronJob('delete-cancelled-accounts', { commit: false });
-    if (!dry.ok) throw new Error(dry.error);
-    return dry.requests.map((q) => q.body?.profile_id);
+  // These are local record-retention fixtures, not billing journeys. Use the
+  // same guarded grant transaction as the lab's lifetime-member helper; never
+  // turn off write enforcement or upload into an unentitled account.
+  const entitledFixture = async opts => {
+    const user = await createPhysician(opts);
+    const profile = await waitFor('retention fixture profile', async () => profileOf(user.id));
+    labExec(`begin;
+      select set_config('credentialdomd.access_grant', '1', true);
+      insert into public.access_grants (profile_id,clerk_subject,livemode,scope,kind,source_key,starts_at)
+        values ('${profile.id}',${lit(user.id)},true,'credential','lifetime','qa-lab:ops-retention-fixture',now());
+      update public.profiles set access_status='active' where id='${profile.id}' and access_status='pending' and deleted_at is null;
+      commit;`);
+    const capability = row(`select public.credentialdo_access_enforced() as enforced,
+      public.credentialdo_profile_scope_write_allowed('${profile.id}',${lit(user.id)},'credential') as allowed`);
+    qa.check(`${opts.firstName} starts with enforced, entitled record writes`, capability?.enforced === true && capability?.allowed === true);
+    return { user, profile };
   };
-  let url = null;
-
-  await qa.feature('OPS-002', 'scope: a cancelled account past its date is in; null, future and already-wiped are out', async () => {
-    const dry = runCronJob('delete-cancelled-accounts', { commit: false });
-    url = dry.requests[0]?.url || `http://supabase_kong_credentialdomd-qa-lab:8000/functions/v1/delete-account`;
-    const ids = dry.requests.map((q) => q.body?.profile_id);
-    qa.check('the cancelled account past its deletion date would be dispatched', ids.includes(cProfile.id), `${ids.length} in scope`);
-    qa.check('the paying member with no deletion date is not in scope', !ids.includes(payerProfile.id));
-    qa.check('an account already wiped after its date is not in scope', !ids.includes(dProfile.id));
-    labExec(`update public.profiles set data_deletion_date = now() + interval '5 days' where id = '${payerProfile.id}'`);
-    qa.check('the paying member with a FUTURE deletion date is not in scope', !scope().includes(payerProfile.id));
-  }, { soft: true });
-
-  await qa.feature('OPS-002', 'a paying member with a stale past deletion date: in scope only if something writes that date (verified: nothing in the product does)', async () => {
-    // The risk the checklist names: a wrong data_deletion_date write (a billing webhook,
-    // an old client) on an account that is active and paying.
-    labExec(`update public.profiles set data_deletion_date = now() - interval '1 hour' where id = '${payerProfile.id}'`);
-    const snapshot = row(`select p.access_status, s.status as subscription from public.profiles p left join public.billing_subscriptions s on s.profile_id = p.id where p.id = '${payerProfile.id}' limit 1`);
-    const ids = scope();
-    const inScope = ids.includes(payerProfile.id);
-    qa.check('(observation) the scope with a past date written by hand', true, `access ${snapshot?.access_status}, subscription ${snapshot?.subscription}, in scope: ${inScope}`);
-    if (inScope) {
-      // Filed as a bug, then verified not to be one (2026-09-30): the date here is written by hand.
-      qa.byDesign('OPS-002', `An active, paying member whose data_deletion_date is set in the past by hand is dispatched for deletion: dispatch_account_deletions() (supabase/migrations/20260925140000_hook_secret_vault.sql:215-220) filters only on data_deletion_date and deleted_at`,
-        'Verified out of reach in production (2026-09-30): nothing in the product writes a non-null data_deletion_date (its only writers, CancellationPage reactivate and delete-account\'s tombstone, write NULL, and no webhook or job computes it), so no member enters the scope through any product flow. A member who writes their own only schedules deletion of their own account, which Delete All My Data already allows. Defense in depth worth adding: check cancelled_at, access_status and the subscription in the dispatcher.');
+  const { user: cancelled, profile: cProfile } = await entitledFixture({ firstName: 'Cora', lastName: `Retained ${letters()}` });
+  labExec(`insert into public.publications (id,user_id,name,citation,year) values (gen_random_uuid(),'${cProfile.id}','Retained legacy publication','Synthetic QA record','2026')`);
+  const { service } = stackKeys();
+  const files = [];
+  for (const [user, profile] of [[payer, payerProfile], [cancelled, cProfile]]) {
+    for (const bucket of ['documents', 'backups']) {
+      const name = `${user.id}/qa-retention-${letters()}.${bucket === 'documents' ? 'txt' : 'zip'}`;
+      const bytes = Buffer.from(`Synthetic retained ${bucket} for ${profile.id}`);
+      await uploadObject(bucket, name, bytes);
+      files.push({ bucket, name, bytes, profile: profile.id });
     }
-    const self = await fetch(`${lab().urls.api}/rest/v1/profiles?id=eq.${payerProfile.id}`, {
-      method: 'PATCH', headers: { apikey: (await import('./support/ops-helpers.mjs')).stackKeys().anon, Authorization: `Bearer ${await tokenFor(payer)}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-      body: JSON.stringify({ data_deletion_date: new Date(Date.now() - 3600e3).toISOString() }),
+  }
+  // Establish old cancellation state only after this owner's genuine bytes
+  // exist, then prove that the retained account has lost write capability.
+  labExec(`begin;
+    select set_config('credentialdomd.access_grant', '1', true);
+    update public.access_grants set revoked_at=now() where profile_id='${cProfile.id}' and source_key='qa-lab:ops-retention-fixture';
+    update public.profiles set cancelled_at=now()-interval '8 days',data_deletion_date=now()-interval '1 day' where id='${cProfile.id}';
+    commit;`);
+  const cancelledCapability = row(`select public.credentialdo_access_enforced() as enforced,
+    public.credentialdo_profile_scope_write_allowed('${cProfile.id}',${lit(cancelled.id)},'credential') as allowed`);
+  qa.check('the retained legacy account is read-only with write enforcement still enabled', cancelledCapability?.enforced === true && cancelledCapability?.allowed === false);
+  const readFile = async file => {
+    const response = await fetch(`${lab().urls.api}/storage/v1/object/${file.bucket}/${file.name.split('/').map(encodeURIComponent).join('/')}`, {
+      headers: { Authorization: `Bearer ${service}`, apikey: service },
     });
-    const written = row(`select data_deletion_date from public.profiles where id = '${payerProfile.id}'`)?.data_deletion_date;
-    qa.check('(observation) the member\'s own session may write data_deletion_date', true, `PATCH profiles.data_deletion_date as the member: HTTP ${self.status}, stored ${written}`);
-    // Put the member back: nothing below should wipe them by accident.
-    labExec(`update public.profiles set data_deletion_date = null where id = '${payerProfile.id}'`);
-    qa.check('with the date cleared the member is out of scope again', !scope().includes(payerProfile.id));
-  }, { soft: true });
+    return { status: response.status, bytes: Buffer.from(await response.arrayBuffer()) };
+  };
+  const retainedFiles = async () => {
+    for (const file of files) {
+      const result = await readFile(file);
+      qa.check(`${file.bucket} file for ${file.profile === payerProfile.id ? 'paid' : 'legacy'} owner keeps identical bytes`, result.status === 200 && result.bytes.equals(file.bytes));
+    }
+  };
+  const profileState = () => rows(`select id,access_status,cancelled_at,data_deletion_date,deleted_at,email,name from public.profiles where id in ('${payerProfile.id}','${cProfile.id}') order by id`);
+  const recordState = () => ({
+    payer: row(`select id,user_id,license_number,state from public.licenses where user_id='${payerProfile.id}'`),
+    legacy: row(`select id,user_id,name,citation,year from public.publications where user_id='${cProfile.id}'`),
+  });
 
-  await qa.feature('OPS-002', 'the job\'s request wipes the cancelled account, writes the audit row, and a second run finds nothing', async () => {
-    const id = sendAsJob(url, { profile_id: cProfile.id, dry_run: false, requested_by: 'scheduled' }, 120000);
-    const [answer] = await netResponses([id], { timeoutMs: 150000 });
-    qa.check('delete-account answered 2xx within the job\'s 120 s timeout', ok2xx(answer), brief(answer));
-    const p = row(`select deleted_at, data_deletion_date, cancelled_at, email, name from public.profiles where id = '${cProfile.id}'`);
-    qa.check('the profile is a tombstone: deleted_at set, the schedule consumed (date and cancelled_at null)', !!p?.deleted_at && !p.data_deletion_date && !p.cancelled_at, JSON.stringify({ deleted_at: p?.deleted_at, date: p?.data_deletion_date, cancelled: p?.cancelled_at }));
-    const audit = rows(`select requested_by, mode, error from public.account_deletions where profile_id = '${cProfile.id}' order by created_at`);
-    qa.check('one account_deletions row: requested_by scheduled, mode delete, no error', audit.some((a) => a.requested_by === 'scheduled' && a.mode === 'delete' && !a.error), JSON.stringify(audit));
-    qa.check('the next run does not dispatch it again', !scope().includes(cProfile.id));
-    qa.check('the paying member was never touched (record and profile intact)', countWhere('licenses', `user_id = '${payerProfile.id}'`) === 1 && !profileOf(payer.id).deleted_at);
-    await page.reload();
-    await waitForMemberApp(page);
-    qa.check('the paying member still opens the app', (await landing(page)) === 'member');
-  }, { soft: true });
+  await qa.feature('OPS-002', 'old cancellation dates never dispatch automatic deletion', async () => {
+    await retainedFiles();
+    for (const date of ['null', "now() + interval '5 days'", "now() - interval '1 hour'"]) {
+      labExec(`update public.profiles set data_deletion_date=${date} where id='${payerProfile.id}'`);
+      const before = JSON.stringify({ profiles: profileState(), records: recordState() });
+      const run = runCronJob('delete-cancelled-accounts');
+      qa.check(`dispatcher sends nothing for paid date ${date} and a past-due legacy cancellation`, run.ok && run.result === '0' && run.requests.length === 0, run.error || '');
+      qa.check('dispatch preserves profiles, stamps and records', JSON.stringify({ profiles: profileState(), records: recordState() }) === before);
+    }
+  });
+
+  await qa.feature('OPS-002', 'previously queued or mislabeled hook requests cannot erase records or files', async () => {
+    const before = JSON.stringify({ profiles: profileState(), records: recordState() });
+    for (const profile of [payerProfile, cProfile]) {
+      for (const label of ['scheduled', 'self', 'admin']) {
+        const result = await callFunction('delete-account', { headers: { 'x-hook-secret': labHookSecret() }, body: { profile_id: profile.id, dry_run: false, requested_by: label } });
+        qa.check(`${label} hook is explicitly refused for ${profile.id === payerProfile.id ? 'paid' : 'legacy'} owner`, result.status === 409 && result.data?.code === 'automatic_deletion_retired', `${result.status}`);
+      }
+    }
+    qa.check('hook refusals preserve profile and record contents', JSON.stringify({ profiles: profileState(), records: recordState() }) === before);
+    await retainedFiles();
+    // A queued request is still harmless after its schedule was cleared.
+    labExec(`update public.profiles set cancelled_at=null,data_deletion_date=null where id='${payerProfile.id}'`);
+    const stale = await callFunction('delete-account', { headers: { 'x-hook-secret': labHookSecret() }, body: { profile_id: payerProfile.id, dry_run: false, requested_by: 'scheduled' } });
+    qa.check('clearing/reactivating a scheduled account cannot race an old destructive request', stale.status === 409 && stale.data?.code === 'automatic_deletion_retired' && !profileOf(payer.id).deleted_at);
+    await retainedFiles();
+    await page.reload(); await waitForMemberApp(page);
+    await openCredentials(page, 'Licenses');
+    qa.check('the paid member still sees the saved license', (await page.locator('body').innerText()).includes('QA-KEEP-1'));
+    await qa.shot('paid account retained after old automatic deletion requests');
+  });
+
+  await qa.feature('OPS-002', 'dry-run inspection and explicit authenticated owner deletion remain separate', async () => {
+    const preview = await callFunction('delete-account', { headers: { 'x-hook-secret': labHookSecret() }, body: { profile_id: cProfile.id, dry_run: true } });
+    qa.check('hook inspection counts records without deleting', preview.status === 200 && preview.data?.dry_run === true && preview.data?.tombstoned === false && preview.data?.tables?.publications === 1);
+    await retainedFiles();
+    const { user: explicit, profile: eProfile } = await entitledFixture({ firstName: 'Erin', lastName: `Explicit ${letters()}` });
+    const file = { bucket: 'documents', name: `${explicit.id}/explicit-delete.txt`, bytes: Buffer.from('Synthetic explicit deletion control') };
+    await uploadObject(file.bucket, file.name, file.bytes);
+    labExec(`insert into public.publications (id,user_id,name) values (gen_random_uuid(),'${eProfile.id}','Explicit deletion control')`);
+    const existing = await readFile(file);
+    qa.check('explicit deletion positive control starts with a real record and file', existing.status === 200 && existing.bytes.equals(file.bytes) && countWhere('publications', `user_id='${eProfile.id}'`) === 1);
+    const deleted = await callFunction('delete-account', { headers: { Authorization: `Bearer ${await tokenFor(explicit)}` }, body: { dry_run: false }, timeoutMs: 120000 });
+    qa.check('verified owner deletion succeeds without a cancellation schedule', deleted.status === 200 && deleted.data?.requested_by === 'self' && deleted.data?.tombstoned === true && !!deleted.data?.deleted_at);
+    const missing = await readFile(file);
+    let missingBody = null; try { missingBody = JSON.parse(missing.bytes.toString('utf8')); } catch { /* the exact failure below remains false */ }
+    const notFound = missing.status === 404 || (missing.status === 400 && String(missingBody?.statusCode) === '404' && missingBody?.error === 'not_found');
+    const disk = objectBytesOnDisk(file.bucket, file.name);
+    qa.check('explicit deletion removes that owner record and stored file', countWhere('publications', `user_id='${eProfile.id}'`) === 0 && notFound && Array.isArray(disk) && disk.length === 0);
+    qa.check('explicit deletion leaves both retained owners untouched', countWhere('licenses', `user_id='${payerProfile.id}'`) === 1 && countWhere('publications', `user_id='${cProfile.id}'`) === 1 && !profileOf(payer.id).deleted_at && !profileOf(cancelled.id).deleted_at);
+    await retainedFiles();
+  });
 });
 
 test('hook secret: every database-called function refuses a missing or wrong secret and a member token, with no side effect', {
@@ -369,7 +429,8 @@ test('hook secret: every database-called function refuses a missing or wrong sec
     }
     const sweepBad = await callFunction('limited-stripe-webhook', { body: {}, headers: wrong });
     qa.check('limited-stripe-webhook: a wrong x-hook-secret is refused by the welcome sweep', sweepBad.status === 401, `${sweepBad.status}`);
-    const sweepNone = await callFunction('limited-stripe-webhook', { body: {} });
+    const sweepNone = await qa.intentionalEdgeRequest('unsigned_webhook', 'OPS-004 deliberately posts an unsigned body and verifies the signature refusal.',
+      () => callFunction('limited-stripe-webhook', { body: {} }));
     qa.check('limited-stripe-webhook: without the header it is the Stripe endpoint and refuses an unsigned body', [400, 401].includes(sweepNone.status), `${sweepNone.status} ${sweepNone.text.slice(0, 80)}`);
     // Positive control: the probes reach the functions, and the lab's vault secret works.
     const good = await callFunction('send-reminders', { body: { profile_id: tProfile.id, dry_run: true }, headers: { 'x-hook-secret': labHookSecret() } });
@@ -432,13 +493,17 @@ test('deployed functions: each has a caller or is retired, and the uncalled ones
     callers[f] = c;
   }
 
-  await qa.feature('OPS-013', 'deployed list vs source (the list production reported on 2026-09-29, kept in the lab template)', async () => {
+  await qa.feature('OPS-013', 'local configured release inventory vs source (production snapshot plus staged release functions)', async () => {
     const notDeployed = source.filter((f) => !deployed.includes(f));
     const noSource = deployed.filter((f) => !source.includes(f));
     qa.check('every deployed function has source', noSource.length === 0, noSource.join(', '));
     // release/qa1 deletes send-onboarding-email's source and deploys prune-backups (listed in the template as its plan deploys it).
     qa.check('functions in source but not deployed are the documented retirements (npi-proxy, support-operations)', notDeployed.sort().join(',') === ['npi-proxy', 'support-operations'].join(','), notDeployed.join(', '));
     const uncalled = deployed.filter((f) => !callers[f].length);
+    qa.check('limited-refund is configured locally and called by the app and database sweep', deployed.includes('limited-refund') && !!browser['limited-refund'] && callers['limited-refund']?.includes('database'), callers['limited-refund']);
+    const refundsBefore = countWhere('limited_refund_requests');
+    const wrongHook = await callFunction('limited-refund', { body: {}, headers: { 'x-hook-secret': 'qa-invalid-refund-hook' } });
+    qa.check('the refund sweep rejects a wrong hook secret without creating refund requests', wrongHook.status === 401 && countWhere('limited_refund_requests') === refundsBefore, `${wrongHook.status}`);
     qa.check(`deployed functions nothing calls: ${uncalled.join(', ') || 'none'}`, true, JSON.stringify(callers));
     // Named in src/ but unreachable: trackEvent() has no call site, and the legacy checkout and portal
     // branches of useSubscription return before invoking them while the limited launch is on (as deployed).
@@ -447,7 +512,7 @@ test('deployed functions: each has a caller or is retired, and the uncalled ones
     qa.check('track-event: its only browser caller, trackEvent(), is never called', /functions\.invoke\("track-event"/.test(src) && trackCalls.length === 0, trackCalls.join(' | '));
     const sub = repoFile('src/hooks/useSubscription.js');
     qa.check('create-checkout-session and customer-portal: reached only when the limited launch is off (production builds it on)', /if \(LIMITED_LAUNCH_ACCESS_ENABLED\) return \{ ok: false, error: "review_offer_required" \}/.test(sub) && /VITE_LIMITED_LAUNCH_ACCESS_ENABLED: "true"/.test(repoFile('.github/workflows/deploy-gh-pages.yml')));
-    qa.blocked('OPS-013', 'The live deployed list and each function\'s verify_jwt are read from the lab template (recorded from production on 2026-09-29); re-reading them needs the Management API, which the lab may use for the catalog only. Deploy-time drift (a function deployed before a fix to a file it bundles) is not visible from the lab.');
+    qa.blocked('OPS-013', 'The local template combines the production catalog recorded on 2026-09-29 and staged release functions, including limited-refund. It does not prove these additions are deployed. Re-reading the live inventory requires the read-only Management API catalog; deploy-time drift is not visible from the lab.');
   }, { soft: true });
 
   await qa.feature('OPS-013', 'unauthenticated probes of the uncalled and legacy functions: refused or read-only', async () => {
@@ -463,7 +528,9 @@ test('deployed functions: each has a caller or is retired, and the uncalled ones
       ['send-invite', 'POST', { email: `ops-invite@${LAB_EMAIL_DOMAIN}` }, [401]],
     ];
     for (const [name, method, body, codes] of probes) {
-      const r = await callFunction(name, { method, body });
+      const r = name === 'track-event'
+        ? await qa.intentionalEdgeRequest('missing_authorization', 'OPS-013 deliberately omits authorization from track-event and verifies the gateway refusal.', () => callFunction(name, { method, body }))
+        : await callFunction(name, { method, body });
       qa.check(`${name} (${callers[name]?.join(', ') || 'no caller'}): refuses an unauthenticated call`, codes.includes(r.status), `${r.status} ${r.text.slice(0, 100)}`);
     }
     const fc = await callFunction('founding-count', { method: 'GET' });

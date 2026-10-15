@@ -1,5 +1,27 @@
-import test from 'node:test';
+import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { createMemoryIndexedDB } from '../helpers/memory-indexeddb.mjs';
+import { setOfflineStoreFactory } from '../../src/utils/offlineStore.js';
+import { _resetInvoiceHandoff } from '../../src/utils/invoiceHandoff.js';
+
+// A successful purge must commit to the real memory-IDB transaction path;
+// an absent API intentionally leaves an owed-deletion marker now.
+let deviceIndexedDB;
+const previousIndexedDB = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
+beforeEach(() => {
+  _resetInvoiceHandoff();
+  deviceIndexedDB = createMemoryIndexedDB();
+  globalThis.indexedDB = deviceIndexedDB;
+  setOfflineStoreFactory(deviceIndexedDB);
+});
+afterEach(() => {
+  _resetInvoiceHandoff();
+  deviceIndexedDB?.closeConnections();
+  setOfflineStoreFactory(undefined);
+  if (previousIndexedDB) Object.defineProperty(globalThis, 'indexedDB', previousIndexedDB);
+  else delete globalThis.indexedDB;
+});
+
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
@@ -10,13 +32,14 @@ const source = await readFile(new URL('../../src/context/AppContext.jsx', import
 const start = source.indexOf('  const handleSignOut = useCallback(');
 const end = source.indexOf('  // Persist the offline copy', start);
 const code = source.slice(start, end) + '\nglobalThis.signOut = handleSignOut;';
-function fixture({ failRetirement = false, cancel = false, accessAuthority, clearLocalData, clerkSignOut, data = {}, confirm, markSignOut, unread = false } = {}) {
+function fixture({ failRetirement = false, cancel = false, accessAuthority, clearLocalData, clerkSignOut, data = {}, confirm, markSignOut, recovery = [], failRecovery = false, unread = false } = {}) {
   const calls = [], generation = { current: 7 }, userIdRef = { current: 'profileA' }, dataOwnerRef = { current: 'user_syntheticA' };
   const context = { useCallback: fn => fn, user: { id: 'user_syntheticA' }, getActiveUserId: () => 'user_syntheticA',
     offlineMode: false, vaultCount: () => cancel ? 1 : 0, pendingOpCount: () => 0,
     window: { alert: message => calls.push(['alert', message]), confirm: confirm ? message => { calls.push(['confirm', message]); return confirm(message); } : () => false, location: { reload() { calls.push(['reload']); } } },
     dataRef: { current: data }, DEVICE_ONLY_SECTIONS, deviceOnlyRecordCounts, lsGetJSON, BASE_KEYS, offlineCopyUnread: () => unread, markDeliberateSignOut: id => { calls.push(['mark-signout', id]); markSignOut?.(id); },
     resetSharedAiStatus: () => calls.push(['ai-reset']), configureSecretContinuity: () => calls.push(['crypto-clear']),
+    readRecovery: () => recovery, purgeRecovery: () => { if (failRecovery) throw Error("Synthetic recovery purge refusal"); },
     retireContinuityRecovery: id => { calls.push(['retire', id]); if (failRetirement) { const error = Error('Synthetic storage refusal'); error.code = 'continuity_retirement_unavailable'; throw error; } },
     invalidateAccountWrites: id => calls.push(['invalidate-writes', id]),
     accessAuthority: accessAuthority || { reset: id => calls.push(['access-reset', id]) },
@@ -204,6 +227,19 @@ test('nothing device-only in memory or on disk: Sign out still asks nothing', as
   });
 });
 
+
+test('saved recovery copies are named before signout; cancellation and failed purge retain the signed-in data', async () => {
+  const cancelled = fixture({ recovery: [{ entryId: 'synthetic' }], confirm: () => false });
+  await cancelled.run();
+  assert.match(cancelled.calls.find(call => call[0] === 'confirm')[1], /1 saved recovery copy/);
+  assert.deepEqual(cancelled.calls.map(call => call[0]), ['ai-reset', 'confirm']);
+  assert.equal(cancelled.dataOwnerRef.current, 'user_syntheticA');
+  const blocked = fixture({ recovery: [{ entryId: 'synthetic' }], confirm: () => true, failRecovery: true });
+  await blocked.run();
+  assert.deepEqual(blocked.calls.map(call => call[0]), ['ai-reset', 'confirm', 'retire', 'alert']);
+  assert.equal(blocked.dataOwnerRef.current, 'user_syntheticA');
+  assert.equal(blocked.generation.current, 7);
+});
 // Review of the IndexedDB move: when this session's load could not read the
 // device's offline copy, Protected Identity and the Answer Bank are not in
 // memory and cannot be counted, and Sign out erased them without a word.

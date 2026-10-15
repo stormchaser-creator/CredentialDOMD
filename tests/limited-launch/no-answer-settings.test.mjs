@@ -24,6 +24,8 @@ import { readFile } from 'node:fs/promises';
 import { build, transformSync } from 'esbuild';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { createRecordAcknowledgements } from '../../src/utils/recordAcknowledgements.js';
+import { recoveryFor } from '../sync-recovery-fixture.mjs';
 import * as access from '../../src/utils/limitedLaunchAccess.js';
 import * as syncRules from '../../src/utils/syncRules.js';
 import * as held from '../../src/utils/heldChanges.js';
@@ -65,7 +67,7 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
       const operation = { table, filters: [] };
       const q = { then: (resolve, reject) => execute(operation).then(resolve, reject) };
       for (const method of ['insert', 'update', 'upsert', 'delete', 'select']) q[method] = (value, options) => { if (!operation.method) { operation.method = method; operation.value = value; if (options !== undefined) operation.options = options; } else if (method === 'select') operation.returning = value ?? '*'; return q; };
-      for (const method of ['eq', 'order', 'range', 'in']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
+      for (const method of ['eq', 'is', 'order', 'range', 'in']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
       q.maybeSingle = q.single = () => q;
       // The real builder's: a request the caller may cancel (a settings save that had no answer).
       q.abortSignal = signal => { operation.signal = signal; return q; };
@@ -74,10 +76,11 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
   }
   const imports = {
     '@supabase/supabase-js': { createClient }, '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS }, '../utils/syncRules.js': syncRules,
-    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => ACCOUNT,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
-      // The queue's write (storageScope makes room first in the app).
-      setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/storageScope.js': { localWriteGuard: () => () => true, BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => ACCOUNT,
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null, setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/recordAcknowledgements.js': createRecordAcknowledgements({ activeAccount: () => ACCOUNT, fenceFor: () => null, copyCurrent: () => true, receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null, write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } }),
+    '../utils/syncRecovery.js': recoveryFor(values, () => ACCOUNT),
+    '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': {}, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},
@@ -179,7 +182,7 @@ const replayOnAnswer = f => f.api.replayPendingOps(PROFILE, ACCOUNT, { tombstone
 test('the Setup board flush before the first answer: no alert, no report, and the stamps are saved once the answer comes', async () => {
   const f = fixture();
   assert.equal(f.authority.state(), null, 'no answer yet this page load');
-  const result = f.app.updateSettings(setupStamp(), { automatic: true });
+  const result = f.app.updateSettings(setupStamp(), { automaticSetup: true });
   assert.notEqual(result, false, 'not refused');
   assert.deepEqual(f.state.settings.setupState, setupStamp().setupState, 'on this device at once, so the board does not stamp again');
   assert.deepEqual(f.alerts, [], 'no "Reconnecting" alert on a load where nobody typed');
@@ -377,12 +380,12 @@ test('the Setup board flushes its own stamps as automatic, and a write with a me
   const updateSettings = (patch, options) => { writes.push(options); };
   const stored = { startedAt: '2026-09-01T00:00:00.000Z' };
   Q.commitSetupState(st => ({ ...st, progress: { done: 1, total: 6 } }), { stored, updateSettings, userId: 'u-1', automatic: true, now: true });
-  assert.deepEqual(writes.at(-1), { automatic: true });
+  assert.deepEqual(writes.at(-1), { automaticSetup: true });
   Q.commitSetupState(st => ({ ...st, progress: { done: 2, total: 6 } }), { stored, updateSettings, userId: 'u-1', automatic: true });
   Q.commitSetupState(st => ({ ...st, snoozedUntil: '2026-10-01T00:00:00.000Z' }), { stored, updateSettings, userId: 'u-1', now: true });
-  assert.deepEqual(writes.at(-1), { automatic: false }, 'a tap folded into the queued stamp is the member\'s');
+  assert.deepEqual(writes.at(-1), { automaticSetup: false }, 'a tap folded into the queued stamp is the member\'s');
   Q.commitSetupState(st => ({ ...st, progress: { done: 3, total: 6 } }), { stored, updateSettings, userId: 'u-1', automatic: true, now: true });
-  assert.deepEqual(writes.at(-1), { automatic: true }, 'the next stamp alone is automatic again');
+  assert.deepEqual(writes.at(-1), { automaticSetup: true }, 'the next stamp alone is automatic again');
 });
 
 test('the board marks its stamps automatic and its taps not', async () => {
@@ -390,9 +393,10 @@ test('the board marks its stamps automatic and its taps not', async () => {
   for (const stamp of ['withStarted(st, patch.startedAt', 'withProgress(st, {', 'lastTouched: new Date().toISOString()']) {
     const at = src.indexOf(stamp);
     assert.ok(at > 0, stamp);
-    assert.match(src.slice(Math.max(0, at - 120), at), /stamp\(\(st\)/, `${stamp} goes through stamp()`);
+    assert.match(src.slice(Math.max(0, at - 120), at), /commitAutomatic\(\(st\)/, `${stamp} goes through the gated automatic writer`);
   }
-  for (const tap of ['skip', 'markNa', 'restore', 'declare', 'snooze', 'stampTier1Done', 'ackNarration']) {
+  assert.match(src, /const stampTier1Done = useCallback\(\(\) => commitAutomatic\(/, 'derived completion is automatic');
+  for (const tap of ['skip', 'markNa', 'restore', 'declare', 'snooze', 'ackNarration']) {
     assert.match(src, new RegExp(`const ${tap} = useCallback\\(\\s*\\(?[^)]*\\)?\\s*=>\\s*commit\\(`), `${tap} is a tap`);
   }
 });

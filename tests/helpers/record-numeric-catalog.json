@@ -1,0 +1,282 @@
+{
+  "sourceCatalogSha256": "c6c37f271a3dfcbf31023dd9c8f7a12f5069546019705deb39ef47d53df1f3fd",
+  "columns": [
+    {
+      "collection": "caseLogs",
+      "table": "case_logs",
+      "column": "w_rvu",
+      "type": "numeric",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "cme",
+      "table": "cme",
+      "column": "hours",
+      "type": "numeric(6,2)",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "deductibles",
+      "table": "deductibles",
+      "column": "amount",
+      "type": "numeric(12,2)",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "dutyDays",
+      "table": "duty_days",
+      "column": "amount",
+      "type": "numeric",
+      "notnull": false,
+      "default": "0"
+    },
+    {
+      "collection": "invoices",
+      "table": "invoices",
+      "column": "total_amount",
+      "type": "numeric(12,2)",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "licenses",
+      "table": "licenses",
+      "column": "renewal_cost",
+      "type": "numeric",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "hourly_rate",
+      "type": "numeric(10,2)",
+      "notnull": false,
+      "default": "0"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "call_hourly_rate",
+      "type": "numeric(10,2)",
+      "notnull": false,
+      "default": "0"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "call_stipend",
+      "type": "numeric(10,2)",
+      "notnull": false,
+      "default": "0"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "stipend_hours",
+      "type": "numeric(6,2)",
+      "notnull": false,
+      "default": "0"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "overage_hourly_rate",
+      "type": "numeric(10,2)",
+      "notnull": false,
+      "default": "0"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "orientation_fee",
+      "type": "numeric(10,2)",
+      "notnull": false,
+      "default": "0"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "orientation_hourly_rate",
+      "type": "numeric(10,2)",
+      "notnull": false,
+      "default": "0"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "day_rate",
+      "type": "numeric",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "scholarly_rate",
+      "type": "numeric",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "clinical_day_rate",
+      "type": "numeric",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "memberships",
+      "table": "professional_memberships",
+      "column": "cost",
+      "type": "numeric",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "scheduleDays",
+      "table": "schedule_days",
+      "column": "expected",
+      "type": "numeric",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "taxPayments",
+      "table": "tax_payments",
+      "column": "amount",
+      "type": "numeric",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "travelExpenses",
+      "table": "travel_expenses",
+      "column": "amount",
+      "type": "numeric(10,2)",
+      "notnull": false,
+      "default": null
+    }
+  ],
+  "unchangedIntegerColumns": [
+    {
+      "collection": "customCategories",
+      "table": "custom_categories",
+      "column": "sort_order",
+      "type": "integer",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "documents",
+      "table": "documents",
+      "column": "size_bytes",
+      "type": "integer",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "documents",
+      "table": "documents",
+      "column": "size",
+      "type": "bigint",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "invoices",
+      "table": "invoices",
+      "column": "total_minutes",
+      "type": "integer",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "increment_minutes",
+      "type": "integer",
+      "notnull": false,
+      "default": "15"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "min_call_minutes",
+      "type": "integer",
+      "notnull": false,
+      "default": "15"
+    },
+    {
+      "collection": "locumContracts",
+      "table": "locum_contracts",
+      "column": "day_start_hour",
+      "type": "integer",
+      "notnull": false,
+      "default": "7"
+    },
+    {
+      "collection": "notificationLog",
+      "table": "notification_log",
+      "column": "alert_count",
+      "type": "integer",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "publications",
+      "table": "publications",
+      "column": "sort_order",
+      "type": "integer",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "workLog",
+      "table": "work_log",
+      "column": "duration_min",
+      "type": "integer",
+      "notnull": false,
+      "default": null
+    },
+    {
+      "collection": "workLog",
+      "table": "work_log",
+      "column": "billed_min",
+      "type": "integer",
+      "notnull": false,
+      "default": null
+    }
+  ],
+  "textControls": [
+    {
+      "table": "cme",
+      "column": "certificate_number",
+      "type": "text"
+    },
+    {
+      "table": "insurance",
+      "column": "coverage_per_claim",
+      "type": "text"
+    },
+    {
+      "table": "insurance",
+      "column": "coverage_aggregate",
+      "type": "text"
+    },
+    {
+      "table": "malpractice_history",
+      "column": "settlement_amount",
+      "type": "text"
+    },
+    {
+      "table": "publications",
+      "column": "year",
+      "type": "text"
+    }
+  ]
+}

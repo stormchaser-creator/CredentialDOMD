@@ -16,6 +16,9 @@ import {
   addRecord, attachToRecord, day, deviceLog, installDeviceStandIns, runTag, shareLog, waitForDocument,
 } from './support/vera-cv-share-helpers.mjs';
 
+/** The share at index `at` the stand-in recorded, waited for (up to 10 s), or null. */
+const sharedEntry = (p, at) => waitFor('the share sheet record', async () => (await deviceLog(p)).shared[at] || null, { timeoutMs: 10000, intervalMs: 200 }).catch(() => null);
+
 test('send a license: share sheet, Mail, Text, Copy and history; email with attachments, the file cap and the hourly cap; documents as one packet', {
   tag: ['@SHARE-002', '@SHARE-003', '@SHARE-004'],
 }, async ({ page, context, qa, secondBrowser }) => {
@@ -88,10 +91,11 @@ test('send a license: share sheet, Mail, Text, Copy and history; email with atta
     await page.reload();
     await waitForMemberApp(page);
     const again = await openSend();
-    const hist = (await again.innerText()).split(/Send history/i)[1] || '';
-    const order = ['Copied', 'Texted to', 'Emailed to', 'Shared to'].map((w) => hist.indexOf(w));
+    const hist = (await again.innerText()).split(/Sharing activity/i)[1] || '';
+    const order = ['Copied', 'Text draft requested to', 'Email requested to', 'Device share requested to'].map((w) => hist.indexOf(w));
     await qa.shot('send history');
-    qa.check('after a reload the Send history lists the four sends, newest first', order.every((i) => i >= 0) && order.every((v, i, a) => i === 0 || a[i - 1] < v), hist.slice(0, 300));
+    qa.check('after a reload sharing activity lists the four actions, newest first', order.every((i) => i >= 0) && order.every((v, i, a) => i === 0 || a[i - 1] < v), hist.slice(0, 450));
+    qa.check('composer handoffs never claim a completed send', /do not confirm delivery/.test(hist) && !/Texted|Emailed|Send history|Device share completed/.test(hist));
     await page.keyboard.press('Escape');
   }, { soft: true });
 
@@ -124,14 +128,14 @@ test('send a license: share sheet, Mail, Text, Copy and history; email with atta
     await sheet.getByRole('button', { name: 'Done' }).click();
     await page.keyboard.press('Escape');
     const reopened = await openSend();
-    const hist = (await reopened.innerText()).split(/Send history/i)[1] || '';
-    const listed = (hist.match(/Emailed to/g) || []).length;
-    qa.check('the license\'s Send history shows the email with attachments too', listed >= 2, hist.slice(0, 300));
+    const hist = (await reopened.innerText()).split(/Sharing activity/i)[1] || '';
+    const listed = (hist.match(/Email requested to/g) || []).length;
+    qa.check('the license\'s sharing activity shows the email with attachments too', listed >= 2, hist.slice(0, 450));
     if (listed < 2) {
       qa.bug({
         title: 'A record emailed "with attachments" never appears in that record\'s Send history',
         step: 'Credentials > Licenses > Send (a license with copies) > Email with attachments > Send; reopen the license\'s Send sheet',
-        expected: 'Send history lists "Emailed to <recipient>" for the email that went out with the files',
+        expected: 'Sharing activity lists "Email requested to <recipient>" for the email that went out with the files',
         actual: `Only the earlier Mail-app entry is listed. send-packet-email writes its share_log row with item_id null and item_name "Email packet (2 files)" (supabase/functions/send-packet-email/index.ts:778-786), and ShareModal's history matches a row by item_id or by the record's own name (src/components/features/ShareModal.jsx:78-80). Fixed on fix/qa-docs-vera-intake and release/qa1 (fd79825a)`,
         severity: 'low',
       });
@@ -187,12 +191,13 @@ test('send a license: share sheet, Mail, Text, Copy and history; email with atta
     qa.check('three ticked: "Send 3 documents as one packet"', await send.isVisible().catch(() => false), (await page.getByRole('button', { name: /as one packet/ }).first().innerText().catch(() => '')));
     const shares = (await deviceLog(page)).shared.length;
     await send.click();
-    const msg = await page.getByText(/Sent 3 documents as one packet\./).waitFor({ timeout: 15000 }).then(() => true, () => false);
+    const packetNotice = page.getByText(/Sharing requested for 3 documents as one packet\. Delivery is not confirmed\./);
+    const msg = await packetNotice.waitFor({ timeout: 15000 }).then(() => true, () => false);
+    const sheet = await sharedEntry(page, shares);
     const log = await deviceLog(page);
-    const sheet = log.shared[shares];
     await qa.shot('packet sent');
     qa.check('the share sheet gets the 3 files', (sheet?.files || []).length === 3 && sheet.files.every((f) => f.head === '%PDF-'), JSON.stringify(sheet?.files));
-    qa.check('the cover letter is copied and the screen says so', msg && /clipboard/.test(await page.getByText(/Sent 3 documents/).first().innerText()) && (log.clipboard.at(-1) || '').length > 20);
+    qa.check('the cover letter is copied and the screen says so', msg && /clipboard/.test(await packetNotice.innerText()) && (log.clipboard.at(-1) || '').length > 20);
     await sleep(2500);
     const packetRow = shareLog(pid).find((r) => /^Packet \(3 documents\)/.test(r.item_name || ''));
     qa.check('share_log row "Packet (3 documents)", method share', packetRow?.method === 'share' && packetRow?.section === 'documents', JSON.stringify(packetRow));
@@ -220,8 +225,8 @@ test('send a license: share sheet, Mail, Text, Copy and history; email with atta
     // After the files land on the device, the same tap works.
     await sleep(6000);
     await p2.getByRole('button', { name: /^Send 3 documents as one packet$/ }).click();
-    const sent2 = await p2.getByText(/Sent 3 documents as one packet\./).waitFor({ timeout: 15000 }).then(() => true, () => false);
-    const log2 = await deviceLog(p2);
-    qa.check('once downloaded, the packet goes to the share sheet with the 3 files', sent2 && (log2.shared.at(-1)?.files || []).length === 3, JSON.stringify(log2.shared.at(-1)?.files));
+    const sent2 = await p2.getByText(/Sharing requested for 3 documents as one packet\. Delivery is not confirmed\./).waitFor({ timeout: 15000 }).then(() => true, () => false);
+    const sheet2 = sent2 ? await sharedEntry(p2, 0) : null;
+    qa.check('once downloaded, the packet goes to the share sheet with the 3 files', sent2 && (sheet2?.files || []).length === 3 && sheet2.files.every((f) => f.head === '%PDF-'), JSON.stringify(sheet2?.files));
   }, { soft: true });
 });

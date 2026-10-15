@@ -91,7 +91,7 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
 
   // Admin "Preview as": recompute the access snapshot below when a preview
   // starts or ends, or when the server's admin answer arrives.
-  useAdminPreviewRefresh();
+  useAdminPreviewRefresh(user?.id || null, profileReady);
 
   // Admin-only preview override (URL or localStorage). Beats Stripe-resolved tier.
   const limitedLaunch = useLimitedLaunchAccess(user?.id || null, { profileReady });

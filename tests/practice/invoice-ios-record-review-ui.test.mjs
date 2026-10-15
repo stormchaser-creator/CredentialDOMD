@@ -218,8 +218,8 @@ for (const name of Object.keys(SCREENS)) {
     const second = stamps.filter(x => x[1] === true).map(x => x[0]);
     assert.equal(second.length, 2, `${name}: two files went to the share sheet`);
     assert.notEqual(second[1], number, `${name}: never two invoices under ${number}`);
-    assert.ok(S.invoiceNotes('').some(n => n.number === number), `${name}: the first one is still noted as not recorded`);
-    assert.ok(S.invoiceNotes('').some(n => n.number === second[1]), `${name}: and the second one too`);
+    assert.ok(S.invoiceNotes('user_synthetic').some(n => n.number === number), `${name}: the first one is still noted as not recorded`);
+    assert.ok(S.invoiceNotes('user_synthetic').some(n => n.number === second[1]), `${name}: and the second one too`);
     assert.deepEqual(recorded(m), [], `${name}: nothing recorded on either`);
   });
 }
@@ -229,13 +229,13 @@ test('the number store: a number handed to the share sheet is never reserved aga
   const first = S.reserveInvoiceNumber([], 'INV', { rpc: srv.allocate, account: 'p1' });
   const number = await first.done;
   assert.equal(number, 'INV-20260910-01');
-  S.handOffInvoice('acct', { number, sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
+  S.handOffInvoice('user_synthetic', { number, sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
   const again = S.reserveInvoiceNumber([], 'INV', { rpc: srv.allocate, account: 'p1' });
   assert.notEqual(await again.done, number, 'the server is asked for the next one');
   // A device-made number (no cloud client) is spent the same way.
   S._resetHeldInvoiceNumbers();
   const local = S.reserveInvoiceNumber([], 'INV', { rpc: null, account: 'p1' });
-  S.handOffInvoice('acct', { number: local.number, sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
+  S.handOffInvoice('user_synthetic', { number: local.number, sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
   assert.notEqual(S.reserveInvoiceNumber([], 'INV', { rpc: null, account: 'p1' }).number, local.number);
 });
 
@@ -345,7 +345,7 @@ test('a share sheet that never answers: once the preview asks, its number is no 
 test('watchUnanswered releases the number it watches when it fires with the page back in front; closing the preview releases it too', async () => {
   fresh();
   const page = pageDoc();
-  S.handOffInvoice('acct', { number: 'INV-20260910-31', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
+  S.handOffInvoice('user_synthetic', { number: 'INV-20260910-31', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
   let asked = 0;
   S.watchUnanswered(() => { asked += 1; }, { number: 'INV-20260910-31', graceMs: 5, waitMs: 60000, doc: globalThis.document, win: null });
   page.back();

@@ -1,8 +1,8 @@
 /**
  * A server-side data deletion reaches every device of the member.
  *
- * Delete All My Data, and the deletion 7 days after a cancellation, empty the
- * account on the server and leave it OPEN (owner decision 2026-09-29): the
+ * Explicit owner/admin data deletion empties the account on the server and
+ * leaves it OPEN (owner decision 2026-09-29); cancellation retains records. The
  * member signs in again and starts over with a blank account. Every other
  * device that member used still holds its local copy from before: the record
  * file (license and DEA numbers included), the private vault, queued writes

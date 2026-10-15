@@ -16,8 +16,14 @@ serve(createAccessPolicyHandler({
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: req.headers.get('authorization') || '' } },
     });
-    const { data, error } = await db.rpc('credentialdo_access_snapshot');
-    if (error) throw Error('Access snapshot unavailable');
-    return data;
+    let result = await db.rpc('credentialdo_access_snapshot');
+    // This STABLE RPC only reads the caller's access state. Retry one explicit
+    // gateway refusal with the same JWT; never replay authentication or writes.
+    if (result.error && [502, 503, 504].includes(result.status)) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      result = await db.rpc('credentialdo_access_snapshot');
+    }
+    if (result.error) throw Error('Access snapshot unavailable');
+    return result.data;
   },
 }));

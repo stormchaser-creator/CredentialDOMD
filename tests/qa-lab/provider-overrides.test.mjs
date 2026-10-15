@@ -62,6 +62,13 @@ test('Stripe: the SDK keeps its own host unless STRIPE_API_BASE is set', () => {
   assert.throws(() => prod.stripeHostOptions('ftp://x'), /bare http\(s\) origin/);
 });
 
+test('Stripe keeps its SDK/API versions with the pinned npm Deno import', () => {
+  const source = readFileSync(path.join(ROOT, 'supabase/functions/_shared/billingDependencies.ts'), 'utf8');
+  assert.match(source, /import Stripe from 'npm:stripe@15\.12\.0'/);
+  assert.match(source, /apiVersion: '2024-04-10'/);
+  assert.doesNotMatch(source, /import[^\n]*\?target=deno['"]/);
+});
+
 // Each override, exactly as written, with the real provider as its default.
 const OVERRIDES = [
   ['ai-proxy/index.ts', 'GEMINI_API_BASE', 'https://generativelanguage.googleapis.com'],

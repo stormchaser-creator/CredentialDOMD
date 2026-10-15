@@ -373,8 +373,9 @@ export function buildInvoicePdf(inv) {
   // Questions go to the physician who sent the invoice. (This line used to
   // send the billing office to inv.billTo, its own inbox.)
   // "Al Li, DO (al@example.test)": a comma would read as a third item.
-  const contact = name ? `${name} (${inv.email})` : inv.email;
-  const questionsWrapped = inv.email ? doc.splitTextToSize(pdfText(`Questions about this invoice: ${contact}`), W - 2 * M) : [];
+  const contactEmail = String(inv.email ?? "").trim();
+  const contact = name ? `${name} (${contactEmail})` : contactEmail;
+  const questionsWrapped = contactEmail ? doc.splitTextToSize(pdfText(`Questions about this invoice: ${contact}`), W - 2 * M) : [];
   const needed = (pay.hasPayment ? 6 : 0) + 20
     + (termsWrapped.length ? termsWrapped.length * 3.8 + 4 : 0)
     + (questionsWrapped.length ? questionsWrapped.length * 3.8 : 0);

@@ -32,9 +32,19 @@ import { MOCK_STATE_DIR, QA_LAB_DIR, REPO_ROOT, isMain } from '../lib/paths.mjs'
 import { readRuntime } from '../lab.mjs';
 import { localExec, localJson } from '../lib/local-db.mjs';
 import { labExposedPorts, passFunctionsCorsThrough } from '../lib/stack.mjs';
-import { envFlag, noRestart, parallelSafe, runOutputs } from './support/run-options.mjs';
+import { readGatewayKeepalive } from '../lib/gateway-keepalive.mjs';
+import { readEdgeRequestStream } from '../lib/edge-request-stream.mjs';
+import { browserSettings, envFlag, noRestart, parallelSafe, runOutputs } from './support/run-options.mjs';
 import { sleep, waitFor } from '../lib/procs.mjs';
 import { describeReset, foundingPlaces, resetFoundingPlaces } from '../founding-reset.mjs';
+import { localApiOrigin, localContainer } from '../lib/config.mjs';
+import { appEvidenceProblem, captureSource } from '../lib/source-evidence.mjs';
+import { reconcileStripeRetries } from '../lib/stripe-retry-evidence.mjs';
+import { aggregateEdgeObservations, edgeErrorObservations, reconcileEdgeClaims } from '../lib/edge-health-claims.mjs';
+import { settleDeliveryAudit } from '../lib/delivery-audit-fence.mjs';
+import { assessLabHealth } from '../lib/health-evidence.mjs';
+import { aggregateClientErrors, reconcileHealthClaims } from '../lib/health-claims.mjs';
+import { dockerClockWindow, readEdgeClock } from '../lib/edge-clock.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG = path.join(HERE, 'playwright.config.mjs');
@@ -73,6 +83,8 @@ async function ensureLab({ mayStart = true } = {}) {
       const exposed = labExposedPorts();
       if (exposed.length) throw new Error(`the running lab publishes ports beyond loopback (${exposed.join(', ')}); restart it (npm run qa:down, then npm run qa:e2e)`);
       if (passFunctionsCorsThrough()) console.log('qa-e2e: the local gateway had its functions CORS plugin back (a Kong restart); removed it again');
+      rt.gatewayKeepalive = readGatewayKeepalive();
+      rt.edgeRequestStream = readEdgeRequestStream();
       console.log(`qa-e2e: using the running lab (${rt.urls.app})`); return { runtime: rt, child: null };
     }
     if (ok) throw new Error(`the running lab (pid ${rt.pid}) predates the API proxy; stop it (Ctrl-C in its terminal) and run qa:e2e again`);
@@ -144,21 +156,25 @@ const SYNCED = ['licenses', 'cme', 'privileges', 'insurance', 'health_records', 
  * client error reports the app sent, rows that exist although they were
  * deleted (zombies), and edge-function errors in the runtime's log.
  */
-export function labHealth(since) {
-  const out = { since };
+export function labHealth(since, until = new Date().toISOString(), edgeClock, { json = localJson, run = spawnSync } = {}) {
+  const out = { since, until, edgeClock };
+  let serverWindow;
+  try { serverWindow = dockerClockWindow(edgeClock?.before, edgeClock?.after, { hostStartedAt: since, hostFinishedAt: until }); }
+  catch (error) { out.clockProblem = error.message; out.clientErrors = 'unavailable (measured server clock window invalid)'; out.edgeFunctionErrors = 'unavailable (measured Docker clock window invalid)'; return out; }
+  out.serverObservationWindow = serverWindow;
   try {
-    out.clientErrors = localJson(`select coalesce(json_agg(json_build_object('message', message, 'n', n) order by n desc), '[]') from (
-      select left(message, 200) as message, count(*)::int as n from public.client_errors where created_at >= '${since}' group by 1) t`);
+    out.clientErrorObservations = json(`select coalesce(json_agg(json_build_object('id', id, 'message', message, 'kind', kind, 'auth_user_id', auth_user_id) order by created_at, id), '[]') from public.client_errors where created_at >= '${serverWindow.since}' and created_at <= '${serverWindow.until}'`);
+    out.clientErrors = aggregateClientErrors(out.clientErrorObservations);
   } catch (e) { out.clientErrors = `unavailable: ${e.message}`; }
   try {
-    out.zombies = localJson(`select coalesce(json_agg(z), '[]') from (${SYNCED.map((t) => `select '${t}' as tbl, x.id from public.${t} x join public.deleted_items d on d.item_id = x.id`).join(' union all ')}) z`);
+    out.zombies = json(`select coalesce(json_agg(z), '[]') from (${SYNCED.map((t) => `select '${t}' as tbl, x.id from public.${t} x join public.deleted_items d on d.item_id = x.id`).join(' union all ')}) z`);
   } catch (e) { out.zombies = `unavailable: ${e.message}`; }
-  const logs = spawnSync('docker', ['logs', '--since', since, 'supabase_edge_runtime_credentialdomd-qa-lab'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (logs.status === 0) {
-    const lines = `${logs.stdout}\n${logs.stderr}`.split('\n').filter((l) => /\b(error|uncaught|unhandled|exception)\b/i.test(l) && !/console\.error\(\)|DeprecationWarning/.test(l));
-    const counts = {};
-    for (const l of lines) { const k = l.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z?/g, '').replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, '<id>').replace(/\s+/g, ' ').trim().slice(0, 220); counts[k] = (counts[k] || 0) + 1; }
-    out.edgeFunctionErrors = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([line, n]) => ({ n, line }));
+  const logs = run('docker', ['logs', '--timestamps', '--since', serverWindow.since, '--until', serverWindow.until, serverWindow.containerId], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 10000 });
+  if (logs.status === 0 && !logs.error) {
+    try {
+      out.edgeErrorObservations = edgeErrorObservations(`${logs.stdout}\n${logs.stderr}`);
+      out.edgeFunctionErrors = aggregateEdgeObservations(out.edgeErrorObservations);
+    } catch { out.edgeFunctionErrors = 'unavailable (raw Docker error timestamps invalid)'; }
   } else out.edgeFunctionErrors = 'unavailable (docker logs failed)';
   return out;
 }
@@ -183,7 +199,7 @@ export function loopingPids(looks, min = 2) {
   return [...seen].filter(([, n]) => n >= min).map(([pid]) => pid).sort((a, b) => a - b);
 }
 
-const postgrestAnswers = () => waitFor('PostgREST', async () => (await fetch('http://127.0.0.1:54321/rest/v1/', { signal: AbortSignal.timeout(3000) }).catch(() => null))?.status < 500, { timeoutMs: 60000, intervalMs: 1000 }).catch(() => {});
+const postgrestAnswers = () => waitFor('PostgREST', async () => (await fetch(`${localApiOrigin()}/rest/v1/`, { signal: AbortSignal.timeout(3000) }).catch(() => null))?.status < 500, { timeoutMs: 60000, intervalMs: 1000 }).catch(() => {});
 const RUNAWAY_DEPS = {
   log: (message) => console.log(message),
   find: async () => {
@@ -194,7 +210,7 @@ const RUNAWAY_DEPS = {
     }
     return loopingPids(looks);
   },
-  restart: async () => { spawnSync('docker', ['restart', 'supabase_rest_credentialdomd-qa-lab'], { stdio: 'ignore' }); await postgrestAnswers(); },
+  restart: async () => { spawnSync('docker', ['restart', localContainer('rest')], { stdio: 'ignore' }); await postgrestAnswers(); },
   // Ends only those sessions: PostgREST gets a connection error instead of another 40001,
   // so the retry loop stops, and it goes on serving everyone else with the rest of its pool
   // (no restart). By pid, and only PostgREST's own (authenticator); not also by the query
@@ -260,14 +276,20 @@ async function rebuildLab() {
 }
 
 export async function runE2e(argv = process.argv.slice(2)) {
-  const since = new Date().toISOString();
+  const runStartedAt = new Date().toISOString();
   const plan = runPlan(argv, process.env);
   const RESULTS = plan.outputs.results;
   if (plan.shared) {
     console.log(`qa-e2e: parallel-safe mode: PostgREST is never restarted; the lab is neither started nor stopped; results ${path.relative(REPO_ROOT, RESULTS)}${plan.outputs.own ? `, traces and HTML report in ${path.relative(REPO_ROOT, path.dirname(plan.outputs.html))}/` : ' (shared: set QA_E2E_RESULTS for a file of this run\'s own)'}`);
   }
   if (plan.fresh) await rebuildLab();
-  const { child } = await ensureLab({ mayStart: plan.mayStartLab });
+  const { child, runtime } = await ensureLab({ mayStart: plan.mayStartLab });
+  const source = captureSource();
+  const buildProblem = appEvidenceProblem(runtime, source);
+  if (buildProblem && !plan.argv.includes('--list')) {
+    if (child) child.kill('SIGTERM');
+    throw new Error(buildProblem);
+  }
   await clearRunawayRetries({ action: plan.restart ? 'restart' : 'count' });
   const placesLeft = foundingPlacesLeft();
   let left = placesLeft === null ? NaN : Number(placesLeft);
@@ -282,15 +304,55 @@ export async function runE2e(argv = process.argv.slice(2)) {
     }
     if (left < 25) console.log('qa-e2e: WARNING: the founding offer will close soon; npm run qa:founding-reset frees the places journeys took (older than 15 minutes)');
   }
+  // Measure before any journey HTTP work. Keep source/setup host timing
+  // separate from the causal host audit window and Docker observation window.
+  const beforeEdgeClock = plan.argv.includes('--list') ? null : readEdgeClock();
+  const since = new Date().toISOString();
   const stopTopUps = plan.topUp && !argv.includes('--list') ? startTopUps() : () => {};
-  const status = await runPlaywright(['test', '-c', CONFIG, ...plan.argv], plan.childEnv);
+  let status = await runPlaywright(['test', '-c', CONFIG, ...plan.argv], plan.childEnv);
   stopTopUps();
   const wrote = existsSync(RESULTS) && statSync(RESULTS).mtimeMs >= Date.parse(since);
   if (!plan.argv.includes('--list') && wrote) {
     const results = JSON.parse(readFileSync(RESULTS, 'utf8'));
-    results.labHealth = labHealth(since);
+    results.browser = browserSettings(plan.childEnv);
+    results.runStartedAt = runStartedAt;
+    results.source = source;
+    results.appBuildSource = runtime.buildSource;
+    results.gatewayKeepalive = runtime.gatewayKeepalive;
+    results.sourceAtEnd = captureSource();
+    if (results.sourceAtEnd.fingerprint !== source.fingerprint) {
+      results.readiness ||= { ready: false, reasons: [] };
+      results.readiness.ready = false;
+      results.readiness.reasons ||= [];
+      results.readiness.reasons.push({ code: 'source_changed', detail: 'Source changed during this run; repeat verification on a stable checkout.' });
+      status = status || 1;
+    }
+    const fence = await settleDeliveryAudit({ since, read: async (until, remainingMs) => {
+      const audit = await fetch(`${runtime.urls.mock}/qa/stripe/delivery-audit?since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}`, { signal: AbortSignal.timeout(Math.min(10000, remainingMs)) });
+      if (!audit.ok) throw new Error(`Local delivery audit answered ${audit.status}`);
+      return audit.json();
+    } });
+    results.billingDeliveryAudit = fence.audit;
+    results.billingAuditFence = { settled: fence.settled, checks: fence.checks, waitedMs: fence.waitedMs };
+    let afterEdgeClock = null, clockProblem = null;
+    try { afterEdgeClock = readEdgeClock(); } catch (error) { clockProblem = error.message; }
+    results.labHealth = labHealth(since, fence.until, { before: beforeEdgeClock, after: afterEdgeClock });
+    if (clockProblem) results.labHealth.clockProblem = clockProblem;
     if (plan.shared) results.labHealth.scope = 'lab-wide: other runs on the shared lab during this window are included';
     results.labHealth.runawayPostgrestRetries = await clearRunawayRetries({ action: plan.restart ? 'restart' : 'count' });
+    results.healthClaimReconciliation = reconcileHealthClaims(results.labHealth, results.healthClientClaims || []);
+    results.stripeRetryReconciliation = reconcileStripeRetries(results.labHealth, results.billingDeliveryAudit);
+    results.edgeClaimReconciliation = reconcileEdgeClaims(results.labHealth, results.healthEdgeRequests || [], results.healthEdgeClaims || [], results.billingDeliveryAudit);
+    results.healthIntentionalEvidence = [...results.healthClaimReconciliation.evidence, ...results.stripeRetryReconciliation.evidence, ...results.edgeClaimReconciliation.evidence];
+    results.labHealth.claimProblems = [...results.healthClaimReconciliation.problems, ...results.stripeRetryReconciliation.problems, ...results.edgeClaimReconciliation.problems, ...(fence.settled ? [] : [{ code: 'unsettled-delivery-audit', detail: 'Local provider work did not settle inside the 15-second evidence fence.' }])];
+    results.healthAssessment = assessLabHealth(results.labHealth, results.healthIntentionalEvidence || []);
+    if (!results.healthAssessment.ready) {
+      results.readiness ||= { ready: false, reasons: [] };
+      results.readiness.ready = false;
+      results.readiness.reasons ||= [];
+      results.readiness.reasons.push(...results.healthAssessment.reasons);
+      status = status || 1;
+    }
     writeFileSync(RESULTS, JSON.stringify(results, null, 2) + '\n');
     const h = results.labHealth;
     console.log(`qa-e2e: lab health: ${Array.isArray(h.clientErrors) ? h.clientErrors.reduce((n, e) => n + e.n, 0) : '?'} client error report(s), ${Array.isArray(h.zombies) ? h.zombies.length : '?'} zombie row(s), ${Array.isArray(h.edgeFunctionErrors) ? h.edgeFunctionErrors.reduce((n, e) => n + e.n, 0) : '?'} edge-function error line(s), ${h.runawayPostgrestRetries ?? '?'} runaway PostgREST retry session(s)`);

@@ -43,6 +43,7 @@ const { doc, win } = installLiveDom();
 win.confirm = () => true;
 win.alert = () => {};
 win.localStorage = globalThis.localStorage;
+win.location = { href: "http://127.0.0.1:55790/", origin: "http://127.0.0.1:55790", pathname: "/", search: "", hash: "" };
 win.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 win.navigator = { userAgent: 'Synthetic', clipboard: { writeText: async () => {} } };
 win.visualViewport = null;

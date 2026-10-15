@@ -150,7 +150,7 @@ const note = (number, days, total) => ({ number, sentAt: new Date().toISOString(
 test('R1: "No, it did not go out" answered while IndexedDB is down never comes back', async () => {
   const dev = device(); const srv = server();
   newPage();
-  S.handOffInvoice('', note('INV-20260910-01', DATES, 12000));
+  S.handOffInvoice('user_synthetic', note('INV-20260910-01', DATES, 12000));
   await settle(); await wait(30);
   newPage();
   const b = await open(srv.copy(), srv);
@@ -232,7 +232,7 @@ test('R4: a note whose days are all on another recorded invoice says it repeats 
   const dev = device(); const srv = server();
   srv.next = 3; srv.macRecords('INV-20260910-01');
   newPage();
-  S.handOffInvoice('', note('INV-20260910-03', DATES, 12000)); // the second file the agency got
+  S.handOffInvoice('user_synthetic', note('INV-20260910-03', DATES, 12000)); // the second file the agency got
   await settle(); await wait(30);
   newPage();
   const c = await open(srv.copy(), srv);
@@ -260,7 +260,7 @@ test('R4: a note whose days are all on another recorded invoice says it repeats 
 test('R5: Yes never records without the server\'s answer', async () => {
   const dev = device(); const srv = server();
   newPage();
-  S.handOffInvoice('', note('INV-20260910-01', DATES, 12000));
+  S.handOffInvoice('user_synthetic', note('INV-20260910-01', DATES, 12000));
   await settle(); await wait(30);
   newPage();
   const stale = srv.copy();
@@ -276,7 +276,7 @@ test('R5: Yes never records without the server\'s answer', async () => {
 test('R6: once Yes learns -01 is recorded on another device, this page never offers its days as unbilled again', async () => {
   const dev = device(); const srv = server();
   newPage();
-  S.handOffInvoice('', note('INV-20260910-01', DATES, 12000));
+  S.handOffInvoice('user_synthetic', note('INV-20260910-01', DATES, 12000));
   await settle(); await wait(30);
   newPage();
   const stale = srv.copy();
@@ -445,7 +445,7 @@ test('a note only some of whose days are on another recorded invoice says so, of
   const dev = device(); const srv = server();
   srv.next = 3; srv.macRecords('INV-20260910-01');
   newPage();
-  S.handOffInvoice('', note('INV-20260910-03', [...DATES, TODAY], 14000));
+  S.handOffInvoice('user_synthetic', note('INV-20260910-03', [...DATES, TODAY], 14000));
   await settle(); await wait(30);
   newPage();
   const c = await open(srv.copy(), srv);

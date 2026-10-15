@@ -1,3 +1,4 @@
+import { reservedAuthHeights } from "../../src/utils/authLayout.js";
 // Signup review 2026-10-07: the sign-in screen showed nothing for 8.7 s on a
 // slow phone connection: one 4.3 MB script (the whole app) had to load before
 // Clerk's own could start, and the screen jumped 162 px as the offer box and
@@ -133,7 +134,7 @@ test('the sign-in screen keeps room for the offer box and Clerk\'s card while th
   });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', built.outputFiles[0].text)(name => (name === 'react' ? React : require(name)), mod, mod.exports);
-  const { default: Page, reservedAuthHeights } = mod.exports;
+  const { default: Page } = mod.exports;
   assert.deepEqual(reservedAuthHeights(320), { offer: 292, widget: 333 });
   assert.deepEqual(reservedAuthHeights(393), { offer: 234, widget: 309 });
   assert.deepEqual(reservedAuthHeights(1280), { offer: 176, widget: 309 });

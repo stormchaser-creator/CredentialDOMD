@@ -88,6 +88,17 @@ input, textarea, select {
   font-size: inherit;
 }
 
+/* Mobile Safari gives native date controls an intrinsic minimum wider than
+   narrow form columns. Keep the native picker inside its assigned column. */
+input[type="date"], input[type="datetime-local"], input[type="month"], input[type="time"] {
+  display: block;
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+}
+
 /* ─── Admin tap targets ─────────────────────────────────────────
    Below the desk breakpoint (AppContext isDesktop: 1024 px), every control
    on the owner's Admin screens is at least 32 x 32 px (QA ADMIN-001 to
@@ -96,6 +107,12 @@ input, textarea, select {
    padding and fonts but no height, so this adds only the floor; the desk
    layout is unchanged. AdminDashboard's root carries the class. */
 @media (max-width: 1023.98px) {
+  /* Native WebKit selects may ignore padding and minimum height. An explicit
+     height preserves the native picker and grows with the selected text size. */
+  select:not([multiple]) {
+    min-height: 44px;
+    height: max(44px, calc(1.5em + 24px));
+  }
   .cdomd-admin button,
   .cdomd-admin select,
   .cdomd-admin input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),

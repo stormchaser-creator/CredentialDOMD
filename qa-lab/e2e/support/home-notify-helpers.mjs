@@ -12,7 +12,7 @@ import { inflateSync } from 'node:zlib';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import {
-  SHOT_DIR, createPhysician, dismissInterruptions, goTab, lab, landing, payForMembership, profileOf, restAs, row, signIn, sleep, waitFor,
+  SHOT_DIR, createPhysician, dismissInterruptions, goTab, lab, landing, payForMembership, profileOf, restAs, row, saveProfession, signIn, sleep, waitFor,
   waitForMemberApp, waitForProfile,
 } from './lab.mjs';
 import { foundingPlaces, resetFoundingPlaces } from '../../founding-reset.mjs';
@@ -256,6 +256,7 @@ export async function memberWithPlace(page, opts = {}) {
     }
   }
   await waitForProfile(user.id, (p) => p.access_status === 'active', 90000);
+  if (opts.profession) await saveProfession(user, opts.profession);
   await waitForMemberApp(page);
   await page.goto(lab().urls.app, { waitUntil: 'domcontentloaded' });
   await waitForMemberApp(page);

@@ -24,6 +24,8 @@ import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import * as storageScope from '../../src/utils/storageScope.js';
 import * as access from '../../src/utils/limitedLaunchAccess.js';
+import { createRecordAcknowledgements, isAcknowledgedRecordCopy } from '../../src/utils/recordAcknowledgements.js';
+import { recoveryFor } from '../sync-recovery-fixture.mjs';
 import * as syncRules from '../../src/utils/syncRules.js';
 import * as dataDeletion from '../../src/utils/dataDeletion.js';
 import { LOCAL_ONLY_SETTINGS, DEFAULT_DATA } from '../../src/constants/defaults.js';
@@ -118,7 +120,7 @@ function launch({ cloud = [licence(L1), licence(L2)], device = cloud, deviceExtr
       Object.assign(db.profile, op.value); return { data: null, error: null };
     }
     const table = db[op.table] || (db[op.table] = []);
-    if (op.method === 'select') return { data: op.table === 'deleted_items' ? table.map(r => ({ item_id: r.item_id })) : table.map(r => ({ ...r })), error: null };
+    if (op.method === 'select') return { data: op.table === 'deleted_items' ? table.map(r => ({ item_id: r.item_id })) : id ? (table.find(r => r.id === id) || null) : table.map(r => ({ ...r })), error: null };
     if (op.method === 'upsert' || op.method === 'insert') {
       for (const value of [op.value].flat()) {
         const key = op.table === 'deleted_items' ? 'item_id' : 'id';
@@ -154,15 +156,19 @@ function launch({ cloud = [licence(L1), licence(L2)], device = cloud, deviceExtr
       const operation = { table, filters: [] };
       const q = { then: (resolve, reject) => execute(operation).then(resolve, reject) };
       for (const method of ['insert', 'update', 'upsert', 'delete', 'select']) q[method] = (value, options) => { if (!operation.method) { operation.method = method; operation.value = value; if (options !== undefined) operation.options = options; } else if (method === 'select') operation.returning = value ?? '*'; return q; };
-      for (const method of ['eq', 'order', 'range', 'in', 'is', 'gte', 'lt']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
+      for (const method of ['eq', 'order', 'range', 'in', 'is', 'or', 'gte', 'lt']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
       q.maybeSingle = q.single = () => q;
       q.abortSignal = signal => { operation.signal = signal; return q; };
       return q;
     }, storage: { from: bucket => ({ upload: (path, blob, options) => execute({ method: 'upload', bucket, path, options, filters: [] }), remove: paths => execute({ method: 'remove', bucket, paths, filters: [] }) }) } };
   }
+  const acknowledgements = createRecordAcknowledgements({ activeAccount: () => clerk.user?.id, fenceFor: storageScope.localFence, copyCurrent: storageScope.localCopyCurrent, read: (base, id) => storage.getItem(`${base}:${id}`), write: (base, value, id) => { storage.setItem(`${base}:${id}`, value); return true; } });
+  const recovery = recoveryFor(storage.map, () => clerk.user?.id, () => storageScope.localFence(OWNER));
   const imports = {
     '@supabase/supabase-js': { createClient }, '../constants/defaults.js': { STORAGE_KEY: BASE_KEYS.data, LOCAL_ONLY_SETTINGS }, '../utils/syncRules.js': syncRules,
     '../utils/storageScope.js': storageScope,
+    '../utils/recordAcknowledgements.js': acknowledgements, '../utils/syncRecovery.js': recovery,
+    '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': dataDeletion, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {}, configureSecretContinuity() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},
@@ -183,6 +189,7 @@ function launch({ cloud = [licence(L1), licence(L2)], device = cloud, deviceExtr
     loadedDeletionRef: { current: null }, cachedRecordsRef: { current: null },
     loadOwesRef: { current: null }, replayingRef: { current: null }, reconciledAccess: { current: null }, OWED_WRITES_WAIT_MS: 5000,
     beginLoadOwes, firstAnswerPlan, layWithheldSaves, readAfterReplay, replayLeftUnsent,
+    ...acknowledgements, isAcknowledgedRecordCopy, ...recovery, recordContent: api.recordContent,
     DEFAULT_DATA, COLLECTION_KEYS: api.COLLECTION_KEYS,
     WIPE_SEEN_KEY, lsGet: storageScope.lsGet, getActiveUserId: () => OWNER, localFence: storageScope.localFence, adoptLocalFence: storageScope.adoptLocalFence, localCopyCurrent: storageScope.localCopyCurrent,
     repairStoredIds, generateId, BASE_KEYS, lsGetJSON: storageScope.lsGetJSON, lsSetJSON: storageScope.lsSetJSON,
@@ -207,7 +214,7 @@ function launch({ cloud = [licence(L1), licence(L2)], device = cloud, deviceExtr
     accessAuthority: authority,
     setData: value => { const next = typeof value === 'function' ? value(dataRef.current) : value; states.push(next); dataRef.current = next; },
     setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {}, setRecordsLoadIssue() {},
-    console: { log() {}, warn() {} },
+    console: { log() {}, warn(...args) { if (process.env.QA_LAUNCH_DEBUG) console.warn(...args); } },
   };
   vm.runInNewContext(launchCode, ctx);
   // AppContext's effect on each answer (replayKeptSaves), as the app wires it.
@@ -217,7 +224,7 @@ function launch({ cloud = [licence(L1), licence(L2)], device = cloud, deviceExtr
   return {
     app: ctx.api, authority, checks, requests, db, dataRef,
     // One full account load reads every collection table once; licenses stands for them.
-    loads: () => reads('licenses'), reads, sent,
+    loads: () => requests.filter(op => op.table === 'licenses' && op.method === 'select' && !op.filters.some(([m, c]) => m === 'eq' && c === 'id')).length, reads, sent,
     identityCalls: () => requests.filter(op => op.table === 'identity').length,
     // The access hook asks once the profile is ready (useLimitedLaunchAccess).
     startCheck: () => authority.requestCheck(),
@@ -309,7 +316,7 @@ test('an add whose save never landed and whose device copy write was lost with t
   const queue = [{ op: 'upsert', collectionKey: 'licenses', payload: added, ts: Date.parse(LATER), queueId: 'queued-add', scopes: ['credential'] }];
   const { now } = await both({ device: [licence(L1), licence(L2)], queue });
   assert.equal(now.loads(), 1);
-  assert.deepEqual(now.sent('licenses'), [`upsert ${LOCAL_ONLY}`], 'sent once, by the replay on the answer');
+  assert.deepEqual(now.sent('licenses'), [`insert ${LOCAL_ONLY}`], 'sent once, by the replay on the answer');
   assert.deepEqual(now.shown().licenses.map(x => x.id), [L1, L2, LOCAL_ONLY]);
   assert.deepEqual(now.deviceCopy(), [L1, L2, LOCAL_ONLY], 'and kept in the device copy');
 });
@@ -327,7 +334,7 @@ test('a record only on this device, first answer read-only then active: the load
   };
   const { now } = await both({ device }, answer);
   assert.equal(now.loads(), 2, 'the second load is the one this case needs');
-  assert.deepEqual(now.sent('licenses'), [`upsert ${LOCAL_ONLY}`], 'pushed once, by that load');
+  assert.deepEqual(now.sent('licenses'), [`insert ${LOCAL_ONLY}`], 'pushed once, by that load');
   assert.deepEqual(now.shown().licenses.map(x => x.id), [L1, L2, LOCAL_ONLY]);
 });
 
@@ -343,15 +350,15 @@ test('a record only on this device, the check times out: the held push goes up t
   };
   const { now } = await both({ device }, answer);
   assert.equal(now.loads(), 2);
-  assert.deepEqual(now.sent('licenses'), [`upsert ${LOCAL_ONLY}`]);
+  assert.deepEqual(now.sent('licenses'), [`insert ${LOCAL_ONLY}`]);
 });
 
 test('a record only on this device, the answer allows it: pushed by the first load as the answer lands, no second load', async () => {
   const device = [licence(L1), licence(L2), licence(LOCAL_ONLY, { createdAt: LATER, updatedAt: LATER })];
   const { now, before } = await both({ device });
   assert.equal(now.loads(), 1);
-  assert.deepEqual(now.sent('licenses'), [`upsert ${LOCAL_ONLY}`]);
-  assert.deepEqual(before.sent('licenses'), [`upsert ${LOCAL_ONLY}`], 'before too, the push went up once');
+  assert.deepEqual(now.sent('licenses'), [`insert ${LOCAL_ONLY}`]);
+  assert.deepEqual(before.sent('licenses'), [`insert ${LOCAL_ONLY}`], 'before too, the push went up once');
 });
 
 test('purge: a launch after Delete All My Data elsewhere purges in its one load, and the answer sends nothing back', async () => {
@@ -392,12 +399,12 @@ test('the load\'s replay could not run, the answer\'s own replay sends the queue
   // device whose push waits on the answer and is slow; the load's ledger read
   // fails once, its cloud read lands.
   const queue = [
-    { op: 'upsert', collectionKey: 'licenses', payload: licence(L1, { name: 'Kept edit', updatedAt: LATER }), ts: Date.parse(LATER), queueId: 'kept', scopes: ['credential'], awaitingAccess: true },
+    { op: 'upsert', collectionKey: 'licenses', payload: licence(L1, { name: 'Kept edit', updatedAt: LATER }), ts: Date.parse(LATER), queueId: 'kept', changed: ['name'], previousSnapshot: JSON.stringify(licence(L1)), expectedBase: { version: EARLIER, record: licence(L1) }, scopes: ['credential'], awaitingAccess: true },
     { op: 'delete', collectionKey: 'licenses', payload: { id: L2 }, ts: Date.parse(LATER), queueId: 'queued-delete', scopes: ['credential'] },
   ];
   const device = [licence(L1), licence(L2), licence(LOCAL_ONLY, { createdAt: LATER, updatedAt: LATER })];
   const f = launch({ device, queue, latency: 20, fails: [{ table: 'deleted_items', method: 'select' }],
-    slow: op => (op.table === 'licenses' && op.method === 'upsert' && [op.value].flat().some(v => v?.id === LOCAL_ONLY) ? 300 : 0) });
+    slow: op => (op.table === 'licenses' && op.method === 'insert' && [op.value].flat().some(v => v?.id === LOCAL_ONLY) ? 300 : 0) });
   const first = f.app.loadDataForUser(OWNER);
   f.startCheck();
   await first;
@@ -417,7 +424,7 @@ test('the load\'s replay could not run, the answer\'s own replay sends the queue
 test('the self-heal push fails on the network: one more load pushes it, as the second load did', async () => {
   const device = [licence(L1), licence(L2), licence(LOCAL_ONLY, { createdAt: LATER, updatedAt: LATER })];
   // The bulk upsert and its row-by-row retry both lost.
-  const setup = { device, fails: [{ table: 'licenses', method: 'upsert', count: 2, thrown: true }] };
+  const setup = { device, fails: [{ table: 'licenses', method: 'insert', count: 2, thrown: true }] };
   const { now, before } = await both(setup);
   assert.equal(before.loads(), 2);
   assert.equal(now.loads(), 2, 'the lost push is owed: the account is read again and the push goes up');
@@ -434,7 +441,7 @@ test('the self-heal push fails on the network: one more load pushes it, as the s
 test('the self-heal push refused as permanent: one load, and the record listed as not saved', async () => {
   const device = [licence(L1), licence(L2), licence(LOCAL_ONLY, { createdAt: LATER, updatedAt: LATER })];
   // The bulk upsert and its row-by-row retry, refused on every load.
-  const setup = { device, fails: [{ table: 'licenses', method: 'upsert', count: 99, code: '23514' }] };
+  const setup = { device, fails: [{ table: 'licenses', method: 'insert', count: 99, code: '23514' }] };
   const { now, before } = await both(setup);
   assert.equal(before.loads(), 2);
   assert.equal(now.loads(), 1, 'a read again would push it and meet the same refusal');
@@ -446,7 +453,7 @@ test('the self-heal push refused as permanent: one load, and the record listed a
 test('the self-heal push refused by the membership on the server (42501): the first answer still reads again and pushes it', async () => {
   const device = [licence(L1), licence(L2), licence(LOCAL_ONLY, { createdAt: LATER, updatedAt: LATER })];
   // Refused by the load (bulk and row), allowed once the answer is in.
-  const setup = { device, fails: [{ table: 'licenses', method: 'upsert', count: 2, code: '42501' }] };
+  const setup = { device, fails: [{ table: 'licenses', method: 'insert', count: 2, code: '42501' }] };
   const { now, before } = await both(setup);
   assert.equal(before.loads(), 2);
   assert.equal(now.loads(), 2, 'held for the answer, as the enrollment case is');

@@ -164,15 +164,33 @@ Deno.serve(async (req) => {
     profile_id = data?.id ?? null;
   }
 
-  let { error } = await db.from("client_errors").insert({
+  // A gateway can lose the response after PostgreSQL committed. Give this
+  // report one server-generated identity before sending it; a single retry
+  // may insert the missing row or keep the already committed row unchanged.
+  // Caller-supplied ids never select or replace another report.
+  const report = {
+    id: crypto.randomUUID(),
     kind, message, stack, url, user_agent, build, auth_user_id, profile_id, extra, ip_hash,
-  });
+  };
+  let error;
+  try {
+    let result = await db.from("client_errors").insert(report);
+    if (result.error && [502, 503, 504].includes(result.status)) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      result = await db.from("client_errors")
+        .upsert(report, { onConflict: "id", ignoreDuplicates: true })
+        .abortSignal(AbortSignal.timeout(5000));
+    }
+    error = result.error;
+  } catch {
+    error = { message: "Report storage unavailable" };
+  }
   // A table whose kind check predates "info" (this function deployed before
   // migration 20261002080000): the event is kept as an error row, marked,
   // rather than lost.
   if (error && kind === "info" && error.code === "23514") {
     ({ error } = await db.from("client_errors").insert({
-      kind: "error", message, stack, url, user_agent, build, auth_user_id, profile_id, extra: { ...extra, reported_kind: "info" }, ip_hash,
+      ...report, kind: "error", extra: { ...extra, reported_kind: "info" }, ip_hash,
     }));
   }
   if (error) {

@@ -283,7 +283,7 @@ test('a share sheet still open over the app after the wait is not reported as no
 
 test('watchUnanswered: the wait alone keeps the number with the sheet; the page back in front releases it', async () => {
   fresh();
-  S.handOffInvoice('acct', { number: 'INV-20260910-41', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
+  S.handOffInvoice('user_synthetic', { number: 'INV-20260910-41', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
   let asked = 0;
   S.watchUnanswered(() => { asked += 1; }, { number: 'INV-20260910-41', waitMs: 5, doc: null, win: null });
   await wait(20);
@@ -292,7 +292,7 @@ test('watchUnanswered: the wait alone keeps the number with the sheet; the page 
   assert.deepEqual(reports, []);
 
   const page = pageDoc();
-  S.handOffInvoice('acct', { number: 'INV-20260910-42', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
+  S.handOffInvoice('user_synthetic', { number: 'INV-20260910-42', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c-day', total: 100, days: [] });
   S.watchUnanswered(() => { asked += 1; }, { number: 'INV-20260910-42', graceMs: 5, waitMs: 60000, doc: globalThis.document, win: null });
   page.back();
   await wait(20);

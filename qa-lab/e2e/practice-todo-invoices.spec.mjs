@@ -80,7 +80,13 @@ test('practice to do: capture, edit, time and finish a task into the Work tab, b
     await work.waitFor({ state: 'detached', timeout: 15000 });
     const entry = await waitFor('the work entry', async () => row(`select * from public.work_log where user_id = '${profile.id}' and description = 'QA call back ICU consult re: drain'`), { timeoutMs: 20000 }).catch(() => null);
     qa.check('a work_log row: Consult, yesterday 14:00-14:30, 30 minutes', entry?.type === 'Consult' && entry.date === localDay(-1) && entry.duration_min === 30, entry && `${entry.type} ${entry.date} ${entry.duration_min}`);
-    const done = row(`select completed_at, notes from public.task_notes where id = '${renamed.id}'`);
+    // Work and task completion persist separately; prove this task's matching
+    // cloud link before reading its completed state.
+    const done = await waitFor('the completed task and its work link', async () => {
+      const saved = row(`select id, user_id, completed_at, notes, work_log_id from public.task_notes where id = '${renamed.id}' and user_id = '${profile.id}'`);
+      return saved?.id === renamed.id && saved.user_id === profile.id && saved.completed_at
+        && entry?.id && saved.work_log_id === entry.id ? saved : null;
+    }, { timeoutMs: 20000 }).catch(() => null);
     qa.check('the task is marked done', !!done?.completed_at, done);
 
     // Build an invoice with that entry and read its line.
@@ -140,6 +146,7 @@ test('practice to do: capture, edit, time and finish a task into the Work tab, b
     await qa.shot('finished tasks');
     qa.check('after a reload, finished tasks list the billed one and the one closed without billing', /QA call back ICU consult re: drain[\s\S]*· billed/.test(list) && /QA sign discharge summary[\s\S]*closed, not billed/.test(list), list.slice(list.indexOf('Hide finished'), list.indexOf('Hide finished') + 600));
     qa.check('the deleted note stays gone', !/QA note to delete/.test(list));
+    qa.check('after a reload, unchanged saved data does not need recovery review', await page.getByText('Saved copies need your review', { exact: true }).count() === 0);
   }, { soft: true });
 });
 

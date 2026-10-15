@@ -22,7 +22,7 @@ const tick = () => new Promise(done => setImmediate(done));
 const nodes = tree => { const out = []; const visit = n => { if (Array.isArray(n)) n.forEach(visit); else if (n && typeof n === 'object' && n.props) { out.push(n); visit(n.props.children); } }; visit(tree); return out; };
 const text = n => (Array.isArray(n) ? n : [n]).map(c => typeof c === 'string' || typeof c === 'number' ? String(c) : c?.props ? text(c.props.children) : '').join('');
 
-function load(db) {
+function load(db, copyToClipboard = async () => true) {
   const hooks = [], effects = [];
   let cursor = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
@@ -35,7 +35,7 @@ function load(db) {
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }) },
     '../../context/AppContext': { useApp: () => app }, '../../lib/supabase': { supabase: db }, '../../lib/admin': { useIsAdmin: () => true },
     '../../utils/adminData': adminData, '../../utils/adminTicketDraft': adminTicketDraft,
-    '../../utils/adminWaitlist': adminWaitlist, '../../utils/adminLabels': adminLabels, '../shared/adminButton': adminButton };
+    '../../utils/adminWaitlist': adminWaitlist, '../../utils/adminLabels': adminLabels, '../shared/adminButton': adminButton, '../../utils/helpers': { copyToClipboard } };
   const module = { exports: {} };
   const ctx = vm.createContext({ module, exports: module.exports, require: name => imports[name] || {}, console, setTimeout: () => 0,
     window: { confirm: () => true }, navigator: { clipboard: { writeText() {} } } });
@@ -179,4 +179,26 @@ test('Fields: approving or dismissing re-reads the counts only once the server c
     await nodes(tree).find(n => n.type === 'button' && text(n.props.children) === 'Dismiss').props.onClick();
     assert.equal(changed, expected);
   }
+});
+
+
+test('copy waiting emails awaits permission, reports denial, and never reuses old success while pending', async () => {
+  const copied = []; let resolve;
+  const { exports, mount } = load(listDb(), text => { copied.push(text); return new Promise(done => { resolve = done; }); });
+  const render = mount(exports.WaitlistList, () => ({ rows: [{ id: 'copy-1', name: 'Synthetic Physician', email: 'clipboard@example.test', waitlist: true }], attempts: [], users: [], invites: [], T: {} }));
+  const click = async () => nodes(await render()).find(n => n.type === 'button' && /Copy waiting emails/.test(text(n.props.children))).props.onClick();
+  // Start the async handler without awaiting browser permission.
+  const first = click(); await tick();
+  assert.doesNotMatch(text((await render()).props.children), /Waiting emails copied/);
+  resolve(false); await first;
+  assert.match(text((await render()).props.children), /Could not copy the emails/);
+  const next = click(); await tick();
+  assert.doesNotMatch(text((await render()).props.children), /Waiting emails copied|Could not copy the emails/);
+  resolve(true); await next;
+  assert.match(text((await render()).props.children), /Waiting emails copied/);
+  const again = click(); await tick();
+  assert.doesNotMatch(text((await render()).props.children), /Waiting emails copied/);
+  resolve(false); await again;
+  assert.match(text((await render()).props.children), /Could not copy the emails/);
+  assert.deepEqual(copied, Array(3).fill('Synthetic Physician <clipboard@example.test>'));
 });

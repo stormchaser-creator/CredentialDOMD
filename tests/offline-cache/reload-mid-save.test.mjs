@@ -1,3 +1,4 @@
+import { copyInvoiceHandoff } from "../helpers/copy-invoice-handoff.mjs";
 // Lab, release goal3: a record added and the page reloaded at once was
 // missing from the device copy, and a weak-signal launch then showed "No
 // saved records in this section" until the server answered.
@@ -57,6 +58,7 @@ async function launch() {
     .replace('from "../constants/defaults"', `from ${srcUrl('../constants/defaults.js')}`)
     .replace('from "./storageScope"', `from ${scopeUrl}`)
     .replace('from "../lib/supabase"', `from ${srcUrl('../lib/supabase.js')}`));
+  copyInvoiceHandoff(dir);
   const scope = await import(pathToFileURL(join(dir, 'storageScope.js')).href);
   const store = await import(pathToFileURL(join(dir, 'offlineStore.js')).href);
   const storage = await import(pathToFileURL(join(dir, 'storage.mjs')).href);

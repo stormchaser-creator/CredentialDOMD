@@ -667,9 +667,52 @@ test("a cancelled share records nothing, and no share support means a download o
   assert.equal(down.how, "download");
   assert.equal(downloads[0].length, 2, "invoice and receipt land together");
   assert.equal(down.coverCopied, true);
-  const failedClipboard = await copyInvoiceCover(expenseInv(), fakeNav({ clipboardFails: true }).clipboard);
+  const failedClipboard = await copyInvoiceCover(expenseInv(), fakeNav({ clipboardFails: true }));
   assert.equal(failedClipboard, false);
 });
+
+for (const route of ["bundle", "invoice alone", "download", "cancel"]) {
+  test(`a throwing clipboard getter does not block expense invoice ${route}`, async () => {
+    const nav = fakeNav({
+      accept: (files) => route === "download" ? false : route === "invoice alone" ? files.length === 1 : true,
+      outcome: () => route === "cancel" ? "abort" : "ok",
+    });
+    let clipboardReads = 0;
+    Object.defineProperty(nav, "clipboard", { get() { clipboardReads += 1; throw Error("clipboard access denied"); } });
+    const downloads = [];
+    const receipt = receiptFile("air.jpg");
+    const sent = await sendExpenseInvoiceFiles({
+      inv: expenseInv(), files: [receipt], attachedExpenseIds: new Set(["e1"]),
+      nav, pdfFor: invoicePdfFile, download: (files) => downloads.push(files),
+    });
+    assert.equal(clipboardReads, 1, "optional copy is attempted once");
+    assert.deepEqual(nav.log.clipboard, []);
+    if (route === "cancel") {
+      assert.equal(sent, null, "cancellation still records nothing");
+      assert.equal(nav.log.shares.length, 1);
+      assert.deepEqual(downloads, []);
+      return;
+    }
+    assert.equal(sent.coverCopied, false, "a refused copy must never be reported as successful");
+    assert.equal(sent.how, route === "download" ? "download" : "share");
+    assert.equal(sent.droppedForSize, route === "invoice alone" ? 1 : 0);
+    const output = route === "download" ? downloads[0] : nav.log.shares[0].files;
+    assert.equal(output.length, route === "invoice alone" ? 1 : 2);
+    assert.equal(downloads.length, route === "download" ? 1 : 0);
+    assert.equal(nav.log.shares.length, route === "download" ? 0 : 1);
+    const pdf = await pdfText(output[0]);
+    if (route === "invoice alone") {
+      assert.doesNotMatch(pdf, /receipts? attached/);
+      assert.doesNotMatch(nav.log.shares[0].text, RECEIPT_CLAIM);
+      assert.ok(sent.lines.every((line) => !/attached/.test(line.detail)));
+    } else {
+      assert.equal(output[1], receipt, "the receipt bytes still accompany the invoice");
+      assert.match(pdf, /^receipt attached$/m);
+      assert.match(pdf, /late checkout . receipts on file/, "unresolved receipts remain on file");
+      if (route === "bundle") assert.match(nav.log.shares[0].text, /The receipt is attached\./);
+    }
+  });
+}
 
 // -- The PDF download fallback says where the cover letter is (review finding) --
 test("a PDF send that falls back to a download reports the cover letter on the clipboard", async () => {

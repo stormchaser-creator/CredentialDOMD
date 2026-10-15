@@ -5,7 +5,7 @@
 // no checkout, no Cancel Subscription.
 import { test } from './support/fixtures.mjs';
 import {
-  LAB_EMAIL_DOMAIN, accessSnapshot, createPhysician, emailBody, emails, landing, letters, makeAdmin, newMember, openMore,
+  LAB_EMAIL_DOMAIN, PAY_FIRST_LINE, accessSnapshot, createPhysician, emailBody, emails, labExec, landing, letters, limitedRefundAs, makeAdmin, newMember, openMore,
   profileOf, row, rows, signIn, sleep, stamp, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 
@@ -21,6 +21,13 @@ test('owner: invite to join sends one email and grants nothing', { tag: ['@ADMIN
   await page.reload();
   await waitForMemberApp(page);
   const invitee = `invitee-${stamp().toLowerCase()}@${LAB_EMAIL_DOMAIN}`;
+  // The cap is service-wide: 20 sends in any 24 hours (invite_to_join_status counts created_at),
+  // and this journey is the lab's only sender, so the 21st run of it in a day met the product's
+  // own 429 daily_cap (2026-10-01, full regression pass 2). Earlier runs' lab invitations are
+  // moved out of the window first, as qa:founding-reset frees founding places; real addresses
+  // never exist in the lab.
+  labExec(`update public.invite_to_join_sends set created_at = created_at - interval '25 hours', sent_at = sent_at - interval '25 hours'
+    where email like '%@${LAB_EMAIL_DOMAIN}' and created_at > now() - interval '25 hours' and created_at < now() - interval '2 minutes'`);
 
   await qa.feature('ADMIN-001', 'Admin > Accounts > Invite to join: preview, send, ledger, email', async () => {
     await openAccounts(page);
@@ -67,6 +74,10 @@ test('owner: invite to join sends one email and grants nothing', { tag: ['@ADMIN
     const where = await landing(other.page);
     qa.check('the invited person lands on the pending gate like anyone else', where === 'gate', where);
     qa.check('their profile is pending', profileOf(person.id)?.access_status === 'pending');
+    // Pay first (feat/pay-first-refund): an Invite to join link pays like everyone else.
+    const opened = await other.page.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 60000 }).then(() => true, () => false);
+    const gate = (await other.page.getByRole('region', { name: 'Membership' }).innerText().catch(() => '')).replace(/\s+/g, ' ');
+    qa.check('pay first: the offer review opens by itself for the invitee, with the guarantee', opened && gate.includes(PAY_FIRST_LINE) && /100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals\./.test(gate), gate.slice(0, 200));
   });
 });
 
@@ -101,7 +112,7 @@ test('owner: lifetime gift by email, claimed by signing up with that address', {
     const person = await createPhysician({ firstName: 'Taylor', lastName: 'Giftee', email: giftee });
     await signIn(other.page, person);
     const where = await landing(other.page);
-    await other.page.screenshot({ path: (await qa.shot('giftee landing')).replace(/\.png$/, '-giftee.png') });
+    await qa.shot('giftee landing', other.page);
     qa.check('the giftee lands in the member app, not on the gate', where === 'member', where);
     const claimed = row(`select claimed_subject, claimed_at from public.lifetime_gift_reservations where email = '${giftee}'`);
     qa.check('the reservation is claimed by the new account', claimed?.claimed_subject === person.id && !!claimed.claimed_at, claimed);
@@ -115,8 +126,15 @@ test('owner: lifetime gift by email, claimed by signing up with that address', {
       const card = (await other.page.getByRole('region', { name: 'Membership' }).innerText().catch(() => '')).replace(/\s+/g, ' ');
       qa.check('the membership card says the lifetime access is protected', /lifetime access is protected/i.test(card), card.slice(0, 200));
       qa.check('no offer or purchase buttons on the card', !/Review .* offer|Continue to secure payment/i.test(card));
+      // Cancel and get a refund (feat/pay-first-refund): a gift has no payment to refund.
+      qa.check('no "Cancel and get a refund" on a lifetime gift\'s card', !(await other.page.getByRole('region', { name: 'Membership' }).getByRole('button', { name: 'Cancel and get a refund' }).count()) && !/Or cancel now and get your money back/.test(card));
       await other.page.getByRole('navigation').first().getByRole('button', { name: /^(\S+ )?More$/ }).click();
       qa.check('More has no "Cancel Subscription" for a lifetime member', !(await other.page.getByRole('button', { name: 'Cancel Subscription' }).count()));
+      qa.check('no refund button anywhere on More', !(await other.page.getByRole('button', { name: 'Cancel and get a refund' }).count()));
     }
+    const quote = await qa.intentionalEdgeRequest('unpaid_refund', 'BILL-014 verifies a lifetime gift without a purchase has no paid membership to refund.', () => limitedRefundAs(person, { action: 'quote' }));
+    qa.check('limited-refund refuses a gift: nothing to refund (404 no_paid_membership or 409 refund_not_available)', (quote.status === 404 && quote.body?.error === 'no_paid_membership') || (quote.status === 409 && quote.body?.error === 'refund_not_available'), quote);
+    const status = await limitedRefundAs(person, { action: 'status' });
+    qa.check('limited-refund status for a gift: none', status.status === 200 && status.body?.state === 'none', status);
   });
 });

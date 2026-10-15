@@ -72,7 +72,7 @@ function device({ localFull = true, caches = false } = {}) {
   S._resetInvoiceHandoff();
   S.setInvoiceHandoffReporter(() => {});
   S._setHandoffTimes({ openMs: 30, txMs: 30, listMs: 50, retryMs: 600000, retryMaxMs: 600000 });
-  globalThis.__screen = {};
+  globalThis.__screen = { activeUserId: ACCOUNT };
   return d;
 }
 
@@ -140,7 +140,7 @@ test('Sign out removes the tombstones and the Cache Storage copies with the note
 test('a share stamp owed only in sessionStorage survives a reload when localStorage still holds an older list', async () => {
   const d = device({ localFull: false });
   setGlobal('indexedDB', { open: () => ({}) });
-  globalThis.__screen = { markShared: () => Promise.resolve({ data: null, error: { message: 'Load failed', code: '' } }), listShared: () => Promise.resolve({ data: [], error: null }) };
+  globalThis.__screen = { activeUserId: 'acct', markShared: () => Promise.resolve({ data: null, error: { message: 'Load failed', code: '' } }), listShared: () => Promise.resolve({ data: [], error: null }) };
   S.handOffInvoice('acct', { number: 'INV-20260910-01', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c', total: 1, days: [] });
   await settle();
   d.local.full = true; // the phone fills up
@@ -155,7 +155,7 @@ test('a stamp the server took never comes back from an older localStorage copy',
   setGlobal('indexedDB', undefined);
   let online = false;
   const sent = [];
-  globalThis.__screen = { markShared: (n, o) => { sent.push([n, o.shared]); return Promise.resolve(online ? { data: true, error: null } : { data: null, error: { message: 'Load failed', code: '' } }); }, listShared: () => Promise.resolve({ data: [], error: null }) };
+  globalThis.__screen = { activeUserId: 'acct', markShared: (n, o) => { sent.push([n, o.shared]); return Promise.resolve(online ? { data: true, error: null } : { data: null, error: { message: 'Load failed', code: '' } }); }, listShared: () => Promise.resolve({ data: [], error: null }) };
   S.handOffInvoice('acct', { number: 'INV-20260910-03', sentAt: new Date().toISOString(), kind: 'INV', contractId: 'c', total: 1, days: [] });
   await settle();
   d.local.full = true; // filled while the stamp was owed

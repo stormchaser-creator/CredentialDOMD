@@ -4,6 +4,7 @@
 // Docker, no stack; the Docker answers and the database's hashes are
 // synthetic, shaped as `docker inspect` and the vault query return them.
 import test from 'node:test';
+import { localContainer } from '../../qa-lab/lib/config.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
@@ -37,7 +38,7 @@ test('the running stack is read with docker inspect of the edge runtime, and onl
   const answer = (status, stdout) => (cmd, args) => { calls.push([cmd, ...args]); return { status, stdout }; };
   assert.equal(runningStackCheckout(answer(0, `true\t${JSON.stringify([cacheVolume, labMount(A)])}\n`)), A);
   assert.deepEqual(calls[0].slice(0, 2), ['docker', 'inspect']);
-  assert.equal(calls[0].at(-1), 'supabase_edge_runtime_credentialdomd-qa-lab');
+  assert.equal(calls[0].at(-1), localContainer('edge_runtime'));
   assert.equal(runningStackCheckout(answer(0, `false\t${JSON.stringify([labMount(A)])}`)), null, 'a stopped container is not a running lab');
   assert.equal(runningStackCheckout(answer(1, '')), null, 'no such container');
   assert.equal(runningStackCheckout(answer(0, 'true\tnot json')), null);

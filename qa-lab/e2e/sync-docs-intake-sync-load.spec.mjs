@@ -14,7 +14,7 @@
 // own request, as a dropped connection would); the lab is never touched.
 import { test } from './support/fixtures.mjs';
 import {
-  accessSnapshot, field, landing, mockApi, newMember, openCredentials, pendingOps, recordButtons, row, rows, signIn, sleep, stripeFor, syntheticPdf, tombstones, waitFor, waitForMemberApp,
+  accessSnapshot, field, landing, lit, mockApi, newMember, openCredentials, pendingOps, recordButtons, row, rows, signIn, sleep, stripeFor, syntheticPdf, tombstones, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import { blockRequests, isFunction, isRest, pageText } from './support/sync-docs-intake-helpers.mjs';
 
@@ -35,6 +35,7 @@ test('records that fail to load: a clear screen with Try again, never an empty a
   qa.check('the publication is saved before the test', !!row(`select id from public.publications where user_id = '${profile.id}'`));
 
   await qa.feature('SYNC-004', 'One collection read fails: the records-load screen, Try again, then the account', async () => {
+    const faultSince = new Date().toISOString();
     // Every read of one collection fails (the publications GET), as a flaky connection would.
     const unblock = await blockRequests(page, (u, m) => m === 'GET' && isRest(u, 'publications'));
     await page.reload();
@@ -46,18 +47,19 @@ test('records that fail to load: a clear screen with Try again, never an empty a
     qa.check('it asks not to re-enter or re-upload anything', /Please don't re-enter or re-upload them/.test(text));
     qa.check('it offers Try again and a support reference', await page.getByRole('button', { name: 'Try again' }).isVisible().catch(() => false) && /DATA-LOAD-UNAVAILABLE/.test(text));
     qa.check('no empty account is shown behind it (no Credentials navigation, no "No publications")', !(await page.getByRole('button', { name: /^Credentials$/ }).count()) && !/No publications/.test(text));
+    // Wait for the first intentional failure to be persisted before reloading;
+    // otherwise reportUnlessLeaving may correctly discard it during navigation.
+    await waitFor('the first blocked collection report', async () => row(`select id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Account records load stopped (DATA-LOAD-UNAVAILABLE).'`), { timeoutMs: 10000, intervalMs: 500 });
     // Try again while the read still fails: the same screen, nothing lost.
     await page.getByRole('button', { name: 'Try again' }).click();
     const again = await screen.waitFor({ timeout: 60000 }).then(() => true, () => false);
     qa.check('Try again while it still fails shows the same screen', again);
     qa.check('nothing was deleted on the server meanwhile', !!row(`select id from public.publications where user_id = '${profile.id}'`));
-    // The stop is reported about a second later (reportUnlessLeaving, src/lib/errorReport.js,
-    // bc131c48): a report still held when the page unloads is dropped, since a reload's own aborts
-    // are not failures. Try again is a reload, so wait for this screen's report to arrive while
-    // the page stays open, and only then tap Try again.
-    const reportsSql = `select count(*)::int as n from public.client_errors where (auth_user_id = '${user.id}' or profile_id = '${profile.id}') and message like '%DATA-LOAD-UNAVAILABLE%'`;
-    const report = await waitFor('the DATA-LOAD-UNAVAILABLE report', async () => { const r = row(reportsSql); return r?.n > 0 ? r : null; }, { timeoutMs: 8000, intervalMs: 500 }).catch(() => row(reportsSql));
-    qa.check('the app reports the stop with its fixed reference (client_errors)', (report?.n || 0) > 0, `${report?.n} report(s)`);
+    const reports = await waitFor('the deliberate fault report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Account records load stopped (DATA-LOAD-UNAVAILABLE).'`);
+      return found.length >= 2 ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(reports, { message: 'Account records load stopped (DATA-LOAD-UNAVAILABLE).', kind: 'error', authUserId: user.id, count: 2, reason: 'SYNC-004 deliberately blocked the publications read on two loads, waited for each failure report, and verified the records-load screen preserved existing records.' });
     await unblock();
     await page.getByRole('button', { name: 'Try again' }).click();
     await waitForMemberApp(page);
@@ -66,13 +68,40 @@ test('records that fail to load: a clear screen with Try again, never an empty a
   });
 
   await qa.feature('SYNC-004', 'The whole REST host unreachable: still a clear error, never an empty account', async () => {
+    const faultSince = new Date().toISOString();
     const unblock = await blockRequests(page, (u) => isRest(u));
     await page.reload();
     await sleep(12000);
     const text = await pageText(page);
     await qa.shot('rest host blocked');
-    const empty = /No publications|No licenses|No documents/.test(text) || ((await page.getByRole('button', { name: /^Credentials$/ }).count()) > 0 && !/read-only|Offline|could not|haven't finished/i.test(text));
-    qa.check('a clear error (records or account screen) with a way to retry, not an empty account', !empty && /(haven't finished loading|could not be verified|could not load|Reload|Try again)/i.test(text), text.slice(0, 240));
+    // release/goal3 39aa743b: a profile read with no answer after every try is
+    // a weak signal too, so the app opens this device's copy read only with
+    // one notice ("too weak to reach your account ... nothing to tap") and
+    // retries on its own, where it stopped on a screen with Reload before.
+    const waiting = /too weak to reach your account/.test(text) && /nothing to tap/.test(text);
+    const empty = /No publications|No licenses|No documents/.test(text) || ((await page.getByRole('button', { name: /^Credentials$/ }).count()) > 0 && !waiting && !/read-only|Offline|could not|haven't finished/i.test(text));
+    qa.check('a clear error (records or account screen) with a way to retry, or this device\'s copy with the retrying notice, not an empty account', !empty && (waiting || /(haven't finished loading|could not be verified|could not load|Reload|Try again)/i.test(text)), text.slice(0, 240));
+    if (waiting) {
+      await openCredentials(page).catch(() => {});
+      await sleep(1500);
+      const copy = await pageText(page);
+      qa.check('the device copy shows the publication saved before (never an empty account)', /QA load-gate paper/.test(copy) && !/No saved records in this section/.test(copy), copy.slice(0, 240));
+      const message = "Account load used this device's copy, read-only (ID-PROFILE-UNKNOWN).";
+      const reports = await waitFor('the exact device-copy report under the blocked REST host', async () => {
+        const found = rows(`select id, kind, message, auth_user_id from public.client_errors where auth_user_id = ${lit(user.id)} and created_at >= ${lit(faultSince)} and message = ${lit(message)}`);
+        return found.length ? found : null;
+      }, { timeoutMs: 10000, intervalMs: 100 });
+      qa.intentionalClientErrors(reports, { message, kind: 'error', authUserId: user.id, count: 1,
+        reason: 'SYNC-004 deliberately blocked the entire REST host; the exact account publication remained visible in its read-only device copy before the host was unblocked.' });
+
+    }
+    if (!waiting) {
+    const reports = await waitFor('the deliberate fault report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Account load stopped (ID-PROFILE-UNKNOWN).'`);
+      return found.length >= 1 ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(reports, { message: 'Account load stopped (ID-PROFILE-UNKNOWN).', kind: 'error', authUserId: user.id, count: 1, reason: 'SYNC-004 deliberately blocked the entire REST host and verified the account verification screen instead of an empty account.' });
+    }
     await unblock();
     await page.reload();
     await waitForMemberApp(page);
@@ -100,6 +129,7 @@ test('a save refused during a membership re-check keeps the form and its file; a
   // active answer, is kept on the device and queued for replay (awaitingAccess) instead of
   // refused; it goes up once a check answers active and is taken back if one answers read-only.
   await qa.feature('SYNC-006', 'Add form with a file while the membership check fails: Save keeps the license and its file on this device and says so; a check that answers active sends one record and one linked file', async () => {
+    const faultSince = new Date().toISOString();
     await openCredentials(page, 'Licenses');
     await page.getByRole('button', { name: 'Add' }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
@@ -126,6 +156,21 @@ test('a save refused during a membership re-check keeps the form and its file; a
     const queued = await pendingOps(page);
     qa.check('the license and its file are queued on this device, waiting for the membership check', queued.some((op) => op?.awaitingAccess === true && op.collectionKey === 'licenses') && queued.some((op) => op?.awaitingAccess === true && op.collectionKey === 'documents'), JSON.stringify(queued.map((op) => ({ key: op?.collectionKey, op: op?.op, awaitingAccess: op?.awaitingAccess }))).slice(0, 300));
     qa.check('nothing reached the database while the check fails', !rows(`select id from public.licenses where user_id = '${profile.id}'`).length && !rows(`select id from public.documents where user_id = '${profile.id}'`).length);
+    const faultReports0 = await waitFor('the deliberate fault report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Membership check failed (network:membership_information_unavailable)'`);
+      return found.length >= 1 ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(faultReports0, { message: 'Membership check failed (network:membership_information_unavailable)', kind: 'error', authUserId: user.id, count: 1, reason: 'SYNC-006 deliberately blocked billing-entitlements while retaining the active page and verified the resulting membership-check failure.' });
+    const faultReports1 = await waitFor('the deliberate fault report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Save kept on device awaiting membership check (check_failed, licenses)'`);
+      return found.length >= 1 ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(faultReports1, { message: 'Save kept on device awaiting membership check (check_failed, licenses)', kind: 'error', authUserId: user.id, count: 1, reason: 'SYNC-006 deliberately submitted one license while billing-entitlements was blocked and verified it was held in the local queue without a database write.' });
+    const faultReports2 = await waitFor('the deliberate fault report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Save kept on device awaiting membership check (check_failed, documents)'`);
+      return found.length >= 1 ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(faultReports2, { message: 'Save kept on device awaiting membership check (check_failed, documents)', kind: 'error', authUserId: user.id, count: 1, reason: 'SYNC-006 deliberately attached one document to the license saved while billing-entitlements was blocked and verified its local queue entry without a database write.' });
     // Back online: the next check answers active, and the kept saves go up without another tap.
     await unblock();
     const answered = page.waitForResponse((r) => r.url().includes('/functions/v1/billing-entitlements') && r.request().method() === 'POST', { timeout: 30000 }).then((r) => r.status(), () => null);
@@ -145,6 +190,7 @@ test('a save refused during a membership re-check keeps the form and its file; a
   });
 
   await qa.feature('SYNC-006', 'A real read-only answer: the membership ends while a save waits for the check; the save is taken back and the member told', async () => {
+    const faultSince = new Date().toISOString();
     await openCredentials(page, 'Licenses');
     await page.getByRole('button', { name: 'Add' }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
@@ -178,6 +224,11 @@ test('a save refused during a membership re-check keeps the form and its file; a
     const queue = await pendingOps(page);
     qa.check('nothing is queued to replay', !queue.some((op) => JSON.stringify(op).includes('QA-READONLY-607')), JSON.stringify(queue).slice(0, 200));
     qa.check('nothing reached the database', !row(`select id from public.licenses where user_id = '${profile.id}' and license_number = 'QA-READONLY-607'`));
+    const reports = await waitFor('the deliberate fault report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Save refused (read_only, licenses)'`);
+      return found.length >= 1 ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(reports, { message: 'Save refused (read_only, licenses)', kind: 'error', authUserId: user.id, count: 1, reason: 'SYNC-006 deliberately ended this membership before submitting one license, then verified the refusal alert and absence from both queue and database.' });
   });
 });
 
@@ -276,6 +327,7 @@ test('a record kept only on this device is pushed up on load; a stale device doe
     // Device A still holds it in its copy; its read of the deletion ledger fails on this load.
     // An unreadable ledger is unknown data, never an empty one (16617e4b): the load stops on the
     // records-load screen instead of opening the account on a copy that may hold deleted rows.
+    const faultSince = new Date().toISOString();
     const unblock = await blockRequests(page, (u, m) => m === 'GET' && isRest(u, 'deleted_items'));
     await page.reload();
     const screen = page.getByRole('alert').filter({ hasText: /haven't finished loading/ });
@@ -286,6 +338,11 @@ test('a record kept only on this device is pushed up on load; a stale device doe
     qa.check('the load stops on "Your records haven\'t finished loading" while the ledger cannot be read', stopped && /DATA-LOAD-UNAVAILABLE/.test(await pageText(page)), (await pageText(page)).slice(0, 200));
     qa.check('no account is opened behind it (no Credentials navigation)', !(await page.getByRole('button', { name: /^Credentials$/ }).count()));
     qa.check('nothing is pushed up while the load is stopped (no zombie row)', !whileBlocked);
+    const reports = await waitFor('the deliberate fault report', async () => {
+      const found = rows(`select id, kind, message, auth_user_id from public.client_errors where created_at > '${faultSince}' and auth_user_id = '${user.id}' and message = 'Account records load stopped (DATA-LOAD-UNAVAILABLE).'`);
+      return found.length >= 1 ? found : null;
+    }, { timeoutMs: 10000, intervalMs: 500 });
+    qa.intentionalClientErrors(reports, { message: 'Account records load stopped (DATA-LOAD-UNAVAILABLE).', kind: 'error', authUserId: user.id, count: 1, reason: 'SYNC-010 deliberately blocked the deletion-ledger read after another device deleted the record and verified the load stopped without resurrecting it.' });
     await unblock();
     await page.getByRole('button', { name: 'Try again', exact: true }).click();
     await waitForMemberApp(page);

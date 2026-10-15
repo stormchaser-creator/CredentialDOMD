@@ -7,11 +7,13 @@
 // Everything here talks to this machine only (the local stack through
 // qa-lab/lib/local-db.mjs, the local gateway, a local docker container,
 // subprocesses). Nothing reads or writes production.
+import { runReminderQueueUntilSettled } from '../../lib/reminder-queue-runner.mjs';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { localExec, supabaseStatus } from '../../lib/local-db.mjs';
 import { GENERATED_DIR, REPO_ROOT } from '../../lib/paths.mjs';
+import { localContainer } from '../../lib/config.mjs';
 import { dismissInterruptions, landing, lab, lit, newMember, profileOf, row, rows, signIn, sleep, waitFor, waitForMemberApp } from './lab.mjs';
 
 export { REPO_ROOT };
@@ -66,6 +68,16 @@ export async function netResponses(ids, { timeoutMs = 150000 } = {}) {
   } catch { return read(); }
 }
 
+/** Simulate the inactive minute cron until this synthetic member's job settles. */
+export async function settleReminderQueue(profileId, { timeoutMs = 180000 } = {}) {
+  return runReminderQueueUntilSettled({
+    read: () => row(`select status,last_error,attempts from public.reminder_email_queue where profile_id=${lit(profileId)} and reminder_day=(now() at time zone 'UTC')::date`),
+    dispatch: () => runCronJob('drain-reminder-emails'),
+    responses: (ids, options) => netResponses(ids, options),
+    pause: sleep, timeoutMs,
+  });
+}
+
 /** The lab vault's hook secret (lab-generated; what the lab's triggers and dispatchers send). Never printed. */
 export function labHookSecret() {
   const r = row("select decrypted_secret as s from vault.decrypted_secrets where name = 'welcome_hook_secret'");
@@ -85,7 +97,7 @@ export async function callFunction(name, { method = 'POST', headers = {}, body, 
   try {
     const r = await fetch(`${functionsUrl(name)}${pathSuffix}`, { method, headers: h, body: payload, signal: AbortSignal.timeout(timeoutMs) });
     const text = await r.text();
-    return { status: r.status, text: text.slice(0, 2000), data: safeJson(text), ms: Date.now() - started };
+    return { status: r.status, text: text.slice(0, 2000), data: safeJson(text), ms: Date.now() - started, url: r.url, method };
   } catch (e) {
     return { status: 0, text: String(e.message || e), data: null, ms: Date.now() - started };
   }
@@ -114,7 +126,7 @@ export async function uploadObject(bucket, name, buffer, contentType = 'applicat
  */
 export function objectBytesOnDisk(bucket, name) {
   if (!/^[a-z0-9_-]+$/.test(bucket) || !/^[A-Za-z0-9_./-]+$/.test(name) || name.includes('..')) throw new Error('refusing an odd object path');
-  const r = spawnSync('docker', ['exec', 'supabase_storage_credentialdomd-qa-lab', 'sh', '-c', `find "/mnt/stub/stub/${bucket}/${name}" -type f 2>/dev/null | head -5`], { encoding: 'utf8', timeout: 20000 });
+  const r = spawnSync('docker', ['exec', localContainer('storage'), 'sh', '-c', `find "/mnt/stub/stub/${bucket}/${name}" -type f 2>/dev/null | head -5`], { encoding: 'utf8', timeout: 20000 });
   return r.status === 0 ? r.stdout.split('\n').filter(Boolean) : null;
 }
 

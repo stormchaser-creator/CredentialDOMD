@@ -23,8 +23,8 @@ const AGREEMENT = { id: 'c-s', facility: 'Synthetic Hospital', agency: 'Syntheti
 test('Home and the Invoices tab: the first unanswered invoice comes into view with its button', () => {
   S._resetInvoiceHandoff();
   const at = '2026-10-02T15:00:00.000Z';
-  S.keepInvoiceNote('', { number: 'INV-20261002-11', sentAt: at, kind: 'INV', contractId: 'c-s', total: 2000, days: ['2026-10-01'], handed: true });
-  S.keepInvoiceNote('', { number: 'EXP-20261002-12', sentAt: at, kind: 'EXP', contractId: null, total: 42, expenseIds: ['x1'], handed: true });
+  S.keepInvoiceNote('user_synthetic', { number: 'INV-20261002-11', sentAt: at, kind: 'INV', contractId: 'c-s', total: 2000, days: ['2026-10-01'], handed: true });
+  S.keepInvoiceNote('user_synthetic', { number: 'EXP-20261002-12', sentAt: at, kind: 'EXP', contractId: null, total: 42, expenseIds: ['x1'], handed: true });
   const card = mount(S.UnansweredInvoices, { data: { locumContracts: [AGREEMENT], invoices: [] }, props: { onOpen() {} } });
   const notes = nodes(card.render()).filter(n => n.type === S.RevealOnShow);
   assert.equal(notes.length, 2, 'each reminder is a RevealOnShow');

@@ -10,6 +10,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from './support/fixtures.mjs';
+import { hostCommandDiagnostics } from './support/host-diagnostics.mjs';
 import { lab } from './support/lab.mjs';
 import { hostRun, nodeTestSummary, repoFile, stackKeys, REPO_ROOT } from './support/ops-helpers.mjs';
 
@@ -150,16 +151,22 @@ test('PostgreSQL suites in Python: which ones anything runs, and whether each pa
 
 test('ticket agent: its own harness passes offline, it holds merges for the owner, and it takes and releases its lock', {
   tag: ['@OPS-009'],
-}, async ({ qa }) => {
+}, async ({ qa }, testInfo) => {
   test.setTimeout(12 * 60 * 1000);
   const sh = repoFile('scripts/ticket-agent.sh');
 
   await qa.feature('OPS-009', 'the runner\'s harness (node tests and the CLI contract) passes offline', async () => {
     const files = [...gitFiles('tests/ticket-fix/*.test.mjs'), ...gitFiles('scripts/ticket-*.test.mjs')];
-    const r = hostRun(process.execPath, ['--experimental-vm-modules', '--test', ...files], { timeoutMs: 10 * 60 * 1000 });
+    const args = ['--experimental-vm-modules', '--test', ...files];
+    const r = hostRun(process.execPath, args, { timeoutMs: 10 * 60 * 1000 });
+    await testInfo.attach('ticket-agent-node-diagnostics.json', { contentType: 'application/json', body: JSON.stringify(hostCommandDiagnostics(r, { command: [process.execPath, ...args], env: process.env }), null, 2) });
     const sum = nodeTestSummary(r.stdout + r.stderr);
-    qa.check(`${files.length} test files: all pass (the 3 LIVE_CLI tests skip by design)`, r.status === 0 && sum.fail === 0 && sum.pass > 200, JSON.stringify(sum));
+    // The failing tests by name, so a failure under load can be read afterwards (2026-10-01: one
+    // failed under four groups and passed alone, and the summary alone did not say which).
+    const failing = [...new Set(((r.stdout || '') + (r.stderr || '')).split('\n').filter((l) => /^\s*✖ /.test(l) && !/failing tests:/.test(l)).map((l) => l.trim().slice(0, 160)))].slice(0, 8);
+    qa.check(`${files.length} test files: all executed tests pass; optional LIVE_CLI cases are reported separately`, r.status === 0 && sum.fail === 0 && sum.pass > 200, JSON.stringify({ ...sum, failing }));
     const cli = hostRun('python3', ['scripts/ticket-agent-cli-contract.test.py'], { timeoutMs: 5 * 60 * 1000 });
+    await testInfo.attach('ticket-agent-cli-diagnostics.json', { contentType: 'application/json', body: JSON.stringify(hostCommandDiagnostics(cli, { command: ['python3', 'scripts/ticket-agent-cli-contract.test.py'], env: process.env }), null, 2) });
     qa.check('the installed CLI\'s structured-output contract passes against a loopback mock (no provider call)', cli.status === 0, (cli.stdout + cli.stderr).trim().split('\n').slice(-2).join(' | '));
   }, { soft: true });
 

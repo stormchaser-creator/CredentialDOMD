@@ -24,7 +24,7 @@ const added = [];
 setGlobal('addEventListener', (type, fn) => { if (type === 'storage') added.push(fn); });
 const SRC = [
   'export {handOffInvoice, invoiceNotes, refreshInvoiceNotes, subscribeInvoiceNotes, _resetInvoiceHandoff, setInvoiceHandoffReporter, _setHandoffTimes} from "./src/utils/invoiceHandoff.js";',
-  'export {purgeForSignOut, setInvoiceHandoffPurge} from "./src/utils/storageScope.js";',
+  'export {purgeForSignOut, setInvoiceHandoffPurge, setActiveUserId} from "./src/utils/storageScope.js";',
   'export {handoffKey, purgeHandoffStores, sweepHandoffPurges, writeDbNotes, readDbNotes, HANDOFF_PURGE_BASE, HANDOFF_DB_NAME, HANDOFF_STAMPS_BASE, HANDOFF_GENERATION_KEY, _resetHandoffStore} from "./src/utils/invoiceHandoffStore.js";',
 ].join(' ');
 const A = await loadScreens(SRC, { real: ['utils/storageScope'] });
@@ -45,7 +45,10 @@ function webStorage() {
 const ACC = 'user_syntheticTwoTabs';
 const note = (number, sentAt = new Date().toISOString()) => ({ number, sentAt, kind: number.slice(0, 3), contractId: null, total: 10, periodStart: '2026-09-28', periodEnd: '2026-09-29' });
 const numbers = (list) => (list || []).map(n => n.number);
-const inTab = (session) => { setGlobal('sessionStorage', session); setGlobal('window', { sessionStorage: session }); };
+const inTab = (session) => {
+  session.clerk ||= { user: { id: ACC }, session: { user: { id: ACC } } };
+  setGlobal('sessionStorage', session); setGlobal('window', { sessionStorage: session, Clerk: session.clerk });
+};
 
 test('Delete All My Data in one tab clears the hand-off notes in every other open tab, which never writes them back', async () => {
   assert.ok(aHears.length && bHears.length, 'each tab listens for another tab\'s purge');
@@ -60,7 +63,7 @@ test('Delete All My Data in one tab clears the hand-off notes in every other ope
     markShared: (number, opts) => { calls.push({ number, ...opts }); return Promise.resolve(online ? { data: true, error: null } : { data: null, error: { message: 'TypeError: Failed to fetch', code: '' } }); },
     listShared: () => Promise.resolve({ data: [], error: null }),
   };
-  for (const T of [A, B]) { T._resetInvoiceHandoff(); T.setInvoiceHandoffReporter(() => {}); T._setHandoffTimes({ openMs: 50, txMs: 200, listMs: 200 }); }
+  for (const T of [A, B]) { T.setActiveUserId(ACC); T._resetInvoiceHandoff(); T.setInvoiceHandoffReporter(() => {}); T._setHandoffTimes({ openMs: 50, txMs: 200, listMs: 200 }); }
 
   // Tab B hands off an expense report with no signal: the note is kept in
   // every store and its stamp is owed.

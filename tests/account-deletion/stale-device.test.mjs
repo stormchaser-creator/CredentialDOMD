@@ -7,13 +7,38 @@
 // an in-memory localStorage, and AppContext's own loadDataForUser, foreground
 // check and account-deletion callbacks extracted from the source. Synthetic
 // identities only; no network.
-import test from 'node:test';
+import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { createMemoryIndexedDB } from '../helpers/memory-indexeddb.mjs';
+import { setOfflineStoreFactory } from '../../src/utils/offlineStore.js';
+import { _resetInvoiceHandoff } from '../../src/utils/invoiceHandoff.js';
+
+// A successful purge must commit to the real memory-IDB transaction path;
+// an absent API intentionally leaves an owed-deletion marker now.
+let deviceIndexedDB;
+const previousIndexedDB = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
+beforeEach(() => {
+  _resetInvoiceHandoff();
+  deviceIndexedDB = createMemoryIndexedDB();
+  globalThis.indexedDB = deviceIndexedDB;
+  setOfflineStoreFactory(deviceIndexedDB);
+});
+afterEach(() => {
+  _resetInvoiceHandoff();
+  deviceIndexedDB?.closeConnections();
+  setOfflineStoreFactory(undefined);
+  if (previousIndexedDB) Object.defineProperty(globalThis, 'indexedDB', previousIndexedDB);
+  else delete globalThis.indexedDB;
+});
+
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { transformSync } from 'esbuild';
 import { createClient } from '@supabase/supabase-js';
 import * as storageScope from '../../src/utils/storageScope.js';
+import * as recovery from '../../src/utils/syncRecovery.js';
+import { fixture as persistenceFixture } from '../limited-launch/persistence-fixture.mjs';
+import * as recordAcknowledgements from '../../src/utils/recordAcknowledgements.js';
 import * as dataDeletion from '../../src/utils/dataDeletion.js';
 import * as continuityRecovery from '../../src/utils/continuityRecovery.js';
 import { createLimitedLaunchClient } from '../../src/utils/limitedLaunchClient.js';
@@ -137,6 +162,9 @@ function sdk() {
     '@supabase/supabase-js': { createClient },
     '../constants/defaults.js': { STORAGE_KEY: 'credentialdomd-data', LOCAL_ONLY_SETTINGS },
     '../utils/storageScope.js': storageScope,
+    '../utils/recordAcknowledgements.js': recordAcknowledgements,
+    '../utils/syncRecovery.js': recovery,
+    '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
     '../utils/dataDeletion.js': dataDeletion,
     '../utils/continuityRecovery.js': continuityRecovery,
     '../utils/syncRules.js': syncRules,
@@ -154,6 +182,7 @@ function sdk() {
     setTimeout, clearTimeout, AbortController,
     fetch: async (url, options) => {
       // A record write (the queue and replay tests), when a test answers them.
+      if (f.read && (!options.method || options.method === 'GET')) return f.read(String(url), options);
       if (f.write && options.method && options.method !== 'GET' && options.method !== 'HEAD') return f.write(String(url), options);
       // The profile lookup, after initialization. Records what was still on
       // the device at that moment.
@@ -264,7 +293,9 @@ function app({ profile, cloud = { licenses: [], documents: [] }, inMemory = null
     userIdRef: { current: null }, dataOwnerRef, dataLoadGeneration: { current: 0 }, dataRef: { current: inMemory },
     loadedDeletionRef: { current: inMemory ? { owner: ownerA, stamp: null } : null },
     DEFAULT_DATA: { settings: {}, licenses: [], documents: [] }, COLLECTION_KEYS: ['licenses', 'documents'],
-    WIPE_SEEN_KEY, lsGet: storageScope.lsGet, getActiveUserId: () => ownerA, localFence, adoptLocalFence,
+    WIPE_SEEN_KEY, lsGet: storageScope.lsGet, getActiveUserId: () => ownerA, localFence, localCopyCurrent, adoptLocalFence,
+    preserveRecovery: recovery.preserveRecovery, recordContent: persistenceFixture().api.recordContent,
+    prepareRecordAcknowledgements: recordAcknowledgements.prepareRecordAcknowledgements, isAcknowledgedRecordCopy: recordAcknowledgements.isAcknowledgedRecordCopy,
     // The id repair and the queue check that run before replay (SYNC-003, SYNC-010).
     repairStoredIds, generateId, BASE_KEYS, lsGetJSON: storageScope.lsGetJSON, lsSetJSON: storageScope.lsSetJSON, pendingOpCount: storageScope.pendingOpCount,
     accountDataDeletedAt, sameDeletionStamp,
@@ -763,6 +794,7 @@ test('the fence: a replay stops at the first queued write once another tab purge
   storage.setItem(`${BASE_KEYS.pendingOps}:${ownerA}`, JSON.stringify(ops));
   const f = sdk();
   const sent = [];
+  f.read = async () => Response.json(null);
   f.write = async (url) => { sent.push(url); if (sent.length === 1) advanceLocalFence(ownerA); return new Response(null, { status: 201 }); };
   await f.api.replayPendingOps(profileA, ownerA);
   assert.equal(sent.length, 1, 'the two writes queued before the purge are not sent');

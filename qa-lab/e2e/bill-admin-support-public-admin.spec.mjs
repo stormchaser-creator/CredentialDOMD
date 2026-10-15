@@ -76,11 +76,13 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
   await qa.feature('ADMIN-003', 'Errors: the label counts new reports; one row opens; clearing it deletes only that group', async () => {
     // A member's app reports a real error through its own reporter (window error -> report-error).
     const m = await secondBrowser();
-    await lifetimeMember(m.page, { firstName: 'Errol', lastName: `Report ${letters()}` });
+    const reporter = await lifetimeMember(m.page, { firstName: 'Errol', lastName: `Report ${letters()}` });
     const message = `QA lab journey error ${t}`;
+    qa.allowPageError(message);
     await m.page.evaluate((msg) => { setTimeout(() => { throw new Error(msg); }, 0); }, message);
-    const reported = await waitFor('the client_errors row', async () => row(`select id, kind, auth_user_id from public.client_errors where message = '${message}'`), { timeoutMs: 30000 }).catch(() => null);
+    const reported = await waitFor('the client_errors row', async () => row(`select id, kind, message, auth_user_id from public.client_errors where message = '${message}'`), { timeoutMs: 30000 }).catch(() => null);
     qa.check('the app reported the error (client_errors row)', !!reported, reported);
+    if (reported) qa.intentionalClientErrors([reported], { message, kind: 'error', authUserId: reporter.user.id, count: 1, reason: 'ADMIN-003 deliberately raised one synthetic member error to verify the admin error list and deletion of that group.' });
     await page.reload();
     await waitForMemberApp(page);
     // Other journeys report errors at the same time: the label is compared with the counts the
@@ -579,7 +581,7 @@ test('Help & FAQ search; the admin-only share-sheet probe', {
           out.statuses.push((await p.getByRole('status').filter({ hasText: /share|Sent/ }).first().innerText().catch(() => '')).trim());
         }
         out.shared = await p.evaluate(() => window.__qaShared || null);
-        await p.screenshot({ path: (await qa.shot(`share probe ${label}`)).replace(/\.png$/, `-${label}.png`) });
+        await qa.shot(`share probe ${label}`, p);
       }
       await context.close();
       return out;

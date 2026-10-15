@@ -22,7 +22,7 @@ const codeLine = (scope, code) => {
 
 test('practice CPT lookup: search, copy, ask the AI, bill it; a Credential-only member is refused', {
   tag: ['@PRAC-026'],
-}, async ({ page, qa, secondBrowser }) => {
+}, async ({ page, context, qa, secondBrowser }) => {
   const { profile } = await newMember(page, { firstName: 'Cora', lastName: 'Coder' });
   await goTab(page, 'Practice');
   await addAgreement(page, { facility: 'QA Coding Hospital', shortName: 'QACH', hourlyRate: 250, blocks: [{ start: localDay(-10), end: localDay(30) }] });
@@ -37,8 +37,30 @@ test('practice CPT lookup: search, copy, ask the AI, bill it; a Credential-only 
     const hitText = (await hit.innerText()).replace(/\s+/g, ' ');
     await qa.shot('cpt search');
     qa.check('searching 61343 finds it with its wRVU', /61343/.test(hitText) && /31\.06 wRVU/.test(hitText), hitText);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
     await hit.click();
-    qa.check('tapping a result copies it and says so', /Copied to clipboard/.test(await hit.innerText()));
+    const copied = await waitFor('confirmed CPT copy', async () => /Copied to clipboard/.test(await hit.innerText()), { timeoutMs: 5000 }).catch(() => false);
+    qa.check('tapping a result confirms the clipboard write before saying copied', copied && await page.evaluate(() => navigator.clipboard.readText()) === '61343');
+
+    // Simulate both browser permission routes being denied in this isolated
+    // page. The UI must handle the rejection; no pageerror is expected.
+    await page.evaluate(() => {
+      const nav = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+      const exec = Object.getOwnPropertyDescriptor(document, 'execCommand');
+      window.__qaRestoreClipboard = () => {
+        if (nav) Object.defineProperty(navigator, 'clipboard', nav); else delete navigator.clipboard;
+        if (exec) Object.defineProperty(document, 'execCommand', exec); else delete document.execCommand;
+        delete window.__qaRestoreClipboard;
+      };
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new DOMException('Synthetic clipboard permission denied', 'NotAllowedError'); } } });
+      Object.defineProperty(document, 'execCommand', { configurable: true, value: () => false });
+    });
+    try {
+      await hit.click(); // close the currently expanded successful result
+      await hit.click(); // open it again for the denied-copy result
+      const denied = await page.getByRole('alert').filter({ hasText: 'Copy failed' }).waitFor({ timeout: 5000 }).then(() => true, () => false);
+      qa.check('denied copy keeps the code visible with a manual-copy message and no false success', denied && /61343/.test(await hit.innerText()) && !/Copied to clipboard/.test(await hit.innerText()));
+    } finally { await page.evaluate(() => window.__qaRestoreClipboard?.()); }
 
     const q = `decompression of a chiari malformation ${stamp('q')}`;
     await search.fill(q);

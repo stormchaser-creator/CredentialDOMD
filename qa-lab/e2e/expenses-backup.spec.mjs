@@ -3,10 +3,11 @@
 // and a session ended from elsewhere (the lab ends it through the mock Clerk,
 // as revoking it on Clerk's account page would).
 import { readFileSync } from 'node:fs';
-import { test } from './support/fixtures.mjs';
+import { test, expect } from './support/fixtures.mjs';
+import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 import {
   LAB_EMAIL_DOMAIN, chooseFiles, clerkId, emailBody, emails, field, goTab, landing, mockApi, newMember, openCredentials, openMore, pendingOps,
-  recordButtons, row, rows, signIn, sleep, stamp, syntheticPng, tombstones, waitFor, waitForMemberApp,
+  recordButtons, row, rows, signIn, sleep, stamp, syntheticPng, tombstones, waitFor, waitForMemberApp, offlineCopy,
 } from './support/lab.mjs';
 
 test('expenses: log two with receipts, invoice them to the agency with the receipts attached', {
@@ -49,6 +50,10 @@ test('expenses: log two with receipts, invoice them to the agency with the recei
     await page.getByRole('button', { name: /^Invoice \d+ expenses/ }).click();
     const d = page.getByRole('dialog', { name: 'Invoice expenses' });
     await d.waitFor();
+    // Visibility alone includes the first transparent frame of Modal's fade.
+    // The saved evidence must show the actual settled invoice dialog.
+    await expect(d).toHaveCSS('opacity', '1');
+    await expect(d).toBeInViewport();
     await qa.shot('invoice expenses');
     const text = (await d.innerText()).replace(/\s+/g, ' ');
     qa.check('both expenses are ticked and the total is $601.50', /Total \$601\.50/.test(text) && (await d.getByRole('checkbox').count()) === 2, text.match(/Total \$[\d.,]+/)?.[0]);
@@ -148,43 +153,130 @@ test('backup: export JSON, delete a record, restore it; an invalid file is refus
 });
 
 test('a session ended elsewhere: device-only data and queued work are not lost silently', { tag: ['@AUTH-006'] }, async ({ page, context, qa }) => {
-  const { user } = await newMember(page, { firstName: 'Sloane', lastName: 'Session' });
+  const { user, profile } = await newMember(page, { firstName: 'Sloane', lastName: 'Session' });
+  const identityLabel = `QA device-only record ${stamp()}`;
+  const paperName = `QA queued paper ${stamp()}`;
   await qa.feature('AUTH-006', 'Revoke this browser\'s session from elsewhere, then sign in again', async () => {
     // Device-only: a Protected Identity record (no SSN, so no lock code needed).
     await openCredentials(page, 'Protected Identity');
     await page.getByRole('button', { name: 'Add record' }).click();
     const d = page.getByRole('dialog', { name: 'Add protected identity' });
-    await d.getByPlaceholder('e.g. Liability application 2026').fill('QA device-only record');
+    await d.getByPlaceholder('e.g. Liability application 2026').fill(identityLabel);
     await field(d, 'Legal first name').fill('Sloane');
     await d.getByRole('button', { name: 'Save on this device' }).click();
     await d.waitFor({ state: 'detached', timeout: 10000 });
-    // One change queued while offline.
+    // One change queued while offline. The connection drops once the account load has settled:
+    // the member app opens before the load's profile is read again, and a read cut off by going
+    // offline stops the account ("identity could not be verified ... ID-PROFILE-UNKNOWN"; 2026-10-01,
+    // full regression pass 2: offline 1.2 s after the app opened, during that read).
     await openCredentials(page, 'Publications');
+    await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
     await context.setOffline(true);
     await page.getByRole('button', { name: /^(\+ )?Add$/ }).first().click();
     const p = page.getByRole('dialog').last();
-    await field(p, 'Short Label').fill('QA queued paper');
+    await field(p, 'Short Label').fill(paperName);
     await field(p, 'Full Citation (as it should read on the CV)').fill('Session S. Queued. QA Journal. 2024;1:1.');
     await p.getByRole('button', { name: /^(Add|Save)$/ }).last().click();
     await sleep(2000);
-    const queued = (await pendingOps(page)).length;
+    const queued = (await pendingOps(page)).filter(op => op.collectionKey === 'publications' && op.payload?.name === paperName);
+    const paperId = queued[0]?.payload?.id;
+    const savedPaper = () => typeof paperId === 'string' && /^[0-9a-f-]{36}$/i.test(paperId)
+      ? row(`select id, name, citation from public.publications where user_id = '${profile.id}' and id = '${paperId}'`) : null;
     await context.setOffline(false);
-    qa.check('one change is queued on this device', queued >= 1, `${queued}`);
+    qa.check('this publication is queued on this device', queued.length === 1 && !!paperId, { matches: queued.length, hasId: !!paperId });
     // End the session from "elsewhere" (the mock Clerk revokes it).
     const sid = await page.evaluate(() => window.Clerk?.session?.id);
     await mockApi(`/qa/sessions/${encodeURIComponent(sid)}`, { method: 'DELETE' });
     const cid = await clerkId(page);
     await page.reload();
-    const warned = qa.report.dialogs.join(' | ');
-    await sleep(3000);
+    await page.locator(`[data-testid="qa-signin-as"][data-user-id="${user.id}"]`).waitFor({ timeout: 15000 });
     await qa.shot('after revoke');
-    const keys = await page.evaluate((id) => Object.keys(localStorage).filter((k) => k.includes(id)), cid);
-    qa.check('after the involuntary sign-out, device-only data and the queue are kept (or the user was warned)', keys.some((k) => /pending-ops|vault|protected|data/i.test(k)) || /unsynced|not synced|discard/i.test(warned), `keys: ${keys.join(', ')}; dialogs: ${warned.slice(0, 160)}`);
+    // The file may live only in IndexedDB. Read its content under the exact
+    // signed-out account, rather than guessing retention from key names.
+    const copy = await offlineCopy(page, cid, { text: true });
+    let saved = null;
+    try { saved = JSON.parse(copy.text || 'null'); } catch { /* fails the content check */ }
+    qa.check('the signed-out account retains its exact Protected Identity record',
+      Array.isArray(saved?.identityVault) && saved.identityVault.some(item => item.label === identityLabel && item.legalFirstName === 'Sloane'),
+      { store: copy.where, parses: copy.parses, identityCount: saved?.identityVault?.length ?? 0 });
+    const remaining = await page.evaluate(id => {
+      try { return JSON.parse(localStorage.getItem(`credentialdomd-pending-ops:${id}`) || '[]'); } catch { return null; }
+    }, cid);
+    // Reconnecting may acknowledge the queued save before the session is
+    // revoked. Either outcome must identify this account's exact publication.
+    const cloudBeforeSignIn = savedPaper();
+    const keptPaper = Array.isArray(remaining) && remaining.some(op => op.collectionKey === 'publications' && op.payload?.id === paperId && op.payload?.name === paperName);
+    qa.check('the exact publication is still queued or acknowledged for this account', keptPaper || cloudBeforeSignIn?.name === paperName,
+      { queued: keptPaper, acknowledged: cloudBeforeSignIn?.name === paperName });
     await signIn(page, user);
     await landing(page);
     await openCredentials(page, 'Protected Identity');
-    qa.check('the Protected Identity record is still on this device after signing in again', /QA device-only record/.test(await page.locator('body').innerText()));
-    await sleep(3000);
-    qa.check('the queued change reached the cloud after signing in again', !!rows(`select id from public.publications where row_to_json(publications)::text like '%QA queued paper%'`).length);
+    qa.check('the Protected Identity record is still on this device after signing in again', (await page.locator('body').innerText()).includes(identityLabel));
+    const cloud = await waitFor("this account's exact queued publication", async () => {
+      const item = savedPaper();
+      return item?.name === paperName && item.citation === 'Session S. Queued. QA Journal. 2024;1:1.' ? item : null;
+    }, { timeoutMs: 15000 }).catch(() => null);
+    qa.check('the exact queued publication reached this account after signing in again', !!cloud);
+    await checkNoUnexpectedRecovery(page, qa, 'restored session with unchanged queued publication');
+  }, { soft: true });
+
+  await qa.feature('AUTH-006', 'Identical concurrent inserts during queued replay do not create a false conflict', async () => {
+    const name = `QA controlled insert race ${stamp()}`;
+    await openCredentials(page, 'Publications');
+    await context.setOffline(true);
+    await page.getByRole('button', { name: /^(\+ )?Add$/ }).first().click();
+    const form = page.getByRole('dialog').last();
+    await field(form, 'Short Label').fill(name);
+    await field(form, 'Full Citation (as it should read on the CV)').fill('Identical I. Concurrent replay. QA Journal. 2026;1:1.');
+    await form.getByRole('button', { name: /^(Add|Save)$/ }).last().click();
+    await form.waitFor({ state: 'detached' });
+    // Closing the form updates the local view before sbInsert's rejected
+    // offline request has persisted its queue entry. Keep the connection off
+    // until the exact owned insert is durably queued; never invent its row.
+    const queued = await waitFor('the exact publication queued before the controlled race', async () => {
+      const entries = (await pendingOps(page)).filter(op => op.collectionKey === 'publications' && op.payload?.name === name);
+      return entries.length === 1 ? entries : null;
+    }, { timeoutMs: 10000, intervalMs: 100 });
+    qa.check('one exact synthetic publication is queued before the controlled race', queued.length === 1);
+    const itemId = queued[0]?.payload?.id;
+    if (!itemId) { await context.setOffline(false); return; }
+    let intercepted = false, outcomes = [], raceError = '';
+    const pattern = '**/rest/v1/publications*';
+    const race = async route => {
+      const request = route.request();
+      let body; try { body = request.postDataJSON(); } catch { /* another read */ }
+      if (intercepted || request.method() !== 'POST' || body?.id !== itemId || body?.user_id !== profile.id) return route.continue();
+      intercepted = true;
+      try {
+        // Two real identical owned inserts, deliberately overlapping. Return
+        // the actual losing response to exercise the app's duplicate branch.
+        // No invented success, direct SQL insert, or overwrite of the winner.
+        const answers = await Promise.all([route.fetch(), route.fetch()]);
+        outcomes = await Promise.all(answers.map(async answer => ({ status: answer.status(), body: await answer.json() })));
+        const loser = answers.find(answer => answer.status() === 409);
+        await route.fulfill({ response: loser || answers[0] });
+      } catch (error) { raceError = String(error); await route.abort('failed'); }
+    };
+    await context.route(pattern, race);
+    try {
+      await context.setOffline(false);
+      const saved = await waitFor('the controlled publication and an acknowledged queue', async () => {
+        const own = rows(`select id, name, citation from public.publications where user_id = '${profile.id}' and id = '${itemId}'`);
+        const pending = (await pendingOps(page)).some(op => op.payload?.id === itemId);
+        return own.length === 1 && !pending ? own[0] : null;
+      }, { timeoutMs: 20000 }).catch(() => null);
+      qa.check('both real inserts completed: one created row and one duplicate-key refusal', intercepted && !raceError && outcomes.length === 2 && outcomes.some(o => o.status === 201) && outcomes.some(o => o.status === 409 && o.body?.code === '23505'), { statuses: outcomes.map(o => o.status), raceError });
+      qa.check('the exact publication is saved once and its queued operation is acknowledged', saved?.name === name && saved?.citation === 'Identical I. Concurrent replay. QA Journal. 2026;1:1.');
+      await checkNoUnexpectedRecovery(page, qa, 'identical concurrent insert replay');
+      await qa.shot('identical insert replay without false warning');
+      await page.reload();
+      await waitForMemberApp(page);
+      await openCredentials(page, 'Publications');
+      qa.check('the controlled publication is still visible after reload', (await page.locator('body').innerText()).includes(name));
+      await checkNoUnexpectedRecovery(page, qa, 'identical insert replay after reload');
+    } finally {
+      await context.setOffline(false);
+      await context.unroute(pattern, race);
+    }
   }, { soft: true });
 });

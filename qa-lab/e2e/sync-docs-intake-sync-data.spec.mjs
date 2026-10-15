@@ -24,7 +24,7 @@ import {
 const tab = (page, name) => page.getByRole('button', { name, exact: true }).first().click();
 
 test('every write fits its table: share-log rows from the Documents packet, the reference list and Vera\'s packet', { tag: ['@SYNC-002'] }, async ({ page, context, qa }) => {
-  const { profile } = await newMember(page, { firstName: 'Sam', lastName: 'Schema' });
+  const { profile } = await newMember(page, { firstName: 'Sam', lastName: 'Schema', profession: 'MD' });
   await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
   const writes = watchRestWrites(page);
   // The device's share sheet: the lab stands in for it and records what it receives.
@@ -140,6 +140,7 @@ test('four ~3 MB documents in one session: no quota warning, and the offline cop
     const file = await readDeviceJSON(page, `credentialdomd-data:${uid}`);
     const cached = { docs: (file.value.documents || []).map((x) => ({ name: x.name, bytes: (x.data || '').length })), size: file.size };
     qa.check('the device copy (IndexedDB or localStorage) lists all four', files.every((f) => cached.docs.some((d) => d.name === f.name)), `${cached.docs.map((d) => `${d.name}:${d.bytes}`).join(', ')} (${cached.size} chars)`);
+    qa.check('no "storage is full" (or offline storage) notice', !/storage is full|offline storage could not be/i.test(await pageText(page)));
     await context.setOffline(true);
     await page.reload().catch(() => {});
     await page.getByText(/Offline\. Showing this device's copy/).first().waitFor({ timeout: 30000 }).catch(() => {});

@@ -1,3 +1,4 @@
+import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 // CME Credits: importing a transcript (a generic CSV mapped by hand, an Excel
 // export read by its column names, pasted text read as columns, line by line
 // and by the lab's mock AI, the same transcript again, a sheet with a patient
@@ -64,27 +65,29 @@ test('CME import, certificates and the CME Passport panel', {
       '2026-04-02,QA Neurosurgical Ethics Forum,QA Neuro Society,1.5,AMA PRA Category 1,Ethics',
       '2026-05-20,QA Spine Imaging Review,QA Radiology Group,3,AMA PRA Category 1,',
     ].join('\n'));
-    let dlg;
-    // Once, in one run, the importer closed by itself while the columns were being mapped (no
-    // reload, no request but the CME page's own mount-time read). It did not happen again in
-    // four tries; if it does, the step is taken again and the evidence says so.
-    const vanished = [];
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      dlg = await openImport(page);
-      await chooseFiles(page, dlg.getByRole('button', { name: /Choose transcript file/ }), [{ name: 'qa-cme-tracker.csv', mimeType: 'text/csv', buffer: csv }]);
-      const mapStep = await dlg.getByRole('button', { name: 'Continue to review' }).waitFor({ timeout: 20000 }).then(() => true, () => false);
-      if (attempt === 1) qa.check('a generic CSV asks for the column mapping', mapStep && /Generic CSV/.test(await dlg.innerText()), (await dlg.innerText()).slice(0, 200));
-      await mapColumn(dlg, 'Date completed', 0);
-      await mapColumn(dlg, 'Hours / credits', 3);
-      await mapColumn(dlg, 'Credit type', 4);
-      await mapColumn(dlg, 'Subject / topic', 5);
-      if (attempt === 1) await qa.shot('cme import mapping');
-      const still = await dlg.getByRole('button', { name: 'Continue to review' }).isVisible().catch(() => false);
-      if (still) break;
-      vanished.push(`attempt ${attempt}: the importer closed while mapping; open dialogs ${await page.getByRole('dialog').count()}`);
+    let dlg = await openImport(page);
+    await chooseFiles(page, dlg.getByRole('button', { name: /Choose transcript file/ }), [{ name: 'qa-cme-tracker.csv', mimeType: 'text/csv', buffer: csv }]);
+    await dlg.getByRole('button', { name: 'Continue to review' }).waitFor({ timeout: 20000 });
+    qa.check('a generic CSV asks for the column mapping', /Generic CSV/.test(await dlg.innerText()), (await dlg.innerText()).slice(0, 200));
+    await mapColumn(dlg, 'Date completed', 0);
+    await mapColumn(dlg, 'Hours / credits', 3);
+    await mapColumn(dlg, 'Credit type', 4);
+    await mapColumn(dlg, 'Subject / topic', 5);
+    const originalViewport = page.viewportSize();
+    const mapping = () => dlg.locator('select').evaluateAll((els) => els.map((el) => el.value));
+    const chosenMapping = await mapping();
+    try {
+      for (const width of [600, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.waitForFunction((desktop) => !!document.querySelector('.cmd-content-area') === desktop, width >= 1024);
+        await dlg.getByRole('button', { name: 'Continue to review' }).waitFor();
+        qa.check(`the open importer keeps its mapped columns at ${width}px`, JSON.stringify(await mapping()) === JSON.stringify(chosenMapping), await mapping());
+      }
+    } finally {
+      if (originalViewport) await page.setViewportSize(originalViewport);
     }
-    if (vanished.length) qa.report.console.push(`qa-note: ${vanished.join('; ')}`);
-    qa.check('the importer stays open through the column mapping', vanished.length < 2, vanished.join('; ') || 'stayed open');
+    await qa.shot('cme import mapping');
+    qa.check('the importer stays open through mapping and its screenshot', await dlg.getByRole('button', { name: 'Continue to review' }).isVisible());
     await dlg.getByRole('button', { name: 'Continue to review' }).click();
     await dlg.getByText(/rows? selected/).first().waitFor({ timeout: 15000 });
     qa.check('review: 3 rows with their hours (6.5)', /^3 of 3 rows selected · 6\.5 hours/.test(await reviewLine(dlg)), await reviewLine(dlg));
@@ -183,6 +186,18 @@ test('CME import, certificates and the CME Passport panel', {
     await qa.shot('cme import duplicates');
     qa.check('importing the same transcript again: both rows marked "already in your log" and unticked', /^0 of 2 rows selected/.test(again) && rs.every((r) => r.dup && !r.ticked), { again, rs });
     qa.check('nothing can be added', await dlg.getByRole('button', { name: /^Add 0 to CME log/ }).isDisabled());
+    const duplicateViewport = page.viewportSize();
+    try {
+      for (const width of [600, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.waitForFunction((desktop) => !!document.querySelector('.cmd-content-area') === desktop, width >= 1024);
+        await dlg.getByRole('button', { name: /^Add 0 to CME log/ }).waitFor();
+        const retained = await reviewRows(dlg);
+        qa.check(`duplicate selections stay unticked after resizing to ${width}px`, retained.length === 2 && retained.every((r) => r.dup && !r.ticked) && await dlg.getByRole('button', { name: /^Add 0 to CME log/ }).isDisabled(), retained);
+      }
+    } finally {
+      if (duplicateViewport) await page.setViewportSize(duplicateViewport);
+    }
     // 5. A sheet with a patient-identifier column is refused.
     await dlg.getByRole('button', { name: 'Columns' }).click();
     await dlg.getByRole('button', { name: 'Back' }).click();
@@ -199,6 +214,7 @@ test('CME import, certificates and the CME Passport panel', {
     await waitForMemberApp(page);
     await openCredentials(page, 'CME Credits');
     qa.check('the list shows 9 entries after a reload', /9 entries/.test(await page.locator('main, body').first().innerText()));
+    await checkNoUnexpectedRecovery(page, qa, 'CME imports after reload');
   }, { soft: true });
 
   let certDoc = null;
@@ -225,8 +241,20 @@ test('CME import, certificates and the CME Passport panel', {
       const btn = p.getByRole('row').filter({ hasText: 'QA Certified Skull Base Workshop' }).getByRole('button', { name: 'Open certificate' });
       await btn.waitFor({ timeout: 20000 });
       const seen = [];
-      const onPage = (np) => seen.push(`tab ${np.url()}`);
+      // A certificate whose bytes are not on this device yet opens about:blank in the tap and
+      // then moves it to the file (CMESection openSourceDoc); under load the clean browser's
+      // bytes were still downloading, and the tab was recorded at about:blank (2026-10-01).
+      // The tab's move to the blob can itself end as a download (no PDF viewer), which aborts that
+      // navigation: waitForURL then rejects (net::ERR_ABORTED) and the download is the new tab's,
+      // not a page's that existed before the tap (2026-10-01, full regression pass 2: the clean
+      // browser's tab went about:blank -> blob: -> download, and nothing was recorded).
       const onDownload = (d) => seen.push(`file ${d.url()}`);
+      const onPage = (np) => {
+        seen.push(`tab ${np.url()}`);
+        np.on('download', onDownload);
+        np.on('request', (r) => { if (r.url().startsWith('blob:')) seen.push(`tab ${r.url()}`); });
+        np.waitForURL(/^blob:/, { timeout: 10000 }).then(() => seen.push(`tab ${np.url()}`), () => {});
+      };
       p.context().on('page', onPage);
       p.context().pages().forEach((x) => x.on('download', onDownload));
       p.on('download', onDownload);
@@ -245,7 +273,9 @@ test('CME import, certificates and the CME Passport panel', {
     const downloads = [];
     other.page.on('response', (r) => { if (/\/storage\/v1\/object\//.test(r.url())) downloads.push(`${r.status()} ${new URL(r.url()).pathname}`); });
     await signIn(other.page, user);
-    qa.check('a clean browser opens the member app', (await landing(other.page)) === 'member');
+    // A first sign-in that stops on a transient identity answer is reloaded, as the screen asks.
+    const where = await landing(other.page);
+    qa.check('a clean browser opens the member app', where === 'member', where);
     await openCredentials(other.page, 'CME Credits');
     const there = await openCert(other.page);
     qa.check('on a clean browser the file is fetched from Storage and opens', /blob:/.test(there) && downloads.some((d) => d.startsWith('200') && d.includes(certDoc.storage_path)), { there, downloads });
@@ -261,7 +291,7 @@ test('CME import, certificates and the CME Passport panel', {
     const missing = await openCert(other.page);
     await sleep(2000);
     const alert = qa.report.dialogs.slice(before).find((d) => /^alert:/.test(d)) || '';
-    await other.page.screenshot({ path: (await qa.shot('certificate missing')).replace(/\.png$/, '-b.png') });
+    await qa.shot('certificate missing', other.page);
     qa.check('a certificate whose file is gone opens nothing and says so', !missing && /^alert: /.test(alert), { missing, alert });
     const clear = /not found|missing|no longer|deleted|upload it again/i.test(alert);
     qa.check('the alert is clear about what happened (the file is missing)', clear, alert);
@@ -326,6 +356,7 @@ test('CME import, certificates and the CME Passport panel', {
     await page.getByRole('button', { name: /ACCME CME Passport/ }).click();
     panelText = await page.locator('main, body').first().innerText();
     const kept = /Your reporting details are ready/.test(panelText);
+    await checkNoUnexpectedRecovery(page, qa, 'CME Passport after reload');
     qa.check('after a reload the birth month and day is still there, so the details stay ready', kept, panelText.match(/\d+ details? missing[^\n]*|Your reporting details are ready[^\n]*/)?.[0]);
     if (!kept) {
       qa.bug({

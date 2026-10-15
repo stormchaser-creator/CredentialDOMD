@@ -1,43 +1,26 @@
-import { useState, useMemo, useRef, memo } from "react";
+import { useState, useRef, memo } from "react";
 import { TAP_MIN } from "../shared/actionButton";
 import { useApp } from "../../context/AppContext";
 import { generateCredentialZip, downloadBlob } from "../../utils/credentialExport";
-import { supabase, downloadDocumentBlob } from "../../lib/supabase";
+import { downloadDocumentBlob } from "../../lib/supabase";
 import { membershipRenewalCopy, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 import RefundSection from "./RefundSection.jsx";
 import { reloadPage } from "../../utils/pageLeave.js";
 
 function CancellationPage() {
-  const { data, theme: T, userIdRef, navigate, hasSubscription, isFreeBeta, limitedLaunch, manage } = useApp();
+  const { data, theme: T, navigate, hasSubscription, isFreeBeta, limitedLaunch, manage } = useApp();
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
-  const [reactivating, setReactivating] = useState(false);
   const [error, setError] = useState(null);
   // What the refund section showed, kept across the branch change a refund
   // press causes (RefundSection's `carry`).
   const refundCarry = useRef(null);
 
   // Nothing to cancel: no live subscription (always the case during the free
-  // beta) and no cancellation on record. Never show a data-wipe countdown to
-  // someone who has never paid and never asked to leave.
+  // beta) and no cancellation on record. Cancellation retains saved records.
   const nothingToCancel = !data.settings?.cancelledAt && (isFreeBeta || !hasSubscription);
 
-  // Calculate days remaining from cancelled_at stored in profile
-  const { daysLeft, deletionDate } = useMemo(() => {
-    const ca = data.settings?.cancelledAt;
-    if (!ca) return { daysLeft: 7, deletionDate: null, cancelledAt: null };
-    const cancelled = new Date(ca);
-    const deletion = new Date(cancelled.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const now = new Date();
-    const remaining = Math.max(0, Math.ceil((deletion - now) / (24 * 60 * 60 * 1000)));
-    return { daysLeft: remaining, deletionDate: deletion, cancelledAt: ca };
-  }, [data.settings?.cancelledAt]);
-
-  // Every stored file goes in, fetched from the account where this device
-  // does not hold it (a load downloads no file any more, so the export left
-  // them all out without a word). One that cannot be fetched now stops the
-  // export, named, rather than handing over a copy that lacks it.
   const handleExport = async () => {
     setExporting(true);
     setError(null);
@@ -53,30 +36,6 @@ function CancellationPage() {
     }
   };
 
-  const handleReactivate = async () => {
-    setReactivating(true);
-    setError(null);
-    try {
-      if (supabase && userIdRef.current) {
-        await supabase
-          .from("profiles")
-          .update({
-            cancelled_at: null,
-            data_deletion_date: null,
-          })
-          .eq("id", userIdRef.current);
-      }
-      // Clear local cancellation state
-      navigate("more", null);
-      reloadPage();
-    } catch (err) {
-      setError("Reactivation failed: " + (err.message || "Unknown error"));
-    } finally {
-      setReactivating(false);
-    }
-  };
-
-  const countdownColor = daysLeft <= 2 ? "#ef4444" : daysLeft <= 4 ? "#f59e0b" : "#10b981";
   // A paid membership says whether it renews, or when it ends after renewal
   // was cancelled in the billing portal (BILL-005). Lifetime access says so
   // instead, as the membership card does: an admin grants it only after
@@ -162,54 +121,21 @@ function CancellationPage() {
           fontSize: 24, fontWeight: 800, color: T.text,
           margin: "0 0 12px",
         }}>
-          Hate to see you go
+          Membership and cancellation
         </h1>
 
         <p style={{
           fontSize: 15, color: T.textMuted, lineHeight: 1.6,
           margin: "0 0 8px",
         }}>
-          We understand, and we don't want to leave you hanging.
+          Your saved records stay available.
         </p>
         <p style={{
           fontSize: 15, color: T.textMuted, lineHeight: 1.6,
           margin: 0,
         }}>
-          Your credentials will be available for export for the <strong style={{ color: T.text }}>next {daysLeft} day{daysLeft !== 1 ? "s" : ""}</strong>. After that, a scheduled job deletes your records, uploaded documents, monthly backups, support tickets, and assistant log from our systems. Reactivate before then and nothing is deleted.
+          Canceling a paid membership does not delete anything. Your records and documents remain available to view and export until you choose Delete All My Data in More &gt; Data Rights.
         </p>
-      </div>
-
-      {/* Countdown */}
-      <div style={{
-        margin: "0 0 20px",
-        padding: "20px 24px",
-        backgroundColor: T.card,
-        borderRadius: 16,
-        border: `1px solid ${T.border}`,
-        boxShadow: T.shadow1,
-        textAlign: "center",
-      }}>
-        <div style={{
-          fontSize: 48, fontWeight: 900, color: countdownColor,
-          lineHeight: 1,
-          marginBottom: 4,
-        }}>
-          {daysLeft}
-        </div>
-        <div style={{
-          fontSize: 14, fontWeight: 600, color: T.textMuted,
-          textTransform: "uppercase",
-          letterSpacing: 1,
-        }}>
-          {daysLeft === 1 ? "day remaining" : "days remaining"}
-        </div>
-        {deletionDate && (
-          <div style={{ fontSize: 12, color: T.textDim, marginTop: 8 }}>
-            Data deletion scheduled: {deletionDate.toLocaleDateString("en-US", {
-              month: "long", day: "numeric", year: "numeric",
-            })}
-          </div>
-        )}
       </div>
 
       {/* Export notice */}
@@ -222,7 +148,7 @@ function CancellationPage() {
         boxShadow: T.shadow1,
       }}>
         <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5 }}>
-          Please download your data before then. Your export includes all credential documents organized by type, plus a spreadsheet summary of every license, certification, and record.
+          You can download your data at any time. Your export includes all credential documents organized by type, plus a spreadsheet summary of every license, certification, and record.
         </div>
       </div>
 
@@ -278,10 +204,9 @@ function CancellationPage() {
         </div>
       )}
 
-      {/* Reactivate Button — Secondary */}
+      {/* Return to the app without changing membership or retention. */}
       <button
-        onClick={handleReactivate}
-        disabled={reactivating}
+        onClick={() => navigate("more", null)}
         style={{
           width: "100%",
           padding: "14px 24px",
@@ -291,13 +216,12 @@ function CancellationPage() {
           color: T.textMuted,
           fontSize: 15,
           fontWeight: 600,
-          cursor: reactivating ? "wait" : "pointer",
+          cursor: "pointer",
           marginBottom: 24,
-          opacity: reactivating ? 0.7 : 1,
           transition: "opacity 0.2s",
         }}
       >
-        {reactivating ? "Reactivating..." : "I've changed my mind -- keep my account"}
+        Back to app
       </button>
 
       {/* Closing note */}

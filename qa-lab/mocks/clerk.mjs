@@ -43,7 +43,7 @@ export function createClerkMock({ store, secrets, supabaseUrl, serviceRoleKey, l
   const usersOf = (instance) => Object.values(state().users).filter((r) => r.instance === instance);
   const primaryEmail = (user) => user.email_addresses.find((e) => e.id === user.primary_email_address_id)?.email_address || null;
 
-  function normalizeEmail(input, first, last) {
+  function normalizeEmail(input, first, last, instance) {
     let email = typeof input === 'string' && input.trim() ? input.trim().toLowerCase() : '';
     if (email && !email.includes('@')) email = `${email}@${LAB_EMAIL_DOMAIN}`;
     if (!email) {
@@ -51,7 +51,7 @@ export function createClerkMock({ store, secrets, supabaseUrl, serviceRoleKey, l
       email = `${slug}-${randomAlnum(5).toLowerCase()}@${LAB_EMAIL_DOMAIN}`;
     }
     if (!EMAIL_RE.test(email)) throw new HttpError(400, `test physicians use addresses on @${LAB_EMAIL_DOMAIN} only`, { error: 'email_domain', message: `Use an address on @${LAB_EMAIL_DOMAIN}` });
-    if (Object.values(state().users).some((r) => r.data.email_addresses.some((e) => e.email_address === email))) {
+    if (usersOf(instance).some((r) => r.data.email_addresses.some((e) => e.email_address === email))) {
       throw new HttpError(409, 'that address is already a test physician', { error: 'email_taken', message: `${email} is already a test physician` });
     }
     return email;
@@ -61,7 +61,7 @@ export function createClerkMock({ store, secrets, supabaseUrl, serviceRoleKey, l
     const firstName = String(input.firstName ?? 'Test').trim().slice(0, 60) || 'Test';
     const lastName = String(input.lastName ?? 'Physician').trim().slice(0, 60) || 'Physician';
     const instance = input.instance === 'legacy' ? 'legacy' : 'live';
-    const email = normalizeEmail(input.email, firstName, lastName);
+    const email = normalizeEmail(input.email, firstName, lastName, instance);
     const now = fixture?.updatedAt ?? Date.now();
     const emailId = `idn_qa${randomAlnum(24)}`;
     const verified = input.verified !== false;
@@ -106,7 +106,7 @@ export function createClerkMock({ store, secrets, supabaseUrl, serviceRoleKey, l
       primary.updated_at = now;
     }
     if (typeof patch.email === 'string') {
-      const email = normalizeEmail(patch.email, u.first_name, u.last_name);
+      const email = normalizeEmail(patch.email, u.first_name, u.last_name, record.instance);
       const emailId = `idn_qa${randomAlnum(24)}`;
       u.email_addresses.push({ id: emailId, object: 'email_address', email_address: email, reserved: false,
         verification: { status: 'verified', strategy: 'email_code', attempts: 1, expire_at: now + 600000 }, linked_to: [], matches_sso_connection: false, created_at: now, updated_at: now });

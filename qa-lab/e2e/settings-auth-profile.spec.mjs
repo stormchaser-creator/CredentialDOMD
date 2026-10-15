@@ -328,7 +328,7 @@ test('settings: appearance, dashboard, notifications follow the account; text si
     await signIn(other.page, user);
     await landing(other.page);
     await check(other.page, 'in a second browser');
-    await other.page.screenshot({ path: (await qa.shot('second browser settings')).replace(/\.png$/, '-second.png'), fullPage: false });
+    await qa.shot('second browser settings', other.page);
     await other.context.close();
   }, { soft: true });
 

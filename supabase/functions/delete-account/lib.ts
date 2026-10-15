@@ -365,9 +365,9 @@ export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
 export const PROFILE_KEEP_COLUMNS = ["id", "auth_user_id", "created_at", "access_status", "is_founding_member", "founding_number"];
 
 /**
- * The full UPDATE for the profiles row at `now`. The cancellation schedule is
- * consumed here: data_deletion_date goes to null so the daily job cannot run
- * the same deletion twice. deleted_at keeps the account closed until its
+ * The full UPDATE for the profiles row at `now`. Any legacy cancellation
+ * schedule is cleared alongside this explicit deletion. Automatic deletion
+ * is retired. deleted_at keeps the account closed until its
  * owner signs in again; initialize_clerk_profile then reopens it empty and
  * moves the stamp to data_deleted_at (migration 20260930020000), which every
  * device of that member compares to drop a local copy that predates the wipe.

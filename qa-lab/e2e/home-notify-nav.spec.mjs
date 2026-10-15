@@ -8,6 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from './support/fixtures.mjs';
+import { settleReminderQueue } from './support/ops-helpers.mjs';
 import {
   LAB_EMAIL_DOMAIN, emailBody, emails, goTab, lab, labExec, lit, makeAdmin, openCredentials, openMore, profileOf, row, rows, scriptAi, sleep, stamp, waitFor,
 } from './support/lab.mjs';
@@ -308,7 +309,7 @@ test('hand-offs, reminder and guide emails, More, email links', {
   tag: ['@HOME-009', '@HOME-021', '@HOME-022', '@NOTIFY-007', '@HOME-007', '@NOTIFY-005'],
 }, async ({ page, context, qa }) => {
   test.setTimeout(12 * 60 * 1000);
-  const { user, profile } = await memberWithPlace(page, { firstName: 'Morgan', lastName: 'Menu' });
+  const { user, profile } = await memberWithPlace(page, { firstName: 'Morgan', lastName: 'Menu', profession: 'MD' });
 
   await qa.feature('HOME-009', 'A question with no matches: Ask Vera opens More > Vera and sends it once; Back returns to More', async () => {
     const q = 'QA when does my DEA expire, lab question';
@@ -407,7 +408,9 @@ test('hand-offs, reminder and guide emails, More, email links', {
     qa.check('Home alerts on the license, the DEA and the permit', /State Medical License, TX/.test(homeText) && /DEA Registration, TX/.test(homeText) && /QA fluoroscopy permit/.test(homeText));
 
     const run = await runHook('send-reminders', { profile_id: profile.id });
-    qa.check('send-reminders sent this member one email', run.status === 200 && run.data?.results?.[0]?.sent === true, JSON.stringify(run.data).slice(0, 200));
+    qa.check('send-reminders queued this member through the shared sender', run.status === 202 && run.data?.delivery === 'scheduled', JSON.stringify(run.data).slice(0, 200));
+    const delivery = await settleReminderQueue(profile.id);
+    qa.check('the member’s reminder job reached sent', delivery.status === 'sent', delivery);
     const msg = await waitFor('the reminder email', async () => (await emails({ to: user.email })).find((m) => /^Credential check/.test(m.subject)) || null, { timeoutMs: 30000, intervalMs: 1000 }).catch(() => null);
     const full = msg ? await emailBody(msg.id) : {};
     const text = full.text || '';
@@ -428,7 +431,7 @@ test('hand-offs, reminder and guide emails, More, email links', {
     }
     const urls = [...new Set(text.match(/https?:\/\/[^\s)]+/g) || [])];
     qa.check('it links to the app and to the renewal pages (Texas board portal, DEA renewal)', urls.includes('https://credentialdomd.com/app/') && urls.some((u) => /deadiversion\.usdoj\.gov/.test(u)) && urls.some((u) => /tmb|texas/i.test(u)), urls.join(' | '));
-    qa.check('it says how to change the lead time or turn it off', /email reminders are on in Settings\. Change the lead time or turn it off there/.test(text));
+    qa.check('it says how to change the lead time or turn it off', /email reminders are on in (Settings|More > Profile & settings)\. Change the lead time or turn it off there/.test(text));
     qa.check('no link points at a waitlist or carries a price', !/waitlist|\$\d/i.test(`${text} ${full.html || ''}`));
     // The app link, opened as the lab's app (credentialdomd.com is the lab app here).
     const appLink = urls.find((u) => u === 'https://credentialdomd.com/app/');
@@ -528,7 +531,7 @@ test('hand-offs, reminder and guide emails, More, email links', {
       qa.check(`Back from ${label} returns to the More menu`, (await page.getByRole('heading', { name: /^More$/ }).count()) > 0 || /Data & Backup Export, import/.test(await bodyText(page)));
     }
     await goTab(page, 'More');
-    await page.getByRole('button', { name: /^(\S+ )?Support/ }).first().click();
+    await page.getByRole('button', { name: /^(\S+ )?(Get help|Support)/ }).first().click();
     qa.check('Support opens the support sheet on Your tickets', await supportSheetOnTickets(page));
     await page.mouse.click(640, 20);
     await sleep(500);

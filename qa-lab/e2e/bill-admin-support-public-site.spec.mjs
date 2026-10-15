@@ -102,7 +102,7 @@ test('visitor: landing offer, create-account path, fallback, beacon', {
     await p.page.goto(`${site.origin}/`, { waitUntil: 'load' });
     await sleep(1000);
     const hero = (await p.page.locator('[data-membership-hero-headline]').first().innerText()).trim();
-    await p.page.screenshot({ path: (await qa.shot('landing phone')).replace(/\.png$/, '-phone.png'), fullPage: false });
+    await qa.shot('landing phone', p.page);
     qa.check('phone: the hero shows the live founding offer', /\$99\/year/.test(hero), hero);
     qa.check('phone: no horizontal page scroll', await noSideScroll(p.page));
     p.pub.setOffer('block');
@@ -111,7 +111,7 @@ test('visitor: landing offer, create-account path, fallback, beacon', {
     const blockedHero = (await p.page.locator('[data-membership-hero-headline]').first().innerText()).trim();
     const blockedStatus = (await p.page.locator('[data-membership-status]').first().innerText()).trim();
     const blockedPrice = (await p.page.locator('[data-membership-price]').first().innerText()).trim();
-    await p.page.screenshot({ path: (await qa.shot('landing phone offer blocked')).replace(/\.png$/, '-phone.png'), fullPage: false });
+    await qa.shot('landing phone offer blocked', p.page);
     qa.check('offer blocked: the offer request was refused', p.pub.offerLog.some((o) => o.mode === 'block'), p.pub.offerLog.map((o) => o.mode));
     qa.check('offer blocked: the static founding copy renders (no invented price)', blockedHero === 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member' && blockedPrice === '$99', `${blockedHero} | ${blockedPrice}`);
     qa.check('offer blocked: the status line says the offer is confirmed before payment', /confirmed before payment/.test(blockedStatus), blockedStatus);
@@ -135,8 +135,7 @@ test('visitor: landing offer, create-account path, fallback, beacon', {
     const allowed = /signed up under the earlier free-beta wording|opt in to \$99\/year Credential during the beta|not offered to founding buyers|After the 100 paid founding memberships|^\$99 a year for the first 100 paid founding members, Practice included/;
     const sentences = (await visible(p.page)).split(/(?<=[.!?])\s+/).filter((x) => /\$99/.test(x) && !allowed.test(x));
     await p.page.locator('#planned-pricing').scrollIntoViewIfNeeded();
-    const shot = (await qa.shot('landing phone earlybird')).replace(/\.png$/, '-phone.png');
-    await p.page.screenshot({ path: shot });
+    const shot = await qa.shot('landing phone earlybird', p.page);
     qa.check('at early bird no sentence still offers $99 to a new visitor', sentences.length === 0, sentences.slice(0, 6));
     if (sentences.length) {
       qa.bug({
@@ -153,13 +152,21 @@ test('visitor: landing offer, create-account path, fallback, beacon', {
 
   await qa.feature('PUBLIC-006', 'One visit beacon per view, path and referrer only; the counter row increments', async () => {
     beacons.length = 0;
-    const beforeHome = pageViews('/').reduce((n, r) => n + Number(r.hits), 0);
-    const beforeState = pageViews('/states/texas').reduce((n, r) => n + Number(r.hits), 0);
+    // page_views is one counter per day, path and referrer domain for the whole
+    // lab, and other journeys view / and /states/texas too
+    // (bill-admin-support-public-admin's view loop, in the same group on
+    // 2026-10-01: /states/texas went up by two). These two views arrive from a
+    // referrer domain of this run's own, so their row counts only them.
+    const refDomain = `qa-pv-${Date.now().toString(36)}.test`;
+    const referer = `http://${refDomain}/`; // http: a referrer from https would be dropped on the way to the http lab site
+    const ownHits = (pathName) => pageViews(pathName).filter((r) => r.referrer_domain === refDomain).reduce((n, r) => n + Number(r.hits), 0);
+    const beforeHome = ownHits('/');
+    const beforeState = ownHits('/states/texas');
     const relayBefore = site.relayLog.length;
-    await page.goto(`${site.origin}/`, { waitUntil: 'load' });
+    await page.goto(`${site.origin}/`, { waitUntil: 'load', referer });
     await sleep(1200);
     const homeBeacons = beacons.filter((b) => new URL(b.page).pathname === '/');
-    await page.goto(`${site.origin}/states/texas`, { waitUntil: 'load' });
+    await page.goto(`${site.origin}/states/texas`, { waitUntil: 'load', referer });
     await sleep(1200);
     const stateBeacons = beacons.filter((b) => new URL(b.page).pathname === '/states/texas');
     qa.check('exactly one beacon for the landing view and one for the guide view', homeBeacons.length === 1 && stateBeacons.length === 1, beacons.map((b) => `${new URL(b.page).pathname}: ${b.body}`));
@@ -167,9 +174,10 @@ test('visitor: landing offer, create-account path, fallback, beacon', {
     qa.check('each beacon carries only a path and a referrer (no personal data, no query string)', bodies.every((b) => b && Object.keys(b).sort().join() === 'p,r' && !/[?@]/.test(b.p)), bodies);
     const relays = site.relayLog.slice(relayBefore).filter((r) => r.path === '/api/pv');
     qa.check('the relay accepted each beacon (2xx)', relays.length >= 2 && relays.every((r) => r.status >= 200 && r.status < 300), relays);
-    const home = await waitFor('home counter', async () => { const n = pageViews('/').reduce((s, r) => s + Number(r.hits), 0); return n >= beforeHome + 1 ? n : null; }, { timeoutMs: 10000 }).catch(() => null);
-    const guide = await waitFor('guide counter', async () => { const n = pageViews('/states/texas').reduce((s, r) => s + Number(r.hits), 0); return n >= beforeState + 1 ? n : null; }, { timeoutMs: 10000 }).catch(() => null);
-    qa.check('page_views counters for / and /states/texas each went up by one', home === beforeHome + 1 && guide === beforeState + 1, `/ ${beforeHome}->${home}, /states/texas ${beforeState}->${guide}`);
+    const home = await waitFor('home counter', async () => { const n = ownHits('/'); return n >= beforeHome + 1 ? n : null; }, { timeoutMs: 10000 }).catch(() => null);
+    const guide = await waitFor('guide counter', async () => { const n = ownHits('/states/texas'); return n >= beforeState + 1 ? n : null; }, { timeoutMs: 10000 }).catch(() => null);
+    await sleep(1000);
+    qa.check('page_views counters for / and /states/texas each went up by one (this run\'s referrer domain)', home === beforeHome + 1 && guide === beforeState + 1 && ownHits('/') === home && ownHits('/states/texas') === guide, `${refDomain}: / ${beforeHome}->${home}, /states/texas ${beforeState}->${guide}`);
     // The state index (/states/), which the landing page links four times, beacons too.
     const hubBefore = site.relayLog.length;
     beacons.length = 0;
@@ -213,7 +221,7 @@ test('visitor: state guides, guide email, invalid and rate-limited requests', {
         }
       }
       await p.page.goto(`${site.origin}/states/texas`, { waitUntil: 'load' });
-      await p.page.screenshot({ path: (await qa.shot('texas guide phone')).replace(/\.png$/, '-phone.png') });
+      await qa.shot('texas guide phone', p.page);
     } finally { await p.context.close(); }
   }, { soft: true });
 
@@ -301,7 +309,7 @@ test('visitor: landing controls at phone width', {
       qa.check('the menu button starts closed', (await toggle.getAttribute('aria-expanded')) === 'false');
       await toggle.click();
       qa.check('tapping it opens the menu (aria-expanded true, links visible)', (await toggle.getAttribute('aria-expanded')) === 'true' && await pg.locator('#primary-nav a[href="#features"]').isVisible());
-      await pg.screenshot({ path: (await qa.shot('mobile menu open')).replace(/\.png$/, '-phone.png') });
+      await qa.shot('mobile menu open', pg);
       await pg.locator('#primary-nav a[href="#features"]').click();
       const at = await settledTop(pg, '#features');
       qa.check('an anchor link scrolls to its section', at >= -5 && at < 200, `#features top ${at}px`);
@@ -335,7 +343,7 @@ test('visitor: landing controls at phone width', {
       const third = await isOpen(2);
       await q(2).click();
       const thirdClosed = !(await isOpen(2));
-      await pg.screenshot({ path: (await qa.shot('faq')).replace(/\.png$/, '-phone.png') });
+      await qa.shot('faq', pg);
       qa.check('tapping a question opens its answer', first && second && third, `${first} ${second} ${third}`);
       qa.check('opening another closes the previous one; tapping again closes it', !firstAfter && thirdClosed);
     }, { soft: true });
@@ -378,7 +386,7 @@ test('visitor: landing controls at phone width', {
       }
       const guide = await visible(pg);
       if (!(await pg.locator('details.support-menu').count())) {
-        await pg.screenshot({ path: (await qa.shot('state guide header no support')).replace(/\.png$/, '-phone.png') });
+        await qa.shot('state guide header no support', pg);
         qa.bug({
           title: 'State renewal guides have no Support menu (and no help link) in their header, unlike / and /help/',
           step: 'Open /states/texas at 375 px and look for Support',
@@ -417,13 +425,22 @@ test('visitor: legal pages vs the app, help videos, CME and locums, link crawl',
     qa.check('the app-relative copies /app/privacy.html and /app/terms.html are served', Object.values(appCopies).every((r) => r.status === 200), appCopies);
     // In the app: More > Privacy and More > Terms.
     const m = await secondBrowser();
-    await lifetimeMember(m.page, { firstName: 'Lee', lastName: 'Legal' });
+    const setupQuotes = [];
+    const onSetupQuote = req => {
+      if (req.method() === 'POST' && req.url() === `${lab().urls.apiOrigin}/functions/v1/billing-quote`) setupQuotes.push(req.url());
+    };
+    m.page.on('request', onSetupQuote);
+    let legalMember;
+    try { legalMember = await lifetimeMember(m.page, { firstName: 'Lee', lastName: 'Legal' }); }
+    finally { m.page.off('request', onSetupQuote); }
+    qa.check('the lifetime fixture enters the app without starting a paid offer request', setupQuotes.length === 0, `${setupQuotes.length} quote request(s)`);
+    qa.check('the lifetime fixture has no membership quote error', rows(`select id from public.client_errors where auth_user_id = '${legalMember.user.id}' and message like 'Membership quote failed%'`).length === 0);
     for (const [item, slug] of [['Privacy', 'privacy'], ['Terms', 'terms']]) {
       await openMore(m.page, item);
       await sleep(1200);
       const appText = (await m.page.locator('main').first().innerText().catch(async () => m.page.locator('body').innerText())).replace(/\s+/g, ' ');
       const missing = site_[slug].headings.filter((h) => !appText.toLowerCase().includes(h.toLowerCase()));
-      await m.page.screenshot({ path: (await qa.shot(`in-app ${slug}`)).replace(/\.png$/, '-app.png') });
+      await qa.shot(`in-app ${slug}`, m.page);
       qa.check(`in-app ${item} has every section the site's /${slug} has`, missing.length === 0, missing.length ? `missing: ${missing.slice(0, 5).join(' | ')}` : `${site_[slug].headings.length} sections`);
       const updatedSite = (site_[slug].text.match(/(?:Last updated|Effective)[:\s]+([A-Z][a-z]+ \d{1,2}, \d{4}|\d{4}-\d{2}-\d{2})/) || [])[1];
       qa.check(`in-app ${item} shows the same "last updated" date as the site`, !updatedSite || appText.includes(updatedSite), updatedSite || 'no date on the site page');
@@ -574,9 +591,30 @@ test('private administrator page headers and the legacy root service worker', {
   await qa.feature('PUBLIC-009', '/sw.js is the retirement worker: an old root registration unregisters itself; /app/sw.js stays', async () => {
     const sw = await (await fetch(`${site.origin}/sw.js`)).text();
     qa.check('/sw.js is scripts/root-sw-retirement.js', /isLegacyRootRegistration/.test(sw) && /registration\.unregister\(\)/.test(sw) && !/addEventListener\(["']fetch/.test(sw));
+    for (const pathname of ['/app/', '/app/index.html']) {
+      const shell = await fetch(`${site.origin}${pathname}`, { headers: { 'Sec-Fetch-Mode': 'cors' }, redirect: 'manual' });
+      qa.check(`the real app worker can precache ${pathname} without an origin-changing redirect`, shell.status === 200 && !shell.headers.has('location') && /text\/html/.test(shell.headers.get('content-type') || ''));
+    }
     await page.goto(`${site.origin}/`, { waitUntil: 'load' });
     const result = await page.evaluate(async () => {
-      const app = await navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' }).then(() => 'ok', (e) => `failed: ${e.message}`);
+      // Registration returning successfully does not mean installation did.
+      // Wait for the real precaching worker to activate before retiring root,
+      // and retain its state history to distinguish an install failure from
+      // accidental removal by the retirement worker.
+      const history = [];
+      let app = 'not registered', appState = null;
+      try {
+        const registration = await navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' });
+        app = 'ok';
+        const deadline = Date.now() + 30000;
+        while (Date.now() < deadline) {
+          const worker = registration.installing || registration.waiting || registration.active;
+          appState = worker?.state || 'missing';
+          if (history.at(-1) !== appState) history.push(appState);
+          if (appState === 'activated' || appState === 'redundant' || appState === 'missing') break;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) { app = `failed: ${error.message}`; }
       const root = await navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(() => 'ok', (e) => `failed: ${e.message}`);
       const before = (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope);
       let after = before;
@@ -585,10 +623,18 @@ test('private administrator page headers and the legacy root service worker', {
         after = (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope);
         if (!after.includes(`${location.origin}/`)) break;
       }
-      return { app, root, before, after };
+      const appRegistration = await navigator.serviceWorker.getRegistration(`${location.origin}/app/`);
+      const cacheNames = await caches.keys();
+      const cached = [];
+      for (const name of cacheNames) {
+        const cache = await caches.open(name);
+        cached.push(...(await cache.keys()).map(request => new URL(request.url).pathname));
+      }
+      return { app, appState, history, root, before, after, activeAfter: appRegistration?.active?.state || null, cached };
     });
+    qa.check('the real app worker finishes installing and activates before root retirement', result.app === 'ok' && result.appState === 'activated', result);
     qa.check('an old root registration (/sw.js at scope /) is removed by the retirement worker', result.root === 'ok' && !result.after.includes(`${site.origin}/`), result);
-    qa.check('the app\'s /app/sw.js registration stays', result.app === 'ok' && result.after.includes(`${site.origin}/app/`), result);
+    qa.check('the app\'s /app/sw.js registration stays active with its cached shell and real build assets', result.after.includes(`${site.origin}/app/`) && result.activeAfter === 'activated' && result.cached.includes('/app/index.html') && result.cached.some(pathname => /^\/app\/assets\/.*\.js$/.test(pathname)), result);
     await page.reload({ waitUntil: 'load' });
     qa.check('the landing page loads normally afterwards', (await page.locator('[data-membership-hero-headline]').count()) > 0);
   }, { soft: true });

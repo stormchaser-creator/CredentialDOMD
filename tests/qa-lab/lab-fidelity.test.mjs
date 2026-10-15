@@ -13,6 +13,7 @@ import { createApiProxy, forwardRequestHeaders, returnResponseHeaders } from '..
 import { labSecretRows, productionSecretNames } from '../../qa-lab/lab.mjs';
 import { generateLabSecrets } from '../../qa-lab/lib/lab-secrets.mjs';
 import { APP_PUBLIC_ORIGIN } from '../../qa-lab/lib/lab-config.mjs';
+import { localApiOrigin } from '../../qa-lab/lib/config.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const APP = 'http://127.0.0.1:54390';
@@ -78,7 +79,7 @@ test('the API proxy presents the lab app as production and renames only producti
   const fwd = forwardRequestHeaders({ origin: APP, referer: `${APP}/app/#home`, authorization: 'Bearer t', host: '127.0.0.1:54385', connection: 'keep-alive' }, { appOrigin: APP });
   assert.equal(fwd.origin, APP_PUBLIC_ORIGIN);
   assert.equal(fwd.referer, `${APP_PUBLIC_ORIGIN}/app/#home`);
-  assert.equal(fwd.host, '127.0.0.1:54321');
+  assert.equal(fwd.host, new URL(localApiOrigin()).host);
   assert.equal(fwd.authorization, 'Bearer t');
   assert.equal(fwd.connection, undefined);
   // A foreign origin is passed on as is, so the function refuses it as it would live.
@@ -172,6 +173,25 @@ test('the QA build sends Stripe hosted-page URLs to the stand-ins on the app ori
   }
 });
 
+// ── The served build's headers ───────────────────────────────────────────────
+test('the served QA build has no CORS middleware, so its assets do not vary on Origin (the offline precache matches)', async () => {
+  const saved = { lab: process.env.VITE_QA_LAB, url: process.env.VITE_SUPABASE_URL, port: process.env.QA_LAB_APP_PORT };
+  process.env.VITE_QA_LAB = '1';
+  process.env.VITE_SUPABASE_URL = 'http://127.0.0.1:54385';
+  process.env.QA_LAB_APP_PORT = '54390';
+  try {
+    const mod = await import('../../qa-lab/app/vite.config.mjs');
+    assert.equal(mod.PREVIEW_CORS, false);
+    const config = mod.default({ command: 'build', mode: 'production' });
+    assert.equal(config.preview.cors, false, 'vite preview adds Vary: Origin through its CORS middleware unless it is off');
+    assert.equal(config.preview.host, '127.0.0.1');
+  } finally {
+    for (const [k, v] of [['VITE_QA_LAB', saved.lab], ['VITE_SUPABASE_URL', saved.url], ['QA_LAB_APP_PORT', saved.port]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});
+
 // ── The CORS contract check (npm run qa:cors) ────────────────────────────────
 test('the CORS contract check fails a function that forgets its headers or a header the app sends', async () => {
   const { judge, methodFor, browserCalledFunctions } = await import('../../qa-lab/cors-check.mjs');
@@ -185,4 +205,16 @@ test('the CORS contract check fails a function that forgets its headers or a hea
   assert.equal(methodFor('GET, OPTIONS'), 'GET');
   assert.equal(judge({ name: 'offer', via: 'fetch', appOrigin: APP, preflight: { status: 200, acao: APP, acah: 'content-type', acam: 'GET, OPTIONS' }, error: { status: 200, acao: APP } }).ok, true);
   assert.deepEqual(browserCalledFunctions(['a-fn', 'b-fn', 'c-fn'], ['supabase.functions.invoke("a-fn", {})', 'fetch(`${u}/functions/v1/b-fn`)']), { 'a-fn': 'invoke', 'b-fn': 'fetch' });
+});
+
+
+test('QA loopback CSP differs from production only by the HTTPS upgrade directive', async () => {
+  const { applyLabRewrites } = await import('../../qa-lab/app/vite.config.mjs');
+  const rel = 'src/utils/appCsp.js';
+  const source = readFileSync(path.join(ROOT, rel), 'utf8');
+  const out = applyLabRewrites(rel, source);
+  assert.equal(out, source.replace('    "upgrade-insecure-requests",\n', ''));
+  assert.ok(source.includes('"upgrade-insecure-requests"'));
+  assert.ok(!out.includes('"upgrade-insecure-requests"'));
+  assert.throws(() => applyLabRewrites(rel, out), /no longer contains/);
 });

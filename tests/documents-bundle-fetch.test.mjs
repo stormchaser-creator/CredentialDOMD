@@ -1,3 +1,4 @@
+import * as deviceShare from '../src/utils/deviceShare.js';
 // SHARE-004: Documents "Select to send" read only doc.data, which is stripped
 // once a document has a storagePath and comes back only on an account load.
 // A ticked file that was in the account but not in memory answered "N file(s)
@@ -22,6 +23,11 @@ import * as shareHandoff from '../src/utils/shareHandoff.js';
 import { mountComponent, settle } from './component-harness.mjs';
 
 const base = { size: 2048, uploadedAt: '2026-09-01T10:00:00Z', type: 'application/pdf' };
+const within = async promise => {
+  let timer;
+  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('packet stayed pending')), 300); })]); }
+  finally { clearTimeout(timer); }
+};
 const DOCS = [
   { ...base, id: 'd-here', name: 'Synthetic license.pdf', data: 'data:application/pdf;base64,JVBERi0=' },
   { ...base, id: 'd-cloud', name: 'Synthetic DEA.pdf', storagePath: 'user_synthetic/d-cloud.pdf' },
@@ -29,23 +35,25 @@ const DOCS = [
   { ...base, id: 'd-gone', name: 'Synthetic renewal.pdf', storagePath: 'user_synthetic/d-gone.pdf', fileMissing: true },
 ];
 
-async function documents({ failFirst = new Set() } = {}) {
+async function documents({ failFirst = new Set(), share, copy } = {}) {
   const shared = [], downloads = [];
+  const logs = [];
   const app = {
     data: { settings: { degreeType: 'MD', name: 'Dana Synthetic' }, documents: DOCS, licenses: [], privileges: [], insurance: [], cme: [], healthRecords: [], education: [], locumContracts: [], travelExpenses: [], deductibles: [], customCategories: [], customRecords: [], screenings: [], shareLog: [] },
-    theme: {}, userIdRef: { current: 'user_synthetic' }, addItem() {}, editItem() {}, deleteItem() {}, setData() {}, updateSettings() {}, navigate() {},
+    theme: {}, userIdRef: { current: 'user_synthetic' }, addItem: (key, row) => logs.push({ key, row }), editItem() {}, deleteItem() {}, setData() {}, updateSettings() {}, navigate() {},
   };
-  const ui = await mountComponent('src/components/features/DocumentsSection.jsx', {
+  const ui = await mountComponent(process.env.DOCUMENTS_SOURCE || 'src/components/features/DocumentsSection.jsx', {
     app,
     globals: {
       navigator: {
         userAgent: 'Synthetic desktop', onLine: true, clipboard: { writeText: async () => {} },
         canShare: ({ files }) => Array.isArray(files) && files.length > 0,
-        share: async payload => { shared.push(payload); },
+        share: payload => { shared.push(payload); return share ? share(payload) : Promise.resolve(); },
       },
     },
     modules: {
-      inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, helpers, spreadsheetGuard: guard, phiGuard, customCategories, receiptFiles, shareText, shareHandoff,
+      inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, helpers, spreadsheetGuard: guard, phiGuard, customCategories, receiptFiles, shareText, deviceShare, shareHandoff,
+      ...(copy ? { helpers: { ...helpers, copyToClipboard: copy } } : {}),
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },
       officeText: { isOfficeFile: f => /\.(docx?|xlsx?|csv|txt|rtf)$/i.test(f?.name || ''), UPLOAD_ACCEPT: '*', extractOfficeText: async () => '', mimeFromName: officeText.mimeFromName },
       aiClient: { useAiAvailable: () => true, describeAiStatus: () => 'AI is off.' },
@@ -66,8 +74,38 @@ async function documents({ failFirst = new Set() } = {}) {
   const send = async () => { await button(/as one packet$/).props.onClick(); await settle(); ui.render(); };
   button('Select to send').props.onClick();
   ui.render();
-  return { ui, shared, downloads, tick, send };
+  return { ui, app, logs, shared, downloads, tick, send, button };
 }
+
+test('an unanswered packet share records one request and exits selection without waiting', async () => {
+  const h = await documents({ share: () => new Promise(() => {}) });
+  await h.tick('d-here');
+  await within(h.send());
+  assert.equal(h.shared.length, 1);
+  assert.equal(h.logs.length, 1);
+  assert.equal(h.logs[0].row.method, 'share');
+  assert.match(h.ui.pageText(), /Sharing requested.*Delivery is not confirmed/);
+  assert.ok(h.button('Select to send'));
+});
+
+test('account replacement while copying the packet prevents a stale native handoff', async () => {
+  let finish; const h = await documents({ copy: () => new Promise(resolve => { finish = resolve; }) });
+  await h.tick('d-here');
+  const pending = h.send();
+  h.app.userIdRef.current = 'other-owner'; h.ui.render();
+  finish(true); await pending;
+  assert.equal(h.shared.length, 0);
+  assert.equal(h.logs.length, 0);
+});
+
+test('a late packet rejection cannot replace a different account view or repeat the send', async () => {
+  let reject; const h = await documents({ share: () => new Promise((_, r) => { reject = r; }) });
+  await h.tick('d-here'); await within(h.send());
+  h.app.userIdRef.current = 'other-owner'; h.ui.render();
+  reject(Error('synthetic late failure')); await settle();
+  assert.equal(h.shared.length, 1); assert.equal(h.logs.length, 1);
+  assert.doesNotMatch(h.ui.pageText(), /device did not confirm/);
+});
 
 test('a ticked file that is in the account but not in memory is fetched and goes in the bundle', async () => {
   const h = await documents();
@@ -77,7 +115,7 @@ test('a ticked file that is in the account but not in memory is fetched and goes
   assert.equal(h.shared.length, 1, `shared once (${h.ui.pageText().match(/[^.]*(download|missing|sent)[^.]*\./gi)})`);
   assert.deepEqual(h.shared[0].files.map(f => f.name), ['Synthetic license.pdf', 'Synthetic DEA.pdf']);
   assert.deepEqual(h.downloads, ['user_synthetic/d-cloud.pdf'], 'only the file not in memory is fetched');
-  assert.match(h.ui.pageText(), /Sent 2 documents as one packet\./);
+  assert.match(h.ui.pageText(), /Sharing requested for 2 documents as one packet\. Delivery is not confirmed\./);
 });
 
 test('a ticked file Storage does not have is named, and nothing is sent', async () => {

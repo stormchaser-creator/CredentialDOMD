@@ -87,10 +87,11 @@ async function startLab() {
   return { runtime, child };
 }
 
-/** Review offer, agree, continue, pay on the lab's Checkout stand-in, back to the app: membership active. */
+/** The offer review (pay first opens it by itself), agree, continue, pay on the lab's Checkout stand-in, back to the app: membership active. */
 async function checkoutFlow({ page, runtime, user, check, shotDir, stamp }) {
-  await page.getByRole('button', { name: 'Review Credential offer' }).click();
   const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
+  // Pay first: a new account's review is already open; Complete payment opens it if it is not yet.
+  if (!(await proceed.waitFor({ timeout: 15000 }).then(() => true, () => false))) await page.getByRole('button', { name: 'Complete payment', exact: true }).click();
   await proceed.waitFor({ timeout: 60000 });
   const reviewText = (await page.getByRole('region', { name: 'Membership' }).innerText()).replace(/\s+/g, ' ');
   check('the offer review shows the founding price and its terms', /\$99\.00 per year/.test(reviewText) && /USD 99 due now/.test(reviewText), reviewText.match(/Credential \$[\d.]+ per year/)?.[0] || reviewText.slice(0, 120));
@@ -178,7 +179,10 @@ export async function smoke(argv = process.argv.slice(2)) {
     const gateText = outcome === 'gate' ? (await gate.innerText()).replace(/\s+/g, ' ').trim() : (await page.locator('body').innerText()).replace(/\s+/g, ' ').trim();
     check('signed in, the pending membership gate appears', outcome === 'gate', outcome === 'gate' ? gateText.slice(0, 160) : `${outcome}: ${gateText.slice(0, 200)}`);
     if (outcome === 'gate') {
-      check('the gate offers the founding Credential membership', /Review Credential offer/.test(gateText));
+      // Pay first: the account opens only once paid, and the gate opens the current offer's review by itself.
+      const opened = await page.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 30000 }).then(() => true, () => false);
+      const reviewText = (await gate.innerText()).replace(/\s+/g, ' ');
+      check('pay first: the gate opens the founding Credential offer by itself (no usable unpaid account)', opened && /Complete your payment to open your account\./.test(reviewText) && /Credential \$99\.00 per year/.test(reviewText), reviewText.match(/Credential \$[\d.]+ per year/)?.[0] || reviewText.slice(0, 160));
       check('the gate has "Check access again" and "Sign out"', await page.getByRole('button', { name: 'Check access again' }).isVisible() && await page.getByRole('button', { name: 'Sign out' }).isVisible());
     }
 

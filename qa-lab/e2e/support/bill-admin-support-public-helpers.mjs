@@ -31,11 +31,15 @@
 //                        refuses to run if any production Supabase host survives.
 //   /credential-access*  production's private-headers worker in front of the files.
 //   /app/<page>          a navigation into the app goes to the lab app
-//                        (302 to http://127.0.0.1:<app port>/app/...): the app on
+//                        (302 to http://127.0.0.1:<app port>/app/...; a fetch of
+//                        the shell, as the service worker's precache, gets the
+//                        packaged file instead): the app on
 //                        this origin could not reach the lab's API proxy, which
 //                        answers the lab app's origin only. /app/privacy.html and
 //                        /app/terms.html (packaged pages) and the app's static
 //                        files (sw.js, assets) are served from the package.
+//                        Fetches, including the real app worker's precache of
+//                        /app/ and /app/index.html, stay on this origin.
 //   everything else      the packaged files, resolved as GitHub Pages does
 //                        (file, file.html, dir/index.html), 404.html otherwise.
 import http from 'node:http';
@@ -44,7 +48,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, sym
 import path from 'node:path';
 import { GENERATED_DIR, QA_APP_DIST, REPO_ROOT } from '../../lib/paths.mjs';
 import { APP_PUBLIC_ORIGIN, SUPABASE_API_URL } from '../../lib/lab-config.mjs';
-import { forwardRequestHeaders, returnResponseHeaders } from '../../lib/api-proxy.mjs';
+import { createApiProxy, forwardRequestHeaders, returnResponseHeaders } from '../../lib/api-proxy.mjs';
+import { nativePublicOfferScript, nativePublicHtml, nativePublicHeaders } from '../../lib/native-public-site.mjs';
 import { supabaseStatus } from '../../lib/local-db.mjs';
 import { freePort } from '../../lib/procs.mjs';
 import { lab, lit, mockApi, row, rows, labExec, sleep, waitFor } from './lab.mjs';
@@ -153,12 +158,22 @@ async function toNode(response, res, method) {
   res.end(body);
 }
 
+/** Only actual page navigation crosses to the lab app/API origin. The real
+ * app worker's cache.addAll fetches its shell as a non-navigation request;
+ * redirecting that fetch breaks its installation with cross-origin CORS. */
+export function redirectsAppNavigation(pathname, headers = {}) {
+  if (!(pathname === '/app' || pathname.startsWith('/app/'))) return false;
+  if (['/app/privacy.html', '/app/terms.html'].includes(pathname)) return false;
+  const isPage = pathname === '/app' || pathname.endsWith('/') || pathname.endsWith('.html');
+  return isPage && headers['sec-fetch-mode'] === 'navigate';
+}
+
 /**
  * Serves a packaged site (buildPublicSite) on 127.0.0.1. Returns
  * { origin, port, siteDir, relayLog, close }. relayLog records every /api/* call
  * (path, status) the relay answered.
  */
-export async function startPublicSite({ siteDir, port } = {}) {
+export async function startPublicSite({ siteDir, port, nativeBrowser = false } = {}) {
   const dir = siteDir || await buildPublicSite();
   const rt = lab();
   const relay = await loadRelayWorker();
@@ -167,14 +182,20 @@ export async function startPublicSite({ siteDir, port } = {}) {
   let listenPort = port || await freePort(54395 + Math.floor(Math.random() * 40), { avoid: [rt.appPort, rt.mockPort, rt.apiPort] });
   let origin = `http://127.0.0.1:${listenPort}`;
   const relayLog = [];
+  let nativeProxy, nativeApiOrigin;
 
   const serveStatic = (req, res, pathname) => {
     const found = resolveFile(dir, pathname);
     if (found?.redirect) { res.writeHead(301, { Location: found.redirect }); return res.end(); }
     const file = found?.file || path.join(dir, '404.html');
     const status = found?.file ? 200 : 404;
-    const body = readFileSync(file);
-    res.writeHead(status, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Content-Length': body.length, 'Cache-Control': 'max-age=600' });
+    let body = readFileSync(file);
+    if (nativeBrowser) {
+      if (!nativeApiOrigin) throw Error('Native public proxy is not ready');
+      if (path.basename(file) === 'membership-offer.js') body = Buffer.from(nativePublicOfferScript(body.toString('utf8'), nativeApiOrigin));
+      if (path.extname(file) === '.html') body = Buffer.from(nativePublicHtml(body.toString('utf8'), origin));
+    }
+    res.writeHead(status, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Content-Length': body.length, 'Cache-Control': 'max-age=600', ...(nativeBrowser ? nativePublicHeaders(nativeApiOrigin) : {}) });
     return res.end(req.method === 'HEAD' ? undefined : body);
   };
 
@@ -197,11 +218,7 @@ export async function startPublicSite({ siteDir, port } = {}) {
         const response = await privateHeaders.fetch(new Request(`${origin}${pathname}${url.search}`, { method: req.method, headers }));
         return toNode(response, res, req.method);
       }
-      if (pathname === '/app' || pathname.startsWith('/app/')) {
-        const packaged = ['/app/privacy.html', '/app/terms.html'].includes(pathname);
-        const isPage = pathname === '/app' || pathname.endsWith('/') || pathname.endsWith('.html');
-        if (!packaged && isPage) { res.writeHead(302, { Location: `${rt.urls.appOrigin}${pathname}${url.search}` }); return res.end(); }
-      }
+      if (redirectsAppNavigation(pathname, req.headers)) { res.writeHead(302, { Location: `${rt.urls.appOrigin}${pathname}${url.search}` }); return res.end(); }
       return serveStatic(req, res, pathname);
     } catch (e) {
       if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
@@ -219,9 +236,19 @@ export async function startPublicSite({ siteDir, port } = {}) {
       origin = `http://127.0.0.1:${listenPort}`;
     }
   }
+  if (nativeBrowser) {
+    try {
+      nativeProxy = createApiProxy({ port: 0, appOrigin: origin });
+      await nativeProxy.listen();
+      nativeApiOrigin = `http://127.0.0.1:${nativeProxy.server.address().port}`;
+    } catch (error) { server.close(); throw error; }
+  }
   return {
-    origin, port: listenPort, siteDir: dir, relayLog,
-    close: () => new Promise((resolve) => server.close(() => resolve())),
+    origin, port: listenPort, siteDir: dir, relayLog, ...(nativeBrowser ? { nativeApiOrigin } : {}),
+    close: async () => {
+      if (nativeProxy) await new Promise(resolve => nativeProxy.server.close(resolve));
+      await new Promise(resolve => server.close(resolve));
+    },
   };
 }
 
@@ -335,20 +362,21 @@ export { sleep, waitFor };
 
 /**
  * An ACTIVE member for journeys that are not about paying (the owner's admin
- * accounts, a member who files a ticket): created on the QA sign-in, signed in
- * once (so initialize-clerk-profile makes the profile, pending), then given
+ * accounts, a member who files a ticket): created through mock Clerk, whose
+ * signed user.created webhook initializes the pending profile, then given
  * free lifetime Credential and Practice access, the state the owner's lifetime
  * gift leaves (access_grants kind lifetime, profile active), written as a lab
  * fixture under the same database switch the product's grant functions set.
  * Paying the founding offer instead would take one of the lab's 96 public
  * founding places, which parallel journeys run out of. The page ends on the
- * member app. Returns { user, profile }.
+ * member app. Seed the grant before the first browser sign-in: granting while
+ * the pending screen auto-quotes races that real request and produces a false
+ * lifetime-access refusal in otherwise unrelated legal/admin journeys.
+ * Returns { user, profile }.
  */
 export async function lifetimeMember(page, opts = {}) {
-  const { createPhysician, signIn, landing, waitForProfile, waitForMemberApp, dismissInterruptions, profileOf } = await import('./lab.mjs');
+  const { createPhysician, signIn, waitForProfile, waitForMemberApp, dismissInterruptions, profileOf } = await import('./lab.mjs');
   const user = await createPhysician(opts);
-  await signIn(page, user);
-  await landing(page);
   const p = await waitForProfile(user.id, () => true, 60000);
   labExec(`begin;
     select set_config('credentialdomd.access_grant', '1', true);
@@ -358,7 +386,7 @@ export async function lifetimeMember(page, opts = {}) {
       on conflict do nothing;
     update public.profiles set access_status = 'active' where id = '${p.id}' and access_status = 'pending';
     commit;`);
-  await page.goto(lab().urls.app, { waitUntil: 'domcontentloaded' });
+  await signIn(page, user);
   await waitForMemberApp(page);
   await dismissInterruptions(page);
   return { user, profile: profileOf(user.id) };

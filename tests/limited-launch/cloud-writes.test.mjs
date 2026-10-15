@@ -67,7 +67,7 @@ test('SYNC-001: replay parks a permanently refused op after three tries, keeps i
   f.values.set('ops:user_syntheticA', JSON.stringify([{ ...f.queue()[0], parkedBuild: 'an-older-build' }]));
   f.onRequest = async () => ({ error: null });
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  assert.equal(f.requests.length, 4);
+  assert.equal(f.requests.length, 5, "the successful retry reads then inserts");
   assert.deepEqual(f.queue(), []);
   assert.deepEqual(json(f.api.syncIssuesFor('user_syntheticA')), [], 'a write that lands clears the listing');
 });
@@ -96,7 +96,7 @@ function dateCheckingCloud(f) {
     if (rows.some((r) => r && r.expiration_date === 'March 2030')) return { error: BAD_DATE };
     if (op.method === 'update') {
       const id = op.filters.find((x) => x[0] === 'eq' && x[1] === 'id')?.[2];
-      return { data: landed.has(id) ? [{ id }] : [], error: null };
+      return { data: landed.has(id) ? [{ id, type: 'Passport', ...op.value }] : [], error: null };
     }
     if (op.method === 'insert' || op.method === 'upsert') for (const r of rows) landed.add(r.id);
     return { error: null };
@@ -111,7 +111,7 @@ test('SYNC-001: a refused add, then the fix saved while its row is missing: repl
   assert.equal(f.queue()[0].permanent, true);
   assert.equal(f.api.syncIssuesFor('user_syntheticA').length, 1);
   // The notice says: open it, fix what is named, save again. No row yet, so the save is queued too.
-  await f.api.updateItem('profileA', 'travelDocs', { id: 'trv-fix', type: 'Passport', expirationDate: '2030-03-01', updatedAt: new Date().toISOString() }, null, 'user_syntheticA');
+  await f.api.updateItem('profileA', 'travelDocs', { id: 'trv-fix', type: 'Passport', expirationDate: '2030-03-01', updatedAt: new Date().toISOString() }, f.queue()[0].payload, 'user_syntheticA');
   for (let load = 1; load <= 4; load += 1) {
     await f.api.replayPendingOps('profileA', 'user_syntheticA');
     assert.deepEqual(f.queue(), [], `load ${load}: no op is left for the record`);
@@ -126,7 +126,7 @@ test('SYNC-001: a refused edit, then the fix lands live: the refused edit leaves
   await f.api.updateItem('profileA', 'travelDocs', { id: 'trv-live', type: 'Passport', expirationDate: 'March 2030' }, null, 'user_syntheticA');
   assert.equal(f.queue().length, 1);
   assert.equal(f.api.syncIssuesFor('user_syntheticA').length, 1);
-  await f.api.updateItem('profileA', 'travelDocs', { id: 'trv-live', type: 'Passport', expirationDate: '2030-03-01' }, null, 'user_syntheticA');
+  await f.api.updateItem('profileA', 'travelDocs', { id: 'trv-live', type: 'Passport', expirationDate: '2030-03-01' }, f.queue()[0].payload, 'user_syntheticA');
   assert.deepEqual(f.queue(), [], 'the stale edit is gone, so no later version can put it over the fix');
   assert.deepEqual(json(f.api.syncIssuesFor('user_syntheticA')), []);
   f.requests.length = 0;
@@ -161,17 +161,16 @@ test('SYNC-009: insert fails, the edit matches no row, replay ends on the edit w
   // 2. Back online, no reload: the edit's UPDATE matches 0 rows.
   const T_EDIT = new Date(Date.now() + 60_000).toISOString(); // the edit comes after the add
   f.onRequest = async (op) => (op.method === 'update' ? { data: [], error: null } : { error: null });
-  await f.api.updateItem('profileA', 'travelDocs', { id: 'trv-1', type: 'Passport', number: 'NEW-111', updatedAt: T_EDIT }, null, 'user_syntheticA');
+  await f.api.updateItem('profileA', 'travelDocs', { id: 'trv-1', type: 'Passport', number: 'NEW-111', updatedAt: T_EDIT }, f.queue()[0].payload, 'user_syntheticA');
   const queued = f.queue();
-  assert.equal(queued.length, 2, 'the edit is queued behind the add, not reported as saved');
-  assert.equal(queued[1].payload.number, 'NEW-111');
+  assert.equal(queued.length, 1, 'the causal edit replaces the unsent add, not reported as saved');
+  assert.equal(queued[0].payload.number, 'NEW-111');
   // 3. Reload: replay runs both in order.
   f.requests.length = 0;
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  const upserts = f.requests.filter((r) => r.method === 'upsert').map((r) => json(r.value));
-  assert.deepEqual(upserts.map((r) => r.number), ['OLD-000', 'NEW-111'], 'the edit replays last');
-  assert.ok(Date.parse(upserts[0].updated_at) < Date.parse(T_EDIT), 'the replayed add is stamped with its queue time, before the edit');
-  assert.equal(upserts[1].updated_at, T_EDIT);
+  const inserts = f.requests.filter((r) => r.method === 'insert').map((r) => json(r.value));
+  assert.deepEqual(inserts.map((r) => r.number), ['NEW-111'], 'only the newest proven causal edit is published');
+  assert.equal(inserts[0].updated_at, T_EDIT);
   assert.deepEqual(f.queue(), []);
 });
 
@@ -180,7 +179,7 @@ test('SYNC-009: an edit that does update its row is not queued', async () => {
   f.onRequest = async () => ({ data: [{ id: 'trv-2' }], error: null });
   await f.api.updateItem('profileA', 'travelDocs', { id: 'trv-2', number: 'X' }, null, 'user_syntheticA');
   assert.deepEqual(f.queue(), []);
-  assert.equal(f.requests[0].returning, 'id', 'the update asks for the matched rows back');
+  assert.equal(f.requests[0].returning, '*', 'the conditional update confirms the complete stored row before acknowledging it');
 });
 
 // ── DOCS-003: a delete can never run ahead of the add it undoes ─────────────
@@ -220,7 +219,7 @@ test('DOCS-003: replay drops a queued save whose record was deleted since', asyn
     { op: 'upsert', collectionKey: 'licenses', payload: { id: 'kept', type: 'Other' }, ts: 2, queueId: 'kept' },
   ]));
   await f.api.replayPendingOps('profileA', 'user_syntheticA', { tombstones: new Set([chart.id]) });
-  assert.deepEqual(f.requests.map((r) => [r.method, r.table]), [['upsert', 'licenses']], 'the chart was never uploaded again');
+  assert.deepEqual(f.requests.map((r) => [r.method, r.table]), [['select', 'licenses'], ['insert', 'licenses']], 'the chart was never uploaded again');
   assert.deepEqual(f.queue(), []);
 });
 
@@ -263,9 +262,9 @@ test('DOCS-003: an edit of a document whose add is queued replaces the queued ad
   f.requests.length = 0;
   f.onRequest = async () => ({ error: null });
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  assert.deepEqual(f.requests.map((r) => r.method), ['upload', 'upsert']);
-  assert.equal(f.requests[1].value.name, 'License.pdf');
-  assert.equal(f.requests[1].value.updated_at, T_EDIT);
+  assert.deepEqual(f.requests.map((r) => r.method), ['select', 'upload', 'insert']);
+  assert.equal(f.requests[2].value.name, 'License.pdf');
+  assert.equal(f.requests[2].value.updated_at, T_EDIT);
   assert.deepEqual(f.queue(), []);
 });
 
@@ -285,7 +284,7 @@ test('SYNC-002, DOCS-001: the replayed upload and a self-heal push of an uploade
   const f = fixture();
   f.values.set('ops:user_syntheticA', JSON.stringify([{ op: 'upsert', collectionKey: 'documents', payload: { ...heic, name: 'notes.docx' }, ts: 1, queueId: 'q' }]));
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  assert.equal(f.requests.find((r) => r.method === 'upsert').value.mime_type, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  assert.equal(f.requests.find((r) => r.method === 'insert').value.mime_type, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   f.requests.length = 0;
   await f.api.bulkSync('profileA', 'documents', [{ id: heic.id, name: 'unknown-kind', type: '', storagePath: `user_syntheticA/${heic.id}` }], 'user_syntheticA');
   assert.equal(f.requests[0].value[0].mime_type, 'application/octet-stream');
@@ -451,7 +450,7 @@ test('CRED-025: failed add, then a star that matches no row: replay lands the re
   f.requests.length = 0;
   f.onRequest = async (op) => (op.method === 'update' ? { data: [{ id: 'cme-star' }], error: null } : { error: null });
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  const upsert = f.requests.find((r) => r.method === 'upsert');
+  const upsert = f.requests.find((r) => r.method === 'insert');
   assert.equal(upsert.value.favorite, true);
   assert.deepEqual(f.queue(), []);
 });

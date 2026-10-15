@@ -159,11 +159,13 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
     await sleep(1500);
     qa.check('the delete asks "Delete this day?"', qa.report.dialogs.some((x) => /Delete this day\?/.test(x)));
     qa.check('the deleted day is gone and tombstoned', !!d4 && !row(`select id from public.duty_days where id = '${d4.id}'`) && tombstones(profile.id).some((t) => t.item_id === d4.id));
+    qa.check('before reloading, saved duty days do not need recovery review', await page.getByText('Saved copies need your review', { exact: true }).count() === 0);
     await page.reload();
     await waitForMemberApp(page);
     await goTab(page, 'Practice');
     await subTab(page, 'Work');
     await loggingAgainst(page).selectOption(contract.id);
+    qa.check('after reloading, unchanged duty days do not need recovery review', await page.getByText('Saved copies need your review', { exact: true }).count() === 0);
     const list = await bodyText(page);
     await qa.shot('duty days after reload');
     qa.check('after a reload: the three days with their amounts', list.includes(listDay(day1)) && list.includes(listDay(day2)) && list.includes(listDay(day3)) && !list.includes(listDay(day4)) && /\$2,750\.00/.test(list) && /\$400\.00/.test(list), list.match(/Days & call[\s\S]{0,900}/)?.[0]);
@@ -171,6 +173,7 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
   }, { soft: true });
 
   await qa.feature('PRAC-003', 'Invoice the outstanding duty days: Copy text & mark sent', async () => {
+    const expectedDutyIds = rows(`select id from public.duty_days where user_id = '${profile.id}' and contract_id = '${contract.id}' and date in ('${day1}', '${day2}', '${day3}')`).map(day => day.id);
     const btn = page.getByRole('button', { name: /Invoice 3 unbilled days/ });
     const label = await btn.innerText().catch(() => '');
     qa.check('"Invoice 3 unbilled days $5,150.00" is offered', /Invoice 3 unbilled days\s*\$5,150\.00/.test(label.replace(/\s+/g, ' ')), label);
@@ -184,7 +187,15 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
     await preview.getByRole('button', { name: 'Copy text & mark sent' }).click();
     const inv = await waitFor('the invoice', async () => row(`select * from public.invoices where user_id = '${profile.id}'`), { timeoutMs: 20000 }).catch(() => null);
     qa.check('an invoices row for $5,150.00 on the day-rate agreement covering the three days', !!inv && Number(inv.total_amount) === 5150 && inv.contract_id === contract.id && (inv.entry_ids || []).length === 3 && inv.period_start === day1 && inv.period_end === day3, inv && { number: inv.number, total: inv.total_amount, entries: inv.entry_ids, period: `${inv.period_start}..${inv.period_end}` });
-    const billed = rows(`select date, invoice_id from public.duty_days where user_id = '${profile.id}'`);
+    const billed = await waitFor('the exact duty days linked to this invoice', async () => {
+      if (!inv?.id || expectedDutyIds.length !== 3 || new Set(expectedDutyIds).size !== 3
+        || (inv.entry_ids || []).length !== 3 || new Set(inv.entry_ids).size !== 3
+        || !inv.entry_ids.every(id => expectedDutyIds.includes(id))) return null;
+      const saved = rows(`select id, user_id, contract_id, date, invoice_id from public.duty_days where user_id = '${profile.id}' and contract_id = '${contract.id}'`);
+      return saved.length === 3 && new Set(saved.map(day => day.id)).size === 3
+        && saved.every(day => expectedDutyIds.includes(day.id) && day.user_id === profile.id
+          && day.contract_id === contract.id && day.invoice_id === inv.id) ? saved : null;
+    }, { timeoutMs: 20000 }).catch(() => []);
     qa.check('each duty day now carries the invoice id', billed.length === 3 && billed.every((b) => b.invoice_id === inv?.id), billed);
     qa.check('the preview says it was marked sent', /Recorded as sent\. It's on the Invoices tab\./.test(await bodyText(page)) || !!inv);
     const clip = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
@@ -295,9 +306,23 @@ test('practice forecast calendar and CallSync: plan days, load coverage dates, s
     await d.waitFor({ state: 'detached', timeout: 10000 });
     await page.getByRole('button', { name: 'Load contract coverage dates onto the calendar' }).click();
     const msg = await page.getByText(/Loaded \d+ coverage days? from your agreements/).first().innerText().catch(() => '');
-    await sleep(2500);
-    const loaded = sched(`and contract_id = '${contract.id}'`);
     const want = [localDay(20), localDay(21), localDay(22), localDay(40), localDay(41), localDay(42), localDay(43), localDay(44)];
+    // A day whose write meets a gateway 502 stays queued on this device, and the page says so: "1
+    // change has not reached your account yet. It is sent again each time the app opens."
+    // (SyncIssuesNotice; only saves kept for a membership answer are replayed while the page stays
+    // open). 2026-10-01, full regression pass 2: one of the 8 POSTs met the lab's Kong/PostgREST
+    // connection reset; reproduced by answering one POST 502. The member then opens the app again.
+    await sleep(2500);
+    const loadedNow = () => { const r = sched(`and contract_id = '${contract.id}'`); return JSON.stringify(r.map((x) => x.date)) === JSON.stringify(want) ? r : null; };
+    if (!loadedNow()) {
+      const notice = await page.locator('[data-sync-waiting]').first().innerText({ timeout: 10000 }).catch(() => '');
+      qa.check('a day whose save met a server error is named as not reached yet, to be sent when the app opens', /1 change has not reached your account yet\. It is sent again each time the app opens/.test(notice), notice.slice(0, 200));
+      await page.reload();
+      await waitForMemberApp(page);
+      await goTab(page, 'Practice');
+      await subTab(page, 'Sched.');
+    }
+    const loaded = await waitFor('the loaded coverage days', async () => loadedNow(), { timeoutMs: 20000, intervalMs: 500 }).catch(() => sched(`and contract_id = '${contract.id}'`));
     await qa.shot('forecast loaded');
     qa.check('loading adds the 3 call days of the timed block and the 5 days of the other', JSON.stringify(loaded.map((r) => r.date)) === JSON.stringify(want), { message: msg, dates: loaded.map((r) => r.date) });
     qa.check('the message counts them', /Loaded 8 coverage days/.test(msg), msg);

@@ -76,6 +76,8 @@ test('Expenses: a refused save keeps the form and its staged receipt photo', asy
     const m = mount(screens.Expenses, { data: { locumContracts: [CONTRACT], documents: [] }, refuse: refuseAll });
     click(m, '+ Expense');
     find(m.render(), n => n.type === 'input' && n.props.placeholder === '$ amount', 'amount').props.onChange({ target: { value: '42.50' } });
+    globalThis.__screen.app.userIdRef = { current: 'profile-synthetic' };
+    globalThis.__screen.app.user = { id: 'user-synthetic' };
     const upload = nodes(m.render()).find(n => n.type === 'input' && n.props.type === 'file' && n.props.multiple);
     upload.props.onChange({ target: { files: [new File([new Uint8Array([1, 2, 3])], 'synthetic-receipt.jpg', { type: 'image/jpeg' })], value: '' } });
     // The receipt is read from a real File (another thread): wait for it, bounded.
@@ -165,6 +167,8 @@ test('Documents: an upload that was not saved is never sent to be read', async (
   globalThis.FileReader = class { readAsDataURL(file) { file.arrayBuffer().then(b => { this.onload?.({ target: { result: `data:${file.type};base64,${Buffer.from(b).toString('base64')}` } }); }); } };
   try {
     const m = mount(screens.DocumentsSection, { data: { settings: { apiKey: 'synthetic-key' }, locumContracts: [], documents: [], licenses: [], privileges: [], insurance: [], cme: [], healthRecords: [], education: [], deductibles: [], customCategories: [], customRecords: [] }, refuse: refuseAll });
+    globalThis.__screen.app.userIdRef = { current: 'profile-synthetic' };
+    globalThis.__screen.app.user = { id: 'user-synthetic' };
     const upload = nodes(m.render()).find(n => n.type === 'input' && n.props.type === 'file' && n.props.multiple);
     upload.props.onChange({ target: { files: [new File(['%PDF-1.4 synthetic'], 'license.pdf', { type: 'application/pdf' })], value: '' } });
     await settleOutcome(40);

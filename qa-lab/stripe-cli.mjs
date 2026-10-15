@@ -21,6 +21,8 @@
 //                                            or at once (customer.subscription.deleted)
 //   resend evt_... [--endpoint name]         posts a stored event again
 //   deliveries                               the latest webhook deliveries and their answers
+//   refunds [--email E | --subject S]        refunds made through the API (Cancel and get a refund),
+//                                            newest first, with the Idempotency-Key each carried
 //
 // Exit code 0 only when every webhook the command posted was answered 2xx.
 import { parseArgs } from 'node:util';
@@ -33,7 +35,8 @@ const USAGE = `usage: npm run qa:stripe -- sessions [--email E | --subject S | -
        npm run qa:stripe -- expire cs_...
        npm run qa:stripe -- cancel sub_... [--now]
        npm run qa:stripe -- resend evt_... [--endpoint NAME]
-       npm run qa:stripe -- deliveries`;
+       npm run qa:stripe -- deliveries
+       npm run qa:stripe -- refunds [--email E | --subject S]`;
 
 export function mockClient(runtime = readRuntime()) {
   if (!runtime?.urls?.mock) throw new Error('no QA lab is running: start it with npm run qa:lab');
@@ -143,6 +146,15 @@ export async function runStripeCli(argv = process.argv.slice(2), { call = mockCl
       const d = await call(`/qa/stripe/events/${encodeURIComponent(target)}/resend`, { method: 'POST', body: values.endpoint ? { endpoint: values.endpoint } : {} });
       out(deliveryLine(d));
       return { ok: deliveredOk([d]), delivery: d };
+    }
+    case 'refunds': {
+      // A member's refunds: those of the customers their checkout sessions name.
+      const sessions = values.email || values.subject ? await listSessions(call, values) : null;
+      const customers = sessions && new Set(sessions.map((x) => x.customer));
+      const { refunds } = await call('/qa/stripe/refunds');
+      const mine = customers ? refunds.filter((r) => customers.has(r.customer)) : refunds;
+      out(mine.length ? mine.slice(0, 30).map((r) => `${r.id}  ${r.status.padEnd(9)} ${money(r.amount).padStart(10)}  ${when(r.created)}  ${r.charge}  ${r.invoice || '?'}  ${r.idempotencyKey || 'no key'}`).join('\n') : 'no refunds');
+      return { ok: true, refunds: mine };
     }
     case 'deliveries': {
       const { deliveries } = await call('/qa/stripe/deliveries');

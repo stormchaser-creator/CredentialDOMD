@@ -24,6 +24,9 @@ import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompl
 import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
 import { repairStoredIds } from '../../src/utils/idRepair.js';
 import { generateId } from '../../src/utils/helpers.js';
+import { createRecordAcknowledgements, isAcknowledgedRecordCopy } from '../../src/utils/recordAcknowledgements.js';
+import { recoveryFor } from '../sync-recovery-fixture.mjs';
+import { recordContent } from '../../src/lib/supabase.js';
 import * as held from '../../src/utils/heldChanges.js';
 import { localChangesSince, rebaseLocalChanges } from '../../src/utils/loadRebase.js';
 
@@ -57,12 +60,12 @@ function server(f, { offline = () => false } = {}) {
     const id = idOf(op);
     if (op.method === 'select') {
       const row = db.get(id);
-      return { error: null, data: row ? { id: row.id } : null };
+      return { error: null, data: row ? (op.value === '*' ? { ...row } : Object.fromEntries(String(op.value).split(',').map(k => [k, row[k]]))) : null };
     }
     if (op.method === 'update') {
       if (!db.has(id)) return { error: null, data: [] };
       const err = write(op.table, { ...op.value, id });
-      return err ? { error: err, data: null } : { error: null, data: [{ id }] };
+      return err ? { error: err, data: null } : { error: null, data: op.returning === '*' ? [{ ...db.get(id) }] : [{ id }] };
     }
     if (op.method === 'upsert' || op.method === 'insert') {
       for (const row of Array.isArray(op.value) ? op.value : [op.value]) {
@@ -179,6 +182,7 @@ function load({ cloud, local }) {
     withLocalOnlySettings: settings => settings, hasLegacyStorage: () => false, offlineCopyUnread: () => false, adoptLegacyStorage: () => null, markOfflineCopyRead: () => false, cachedRecordsRef: { current: null }, adoptOfflineCopyRead: () => false, deviceOnlyForLoad: () => null, offlineCopyUnchangedSinceKnown: () => false,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [], reconcileDocumentLinks,
     applyHeldQueue: held.applyHeldQueue, localChangesSince, rebaseLocalChanges, localCopyCurrent: storageScope.localCopyCurrent,
+    recordContent, isAcknowledgedRecordCopy, ...createRecordAcknowledgements({ activeAccount: () => OWNER, fenceFor: () => null, copyCurrent: () => true, read: () => null, write: () => true }), ...recoveryFor(new Map(), () => OWNER),
     accessAuthority: { suspendWrites: () => {} },
     setData: value => { states.push(value); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },

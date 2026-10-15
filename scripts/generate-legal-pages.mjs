@@ -82,6 +82,7 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; backdrop-filter
 .nav-links a:hover { color: var(--text); }
 .btn-primary { display: inline-flex; align-items: center; justify-content: center; padding: 10px 22px; border-radius: var(--radius-md); background: var(--emerald); color: #0d0d1a; font-weight: 700; font-size: 13px; letter-spacing: -0.01em; transition: all 0.2s ease; }
 .btn-primary:hover { background: var(--emerald-light); color: #0d0d1a; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3); }
+.nav-links a.btn-primary, .nav-links a.btn-primary:hover { color: #0d0d1a; }
 
 main { max-width: 800px; margin: 0 auto; padding: 128px 24px 64px; }
 .section-label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--emerald); margin-bottom: 16px; }

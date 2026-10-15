@@ -53,11 +53,12 @@ test('a size read from size_bytes (sizeBytes) counts as the size', async () => {
   assert.equal(dup?.id, 'a');
 });
 
-test('Documents uploads ask for a stored duplicate before anything is read or stored', () => {
+test('Documents uploads check cloud bytes and account ownership before AI reading', () => {
   const src = readFileSync(new URL('../src/components/features/DocumentsSection.jsx', import.meta.url), 'utf8');
   const handle = src.slice(src.indexOf('const handleFiles = useCallback('));
-  const check = handle.indexOf('findStoredDuplicate(data.documents, file, { download: downloadDocumentBlob })');
-  assert.ok(check > 0, 'handleFiles uses findStoredDuplicate with the Storage download');
+  const check = handle.indexOf('findDocumentDuplicate([...(data.documents || []), ...accepted], file, dataUrl, { downloadBlob: downloadDocumentBlob, isCurrent: current })');
+  assert.ok(check > 0, 'handleFiles checks existing and batch file bytes with the Storage download and current account');
+  assert.ok(check < handle.indexOf('if (checked.unavailable) {'), 'unavailable stored bytes stop the upload');
   assert.ok(check < handle.indexOf('if (dup) {'), 'before the duplicate refusal');
   assert.ok(check < handle.indexOf('readScan('), 'before the file is sent to be read');
 });

@@ -84,6 +84,11 @@ test('administrator access: the physician shares a view-only link; the administr
     qa.check('the administrator receives the link by email', !!token, (body?.subject || '') + ' / ' + (body?.text || '').slice(0, 200));
     qa.check('the email names the physician and the purpose, and says downloads are allowed', /Avery Access/.test(body?.subject || '') && (body?.text || '').includes(purpose) && /download the files/.test(body?.text || ''), body?.subject);
     qa.check('replies go to the physician', JSON.stringify(body?.reply_to || body?.replyTo || '').includes(profile.email) || JSON.stringify(body?.reply_to || body?.replyTo || '').includes('qa.credentialdomd.test'), JSON.stringify(body?.reply_to || body?.replyTo));
+    // The mock captures the email when credential-portal posts it; the function records the
+    // provider's answer on its outbox row afterwards. Under load a Refresh in between honestly
+    // shows "Email submission in progress" (2026-10-01, full regression pass 2; reproduced by
+    // holding the outbox row's update), so the list is read once the server has recorded it.
+    if (invite) await waitFor('the invite email recorded as sent', async () => row(`select state from public.credential_portal_outbox where invite_id = '${invite.id}' and kind = 'invite' and state not in ('pending', 'sending')`), { timeoutMs: 30000 }).catch(() => null);
     await page.getByRole('button', { name: 'Refresh' }).click();
     await sleep(1500);
     const card = (await grantCard().innerText().catch(() => '')).replace(/\s+/g, ' ');

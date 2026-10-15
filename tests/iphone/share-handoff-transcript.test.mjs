@@ -68,11 +68,11 @@ test('a cancel is reported to undo; a share refused because another is open says
 test('CME Credits and Home act at hand-off: the busy state and picker clear, the packet is logged, the missing certificates are told', () => {
   const cme = readFileSync(`${root}src/components/features/CMESection.jsx`, 'utf8');
   const run = cme.slice(cme.indexOf('const runTranscript = useCallback'), cme.indexOf('const openTranscript'));
-  assert.match(run, /onHanded: \(\{ model: going \}\) => \{[\s\S]*?flash\(`Transcript PDF is in the share sheet\.[\s\S]*?setShowTranscript\(false\);\s+setTranscriptBusy\(false\);/);
+  assert.match(run, /onHanded: \(\{ model: going \}\) => \{[\s\S]*?flash\(`Transcript sharing requested\. Delivery is not confirmed\.[\s\S]*?setShowTranscript\(false\);\s+setTranscriptBusy\(false\);/);
   const app = readFileSync(`${root}src/App.jsx`, 'utf8');
   const send = app.slice(app.indexOf('const sendRenewalPacket = useCallback'), app.indexOf('const openShare = useCallback'));
-  assert.match(send, /onHanded: \(\{ model: going \}\) => \{\s+logId = generateId\(\);\s+addItem\("shareLog", \{ id: logId, itemId: null, itemName: `\$\{st\} renewal packet`, section: "cme", method: "share"/);
+  assert.match(send, /onHanded: \(\{ model: going \}\) => \{[\s\S]*?logId = generateId\(\);\s+addItem\("shareLog", \{ id: logId, itemId: null, itemName: `\$\{st\} renewal packet`, section: "cme", method: "share"/);
   assert.match(send, /missingNote = certificatesNotIncludedMessage\(going\);/);
   assert.match(send, /onUnanswered: tell,/, 'told once he is back in the app, even if the sheet never answers');
-  assert.match(send, /onUndo: \(\) => \{ if \(logId\) deleteItem\("shareLog", logId\);/);
+  assert.match(send, /onUndo: \(\) => \{[\s\S]*?if \(logId\) deleteItem\("shareLog", logId\);/);
 });

@@ -8,6 +8,8 @@ import vm from 'node:vm';
 import { settleOutcome } from '../helpers/settle-outcome.mjs';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
+import { createRecordAcknowledgements } from '../../src/utils/recordAcknowledgements.js';
+import { recoveryFor } from '../sync-recovery-fixture.mjs';
 import * as access from '../../src/utils/limitedLaunchAccess.js';
 import * as syncRules from '../../src/utils/syncRules.js';
 import * as held from '../../src/utils/heldChanges.js';
@@ -47,7 +49,7 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
       const operation = { table, filters: [] };
       const q = { then: (resolve, reject) => execute(operation).then(resolve, reject) };
       for (const method of ['insert', 'update', 'upsert', 'delete', 'select']) q[method] = (value, options) => { if (!operation.method) { operation.method = method; operation.value = value; if (options !== undefined) operation.options = options; } else if (method === 'select') operation.returning = value ?? '*'; return q; };
-      for (const method of ['eq', 'order', 'range', 'in']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
+      for (const method of ['eq', 'is', 'order', 'range', 'in']) q[method] = (...args) => { operation.filters.push([method, ...args]); return q; };
       q.maybeSingle = q.single = () => q;
       // The real builder's: a request the caller may cancel (a settings save that had no answer).
       q.abortSignal = signal => { operation.signal = signal; return q; };
@@ -56,10 +58,11 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
   }
   const imports = {
     '@supabase/supabase-js': { createClient }, '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS }, '../utils/syncRules.js': syncRules,
-    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => ACCOUNT,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
-      // The queue's write (storageScope makes room first in the app).
-      setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/storageScope.js': { localWriteGuard: () => () => true, BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => ACCOUNT,
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null, setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/recordAcknowledgements.js': createRecordAcknowledgements({ activeAccount: () => ACCOUNT, fenceFor: () => null, copyCurrent: () => true, receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null, write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } }),
+    '../utils/syncRecovery.js': recoveryFor(values, () => ACCOUNT),
+    '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': {}, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},

@@ -166,8 +166,8 @@ function BackupPanel() {
       const url = res.data?.url;
       if (!url) throw new Error("Could not create a download link.");
       const w = window.open(url, "_blank", "noopener,noreferrer");
-      // A blocked popup is not a failure: show the link and let them tap it,
-      // for as long as it lives.
+      // With noopener a browser may return null even when the tab opens.
+      // Offer the expiring link without claiming the browser blocked it.
       if (!w) {
         setLinks((m) => ({ ...m, [row.id]: url }));
         setTimeout(() => setLinks((m) => (m[row.id] === url ? { ...m, [row.id]: "" } : m)), LINK_TTL_MS);
@@ -343,7 +343,7 @@ function BackupPanel() {
                   )}
                   {links[r.id] && (
                     <div style={{ fontSize: 12, marginTop: 5, lineHeight: 1.5 }}>
-                      Your browser blocked the new tab.{" "}
+                      If the download did not start,{" "}
                       <a href={links[r.id]} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, fontWeight: 700, ...inlineLinkTap }}>
                         Open the download
                       </a>

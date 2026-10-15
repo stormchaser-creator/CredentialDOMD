@@ -5,6 +5,7 @@
 // floor. The app sets box-sizing: border-box on every element
 // (src/styles/base.css), so a min-height or min-width here is the size the
 // physician taps. Synthetic records only.
+import * as documentDuplicate from '../src/utils/documentDuplicate.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as inboxDocs from '../src/utils/inboxDocs.js';
@@ -49,6 +50,7 @@ test('DOCS-009: a stored document\'s delete, File with AI, View PDF and Select t
       theme: {}, userIdRef: { current: 'user_synthetic' }, addItem() {}, editItem() {}, deleteItem() {}, setData() {}, updateSettings() {}, navigate() {},
     },
     modules: {
+      documentDuplicate, storageScope: { localWriteGuard: () => () => true },
       inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, helpers, spreadsheetGuard: guard, phiGuard, customCategories,
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },
       officeText: { isOfficeFile: f => /\.(docx?|xlsx?|csv|txt|rtf)$/i.test(f?.name || ''), UPLOAD_ACCEPT: '*', extractOfficeText: async () => '', mimeFromName: officeText.mimeFromName },
@@ -84,6 +86,7 @@ async function documentsScreen({ aiOn = true, scanner } = {}) {
       theme: {}, userIdRef: { current: 'user_synthetic' }, addItem() {}, editItem() {}, deleteItem() {}, setData() {}, updateSettings() {}, navigate() {},
     },
     modules: {
+      documentDuplicate, storageScope: { localWriteGuard: () => () => true },
       inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, spreadsheetGuard: guard, phiGuard, customCategories, actionButton,
       helpers: { ...helpers, generateId: () => ids[n++] || `id-${n}` },
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },

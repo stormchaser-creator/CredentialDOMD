@@ -14,8 +14,11 @@
  * adoptLegacyStorage() and then removed.
  */
 import { STORAGE_KEY, LOCAL_ONLY_SETTINGS } from "../constants/defaults.js";
+import { purgeInvoiceHandoff, sweepPendingInvoiceHandoffPurges } from "./invoiceHandoff.js";
 import { clearSupportTextDrafts } from "./supportTextDrafts.js";
 import { DEVICE_ONLY_SECTIONS } from "./pausedApplicationRecords.js";
+import { purgeRecovery } from "./syncRecovery.js";
+import { clearHealthRecordDraft } from "./healthRecordDraft.js";
 import { changesBetween } from "./heldChanges.js";
 import { rebaseLocalChanges } from "./loadRebase.js";
 import { offlineRead, offlineWrite, offlineUpdate, offlineRemove, offlineStoreSupported, isQuotaError, OfflineStoreUnavailable, offlineStoreState } from "./offlineStore.js";
@@ -33,6 +36,7 @@ export const BASE_KEYS = {
   // id and neither overwrites the other.
   contractPick: "credentialdomd-contract-pick",
   pendingOps: "credentialdomd-pending-ops", // writes that failed to reach the cloud, replayed next load
+  recordAcknowledgements: "credentialdomd-record-acknowledgements", // hashes of successfully saved copies, never record contents
   // Who last completed a signed-in load on this device (offline fallback
   // identity, src/utils/offlineSession.js). Listed here so purgeUserStorage
   // removes it with everything else: a session that ended in sign-out leaves
@@ -71,9 +75,9 @@ export const BASE_KEYS = {
 // imports nothing more. Its IndexedDB half is recorded before the purge
 // returns and finished before the notes are read again (HANDOFF_PURGE_BASE),
 // so it is not awaited here.
-let purgeInvoiceHandoff = null;
+let invoiceHandoffPurgeHook = null;
 export function setInvoiceHandoffPurge(fn) {
-  purgeInvoiceHandoff = typeof fn === "function" ? fn : null;
+  invoiceHandoffPurgeHook = typeof fn === "function" ? fn : null;
 }
 
 // The profiles.deleted_at stamp this device last purged its cache for
@@ -382,8 +386,9 @@ export function lsRemove(base, userId) {
 // The offline copy of the file and the Assistant transcript and archives
 // grow with the account, and Safari gives localStorage about 5 MB for the
 // whole origin (UTF-16). A 1,500-case-log account filled it, the cache write
-// threw, and what opened offline was older than the screen. These three live
-// in IndexedDB now, under the same scoped key; everything small (markers,
+// threw, and what opened offline was older than the screen. These stores and
+// the per-record acknowledgement hashes live in IndexedDB under the same
+// scoped key; everything small (markers,
 // settings, the device keys, the vault, the write queue) stays here.
 //
 // One rule makes the two stores safe together: a localStorage copy of one of
@@ -398,7 +403,7 @@ export function lsRemove(base, userId) {
 // hold the only copy of Protected Identity and the Answer Bank. A read that
 // could not look says so (OfflineStoreUnavailable), and what a tab builds
 // from such a read is never written over the stored copy (unreadKeys).
-export const OFFLINE_STORE_BASES = Object.freeze([BASE_KEYS.data, BASE_KEYS.chat, BASE_KEYS.archives]);
+export const OFFLINE_STORE_BASES = Object.freeze([BASE_KEYS.data, BASE_KEYS.chat, BASE_KEYS.archives, BASE_KEYS.recordAcknowledgements]);
 // Read synchronously by the Assistant (useState initialisers), so they are
 // held in memory once hydrated (hydrateOfflineStores) and written through.
 const MIRRORED_BASES = Object.freeze([BASE_KEYS.chat, BASE_KEYS.archives]);
@@ -1017,16 +1022,40 @@ function offlineWipeOwed(userId) {
 // knows nothing of them, and every read laid them back over the emptied file.
 function catchUpOfflineWipe(userId) {
   if (!userId || !offlineWipeOwed(userId)) return;
+  // The older build did not know these stores. Neither recovery snapshots
+  // nor historical clean-copy receipts may outlive the deletion it honored.
+  // Fence hashes before recording the catch-up marker; refusal leaves this
+  // deletion owed so the next read cannot bless the old copies as current.
+  purgeRecovery(userId);
+  lsRemove(BASE_KEYS.recordAcknowledgements, userId);
   lsRemove(DEVICE_ONLY_PENDING_BASE, userId);
   const seen = lsGet(WIPE_SEEN_KEY, userId);
   const mayHave = offlineStoreSupported() && mayHaveOfflineCopy(userId);
-  if (!markOfflineWipe(userId, seen)) return;
-  if (!mayHave) return;
+  if (!mayHave) {
+    // With no earlier IndexedDB copy, a full localStorage file can move and
+    // free room; markOfflineHome records this stamp before creating its home.
+    markOfflineWipe(userId, seen);
+    return;
+  }
+  // Record the owed destructive work before marking the deletion caught up.
+  // If either marker is refused, expose no old copy and try again later.
+  // Otherwise a successful wipe stamp plus a refused purge marker made this
+  // account's pre-deletion rows appear current forever.
   const recorded = beginOfflinePurge(userId, "all", true);
-  if (recorded == null) return;
+  if (recorded == null || !markOfflineWipe(userId, seen)) throw new OfflineStoreUnavailable();
   bumpPurgeEpoch(userId);
   forgetLargeStoreMemory(userId);
   lsRemove(OFFLINE_WRITTEN_BASE, userId);
+}
+
+/**
+ * Record an already-owed old-build deletion before a reader takes its guard.
+ * This synchronous preparation reads no file bytes. Later purges still move
+ * that original guard and cancel the read; it is never refreshed after I/O.
+ */
+export function prepareOfflineRead(userId) {
+  try { catchUpOfflineWipe(userId); return true; }
+  catch { return false; } // Keep every copy unread until the purge can proceed.
 }
 
 /**
@@ -1141,6 +1170,7 @@ export function settlePendingPurge(userId) {
  * account to come back.
  */
 export async function sweepPendingOfflinePurges() {
+  await sweepPendingInvoiceHandoffPurges();
   const prefix = `${OFFLINE_PURGE_BASE}:`;
   const users = [];
   try {
@@ -1282,7 +1312,9 @@ export async function readOfflineFile(userId, receipt = null) {
   const key = scopedKey(BASE_KEYS.data, userId);
   if (receipt) { receipt.read = false; receipt.token = null; receipt.stamp = null; }
   if (!key) return null;
+  if (!prepareOfflineRead(userId)) { markOfflineCopyUnread(userId, receipt); return null; }
   const epoch = purgeEpoch(userId);
+  const current = localWriteGuard(userId, { adopted: false });
   // Who had written the file as this read began (OFFLINE_WRITTEN_BASE). None
   // recorded while IndexedDB may hold a copy (a move or a write that found no
   // room for it, a session-end trim) is recorded now when there is room: this
@@ -1293,6 +1325,8 @@ export async function readOfflineFile(userId, receipt = null) {
   const stamp = offlineWriteStamp(userId);
   try {
     const found = await readOfflineText(key, { retryOpen: true });
+    // A purge while this read was pending must not return old bytes.
+    if (!current()) { markOfflineCopyUnread(userId, receipt); return null; }
     if (receipt && purgeEpoch(userId) === epoch) { receipt.read = true; receipt.token = { key, epoch }; receipt.stamp = stamp; }
     return found;
   } catch {
@@ -1308,6 +1342,13 @@ export async function readOfflineFile(userId, receipt = null) {
     if (purgeEpoch(userId) === epoch && !stale && !trusted) unreadKeys.add(key);
     return null;
   }
+}
+
+/** A canceled/unread file must not be replaced by records built without it. */
+export function markOfflineCopyUnread(userId, receipt = null) {
+  if (receipt) { receipt.read = false; receipt.token = null; receipt.stamp = null; }
+  const key = scopedKey(BASE_KEYS.data, userId);
+  if (key) unreadKeys.add(key);
 }
 
 /**
@@ -1809,7 +1850,9 @@ export function hydrateOfflineStores(userId) {
   const purged = () => purgeEpoch(userId) !== epoch || (localFence(userId) ?? null) !== fence;
   const run = (async () => {
     let complete = true;
-    await moveToOfflineStore(scopedKey(BASE_KEYS.data, userId), localWriteGuard(userId, { adopted: false }));
+    for (const base of [BASE_KEYS.data, BASE_KEYS.recordAcknowledgements]) {
+      await moveToOfflineStore(scopedKey(base, userId), localWriteGuard(userId, { adopted: false }));
+    }
     for (const base of MIRRORED_BASES) {
       const key = scopedKey(base, userId);
       if (mirror.has(key)) continue;
@@ -2079,6 +2122,11 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
   // A real server wipe may preserve a private vault but must still prevent
   // recovery. Ordinary involuntary sign-out uses keepVault:true without this.
   if (!keepVault || retireRecovery) retireContinuityRecovery(userId);
+  // Retire pending recovery hashes before any cache is removed. Session
+  // expiry keeps these copies for the same account, as it keeps unsent writes.
+  if (!keepLocal) purgeRecovery(userId);
+  const handoffPurged = Promise.all([purgeInvoiceHandoff(userId, { keepLocal }),
+    !keepLocal && invoiceHandoffPurgeHook ? invoiceHandoffPurgeHook(userId) : true]).then(results => results.every(value => value !== false));
   // The session merely ended: a save of the file this tab still has on its
   // way is about to be cancelled, and the device-only changes it carries are
   // held aside first (setBeforeDeviceOnlyTrim), as the rest of what exists
@@ -2097,6 +2145,7 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
   // Session expiry keeps this account's text for re-sign-in. Deliberate
   // sign-out/deletion removes it; screenshots are never stored here.
   if (!keepVault || retireRecovery) clearSupportTextDrafts(userId);
+  if (!keepVault || retireRecovery) clearHealthRecordDraft(userId);
   let keptOwnCopy = null;
   for (const [name, base] of Object.entries(BASE_KEYS)) {
     if (name === "vault" && keepVault) continue;
@@ -2107,7 +2156,6 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
     if (keepLocal && name === "pendingOps") { markQueueKept(userId); continue; }
     if (keepLocal && (name === "timer" || name === "unrecordedInvoices" || name === "formDrafts")) continue;
     // The invoice hand-off notes go with the unrecorded-invoice notes.
-    if (name === "unrecordedInvoices" && purgeInvoiceHandoff) { try { purgeInvoiceHandoff(userId); } catch { /* the purge goes on */ } }
     if (keepLocal && name === "data") {
       const raw = lsGet(base, userId);
       if (raw == null) continue;
@@ -2157,6 +2205,7 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
     if (result.done) clearOfflinePurge(userId, null, result.empty);
     durable = result.done;
   }
+  durable = (await handoffPurged) && durable;
   const nativeKey = scopedKey(BASE_KEYS.data, userId);
   try {
     if (keepLocal && window.storage?.get) {

@@ -1,6 +1,7 @@
 // Smart Scan (src/components/features/DocumentsSection.jsx), driven through
 // the real component with synthetic hooks (tests/component-harness.mjs).
 // Every file, record and name here is synthetic.
+import * as documentDuplicate from '../src/utils/documentDuplicate.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as inboxDocs from '../src/utils/inboxDocs.js';
@@ -12,7 +13,7 @@ import * as guard from '../src/utils/spreadsheetGuard.js';
 import * as phiGuard from '../src/utils/phiGuard.js';
 import * as customCategories from '../src/utils/customCategories.js';
 import * as officeText from '../src/utils/officeText.js';
-import { mountComponent } from './component-harness.mjs';
+import { mountComponent, settle } from './component-harness.mjs';
 
 function recorder() {
   const calls = [];
@@ -26,14 +27,16 @@ const baseData = over => ({
   ...over,
 });
 
-async function smartScan(rec, { data = {}, modules = {} } = {}) {
+async function smartScan(rec, { data = {}, modules = {}, app = {}, globals = {} } = {}) {
   return mountComponent('src/components/features/DocumentsSection.jsx', {
     app: {
       data: baseData(data), theme: {}, userIdRef: { current: 'user_synthetic' },
       addItem: rec.fn('addItem'), editItem: rec.fn('editItem'), deleteItem: rec.fn('deleteItem'),
       setData: rec.fn('setData'), updateSettings: rec.fn('updateSettings'), navigate: rec.fn('navigate'),
+      ...app,
     },
     modules: {
+      documentDuplicate, storageScope: { localWriteGuard: () => () => true },
       inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, helpers, spreadsheetGuard: guard, phiGuard, customCategories,
       aiClient: { useAiAvailable: () => true, describeAiStatus: () => 'AI is off.' },
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },
@@ -43,6 +46,7 @@ async function smartScan(rec, { data = {}, modules = {} } = {}) {
       useInputStyle: { useInputStyle: () => ({ width: '100%', fontSize: 16 }) },
       ...modules,
     },
+    globals,
   });
 }
 
@@ -113,6 +117,123 @@ test('an unlinked document still offers File with AI and the picker', async () =
 // -- DOCS-001: every refusal in a multi-file pick stays on screen --
 const caseLog = () => new File(['Date,CPT,MRN\n2025-01-06,61510,000000\n'], 'caselog.csv', { type: 'text/csv' });
 const bigPdf = () => new File([new Uint8Array(12 * 1024 * 1024)], 'big.pdf', { type: 'application/pdf' });
+
+test('a renamed stored duplicate waits for its file and is skipped before AI or another row', async () => {
+  const rec = recorder();
+  const file = new File(['%PDF-1.4 synthetic A'], 'renamed.pdf', { type: 'application/pdf' });
+  let finish;
+  const delayed = new Promise(resolve => { finish = resolve; });
+  const ui = await smartScan(rec, { data: { documents: [pdfDoc({ name: 'original.pdf', data: undefined, size: file.size, storagePath: 'synthetic/doc-1' })] },
+    modules: { documentScanner: readingScanner(rec), supabase: { downloadDocumentBlob: rec.fn('download', delayed) } } });
+  await ui.pick(ui.fileInputs().find(n => n.props.multiple), [file]);
+  assert.equal(rec.of('download').length, 1);
+  assert.equal(rec.of('addItem').length, 0);
+  finish({ blob: file });
+  await settle();
+  assert.equal(rec.of('addItem').length, 0);
+  assert.equal(rec.of('analyzePDF').length, 0);
+  assert.match(ui.pageText(), /Skipped duplicate/);
+});
+
+test('same-size stored files with different bytes do not prevent a new upload', async () => {
+  const rec = recorder();
+  const file = new File(['%PDF-1.4 synthetic B'], 'new.pdf', { type: 'application/pdf' });
+  const ui = await smartScan(rec, { data: { documents: [pdfDoc({ name: 'original.pdf', data: undefined, size: file.size, storagePath: 'synthetic/doc-1' })] },
+    modules: { documentScanner: readingScanner(rec), supabase: { downloadDocumentBlob: async () => ({ blob: new Blob(['%PDF-1.4 synthetic A']) }) } } });
+  await ui.pick(ui.fileInputs().find(n => n.props.multiple), [file]);
+  assert.equal(rec.of('addItem').length, 1);
+  assert.equal(rec.of('analyzePDF').length, 1);
+});
+
+test('a stored file read failure keeps a renamed upload unsaved with a visible retry explanation', async () => {
+  const rec = recorder();
+  const file = new File(['%PDF-1.4 synthetic A'], 'new.pdf', { type: 'application/pdf' });
+  const ui = await smartScan(rec, { data: { documents: [pdfDoc({ name: 'original.pdf', data: undefined, size: file.size, storagePath: 'synthetic/doc-1' })] },
+    modules: { documentScanner: readingScanner(rec), supabase: { downloadDocumentBlob: async () => ({ failed: true }) } } });
+  await ui.pick(ui.fileInputs().find(n => n.props.multiple), [file]);
+  assert.equal(rec.of('addItem').length, 0);
+  assert.equal(rec.of('analyzePDF').length, 0);
+  assert.match(ui.pageText(), /was not uploaded because an existing file could not be checked for duplicates/);
+  assert.match(ui.pageText(), /original\.pdf/);
+});
+
+for (const boundary of ['account', 'purge']) test(`a delayed duplicate read cannot continue across ${boundary}`, async () => {
+  const rec = recorder();
+  const profile = { current: 'profileA' };
+  let generation = 0, finish;
+  const delayed = new Promise(resolve => { finish = resolve; });
+  const file = new File(['%PDF-1.4 synthetic B'], 'new.pdf', { type: 'application/pdf' });
+  const ui = await smartScan(rec, { app: { userIdRef: profile, user: { id: 'userA' } },
+    data: { documents: [pdfDoc({ name: 'original.pdf', data: undefined, size: file.size, storagePath: 'synthetic/doc-1' })] },
+    modules: { documentScanner: readingScanner(rec), supabase: { downloadDocumentBlob: () => delayed },
+      storageScope: { localWriteGuard: () => { const captured = generation; return () => captured === generation; } } } });
+  await ui.pick(ui.fileInputs().find(n => n.props.multiple), [file]);
+  if (boundary === 'account') profile.current = 'profileB'; else generation++;
+  finish({ blob: new Blob(['%PDF-1.4 synthetic A']) });
+  await settle();
+  assert.equal(rec.of('addItem').length, 0);
+  assert.equal(rec.of('analyzePDF').length, 0);
+  assert.doesNotMatch(ui.pageText(), /Skipped duplicate|was not uploaded/);
+});
+
+test('renamed duplicates in one selection are skipped even before a data rerender', async () => {
+  const rec = recorder();
+  const ui = await smartScan(rec, { modules: { documentScanner: readingScanner(rec) } });
+  await ui.pick(ui.fileInputs().find(n => n.props.multiple), ['one.pdf', 'two.pdf'].map(name => new File(['%PDF-1.4 same'], name, { type: 'application/pdf' })));
+  assert.equal(rec.of('addItem').length, 1);
+  assert.equal(rec.of('analyzePDF').length, 1);
+  assert.match(ui.pageText(), /"two\.pdf" is already uploaded/);
+});
+
+test('overlapping selections are visibly refused until the first upload finishes, then retry is usable', async () => {
+  const rec = recorder();
+  let finishRead;
+  const delayed = new Promise(resolve => { finishRead = resolve; });
+  let reads = 0;
+  const scanner = { ...readingScanner(rec), analyzePDF: async () => { reads++; return reads === 1 ? delayed : { documentType: 'license', extracted: {} }; } };
+  const ui = await smartScan(rec, { modules: { documentScanner: scanner } });
+  const input = () => ui.fileInputs().find(n => n.props.multiple);
+  const file = name => new File(['%PDF-1.4 same'], name, { type: 'application/pdf' });
+  await ui.pick(input(), [file('first.pdf')]);
+  assert.equal(reads, 1);
+  await ui.pick(input(), [file('second.pdf')]);
+  assert.equal(reads, 1, 'the second selection never enters the AI or save flow');
+  assert.equal(rec.of('addItem').length, 0);
+  assert.match(ui.pageText(), /Your new selection was not uploaded/);
+  finishRead({ documentType: 'license', extracted: {} });
+  await settle();
+  assert.equal(rec.of('addItem').length, 1);
+  assert.match(ui.pageText(), /Your new selection was not uploaded/, 'the refusal survives completion of the first upload');
+  // This synthetic context deliberately does not rerender the added row.
+  // Different content proves the gate released without asserting dedup here.
+  await ui.pick(input(), [new File(['%PDF-1.4 different'], 'retry.pdf', { type: 'application/pdf' })]);
+  assert.equal(reads, 2);
+  assert.equal(rec.of('addItem').length, 2);
+  assert.doesNotMatch(ui.pageText(), /Your new selection was not uploaded/);
+});
+
+test('a failed local file read is visible, stores nothing, and releases the upload gate for retry', async () => {
+  const rec = recorder();
+  let fail = true;
+  class Reader {
+    readAsDataURL(file) {
+      if (fail) { queueMicrotask(() => this.onerror?.(Error('synthetic file read failed'))); return; }
+      file.arrayBuffer().then(bytes => this.onload?.({ target: { result: `data:${file.type};base64,${Buffer.from(bytes).toString('base64')}` } }));
+    }
+  }
+  const ui = await smartScan(rec, { modules: { documentScanner: readingScanner(rec) }, globals: { FileReader: Reader } });
+  const file = new File(['%PDF-1.4 same'], 'unread.pdf', { type: 'application/pdf' });
+  const input = () => ui.fileInputs().find(n => n.props.multiple);
+  await ui.pick(input(), [file]);
+  assert.equal(rec.of('addItem').length, 0);
+  assert.equal(rec.of('analyzePDF').length, 0);
+  assert.match(ui.pageText(), /"unread\.pdf" could not be read\. It was not uploaded/);
+  fail = false;
+  await ui.pick(input(), [file]);
+  assert.equal(rec.of('addItem').length, 1);
+  assert.equal(rec.of('analyzePDF').length, 1);
+  assert.doesNotMatch(ui.pageText(), /could not be read|Another file upload/);
+});
 
 test('Smart Scan keeps the spreadsheet refusal on screen when a later file in the pick is refused too', async () => {
   const rec = recorder();
@@ -306,6 +427,7 @@ async function rescan(result, { confirm = true } = {}) {
       setData: rec.fn('setData'), updateSettings: rec.fn('updateSettings'), navigate: rec.fn('navigate'),
     },
     modules: {
+      documentDuplicate, storageScope: { localWriteGuard: () => () => true },
       inboxDocs, docLabel, pausedApplicationRecords: paused, credentialTypes, helpers, spreadsheetGuard: guard, phiGuard, customCategories,
       aiClient: { useAiAvailable: () => true, describeAiStatus: () => 'AI is off.' },
       storageQuota: { checkStorageQuota: () => ({ ok: true }) },
@@ -349,6 +471,7 @@ async function reviewCard(props) {
     app: { theme: {}, data: { settings: { degreeType: 'MD' }, locumContracts: [] }, allTrackedStates: [] },
     props: { result: { documentType: 'license', confidence: 'high', extracted: { type: 'State Medical License', state: 'CO', expirationDate: '2027-06-30' } }, imageData: null, fileName: 'scan.pdf', onSave() {}, ...props },
     modules: {
+      documentDuplicate, storageScope: { localWriteGuard: () => () => true },
       credentialTypes, helpers, customCategories,
       cmeTopics: await real('constants/cmeTopics'), stateRequirements: await real('constants/stateRequirements'), states: await real('constants/states'),
       receiptScan: await real('utils/receiptScan'), scanShape: await real('utils/scanShape'), contractsForDate: await real('utils/contractsForDate'), coverageBlocks: await real('utils/coverageBlocks'),

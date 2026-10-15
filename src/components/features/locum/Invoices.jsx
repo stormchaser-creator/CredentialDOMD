@@ -314,7 +314,7 @@ function Invoices({ onOpenContract, onOpenExpenses }) {
           lines: expenseReceiptLines(args.lines, ready.attachedIds, { allAttached: !ready.missing.length }),
         };
         const bundle = [invoicePdfFile(withReceipts), ...ready.files];
-        const coverCopied = await copyInvoiceCover(args, navigator.clipboard);
+        const coverCopied = await copyInvoiceCover(args, navigator);
         const shared = await shareInvoiceFiles(withReceipts, bundle, ready.files.length, navigator);
         if (shared === "abort") return;
         if (shared) {

@@ -128,7 +128,7 @@ test('qa:up and qa:lab apply a release branch\'s migrations after production\'s 
   const lab = readFileSync(path.join(ROOT, 'qa-lab/lab.mjs'), 'utf8');
   assert.ok(lab.indexOf("runNode('release-migrations.mjs', ['--if-planned'])") > lab.indexOf("runNode('apply-schema.mjs')"));
   const script = readFileSync(path.join(ROOT, 'qa-lab/release-migrations.mjs'), 'utf8');
-  assert.match(script, /runSqlRequest\(f\.sql, \{ user: 'postgres' \}\)/, 'each file runs as postgres, as the plan says');
+  assert.match(script, /runSqlRequest\(localMigrationRequest\(f\.sql\), \{ user: 'postgres' \}\)/, 'each file runs as postgres, as the plan says');
 });
 
 test('this branch\'s DEPLOY-PLAN.md, when it has one, lists migrations that exist, and its probes parse', { skip: !existsSync(path.join(ROOT, 'DEPLOY-PLAN.md')) && 'no DEPLOY-PLAN.md on this branch' }, () => {

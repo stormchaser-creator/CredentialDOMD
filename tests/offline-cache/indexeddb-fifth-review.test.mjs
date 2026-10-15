@@ -1,3 +1,7 @@
+import * as acknowledgements from '../../src/utils/recordAcknowledgements.js';
+import { preserveRecovery } from '../../src/utils/syncRecovery.js';
+import { fixture as persistenceFixture } from '../limited-launch/persistence-fixture.mjs';
+import { copyInvoiceHandoff } from "../helpers/copy-invoice-handoff.mjs";
 // Fifth review of the IndexedDB offline copy (76dcc17b): where Protected
 // Identity and the Answer Bank, which exist only on this device, could still
 // be lost. Each finding is reproduced here against the REAL storage.js,
@@ -69,7 +73,9 @@ async function otherWindow() {
     .replace('from "./heldChanges.js"', `from ${JSON.stringify(srcUrl('./heldChanges.js'))}`)
     .replace('from "./loadRebase.js"', `from ${JSON.stringify(srcUrl('./loadRebase.js'))}`);
   writeFileSync(join(dir, 'storageScope.js'), scopeSource);
+  copyInvoiceHandoff(dir);
   writeFileSync(join(dir, 'offlineStore.js'), readFileSync(resolve(root, 'src/utils/offlineStore.js'), 'utf8'));
+  writeFileSync(join(dir, 'syncRecovery.js'), readFileSync(resolve(root, 'src/utils/syncRecovery.js'), 'utf8'));
   const scopeUrl = pathToFileURL(join(dir, 'storageScope.js')).href;
   writeFileSync(join(dir, 'storage.mjs'), patchStorage(scopeUrl));
   const tabScope = await import(scopeUrl);
@@ -158,6 +164,7 @@ function app(U, { offlineMode = false, st = storage, sc = scope, localOnly = s =
     loadData: st.loadData,
     saveData: (value, id, how) => { f.saves += 1; return st.saveData(value, id, how); },
     listTombstones: async () => new Set(),
+    prepareRecordAcknowledgements: acknowledgements.prepareRecordAcknowledgements, isAcknowledgedRecordCopy: acknowledgements.isAcknowledgedRecordCopy, preserveRecovery, recordContent: persistenceFixture().api.recordContent,
     bulkSync: async () => {}, sbSaveSettings: async () => {}, sbUpdate: async () => {},
     uploadDocumentFile: async () => null, downloadDocumentFile: async () => null, missingDocumentFiles: new Set(),
     withLocalOnlySettings: localOnly, hasLegacyStorage: sc.hasLegacyStorage, adoptLegacyStorage: sc.adoptLegacyStorage,

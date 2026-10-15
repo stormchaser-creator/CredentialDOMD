@@ -38,7 +38,7 @@ test('case logs: summary, reports, Vera export, dictation; references: contacts,
   await fakeSpeech(context);
   await fakeContactPicker(context, { name: 'Quincy Picker, MD', email: 'quincy.picker@qa.credentialdomd.test', tel: '(555) 010-4411' });
   await allowClipboard(context);
-  const { profile } = await newMember(page, { firstName: 'Casey', lastName: 'Casebook' });
+  const { profile } = await newMember(page, { firstName: 'Casey', lastName: 'Casebook', profession: 'MD' });
   const pid = profile.id;
   const dbCases = (where = '') => rows(`select id, date, w_rvu from public.case_logs where user_id = '${pid}' ${where}`);
 

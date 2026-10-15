@@ -63,7 +63,7 @@ test('support: ticket with a screenshot, owner replies in the app, member sees i
     const cspBlocked = qa.report.console.filter((l) => /Loading the image .*storage\/v1\/object\/sign.*violates|img-src/i.test(l));
     qa.check('the admin sees the screenshot (the image loads)', images > 0, `${images} loaded image(s)${cspBlocked.length ? `; CSP: ${cspBlocked[0].slice(0, 160)}` : ''}`);
     if (!images) {
-      await other.page.screenshot({ path: (await qa.shot('admin ticket attachment')).replace(/\.png$/, '-admin.png') });
+      await qa.shot('admin ticket attachment', other.page);
       qa.bug({
         title: 'Admin > Tickets: the ticket\'s screenshot never displays; the app\'s Content-Security-Policy blocks the signed Storage URL',
         step: 'More > Admin > Tickets > open a ticket filed with a screenshot',
@@ -75,7 +75,7 @@ test('support: ticket with a screenshot, owner replies in the app, member sees i
     await other.page.getByRole('textbox', { name: 'Reply to the physician', exact: true }).fill(replyText);
     await other.page.getByRole('button', { name: 'Send reply' }).click();
     await other.page.getByText(replyText).first().waitFor({ timeout: 30000 });
-    await other.page.screenshot({ path: (await qa.shot('admin view before reply')).replace(/\.png$/, '-admin.png') });
+    await qa.shot('admin reply visible', other.page);
     const reply = await waitFor('the admin reply row', async () => row(`select * from public.support_messages where ticket_id = '${ticket.id}' and is_admin_reply and body = '${replyText.replace(/'/g, "''")}'`), { timeoutMs: 20000 }).catch(() => null);
     qa.check('a support_messages row by the admin (is_admin_reply)', !!reply && reply.author_id === admin.profile.id, reply ? reply.id : 'none');
   });

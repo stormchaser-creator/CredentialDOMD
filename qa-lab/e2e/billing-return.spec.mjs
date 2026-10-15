@@ -28,8 +28,12 @@ test('back from Checkout before the events land: "confirming", nothing to buy, t
 
   let sessionId;
   await qa.feature('BILL-003', 'Return before the webhook: the app confirms, then activates without a reload', async () => {
-    // The events land 10 seconds after the browser is sent back (Stripe: usually a second or two, sometimes more).
-    ({ sessionId } = await payForMembership(page, { plan: { delayMs: 10000, order: 'shuffled', mode: 'concurrent' } }));
+    // The events land 30 seconds after the browser is sent back (Stripe: usually a second or two,
+    // sometimes more). Ten was shorter than the page back from Checkout took to start under load
+    // (2026-10-01, full regression pass 2: 13 s from the hosted page's Pay to the app's first call,
+    // so the events had landed and the profile was active before "confirming" could show;
+    // reproduced by holding the return page's first profile call 12 s).
+    ({ sessionId } = await payForMembership(page, { plan: { delayMs: 30000, order: 'shuffled', mode: 'concurrent' } }));
     // "Checking your membership…" (the app's loading line) is a membership status too: wait for the return notice itself.
     const shown = await page.getByRole('status').filter({ hasText: CONFIRMING }).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
     const early = shown ? await page.getByRole('status').filter({ hasText: CONFIRMING }).first().innerText() : await notice(page).innerText().catch(() => '');
@@ -40,7 +44,7 @@ test('back from Checkout before the events land: "confirming", nothing to buy, t
     qa.check('the profile is still pending (nothing recorded yet)', profileOf(user.id)?.access_status === 'pending', profileOf(user.id)?.access_status);
     const gate = page.getByRole('region', { name: 'Membership' });
     const gateText = (await gate.innerText().catch(() => '')).replace(/\s+/g, ' ');
-    qa.check('the membership page offers nothing to choose or pay while confirming', /nothing more to choose or pay/.test(gateText) && !(await page.getByRole('button', { name: /Review .* offer|Continue to secure payment/ }).count()), gateText.slice(0, 200));
+    qa.check('the membership page offers nothing to choose or pay while confirming', /nothing more to choose or pay/.test(gateText) && !(await page.getByRole('button', { name: /Review .* offer|Continue to secure payment|Complete payment/ }).count()), gateText.slice(0, 200));
 
     const attempts = await waitForCheckoutEvents(sessionId).catch(() => null);
     qa.check('the three events land and are accepted (a busy 503 is retried)', !!attempts, (attempts || []).map((d) => `${d.type} ${d.status}${d.attempt > 1 ? ` #${d.attempt}` : ''}`).join(', '));

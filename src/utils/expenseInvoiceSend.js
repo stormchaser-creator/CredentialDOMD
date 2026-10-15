@@ -21,9 +21,10 @@ import { invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail, expenseReceiptLin
  */
 
 /** The long cover letter on the clipboard, count-free. true when it landed. */
-export async function copyInvoiceCover(inv, clipboard) {
+export async function copyInvoiceCover(inv, nav) {
   try {
-    await clipboard.writeText(invoiceCoverEmail({ ...inv, receipts: 0 }));
+    // The browser may refuse even reading the optional clipboard property.
+    await nav.clipboard.writeText(invoiceCoverEmail({ ...inv, receipts: 0 }));
     return true;
   } catch {
     return false;
@@ -57,7 +58,7 @@ export async function shareInvoiceFiles(inv, files, receipts, nav) {
  * `lines` are the lines of the PDF that actually went, for the invoice record.
  */
 export async function sendExpenseInvoiceFiles({ inv, files = [], attachedExpenseIds = new Set(), nav, pdfFor, download }) {
-  const coverCopied = await copyInvoiceCover(inv, nav?.clipboard);
+  const coverCopied = await copyInvoiceCover(inv, nav);
   const withReceipts = { ...inv, lines: expenseReceiptLines(inv.lines, attachedExpenseIds) };
   const pdf = pdfFor(withReceipts);
   const first = await shareInvoiceFiles(withReceipts, [pdf, ...files], files.length, nav);

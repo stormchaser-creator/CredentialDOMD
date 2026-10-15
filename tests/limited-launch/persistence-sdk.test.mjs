@@ -8,6 +8,8 @@ import { createAccessAuthority, allowsSettingsChange, membershipWriteError } fro
 import { profileInitializationError, profileSupportReference } from '../../src/utils/profileIssueDiagnostics.js';
 import * as syncRules from '../../src/utils/syncRules.js';
 import { LOCAL_ONLY_SETTINGS } from '../../src/constants/defaults.js';
+import { recoveryFor } from '../sync-recovery-fixture.mjs';
+import { createRecordAcknowledgements } from '../../src/utils/recordAcknowledgements.js';
 
 const source = await readFile(new URL('../../src/lib/supabase.js', import.meta.url), 'utf8');
 const code = transformSync(source, { loader: 'js', format: 'cjs', define: {
@@ -31,6 +33,10 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false, c
     clerk.session = { user: { id: actor }, getToken: async () => 'synthetic-token-B' };
   };
   const signOut = () => { actor = null; clerk.user = null; clerk.session = null; };
+  const acknowledgements = createRecordAcknowledgements({ activeAccount: () => actor, fenceFor: () => null,
+    copyCurrent: () => true, receiptBase: 'acks', queueBase: 'ops',
+    read: (base, id) => values.get(`${base}:${id}`) ?? null,
+    write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } });
   const imports = {
     '@supabase/supabase-js': { createClient: (url, key, options) => {
       f.clientCount += 1;
@@ -42,8 +48,11 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false, c
     } },
     '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS },
     '../utils/syncRules.js': syncRules,
+    '../utils/recordAcknowledgements.js': acknowledgements,
+    '../utils/syncRecovery.js': recoveryFor(values, () => actor),
+    '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
     // No data deletion purges anything here, so the purge fence never moves.
-    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
+    '../utils/storageScope.js': { localWriteGuard: () => () => true, BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
       adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
       // The queue's write (storageScope makes room first in the app).
       setItemMakingRoom: (key, value) => values.set(key, value) },

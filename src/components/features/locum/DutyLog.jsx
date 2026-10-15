@@ -1,3 +1,4 @@
+import { getActiveUserId } from "../../../utils/storageScope.js";
 import { useState, useEffect, useMemo, useRef, memo } from "react";
 import { cardActionSize } from "../../shared/actionButton";
 import { useApp } from "../../../context/AppContext";
@@ -108,7 +109,7 @@ function DutyLog({ contract, onBusyChange }) {
   // screen asks first.
   // Handed to the share sheet too (WorkLog's; utils/invoiceHandoff.js).
   // The Clerk user id: the same offline and online (WorkLog's).
-  const account = user?.id || "";
+  const account = getActiveUserId() || user?.id || "";
   const { list: leftUnrecorded, repeats: repeatNotes, dismissRepeat, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id, account, records: data });
   useUnloadWarning(!!unrecorded);
   // The preview asks whether its file went out (WorkLog's): the share sheet
@@ -311,7 +312,7 @@ function DutyLog({ contract, onBusyChange }) {
     // opens; Send and Copy wait for it (utils/invoiceNumber.js).
     // A preview replaced while its share sheet never answered: that number
     // is no longer with the sheet (it shows as unrecorded).
-    if (invoicePreview) shareAnswered(invoicePreview.number);
+    if (invoicePreview) shareAnswered(invoicePreview.number, account);
     // Record it, and Yes when its days changed: the invoice that went out,
     // under its own number. Never a new number (2026-10-02: Record it got a
     // fresh one, with Send beside it, and a fourth invoice was a tap away).
@@ -650,7 +651,7 @@ function DutyLog({ contract, onBusyChange }) {
     if (emailSendingRef.current) return;
     if (unrecorded && !recordedRef.current && !window.confirm(closeUnrecordedQuestion(unrecorded.number))) return;
     // A share sheet that never answered: its number shows as unrecorded now.
-    if (invoicePreview) shareAnswered(invoicePreview.number);
+    if (invoicePreview) shareAnswered(invoicePreview.number, account);
     previewSeqRef.current += 1; // a Send or Copy still waiting for the membership check stops
     setSending(null);
     setInvoicePreview(null); setSent(false); setUnrecorded(null); setSendNote(null); setMarkSent(null); setEmailFor(null);
@@ -769,7 +770,7 @@ function DutyLog({ contract, onBusyChange }) {
     const stopWatch = watchUnanswered(() => {
       if (recordedRef.current || previewSeqRef.current !== opened) return;
       setSendNote({ ask: true, shared: number, at });
-    }, { number });
+    }, { number, account });
     let how;
     try {
       how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
@@ -779,7 +780,7 @@ function DutyLog({ contract, onBusyChange }) {
       return;
     } finally {
       stopWatch();
-      shareAnswered(number);
+      shareAnswered(number, account);
       if (shareOutRef.current?.seq === opened) shareOutRef.current = null;
     }
     // Emailed and recorded while the sheet had the file (WorkLog's).

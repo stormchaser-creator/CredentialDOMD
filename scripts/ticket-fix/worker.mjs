@@ -47,7 +47,7 @@ import { promises as fs, rmSync, readdirSync, existsSync, mkdirSync, writeFileSy
 import os from 'node:os';
 import path from 'node:path';
 import { SANDBOX_EXEC, sandboxProfile, sandboxEnv, real, slotEnv, pinDir, grantDir, hostTemp, dropHostTemp, removeHostTemps } from './sandbox.mjs';
-import { ATTACH_ROOT_PREFIX } from './attachments.mjs';
+import { ATTACH_ROOT_PREFIX, LEGACY_ATTACH_ROOT_PREFIX } from './attachments.mjs';
 import { redactSecrets, redactedLine } from './redact.mjs';
 
 export const WORKER_MODEL = 'claude-sonnet-5';
@@ -123,7 +123,7 @@ export function attachmentRules(dir) {
   const list = d => { try { return readdirSync(d); } catch { return []; } };
   for (const name of list(root)) if (path.join(root, name) !== own) deny.push(`Read(${abs(path.join(root, name))}/**)`, `Read(${abs(path.join(root, name))})`);
   const parent = path.dirname(root);
-  for (const name of list(parent)) if (name.startsWith(ATTACH_ROOT_PREFIX) && path.join(parent, name) !== root) deny.push(`Read(${abs(path.join(parent, name))}/**)`);
+  for (const name of list(parent)) if ([ATTACH_ROOT_PREFIX, LEGACY_ATTACH_ROOT_PREFIX].some(prefix => name.startsWith(prefix)) && path.join(parent, name) !== root) deny.push(`Read(${abs(path.join(parent, name))}/**)`);
   return { allow: existsSync(own) ? [`Read(${abs(own)}/**)`] : [], deny };
 }
 

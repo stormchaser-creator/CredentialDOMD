@@ -35,7 +35,11 @@ const crud = await readFile(new URL('../src/components/features/CrudSection.jsx'
 const FONT_ZOOM = Function(`return (${/const FONT_ZOOM = (\{[^}]+\});/.exec(app)[1]})`)();
 const SIDE_NAV = Number(/\.cmd-content-area \{[^}]*margin-left: (\d+)px/.exec(css)[1]);
 const [, INNER_MAX, INNER_PAD] = /\.cmd-content-inner \{[^}]*max-width: (\d+)px;[^}]*padding: \d+px (\d+)px/.exec(css).map(Number);
-const [, RAIL_GAP, RAIL] = /gap: (\d+), alignItems: "flex-start" \} : undefined\}>\s*\{isDesktop \? <nav style=\{\{ \.\.\.deskRailStyle\((\d+)\)/.exec(app).map(Number);
+const credentialsLayout = app.slice(app.indexOf('const renderCredentials = () => {'), app.indexOf('const renderMore = () => {'));
+const gapMatch = /gap: (\d+), alignItems: "flex-start"/.exec(credentialsLayout);
+const railMatch = /<nav style=\{\{ \.\.\.deskRailStyle\((\d+)\)/.exec(credentialsLayout);
+assert.ok(gapMatch && railMatch, 'the Credentials layout still defines a desktop rail and gap');
+const RAIL_GAP = Number(gapMatch[1]), RAIL = Number(railMatch[1]);
 const ACTIONS = Number(/actionsWidth=\{favoritable \? (\d+) : \d+\}/.exec(crud)[1]);
 const COMPACT = Number(/compactActionsWidth=\{(\d+)\}/.exec(crud)[1]);
 assert.match(app, /deskColumns=\{licenseDeskColumns\(T, reminderLeadDays\(data\.settings\.reminderLeadDays\)\)\}/, 'the Licenses page uses these columns, graded on the member\'s lead time');

@@ -5,7 +5,7 @@ import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { getPrivate, setPrivate, removePrivate, looksLikePHI } from "../../../utils/privateVault";
-import { BASE_KEYS, lsGet, lsSet } from "../../../utils/storageScope";
+import { getActiveUserId, BASE_KEYS, lsGet, lsSet, lsGetJSON, lsSetJSON, lsRemove } from "../../../utils/storageScope";
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
@@ -349,7 +349,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   // the file goes, so a reload or iOS closing the app in Mail leaves a note.
   // Keyed by the Clerk user id: the same offline and online (the profile id
   // is known only after an online load), and the id Sign out purges by.
-  const account = user?.id || "";
+  const account = getActiveUserId() || user?.id || "";
   const { list: leftUnrecorded, repeats: repeatNotes, dismissRepeat, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "INV", contractId: contract?.id, account, records: data });
   // Every agreement's: one from another agreement than the one on screen is
   // named above the picker's engine with a way to switch to it (after a
@@ -1400,7 +1400,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     const built = workInvoiceFor(daySet, num);
     // A preview replaced while its share sheet never answered: that number
     // is no longer with the sheet (it shows as unrecorded).
-    if (built && invoicePreview) shareAnswered(invoicePreview.number);
+    if (built && invoicePreview) shareAnswered(invoicePreview.number, account);
     if (!built) {
       showNotice("Nothing billable in the days picked. Entries that ride inside another entry wait for that entry's day, so pick both days together.");
       return;
@@ -1715,7 +1715,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     if (emailSendingRef.current) return;
     if (unrecorded && !recordedRef.current && !window.confirm(closeUnrecordedQuestion(unrecorded.number))) return;
     // A share sheet that never answered: its number shows as unrecorded now.
-    if (invoicePreview) shareAnswered(invoicePreview.number);
+    if (invoicePreview) shareAnswered(invoicePreview.number, account);
     previewSeqRef.current += 1; // a Send or Copy still waiting for the membership check stops
     setSending(null);
     setInvoicePreview(null); setUnrecorded(null); setSendNote(null); setMarkSent(null); setEmailFor(null);
@@ -1874,7 +1874,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       const stopWatch = watchUnanswered(() => {
         if (recordedRef.current || previewSeqRef.current !== opened) return;
         setSendNote({ ask: true, shared: number, at });
-      }, { number });
+      }, { number, account });
       // PDF / Word / Excel, physician's choice — share sheet, download fallback
       let how;
       try {
@@ -1886,7 +1886,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         return;
       } finally {
         stopWatch();
-        shareAnswered(number);
+        shareAnswered(number, account);
         if (shareOutRef.current?.seq === opened) shareOutRef.current = null;
       }
       // Emailed and recorded while the sheet had the file (No was answered

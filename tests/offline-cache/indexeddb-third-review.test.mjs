@@ -1,3 +1,4 @@
+import { copyInvoiceHandoff } from "../helpers/copy-invoice-handoff.mjs";
 // Third review of the IndexedDB offline copy (7bdca10b). Six findings, each
 // reproduced here against the REAL storageScope.js and offlineStore.js (and
 // the real Assistant, where the finding is about what it writes) over a 5 MB
@@ -53,7 +54,9 @@ async function openTab() {
     .replace('from "./heldChanges.js"', `from ${abs('./heldChanges.js')}`)
     .replace('from "./loadRebase.js"', `from ${abs('./loadRebase.js')}`);
   writeFileSync(join(dir, 'storageScope.js'), scopeSource);
+  copyInvoiceHandoff(dir);
   writeFileSync(join(dir, 'offlineStore.js'), readFileSync(resolve(root, 'src/utils/offlineStore.js'), 'utf8'));
+  writeFileSync(join(dir, 'syncRecovery.js'), readFileSync(resolve(root, 'src/utils/syncRecovery.js'), 'utf8'));
   const scope = await import(pathToFileURL(join(dir, 'storageScope.js')).href);
   const store = await import(pathToFileURL(join(dir, 'offlineStore.js')).href);
   // "pass" opens at once, "hold" waits for release(ok), "fail" fails the open,

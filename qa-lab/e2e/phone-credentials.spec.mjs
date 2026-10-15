@@ -1,3 +1,4 @@
+import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 // Phone layouts, part 2: every Credentials section on a phone (375 x 812 and
 // 390 x 844, touch). For each section a member opens its list from the
 // Credentials menu, taps Add, checks the form fits the screen and can be
@@ -74,7 +75,7 @@ const BUGS = [
   },
   {
     key: 'filter-chips', feature: 'CRED-026', kind: 'small', severity: 'low',
-    match: /^button "(All|Medical Licenses|DEA \/ CSR|Board Certs|Life Support|Other|Vaccination|Titer \/ Immunity|TB Test|Drug Screen|Fit Test|Personal IDs|Travel Programs)( \(\d+\))?"$/,
+    match: /^button "(All|Medical Licenses|State Licenses|DEA \/ CSR|Board Certs|Life Support|Other|Vaccination|Titer \/ Immunity|TB Test|Drug Screen|Fit Test|Personal IDs|Travel Programs)( \(\d+\))?"$/,
     title: 'Phone Credentials: the filter chips (Licenses, Health Records, Travel & IDs) are 30 px tall',
     step: 'Credentials > Licenses (or Health Records, Travel & IDs) on a phone',
     expected: 'Each filter chip at least 32 px tall',
@@ -216,8 +217,15 @@ for (const width of [375, 390]) {
           const added = rowFor(s);
           qa.check(`a ${s.table} row with the typed values`, !!added, added ? added.j.slice(0, 160) : 'none');
           if (added) saved.push({ ...s, rowId: added.id });
+          await checkNoUnexpectedRecovery(page, qa, `${width}px ${s.section} saved`);
           const shown = await shownText(page, s);
           qa.check('the record is listed', !!shown, shown ? `listed as "${shown}"` : 'none of the typed values is on screen');
+          if (s.id === 'CRED-001') {
+            const licenseCard = recordButtons(page, s.mark).box;
+            qa.check(`${width}px the license card shows exactly CO below State Medical License`,
+              await licenseCard.getByText('State Medical License', { exact: true }).isVisible()
+              && await licenseCard.getByText('CO', { exact: true }).isVisible());
+          }
           const star = page.getByRole('button', { name: /(Add to|Remove from) Favorites/ }).first();
           const primary = [];
           if (shown && await star.count()) {
@@ -333,7 +341,11 @@ for (const width of [375, 390]) {
       await qa.feature('CRED-026', 'License filter chips on a phone: each one filters the list', async () => {
         await phoneCredentials(page, 'Licenses');
         await sleep(600);
-        for (const [chip, shows] of [['Medical Licenses', true], ['DEA / CSR', false], ['Board Certs', false], ['Life Support', false], ['All', true]]) {
+        // release/goal3 5b2cc728: a member with no profession (this one) has
+        // "State Licenses" as the first tab, holding every practice kind; MD
+        // and DO keep "Medical Licenses".
+        const firstTab = await page.getByRole('button', { name: /^State Licenses( \(\d+\))?$/ }).count() ? 'State Licenses' : 'Medical Licenses';
+        for (const [chip, shows] of [[firstTab, true], ['DEA / CSR', false], ['Board Certs', false], ['Life Support', false], ['All', true]]) {
           const b = page.getByRole('button', { name: new RegExp(`^${chip.replace(/[/]/g, '\\/')}( \\(\\d+\\))?$`) }).first();
           const t = await tapTarget(b);
           qa.check(`"${chip}" can be reached (${t.size})`, t.onScreen && !t.covered, t.why);
@@ -403,6 +415,7 @@ for (const width of [375, 390]) {
         await reloadPhone(page);
         await phoneTab(page, 'Credentials');
         for (const s of saved.slice(0, 4)) qa.check(`${s.section} still counts 1 item after a reload`, /1 item/.test(await credentialsRow(page, s.section).innerText().catch(() => '')));
+        await checkNoUnexpectedRecovery(page, qa, `${width}px credentials after reload`);
         const other = await secondPhone(browser, qa.report, width === 375 ? 390 : 375);
         try {
           await signInPhone(other.page, user);
@@ -413,6 +426,7 @@ for (const width of [375, 390]) {
           await phoneCredentials(other.page, 'Insurance');
           await sleep(1000);
           qa.check('and the insurance policy', await other.page.getByText(/QA-PHPOL-51|QA Phone Malpractice|QA Mutual/).first().isVisible().catch(() => false));
+          await checkNoUnexpectedRecovery(other.page, qa, `${width}px credentials on the second phone`);
         } finally { await other.context.close().catch(() => {}); }
       }, { soft: true });
 

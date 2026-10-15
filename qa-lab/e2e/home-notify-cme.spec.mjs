@@ -82,7 +82,7 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
     const name = dl?.suggestedFilename() || '';
     const path = dl ? await dl.path().catch(() => null) : null;
     const head = path ? readFileSync(path).subarray(0, 5).toString('latin1') : '';
-    qa.check('without a share sheet the transcript PDF downloads', /^CME-Transcript-TX-\d{4}-\d{2}-\d{2}\.pdf$/.test(name) && head === '%PDF-', `${name} ${head}`);
+    qa.check('without a share sheet the transcript PDF downloads', /^(CME-Transcript-TX-\d{4}-\d{2}-\d{2}|CME Transcript, Texas, [^/]+)\.pdf$/.test(name) && head === '%PDF-', `${name} ${head}`);
     const pdf = path ? pdfText(readFileSync(path)) : '';
     qa.check('the transcript lists the in-window activities for Texas and leaves out the rest', /CME Transcript/.test(pdf) && /Texas/.test(pdf) && /QA ethics in practice/.test(pdf) && /QA neurosurgery update/.test(pdf) && !/QA old conference/.test(pdf) && !/QA undated webinar/.test(pdf), `${pdf.length} chars of drawn text; ${['CME Transcript', 'Texas', 'QA ethics in practice', 'QA neurosurgery update', 'QA old conference', 'QA undated webinar'].map((w) => `${w}: ${pdf.includes(w)}`).join(', ')}`);
     await sleep(2000);
@@ -105,7 +105,7 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
     await sleep(3000);
     const got = await shared(page);
     const files = got.flatMap((s) => s.files);
-    qa.check('with a share sheet the PDF is shared', files.length === 1 && files[0].type === 'application/pdf' && /^CME-Transcript-TX-/.test(files[0].name), JSON.stringify(got));
+    qa.check('with a share sheet the PDF is shared', files.length === 1 && files[0].type === 'application/pdf' && /^CME(-Transcript-TX-| Transcript, Texas, )/.test(files[0].name), JSON.stringify(got));
     logs = rows(`select item_name, method from public.share_log where user_id = '${profile.id}' order by sent_at`);
     qa.check('share_log records the share', logs.some((l) => l.item_name === 'TX renewal packet' && l.method === 'share'), logs);
     // New Mexico: nothing in its window.

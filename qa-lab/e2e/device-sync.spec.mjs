@@ -8,7 +8,7 @@
 import { test } from './support/fixtures.mjs';
 import { deviceStoreKeys } from './support/device-store.mjs';
 import {
-  clerkId, field, goTab, landing, lab, newMember, openCredentials, openMore, pendingOps, recordButtons, row, rows, signIn, sleep, syncWarnings, tableRow,
+  clerkId, field, goTab, landing, lab, newMember, offlineKeysFor, openCredentials, openMore, pendingOps, recordButtons, row, rows, signIn, sleep, syncWarnings, tableRow,
   waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 
@@ -57,6 +57,8 @@ test('sign out purges the device; signing back in restores the cloud records', {
   await qa.feature('AUTH-005', 'Sign out purges the device', async () => {
     const keysBefore = await storageKeysFor(page, cid);
     qa.check('the device holds this account\'s data before sign-out', keysBefore.local.length + keysBefore.idb.length > 0, [...keysBefore.local, ...keysBefore.idb].join(', '));
+    const offlineBefore = await offlineKeysFor(page, cid);
+    qa.check('the offline store (IndexedDB) holds the account\'s file before sign-out', offlineBefore.idb.some((e) => e.key === `credentialdomd-data:${cid}`), offlineBefore.idb.map((e) => e.key).join(', '));
     const dialogs = qa.report.dialogs.length;
     await openMore(page, 'Sign Out');
     await page.getByTestId('qa-signin').waitFor({ timeout: 60000 });
@@ -67,6 +69,9 @@ test('sign out purges the device; signing back in restores the cloud records', {
     qa.check('the device-key slot is gone', deviceKeys === null);
     const idb = await page.evaluate(async (id) => (indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name).filter((n) => n && n.includes(id)) : []), cid);
     qa.check('no IndexedDB database named for that account remains', idb.length === 0, idb.join(', '));
+    // The offline copy lives in one shared IndexedDB database (credentialdomd-offline), keyed by account.
+    const offline = await offlineKeysFor(page, cid);
+    qa.check('the offline store (IndexedDB) holds no entry of that account', offline.idb.length === 0, offline.idb.map((e) => `${e.key} ${e.chars}`).join(', '));
     qa.check('no entry of that account remains in the app\'s IndexedDB store (file, transcript, archives)', keysAfter.idb.length === 0, keysAfter.idb.join(', '));
     qa.check('the cloud rows are untouched by sign-out', JSON.stringify(counts()) === JSON.stringify(before), JSON.stringify(counts()));
   });

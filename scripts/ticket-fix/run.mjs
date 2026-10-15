@@ -101,7 +101,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareResult, refusalHead, RESULT_SCHEMA } from '../ticket-agent-context.mjs';
-import { readManifest, reviewedIds, modelView, selectAttachments, attachRootPrefix } from './attachments.mjs';
+import { readManifest, reviewedIds, modelView, selectAttachments } from './attachments.mjs';
+import { createAttachmentRoot } from './attachment-temp.mjs';
 import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtraction, confirmPrompt, extendChecklist, writeChecklist, applyAskVerdicts,
   coverageHints, finalStates, unseenItems, untrustedItems, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
@@ -308,11 +309,10 @@ function writeRunSync(work, value) {
 // This ticket's own folder the sessions may read (stage 3, G6): the
 // attachment folder the download step made and the manifest vouches for, or
 // else a fresh one of the same shape (the case history file goes in it), so
-// the sandbox and the permission rules treat it the same way. Its name
-// carries this process, so the runner's sweep leaves it alone while it runs.
-async function sessionReadable(attachDir, ticket) {
+// the sandbox and the permission rules treat it the same way.
+async function sessionReadable(attachDir, ticket, repo, work) {
   if (attachDir) return { dir: attachDir, remove: () => {} };
-  const root = realpathSync(await fs.mkdtemp(path.join(realpathSync(os.tmpdir()), attachRootPrefix())));
+  const root = createAttachmentRoot({ repo, work });
   const dir = path.join(root, ticket);
   await fs.mkdir(dir, { mode: 0o700 });
   return { dir, remove: () => rmSync(root, { recursive: true, force: true }) };
@@ -356,7 +356,7 @@ async function workTicket(o, atEnd) {
   const attachDir = manifest.dir && existsSync(manifest.dir) ? realpathSync(manifest.dir) : null;
   // What the sessions may read besides the worktree: the attachments and the
   // case history file (written below, removed when the run ends).
-  const readable = await sessionReadable(attachDir, ticket);
+  const readable = await sessionReadable(attachDir, ticket, repo, work);
   const readDir = readable.dir;
   const historyFile = path.join(readDir, HISTORY_FILE);
   const removeHistory = () => { rmSync(historyFile, { force: true }); readable.remove(); };

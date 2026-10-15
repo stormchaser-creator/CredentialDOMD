@@ -7,7 +7,12 @@ import { classifyWriteError, describeWriteError } from '../src/utils/syncRules.j
 // SYNC-001: a record the cloud refused must not look saved. The notice names
 // each one, says why in plain words, and opens it. Synthetic records only.
 
-const { SyncIssuesNotice } = await loadScreens('export { default as SyncIssuesNotice } from "./src/components/shared/SyncIssuesNotice.jsx";');
+// These controls belong to the write-status portion. Recovery has its own
+// account-switch/download tests in sync-recovery-ui.test.mjs; the wrapper now
+// renders both components, so expose this portion for direct click handlers.
+const { SyncIssuesNotice } = await loadScreens('export { SavedWriteIssuesNotice as SyncIssuesNotice } from "./src/components/shared/SyncIssuesNotice.jsx";', {
+  expose: { 'src/components/shared/SyncIssuesNotice.jsx': ['SavedWriteIssuesNotice'] },
+});
 
 function show({ issues = [], pending = 0, offline = false, data = {} } = {}) {
   const m = mount(SyncIssuesNotice, { data });

@@ -17,6 +17,9 @@ import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompl
 import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
 import { repairStoredIds } from '../../src/utils/idRepair.js';
 import { generateId } from '../../src/utils/helpers.js';
+import * as acknowledgements from '../../src/utils/recordAcknowledgements.js';
+import * as recovery from '../../src/utils/syncRecovery.js';
+import { fixture as persistenceFixture } from './persistence-fixture.mjs';
 import * as held from '../../src/utils/heldChanges.js';
 import { localChangesSince, rebaseLocalChanges } from '../../src/utils/loadRebase.js';
 
@@ -45,7 +48,7 @@ if (start < 0 || end < start) throw new Error('AppContext loadDataForUser could 
 const loadCode = `${appSource.slice(start, end)}\nglobalThis.api = { loadDataForUser };`;
 
 function load({ cloud, local, queue }) {
-  storage.clear();
+  storage.clear(); storageScope.setActiveUserId(OWNER);
   adoptLocalFence(OWNER);
   storage.setItem(`${BASE_KEYS.data}:${OWNER}`, JSON.stringify(local));
   storage.setItem(`${BASE_KEYS.pendingOps}:${OWNER}`, JSON.stringify(queue));
@@ -57,10 +60,11 @@ function load({ cloud, local, queue }) {
     loadedDeletionRef: { current: null },
     DEFAULT_DATA: { settings: {}, cme: [] }, COLLECTION_KEYS: ['cme'],
     WIPE_SEEN_KEY, lsGet: storageScope.lsGet, getActiveUserId: () => OWNER, localFence, adoptLocalFence,
+    localCopyCurrent: storageScope.localCopyCurrent, prepareRecordAcknowledgements: acknowledgements.prepareRecordAcknowledgements, isAcknowledgedRecordCopy: acknowledgements.isAcknowledgedRecordCopy, preserveRecovery: recovery.preserveRecovery, recordContent: persistenceFixture().api.recordContent,
     repairStoredIds, generateId, BASE_KEYS, lsGetJSON: storageScope.lsGetJSON, lsSetJSON: storageScope.lsSetJSON, pendingOpCount: storageScope.pendingOpCount,
     accountDataDeletedAt, sameDeletionStamp, honorAccountDataDeletion: async () => false,
     profileSupportReference, localFallbackReference, ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords,
-    reportError: () => record('reportError'), reportWriteAccess: () => {},
+    reportError: () => record('reportError'), reportUnlessLeaving: () => record('reportError'), reportWriteAccess: () => {},
     ensureProfile: async () => ({ id: PROFILE, auth_user_id: OWNER, deleted_at: null, data_deleted_at: null }),
     // The membership answer is read-only: replay sends none of the kept saves, and they stay queued.
     replayPendingOps: async () => { record('replay'); return { refused: [] }; },
@@ -73,7 +77,7 @@ function load({ cloud, local, queue }) {
     uploadDocumentFile: async () => null, downloadDocumentFile: async () => null,
     withLocalOnlySettings: settings => settings, hasLegacyStorage: () => false, offlineCopyUnread: () => false, adoptLegacyStorage: () => null, markOfflineCopyRead: () => false, cachedRecordsRef: { current: null }, adoptOfflineCopyRead: () => false, deviceOnlyForLoad: () => null, offlineCopyUnchangedSinceKnown: () => false,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [], reconcileDocumentLinks,
-    applyHeldQueue: held.applyHeldQueue, localChangesSince, rebaseLocalChanges, localCopyCurrent: storageScope.localCopyCurrent,
+    applyHeldQueue: held.applyHeldQueue, localChangesSince, rebaseLocalChanges,
     accessAuthority: { suspendWrites: () => record('suspendWrites') },
     setData: value => { states.push(value); }, setLoaded() {}, setLoadedFrom() {}, setProfileOwner() {}, setProfileIssue() {}, setIdentityWaiting() {},
     setRecordsLoadIssue() {}, console: { log() {}, warn() {} },

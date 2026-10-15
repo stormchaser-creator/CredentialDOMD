@@ -3,6 +3,7 @@
 // Nothing here is a secret. Every value that must be secret for the lab to be
 // honest (the token signing key, the fake provider keys, webhook secrets) is
 // generated per machine by lab-secrets.mjs into the gitignored .generated/.
+import { localApiOrigin } from './config.mjs';
 
 /** Reserved test domain (.test never resolves publicly). Every test physician's address is on it. */
 export const LAB_EMAIL_DOMAIN = 'qa.credentialdomd.test';
@@ -30,7 +31,7 @@ export const PRODUCTION_LEGACY_ISSUER = 'https://dynamic-goshawk-87.clerk.accoun
 export const APP_PUBLIC_ORIGIN = 'https://credentialdomd.com';
 
 /** The local Supabase stack (CLI defaults, supabase/config.toml). */
-export const SUPABASE_API_URL = 'http://127.0.0.1:54321';
+export const SUPABASE_API_URL = localApiOrigin();
 /** How containers (edge functions) reach a server on this machine's loopback. */
 export const DOCKER_HOST_ALIAS = 'host.docker.internal';
 
@@ -39,6 +40,16 @@ export const DEFAULT_MOCK_PORT = 54380;
 /** The API origin the app calls as its Supabase URL (a different origin from the app, as live). */
 export const DEFAULT_API_PORT = 54385;
 export const DEFAULT_APP_PORT = 54390;
+
+/**
+ * The iOS Simulator profile (npm run qa:sim, qa-lab/sim.mjs): the same lab over
+ * HTTPS on ports of its own, because iOS Safari upgrades the plain-HTTP lab's
+ * fetches to TLS on the same port and they fail. First ports tried.
+ */
+export const DEFAULT_SIM_APP_PORT = 54395;
+export const DEFAULT_SIM_API_PORT = 54396;
+/** The names the simulator profile's leaf certificate covers (its root CA may sign nothing else). */
+export const SIM_TLS_HOSTS = Object.freeze({ dns: ['localhost'], ip: ['127.0.0.1', '::1'] });
 
 /** Only these hosts may appear in anything the lab points a function or the app at. */
 export const LOCAL_HOSTS = Object.freeze(['127.0.0.1', 'localhost', '::1', DOCKER_HOST_ALIAS]);

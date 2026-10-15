@@ -37,11 +37,21 @@
  * (event codes and counts only, never a number or an amount).
  */
 
-import * as cloud from "../lib/supabase";
 import { reportError } from "../lib/errorReport.js";
+import { getActiveUserId, localWriteGuard } from "./storageScope.js";
+
+const DB_NAME = "credentialdomd-invoice-handoff";
+const STORE = "notes";
+const KEY_BASE = "credentialdomd-invoice-handoff-v1";
+const OWNER_BASE = `${KEY_BASE}-owners`;
+const PURGE_BASE = `${KEY_BASE}-purge`;
+const GENERATION = `${KEY_BASE}-generation`;
+let STORE_TIMEOUT_MS = 3000;
+const keyFor = account => `${KEY_BASE}:${account || "signed-out"}`;
 import {
-  readWebNotes, writeWebNotes, readDbNotes, writeDbNotes, readStampsCopy, writeStamps, newestStamps,
+  readDbNotes, readStampsCopy, writeStamps, newestStamps,
   readTombs, writeTombs, writeCacheNotes, readCacheNotes, readCacheTombs, readCacheStamps,
+  purgeHandoffStores, handoffPurgePending,
   onHandoffPurge, syncHandoffGeneration, _resetHandoffStore, _setHandoffStoreTimes, HANDOFF_KEY_BASE, HANDOFF_STAMPS_BASE,
   HANDOFF_TOMBS_BASE, HANDOFF_GENERATION_KEY,
 } from "./invoiceHandoffStore.js";
@@ -78,6 +88,7 @@ export function _setHandoffTimes(next = {}) {
   const { openMs, txMs, ...rest } = next;
   Object.assign(times, DEFAULT_TIMES, rest);
   _setHandoffStoreTimes({ openMs, txMs });
+  STORE_TIMEOUT_MS = Number(txMs) > 0 ? Number(txMs) : Number(openMs) > 0 ? Number(openMs) : 3000;
 }
 
 const same = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
@@ -117,9 +128,15 @@ let stampSeq = 0;
 const retries = new Map();
 // Numbers whose share sheet has the file on this page and has not answered.
 const inFlight = new Set();
+const flightKey = (account, number) => `${account}|${norm(number)}`;
+const clearFlights = account => { for (const key of inFlight) if (key.startsWith(`${account}|`)) inFlight.delete(key); };
 const loading = new Map();
+const owners = new Map();
+const epochs = new Map();
+const transactions = new Map();
 const listeners = new Set();
-let reporter = (message, extra) => reportError(message, "error", extra);
+const defaultReporter = (message, extra, kind = "error") => reportError(message, kind, extra);
+let reporter = defaultReporter;
 const reported = new Set();
 
 const emit = () => { for (const fn of [...listeners]) { try { fn(); } catch { /* a listener never stops the others */ } } };
@@ -134,7 +151,7 @@ function honorPurges() {
   const now = syncHandoffGeneration();
   const moved = memoryGeneration !== undefined && memoryGeneration !== now;
   memoryGeneration = now;
-  if (moved) { memory.clear(); server.clear(); forgotten.clear(); tombs.clear(); dbOwed.clear(); owedVersion.clear(); owed.clear(); loading.clear(); clearRetries(); }
+  if (moved) { memory.clear(); server.clear(); forgotten.clear(); tombs.clear(); dbOwed.clear(); owedVersion.clear(); owed.clear(); loading.clear(); clearRetries(); inFlight.clear(); }
   return moved;
 }
 
@@ -143,7 +160,7 @@ function honorPurges() {
 onHandoffPurge((account) => {
   honorPurges();
   memory.delete(account); server.delete(account); forgotten.delete(account); tombs.delete(account); dbOwed.delete(account); owedVersion.delete(account); owed.delete(account); loading.delete(account);
-  clearRetries(account);
+  clearRetries(account); clearFlights(account);
   emit();
 });
 // Another tab's purge: the open screens drop its notes now.
@@ -156,7 +173,7 @@ try {
 
 /** Where the owner is told (client_errors). Tests pass their own. */
 export function setInvoiceHandoffReporter(fn) {
-  reporter = typeof fn === "function" ? fn : (message, extra) => reportError(message, "error", extra);
+  reporter = typeof fn === "function" ? fn : defaultReporter;
   reported.clear();
 }
 
@@ -174,12 +191,204 @@ const MESSAGES = {
 export function reportHandoffEvent(event, extra = {}) {
   if (!MESSAGES[event] || reported.has(event)) return false;
   reported.add(event);
-  try { reporter(MESSAGES[event], { event, ...extra }); } catch { /* reporting never blocks */ }
+  try { reporter(MESSAGES[event], { event, ...extra }, event === "invoice_share_confirmed_by_member" ? "info" : "error"); } catch { /* reporting never blocks */ }
   return true;
 }
 
-// ── The device's notes ──
-const readWeb = (name, account) => readWebNotes(name, account).filter(valid);
+// ── The device's stores ──
+const webStore = (name) => { try { return globalThis[name] || null; } catch { return null; } };
+const rawGet = (name, key) => { try { return webStore(name)?.getItem(key) ?? null; } catch { return null; } };
+const rawSet = (name, key, value) => {
+  try { const store = webStore(name); if (!store) return false; if (value === null) store.removeItem(key); else store.setItem(key, value); return store.getItem(key) === value; } catch { return false; }
+};
+const parse = raw => { try { return JSON.parse(raw); } catch { return null; } };
+const array = value => Array.isArray(value) ? value : [];
+const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
+const purgeKey = account => `${PURGE_BASE}:${account}`;
+const ownerKey = account => `${OWNER_BASE}:${account}`;
+function scopeFor(account, { pendingPurge = false } = {}) {
+  const epoch = epochs.get(account) || 0, generation = rawGet("localStorage", GENERATION);
+  const sharedGeneration = rawGet("localStorage", HANDOFF_GENERATION_KEY);
+  const session = globalThis.window?.Clerk?.session || null;
+  const sameSession = () => {
+    const now = globalThis.window?.Clerk?.session || null;
+    return now === session || (!!session?.id && now?.id === session.id
+      && (session.user?.id || session.userId) === account && (now.user?.id || now.userId) === account);
+  };
+  const local = localWriteGuard(account);
+  return () => !!account && !uuid(account) && getActiveUserId() === account && local()
+    && (epochs.get(account) || 0) === epoch && rawGet("localStorage", GENERATION) === generation
+    && rawGet("localStorage", HANDOFF_GENERATION_KEY) === sharedGeneration
+    && sameSession()
+    && (pendingPurge || (rawGet("localStorage", purgeKey(account)) === null && rawGet("sessionStorage", purgeKey(account)) === null));
+}
+function readWeb(name, account) {
+  try {
+    const raw = webStore(name)?.getItem(keyFor(account));
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter(valid) : [];
+  } catch { return []; }
+}
+function writeWeb(name, account, list) {
+  const store = webStore(name);
+  if (!store) return false;
+  try {
+    if (list.length) store.setItem(keyFor(account), JSON.stringify(list));
+    else store.removeItem(keyFor(account));
+    return true;
+  } catch { return false; } // QuotaExceededError on a full device
+}
+
+let dbPromise = null;
+function openDb() {
+  if (dbPromise) return dbPromise;
+  let idb = null;
+  try { idb = globalThis.indexedDB || null; } catch { idb = null; }
+  if (!idb) return Promise.resolve(null);
+  dbPromise = new Promise((resolve) => {
+    let done = false;
+    const finish = value => { if (done) { value?.close?.(); return; } done = true; clearTimeout(timer); resolve(value); };
+    const timer = setTimeout(() => finish(null), STORE_TIMEOUT_MS);
+    let req;
+    try { req = idb.open(DB_NAME, 1); } catch { finish(null); return; }
+    req.onupgradeneeded = () => { try { req.result.createObjectStore(STORE); } catch { /* already there */ } };
+    req.onsuccess = () => finish(req.result);
+    req.onerror = () => finish(null);
+    req.onblocked = () => finish(null);
+  }).then((db) => { if (!db) dbPromise = null; return db; });
+  return dbPromise;
+}
+async function readDbKey(key) {
+  const db = await openDb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = value => { if (!done) { done = true; clearTimeout(timer); if (value === null) dbPromise = null; resolve(value); } };
+    const timer = setTimeout(() => finish(null), STORE_TIMEOUT_MS);
+    try {
+      const tx = db.transaction(STORE, "readonly");
+      tx.onerror = tx.onabort = () => finish(null);
+      const req = tx.objectStore(STORE).get(key);
+      req.onsuccess = () => finish(req.result ?? []);
+      req.onerror = () => finish(null);
+    } catch { finish(null); }
+  });
+}
+async function writeDb(account, list, current = scopeFor(account), key = keyFor(account), combine = null) {
+  const db = await openDb();
+  if (!db || !current()) return false;
+  return new Promise((resolve) => {
+    let tx, done = false;
+    const finish = value => { if (!done) { done = true; clearTimeout(timer); transactions.get(account)?.delete(tx); if (!value) dbPromise = null; resolve(value); } };
+    const timer = setTimeout(() => { try { tx?.abort?.(); } catch { /* already ended */ } finish(false); }, STORE_TIMEOUT_MS);
+    try {
+      if (!current()) { finish(false); return; }
+      tx = db.transaction(STORE, "readwrite");
+      if (!transactions.has(account)) transactions.set(account, new Set());
+      transactions.get(account).add(tx);
+      const store = tx.objectStore(STORE);
+      const write = next => {
+        if (!current()) { try { tx.abort(); } catch { finish(false); } return; }
+        if (next.length) store.put(next, key); else store.delete(key);
+      };
+      if (combine) {
+        const read = store.get(key);
+        read.onsuccess = () => {
+          if (!current()) { try { tx.abort(); } catch { finish(false); } return; }
+          try { write(combine(Array.isArray(read.result) ? read.result : [])); }
+          catch { try { tx.abort(); } catch { finish(false); } }
+        };
+        read.onerror = () => { try { tx.abort(); } catch { finish(false); } };
+      } else write(list);
+      tx.oncomplete = () => finish(current());
+      tx.onerror = () => finish(false);
+      tx.onabort = () => finish(false);
+    } catch { finish(false); }
+  });
+}
+
+/** Called only after the profile has been verified as belonging to this subject.
+ * Old UUID-keyed notes are quarantined, never displayed; the alias is kept only
+ * so an explicit purge also removes that account's earlier-build copy. */
+export function registerInvoiceHandoffOwner(account, profileId) {
+  const current = scopeFor(account, { pendingPurge: true });
+  if (!current() || !uuid(profileId)) return false;
+  const aliases = new Set([...(owners.get(account) || []), ...array(parse(rawGet("localStorage", ownerKey(account)))).filter(uuid), ...array(parse(rawGet("sessionStorage", ownerKey(account)))).filter(uuid), profileId]);
+  owners.set(account, aliases);
+  for (const name of ["localStorage", "sessionStorage"]) rawSet(name, ownerKey(account), JSON.stringify([...aliases]));
+  // Purge reads these aliases synchronously too. A late registration write
+  // retains the same epoch and cannot recreate them after that purge.
+  void writeDb(account, [...aliases], current, ownerKey(account));
+  return true;
+}
+
+/** Explicit purge only. Session expiry retains the original account's notes.
+ * When IndexedDB is unavailable, a durable marker prevents a later read from
+ * restoring anything until the owed deletion has committed. */
+export async function purgeInvoiceHandoff(account, { keepLocal = false } = {}) {
+  if (!account || keepLocal) return true;
+  epochs.set(account, (epochs.get(account) || 0) + 1);
+  const sharedPurged = purgeHandoffStores(account);
+  for (const tx of transactions.get(account) || []) { try { tx.abort?.(); } catch { /* ended */ } }
+  memory.delete(account); server.delete(account); forgotten.delete(account); loading.delete(account);
+  const savedMarker = parse(rawGet("localStorage", purgeKey(account))) || parse(rawGet("sessionStorage", purgeKey(account)));
+  const aliases = new Set([...(owners.get(account) || []), ...array(parse(rawGet("localStorage", ownerKey(account)))), ...array(parse(rawGet("sessionStorage", ownerKey(account)))), ...array(savedMarker?.aliases)].filter(uuid));
+  const generation = `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+  rawSet("localStorage", GENERATION, generation);
+  const mark = () => { const text = JSON.stringify({ aliases: [...aliases] }); rawSet("sessionStorage", purgeKey(account), text); return rawSet("localStorage", purgeKey(account), text); };
+  mark();
+  const clearWeb = () => {
+    let okay = true;
+    for (const name of ["localStorage", "sessionStorage"]) {
+      if (!webStore(name)) continue;
+      for (const owner of [account, ...aliases]) okay = rawSet(name, keyFor(owner), null) && okay;
+      okay = rawSet(name, ownerKey(account), null) && okay;
+    }
+    return okay;
+  };
+  clearWeb();
+  rawSet("localStorage", GENERATION, generation); // removals may have freed quota
+  mark();
+  const storedAliases = await readDbKey(ownerKey(account));
+  for (const id of array(storedAliases).filter(uuid)) aliases.add(id);
+  const webCleared = clearWeb(), recorded = mark();
+  // Never discard unread alias metadata: it may be the only remaining way
+  // to identify this account's legacy UUID namespace on a later retry.
+  const db = storedAliases === null ? null : await openDb();
+  let removed = false; // unavailable/absent IDB is not proof an earlier copy is gone
+  if (db) removed = await new Promise(resolve => {
+    let tx, done = false;
+    const finish = value => { if (!done) { done = true; clearTimeout(timer); if (!value) dbPromise = null; resolve(value); } };
+    const timer = setTimeout(() => { try { tx?.abort?.(); } catch { /* ended */ } finish(false); }, STORE_TIMEOUT_MS);
+    try {
+      tx = db.transaction(STORE, "readwrite");
+      const store = tx.objectStore(STORE);
+      for (const owner of [account, ...aliases]) store.delete(keyFor(owner));
+      store.delete(ownerKey(account));
+      tx.oncomplete = () => finish(true); tx.onerror = () => finish(false); tx.onabort = () => finish(false);
+    } catch { finish(false); }
+  });
+  // Retain aliases in memory until either deletion or its durable marker is
+  // established. A quota failure must not silently lose this association.
+  if (removed || recorded) owners.delete(account);
+  const sharedOkay = await sharedPurged;
+  if (removed && webCleared && !handoffPurgePending(account)) for (const name of ["localStorage", "sessionStorage"]) rawSet(name, purgeKey(account), null);
+  emit();
+  return sharedOkay && webCleared && (removed || recorded);
+}
+
+/** Finish owed deletions at app launch, even if their owners never sign in. */
+export async function sweepPendingInvoiceHandoffPurges() {
+  const accounts = new Set(), prefix = `${PURGE_BASE}:`;
+  for (const name of ["localStorage", "sessionStorage"]) {
+    const storage = webStore(name);
+    try { for (let i = 0; i < (storage?.length || 0); i += 1) {
+      const key = storage.key(i);
+      if (key?.startsWith(prefix) && key.length > prefix.length) accounts.add(key.slice(prefix.length));
+    } } catch { /* retry once that store is available */ }
+  }
+  for (const account of accounts) await purgeInvoiceHandoff(account);
+}
 
 /** `list` with `note` in it (one per number, newest last, at most KEPT). */
 function withNote(list, note) {
@@ -233,17 +442,16 @@ function deviceNotes(account) {
 }
 
 // Every store gets the whole list; true when at least one kept it now
-// (IndexedDB answers later, `durable`). IndexedDB keeps, besides, the notes
-// it holds that this page never read (its first open timed out) and has not
-// forgotten, and this page learns of them.
-function persist(account, list) {
-  const session = writeWebNotes("sessionStorage", account, list);
-  const local = writeWebNotes("localStorage", account, list);
+// (IndexedDB answers later, `durable`).
+function persist(account, list, current = scopeFor(account)) {
+  if (!current()) return { now: false, durable: Promise.resolve(false) };
+  const session = writeWeb("sessionStorage", account, list);
+  const local = writeWeb("localStorage", account, list);
   writeCacheNotes(account, list);
-  const write = writeDbNotes(account, list, (stored) => {
+  const write = writeDb(account, list, current, keyFor(account), stored => {
     const unread = stored.filter(valid).filter(n => !isForgotten(account, n.number) && !list.some(x => same(x.number, n.number)));
     if (!unread.length) return list;
-    if (memory.has(account)) {
+    if (current() && memory.has(account)) {
       memory.set(account, merged(memory.get(account), unread).filter(n => !isForgotten(account, n.number)));
       emit();
     }
@@ -252,7 +460,7 @@ function persist(account, list) {
   // Not committed (IndexedDB dropped behind Gmail): what it holds may be a
   // note answered since. Written again on the next refresh, and every one
   // after, until it commits.
-  const durable = write.then((ok) => { if (ok) dbOwed.delete(account); else dbOwed.add(account); return ok; });
+  const durable = write.then((ok) => { if (!current()) return false; if (ok) dbOwed.delete(account); else dbOwed.add(account); return ok; });
   return { now: session || local, durable };
 }
 
@@ -262,16 +470,32 @@ function persist(account, list) {
  * whether IndexedDB did. Nothing taking it is reported.
  */
 export function keepInvoiceNote(account, note) {
-  if (!note?.number) return { kept: false, durable: Promise.resolve(false) };
-  forgotten.get(account)?.delete(norm(note.number));
-  // Kept again (handed over again, a send reported after No): its
-  // tombstone goes.
+  if (!note?.number || !scopeFor(account, { pendingPurge: true })()) return { kept: false, durable: Promise.resolve(false) };
+  if (rawGet("localStorage", purgeKey(account)) !== null || rawGet("sessionStorage", purgeKey(account)) !== null) {
+    // A fresh session can hand off while an earlier deletion is still owed.
+    // Finish that deletion before storing the new note; never merge it with
+    // an unread pre-deletion copy, or resume after another account/purge.
+    const removing = purgeInvoiceHandoff(account);
+    const afterPurge = scopeFor(account, { pendingPurge: true });
+    const durable = removing.then(async removed => {
+      if (!removed || !afterPurge() || !scopeFor(account)()) return false;
+      return keepInvoiceNote(account, note).durable;
+    }).catch(() => false).then(kept => {
+      if (!kept && afterPurge()) reportHandoffEvent("invoice_handoff_not_kept");
+      return kept;
+    });
+    return { kept: false, durable, pendingPurge: true };
+  }
+  const current = scopeFor(account);
+  if (!note?.number || !current()) return { kept: false, durable: Promise.resolve(false) };
+  const key = String(note.number).trim().toLowerCase();
+  forgotten.get(account)?.delete(key);
   if (tombsOf(account).delete(norm(note.number))) saveTombs(account);
   const list = withNote(deviceNotes(account), note);
   memory.set(account, list);
-  const { now, durable } = persist(account, list);
+  const { now, durable } = persist(account, list, current);
   const checked = durable.then((ok) => {
-    if (!ok && !now) reportHandoffEvent("invoice_handoff_not_kept");
+    if (!ok && !now && current()) reportHandoffEvent("invoice_handoff_not_kept");
     return ok;
   });
   emit();
@@ -293,8 +517,9 @@ export function keepInvoiceNote(account, note) {
  * at the agency do (PRAC-030).
  */
 export function handOffInvoice(account, note) {
+  if (!scopeFor(account, { pendingPurge: true })()) return { kept: false, durable: Promise.resolve(false) };
   invoiceNumberUsed(note?.number);
-  inFlight.add(norm(note?.number));
+  inFlight.add(flightKey(account, note?.number));
   notePageState({ shareInFlight: true });
   return keepSentInvoiceNote(account, note);
 }
@@ -308,7 +533,11 @@ export function handOffInvoice(account, note) {
 export function keepSentInvoiceNote(account, note) {
   const handed = { ...note, handed: true };
   const kept = keepInvoiceNote(account, handed);
-  if (handed.number) stamp(account, handed.number, { shared: true, contractId: handed.contractId || null, at: handed.sentAt });
+  const sendStamp = () => stamp(account, handed.number, { shared: true, contractId: handed.contractId || null, at: handed.sentAt });
+  if (kept.pendingPurge) {
+    const current = scopeFor(account, { pendingPurge: true });
+    void kept.durable.then(ok => { if (ok && current()) return sendStamp(); });
+  } else sendStamp();
   return kept;
 }
 
@@ -317,8 +546,8 @@ export function keepSentInvoiceNote(account, note) {
  * its preview gave up on it: the note is no longer "with the share sheet now",
  * so a screen may report it as unrecorded (useUnrecordedInvoices).
  */
-export function shareAnswered(number) {
-  if (inFlight.delete(norm(number))) emit();
+export function shareAnswered(number, account = getActiveUserId()) {
+  if (inFlight.delete(flightKey(account, number))) emit();
   notePageState({ shareInFlight: inFlight.size > 0 });
 }
 /**
@@ -326,14 +555,14 @@ export function shareAnswered(number) {
  * server email, "Email it for me"): like a share sheet that has the file, it
  * is not reported as unrecorded until shareAnswered.
  */
-export function holdInFlight(number) {
-  if (!number) return;
-  inFlight.add(norm(number));
+export function holdInFlight(number, account = getActiveUserId()) {
+  if (!number || !scopeFor(account)()) return;
+  inFlight.add(flightKey(account, number));
   notePageState({ shareInFlight: true });
   emit();
 }
 /** True while the share sheet on this page has `number` and has not answered. */
-export const shareInFlight = (number) => inFlight.has(norm(number));
+export const shareInFlight = (number, account = getActiveUserId()) => inFlight.has(flightKey(account, number));
 
 // ── The server's stamps ──
 // Each stamp is owed (kept on the device) until the server answers it, and
@@ -371,6 +600,7 @@ function setOwed(account, list) {
 // first, and the unstamp waits for it too (sendNow). Replaced, the server got
 // neither until the record landed, and the Mac had nothing saying it went.
 function stamp(account, number, { shared, contractId = null, at = null, recordedAs = null }) {
+  if (!scopeFor(account)()) return Promise.resolve();
   const n = String(number ?? "").trim();
   if (!ISSUED.test(n)) return Promise.resolve();
   const when = Number.isFinite(Date.parse(at || "")) ? new Date(at).toISOString() : new Date().toISOString();
@@ -387,8 +617,9 @@ const nextSeq = () => `${Date.now()}-${++stampSeq}`;
 const shareOwed = (account, entry) => !entry.shared && owedOf(account).some(s => s.shared && same(s.number, entry.number));
 
 function send(account, entry) {
+  const current = scopeFor(account);
   const key = `${account}|${norm(entry.number)}`;
-  const run = (chains.get(key) || Promise.resolve()).then(() => sendNow(account, entry));
+  const run = (chains.get(key) || Promise.resolve()).then(() => current() ? sendNow(account, entry, current) : undefined);
   chains.set(key, run);
   run.then(() => { if (chains.get(key) === run) chains.delete(key); });
   return run;
@@ -398,37 +629,43 @@ function send(account, entry) {
 // true once the server holds an invoice under that number, or when there is
 // no cloud client to ask. One owed for HANDOFF_KEPT_DAYS goes anyway: its
 // note would be dropped by then too.
-async function recordLanded(entry) {
+async function recordLanded(entry, account, current) {
   if (entry.shared || !entry.after) return true;
   const since = Date.parse(entry.since || "");
   if (Number.isFinite(since) && Date.now() - since >= HANDOFF_KEPT_DAYS * 86400000) return true;
   let call = null;
-  try { call = typeof cloud.readInvoiceNumberRecorded === "function" ? cloud.readInvoiceNumberRecorded(entry.after) : null; } catch { call = null; }
+  try { const cloud = await import("../lib/supabase.js"); if (!current()) return false; call = typeof cloud.readInvoiceNumberRecorded === "function" ? cloud.readInvoiceNumberRecorded(entry.after, account) : null; } catch { call = null; }
   if (!call || typeof call.then !== "function") return true;
   const res = await within(Promise.resolve(call), times.listMs, null);
   return !!(res && !res.error && res.data === true);
 }
 
-async function sendNow(account, entry) {
+async function sendNow(account, entry, current) {
   // A newer stamp for this number replaced it, or the server has it already.
-  if (!owedOf(account).some(s => s.seq === entry.seq)) return;
+  if (!current() || !owedOf(account).some(s => s.seq === entry.seq)) return;
   // The share stamp for this number has not landed yet: still owed, sent
   // once it has (the resend sends it first).
   if (shareOwed(account, entry)) { retryLater(account); return; }
   // Its invoice is not on the server yet (offline, its write still queued, or
   // kept on the device while membership is checked): still owed.
-  if (!(await recordLanded(entry))) {
+  if (!(await recordLanded(entry, account, current))) {
     if (owedOf(account).some(s => s.seq === entry.seq)) retryLater(account);
     return;
   }
-  if (!owedOf(account).some(s => s.seq === entry.seq) || shareOwed(account, entry)) return;
+  if (!current() || !owedOf(account).some(s => s.seq === entry.seq) || shareOwed(account, entry)) return;
   let call = null;
-  try { call = typeof cloud.markInvoiceNumberSharedRpc === "function" ? cloud.markInvoiceNumberSharedRpc(entry.number, { shared: entry.shared, contractId: entry.contractId, sharedAt: entry.at || null }) : null; } catch { call = null; }
+  try {
+    const cloud = await import("../lib/supabase.js");
+    if (!current()) return;
+    call = typeof cloud.markInvoiceNumberSharedRpc === "function" ? cloud.markInvoiceNumberSharedRpc(entry.number,
+      { shared: entry.shared, contractId: entry.contractId, sharedAt: entry.at || null }, account, current) : null;
+  } catch { return; /* an unavailable client leaves the original account's stamp owed */ }
   // No cloud client: nothing to send now or later.
   if (!call || typeof call.then !== "function") { settle(account, entry); return; }
   let res;
   // .then sends the request (a Supabase builder is lazy).
-  try { res = await call; } catch { retryLater(account); return; /* offline: still owed */ }
+  try { res = await call; } catch { if (current()) retryLater(account); return; /* offline: still owed */ }
+  if (!current()) return;
   const code = String(res?.error?.code || "");
   // A request that never reached the server (supabase-js answers a failed
   // fetch with an error and no code), an expired session (PGRST3xx), or no
@@ -453,12 +690,15 @@ function settle(account, entry) {
 // up to retryMaxMs), and again until none is owed. One timer per account; a
 // resend that lands clears it (settle).
 function retryLater(account) {
+  const current = scopeFor(account);
+  if (!current()) return;
   wakeOnReturn();
   const r = retries.get(account) || { timer: null, delay: times.retryMs };
   retries.set(account, r);
   if (r.timer) return;
   r.timer = setTimeout(() => {
     r.timer = null;
+    if (!current()) { clearRetries(account); return; }
     const owedNow = owedOf(account);
     if (!owedNow.length) { retries.delete(account); return; }
     r.delay = Math.min(r.delay * 2, times.retryMaxMs);
@@ -507,7 +747,7 @@ function wakeOnReturn() {
  * invoice is on the server (stamp).
  */
 export function forgetInvoiceNote(account, number, { unstamp = false, recordedAs = null } = {}) {
-  if (!number) return;
+  if (!number || !scopeFor(account)()) return;
   if (!forgotten.has(account)) forgotten.set(account, new Set());
   forgotten.get(account).add(norm(number));
   // A tombstone, in both web stores and Cache Storage: a copy the answer
@@ -547,6 +787,7 @@ export function invoiceDeleted(account, number) {
 
 /** Every note this page knows for `account`: the device's, then the server's for numbers the device has none for. */
 export function invoiceNotes(account) {
+  if (!scopeFor(account)()) return [];
   return merged(deviceNotes(account), (server.get(account) || []).filter(n => !serverHidden(account, n)));
 }
 
@@ -573,13 +814,17 @@ const within = (promise, ms, fallback) => new Promise((resolve) => {
 export function refreshInvoiceNotes(account) {
   honorPurges();
   if (loading.has(account)) return loading.get(account);
+  const started = scopeFor(account);
+  if (getActiveUserId() !== account || !account || uuid(account)) return Promise.resolve();
+  if (rawGet("localStorage", purgeKey(account)) !== null || rawGet("sessionStorage", purgeKey(account)) !== null) return purgeInvoiceHandoff(account);
+  if (!started()) return Promise.resolve();
   for (const s of owedOf(account)) send(account, s);
   // Cache Storage first (its own quota; opens when IndexedDB does not): the
   // tombstones, then the notes and the stamps a relaunch lost from
   // sessionStorage with localStorage full.
   const cached = (async () => {
     const [cacheTombs, cacheNotes, cacheStamps] = await Promise.all([readCacheTombs(account), readCacheNotes(account), readCacheStamps(account)]);
-    if (loading.get(account) !== run) return;
+    if (!started() || loading.get(account) !== run) return;
     let changed = false;
     if (addTombs(account, cacheTombs)) {
       // Answers this page had not seen (a relaunch lost sessionStorage's):
@@ -608,6 +853,7 @@ export function refreshInvoiceNotes(account) {
     if (changed) emit();
   })();
   const device = readDbNotes(account).then((fromDb) => {
+    if (!started()) return;
     const all = fromDb.filter(valid);
     const ok = all.filter(n => !isForgotten(account, n.number));
     // IndexedDB still holds a note answered on an earlier page (its write
@@ -621,10 +867,10 @@ export function refreshInvoiceNotes(account) {
     // still owed when it answers, is not listed again.
     const unstamped = owedOf(account).filter(s => !s.shared).map(s => s.number);
     let call = null;
-    try { call = typeof cloud.listSharedInvoiceNumbersRpc === "function" ? cloud.listSharedInvoiceNumbersRpc() : null; } catch { call = null; }
+    try { const cloud = await import("../lib/supabase.js"); if (!started()) return; call = typeof cloud.listSharedInvoiceNumbersRpc === "function" ? cloud.listSharedInvoiceNumbersRpc(account, started) : null; } catch { call = null; }
     if (!call || typeof call.then !== "function") return;
     const res = await within(Promise.resolve(call), times.listMs, null);
-    if (!res || res.error || !Array.isArray(res.data) || loading.get(account) !== run) return;
+    if (!started() || !res || res.error || !Array.isArray(res.data) || loading.get(account) !== run) return;
     unstamped.push(...owedOf(account).filter(s => !s.shared).map(s => s.number));
     server.set(account, res.data.map(fromServer).filter(valid).filter(n => !unstamped.some(x => same(x, n.number))).filter(n => !serverHidden(account, n)));
     emit();
@@ -658,7 +904,7 @@ export function subscribeInvoiceNotes(fn) {
  * when the wait runs out, as when it comes back. Closing or replacing the preview releases it (the screens
  * call shareAnswered), as does the sheet answering.
  */
-export function watchUnanswered(onUnanswered, { number = null, graceMs = times.graceMs, waitMs = times.waitMs, doc = globalThis.document, win = globalThis.window } = {}) {
+export function watchUnanswered(onUnanswered, { number = null, account = getActiveUserId(), graceMs = times.graceMs, waitMs = times.waitMs, doc = globalThis.document, win = globalThis.window } = {}) {
   let done = false;
   let grace = null;
   // The page has left the front since the hand-off (the full Mail or Gmail
@@ -670,7 +916,7 @@ export function watchUnanswered(onUnanswered, { number = null, graceMs = times.g
     if (done) return;
     stop();
     if (cameBack || left) {
-      if (number) shareAnswered(number);
+      if (number) shareAnswered(number, account);
       reportHandoffEvent("invoice_share_unanswered");
     }
     try { onUnanswered(); } catch { /* the screen's own business */ }
@@ -697,7 +943,9 @@ export function watchUnanswered(onUnanswered, { number = null, graceMs = times.g
 
 /** Tests only: a new page (memory gone; the stores stay). */
 export function _resetInvoiceHandoff({ stores = false } = {}) {
+  for (const account of new Set([...memory.keys(), ...loading.keys(), ...owners.keys()])) epochs.set(account, (epochs.get(account) || 0) + 1);
   memory.clear(); server.clear(); forgotten.clear(); tombs.clear(); dbOwed.clear(); owedVersion.clear(); owed.clear(); chains.clear(); loading.clear(); reported.clear();
+  owners.clear(); dbPromise = null;
   _resetServerBilled();
   clearRetries(); inFlight.clear();
   memoryGeneration = undefined;
@@ -749,4 +997,3 @@ export function emailSendUnconfirmed(account, note) {
 export function emailSendConfirmed(number) {
   shareAnswered(number);
 }
-

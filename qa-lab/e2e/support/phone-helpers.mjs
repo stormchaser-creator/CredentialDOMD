@@ -20,8 +20,9 @@
 //
 // Everything here drives the lab only (the guarded contexts of fixtures.mjs).
 import { guardContext, watchPage } from './fixtures.mjs';
+import { observeInitialSetupSave } from './browser-completion.mjs';
 import {
-  createPhysician, dismissInterruptions, lab, landing, profileOf, signIn, sleep, waitForMemberApp, waitForProfile,
+  PAY_FIRST_LINE, createPhysician, dismissInterruptions, lab, landing, profileOf, saveProfession, signIn, sleep, waitForMemberApp, waitForProfile,
 } from './lab.mjs';
 
 const IPHONE_UA = (os) => `Mozilla/5.0 (iPhone; CPU iPhone OS ${os} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1`;
@@ -110,23 +111,41 @@ export async function phoneMore(page, item) {
  */
 export async function newPhoneMember(page, opts = {}, { attempts = 8, waitMs = 30000 } = {}) {
   const user = await createPhysician(opts);
-  await signIn(page, user);
-  const { where, seen } = await landOnGate(page);
-  if (where !== 'gate') throw new Error(`a new physician should land on the membership gate, landed on: ${where} ${seen.join(', ')}`);
-  const rt = lab();
-  await reviewOffer(page, { attempts, waitMs });
-  await page.getByRole('checkbox', { name: /agree to the payment and renewal terms/ }).tap();
-  await page.getByRole('button', { name: 'Continue to secure payment' }).tap();
-  const pay = page.getByTestId('qa-stripe-pay');
-  await pay.waitFor({ timeout: 60000 });
-  await pay.tap();
-  await page.waitForURL((u) => u.origin === rt.urls.appOrigin && u.searchParams.get('billing') === 'complete', { timeout: 120000 });
-  await waitForProfile(user.id, (p) => p.access_status === 'active', 90000);
-  await waitForMemberApp(page);
-  await page.goto(rt.urls.app, { waitUntil: 'domcontentloaded' });
-  await waitForMemberApp(page);
-  await dismissInterruptions(page);
-  return { user, profile: profileOf(user.id) };
+  const setupSave = observeInitialSetupSave(page);
+  try {
+    await signIn(page, user);
+    const { where, seen } = await landOnGate(page);
+    if (where !== 'gate') throw new Error(`a new physician should land on the membership gate, landed on: ${where} ${seen.join(', ')}`);
+    const rt = lab();
+    await reviewOffer(page, { attempts, waitMs });
+    const consent = page.getByRole('checkbox', { name: /agree to the payment and renewal terms/ });
+    const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
+    await consent.tap();
+    await proceed.tap();
+    const pay = page.getByTestId('qa-stripe-pay');
+    // A checkout refused with "Membership could not be updated ... Please try again." is tried
+    // again once, as the screen asks (2026-10-01: limited-checkout 503 on a gateway stall, as
+    // payForMembership does).
+    const tryAgain = page.getByText(/Membership could not be updated\..*Please try again\./).first();
+    if (await pay.or(tryAgain).first().waitFor({ timeout: 60000 }).then(() => tryAgain.isVisible().catch(() => false), () => false)) {
+      console.log('qa-lab: the checkout was refused with "Please try again" (a lab stall); trying again, as the screen asks');
+      if (!(await consent.isChecked().catch(() => false))) await consent.tap();
+      await proceed.tap();
+    }
+    await pay.waitFor({ timeout: 60000 });
+    await pay.tap();
+    await page.waitForURL((u) => u.origin === rt.urls.appOrigin && u.searchParams.get('billing') === 'complete', { timeout: 120000 });
+    const profile = await waitForProfile(user.id, (p) => p.access_status === 'active', 90000);
+    if (opts.profession) await saveProfession(user, opts.profession);
+    await waitForMemberApp(page);
+    // Complete setup before this incidental navigation, as the desktop helper does.
+    // The journeys still interrupt their explicitly tested saves and app returns.
+    await setupSave.wait(profile.id);
+    await page.goto(rt.urls.app, { waitUntil: 'domcontentloaded' });
+    await waitForMemberApp(page);
+    await dismissInterruptions(page);
+    return { user, profile: profileOf(user.id) };
+  } finally { setupSave.dispose(); }
 }
 
 /**
@@ -154,8 +173,9 @@ export async function landOnGate(page, { attempts = 4 } = {}) {
 }
 
 /**
- * From the membership gate: taps "Review ... offer" and waits for the offer
- * with its Continue button. When the product answers founding_capacity_pending
+ * From the membership gate: the offer with its Continue button. Pay first
+ * opens a new account's review by itself (Complete payment until it has);
+ * otherwise taps "Review ... offer". When the product answers founding_capacity_pending
  * (the lab's shared founding places are held by checkouts of journeys running
  * at the same time), it checks again after `waitMs`, as the message asks.
  * Returns how many tries it took.
@@ -168,11 +188,17 @@ export async function reviewOffer(page, { attempts = 8, waitMs = 30000 } = {}) {
     // try again"); the physician taps Try again, as the screen asks.
     const review = page.getByRole('button', { name: /Review .* offer/ }).first();
     const retry = page.getByRole('button', { name: 'Try again' }).first();
+    const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
+    const payFirst = page.getByText(PAY_FIRST_LINE).first();
+    const busy = page.getByText(/temporarily unavailable while existing checkouts are resolved/).first();
     const first = await Promise.race([
+      proceed.waitFor({ timeout: 45000 }).then(() => 'offer'),
       review.waitFor({ timeout: 45000 }).then(() => 'gate'),
+      payFirst.waitFor({ timeout: 45000 }).then(() => 'payFirst'),
       retry.waitFor({ timeout: 45000 }).then(() => 'retry'),
     ]).catch(() => 'timeout');
-    if (first !== 'gate') {
+    if (first === 'offer') return i;
+    if (first !== 'gate' && first !== 'payFirst') {
       if (i >= attempts) throw new Error(`the membership gate did not come back (${first}) after ${attempts} tries`);
       if (first === 'retry') await retry.tap().catch(() => {});
       await sleep(5000);
@@ -180,9 +206,14 @@ export async function reviewOffer(page, { attempts = 8, waitMs = 30000 } = {}) {
       await landing(page);
       continue;
     }
-    await review.tap();
-    const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
-    const busy = page.getByText(/temporarily unavailable while existing checkouts are resolved/).first();
+    // Pay first: the review is on its way by itself; Complete payment only when it has not come.
+    if (first === 'payFirst') {
+      const came = await Promise.race([
+        proceed.waitFor({ timeout: 15000 }).then(() => 'offer'),
+        busy.waitFor({ timeout: 15000 }).then(() => 'busy'),
+      ]).catch(() => 'none');
+      if (came === 'none') await page.getByRole('button', { name: 'Complete payment', exact: true }).tap();
+    } else await review.tap();
     const state = await Promise.race([
       proceed.waitFor({ timeout: 60000 }).then(() => 'offer'),
       busy.waitFor({ timeout: 60000 }).then(() => 'busy'),

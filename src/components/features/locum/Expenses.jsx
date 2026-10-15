@@ -1,3 +1,4 @@
+import { getActiveUserId } from "../../../utils/storageScope.js";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { editOverCurrent } from "../../../utils/formEdits";
 import { cardActionSize, dismissButtonStyle, TAP_MIN } from "../../shared/actionButton";
@@ -308,7 +309,7 @@ function Expenses() {
   // screen asks first.
   // Handed to the share sheet too (WorkLog's; utils/invoiceHandoff.js).
   // The Clerk user id: the same offline and online (WorkLog's).
-  const account = user?.id || "";
+  const account = getActiveUserId() || user?.id || "";
   const { list: leftUnrecorded, repeats: repeatNotes, dismissRepeat, remember: rememberUnrecorded, forget: forgetUnrecorded } = useUnrecordedInvoices(data.invoices, { kind: "EXP", account, records: data });
   useUnloadWarning(!!unrecorded);
   // The sheet asks whether its file went out (WorkLog's): the share sheet
@@ -359,7 +360,7 @@ function Expenses() {
     setInvFrom(from?.number ? { number: from.number, matched: fromNote.matched } : null);
     // A sheet replaced while its share sheet never answered: that number is
     // no longer with the sheet (it shows as unrecorded).
-    if (expNumber?.number) shareAnswered(expNumber.number);
+    if (expNumber?.number) shareAnswered(expNumber.number, account);
     setInvOpen(true);
     setEmailFor(null);
     wentOutRef.current = null;
@@ -629,7 +630,7 @@ function Expenses() {
     if (emailSendingRef.current) return;
     if (unrecorded && !window.confirm(closeUnrecordedQuestion(unrecorded.number))) return;
     // A share sheet that never answered: its number shows as unrecorded now.
-    if (expNumber?.number) shareAnswered(expNumber.number);
+    if (expNumber?.number) shareAnswered(expNumber.number, account);
     sheetRef.current += 1;
     setBusy(false);
     setInvOpen(false); setUnrecorded(null); setSendNote(null); setMarkSent(null); setEmailFor(null);
@@ -814,7 +815,7 @@ function Expenses() {
       const stopWatch = watchUnanswered(() => {
         if (recordedRef.current || sheetRef.current !== opened) return;
         setSendNote(ask);
-      }, { number });
+      }, { number, account });
       let sent;
       try {
         sent = await sendExpenseInvoiceFiles({
@@ -826,7 +827,7 @@ function Expenses() {
         throw err;
       } finally {
         stopWatch();
-        shareAnswered(number);
+        shareAnswered(number, account);
         if (shareOutRef.current?.seq === opened) shareOutRef.current = null;
       }
       // Closed without reporting a send, which iOS also answers after Mail

@@ -29,6 +29,20 @@ const idempotencyMismatch = () => new HttpError(409, 'Same idempotency key used 
 });
 const addressOf = (v) => (/<([^>]+)>/.exec(v)?.[1] || v || '').trim().toLowerCase();
 
+// Keep useful delivery evidence without persisting arbitrary gateway bodies,
+// request headers, or signature/token values. Unknown bodies remain unknown.
+const INBOUND_ERRORS = new Set(['ledger unavailable', 'processing in progress', 'processing failed', 'rate limited', 'forward failed']);
+function inboundResponseEvidence(status, text, transport = false) {
+  let bodyShape = transport ? 'unavailable' : 'text';
+  let error = null;
+  try {
+    const body = JSON.parse(text);
+    bodyShape = Array.isArray(body) ? 'json_array' : body === null ? 'json_null' : typeof body === 'object' ? 'json_object' : 'json_scalar';
+    if (bodyShape === 'json_object' && Object.keys(body).length === 1 && INBOUND_ERRORS.has(body.error)) error = body.error;
+  } catch { if (!transport && /^\s*(?:<!doctype html|<html)[\s>]/i.test(text)) bodyShape = 'html'; }
+  return { status, bodyShape, error, responseSha256: transport ? null : createHash('sha256').update(text).digest('hex'), responseBytes: transport ? null : Buffer.byteLength(text) };
+}
+
 export function createResendMock({ store, secrets, supabaseUrl, dockerBaseUrl, log = console.log }) {
   const auth = (req) => {
     if ((req.headers.authorization || '') !== `Bearer ${secrets.resend.apiKey}`) {
@@ -119,11 +133,46 @@ export function createResendMock({ store, secrets, supabaseUrl, dockerBaseUrl, l
   }
   async function deliverInbound(event) {
     const payload = JSON.stringify(event);
-    const headers = { 'Content-Type': 'application/json', ...svixHeaders(secrets.resend.webhookSecret, payload, { id: `msg_qa${randomAlnum(24)}` }) };
+    const eventId = `msg_qa${randomAlnum(24)}`;
+    const headers = { 'Content-Type': 'application/json', ...svixHeaders(secrets.resend.webhookSecret, payload, { id: eventId }) };
+    const emailId = event.data.email_id;
+    // Persist the attempt before dispatch. A crash or failed completion write
+    // leaves explicit pending evidence, never a fabricated successful answer.
+    store.update((s) => {
+      s.inboundDeliveries[emailId] = {
+        emailId, eventId, messageId: event.data.message_id,
+        payloadSha256: createHash('sha256').update(payload).digest('hex'),
+        attempts: [{ attempt: 1, startedAt: new Date().toISOString(), finishedAt: null, state: 'pending', status: null }],
+      };
+    });
+    // Ordinary mock state saves are coalesced; causal delivery evidence is
+    // durable before dispatch and before its outcome can be reported.
+    store.flush();
+    let result, evidence;
     try {
       const r = await fetch(`${supabaseUrl}/functions/v1/email-inbound`, { method: 'POST', headers, body: payload, signal: AbortSignal.timeout(120000) });
-      return { status: r.status, response: (await r.text()).slice(0, 2000) };
-    } catch (e) { return { status: 0, response: `network: ${e.message}` }; }
+      const response = await r.text();
+      evidence = inboundResponseEvidence(r.status, response);
+      result = { status: r.status, response: r.ok ? response.slice(0, 2000) : evidence.error ? JSON.stringify({ error: evidence.error }) : `Unrecognized ${evidence.bodyShape} response (sha256 ${evidence.responseSha256})` };
+    } catch {
+      evidence = inboundResponseEvidence(0, '', true);
+      result = { status: 0, response: 'Webhook transport did not return a complete response' };
+    }
+    const pending = { ...store.state.inboundDeliveries[emailId].attempts[0] };
+    try {
+      store.update((s) => {
+        Object.assign(s.inboundDeliveries[emailId].attempts[0], evidence, {
+          finishedAt: new Date().toISOString(), state: result.status >= 200 && result.status < 300 ? 'delivered' : 'failed',
+        });
+      });
+      store.flush();
+    } catch (error) {
+      // update() mutates memory before its atomic disk save. A failed save
+      // must not expose a completed in-memory answer through the evidence API.
+      store.state.inboundDeliveries[emailId].attempts[0] = pending;
+      throw error;
+    }
+    return result;
   }
   const received = (id) => {
     const e = store.state.inbound[id];
@@ -156,7 +205,7 @@ main{display:grid;grid-template-columns:minmax(260px,380px) 1fr;min-height:calc(
 nav{border-right:1px solid var(--line);overflow:auto}.row{display:block;padding:10px 16px;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}.row.on{background:var(--card);box-shadow:inset 3px 0 var(--accent)}
 .row b,.row span,.row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row span,.row small{color:var(--muted)}
 .detail{padding:16px;min-width:0}.empty{color:var(--muted)}dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 12px}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
-iframe{width:100%;height:60vh;border:1px solid var(--line);border-radius:8px;background:#fff}pre{white-space:pre-wrap;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px}</style></head>
+iframe{width:100%;height:60vh;border:1px solid var(--line);border-radius:8px;background:#fff}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px}</style></head>
 <body><header><h1>QA lab inbox</h1><span style="color:var(--muted)">${store.state.emails.length} captured. Nothing here was sent.</span>
 <form method="get"><input name="to" placeholder="to address" value="${esc(q.get('to') || '')}"><input name="subject" placeholder="subject contains" value="${esc(q.get('subject') || '')}"><button>Filter</button></form>
 <form method="post" action="/qa/emails/clear" onsubmit="return confirm('Clear every captured email?')"><button>Clear inbox</button></form></header>
@@ -231,7 +280,15 @@ iframe{width:100%;height:60vh;border:1px solid var(--line);border-radius:8px;bac
       const { email, event } = inbound(await readJson(req));
       const delivery = await deliverInbound(event);
       log(`resend: inbound "${email.subject}" to ${email.to.join(', ')} -> email-inbound ${delivery.status}`);
-      json(res, 200, { emailId: email.id, delivery });
+      // The lab accepted the simulated email, but a failed nested webhook is
+      // not success. Existing journey mockApi callers now stop here with the
+      // exact email identity/status instead of polling a nonexistent ledger.
+      json(res, delivery.status >= 200 && delivery.status < 300 ? 200 : 502, { emailId: email.id, delivery });
+    });
+    router.add('GET', '/qa/inbound/:id/delivery', (req, res, { params }) => {
+      const delivery = store.state.inboundDeliveries[params.id];
+      if (!delivery) throw new HttpError(404, 'no inbound delivery evidence');
+      json(res, 200, delivery);
     });
   }
   return { routes, accept };

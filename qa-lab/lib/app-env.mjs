@@ -24,10 +24,15 @@ export function productionAppFlags(text = readFileSync(DEPLOY_WORKFLOW, 'utf8'))
   return flags;
 }
 
-/** The environment for `vite build/preview/dev --config qa-lab/app/vite.config.mjs`. */
-export function qaAppEnv({ appPort, apiPort, anonKey, base = process.env }) {
+/**
+ * The environment for `vite build/preview/dev --config qa-lab/app/vite.config.mjs`.
+ * `scheme` 'https' is the iOS Simulator profile's build (qa-lab/sim.mjs): the
+ * API proxy's origin is baked into the bundle, so that profile has a build of its own.
+ */
+export function qaAppEnv({ appPort, apiPort, anonKey, scheme = 'http', base = process.env }) {
   if (!Number.isInteger(appPort) || !Number.isInteger(apiPort) || !anonKey) throw new Error('qaAppEnv needs the app port, the API proxy port and the local anon key');
   if (appPort === apiPort) throw new Error('the API proxy must be on another port than the app (another origin, as live)');
+  if (!['http', 'https'].includes(scheme)) throw new Error(`qaAppEnv: scheme must be http or https, not ${scheme}`);
   const env = {};
   // Keep only what node, npm and vite need from the caller; drop every VITE_* the caller had.
   for (const [k, v] of Object.entries(base)) if (!k.startsWith('VITE_')) env[k] = v;
@@ -35,7 +40,7 @@ export function qaAppEnv({ appPort, apiPort, anonKey, base = process.env }) {
     ...env,
     ...productionAppFlags(),
     VITE_QA_LAB: '1',
-    VITE_SUPABASE_URL: `http://127.0.0.1:${apiPort}`,
+    VITE_SUPABASE_URL: `${scheme}://127.0.0.1:${apiPort}`,
     VITE_SUPABASE_ANON_KEY: anonKey,
     // Clerk's key format (pk_live_ + base64 of the frontend API host + "$"), naming the lab's
     // mock issuer. Nothing reads it but the app's startup check; the QA sign-in ignores it.

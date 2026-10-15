@@ -1,3 +1,4 @@
+import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 // P1 journey: every other Credentials section, the way a physician fills
 // them in: add a record through the section's form, see it listed, edit one
 // field, reload, then delete it (tombstoned). Each section's database row is
@@ -106,6 +107,7 @@ test('credentials: every other section adds, edits, survives a reload and delete
       const edited = rowFor(s);
       qa.check('the edit is in the database after a reload', !!edited && edited.j.includes(String(s.edit[1]).replace(/"/g, '\\"')), edited?.j.slice(0, 200));
       await openCredentials(page, s.section);
+      await checkNoUnexpectedRecovery(page, qa, `${s.section} edited and reloaded`);
       // Delete.
       await recordButtons(page, (await shownText(page, s)) || s.mark).remove.click();
       await sleep(2500);
@@ -115,6 +117,7 @@ test('credentials: every other section adds, edits, survives a reload and delete
       await waitForMemberApp(page);
       await openCredentials(page, s.section);
       qa.check('it does not come back after a reload', !(await shownText(page, s)));
+      await checkNoUnexpectedRecovery(page, qa, `${s.section} deleted and reloaded`);
     }, { soft: true });
   }
 

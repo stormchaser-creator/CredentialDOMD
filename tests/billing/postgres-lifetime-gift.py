@@ -5,6 +5,7 @@ Synthetic identities only; no credentials, network listener, provider request, l
 email or deployment. Continuity helpers are explicit fixture stubs, as in the founding-cap test.
 """
 import concurrent.futures
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -34,7 +35,8 @@ with tempfile.TemporaryDirectory(prefix='gift-', dir='/tmp') as tmp:
     base = Path(tmp); sock = base / 's'; sock.mkdir()
     run = lambda *a, **k: subprocess.run([str(x) for x in a], text=True, capture_output=True, env=ENV, **k)
     slot = pg_slot.acquire(base / 'data')
-    assert run(BIN / 'initdb', '-D', base / 'data', '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8').returncode == 0
+    initialized = run(BIN / 'initdb', '-D', base / 'data', '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8')
+    assert initialized.returncode == 0, initialized.stderr
     r = run(BIN / 'pg_ctl', '-D', base / 'data', '-l', base / 'log', '-o', f"-k {sock} -p 56451 -c listen_addresses='' -c fsync=off", '-w', 'start')
     assert r.returncode == 0, r.stderr
 
@@ -246,6 +248,97 @@ with tempfile.TemporaryDirectory(prefix='gift-', dir='/tmp') as tmp:
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             ids = {r.get('id') for r in pool.map(lambda _: reserve('many@example.invalid'), range(8))}
         check('eight concurrent reservations create exactly one row', len(ids) == 1 and sql("select count(*) from lifetime_gift_reservations where email='many@example.invalid'").stdout.strip() == '1')
+
+        # Exact repeated write after a committed first call whose HTTP response
+        # was lost. These are separate transactions, not a rollback illusion.
+        # Apply the actual administrator regrant guard beside all three actual
+        # bootstrap bodies; provider continuity remains the explicit fixture.
+        sql("""alter table profiles add column updated_at timestamptz not null default now();
+          create function public.current_profile_id() returns uuid language sql stable security definer as $$select id from public.profiles where auth_user_id=auth.jwt()->>'sub'$$;
+          create function public.is_admin(p_id uuid) returns boolean language sql stable security definer as $$select exists(select 1 from public.app_admins where profile_id=p_id)$$;
+          create table beta_access(id uuid primary key default gen_random_uuid(),email text not null,name text,status text not null default 'invited',profile_id uuid,activated_at timestamptz,created_at timestamptz default now(),updated_at timestamptz default now(),invited_at timestamptz default now(),invited_by uuid,invite_sent_at timestamptz,lead_id uuid,note text);
+        """)
+        sql((ROOT / 'supabase/migrations/20260902h_access_grant_flag.sql').read_text())
+        sql((ROOT / 'supabase/migrations/20260924020000_admin_operations.sql').read_text())
+        sql((ROOT / 'supabase/migrations/20260925110000_admin_access_regrant_guard.sql').read_text())
+        check('all bootstrap layers and actual regrant guard are installed', sql("select count(*) from pg_proc join pg_namespace ns on pronamespace=ns.oid where ns.nspname='public' and proname in ('bootstrap_limited_signup','bootstrap_limited_signup_before_gift','bootstrap_limited_signup_before_founding','admin_change_profile_access')").stdout.strip() == '4')
+
+        def retained(n):
+            tables = ['access_grants', 'limited_billing_invitations', 'limited_beta_grants', 'limited_signup_enrollments',
+                      'billing_accounts', 'billing_subscriptions', 'billing_checkout_attempts', 'limited_billing_quotes', 'limited_paid_purchase_history']
+            parts = [f"'profile',(select to_jsonb(p) from profiles p where id='{pid(n)}')"]
+            for table in tables:
+                parts.append(f"'{table}',(select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]'::jsonb) from {table} t where profile_id='{pid(n)}')")
+            parts.append(f"'gift',(select coalesce(jsonb_agg(to_jsonb(g) order by g.id),'[]'::jsonb) from lifetime_gift_reservations g where claimed_profile_id='{pid(n)}')")
+            return sql('select jsonb_build_object(' + ','.join(parts) + ')').stdout.strip()
+
+        def replay_keeps(n, email, kind):
+            profile(n)
+            first = bootstrap(n, email)  # committed; its result is unavailable to the retrying caller
+            before = retained(n)
+            replay = bootstrap(n, email)
+            check(kind + ' committed response loss does not duplicate or rewrite any enrollment/grant/billing row', first['kind'] == kind and replay['kind'] == kind and retained(n) == before)
+            return first
+
+        replay_keeps(80, 'replay-paid@example.invalid', 'paid')
+        beta_email = 'replay-beta@example.invalid'
+        encoded = json.dumps([beta_email], separators=(',', ':'))
+        value("seal_limited_free_beta_cohort('replay_cohort'," + text(hashlib.sha256(encoded.encode()).hexdigest()) + ',' + text(encoded) + "::jsonb,'Reviewed synthetic historical no-card cohort')")
+        beta = replay_keeps(81, beta_email, 'grandfathered_beta')
+        beta_rows = retained(81)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            repeated = list(pool.map(lambda _: bootstrap(81, beta_email), range(6)))
+        check('concurrent committed beta replays keep exact original start/end and one grant', all(r['free_beta'] == beta['free_beta'] for r in repeated) and retained(81) == beta_rows)
+        sql(f"update limited_beta_grants set starts_at=now()-interval '31 days',ends_at=now()-interval '1 day' where profile_id='{pid(81)}'")
+        expired_before = retained(81)
+        check('expired beta cannot restart on gateway replay', bootstrap(81, beta_email)['free_beta']['state'] == 'expired' and retained(81) == expired_before)
+        sql(f"update limited_beta_grants set revoked_at=now() where profile_id='{pid(81)}'")
+        revoked_beta_before = retained(81)
+        check('revoked beta cannot be replaced on gateway replay', bootstrap(81, beta_email)['state'] == 'enrollment_unavailable' and retained(81) == revoked_beta_before)
+
+        reserve('replay-gift@example.invalid')
+        replay_keeps(82, 'replay-gift@example.invalid', 'lifetime')
+        check('replayed gift has exactly its two original scope grants and one claimed reservation', grants(82) == 2 and sql(f"select count(*) from lifetime_gift_reservations where claimed_profile_id='{pid(82)}'").stdout.strip() == '1')
+        sql(f"update access_grants set revoked_at=now() where profile_id='{pid(82)}' and scope='practice'")
+        revoked_gift_before = retained(82)
+        bootstrap(82, 'replay-gift@example.invalid')
+        check('a revoked gift scope is not regranted or its history rewritten by replay', retained(82) == revoked_gift_before and grants(82) == 1)
+
+        replay_keeps(83, 'replay-invitation@example.invalid', 'paid')
+        sql(f"update limited_billing_invitations set revoked_at=now() where profile_id='{pid(83)}'")
+        unavailable_before = retained(83)
+        check('revoked invitation remains unavailable without replacement on replay', bootstrap(83, 'replay-invitation@example.invalid')['state'] == 'enrollment_unavailable' and retained(83) == unavailable_before)
+        replay_keeps(84, 'replay-owner@example.invalid', 'paid')
+        sql(f"update profiles set auth_user_id='user_ChangedOwner' where id='{pid(84)}'")
+        owner_before = retained(84)
+        check('the exact old arguments cannot enroll a rebound profile', bootstrap(84, 'replay-owner@example.invalid')['state'] == 'membership_unavailable' and retained(84) == owner_before)
+        replay_keeps(85, 'replay-deleted@example.invalid', 'paid')
+        sql(f"update profiles set deleted_at=now() where id='{pid(85)}'")
+        deleted_before = retained(85)
+        check('a deletion between attempts is rechecked and never restored', bootstrap(85, 'replay-deleted@example.invalid')['state'] == 'membership_unavailable' and retained(85) == deleted_before)
+
+        reserve('replay-paused@example.invalid'); replay_keeps(86, 'replay-paused@example.invalid', 'lifetime')
+        sql(f"insert into beta_access(email,profile_id,status) values('replay-paused@example.invalid','{pid(86)}','active')")
+        pause = f"select admin_change_profile_access('{pid(86)}','revoked',access_status,updated_at,auth_user_id,'Synthetic explicit operator pause',gen_random_uuid()) from profiles where id='{pid(86)}'"
+        role("select set_config('request.jwt.claims'," + text(json.dumps({'sub': subject(1), 'role': 'authenticated'})) + ",true);" + pause, 'authenticated')
+        paused_before = retained(86)
+        check('actual audited Pause between attempts blocks gift reactivation on replay', bootstrap(86, 'replay-paused@example.invalid')['state'] == 'membership_unavailable' and retained(86) == paused_before
+              and sql(f"select count(*) from admin_operations_audit where target_profile_id='{pid(86)}' and after_state->'profile'->>'access_status'='revoked'").stdout.strip() == '1'
+              and sql(f"select status from beta_access where profile_id='{pid(86)}'").stdout.strip() == 'revoked')
+
+        profile(87)
+        role(f"select bootstrap_limited_signup('{pid(87)}','{subject(87)}',false,'replay-test@example.invalid')")
+        mode_before = retained(87)
+        check('test-mode replay cannot activate a live profile or add live grants', value(f"bootstrap_limited_signup('{pid(87)}','{subject(87)}',false,'replay-test@example.invalid')")['access_status'] == 'pending' and retained(87) == mode_before and grants(87) == 0)
+        profile(88)
+        sql(f"begin;set local role service_role;select bootstrap_limited_signup('{pid(88)}','{subject(88)}',true,'replay-rollback@example.invalid');rollback")
+        check('an uncommitted first attempt leaves no enrollment', sql(f"select count(*) from limited_signup_enrollments where profile_id='{pid(88)}'").stdout.strip() == '0')
+        replay_keeps(88, 'replay-rollback@example.invalid', 'paid')
+        gate_before = retained(88)
+        sql('update access_policy_settings set limited_self_service_enabled=false')
+        check('disabled policy is rechecked by a retry after the first commit', bootstrap(88, 'replay-rollback@example.invalid')['state'] == 'disabled' and retained(88) == gate_before)
+        sql('update access_policy_settings set limited_self_service_enabled=true')
+        check('all replay controls create no customer, subscription, checkout, quote or paid purchase', sql("select (select count(*) from billing_accounts where profile_id>='00000000-0000-4000-8000-000000000080')+(select count(*) from billing_subscriptions where profile_id>='00000000-0000-4000-8000-000000000080')+(select count(*) from billing_checkout_attempts where profile_id>='00000000-0000-4000-8000-000000000080')+(select count(*) from limited_billing_quotes where profile_id>='00000000-0000-4000-8000-000000000080')+(select count(*) from limited_paid_purchase_history where profile_id>='00000000-0000-4000-8000-000000000080')").stdout.strip() == '0')
 
         # --- the shipped rollback must leave sign-in working for everyone -------------
         rollback = (ROOT / 'docs/rollback/20260923010000_lifetime_gift_reservations.rollback.sql').read_text()

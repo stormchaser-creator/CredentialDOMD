@@ -404,7 +404,7 @@ test('licenses: matrix, renewal info, NPI import, filter tabs, desk sorting, sca
       // The phone's bottom bar (not a <nav>): its Credentials tab.
       const credTab = pp.getByRole('button', { name: /^(\S+ )?Credentials$/ }).filter({ visible: true }).first();
       const onPhone = await credTab.waitFor({ timeout: 120000 }).then(() => true, () => false);
-      await pp.screenshot({ path: (await qa.shot('phone signed in')).replace(/\.png$/, '-phone.png') });
+      await qa.shot('phone signed in', pp);
       qa.check('the phone opens the member app (bottom bar)', onPhone);
       await credTab.click();
       await pp.getByRole('button', { name: /^\S+ Licenses( |$)/ }).first().click();

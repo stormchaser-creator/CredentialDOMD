@@ -8,13 +8,17 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { setTimeout as realSetTimeout, clearTimeout as realClearTimeout } from 'node:timers';
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const read = (p) => readFileSync(`${root}${p}`, 'utf8');
 
 const T = await (async () => {
-  const out = await build({ entryPoints: [`${root}src/utils/cmeTranscriptPdf.js`], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent', define: { 'import.meta.env': '{}' } });
+  const plugins = process.env.TRANSCRIPT_SOURCE ? [{ name: 'preserved-transcript-control', setup(b) {
+    b.onLoad({ filter: /\/cmeTranscriptPdf\.js$/ }, () => ({ contents: readFileSync(process.env.TRANSCRIPT_SOURCE, 'utf8'), loader: 'js' }));
+  } }] : [];
+  const out = await build({ entryPoints: [`${root}src/utils/cmeTranscriptPdf.js`], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent', define: { 'import.meta.env': '{}' }, plugins });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);
   return mod.exports;
@@ -124,11 +128,12 @@ async function inBrowser(t, nav, fn) {
   });
   URL.createObjectURL = (blob) => { const u = `blob:synthetic/${blobs.size}`; blobs.set(u, blob); return u; };
   // downloadFile revokes its object URL on a 10 s timer; do not hold the test for it.
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const prevTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (...args) => { const timer = realSetTimeout(...args); if (Number(args[1]) >= 10000) timer.unref?.(); return timer; };
   try {
     return { result: await fn(), downloads };
   } finally {
-    t.mock.timers.reset();
+    globalThis.setTimeout = prevTimeout;
     URL.createObjectURL = prevCreate;
     if (prevNav) Object.defineProperty(globalThis, 'navigator', prevNav); else delete globalThis.navigator;
     if (prevDoc) Object.defineProperty(globalThis, 'document', prevDoc); else delete globalThis.document;
@@ -185,6 +190,24 @@ test('a cancelled share sheet sends nothing and downloads nothing', async (t) =>
   const { result, downloads } = await inBrowser(t, nav, () => T.shareTranscriptPdf(model));
   assert.equal(result, null);
   assert.deepEqual(downloads, []);
+});
+
+test('an unanswered transcript share releases the picker without starting downloads', async (t) => {
+  const model = T.stateTranscriptModel(data(), 'CO'); let calls = 0, timer;
+  const nav = { canShare: () => true, share: () => { calls++; return new Promise(() => {}); } };
+  try {
+    const { result, downloads } = await inBrowser(t, nav, () => Promise.race([
+      T.shareTranscriptPdf(model), new Promise((_, reject) => { timer = realSetTimeout(() => reject(Error('transcript stayed pending')), 500); }),
+    ]));
+    assert.equal(result.method, 'share'); assert.equal(calls, 1); assert.deepEqual(downloads, []);
+  } finally { realClearTimeout(timer); }
+});
+
+test('a transcript whose initiating view is gone cannot open a native share or download', async (t) => {
+  const model = T.stateTranscriptModel(data(), 'CO'); let calls = 0;
+  const nav = { canShare: () => true, share: async () => { calls++; } };
+  const { result, downloads } = await inBrowser(t, nav, () => T.shareTranscriptPdf(model, { isCurrent: () => false }));
+  assert.equal(result, null); assert.equal(calls, 0); assert.deepEqual(downloads, []);
 });
 
 test('PDF certificates a share sheet cannot carry with the transcript are named as not included', async (t) => {

@@ -76,6 +76,23 @@ export function planProbes(planText, checks = ['A', 'F']) {
  * or when anything credential-shaped is in the file (the lab does not guess
  * what a migration meant by it).
  */
+/** Keep scheduled work and the new owner notifier off before the local transaction commits. */
+export function localMigrationRequest(sql) {
+  return `${sql}
+
+do $qa_migration_containment$
+begin
+  if to_regclass('cron.job') is not null then
+    perform cron.alter_job(jobid, active := false) from cron.job where active;
+  end if;
+  if to_regclass('public.owner_notify_settings') is not null then
+    execute 'update public.owner_notify_settings set enabled = false where singleton';
+  end if;
+end
+$qa_migration_containment$;
+`;
+}
+
 export function labMigrationText(text, name, localOrigin) {
   const report = { rewrites: [], redactions: [], skippedGrants: [], notes: [] };
   const sql = sanitize(text, name, report, localOrigin);

@@ -5,13 +5,16 @@
 // Everything here talks to this machine only: the mock server and app server
 // from qa-lab/.generated/lab.json, the local Supabase stack through
 // qa-lab/lib/local-db.mjs (which refuses any non-local host).
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { LAB_EMAIL_DOMAIN } from '../../lib/lab-config.mjs';
-import { GENERATED_DIR } from '../../lib/paths.mjs';
+import { LAB_EMAIL_DOMAIN, APP_PUBLIC_ORIGIN } from '../../lib/lab-config.mjs';
+import { GENERATED_DIR, LAB_SECRETS_JSON } from '../../lib/paths.mjs';
 import { localExec, localJson, supabaseStatus } from '../../lib/local-db.mjs';
 import { sleep, waitFor } from '../../lib/procs.mjs';
 import { readRuntime } from '../../lab.mjs';
+import { installBillingBodyObserver } from './billing-response-body.mjs';
+import { observeInitialSetupSave } from './browser-completion.mjs';
 
 export { sleep, waitFor, LAB_EMAIL_DOMAIN };
 
@@ -109,12 +112,18 @@ export async function waitForEmail(filter, timeoutMs = 60000) {
 /** Makes a physician a lab administrator (local app_admins). */
 export async function makeAdmin(user) { return mockApi(`/qa/users/${encodeURIComponent(user.id)}/admin`, { method: 'POST' }); }
 
-/** Screenshot to .generated/e2e/shots/<name>.png; returns the path. */
+/** Captures the target viewport to a unique PNG and attaches only a successful capture. */
 export async function shot(page, name, testInfo) {
   mkdirSync(SHOT_DIR, { recursive: true });
-  const file = path.join(SHOT_DIR, `${name.replace(/[^A-Za-z0-9._-]+/g, '_')}.png`);
-  await page.screenshot({ path: file, fullPage: true }).catch(() => {});
-  if (testInfo) await testInfo.attach(name, { path: file, contentType: 'image/png' }).catch(() => {});
+  const identity = JSON.stringify({ titlePath: testInfo?.titlePath || [], name });
+  const digest = createHash('sha256').update(identity).digest('hex').slice(0, 12);
+  const label = name.replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 80) || 'screenshot';
+  const file = path.join(SHOT_DIR, `${label}-${digest}-${randomUUID()}.png`);
+  // Full-page Chromium capture can briefly resize to 1×1, remounting
+  // responsive drawers and dismissing the workflow this evidence observes.
+  // Capture the current viewport without changing the tested interaction.
+  await page.screenshot({ path: file, fullPage: false });
+  if (testInfo) await testInfo.attach(name, { path: file, contentType: 'image/png' });
   return file;
 }
 
@@ -128,34 +137,82 @@ export async function signIn(page, user) {
   await row.click();
 }
 
-/** Waits for what a signed-in physician lands on: the membership gate, or the member app. */
-export async function landing(page, { timeoutMs = 120000 } = {}) {
+/**
+ * Waits for what a signed-in physician lands on: the membership gate, or the member app.
+ * With `stalls: true` it also answers 'stalled' on a transient identity stop (TRANSIENT_IDENTITY,
+ * below) instead of waiting it out to 'timeout'.
+ */
+export async function landing(page, { timeoutMs = 120000, stalls = false } = {}) {
   const gate = page.getByRole('region', { name: 'Membership' });
   const member = page.locator('nav, [role="navigation"]').filter({ hasText: /Home|Dashboard/ }).first();
   const failure = page.getByText(/could not finish|could not load|could not be loaded|could not be initialized/i).first();
+  const stalled = page.getByRole('status').filter({ hasText: TRANSIENT_IDENTITY }).first();
   return Promise.race([
     gate.waitFor({ timeout: timeoutMs }).then(() => 'gate'),
     member.waitFor({ timeout: timeoutMs }).then(() => 'member'),
     failure.waitFor({ timeout: timeoutMs }).then(() => 'failure'),
+    ...(stalls ? [stalled.waitFor({ timeout: timeoutMs }).then(() => 'stalled')] : []),
   ]).catch(() => 'timeout');
 }
 
 /**
- * From the pending membership gate: review the offer shown, agree to its
- * terms, continue to payment and pay on the lab's Checkout stand-in. Returns
- * the review text and the checkout session id. As with Stripe, the browser is
- * back at ?billing=complete at once and the webhook events follow (by default
- * 1.5 s later, all at once, shuffled); `plan` changes that for this checkout
- * (see setDeliveryPlan), `beforePay(sessionId)` runs on the stand-in first.
+ * landing() for a first sign-in: on a transient identity stop it taps Reload, as the screen
+ * asks, at most `retries` times (as waitForMemberApp does), and says so on the run's output.
+ */
+export async function landingAfterStalls(page, { retries = 2, timeoutMs = 120000 } = {}) {
+  let where = await landing(page, { timeoutMs, stalls: true });
+  for (let i = 0; where === 'stalled' && i < retries; i++) {
+    const text = await page.getByRole('status').filter({ hasText: TRANSIENT_IDENTITY }).first().innerText().catch(() => '');
+    console.log(`qa-lab: the first sign-in stopped on ${(text.match(TRANSIENT_IDENTITY) || ['a transient identity failure'])[0]} (a lab stall); tapping Reload, as the screen asks`);
+    await page.getByRole('button', { name: /^(Reload|Try again)$/ }).first().click().catch(() => {});
+    await sleep(2000);
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    where = await landing(page, { timeoutMs, stalls: true });
+  }
+  return where;
+}
+
+/** Pay first's line on the membership page of a new, unpaid account (LimitedLaunchMembership.jsx). */
+export const PAY_FIRST_LINE = 'Complete your payment to open your account.';
+
+/**
+ * Opens the offer review on the membership page and waits for its Continue.
+ * Pay first (feat/pay-first-refund): a new account's review opens by itself,
+ * and its one button is Complete payment until it has; an account that is not
+ * new chooses with `offerButton` (Review ... offer). Returns whether the review
+ * opened by itself.
+ */
+export async function openOfferReview(page, { offerButton = /Review .* offer/ } = {}) {
+  const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
+  const payFirst = page.getByText(PAY_FIRST_LINE).first();
+  const offer = page.getByRole('button', { name: offerButton }).first();
+  await proceed.or(payFirst).or(offer).first().waitFor({ timeout: 60000 });
+  if (await proceed.isVisible().catch(() => false)) return true;
+  if (await payFirst.isVisible().catch(() => false)) {
+    if (await proceed.waitFor({ timeout: 15000 }).then(() => true, () => false)) return true;
+    await page.getByRole('button', { name: 'Complete payment', exact: true }).click();
+  } else await offer.click();
+  await proceed.waitFor({ timeout: 60000 });
+  return false;
+}
+
+/**
+ * From the pending membership gate: review the offer shown (pay first opens it
+ * by itself), agree to its terms, continue to payment and pay on the lab's
+ * Checkout stand-in. Returns the review text and the checkout session id. As
+ * with Stripe, the browser is back at ?billing=complete at once and the
+ * webhook events follow (by default 1.5 s later, all at once, shuffled);
+ * `plan` changes that for this checkout (see setDeliveryPlan),
+ * `beforePay(sessionId)` runs on the stand-in first.
  */
 export async function payForMembership(page, { offerButton = /Review .* offer/, plan, beforePay } = {}) {
   const rt = lab();
-  await page.getByRole('button', { name: offerButton }).first().click();
+  const openedByItself = await openOfferReview(page, { offerButton });
   const proceed = page.getByRole('button', { name: 'Continue to secure payment' });
-  await proceed.waitFor({ timeout: 60000 });
   const reviewText = (await page.getByRole('region', { name: 'Membership' }).innerText()).replace(/\s+/g, ' ');
   const disabledBeforeConsent = await proceed.isDisabled();
-  await page.getByRole('checkbox', { name: /agree to the payment and renewal terms/ }).check();
+  const consent = page.getByRole('checkbox', { name: /agree to the payment and renewal terms/ });
+  await consent.check();
   await proceed.click();
   const pay = page.getByTestId('qa-stripe-pay');
   await pay.waitFor({ timeout: 60000 });
@@ -167,7 +224,7 @@ export async function payForMembership(page, { offerButton = /Review .* offer/, 
   if (beforePay) await beforePay(sessionId);
   await pay.click();
   await page.waitForURL((u) => u.origin === rt.urls.appOrigin && u.searchParams.get('billing') === 'complete', { timeout: 120000 });
-  return { reviewText, sessionId, disabledBeforeConsent };
+  return { reviewText, sessionId, disabledBeforeConsent, openedByItself };
 }
 
 /**
@@ -256,18 +313,41 @@ export async function waitForMemberApp(page, timeoutMs = 120000, { retries = 2 }
  * that started pending gets wrong, is billing-return.spec.mjs's and
  * signup-checkout.spec.mjs's to check.)
  */
+/**
+ * A member who has already chosen a profession ('MD', 'DO', 'PA', 'NP'):
+ * saved as the app saves updateSettings({ degreeType }) (profiles.degree_type,
+ * as the member, through PostgREST), before the app opens again. Since
+ * release/goal3 (35187499) a member with no profession is asked "Which
+ * license do you hold?" before Vera answers or the CV reader reads, so the
+ * journeys about Vera or CV import start from a physician who chose MD
+ * (newMember / newPhoneMember / memberWithPlace `{ profession: 'MD' }`).
+ * Left out, the profession stays blank, as at signup.
+ */
+export async function saveProfession(user, degree) {
+  const set = await restAs(user, `profiles?id=eq.${profileOf(user.id).id}`, { method: 'PATCH', body: { degree_type: degree } });
+  if (set.status >= 300 || profileOf(user.id)?.degree_type !== degree) throw new Error(`could not save the profession ${degree}: ${set.status} ${JSON.stringify(set.data).slice(0, 160)}`);
+}
+
 export async function newMember(page, opts = {}) {
   const user = await createPhysician(opts);
-  await signIn(page, user);
-  const where = await landing(page);
-  if (where !== 'gate') throw new Error(`a new physician should land on the membership gate, landed on: ${where}`);
-  const payment = await payForMembership(page);
-  await waitForProfile(user.id, (p) => p.access_status === 'active', 90000);
-  await waitForMemberApp(page);
-  await page.goto(lab().urls.app, { waitUntil: 'domcontentloaded' });
-  await waitForMemberApp(page);
-  await dismissInterruptions(page);
-  return { user, payment, profile: profileOf(user.id) };
+  const setupSave = observeInitialSetupSave(page);
+  try {
+    await signIn(page, user);
+    const where = await landingAfterStalls(page);
+    if (where !== 'gate') throw new Error(`a new physician should land on the membership gate, landed on: ${where}`);
+    const payment = await payForMembership(page);
+    const profile = await waitForProfile(user.id, (p) => p.access_status === 'active', 90000);
+    if (opts.profession) await saveProfession(user, opts.profession);
+    await waitForMemberApp(page);
+    // Home queues setup bookkeeping. Wait for this account's completed save
+    // before deliberately leaving; an immediate navigation flushes it while
+    // WebKit is unloading and reports a misleading access-control failure.
+    await setupSave.wait(profile.id);
+    await page.goto(lab().urls.app, { waitUntil: 'domcontentloaded' });
+    await waitForMemberApp(page);
+    await dismissInterruptions(page);
+    return { user, payment, profile: profileOf(user.id) };
+  } finally { setupSave.dispose(); }
 }
 
 /** Closes first-run dialogs and banners that sit over the app (if any are shown). */
@@ -292,6 +372,31 @@ function localAnonKey() {
   const status = supabaseStatus();
   if (!status?.ANON_KEY) throw new Error('the local stack is not running');
   return (anonKey = status.ANON_KEY);
+}
+
+// Read the native response bytes consumed by this account's app. Install
+// before arming the click; never replay a request or fulfill its response.
+const functionObservers = new WeakMap();
+/** Install before navigation: the app captures fetch when its client is made. */
+export async function prepareFunctionAnswers(page) {
+  if (functionObservers.has(page)) return;
+  if (page.url() !== 'about:blank') throw Error('Prepare function observation on a fresh page before navigation');
+  const key = JSON.parse(readFileSync(LAB_SECRETS_JSON, 'utf8')).signingKey;
+  const observer = await installBillingBodyObserver(page, { origin: lab().urls.apiOrigin,
+    jwk: { kty: key.kty, kid: key.kid, n: key.n, e: key.e }, issuer: lab().issuer, authorizedParty: APP_PUBLIC_ORIGIN });
+  functionObservers.set(page, observer);
+  page.once('close', () => { observer.stop(); functionObservers.delete(page); });
+}
+export async function armFunctionAnswer(page, name, { user, bodyTest = null } = {}) {
+  if (name !== 'limited-refund' || !/^user_qa[A-Za-z0-9]+$/.test(user?.id || '')) throw Error('Refund observation needs its exact test account');
+  const observer = functionObservers.get(page);
+  if (!observer) throw Error('Prepare function observation before loading the app');
+  const answer = observer.next(`/functions/v1/${name}`, user.id, [200]).then(async response => {
+    if (bodyTest && !bodyTest(response.request().postData() || '')) throw Error('Refund request action did not match');
+    return { status: response.status(), body: await response.json() };
+  });
+  answer.catch(() => {});
+  return { answer };
 }
 
 /** A token for `user` from the mock Clerk (template 'supabase' is the database token). */
@@ -329,6 +434,30 @@ export async function stripeFor(subject) {
   const ids = new Set(sessions.flatMap((s) => [s.id, s.subscription, s.invoice, s.customer]).filter(Boolean));
   const deliveries = (await mockApi('/qa/stripe/deliveries')).deliveries.filter((d) => ids.has(d.object) || ids.has(d.customer));
   return { sessions, deliveries };
+}
+
+/**
+ * Cancel and get a refund's edge function (limited-refund) called as `user` with their own Clerk
+ * session token on the LOCAL gateway, as the app calls it: { action: 'status' | 'quote' } or
+ * { action: 'refund', paymentId, amountCents, confirm: true }. Returns { status, body }.
+ */
+export async function limitedRefundAs(user, body) {
+  const jwt = await tokenFor(user, null);
+  const r = await fetch(`${lab().urls.api}/functions/v1/limited-refund`, {
+    method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000),
+  });
+  const text = await r.text();
+  let data = null; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  return { status: r.status, body: data, text, url: r.url, method: 'POST' };
+}
+
+/** What the mock Stripe holds for one customer: refunds (newest first, with their Idempotency-Key), charges and subscriptions. */
+export async function stripeMoneyFor(customerId) {
+  const q = `customer=${encodeURIComponent(customerId)}`;
+  const [{ refunds }, { charges }, { subscriptions }] = await Promise.all([
+    mockApi(`/qa/stripe/refunds?${q}`), mockApi(`/qa/stripe/charges?${q}`), mockApi(`/qa/stripe/subscriptions?${q}`),
+  ]);
+  return { refunds, charges, subscriptions };
 }
 
 /** Sends a recorded Stripe event to the webhook again (a replay). */
@@ -375,6 +504,105 @@ export async function pendingOps(page) {
     const id = window.Clerk?.user?.id;
     const raw = id ? localStorage.getItem(`credentialdomd-pending-ops:${id}`) : null;
     try { return raw ? JSON.parse(raw) : []; } catch { return [raw]; }
+  });
+}
+
+// ── The device's offline copy (IndexedDB since fix/offline-cache-idb) ──────
+// The offline copy of the file, the Vera transcript and its archives live in
+// IndexedDB (database `credentialdomd-offline`, object store `kv`) under the
+// same scoped keys localStorage used (`credentialdomd-data:<clerk id>`), as
+// the JSON text localStorage held. A localStorage copy of one of those keys is
+// never older than the IndexedDB one (the app writes localStorage only when
+// IndexedDB refuses, and removes it once an IndexedDB write lands), so it is
+// read first, as the app reads it (src/utils/storageScope.js readOfflineText).
+export const OFFLINE_DB = Object.freeze({ name: 'credentialdomd-offline', store: 'kv' });
+export const OFFLINE_BASES = Object.freeze({ data: 'credentialdomd-data', chat: 'credentialdomd-assistant-chat', archives: 'credentialdomd-assistant-archives' });
+
+// In the page: the offline store's entries, never creating the database (an
+// open of a database that does not exist creates it at version 1 without its
+// store, and the app's own open would then find no store to use).
+const IDB_READER = `async (db, only) => {
+  if (!indexedDB.databases) return { exists: null, entries: [] };
+  if (!(await indexedDB.databases()).some((d) => d.name === db.name)) return { exists: false, entries: [] };
+  const conn = await new Promise((resolve, reject) => {
+    const r = indexedDB.open(db.name);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.onblocked = () => reject(new Error('blocked'));
+  });
+  try {
+    if (!conn.objectStoreNames.contains(db.store)) return { exists: true, noStore: true, entries: [] };
+    const all = await new Promise((resolve, reject) => {
+      const t = conn.transaction(db.store, 'readonly');
+      const s = t.objectStore(db.store);
+      const keys = s.getAllKeys();
+      const vals = s.getAll();
+      t.oncomplete = () => resolve(keys.result.map((k, i) => [String(k), vals.result[i]]));
+      t.onerror = () => reject(t.error);
+    });
+    return { exists: true, entries: all.filter(([k]) => !only || only(k)).map(([key, value]) => ({ key, value })) };
+  } finally { conn.close(); }
+}`;
+// A page function with `readIdb` declared in its own body: Playwright sends a function's source
+// to the page, so nothing from this module's scope can be shared any other way (and no eval runs
+// in the page).
+const withIdb = (params, body) => new Function(`return async function (${params}) {\n  const readIdb = ${IDB_READER};\n${body}\n}`)();
+
+const KEYS_FOR = withIdb('{ cid, find, db }', `
+  const idb = await readIdb(db, (k) => k.endsWith(':' + cid));
+  const local = Object.keys(localStorage).filter((k) => k.includes(cid));
+  const has = (v) => find.filter((n) => typeof v === 'string' && v.includes(n));
+  return {
+    dbExists: idb.exists,
+    idb: idb.entries.map((e) => ({ key: e.key, chars: typeof e.value === 'string' ? e.value.length : -1, found: has(e.value) })),
+    local: local.map((k) => ({ key: k, chars: (localStorage.getItem(k) || '').length, found: has(localStorage.getItem(k)) })),
+  };`);
+
+/**
+ * What this browser keeps of account `cid` in its offline stores: every IndexedDB key of the
+ * offline store naming the account and every localStorage key naming it, with their sizes and
+ * which of the `find` texts each holds.
+ */
+export async function offlineKeysFor(page, cid, { find = [] } = {}) {
+  return page.evaluate(KEYS_FOR, { cid, find, db: OFFLINE_DB });
+}
+
+const COPY_OF = withIdb('{ cid, base, find, wantText, db }', `
+  const key = base + ':' + cid;
+  const local = localStorage.getItem(key);
+  const idb = await readIdb(db, (k) => k === key);
+  const stored = idb.entries[0]?.value ?? null;
+  const raw = local ?? stored;
+  const sections = {};
+  let parsed = null;
+  try { parsed = raw == null ? null : JSON.parse(raw); } catch { parsed = undefined; }
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    for (const [k, v] of Object.entries(parsed)) if (Array.isArray(v)) sections[k] = v.length;
+  }
+  return {
+    key, where: local != null ? 'local' : stored != null ? 'offline' : null,
+    chars: raw == null ? 0 : raw.length, inLocal: local != null, inIdb: stored != null, dbExists: idb.exists,
+    parses: parsed !== undefined, messages: Array.isArray(parsed) ? parsed.length : null, sections,
+    found: Object.fromEntries(find.map((n) => [n, raw != null && raw.includes(n)])),
+    text: wantText ? raw : undefined,
+  };`);
+
+/**
+ * Account `cid`'s copy of one large store (default the offline file) as the app reads it:
+ * localStorage first, then IndexedDB. Returns { where: 'local' | 'offline' | null, chars,
+ * inLocal, inIdb, sections: { <collection>: count } (the file), messages (a transcript's
+ * length), found: { <needle>: bool }, text (only with { text: true }) }.
+ */
+export async function offlineCopy(page, cid, { base = OFFLINE_BASES.data, find = [], text = false } = {}) {
+  return page.evaluate(COPY_OF, { cid, base, find, wantText: text, db: OFFLINE_DB });
+}
+
+/** localStorage's use in this browser, as a browser counts it: characters of every key and value. */
+export async function localStorageUse(page) {
+  return page.evaluate(() => {
+    const all = Object.keys(localStorage).map((k) => ({ key: k, chars: k.length + (localStorage.getItem(k) || '').length }));
+    all.sort((a, b) => b.chars - a.chars);
+    return { chars: all.reduce((n, e) => n + e.chars, 0), keys: all.length, largest: all.slice(0, 5) };
   });
 }
 

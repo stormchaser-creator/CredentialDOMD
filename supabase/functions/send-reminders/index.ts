@@ -23,6 +23,7 @@
  * alerts_fingerprint or last_notified: those are the in-app banner's, and
  * alerts_fingerprint is only read, as the list the member snoozed over.
  *
+ * Live manual requests enqueue work and return 202; only leased drains send.
  * Body (optional): { profile_id?: uuid, dry_run?: boolean }
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -35,6 +36,7 @@ import { remindable, reminderLabel, withCurrentCategoryNames, reminderGreeting, 
 import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
 import { reminderEmailDecision, reminderFingerprint, reminderToldStill } from "../_shared/reminderCadence.mjs";
 import { readAllPages, groupsOf, readReminderGroup } from "../_shared/reminderReads.mjs";
+import { drainReminderQueue, reminderDeadline } from "../_shared/reminderQueue.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") || "";
@@ -68,11 +70,12 @@ const json = (status: number, body: unknown) =>
 const dayDiff = (iso: string, today: string) => Math.round((Date.parse(iso + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86400000);
 const fmt = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-// A Clerk key set or profiles read that does not answer is 503, not the
-// runtime's bare 500 (see answerAuthUnavailable). Hook and admin callers only: no CORS.
-serve(answerAuthUnavailable({}, async (req) => {
+
+async function handle(req: Request, queueJob: { id: string; lease_token: string } | null = null, deadline: number | null = null): Promise<Response> {
   if (req.method !== "POST") return json(405, { error: "POST only" });
-  const secretOk = HOOK && req.headers.get("x-hook-secret") === HOOK;
+  // queueJob is an internal argument from an already-authorized drain, never
+  // read from request JSON or Deno connection metadata.
+  const secretOk = !!queueJob || (HOOK && req.headers.get("x-hook-secret") === HOOK);
   let adminOk = false;
   if (!secretOk) {
     const who = await clerkProfile(req);
@@ -83,11 +86,38 @@ serve(answerAuthUnavailable({}, async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch { /* empty */ }
   const dryRun = !!body.dry_run;
+  if (body.drain === true && dryRun) return json(400, { error: "A queue drain cannot be a dry run. Use profile_id with dry_run to preview reminders." });
 
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const requestDeadline = deadline ?? (dryRun ? null : Date.now() + 45000);
+  const bounded = requestDeadline === null ? null : reminderDeadline(requestDeadline);
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, bounded ? { global: { fetch: bounded.fetch } } : undefined);
 
-  // Every recipient, page by page: one read stops at PostgREST's max_rows
-  // (1,000 on hosted Supabase), and the members past it were never reminded.
+  if (!queueJob && !dryRun && body.drain !== true) {
+    if (body.profile_id != null && (typeof body.profile_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.profile_id))) return json(400, { error: "Invalid profile_id" });
+    try {
+      const queued = await db.rpc("reminder_queue_enqueue", { p_profile: body.profile_id ?? null });
+      if (queued.error || !Number.isInteger(queued.data)) return json(503, { error: "queue_unavailable" });
+      return json(202, { ok: true, queued: queued.data, delivery: "scheduled", sent: 0 });
+    } catch { return json(503, { error: "queue_unavailable" }); }
+  }
+
+  if (body.drain === true) {
+    try {
+      const results: any[] = [];
+      const result = await drainReminderQueue({ db, process: async (job: { id: string; profile_id: string; lease_token: string }) => {
+        const response = await handle(new Request(req.url, {
+          method: "POST", headers: req.headers, body: JSON.stringify({ profile_id: job.profile_id }),
+        }), job, requestDeadline! - 5000); // reserve five seconds for acknowledgement/release
+        if (!response.ok) return { error: "records_unavailable" };
+        const answer = await response.json();
+        const result = answer.results?.[0] || { profile: job.profile_id, sent: false, reason: "ineligible" };
+        results.push(result);
+        return result;
+      } });
+      return json(result.ok ? 200 : 503, { ...result, results });
+    } catch { return json(503, { ok: false, error: "queue_unavailable" }); }
+  }
+
   const { data: profiles, error: pe } = await readAllPages(() => reminderRecipientsQuery(db, body.profile_id).order("id"));
   if (pe) return json(500, { error: pe.message });
 
@@ -104,6 +134,12 @@ serve(answerAuthUnavailable({}, async (req) => {
     const read = await readReminderGroup(db, group.map((p: any) => p.id), { tables: TABLES, today, lo, hi: hiMax });
 
     for (const p of group) {
+      // An incomplete read is never a complete credential check. In
+      // particular, an unread acknowledgment must not unsnooze a record.
+      if (read.acksFailed || read.failed.size) {
+        results.push({ profile: p.id, sent: false, error: "records_unavailable" });
+        continue;
+      }
       const lead = reminderLeadDays(p.reminder_lead_days);
       const freq = notifyFreqDays(p.notify_freq_days);
       const hi = hiFor(p);
@@ -153,7 +189,8 @@ serve(answerAuthUnavailable({}, async (req) => {
       const decision = reminderEmailDecision(p, { fingerprint: fp, freqDays: freq });
       if (!decision.send) { await forget(); results.push({ profile: p.id, sent: false, reason: decision.reason }); continue; }
 
-      items.sort((a, b) => a.days - b.days);
+      // Stable tie ordering preserves the frozen retry body.
+      items.sort((a, b) => a.days - b.days || a.table.localeCompare(b.table) || a.id.localeCompare(b.id));
       const expired = items.filter(i => i.days < 0);
       const soon = items.filter(i => i.days >= 0 && i.days <= 30);
       const later = items.filter(i => i.days > 30);
@@ -184,31 +221,72 @@ CredentialDOMD`;
 
       if (dryRun) { results.push({ profile: p.id, sent: false, dry_run: true, count: items.length, headline, text }); continue; }
 
+      let delivery = { email: {
+        from: "CredentialDOMD <whit@credentialdomd.com>", to: [p.email], reply_to: "stormchaser@elryx.com",
+        subject: `Credential check: ${headline}`, text,
+      }, fingerprint: fp, count: items.length, headline, reason: decision.reason };
+      if (!queueJob) return json(500, { error: "Missing reminder lease" });
+      {
+        const frozen = await db.rpc("reminder_queue_payload", { p_job: queueJob.id, p_token: queueJob.lease_token, p_payload: delivery });
+        if (!frozen.error && frozen.data?.suppressed === true && typeof frozen.data.reason === "string") {
+          results.push({ profile: p.id, sent: false, reason: frozen.data.reason });
+          continue;
+        }
+        if (frozen.error || !frozen.data?.email || !frozen.data?.fingerprint) {
+          results.push({ profile: p.id, sent: false, error: "queue_unavailable" });
+          continue;
+        }
+        delivery = frozen.data;
+        // A retry must never deliver personal credential details to an address
+        // the account has since removed. Do not change the frozen body/key.
+        if (delivery.email.to?.length !== 1 || delivery.email.to[0] !== p.email) {
+          results.push({ profile: p.id, sent: false, reason: "recipient changed" });
+          continue;
+        }
+      }
+
       // RESEND_API_BASE is unset in production (api.resend.com); only the local QA lab points it at its mock.
-      const r = await fetch(`${(Deno.env.get("RESEND_API_BASE") || "https://api.resend.com").replace(/\/+$/, "")}/emails`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from: "CredentialDOMD <whit@credentialdomd.com>",
-          to: [p.email],
-          reply_to: "stormchaser@elryx.com",
-          subject: `Credential check: ${headline}`,
-          text,
-        }),
-      });
-      const rj = await r.json().catch(() => ({}));
-      if (!r.ok) { console.error("resend failed", p.id, r.status, rj); results.push({ profile: p.id, sent: false, error: rj }); continue; }
-      const now = new Date().toISOString();
-      // The server's own columns only; updated_at because this is a server-side
-      // edit of the row (the app's banner state is left alone).
-      const { error: stampError } = await db.from("profiles")
-        .update({ reminder_email_fingerprint: fp, reminder_emailed_at: now, updated_at: now })
-        .eq("id", p.id);
-      if (stampError) console.error("reminder stamp failed", p.id, stampError.message);
-      await db.from("notification_log").insert({ user_id: p.id, method: "email", alert_count: items.length, date: now });
-      results.push({ profile: p.id, sent: true, reason: decision.reason, count: items.length, headline, resend_id: rj.id || null, ...(stampError ? { stamp_error: stampError.message } : {}) });
+      let r: Response;
+      let rj: { id?: string };
+      try {
+        r = await fetch(`${(Deno.env.get("RESEND_API_BASE") || "https://api.resend.com").replace(/\/+$/, "")}/emails`, {
+          method: "POST",
+          // Concurrent runs and a same-day retry after a lost provider answer
+          // or failed database stamp reuse the provider's original send.
+          headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json", "Idempotency-Key": `reminder-queue/${queueJob.id}` },
+          signal: bounded ? AbortSignal.any([AbortSignal.timeout(10000), bounded.signal]) : AbortSignal.timeout(10000),
+          body: JSON.stringify(delivery.email),
+        });
+        rj = await r.json().catch(() => ({}));
+      } catch {
+        // The email may have reached the provider. Leave the cadence alone,
+        // report uncertainty, and continue with the remaining members.
+        console.error("reminder send unconfirmed", p.id);
+        results.push({ profile: p.id, sent: false, error: "send_unconfirmed" });
+        continue;
+      }
+      if (!r.ok) {
+        // A conflict can mean another run is still sending, or the original
+        // payload already reached Resend before a same-day profile edit.
+        // Do not generate a new key (which could send twice) or claim success.
+        const error = r.status === 409 || r.status >= 500 ? "send_unconfirmed" : "provider_refused";
+        console.error("reminder provider response", p.id, r.status);
+        results.push({ profile: p.id, sent: false, error });
+        continue;
+      }
+      if (!rj || typeof rj.id !== "string" || !rj.id.trim()) {
+        console.error("reminder send unconfirmed", p.id);
+        results.push({ profile: p.id, sent: false, error: "send_unconfirmed" });
+        continue;
+      }
+      // The queue acknowledgement atomically stamps cadence and notification
+      // history. If it fails, the frozen body/key can be retried safely.
+      results.push({ profile: p.id, sent: true, reason: delivery.reason, count: delivery.count, headline: delivery.headline, resend_id: rj.id });
     }
   }
 
   return json(200, { ok: true, profiles: (profiles || []).length, results });
-}));
+}
+
+// Never pass Deno's connection-info argument as the internal queue context.
+serve(answerAuthUnavailable({}, (req) => handle(req)));

@@ -216,7 +216,7 @@ test('the results reporter writes to QA_E2E_RESULTS (creating its folder) and le
     await withEnv({ QA_E2E_RESULTS: file, QA_FEATURES: path.join(dir, 'no-checklist.json') }, () => {
       const r = new ResultsReporter();
       r.onTestEnd({ titlePath: () => ['', 'x.spec.mjs', 'journey'], tags: ['@CRED-001'], annotations: [], location: { file: path.join(REPO_ROOT, 'qa-lab', 'e2e', 'x.spec.mjs') } },
-        { status: 'passed', duration: 5, retry: 0, annotations: [], attachments: [] });
+        { status: 'passed', duration: 5, retry: 0, annotations: [{ type: 'qa-feature', description: JSON.stringify({ id: 'CRED-001', status: 'pass', checks: [{ name: 'record saved', ok: true }] }) }], attachments: [] });
       r.onEnd({ status: 'passed' });
     });
     const res = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -271,13 +271,16 @@ async function startPostgres() {
   const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PG'))), LC_ALL: 'C' };
   const exec = (name, args) => run(path.join(bin, name), args, { env, maxBuffer: 8 * 1024 * 1024 });
-  // One of the machine's PostgreSQL test slots (tests/helpers/pg-slot.mjs), taken before initdb
-  // and given back once the cluster is stopped (release also stops a cluster left running).
-  const slot = await acquirePgSlot(path.join(root, 'data'));
+  // Every disposable cluster takes one of the machine's shared test slots first (tests/helpers/pg-slot.mjs).
+  const slot = await acquirePgSlot(path.join(root, 'data'), { label: 'tests/qa-lab/e2e-parallel.test.mjs' });
   try {
     await exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
     await exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off`, '-w', 'start']);
-  } catch (e) { slot.release(); fs.rmSync(root, { recursive: true, force: true }); throw e; }
+  } catch (error) {
+    slot.release();
+    fs.rmSync(root, { recursive: true, force: true });
+    throw error;
+  }
   const psqlArgs = ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', PORT, '-U', 'postgres', '-d', 'postgres'];
   const psql = (input) => new Promise((resolve, reject) => {
     const child = spawn(path.join(bin, 'psql'), psqlArgs, { env });
@@ -296,7 +299,8 @@ async function startPostgres() {
     return { send: (s) => child.stdin.write(`${s}\n`), end: () => { child.stdin.end(); return closed; } };
   };
   const close = async () => {
-    try { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); } finally { slot.release(); fs.rmSync(root, { recursive: true, force: true }); }
+    try { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); }
+    finally { slot.release(); fs.rmSync(root, { recursive: true, force: true }); }
   };
   return { psql, sql, session, close };
 }
@@ -315,7 +319,7 @@ test('founding reset on PostgreSQL: frees old public places only, waits for a ch
       return m[0];
     };
     await sql(`create table public.limited_beta_cohorts(cohort_id text primary key);
-      create table public.profiles(id uuid primary key);
+      create table public.profiles(id uuid primary key, email text);
       create table public.limited_billing_quotes(attempt_id uuid primary key);
       ${table('limited_founding_programs')}
       ${table('limited_founding_slots')}
@@ -394,6 +398,14 @@ test('founding reset on PostgreSQL: frees old public places only, waits for a ch
       const r = resetJson(await sql(foundingResetSql({ minAge: 0 })));
       assert.equal(r.freed, 2);
       assert.equal(await snapshot(), 'true:1:promised true:2:paid false:1:promised');
+    });
+    await t.test('a native simulator account keeps its allocation after hours, including an explicit zero-age cleanup', async () => {
+      await sql(member(true, 9, 'paid', 180));
+      await sql("update public.profiles set email='native-se-manual@qa.credentialdomd.test' where id=(select profile_id from public.limited_founding_slots where livemode and slot=9)");
+      const before = await snapshot();
+      const r = resetJson(await sql(foundingResetSql({ minAge: 0 })));
+      assert.equal(r.freed, 0);
+      assert.equal(await snapshot(), before, 'native cancellation still has its founding allocation');
     });
   } finally { await db.close(); }
 });

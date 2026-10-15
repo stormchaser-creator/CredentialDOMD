@@ -10,8 +10,7 @@ import "./styles/base.css";
 import { sweepLapsedQueues, sweepSignOutIntents, watchSignOutIntents, sweepPendingOfflinePurges, releaseRecoveredContinuitySources } from "./utils/storageScope";
 import { SIGN_IN_LOCALIZATION } from "./utils/signInMethods";
 import { appContentSecurityPolicy } from "./utils/appCsp";
-import { setInvoiceHandoffPurge } from "./utils/storageScope";
-import { purgeHandoffStores, sweepHandoffPurges } from "./utils/invoiceHandoffStore.js";
+import { sweepHandoffPurges } from "./utils/invoiceHandoffStore.js";
 import { setInvoiceNumberConflictHandler } from "./lib/supabase";
 import { requestRecordsRefresh } from "./utils/serverBilling.js";
 import { startPageDiscardWatch } from "./utils/pageDiscard.js";
@@ -30,10 +29,10 @@ installErrorReporting();
 // the operator's alerts and the Admin Errors count leave out
 // (migration 20261002080000).
 startPageDiscardWatch({ report: (message, extra) => reportError(message, "info", extra) });
-// Sign out and Delete All My Data remove the invoice hand-off notes with the
-// account's other keys (utils/invoiceHandoffStore.js). Its IndexedDB half,
-// when an earlier page could not finish it, is finished now.
-setInvoiceHandoffPurge(purgeHandoffStores);
+// storageScope already removes both current and legacy invoice hand-off
+// stores through purgeInvoiceHandoff. Registering the shared-store purge
+// again starts a second purge generation and can strand the legacy barrier.
+// An earlier page's unfinished shared-store purge is swept below.
 // An invoice whose number another invoice of the account carries (recorded
 // on another device) is not retried: the account is read again instead.
 setInvoiceNumberConflictHandler(requestRecordsRefresh);

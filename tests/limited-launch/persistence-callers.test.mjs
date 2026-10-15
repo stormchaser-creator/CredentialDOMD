@@ -8,6 +8,8 @@ import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
 import { applyHeldQueue } from '../../src/utils/heldChanges.js';
 import { localChangesSince, rebaseLocalChanges } from '../../src/utils/loadRebase.js';
 import { accountDataDeletedAt, sameDeletionStamp } from '../../src/utils/dataDeletion.js';
+import { fixture as persistenceFixture } from './persistence-fixture.mjs';
+import { createRecordAcknowledgements, isAcknowledgedRecordCopy } from '../../src/utils/recordAcknowledgements.js';
 
 // Execute the actual provider functions with synthetic dependencies. Extracting
 // this contiguous function block avoids mounting Clerk/React or making requests;
@@ -34,7 +36,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
   let actor = ownerA;
   const calls = [], stateWrites = [], queuedUpdates = [], warnings = [];
   const stateFor = (owner, docs = []) => ({ settings: { name: owner }, documents: docs, licenses: [] });
-  const f = { calls, stateWrites, warnings, state: stateFor(ownerA, documents), handlers: {}, pending: 1 };
+  const f = { calls, stateWrites, warnings, state: stateFor(ownerA, documents), handlers: {}, pending: 1, fence: null };
   const userIdRef = { current: 'profileA' }, dataOwnerRef = { current: ownerA };
   const dataLoadGeneration = { current: 0 }, dataRef = { current: f.state };
   const window = { Clerk: { user: { id: ownerA } } };
@@ -54,7 +56,8 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     honorAccountDataDeletion: asyncDependency('honorAccountDataDeletion', false),
     // Reads of the deletion stamp and the purge fence are not effects; only
     // adopting a fence is recorded.
-    localFence: () => null,
+    localFence: () => f.fence,
+    localCopyCurrent: (_owner, fence) => (fence ?? null) === f.fence,
     adoptLocalFence: (...args) => record('adoptLocalFence', args),
     user: { id: ownerA }, useCallback: callback => callback, accessAuthority: { enabled: false, suspendWrites: () => calls.push({ name: 'suspendWrites' }) },
     DEFAULT_DATA: { settings: {}, documents: [], licenses: [] }, COLLECTION_KEYS: ['licenses', 'documents'], WIPE_SEEN_KEY: 'synthetic-wipe',
@@ -83,12 +86,15 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     lsGet: () => null,
     lsSet: (...args) => record('lsSet', args),
     readCachedData: (...args) => record('readCachedData', args) ?? null,
+    preserveRecovery: asyncDependency('preserveRecovery', 'synthetic-recovery'), recordContent: persistenceFixture().api.recordContent,
+    prepareRecordAcknowledgements: async (...args) => f.handlers.prepareRecordAcknowledgements?.(...args) ?? new Set(),
+    isAcknowledgedRecordCopy,
     withLocalOnlySettings: cloud => cloud,
     hasLegacyStorage: () => false, offlineCopyUnread: () => false, adoptLegacyStorage: () => null, markOfflineCopyRead: () => false, cachedRecordsRef: { current: null }, adoptOfflineCopyRead: () => false, deviceOnlyForLoad: () => null, offlineCopyUnchangedSinceKnown: () => false,
     deviceOnlySaveBlocked: () => null, retryOfflineSave: async () => false,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [],
     // The REAL reconciler, so the harness exercises the actual sweep.
-    reconcileDocumentLinks, applyHeldQueue, localChangesSince, rebaseLocalChanges, localCopyCurrent: () => true,
+    reconcileDocumentLinks, applyHeldQueue, localChangesSince, rebaseLocalChanges,
     setData: update => { calls.push({ name: 'setData', actor }); if (deferReact) queuedUpdates.push(update); else applyUpdate(update); },
     setProfileIssue: value => { calls.push({ name: 'setProfileIssue', actor, value }); },
     setIdentityWaiting() {},
@@ -130,6 +136,130 @@ function assertNoLateWrites(f) {
   assert.equal(f.refs.userIdRef.current, 'profileB');
   assert.equal(f.refs.dataOwnerRef.current, ownerB);
 }
+
+test('SYNC-016: acknowledged fast-clock cache accepts the later cloud edit without a self-heal write', async () => {
+  const values = new Map(), f = fixture();
+  f.pending = 0;
+  const saved = { id: 'synthetic-license', notes: 'Earlier accepted A', updatedAt: '2026-09-30T12:10:00.000Z' };
+  const cloud = { ...saved, notes: 'Later accepted B', updatedAt: '2026-09-30T12:00:05.000Z' };
+  const receipts = createRecordAcknowledgements({ activeAccount: () => ownerA, fenceFor: () => f.fence, copyCurrent: () => true,
+    receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null,
+    write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } });
+  const scope = { accountId: ownerA, fence: null };
+  await receipts.acknowledgeRecordWrite(receipts.captureRecordWrite({ ...scope, collectionKey: 'licenses', item: saved }));
+  f.handlers.readCachedData = () => ({ settings: { name: 'Synthetic' }, licenses: [saved], documents: [] });
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Synthetic' }, licenses: [cloud], documents: [] });
+  f.handlers.prepareRecordAcknowledgements = receipts.prepareRecordAcknowledgements;
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(f.state.licenses[0].notes, 'Later accepted B');
+  assert.equal(f.named('bulkSync').length, 0);
+});
+
+test('SYNC-016: save A, reload its normalized cloud shape, edit B, and reload A twice keeps B', async () => {
+  const values = new Map(), f = fixture(); f.pending = 0;
+  const submitted = { id: 'synthetic-license', notes: 'Accepted from fast-clock A', updatedAt: '2026-09-30T12:10:00.000Z' };
+  const normalizedA = { ...submitted, number: null, state: null, updatedAt: '2026-09-30T12:10:00.010Z' };
+  const normalizedB = { ...normalizedA, notes: 'Later accepted B', updatedAt: '2026-09-30T12:00:05.000Z' };
+  let cache = { settings: { name: 'Synthetic' }, licenses: [submitted], documents: [] }, cloud = normalizedA;
+  const receipts = createRecordAcknowledgements({ activeAccount: () => ownerA, fenceFor: () => f.fence, copyCurrent: () => true,
+    receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null,
+    write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } });
+  await receipts.acknowledgeRecordWrite(receipts.captureRecordWrite({ accountId: ownerA, collectionKey: 'licenses', item: submitted }));
+  f.handlers.readCachedData = () => cache;
+  f.handlers.saveData = async value => { cache = JSON.parse(JSON.stringify(value)); };
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Synthetic' }, licenses: [{ ...cloud }], documents: [] });
+  f.handlers.prepareRecordAcknowledgements = receipts.prepareRecordAcknowledgements;
+  await f.api.loadDataForUser(ownerA);
+  assert.deepEqual(cache.licenses[0], normalizedA, 'the first reload caches the DB timestamp and nullable/default columns');
+  cloud = normalizedB;
+  for (let reload = 0; reload < 2; reload++) {
+    await f.api.loadDataForUser(ownerA);
+    assert.equal(f.state.licenses[0].notes, 'Later accepted B');
+    assert.equal(cache.licenses[0].notes, 'Later accepted B');
+  }
+  assert.equal(f.named('bulkSync').length, 0, 'no reload republishes the known clean fast-clock copy');
+});
+
+test('SYNC-016: a failed deletion-ledger read retains the known-clean cached shape for retry', async () => {
+  const values = new Map(), f = fixture(); f.pending = 0;
+  const submitted = { id: 'synthetic-license', notes: 'Accepted A', updatedAt: '2026-09-30T12:10:00.000Z' };
+  const normalizedA = { ...submitted, number: null, updatedAt: '2026-09-30T12:10:00.010Z' };
+  let cache = { settings: { name: 'Synthetic' }, licenses: [submitted], documents: [] }, cloud = normalizedA;
+  const receipts = createRecordAcknowledgements({ activeAccount: () => ownerA, fenceFor: () => f.fence, copyCurrent: () => true,
+    receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null,
+    write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } });
+  await receipts.acknowledgeRecordWrite(receipts.captureRecordWrite({ accountId: ownerA, collectionKey: 'licenses', item: submitted }));
+  f.handlers.readCachedData = () => cache;
+  f.handlers.saveData = async value => { cache = JSON.parse(JSON.stringify(value)); };
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Synthetic' }, licenses: [{ ...cloud }], documents: [] });
+  f.handlers.prepareRecordAcknowledgements = receipts.prepareRecordAcknowledgements;
+  await f.api.loadDataForUser(ownerA);
+  assert.deepEqual(cache.licenses[0], normalizedA);
+  f.handlers.listTombstones = async () => { throw Error('Synthetic ledger unavailable'); };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    cloud = { ...normalizedA, notes: `Later accepted B revision ${attempt}`, updatedAt: '2026-09-30T12:00:05.000Z' };
+    await f.api.loadDataForUser(ownerA);
+    assert.deepEqual(cache.licenses[0], normalizedA, 'failed hydration leaves the previous cached row intact');
+  }
+  f.handlers.listTombstones = async () => new Set();
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(f.state.licenses[0].notes, 'Later accepted B revision 3');
+  assert.equal(f.named('bulkSync').length, 0, 'receipt refreshes on failed loads must not make the fast-clock cache look unsent');
+});
+
+test('SYNC-016: unknown unsent copies at either clock ordering preserve both versions without overwriting cloud', async () => {
+  for (const updatedAt of ['2026-09-30T11:59:00.000Z', '2026-09-30T12:09:00.000Z', '2026-09-30T12:11:00.000Z']) {
+    const values = new Map(), f = fixture(); f.pending = 0;
+    const previous = { id: 'synthetic-license', notes: 'Acknowledged earlier', updatedAt: '2026-09-30T12:10:00.000Z' };
+    const dirty = { ...previous, notes: 'Unsent local edit', updatedAt };
+    const cloud = { ...previous, notes: 'Cloud before the unsent edit', updatedAt: '2026-09-30T12:00:00.000Z' };
+    const receipts = createRecordAcknowledgements({ activeAccount: () => ownerA, fenceFor: () => null, copyCurrent: () => true,
+      receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null,
+      write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } });
+    await receipts.acknowledgeRecordWrite(receipts.captureRecordWrite({ accountId: ownerA, collectionKey: 'licenses', item: previous }));
+    f.handlers.readCachedData = () => ({ settings: { name: 'Synthetic' }, licenses: [dirty], documents: [] });
+    f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Synthetic' }, licenses: [cloud], documents: [] });
+    f.handlers.prepareRecordAcknowledgements = receipts.prepareRecordAcknowledgements;
+    await f.api.loadDataForUser(ownerA);
+    assert.equal(f.state.licenses[0].notes, cloud.notes);
+    assert.equal(f.named('bulkSync').length, 0);
+    assert.equal(f.named('preserveRecovery')[0].args[0].local.notes, 'Unsent local edit');
+    assert.equal(f.named('preserveRecovery')[0].args[0].cloud.notes, cloud.notes);
+  }
+});
+
+test('a load superseded or purged while receipt hashes wait cannot hydrate or self-heal its stale cache', async () => {
+  for (const interrupt of [f => f.switchAccount(), f => { f.refs.dataLoadGeneration.current += 1; }, f => { f.fence = 'purged'; }]) {
+    const f = fixture(), waiting = deferred(); f.pending = 0;
+    f.handlers.readCachedData = () => ({ settings: { name: 'Synthetic' }, licenses: [{ id: 'synthetic-license', notes: 'Stale cached content' }], documents: [] });
+    f.handlers.prepareRecordAcknowledgements = () => waiting.promise;
+    const loading = f.api.loadDataForUser(ownerA);
+    await tick(); interrupt(f); waiting.resolve(new Set()); await loading;
+    for (const name of ['setData', 'saveData', 'bulkSync', 'sbUpdate', 'listTombstones']) assert.equal(f.named(name).length, 0, name);
+  }
+});
+
+test('recovery storage failure leaves the unknown local source intact and never self-heals over cloud', async () => {
+  const f = fixture(); f.pending = 0;
+  const local = { settings: { name: 'Synthetic' }, licenses: [{ id: 'synthetic', notes: 'Unsent here', updatedAt: '2026-09-30T12:10:00Z' }], documents: [] };
+  f.handlers.readCachedData = () => local; f.handlers.loadData = async () => local;
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: {}, licenses: [{ id: 'synthetic', notes: 'Saved elsewhere' }], documents: [] });
+  f.handlers.preserveRecovery = async () => { throw Object.assign(Error('Recovery store full'), { code: 'sync_recovery_unavailable' }); };
+  await f.api.loadDataForUser(ownerA); await tick();
+  assert.equal(f.state.licenses[0].notes, 'Unsent here');
+  assert.equal(f.named('saveData').length, 0);
+  assert.equal(f.named('bulkSync').length, 0);
+});
+
+test('an account switch while recovery capture waits cannot hydrate or cache the former account', async () => {
+  const f = fixture(), wait = deferred(); f.pending = 0;
+  f.handlers.readCachedData = () => ({ settings: {}, licenses: [{ id: 'synthetic', notes: 'Local A' }] });
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: {}, licenses: [{ id: 'synthetic', notes: 'Cloud A' }], documents: [] });
+  f.handlers.preserveRecovery = () => wait.promise;
+  const loading = f.api.loadDataForUser(ownerA); await tick();
+  f.switchAccount(); wait.resolve('saved'); await loading;
+  assertNoLateWrites(f);
+});
 
 test('account switch while profile lookup waits prevents replay, cloud load, state, and cache writes', async () => {
   const f = fixture(), pending = deferred();
@@ -681,6 +811,14 @@ test('SYNC-013: a file given again that has not reached Storage is uploaded even
   assert.equal(doc.pendingUpload, undefined, 'the note clears once the file is in Storage');
 });
 
+
+test('automatic healing of an absent non-document row explicitly requests insertion without replacement', async () => {
+  const f = fixture(); f.pending = 0;
+  f.handlers.readCachedData = () => ({ settings: {}, documents: [], licenses: [{ id: 'synthetic-only-local', notes: 'Original device copy' }] });
+  await f.api.loadDataForUser(ownerA);
+  const healing = f.named('bulkSync').find(call => call.args[1] === 'licenses');
+  assert.equal(healing.args[4].insertOnly, true);
+});
 
 // 2026-10-02, the owner's iPhone: every stored file of the account was
 // downloaded at load and held as a data URL (hundreds of MB), and iOS

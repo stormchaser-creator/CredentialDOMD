@@ -6,15 +6,13 @@
 //               still being fetched;
 //   * SYNC-014  AI keys, the Vera model, the CallSync link and the portal-password
 //               lock code stay on the device they were set on;
-//   * SYNC-016  two devices edit the same license; the later edit wins. When the
-//               device that edited first has a clock ten minutes fast its older
-//               edit can win (last write by device clock): recorded by design,
-//               verified out of reach with clocks the devices keep themselves.
+//   * SYNC-016  conflicting device edits preserve both versions for review;
+//               acknowledged cached copies never overwrite later accepted edits.
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { guardContext, test, watchPage } from './support/fixtures.mjs';
 import {
-  chooseFiles, field, goTab, landing, newMember, openCredentials, openMore, profileOf, row, rows, signIn, sleep, syntheticPdf, tableRow, waitFor, waitForMemberApp,
+  chooseFiles, field, goTab, landing, newMember, openCredentials, openMore, profileOf, pendingOps, row, rows, signIn, sleep, syntheticPdf, tableRow, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import { addLicense, pageText } from './support/sync-docs-intake-helpers.mjs';
 
@@ -53,7 +51,7 @@ test('a backup with 1,050 case logs imports and all of them come back, here and 
     await signIn(b.page, user);
     await landing(b.page);
     const bn = await countOnScreen(b.page);
-    await b.page.screenshot({ path: (await qa.shot('case logs on browser B')).replace(/\.png$/, '-B.png') });
+    await qa.shot('case logs on browser B', b.page);
     qa.check('a clean second browser counts 1,050', bn === N, `${bn}`);
     qa.check('the database count is still 1,050 (nothing duplicated or lost by the second device)', row(`select count(*)::int as n from public.case_logs where user_id = '${profile.id}'`).n === N);
   });
@@ -93,7 +91,7 @@ test('a file attached on one device opens on another (or says it is still coming
     } else {
       firstTap = /downloading from cloud|check back shortly|syncing/i.test(first) ? 'says it is still fetching' : 'no file shown';
     }
-    await b.page.screenshot({ path: (await qa.shot('B license view first tap')).replace(/\.png$/, '-B.png') });
+    await qa.shot('B license view first tap', b.page);
     qa.check('the first tap opens the file or visibly says it is still fetching', firstTap === 'opened' || firstTap === 'says it is still fetching', firstTap);
     // Wait for the bytes, close and reopen the view, tap again.
     await b.page.keyboard.press('Escape');
@@ -122,7 +120,7 @@ test('a file attached on one device opens on another (or says it is still coming
       docsTap = p ? 'opened' : 'nothing happened';
       if (p) await p.close().catch(() => {});
     }
-    await b.page.screenshot({ path: (await qa.shot('B documents')).replace(/\.png$/, '-B.png') });
+    await qa.shot('B documents', b.page);
     qa.check('Documents on B: View PDF opens the file', docsTap === 'opened', docsTap);
   });
 });
@@ -215,7 +213,7 @@ test('device-only secrets and settings stay on the device they were set on', { t
     qa.check('B: no CallSync link', feedB === '' || feedB === '(no field)', feedB);
     const keysB = await b.page.evaluate(() => { const id = window.Clerk.user.id; const raw = localStorage.getItem(`credentialdomd-keys:${id}`) || '{}'; try { return Object.keys(JSON.parse(raw)); } catch { return []; } });
     qa.check('B: no lock code on the device', !keysB.includes('lockCode'), keysB.join(', '));
-    await b.page.screenshot({ path: (await qa.shot('B settings')).replace(/\.png$/, '-B.png') });
+    await qa.shot('B settings', b.page);
     // The JSON backup exported on A.
     await openMore(page, 'Data & Backup');
     const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.getByRole('button', { name: /Export JSON Backup/ }).click()]);
@@ -224,7 +222,7 @@ test('device-only secrets and settings stay on the device they were set on', { t
   });
 });
 
-test('two devices edit the same license: the later edit wins; a device clock set minutes fast is by design', { tag: ['@SYNC-016'] }, async ({ page, qa, secondBrowser, browser }) => {
+test('two devices edit the same license: conflicts preserve both copies and acknowledged saves survive a fast device clock', { tag: ['@SYNC-016'] }, async ({ page, qa, secondBrowser, browser }) => {
   const { user, profile } = await newMember(page, { firstName: 'Tove', lastName: 'Twodevice' });
   const { lic } = await addLicense(page, profile.id, { name: 'QA Concurrent License', number: 'QA-CONC-1616', state: 'OR', expires: '2029-06-30' });
   const editNotes = async (p) => {
@@ -249,26 +247,40 @@ test('two devices edit the same license: the later edit wins; a device clock set
     return /QA note from B/.test(t) ? 'B' : /QA note from A/.test(t) ? 'A' : 'none';
   };
 
-  await qa.feature('SYNC-016', 'A saves "A"; 30 seconds later B, opened before, saves "B"; both reload', async () => {
+  const checkRecovery = async (p, localNote, cloudNote) => {
+    const notice = p.locator('[data-sync-recovery]');
+    await notice.waitFor({ state: 'visible', timeout: 30000 });
+    const details = notice.locator('details').filter({ hasText: localNote }).first();
+    await details.locator('summary').click();
+    const compared = await details.innerText();
+    qa.check('recovery compares the local draft with the observed account copy', compared.includes(localNote) && compared.includes(cloudNote), compared.slice(0, 700));
+    const [download] = await Promise.all([
+      p.waitForEvent('download', { timeout: 15000 }),
+      details.getByRole('button', { name: 'Download both copies', exact: true }).click(),
+    ]);
+    const exported = JSON.parse(readFileSync(await download.path(), 'utf8'));
+    qa.check('the recovery download preserves both complete versions of this record', exported.type === 'CredentialDOMD recovery copies' && exported.entries.some(e => e.collectionKey === 'licenses' && e.recordId === lic.id && e.local.notes === localNote && e.cloud.notes === cloudNote));
+    await qa.shot(`deliberate recovery ${localNote}`, p);
+  };
+
+  await qa.feature('SYNC-016', 'Two stale forms edit the same field: the first accepted edit stays saved and the other draft is recoverable', async () => {
     const b = await secondBrowser();
     await signIn(b.page, user);
     await landing(b.page);
     const eA = await editNotes(page);
     const eB = await editNotes(b.page);
     await save(eA, 'QA note from A');
-    await sleep(30000);
+    await waitFor('A accepted', async () => row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA note from A');
     await save(eB, 'QA note from B');
-    await sleep(3000);
-    await page.reload(); await waitForMemberApp(page); await sleep(3000);
-    await b.page.reload(); await waitForMemberApp(b.page); await sleep(3000);
-    const a1 = await notesShown(page), b1 = await notesShown(b.page);
-    const db = row(`select notes, updated_at from public.licenses where id = '${lic.id}'`);
-    qa.check('the database holds "B"', db.notes === 'QA note from B', db.notes);
-    qa.check('A shows "B" after its reload', a1 === 'B', a1);
-    qa.check('B shows "B" after its reload', b1 === 'B', b1);
+    await checkRecovery(b.page, 'QA note from B', 'QA note from A');
+    qa.check('the conflicting stale form did not overwrite A', row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA note from A');
+    await page.reload(); await waitForMemberApp(page);
+    await b.page.reload(); await waitForMemberApp(b.page);
+    qa.check('both devices show the accepted A version after reload', await notesShown(page) === 'A' && await notesShown(b.page) === 'A');
+    qa.check('the saved recovery remains after reload', await b.page.locator('[data-sync-recovery]').isVisible());
   });
 
-  await qa.feature('SYNC-016', 'The device that edits first runs ten minutes fast: which edit wins, and the devices agree', async () => {
+  await qa.feature('SYNC-016', 'The first device runs ten minutes fast, reloads its normalized saved copy, then accepts the later edit', async () => {
     // A third browser whose clock is ten minutes ahead edits first; B (correct clock) edits after it.
     const fastCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await guardContext(fastCtx, qa.report);
@@ -282,9 +294,13 @@ test('two devices edit the same license: the later edit wins; a device clock set
       await signIn(b.page, user);
       await landing(b.page);
       const eF = await editNotes(fast);
-      const eB = await editNotes(b.page);
       await save(eF, 'QA note from A (fast clock)');
       await sleep(5000);
+      // The server rewrites timestamps and adds nullable/default columns.
+      // A normal reload must not make the same saved copy appear dirty again.
+      await fast.reload(); await waitForMemberApp(fast); await sleep(3000);
+      await b.page.reload(); await waitForMemberApp(b.page);
+      const eB = await editNotes(b.page);
       await save(eB, 'QA note from B, the later edit');
       await sleep(3000);
       qa.check('right after both saves the database holds the later edit', row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA note from B, the later edit');
@@ -292,16 +308,35 @@ test('two devices edit the same license: the later edit wins; a device clock set
       await b.page.reload(); await waitForMemberApp(b.page); await sleep(3000);
       const db = row(`select notes, updated_at from public.licenses where id = '${lic.id}'`);
       const shownB = /the later edit/.test(await (async () => { await openCredentials(b.page, 'Licenses'); await tableRow(b.page, 'QA-CONC-1616').click(); const v = b.page.getByRole('dialog').first(); await v.waitFor(); const t = await v.innerText(); await b.page.keyboard.press('Escape'); return t; })());
-      // Filed as a bug, then verified not to be one (2026-09-30): the mechanism is real, but only a clock
-      // set wrong by minutes reaches it, which the lab has to fake (Playwright's clock.install).
       const later = db.notes === 'QA note from B, the later edit';
-      qa.check('device B and the database agree after both reloads (whichever edit won)', shownB === later, `database "${db.notes}" (updated_at ${db.updated_at}); B shows the later edit: ${shownB}`);
+      qa.check('the later accepted edit remains on device B and in the database after both reloads', later && shownB, `database "${db.notes}" (updated_at ${db.updated_at}); B shows the later edit: ${shownB}`);
       if (!later) {
-        qa.byDesign('SYNC-016', `A device whose clock runs 10 minutes fast overwrote a later edit: the database went back to "${db.notes}" (updated_at ${db.updated_at}); last write wins by device clock (editItem and updateItem stamp updated_at from the device; the load's self-heal pushes a copy that looks newer)`,
-          'Verified not a bug a physician meets (2026-09-30): it needs two of the same physician\'s devices whose clocks differ by more than the time between two edits of the same field, and the fast one reloading after; phones and Macs keep their clocks within a second, so only a clock set wrong by hand reaches it. A hardening item: let the database stamp updated_at and compare local edits with the last cloud stamp this device saw.');
+        qa.bug({ feature: 'SYNC-016', severity: 'high', title: 'A fast-clock cached edit overwrites a later accepted edit',
+          step: 'A saves with a fast clock, B saves later, then both reload', expected: 'B\'s later accepted edit stays saved',
+          actual: `The database reverted to "${db.notes}" at ${db.updated_at}. Client-clock ordering is not proof of an unsynchronized edit.` });
       }
     } finally {
       await fastCtx.close().catch(() => {});
     }
   });
+
+  await qa.feature('SYNC-016', 'An offline draft reconnects after another device saved: cloud stays saved, both copies can be downloaded', async () => {
+    await page.reload(); await waitForMemberApp(page);
+    const b = await secondBrowser();
+    await signIn(b.page, user); await landing(b.page);
+    const offline = await editNotes(page);
+    const online = await editNotes(b.page);
+    await page.context().setOffline(true);
+    try {
+      await save(offline, 'QA offline draft from A');
+      await waitFor('the offline draft is queued', async () => (await pendingOps(page)).some(op => op.collectionKey === 'licenses' && op.payload?.id === lic.id), { timeoutMs: 30000 });
+      await save(online, 'QA newer accepted note from B');
+      await waitFor('B accepted', async () => row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA newer accepted note from B');
+    } finally { await page.context().setOffline(false); }
+    await checkRecovery(page, 'QA offline draft from A', 'QA newer accepted note from B');
+    qa.check('replaying the offline draft preserves the newer account record', row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA newer accepted note from B');
+    await page.reload(); await waitForMemberApp(page);
+    qa.check('the recovery survives reload without replaying its draft again', await page.locator('[data-sync-recovery]').isVisible() && row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA newer accepted note from B');
+  });
+
 });

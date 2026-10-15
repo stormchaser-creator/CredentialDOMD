@@ -67,7 +67,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { removeOrphanSegments, clusterInodes, directoryInode } from '../../scripts/ticket-fix/pg-clusters.mjs';
+import { removeOrphanSegments, removeOrphanSemaphores, clusterInodes, directoryInode } from '../../scripts/ticket-fix/pg-clusters.mjs';
 
 export const DEFAULT_SLOTS = 12;
 export const DEFAULT_TIMEOUT_SECONDS = 600;
@@ -238,7 +238,7 @@ function reclaimable(seen) {
   if (cluster.state === 'unknown') return false;
   if (cluster.state === 'running' && !stopCluster(cluster.pid)) return false;
   // The segments its backends orphaned, before the slot is anyone else's.
-  try { removeOrphanSegments(clusterInodes(seen.record)); } catch { /* best effort */ }
+  try { removeOrphanSegments(clusterInodes(seen.record)); removeOrphanSemaphores(clusterInodes(seen.record)); } catch { /* best effort */ }
   return true;
 }
 // Removes a name only if it is still exactly what was seen there (inode,
@@ -354,7 +354,7 @@ export class PgSlot {
     if (this.dataDir) {
       const cluster = clusterOf(this.record, true);
       if (cluster.state === 'running') stopCluster(cluster.pid);
-      try { removeOrphanSegments(clusterInodes(this.record)); } catch { /* best effort */ }
+      try { removeOrphanSegments(clusterInodes(this.record)); removeOrphanSemaphores(clusterInodes(this.record)); } catch { /* best effort */ }
     }
     const mine = () => { const seen = inspect(this.file); if (seen?.record?.token === this.token) removeIfSame(this.file, seen); };
     try { if (!underLock(this.dir, mine).held) mine(); } catch { try { mine(); } catch { /* the directory is gone */ } }

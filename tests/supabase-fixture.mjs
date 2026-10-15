@@ -9,6 +9,8 @@ import { createAccessAuthority, allowsSettingsChange, membershipWriteError } fro
 import { PUBLIC_BILLING_POLICY } from '../supabase/functions/_shared/accessPolicy.mjs';
 import * as syncRules from '../src/utils/syncRules.js';
 import { LOCAL_ONLY_SETTINGS } from '../src/constants/defaults.js';
+import { recoveryFor } from './sync-recovery-fixture.mjs';
+import { createRecordAcknowledgements } from '../src/utils/recordAcknowledgements.js';
 
 const source = await readFile(new URL('../src/lib/supabase.js', import.meta.url), 'utf8');
 const code = transformSync(source, { loader: 'js', format: 'cjs', define: { 'import.meta.env': JSON.stringify({ VITE_SUPABASE_URL: 'https://synthetic.invalid', VITE_SUPABASE_ANON_KEY: 'synthetic-public' }) } }).code;
@@ -46,17 +48,20 @@ export function fixture() {
     }, storage: { from: bucket => ({ upload: (path, blob) => execute({ method: 'upload', bucket, path, blob }), remove: paths => execute({ method: 'remove', bucket, paths }) }) } };
   }
   const imports = {
+    '../utils/recordAcknowledgements.js': createRecordAcknowledgements({ activeAccount: () => actor, fenceFor: () => null, copyCurrent: () => true,
+      receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null,
+      write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } }),
     '@supabase/supabase-js': { createClient }, '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data', LOCAL_ONLY_SETTINGS },
     '../utils/syncRules.js': syncRules,
     // No data deletion purges anything here, so the purge fence never moves.
-    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
-      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
-      // The queue's write (storageScope makes room first in the app).
-      setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/storageScope.js': { localWriteGuard: () => () => true, BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
+      adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null, setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/syncRecovery.js': recoveryFor(values, () => actor),
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {},
     // Reached only from a sign-in receipt, which this continuity-disabled
     // fixture never has.
+    '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
     '../utils/dataDeletion.js': { accountDataDeletedAt() { throw Error('Continuity must be disabled'); }, honorAccountDataDeletion() { throw Error('Continuity must be disabled'); } },
     '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) },
@@ -76,4 +81,3 @@ export function fixture() {
   f.removed = () => requests.filter(r => r.method === 'remove').flatMap(r => r.paths);
   return f;
 }
-

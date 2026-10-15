@@ -72,13 +72,14 @@ test("the CV prints a reference's degree once and privileges in the same range s
   assert.ok(items.some((t) => /^Example Regional: \(March 1, 2024 – current\) ND$/.test(t || "")), items.join(" | "));
 });
 
-test("a file shared alone carries a title and a short email, not an empty body", () => {
+test("ordinary file sharing carries a title and a short email, not an empty body", () => {
   const { title, text } = fileShareText({ what: "CME transcript for the Colorado medical license renewal", settings });
   assert.equal(title, "CME transcript for the Colorado medical license renewal: Ana Li, DO");
   assert.equal(text, "Hello, attached is the CME transcript for the Colorado medical license renewal for Ana Li, DO (NPI 1234567893).\n\nPlease reach out with any questions.\n\nThank you,\nAna Li, DO \u{b7} NPI 1234567893 \u{b7} ana@example.test");
   assert.match(read("src/utils/cvPdf.js"), /navigator\.share\(\{ title, text, files: \[file\] \}\)/);
-  // fix/links-iphone hands the share to shareAtHandoff; the payload is the same.
-  assert.match(read("src/utils/cmeTranscriptPdf.js"), /shareAtHandoff\(\{ title, text, files:/);
+  // Explicit file saving omits the extra text item; ordinary sharing still
+  // hands the same formatted title and body to the existing handoff helper.
+  assert.match(read("src/utils/cmeTranscriptPdf.js"), /shareAtHandoff\(filesOnly \? \{ files \} : \{ title, text, files \}/);
   // feat/np-pa: a PA's or NP's transcript names its licence kind; MD and DO keep this name.
   assert.match(read("src/utils/cmeTranscriptPdf.js"), /fileName: app\s+\? transcriptFileName\([^\n]+\n\s+: transcriptFileName\(stateName, physicianBlock\(data\)\)/);
 });

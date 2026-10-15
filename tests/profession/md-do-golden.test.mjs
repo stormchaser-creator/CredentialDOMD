@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { computeGolden, BASE_COMMIT } from './golden-cases.mjs';
 
 const golden = JSON.parse(readFileSync(new URL('./golden/md-do.json', import.meta.url), 'utf8'));
+const reviewedCopy = JSON.parse(readFileSync(new URL('./golden/qa-ca-view-copy.json', import.meta.url), 'utf8'));
 const full = JSON.parse(readFileSync(new URL('./golden/md-do-full.json', import.meta.url), 'utf8'));
 
 test('goldens were captured at the base commit', () => {
@@ -21,9 +22,14 @@ test('goldens were captured at the base commit', () => {
   assert.ok(Object.keys(golden.hashes).length >= 2500, 'the case set is the full one');
 });
 
-test('every MD and DO case matches its golden', async () => {
+test('every MD and DO calculation matches its golden; only the exact reviewed California display wording differs', async () => {
   const { hashes, full: now } = await computeGolden();
-  const changed = Object.keys(golden.hashes).filter(k => hashes[k] !== golden.hashes[k]);
+  const allowed = new Map(reviewedCopy.entries.map(entry => [entry.key, entry]));
+  for (const entry of allowed.values()) {
+    assert.equal(golden.hashes[entry.key], entry.originalHash, `${entry.key}: the original baseline is retained`);
+    assert.equal(hashes[entry.key], entry.reviewedHash, `${entry.key}: only the reviewed display copy is accepted`);
+  }
+  const changed = Object.keys(golden.hashes).filter(k => hashes[k] !== golden.hashes[k] && !allowed.has(k));
   // Full JSON first, so a failure shows the field that moved.
   for (const k of changed) if (full[k]) assert.deepEqual(now[k], full[k], k);
   assert.deepEqual(changed, [], `MD/DO output changed in ${changed.length} cases`);

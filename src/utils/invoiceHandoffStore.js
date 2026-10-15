@@ -186,6 +186,17 @@ export function writeTombs(account, list) {
 const cacheUrl = (kind, account) => `https://handoff.credentialdomd.invalid/${kind}/${encodeURIComponent(account || "signed-out")}`;
 const cacheApi = () => { try { const c = globalThis.caches; return c && typeof c.open === "function" ? c : null; } catch { return null; } };
 const cacheWrites = new Map();
+const storeEpochs = new Map();
+function storeGuard(account, isCurrent = () => true) {
+  const epoch = storeEpochs.get(account) || 0;
+  const generation = handoffGeneration();
+  return () => (storeEpochs.get(account) || 0) === epoch && handoffGeneration() === generation && isCurrent();
+}
+async function cacheDeadline(promise, fallback) {
+  let timer;
+  try { return await Promise.race([promise, new Promise(resolve => { timer = setTimeout(() => resolve(fallback), waits.txMs); timer?.unref?.(); })]); }
+  finally { clearTimeout(timer); }
+}
 // One operation at a time per key, in the order asked: a purge never lands
 // before a write it follows.
 function cacheChain(url, op) {
@@ -195,41 +206,62 @@ function cacheChain(url, op) {
   return run;
 }
 /** Writes `value` (JSON) under `kind` for `account`. Resolves true when stored. */
-export function cachePut(kind, account, value) {
+export function cachePut(kind, account, value, isCurrent = () => true) {
   const api = cacheApi();
   if (!api || typeof globalThis.Response !== "function") return Promise.resolve(false);
   const url = cacheUrl(kind, account);
   const body = JSON.stringify(value);
-  return cacheChain(url, async () => {
+  const current = storeGuard(account, isCurrent);
+  const pending = cacheChain(url, async () => {
     try {
-      const cache = await api.open(HANDOFF_CACHE_NAME);
+      if (!current()) return false;
+      const cache = await cacheDeadline(api.open(HANDOFF_CACHE_NAME), null);
+      if (!cache || !current()) return false;
+      // Keep the chain occupied until this mutation actually finishes. A
+      // timed-out put must never land after a following purge deleted it.
       await cache.put(url, new Response(body, { headers: { "content-type": "application/json" } }));
+      if (!current()) {
+        // A purge may have completed while Cache Storage was committing.
+        // Delete that stale copy before any new write of this key proceeds.
+        await cache.delete(url);
+        return false;
+      }
       return true;
     } catch { return false; }
   });
+  return cacheDeadline(pending, false);
 }
 /** The JSON value under `kind` for `account`, or null. Waits for writes still on their way. */
 export async function cacheGet(kind, account) {
   const api = cacheApi();
   if (!api) return null;
   const url = cacheUrl(kind, account);
-  try { await cacheWrites.get(url); } catch { /* read anyway */ }
+  const current = storeGuard(account);
+  try { if (await cacheDeadline(Promise.resolve(cacheWrites.get(url)).then(() => true), false) === false) return null; } catch { return null; }
   try {
-    const cache = await api.open(HANDOFF_CACHE_NAME);
-    const hit = await cache.match(url);
-    return hit ? await hit.json() : null;
+    if (!current() || owedPurge(account) != null) return null;
+    const cache = await cacheDeadline(api.open(HANDOFF_CACHE_NAME), null);
+    if (!cache || !current()) return null;
+    const hit = await cacheDeadline(cache.match(url), null);
+    const value = hit ? await hit.json() : null;
+    return current() && owedPurge(account) == null ? value : null;
   } catch { return null; }
 }
 /** Removes `account`'s entries (Sign out, Delete All My Data), after any write still on its way. */
 function cachePurge(account) {
   const api = cacheApi();
-  if (!api) return Promise.resolve();
+  if (!api) return Promise.resolve(true);
   return Promise.all(["notes", "stamps", "tombs"].map((k) => {
     const url = cacheUrl(k, account);
-    return cacheChain(url, async () => {
-      try { const cache = await api.open(HANDOFF_CACHE_NAME); await cache.delete(url); } catch { /* the next purge */ }
-    });
-  })).then(() => {});
+    return cacheDeadline(cacheChain(url, async () => {
+      try {
+        const cache = await cacheDeadline(api.open(HANDOFF_CACHE_NAME), null);
+        if (!cache) return false;
+        await cache.delete(url);
+        return true;
+      } catch { return false; }
+    }), false);
+  })).then(results => results.every(Boolean));
 }
 
 
@@ -316,6 +348,7 @@ async function request(mode, fallback, run) {
 
 // The purge still owed for `account` (its record's value), or null.
 const owedPurge = (account) => { try { return webStore("localStorage")?.getItem(purgeKey(account)) ?? null; } catch { return null; } };
+export const handoffPurgePending = account => owedPurge(account) != null;
 // Removed only while it is still the record `raw`: a newer purge keeps its own.
 function clearPurge(account, raw) {
   try { const ls = webStore("localStorage"); if (ls?.getItem(purgeKey(account)) === raw) ls.removeItem(purgeKey(account)); } catch { /* the next read finishes it */ }
@@ -327,10 +360,11 @@ function clearPurge(account, raw) {
 // `unrecorded`: the record `raw` could never be kept (a full or blocked
 // localStorage), so no write can have cleared it; the entry goes unless a
 // newer purge recorded its own, which finishes it.
-function finishPurge(account, raw, { unrecorded = false } = {}) {
+async function finishPurge(account, raw, { unrecorded = false } = {}) {
+  const cacheCleared = await cachePurge(account);
   return request("readwrite", false, (tx, store, finish) => {
     const key = handoffKey(account);
-    tx.oncomplete = () => { clearPurge(account, raw); finish(true); };
+    tx.oncomplete = () => { if (cacheCleared) clearPurge(account, raw); finish(cacheCleared); };
     tx.onerror = () => finish(false);
     tx.onabort = () => finish(false);
     const req = store.get(key);
@@ -366,15 +400,23 @@ export function readDbNotes(account) {
  * timed out never knew that list, and a blind put would erase notes kept
  * only there (a full localStorage, a sessionStorage gone with the page).
  */
-export function writeDbNotes(account, list, combine = null) {
+export async function writeDbNotes(account, list, combine = null) {
+  const current = storeGuard(account);
   // A purge still owed: what is stored is the purged account's, never merged
   // in. The list replaces it, and that completes the purge.
   const raw = owedPurge(account);
-  if (raw != null) combine = null;
+  if (raw != null) {
+    combine = null;
+    if (!await finishPurge(account, raw) || !current() || owedPurge(account) != null) return false;
+  }
   return request("readwrite", false, (tx, store, finish) => {
+    if (!current()) { try { tx.abort(); } catch { /* closed */ } finish(false); return; }
     const key = handoffKey(account);
-    const write = (next) => { if (next.length) store.put(next, key); else store.delete(key); };
-    tx.oncomplete = () => { if (raw != null) clearPurge(account, raw); finish(true); };
+    const write = (next) => {
+      if (!current()) { try { tx.abort(); } catch { /* closed */ } finish(false); return; }
+      if (next.length) store.put(next, key); else store.delete(key);
+    };
+    tx.oncomplete = () => { if (raw != null && current()) clearPurge(account, raw); finish(current()); };
     tx.onerror = () => finish(false);
     tx.onabort = () => finish(false);
     if (typeof combine !== "function") { write(list); return; }
@@ -406,13 +448,13 @@ export function onHandoffPurge(fn) {
  */
 export function purgeHandoffStores(account) {
   if (!account) return Promise.resolve(false);
+  storeEpochs.set(account, (storeEpochs.get(account) || 0) + 1);
   syncHandoffGeneration();
   for (const name of ["sessionStorage", "localStorage"]) {
     removeKey(name, handoffKey(account));
     removeKey(name, stampsKey(account));
     removeKey(name, tombsKey(account));
   }
-  cachePurge(account);
   // Every other open tab drops what it holds (its memory, its sessionStorage).
   // After the removals above, so a full localStorage has room for it.
   const generation = `${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;

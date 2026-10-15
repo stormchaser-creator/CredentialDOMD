@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect, memo, useCallback } from "react";
+import { writeClipboardText } from "../../utils/clipboard.js";
 import { snapToOption, canonicalizeSelectValue } from "../../utils/snapOption";
 import { useApp } from "../../context/AppContext";
 import { billedCodes } from "../../utils/caseBilling.js";
@@ -1178,7 +1179,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                         <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                           <span style={{ fontFamily: open ? "ui-monospace, monospace" : "inherit", userSelect: "all" }}>{open ? open : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}</span>
                           <button onClick={(e) => { e.stopPropagation(); if (open) setRevealed(r => ({ ...r, [f.key]: null })); else revealSecret(f); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, whiteSpace: "nowrap", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.accent, cursor: "pointer" }}>{open ? "Hide" : "Show"}</button>
-                          {open && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(open); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, whiteSpace: "nowrap", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, cursor: "pointer" }}>Copy</button>}
+                          {open && <button onClick={async (e) => { e.stopPropagation(); if (!await writeClipboardText(open)) alert("Could not copy. Select the revealed value and copy it manually."); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", minHeight: isDesktop ? undefined : TAP_MIN, whiteSpace: "nowrap", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, cursor: "pointer" }}>Copy</button>}
                         </span>
                       );
                     }

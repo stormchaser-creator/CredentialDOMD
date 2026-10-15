@@ -20,7 +20,7 @@ const STUBS = {
   // useNotifications and AppProvider are for App.jsx; a test that renders the
   // app shell sets globalThis.__screen.notifications to change the answer.
   'context/AppContext': 'export const useApp = () => globalThis.__screen.app; export const useNotifications = () => globalThis.__screen.notifications ?? { browserPermission: "default", requestPermission: async () => "default", checkAndNotify() {} }; export const AppProvider = ({ children }) => children;',
-  'utils/storageScope': 'export const BASE_KEYS = { timer: "timer", lastContract: "lastContract", contractPick: "contractPick", unrecordedInvoices: "unrecordedInvoices", formDrafts: "formDrafts" }; const m = () => globalThis.__screen.storage; const full = () => globalThis.__screen.storageFull === true; export const lsGet = (k) => m()[k] ?? null; export const lsSet = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsGetJSON = (k) => m()[k] ?? null; export const lsSetJSON = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsRemove = (k) => { delete m()[k]; }; export const offlineCopyUnread = () => globalThis.__screen?.offlineCopyUnread === true; export const scopedKey = (k) => "user_synthetic:" + k; export const getActiveUserId = () => "user_synthetic"; export const localCopyCurrent = () => true;',
+  'utils/storageScope': 'export const getActiveUserId = () => globalThis.__screen?.activeUserId ?? globalThis.__screen?.app?.user?.id ?? "user_synthetic"; export const localWriteGuard = () => () => true; export const localFence = () => null; export const BASE_KEYS = { timer: "timer", lastContract: "lastContract", contractPick: "contractPick", unrecordedInvoices: "unrecordedInvoices", formDrafts: "formDrafts" }; const m = () => globalThis.__screen.storage; const full = () => globalThis.__screen.storageFull === true; export const lsGet = (k) => m()[k] ?? null; export const lsSet = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsGetJSON = (k) => m()[k] ?? null; export const lsSetJSON = (k, v) => { if (full()) return false; m()[k] = v; return true; }; export const lsRemove = (k) => { delete m()[k]; }; export const offlineCopyUnread = () => globalThis.__screen?.offlineCopyUnread === true; export const scopedKey = (k) => "user_synthetic:" + k; export const localCopyCurrent = () => true;',
   'utils/privateVault': 'const v = () => globalThis.__screen.vault; export const getPrivate = (s, id) => v()[s + ":" + id] || ""; export const setPrivate = (s, id, t) => { v()[s + ":" + id] = t; }; export const removePrivate = (s, id) => { delete v()[s + ":" + id]; }; export const looksLikePHI = () => null;',
   // A stored file comes back as null (not reachable) unless a test sets
   // globalThis.__screen.download to hand one back.
@@ -34,7 +34,7 @@ const STUBS = {
   // (readInvoiceNumberRecorded) unless it sets globalThis.__screen.numberRecorded.
   // Edge functions (supabase.functions.invoke) answer only when a test sets
   // globalThis.__screen.invoke; otherwise the call fails as a lost network does.
-  'lib/supabase': 'export const supabase = { functions: { invoke: (n, o) => (globalThis.__screen?.invoke ? globalThis.__screen.invoke(n, o) : Promise.reject(new TypeError("Load failed"))) } }; export const downloadDocumentBlob = async (p) => (globalThis.__screen?.download ? globalThis.__screen.download(p) : null); export const downloadDocumentFile = async (p, o) => (globalThis.__screen?.downloadFile ? globalThis.__screen.downloadFile(p, o) : (o?.detail ? { failed: true } : null)); export const allocateInvoiceNumberRpc = (...a) => (globalThis.__screen?.allocate ? globalThis.__screen.allocate(...a) : null); export const markInvoiceNumberSharedRpc = (...a) => (globalThis.__screen?.markShared ? globalThis.__screen.markShared(...a) : null); export const listSharedInvoiceNumbersRpc = () => (globalThis.__screen?.listShared ? globalThis.__screen.listShared() : null); export const readInvoiceRecordState = (...a) => (globalThis.__screen?.recordState ? globalThis.__screen.recordState(...a) : null); export const readInvoiceNumberRecorded = (...a) => (globalThis.__screen?.numberRecorded ? globalThis.__screen.numberRecorded(...a) : null); export const uploadDocumentFile = async () => globalThis.__screen?.uploadDocumentFile?.() ?? null; export default {};',
+  'lib/supabase': 'export const supabase = { functions: { invoke: (n, o) => (globalThis.__screen?.invoke ? globalThis.__screen.invoke(n, o) : Promise.reject(new TypeError("Load failed"))) } }; export const downloadDocumentBlob = async (p) => (globalThis.__screen?.download ? globalThis.__screen.download(p) : null); export const downloadDocumentFile = async (p, o) => (globalThis.__screen?.downloadFile ? globalThis.__screen.downloadFile(p, o) : (o?.detail ? { failed: true } : null)); export const allocateInvoiceNumberRpc = (...a) => (globalThis.__screen?.allocate ? globalThis.__screen.allocate(...a) : null); export const markInvoiceNumberSharedRpc = (...a) => (globalThis.__screen?.markShared ? globalThis.__screen.markShared(...a) : null); export const listSharedInvoiceNumbersRpc = (...a) => (globalThis.__screen?.listShared ? globalThis.__screen.listShared(...a) : null); export const readInvoiceRecordState = (...a) => (globalThis.__screen?.recordState ? globalThis.__screen.recordState(...a) : null); export const readInvoiceNumberRecorded = (...a) => (globalThis.__screen?.numberRecorded ? globalThis.__screen.numberRecorded(...a) : null); export const uploadDocumentFile = async () => globalThis.__screen?.uploadDocumentFile?.() ?? null; export default {};',
   'hooks/useDeskKeys': 'export const useDeskAddShortcut = () => {}; export const useDeskKeyboard = () => {};',
 };
 // Sign-in (Clerk) for screens that read the signed-in user, such as Settings.
@@ -70,15 +70,24 @@ for (const hook of ['useState', 'useRef', 'useMemo', 'useCallback', 'useEffect',
  * `expose` names module-private functions to export as well ({ 'src/App.jsx': ['AppInner'] });
  * `real` lists fixtures to leave out, so that module is bundled as it is ('lib/supabase').
  */
-export async function loadScreens(exportsSource, { expose = {}, real: keep = [], clerk = false } = {}) {
+export async function loadScreens(exportsSource, { expose = {}, real: keep = [], clerk = false, env = {} } = {}) {
   const stubbed = Object.keys(STUBS).filter(k => !keep.includes(k));
   const pattern = new RegExp(`(${stubbed.map(k => k.replace('/', '\\/')).join('|')})(\\.js)?$`);
   const exposed = Object.entries(expose).map(([file, names]) => [fileURLToPath(new URL(`../../${file}`, import.meta.url)), names]);
   const bundled = await build({
     stdin: { contents: exportsSource, resolveDir: root, loader: 'jsx' },
-    bundle: true, define: { 'import.meta.env': '{}' }, platform: 'node', format: 'cjs', write: false, jsx: 'automatic',
+    bundle: true, define: { 'import.meta.env': JSON.stringify(env) }, platform: 'node', format: 'cjs', write: false, jsx: 'automatic',
     external: ['react', 'react/jsx-runtime', 'react-dom'], logLevel: 'silent',
     plugins: [{ name: 'synthetic-device', setup(b) {
+      // Handoff's sibling import must share the invoice screen's synthetic
+      // account. Keep this exception local: catching every storageScope
+      // basename replaces real continuity/recovery dependencies with a small
+      // UI fixture that intentionally does not implement those security APIs.
+      b.onResolve({ filter: /^\.\/storageScope\.js$/ }, ({ importer }) => {
+        if (stubbed.includes('utils/storageScope') && importer === fileURLToPath(new URL('../../src/utils/invoiceHandoff.js', import.meta.url))) {
+          return { path: 'utils/storageScope', namespace: 'fixture' };
+        }
+      });
       b.onResolve({ filter: pattern }, ({ path }) => ({
         path: stubbed.find(k => path.replace(/\.js$/, '').endsWith(k)), namespace: 'fixture',
       }));
@@ -112,7 +121,7 @@ export function mount(Component, { data: seed = {}, confirm = () => true, storag
   const apply = (key, fn) => { data[key] = fn(data[key] || []); };
   const refused = (op, key) => { if (!refuse(op, key)) return false; calls.push(['refused', op, key]); return true; };
   const app = {
-    data, theme: THEME, isDesktop: false, setData: () => {},
+    data, user: { id: 'user_synthetic' }, theme: THEME, isDesktop: false, setData: () => {},
     addItem: (key, item) => { if (refused('add', key)) return false; calls.push(['add', key, item]); apply(key, l => [...l, item]); return true; },
     // Whether an add would be accepted, without adding (AppContext canAddItem).
     canAddItem: (key) => !refused('add', key),

@@ -60,12 +60,14 @@ function CVGenerator() {
     flash(ok ? "Copied. Paste it anywhere." : "Could not copy here. Use Save PDF instead.");
   };
 
-  const handlePdfCV = async () => {
+  const handlePdfCV = async (filesOnly = true) => {
     if (!hasData) { flash(emptyNote()); return; }
     try {
-      const result = await shareCvPdf(cvContent, { name: s.name || professionCopy(s.degreeType, { audience: "third-party" }).fallbackName, degree: s.degreeType || "", settings: s });
-      if (result === "download") flash("PDF downloaded.");
-      else if (result === "share") flash("PDF ready in the share sheet.");
+      const result = await shareCvPdf(cvContent, { name: s.name || professionCopy(s.degreeType, { audience: "third-party" }).fallbackName, degree: s.degreeType || "", settings: s }, { filesOnly });
+      if (result === "download") flash("PDF download requested. Confirm saving in your browser.");
+      else if (result === "share") flash(filesOnly
+        ? "File saving requested. Confirm the save in the device dialog."
+        : "Sharing requested. Finish sending in the app you choose.");
     } catch (err) {
       flash(`Couldn't build the PDF: ${err.message}`);
     }
@@ -101,11 +103,17 @@ function CVGenerator() {
           flex: 1, padding: "12px 16px", borderRadius: 12, border: "none",
           backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
         }}>Copy to Clipboard</button>
-        <button onClick={handlePdfCV} style={{
+        <button onClick={() => handlePdfCV(true)} style={{
           flex: 1, padding: "12px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
           backgroundColor: T.card, color: T.text, fontSize: 14, fontWeight: 600, cursor: "pointer",
         }}>Save PDF</button>
       </div>
+
+      <button onClick={() => handlePdfCV(false)} style={{
+        width: "100%", minHeight: 44, padding: "12px 16px", marginBottom: 16,
+        borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: T.card,
+        color: T.text, fontSize: 14, fontWeight: 600, cursor: "pointer",
+      }}>Share with message</button>
 
       {note && (
         <div style={{ marginBottom: 12, padding: "9px 12px", borderRadius: 10, backgroundColor: T.accentDim, color: T.accent, fontSize: 13, fontWeight: 700 }}>{note}</div>

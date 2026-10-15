@@ -13,27 +13,20 @@
 //
 // Plain JavaScript so the Deno function and the node tests share one copy.
 
-/** Rows asked for per request; a server that caps lower is followed by offset. */
-export const PAGE_ROWS = 1000;
+import { reminderPages } from "./reminderPagination.mjs";
+
+/** A bounded page; the server may cap it further. */
+export const PAGE_ROWS = 500;
 /** Members per grouped read: 100 ids keep the request URL near 4 KB. */
 export const MEMBER_GROUP = 100;
 
 /**
- * Every row a query matches, page by page. `build` returns a fresh query with a
- * stable order (a unique column last); each page asks for PAGE_ROWS rows from
- * the offset reached so far, and the read ends on an empty page, so a server
- * whose max_rows is lower than PAGE_ROWS still yields every row.
+ * Read every matching immutable id in order. Keyset pagination keeps a
+ * concurrent deletion from shifting later rows behind an offset. Invalid,
+ * repeated or failed pages invalidate the whole read, never a partial list.
  */
-export async function readAllPages(build, pageRows = PAGE_ROWS) {
-  const out = [];
-  for (let from = 0; ;) {
-    const { data, error } = await build().range(from, from + pageRows - 1);
-    if (error) return { data: null, error };
-    const rows = data || [];
-    if (!rows.length) return { data: out, error: null };
-    out.push(...rows);
-    from += rows.length;
-  }
+export function readAllPages(build, pageRows = PAGE_ROWS) {
+  return reminderPages(build, pageRows);
 }
 
 /** Splits a list into groups of `size`. */
@@ -60,10 +53,10 @@ function byUser(rows) {
  * group needs (each member's own lead time is applied by the caller). Returns
  * { acked: Map<user_id, Set<item_id>>, rows: Map<table, Map<user_id, rows[]>>,
  *   categories: Map<user_id, [{ id, name }]>, failed: Set<table>,
- *   categoriesFailed: boolean }.
+ *   categoriesFailed: boolean, acksFailed: boolean }.
  * A table whose read fails is in `failed` and has no rows; the caller treats
- * its members as not fully read. A failed acknowledgement read leaves nothing
- * acknowledged, as the one-member read did.
+ * its members as not fully read. A failed acknowledgement read is marked so the caller can refuse
+ * a digest rather than treating unread snoozes as an empty list.
  */
 export async function readReminderGroup(db, ids, { tables, today, lo, hi }) {
   const acksRead = await readAllPages(() => db.from('alert_acks')
@@ -109,5 +102,5 @@ export async function readReminderGroup(db, ids, { tables, today, lo, hi }) {
     if (read.error) { console.error('query failed', 'custom_categories', read.error.message); categoriesFailed = true; }
     for (const [user, list] of byUser(read.data)) categories.set(user, list.map(({ id, name }) => ({ id, name })));
   }
-  return { acked, rows, categories, failed, categoriesFailed };
+  return { acked, rows, categories, failed, categoriesFailed, acksFailed: !!acksRead.error };
 }

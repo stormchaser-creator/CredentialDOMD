@@ -1,3 +1,4 @@
+import { reservedAuthHeights } from "../../utils/authLayout.js";
 import { memo, useEffect, useRef, useState } from "react";
 import { SignIn } from "@clerk/clerk-react";
 import { THEMES } from "../../constants/themes";
@@ -31,17 +32,6 @@ const IS_DEV_CLERK_INSTANCE =
 // #/verify-email and #/factor-one belong to Clerk and must stay untouched.
 const isLegacyEntry = hash => hash === "#sign-in" || hash === "#sign-up";
 
-// Room kept for the offer box and Clerk's card before they arrive, so the
-// screen does not jump as each loads (signup review 2026-10-07: 162 px, a
-// layout shift of 0.4 on a phone). Heights as the live screen draws them
-// (WebKit, 2026-10-07): the offer box 186 px at 320 px wide, 147 px at 393,
-// 108 px on a desktop; the card 333 px at 320 wide, 309 px elsewhere. With
-// the price line and the renewal sentence (funnel 2026-10-14, measured the
-// same way): 292 px, 234 px and 176 px.
-export function reservedAuthHeights(width) {
-  const w = Number.isFinite(width) ? width : 1024;
-  return { offer: w <= 360 ? 292 : w <= 480 ? 234 : 176, widget: w <= 360 ? 333 : 309 };
-}
 
 const HIDE_SOCIAL_ELEMENTS = IS_DEV_CLERK_INSTANCE
   ? {
@@ -108,8 +98,13 @@ function AuthPage() {
       const formShown = !!widgetRef.current?.querySelector?.("input, textarea, select");
       if (chunkRecoveryStep(chunkFailures.current, formShown) === "remount") {
         clearTimeout(timer);
-        timer = setTimeout(() => setEntry(previous => ({ ready: true, version: previous.version + 1 })), CHUNK_RETRY_DELAY_MS);
-      } else setChunkNotice(true);
+        timer = setTimeout(() => {
+          // The provider can finish loading while this delay is pending.
+          // Keep a newly visible form and anything the visitor has entered.
+          if (widgetRef.current?.querySelector?.("input, textarea, select")) setChunkNotice(true);
+          else setEntry(previous => ({ ready: true, version: previous.version + 1 }));
+        }, CHUNK_RETRY_DELAY_MS);
+      } else { clearTimeout(timer); setChunkNotice(true); }
     });
     return () => { clearTimeout(timer); stop(); };
   }, []);

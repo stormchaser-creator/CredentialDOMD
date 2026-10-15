@@ -121,13 +121,22 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
   return new File([blob], fname, { type: "application/pdf" });
 }
 
-export async function shareCvPdf(sections, meta) {
-  const file = buildCvPdf(sections, meta);
+let saveSequence = 0;
+
+export async function shareCvPdf(sections, meta, { filesOnly = false } = {}) {
+  let file = buildCvPdf(sections, meta);
+  if (filesOnly) {
+    const stamp = `${new Date().toISOString().replace(/:/g, "-")}-${++saveSequence}`;
+    file = new File([file], file.name.replace(/\.pdf$/i, ` ${stamp}.pdf`), { type: file.type });
+  }
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       // A title and a short email with it: it went out with an empty body.
       const { title, text } = fileShareText({ what: "CV", settings: meta?.settings || { name: meta?.name, degreeType: meta?.degree, npi: meta?.npi, email: meta?.email } });
-      await navigator.share({ title, text, files: [file] });
+      // Save to Files turns message text into a second text.txt item. Keep
+      // explicit saving file-only; formatted message sharing stays available.
+      if (filesOnly) await navigator.share({ files: [file] });
+      else await navigator.share({ title, text, files: [file] });
       return "share";
     } catch (err) {
       if (err?.name === "AbortError") return null;

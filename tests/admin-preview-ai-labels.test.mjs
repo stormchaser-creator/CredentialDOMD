@@ -12,18 +12,27 @@ const store = new Map();
 const storage = { getItem: key => (store.has(key) ? store.get(key) : null), setItem: (key, value) => store.set(key, String(value)), removeItem: key => store.delete(key) };
 globalThis.localStorage = storage;
 globalThis.sessionStorage = storage;
-globalThis.window = { Clerk: { user: { id: ACCOUNT } }, addEventListener() {}, removeEventListener() {} };
+globalThis.window = { Clerk: { user: { id: ACCOUNT }, session: { getToken: async () => "synthetic-admin-token" } }, addEventListener() {}, removeEventListener() {} };
 // The cached status an admin's device holds: shared keys on, no caps.
 localStorage.setItem('credentialdomd-ai-shared', JSON.stringify({ shared: true, used: 3, limit: 200, anthropicShared: true, anthropicUsed: 4, anthropicLimit: 50, unlimited: true, budgetHardUsd: 100, budgetSoftUsd: 60, monthSpentUsd: 12 }));
 
 const require = createRequire(import.meta.url);
 const bundled = await build({
   stdin: { contents: 'export { isAdminUser } from "./src/lib/admin.js"; export * as ai from "./src/utils/aiClient.js"; export { adminPreviewStore } from "./src/utils/adminPreview.js"; export { accessAuthority } from "./src/utils/limitedLaunchAccess.js"; export { PUBLIC_BILLING_POLICY } from "./supabase/functions/_shared/accessPolicy.mjs";', resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'js' },
-  bundle: true, platform: 'node', format: 'cjs', write: false, external: ['react'], define: { 'import.meta.env': '{}' }, logLevel: 'silent',
+  bundle: true, platform: 'node', format: 'cjs', write: false, external: ['react'], define: { 'import.meta.env': JSON.stringify({ VITE_SUPABASE_URL: 'https://admin-preview.synthetic.invalid' }) }, logLevel: 'silent',
 });
 const mod = { exports: {} };
 new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(require, mod, mod.exports);
 const { ai, adminPreviewStore, accessAuthority, PUBLIC_BILLING_POLICY } = mod.exports;
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
+  shared: true, configured: true, allowed: true, unlimited: true, used_today: 3, limit: 200,
+  anthropic_shared: true, anthropic_used_today: 4, anthropic_limit: 50,
+  budget_hard_usd: 100, budget_soft_usd: 60, month_spent_usd: 12,
+}) });
+ai.registerSharedAiProfile(ACCOUNT, true);
+await ai.fetchSharedAiStatus();
+globalThis.fetch = originalFetch;
 
 test('admin labels read as a member\'s while previewing and come back on exit', () => {
   assert.match(ai.describeOpusStatus({}), /no cap on admin accounts/);

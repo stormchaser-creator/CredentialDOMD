@@ -1758,3 +1758,47 @@ test('with no credit on the customer the refund reads the balance and goes ahead
   assert.equal(r.status, 503);
   assert.deepEqual(g.providerCalls(), [], 'an unknown balance is never read as no credit');
 });
+
+// Operational QA: cancellation can meet another event's short reconciliation
+// lease. Retry only that busy claim once; never repeat a provider money action.
+test('refund settlement: a short busy lease is reacquired and access is settled before the refund answer', async () => {
+  const f=fixture(); let claims=0;
+  f.store.claimReconcile=async (...args)=>{f.calls.push(['reconcile',...args]);return ++claims===1?{state:'busy'}:{state:'claimed',token:'afterBusy'};};
+  const result=await body(await f.handlers().refund(refundReq()));
+  assert.equal(result.status,200); assert.equal(result.data.state,'refunded'); assert.equal(claims,2);
+  const attempts=f.calls.filter(x=>x[0]==='reconcile'); assert.deepEqual(attempts[0],attempts[1], 'same owner, customer and immutable event');
+  const settled=f.calls.filter(x=>x[0]==='settle'); assert.equal(settled.length,1); assert.equal(settled[0][1].p_status,'canceled'); assert.equal(settled[0][1].p_reconcile_token,'afterBusy');
+  assert.equal(f.calls.filter(x=>x[0]==='release').length,1);
+  assert.equal(f.providerCalls().filter(x=>x[0]==='cancel').length,1); assert.equal(f.providerCalls().filter(x=>x[0]==='refund').length,1);
+  assert.equal(f.logs.filter(x=>x.event==='refund_settlement_deferred').length,0);
+});
+test('refund settlement: a continuing busy lease remains visible after exactly one bounded retry', async () => {
+  const f=fixture(); let claims=0; f.store.claimReconcile=async()=>{claims++;return {state:'busy'};};
+  const result=await body(await f.handlers().refund(refundReq()));
+  assert.equal(result.data.state,'refunded'); assert.equal(claims,2); assert.equal(f.calls.filter(x=>x[0]==='settle').length,0);
+  assert.equal(f.logs.filter(x=>x.event==='refund_settlement_deferred').length,1);
+  assert.equal(f.providerCalls().filter(x=>x[0]==='cancel').length,1);assert.equal(f.providerCalls().filter(x=>x[0]==='refund').length,1);
+});
+test('refund settlement: an already applied retry is duplicate-safe', async () => {
+  const f=fixture();let claims=0;f.store.claimReconcile=async()=>++claims===1?{state:'busy'}:{state:'duplicate'};
+  assert.equal((await body(await f.handlers().refund(refundReq()))).data.state,'refunded');assert.equal(claims,2);
+  assert.equal(f.calls.filter(x=>x[0]==='settle').length,0);assert.equal(f.calls.filter(x=>x[0]==='release').length,0);assert.equal(f.logs.filter(x=>x.event==='refund_settlement_deferred').length,0);
+});
+test('refund settlement: database errors and unknown claim states are never retried or hidden', async () => {
+  for (const fail of [()=>{throw Error('synthetic unavailable store');},()=>({state:'unknown'})]) {
+    const f=fixture();let claims=0;f.store.claimReconcile=async()=>{claims++;return fail();};
+    assert.equal((await body(await f.handlers().refund(refundReq()))).data.state,'refunded');assert.equal(claims,1);
+    assert.equal(f.calls.filter(x=>x[0]==='settle').length,0);assert.equal(f.logs.filter(x=>x.event==='refund_settlement_deferred').length,1);
+  }
+});
+test('refund settlement: a write failure after acquiring the lease releases it and remains deferred', async () => {
+  const f=fixture();let writes=0;f.store.settleLimited=async()=>{writes++;throw Error('synthetic settlement failure');};
+  assert.equal((await body(await f.handlers().refund(refundReq()))).data.state,'refunded');assert.equal(writes,1);
+  assert.equal(f.calls.filter(x=>x[0]==='reconcile').length,1);assert.equal(f.calls.filter(x=>x[0]==='release').length,1);assert.equal(f.logs.filter(x=>x.event==='refund_settlement_deferred').length,1);
+});
+test('refund settlement: a pending provider refund still records one request and ticket after contention recovery', async () => {
+  const f=fixture();let claims=0;f.store.claimReconcile=async()=>++claims===1?{state:'busy'}:{state:'claimed',token:'afterBusy'};
+  f.refundFaults.push(stripeError('StripeAPIError','api_error'));
+  assert.deepEqual(await body(await f.handlers().refund(refundReq())),{status:503,data:{error:'refund_pending'}});
+  assert.equal(claims,2);assert.equal(f.calls.filter(x=>x[0]==='settle').length,1);assert.equal(f.ledger.length,1);assert.equal(f.tickets.length,1);assert.equal(f.refunds.length,0);assert.equal(f.logs.filter(x=>x.event==='refund_settlement_deferred').length,0);
+});

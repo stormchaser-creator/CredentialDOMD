@@ -150,6 +150,38 @@ test('packaging config allows only the exact public endpoint and CSP permits onl
   assert.equal((html.match(/src="\/membership-offer.js"/g)||[]).length,1);
 });
 
+test('a page view asks for the offer once, and only a back forward cache restore asks again', async () => {
+  // The page bootstrap runs at import, so it is loaded fresh against stub page globals.
+  const listeners = {}, calls = [];
+  const saved = Object.fromEntries(['document', 'window', 'fetch', 'setInterval'].map(key => [key, globalThis[key]]));
+  globalThis.window = { addEventListener: (type, listener) => { (listeners[`window:${type}`] ||= []).push(listener); } };
+  globalThis.document = {
+    visibilityState: 'visible',
+    querySelector: selector => selector === 'script[data-membership-endpoint]' ? { dataset: { membershipEndpoint: endpoint } } : null,
+    querySelectorAll: () => [],
+    addEventListener: (type, listener) => { (listeners[`document:${type}`] ||= []).push(listener); },
+  };
+  globalThis.fetch = async url => { calls.push(url); return Response.json(offer()); };
+  globalThis.setInterval = () => 0;
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+  try {
+    await import(`../public/membership-offer.js?page-bootstrap=${Date.now()}`);
+    await settle();
+    assert.deepEqual(calls, [endpoint], 'the page asks once when it loads');
+    // Browsers fire pageshow with persisted false on every first load, after the module ran.
+    for (const listener of listeners['window:pageshow']) listener({ persisted: false });
+    await settle();
+    assert.equal(calls.length, 1, 'the first load pageshow does not send a second request');
+    for (const listener of listeners['window:pageshow']) listener({ persisted: true });
+    await settle();
+    assert.equal(calls.length, 2, 'a page restored from the back forward cache asks again');
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[key]; else globalThis[key] = value;
+    }
+  }
+});
+
 test('every signup button says the live price once confirmed, and goes back to the plain label when it cannot be', async () => {
   const dom = root(); let current = offer();
   const refresh = createOfferUpdater(dom, endpoint, { fetchImpl: async () => { if (current instanceof Error) throw current; return Response.json(current); } });

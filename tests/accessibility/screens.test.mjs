@@ -9,16 +9,16 @@
 // journeys had to find them by position). This keeps them usable.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScreens, renderScreen } from '../harness/component-harness.mjs';
+import { loadScreens, renderScreen as renderFixtureScreen } from '../harness/component-harness.mjs';
 import { auditHtml } from './html-audit.mjs';
 import { DEFAULT_DATA } from '../../src/constants/defaults.js';
 import { THEMES } from '../../src/constants/themes.js';
 
-// The device's cached AI status decides what AI-backed controls draw (the
-// scan buttons, Vera's composer) and whether this account is an admin. The
-// module reads it once, when the bundle loads, so each account is its own bundle.
+// Each account gets its own real AI-status module and acknowledged answer,
+// which decides the visible AI controls and administrator presentation.
 const SCREENS = [
   'export { AppInner } from "./src/App.jsx";',
+  'export * as aiStatusFixture from "./src/utils/aiClient.js";',
   'export { default as LocumDashboard } from "./src/components/features/locum/LocumDashboard.jsx";',
   'export { default as AdminDashboard } from "./src/components/pages/AdminDashboard.jsx";',
   'export { default as SupportModal } from "./src/components/pages/SupportModal.jsx";',
@@ -27,17 +27,49 @@ const SCREENS = [
   'export { default as ShareModal } from "./src/components/features/ShareModal.jsx";',
   'export { default as FinanceSection } from "./src/components/features/locum/FinanceSection.jsx";',
 ].join('\n');
-async function load(aiStatus) {
-  const stored = new Map([['credentialdomd-ai-shared', JSON.stringify({ shared: true, anthropicShared: true, limit: 200, checkedAt: 1, ...aiStatus })]]);
+const ACCOUNT = 'user_synthetic';
+const STATUS_URL = 'https://screen-status.synthetic.invalid/functions/v1/ai-proxy';
+const statusWindow = { Clerk: { user: { id: ACCOUNT }, session: { getToken: async ({ template }) => {
+  assert.equal(template, 'supabase'); return 'synthetic-screen-token';
+} } }, addEventListener() {}, removeEventListener() {}, dispatchEvent() {} };
+// SSR has no profile-owning effect. Establish that lifecycle explicitly, then
+// let the real AI client consume an in-memory server answer; a cache alone is
+// deliberately no longer administrator authority. No network call is made.
+async function load(aiStatus, { ready = true } = {}) {
+  const original = { localStorage: globalThis.localStorage, window: globalThis.window, fetch: globalThis.fetch };
+  const stored = new Map([['credentialdomd-ai-shared', JSON.stringify({ shared: true, unlimited: aiStatus.unlimited })]]);
   globalThis.localStorage = { getItem: k => stored.get(k) ?? null, setItem: (k, v) => stored.set(k, String(v)), removeItem: k => stored.delete(k) };
   try {
-    return await loadScreens(SCREENS, { expose: { 'src/App.jsx': ['AppInner'] }, real: ['lib/supabase', 'utils/storageScope', 'utils/privateVault'], clerk: true });
+    const screens = await loadScreens(SCREENS, {
+      expose: { 'src/App.jsx': ['AppInner'] }, real: ['lib/supabase', 'utils/storageScope', 'utils/privateVault'], clerk: true,
+      env: { VITE_SUPABASE_URL: 'https://screen-status.synthetic.invalid' },
+    });
+    globalThis.window = statusWindow;
+    let requests = 0;
+    globalThis.fetch = async (url, init) => {
+      assert.equal(url, STATUS_URL); assert.equal(init.method, 'GET');
+      assert.equal(init.headers.Authorization, 'Bearer synthetic-screen-token'); requests++;
+      return { ok: true, status: 200, json: async () => ({ shared: true, configured: true, allowed: true, anthropic_shared: true, limit: 200, unlimited: aiStatus.unlimited }) };
+    };
+    screens.aiStatusFixture.registerSharedAiProfile(ACCOUNT, ready);
+    await screens.aiStatusFixture.fetchSharedAiStatus();
+    assert.equal(requests, ready ? 1 : 0, 'only a current ready profile may consume a status answer');
+    assert.equal(screens.aiStatusFixture.sharedAiStatus.unlimited, ready && aiStatus.unlimited);
+    return screens;
   } finally {
-    delete globalThis.localStorage;
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete globalThis[key]; else globalThis[key] = value;
+    }
   }
 }
 const screens = await load({ unlimited: false });
 const adminScreens = await load({ unlimited: true });
+function renderScreen(Component, options, clerk = statusWindow.Clerk) {
+  const previousWindow = globalThis.window;
+  globalThis.window = { ...statusWindow, Clerk: clerk };
+  try { return renderFixtureScreen(Component, options); }
+  finally { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
+}
 
 // A synthetic account with a record in most sections, so each list draws its
 // rows and each row its buttons. No real person, facility or number.
@@ -162,4 +194,22 @@ test('the admin area, and the app as an admin sees it: buttons named, fields lab
     }
   }
   assert.deepEqual(problems, [], `\n${problems.join('\n')}`);
+});
+
+
+test('a current ready account whose status says non-admin remains outside the Admin dashboard', () => {
+  const html = renderScreen(screens.AdminDashboard, { app: app({ isDesktop: false }), props: {} });
+  assert.match(html, /Admin only\./);
+  assert.doesNotMatch(html, /Administration sections/);
+});
+
+
+test('cached admin status without profile readiness, a session or the same actor fails closed', async () => {
+  const notReady = await load({ unlimited: true }, { ready: false });
+  const denied = [
+    renderScreen(notReady.AdminDashboard, { app: app({ isDesktop: false }), props: {} }),
+    renderScreen(adminScreens.AdminDashboard, { app: app({ isDesktop: false }), props: {} }, { ...statusWindow.Clerk, session: null }),
+    renderScreen(adminScreens.AdminDashboard, { app: app({ isDesktop: false }), props: {} }, { ...statusWindow.Clerk, user: { id: 'user_different' } }),
+  ];
+  for (const html of denied) { assert.match(html, /Admin only\./); assert.doesNotMatch(html, /Administration sections/); }
 });

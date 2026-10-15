@@ -17,10 +17,11 @@
 // Synthetic physicians only, on the lab's reserved domain.
 import { devices } from '@playwright/test';
 import { test } from './support/fixtures.mjs';
-import { LAB_EMAIL_DOMAIN, lab, mockApi, rows, sleep, stamp, waitForCheckoutEvents, waitForMemberApp } from './support/lab.mjs';
+import { LAB_EMAIL_DOMAIN, lab, labExec, mockApi, rows, sleep, stamp, waitForCheckoutEvents, waitForMemberApp } from './support/lab.mjs';
 
 const { defaultBrowserType: _webkit, ...iphone } = devices['iPhone 15'];
-test.use({ ...iphone, browserName: 'chromium' });
+// The engine the run asks for (QA_ENGINE=webkit: Safari's), Chromium otherwise.
+test.use({ ...iphone, browserName: String(process.env.QA_ENGINE || '').trim().toLowerCase() === 'webkit' ? 'webkit' : 'chromium' });
 
 const CONTINUE = 'Continue to secure payment';
 const CONSENT = /agree to the payment and renewal terms/;
@@ -54,6 +55,7 @@ function apiLog(context) {
   const api = lab().urls.apiOrigin;
   const log = [];
   context.on('request', (r) => { if (r.url().startsWith(api)) { const u = new URL(r.url()); log.push({ at: Date.now(), method: r.method(), path: u.pathname, search: u.search }); } });
+  context.on('response', (r) => { if (r.url().startsWith(api) && new URL(r.url()).pathname === '/functions/v1/report-error') log.reportStatuses = [...(log.reportStatuses || []), r.status()]; });
   return log;
 }
 
@@ -66,7 +68,7 @@ test('signup fixes: the sign-in screen without the app; the funnel; back from a 
   const log = apiLog(context);
   let email, subject;
 
-  await qa.feature('SIGNUP-SPLIT', 'The sign-in screen comes up without the app chunk', async () => {
+  await qa.feature('SIGNUP-001', 'The sign-in screen comes up without the app chunk', async () => {
     const start = Date.now();
     await page.goto(lab().urls.app, { waitUntil: 'domcontentloaded' });
     await page.getByTestId('qa-signin').waitFor({ timeout: 60000 });
@@ -80,8 +82,14 @@ test('signup fixes: the sign-in screen without the app; the funnel; back from a 
     await qa.shot('sign-in screen');
   });
 
+  // report-error keeps 30 events per address per 10 minutes. Every browser of
+  // the lab reaches it from one address, so the steps of earlier journeys (or
+  // of another run on the same lab) would spend this visitor's budget; live,
+  // each visitor has an address of their own. The lab's earlier events are
+  // taken off the count (their address cleared), as a fresh visitor's would be.
+  labExec(`update public.client_errors set ip_hash = null where kind = 'info' and ip_hash is not null and created_at > now() - interval '15 minutes'`);
   const submitted = Date.now();
-  await qa.feature('SIGNUP-FUNNEL', 'Sign up, the review, Continue before the tick, Checkout', async () => {
+  await qa.feature('SIGNUP-002', 'Sign up, the review, Continue before the tick, Checkout', async () => {
     email = await signUp(page, 'fixes', { goto: false });
     qa.check('the review opens after sign-up', await reviewShown(page, 120000));
     subject = await subjectOf(email);
@@ -96,7 +104,7 @@ test('signup fixes: the sign-in screen without the app; the funnel; back from a 
     await qa.shot('checkout stand-in');
   });
 
-  await qa.feature('SIGNUP-CANCEL', 'Back from Checkout\'s cancel link: the review says nothing was charged, on screen', async () => {
+  await qa.feature('SIGNUP-003', 'Back from Checkout\'s cancel link: the review says nothing was charged, on screen', async () => {
     await page.getByTestId('qa-stripe-cancel').click();
     await page.waitForURL((u) => u.origin === lab().urls.appOrigin && /\/app\//.test(u.pathname), { timeout: 60000 });
     qa.check('the review opens again', await reviewShown(page, 60000));
@@ -108,7 +116,7 @@ test('signup fixes: the sign-in screen without the app; the funnel; back from a 
     await qa.shot('back from canceled checkout');
   });
 
-  await qa.feature('SIGNUP-RESUME', 'A pending account back in front reads no records again', async () => {
+  await qa.feature('SIGNUP-004', 'A pending account back in front reads no records again', async () => {
     await sleep(31000); // past the resume read's 30 s gap
     const mark = Date.now();
     await setVisibility(page, 'hidden');
@@ -122,7 +130,7 @@ test('signup fixes: the sign-in screen without the app; the funnel; back from a 
     qa.check('the review is still on screen', await page.getByRole('button', { name: CONTINUE }).isVisible());
   });
 
-  await qa.feature('SIGNUP-FUNNEL', 'The funnel steps are recorded as events, ID-free', async () => {
+  await qa.feature('SIGNUP-002', 'The funnel steps are recorded as events, ID-free', async () => {
     let steps = [];
     for (let i = 0; i < 20; i++) {
       steps = clientRows(subject).filter((r) => r.kind === 'info' && /^Funnel: /.test(r.message));
@@ -130,7 +138,16 @@ test('signup fixes: the sign-in screen without the app; the funnel; back from a 
       await sleep(1500);
     }
     const names = steps.map((r) => r.extra?.step);
+    const refused = (log.reportStatuses || []).filter((st) => st === 429).length;
+    qa.check('report-error took every step (no 429: the lab address budget not spent by other runs)', refused === 0, JSON.stringify(log.reportStatuses || []));
+    // In WebKit the lab cannot see checkout_redirected: it is a beacon sent as
+    // the page navigates to Checkout, and Playwright's WebKit drops such a
+    // beacon whenever the context routes requests (every lab context does,
+    // fixtures.mjs). Plain WebKit delivers it (probe, 2026-10-08: WebKit
+    // plain delivered, routed lost; Chromium both delivered).
+    const webkitRouted = test.info().project.use?.browserName === 'webkit' || String(process.env.QA_ENGINE || '').trim().toLowerCase() === 'webkit';
     for (const step of ['membership_page_shown', 'price_panel_shown', 'continue_tapped_unticked', 'checkout_redirected', 'billing_return_canceled']) {
+      if (step === 'checkout_redirected' && webkitRouted) continue;
       qa.check(`step ${step}`, names.includes(step), JSON.stringify(names));
     }
     const text = JSON.stringify(steps.map((r) => r.extra));
@@ -139,7 +156,7 @@ test('signup fixes: the sign-in screen without the app; the funnel; back from a 
     qa.check('no error reported for the account', errors.length === 0, JSON.stringify(errors.map((r) => r.message)));
   });
 
-  await qa.feature('SIGNUP-PAY', 'Pay on the Checkout stand-in: the webhook (npm:stripe) settles it and the account opens', async () => {
+  await qa.feature('SIGNUP-005', 'Pay on the Checkout stand-in: the webhook (npm:stripe) settles it and the account opens', async () => {
     await page.getByRole('checkbox', { name: CONSENT }).check();
     await page.getByRole('button', { name: CONTINUE }).click();
     const pay = page.getByTestId('qa-stripe-pay');
@@ -168,7 +185,7 @@ test('signup fixes: a profile read that never answers no longer holds "Loading..
     await gate;
     return route.abort('timedout').catch(() => {});
   });
-  await qa.feature('SIGNUP-STALL', 'The held read ends at its deadline; Reload is offered; the load reaches the review on its own', async () => {
+  await qa.feature('SIGNUP-006', 'The held read ends at its deadline; Reload is offered; the load reaches the review on its own', async () => {
     const email = await signUp(page, 'stall');
     const start = Date.now();
     const screens = [];
@@ -196,7 +213,7 @@ test('signup fixes: a profile read that never answers no longer holds "Loading..
 
 test('signup fixes: a phone clock 31 minutes fast still reaches Checkout', { tag: ['@SIGNUP-SKEW'] }, async ({ page, qa }) => {
   test.setTimeout(5 * 60 * 1000);
-  await qa.feature('SIGNUP-SKEW', 'Tick and Continue on a device 31 minutes ahead', async () => {
+  await qa.feature('SIGNUP-007', 'Tick and Continue on a device 31 minutes ahead', async () => {
     await page.clock.install({ time: Date.now() + 31 * 60 * 1000 });
     await signUp(page, 'skew');
     qa.check('the review opens', await reviewShown(page, 120000));

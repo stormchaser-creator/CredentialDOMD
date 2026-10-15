@@ -36,7 +36,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { DEPLOY_PLAN, MIGRATIONS_DIR, RELEASE_AFTER_JSON, RELEASE_BEFORE_JSON, RELEASE_DELTA_JSON, RELEASE_DIR, REPO_ROOT, isMain } from './lib/paths.mjs';
-import { labMigrationText, planMigrations, planProbes, releaseDelta, unplannedDifferences } from './lib/release-plan.mjs';
+import { labMigrationText, localMigrationRequest, planMigrations, planProbes, releaseDelta, unplannedDifferences } from './lib/release-plan.mjs';
 import { localExec, localJson, runSqlRequest } from './lib/local-db.mjs';
 import { fetchLocalCatalog } from './lib/fetch-catalog.mjs';
 import { localGatewayOrigin } from './lib/config.mjs';
@@ -153,7 +153,7 @@ export function applyRelease({ plan = DEPLOY_PLAN, liveRef = 'main', ifPlanned =
   const applied = [];
   for (const f of todo) {
     const started = Date.now();
-    const r = runSqlRequest(f.sql, { user: 'postgres' });
+    const r = runSqlRequest(localMigrationRequest(f.sql), { user: 'postgres' });
     if (!r.ok) {
       process.stderr.write(r.stderr);
       throw new Error(`step ${f.step} ${f.name} failed as postgres; its transaction was rolled back (the migrations before it stay applied)`);

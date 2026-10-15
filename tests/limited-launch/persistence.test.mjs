@@ -241,11 +241,11 @@ for (const enabled of [true, false]) {
     assert.equal(f.queue('user_syntheticB').length, 0);
     f.switchAccount('user_syntheticA');
     await f.api.replayPendingOps('profileA', 'user_syntheticA');
-    assert.deepEqual(f.requests.map(op => op.method), ['upload', 'upsert']);
-    assert.equal(f.requests[0].path, 'user_syntheticA/doc');
-    assert.equal(await f.requests[0].blob.text(), 'a');
-    assert.equal(f.requests[1].value.storage_path, 'user_syntheticA/doc');
-    assert.equal(Object.hasOwn(f.requests[1].value, 'data'), false);
+    assert.deepEqual(f.requests.map(op => op.method), ['select', 'upload', 'insert']);
+    assert.equal(f.requests[1].path, 'user_syntheticA/doc');
+    assert.equal(await f.requests[1].blob.text(), 'a');
+    assert.equal(f.requests[2].value.storage_path, 'user_syntheticA/doc');
+    assert.equal(Object.hasOwn(f.requests[2].value, 'data'), false);
     assert.equal(f.queue().length, 0);
   });
 
@@ -293,9 +293,9 @@ for (const enabled of [true, false]) {
       f.requests.length = 0;
       f.onRequest = async () => ({ error: null });
       await f.api.replayPendingOps('profileA', 'user_syntheticA');
-      assert.deepEqual(f.requests.map(op => op.method), ['upload', 'upsert']);
-      assert.equal(await f.requests[0].blob.text(), 'a');
-      assert.equal(f.requests[1].value.storage_path, 'user_syntheticA/doc');
+      assert.deepEqual(f.requests.map(op => op.method), ['select', 'upload', 'insert']);
+      assert.equal(await f.requests[1].blob.text(), 'a');
+      assert.equal(f.requests[2].value.storage_path, 'user_syntheticA/doc');
       assert.equal(f.queue().length, 0);
     });
   }
@@ -326,7 +326,7 @@ test('concurrent replay callers do not duplicate an in-flight write or erase app
   await f.api.insertItem(null, 'licenses', { id: 'later' });
   assert.equal(f.requests.length, 1);
   pending.resolve({ error: null }); await Promise.all([first, second]);
-  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests.filter(r => r.method !== 'select').length, 1);
   assert.deepEqual(f.queue().map(op => op.payload.id), ['later']);
 });
 
@@ -353,7 +353,7 @@ test('replay acknowledgement preserves an identical same-timestamp operation app
   const concurrent = f.queue(); concurrent.push(identical);
   f.values.set('ops:user_syntheticA', JSON.stringify(concurrent));
   pending.resolve({ error: null }); await replay;
-  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests.filter(r => r.method !== 'select').length, 1);
   assert.equal(f.queue().length, 1);
   assert.equal(f.queue()[0].op, identical.op);
   assert.equal(f.queue()[0].ts, identical.ts);
@@ -439,7 +439,7 @@ test('a queued identityVault upsert is never sent and is removed from the queue'
     oldOp('license-1'),
   ]));
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  assert.deepEqual(f.requests.map(r => r.table), ['licenses'], 'only the registered collection is sent');
+  assert.deepEqual(f.requests.filter(r => r.method !== 'select').map(r => r.table), ['licenses'], 'only the registered collection is written');
   assert.doesNotMatch(JSON.stringify(f.requests), /identity|enc1:|Synthetic application/);
   assert.deepEqual(f.queue(), [], 'the identity ops are gone, not waiting for another try');
 });
@@ -484,18 +484,23 @@ test('no write path sends the server-owned invoice email stamp, and the rest of 
   await f.api.bulkSync('profileA', 'invoices', [invoice], 'user_syntheticA');
   f.values.set('ops:user_syntheticA', JSON.stringify([{ op: 'upsert', collectionKey: 'invoices', payload: invoice, ts: 1, queueId: 'q1' }]));
   await f.api.replayPendingOps('profileA', 'user_syntheticA');
-  const writes = f.requests.filter(r => r.table === 'invoices');
-  assert.deepEqual(writes.map(r => r.method), ['insert', 'update', 'upsert', 'upsert'], 'insert, edit, self-heal, queued replay');
+  const writes = f.requests.filter(r => r.table === 'invoices' && r.method !== 'select');
+  assert.deepEqual(writes.map(r => r.method), ['insert', 'update', 'upsert', 'insert'], 'insert, edit, self-heal, queued replay');
   for (const w of writes) {
     for (const row of [].concat(w.value)) {
       assert.equal('last_emailed_at' in row, false, `${w.method} carries no last_emailed_at`);
       assert.equal('last_emailed_to' in row, false, `${w.method} carries no last_emailed_to`);
       // An edit sends only what it changed (IOS-SYNC-3): this one changed
       // nothing it may send, so it carries the id and its date alone.
-      if (w.method === 'update') { assert.deepEqual(Object.keys(row).sort(), ['id', 'updated_at']); continue; }
+      if (w.method === 'update') { assert.deepEqual(Object.keys(row).sort(), ['updated_at']); continue; }
       // (A replayed row was parsed inside the module's realm: compare as JSON.)
-      assert.equal(JSON.stringify(row.payments), JSON.stringify(invoice.payments), `${w.method} still carries the payment`);
-      assert.equal(row.number, 'INV-1');
+      if (w.method === 'update') {
+        assert.equal(Object.hasOwn(row, 'payments'), false, 'an unchanged payment is never overwritten by a stale form');
+        assert.equal(Object.hasOwn(row, 'number'), false);
+      } else {
+        assert.equal(JSON.stringify(row.payments), JSON.stringify(invoice.payments), `${w.method} still carries the payment`);
+        assert.equal(row.number, 'INV-1');
+      }
     }
   }
   // An edit that does change the payments sends them, and still no stamp.

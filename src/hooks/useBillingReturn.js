@@ -26,6 +26,11 @@ export function useBillingReturn(limitedLaunch, accountId, { win = globalThis.wi
   useEffect(() => {
     if (state?.kind === "canceled" || landed) clearBillingReturn(win);
   }, [state?.kind, landed, win]);
+  // Settlement is terminal for this checkout. A later cancellation or access
+  // refresh must not turn the old return into another pending purchase.
+  useEffect(() => {
+    if (landed) setState(current => current && current.phase !== "confirmed" ? { ...current, phase: "confirmed" } : current);
+  }, [landed]);
   // A fresh membership answer on a short backoff until the webhook has landed.
   useEffect(() => {
     if (state?.kind !== "complete" || state.phase !== "confirming" || landed || !ready) return;
@@ -46,7 +51,7 @@ export function useBillingReturn(limitedLaunch, accountId, { win = globalThis.wi
     next();
     return () => { stopped = true; clearTimeout(timer); };
   }, [state, landed, ready, refresh, delays]);
-  if (!state) return null;
+  if (!state || (state.phase === "confirmed" && !landed)) return null;
   const phase = landed ? "confirmed" : state.phase;
   // Dismissing hides the notice. A completed Checkout still waiting to show
   // stays known (dismissed: true), so the page never asks a member who has

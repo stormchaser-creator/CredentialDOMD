@@ -62,6 +62,7 @@ test('keywords inside literals and comments do not trip the guard; hidden statem
 // as the local superuser in one transaction, so a URL that sends libpq anywhere
 // but this machine must never get through.
 import { connectionUrl, localConnection, psqlEnv } from '../../qa-lab/lib/local-db.mjs';
+import { stackPorts } from '../../qa-lab/lib/config.mjs';
 
 test('a local database URL is accepted only when every part is plain and local', () => {
   assert.deepEqual(localConnection('postgresql://postgres:postgres@127.0.0.1:54322/postgres'), { host: '127.0.0.1', port: '54322', database: 'postgres', password: 'postgres', sslmode: null });
@@ -86,9 +87,10 @@ test('a local database URL is accepted only when every part is plain and local',
 });
 
 test('connectionUrl rebuilds the URL from the checked parts, and psql gets no libpq connection variables', () => {
-  process.env.QA_LAB_DB_URL = 'postgresql://postgres:p%40ss@127.0.0.1:54322/postgres?sslmode=disable';
-  assert.equal(connectionUrl('postgres'), 'postgresql://postgres:p%40ss@127.0.0.1:54322/postgres?sslmode=disable');
-  assert.equal(connectionUrl(), 'postgresql://supabase_admin:p%40ss@127.0.0.1:54322/postgres?sslmode=disable');
+  const port = stackPorts().database;
+  process.env.QA_LAB_DB_URL = `postgresql://postgres:p%40ss@127.0.0.1:${port}/postgres?sslmode=disable`;
+  assert.equal(connectionUrl('postgres'), `postgresql://postgres:p%40ss@127.0.0.1:${port}/postgres?sslmode=disable`);
+  assert.equal(connectionUrl(), `postgresql://supabase_admin:p%40ss@127.0.0.1:${port}/postgres?sslmode=disable`);
   assert.throws(() => connectionUrl('x@evil.example'), /refusing database user/);
   const env = psqlEnv({ PATH: '/bin', PGHOST: 'db.remote.example.co', PGHOSTADDR: '203.0.113.9', PGPORT: '6543', PGSERVICE: 'prod', PGSERVICEFILE: '/tmp/s', PGOPTIONS: '-c role=x', PG_BIN: '/opt/pg' });
   assert.deepEqual(Object.keys(env).filter((k) => k.startsWith('PG')), ['PGCONNECT_TIMEOUT']);

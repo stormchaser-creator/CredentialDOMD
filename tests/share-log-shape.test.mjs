@@ -83,7 +83,8 @@ test('a queued old-shape row lands on replay', async () => {
   f.values.set('ops:user_syntheticTarget', JSON.stringify([{ op: 'upsert', collectionKey: 'shareLog', ts: 1,
     payload: { id: '00000000-0000-4000-8000-000000000003', itemName: 'Vera packet (1 files)', method: 'share', sharedAt: '2026-09-21T10:00:00.000Z', recipient: '' } }]));
   await f.api.replayPendingOps('profileA', 'user_syntheticTarget');
-  const row = f.requests.find(r => r.table === 'share_log')?.value;
+  const row = f.requests.find(r => r.table === 'share_log' && r.method === 'insert')?.value;
+  assert.ok(row, 'a missing cloud row is inserted after the replay checks for an existing copy');
   assert.equal(row.sent_at, '2026-09-21T10:00:00.000Z');
   assert.equal(row.section, 'documents');
   assert.ok(!('shared_at' in row));

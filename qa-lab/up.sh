@@ -44,6 +44,5 @@ if [ "$RELEASE" = 1 ]; then
 fi
 
 echo
-echo "QA lab stack is up. Studio: http://127.0.0.1:54323  API: http://127.0.0.1:54321  Auth mail (Mailpit): http://127.0.0.1:54324"
-echo "Database: postgresql://postgres:postgres@127.0.0.1:54322/postgres (loopback only; the CLI's default password, so never publish these ports)   Parity: npm run qa:parity"
+node --input-type=module -e 'import {localStudioOrigin,localApiOrigin,localMailOrigin,projectId,stackPorts} from "./qa-lab/lib/config.mjs"; console.log(`QA lab ${projectId()} is up. Studio: ${localStudioOrigin()}  API: ${localApiOrigin()}  Auth mail (Mailpit): ${localMailOrigin()}`); console.log(`Database: postgresql://postgres:postgres@127.0.0.1:${stackPorts().database}/postgres (loopback only; the CLI default password)   Parity: npm run qa:parity`);'
 echo "The whole lab (mocks, the app with the QA sign-in, the email inbox): npm run qa:lab"

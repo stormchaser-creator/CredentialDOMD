@@ -86,12 +86,27 @@ async function load(status = SHARED_ON, fetchStub = null) {
   // from the ESM module cache.
   const file = path.join(CACHE, `aiClient.${++seq}.mjs`);
   writeFileSync(file, patched);
-  return import(pathToFileURL(file).href);
+  const m = await import(pathToFileURL(file).href);
+  m.registerSharedAiProfile("user_synthetic_ai_errors", true);
+  if (status === null) return m;
+  // Establish this account's prior successful status through the same read
+  // lifecycle as the app. An unowned localStorage seed is no authority.
+  const nextFetch = globalThis.fetch;
+  globalThis.fetch = async () => proxyResponse(200, {
+    shared: status.shared, allowed: status.reason !== "pending", configured: true,
+    used_today: status.used, limit: status.limit, unlimited: status.unlimited,
+    anthropic_shared: status.anthropicShared, anthropic_used_today: status.anthropicUsed, anthropic_limit: status.anthropicLimit,
+    month_spent_usd: status.monthSpentUsd, budget_soft_usd: status.budgetSoftUsd, budget_hard_usd: status.budgetHardUsd,
+    over_soft: status.overSoft, over_hard: status.overHard,
+  });
+  await m.fetchSharedAiStatus();
+  globalThis.fetch = nextFetch;
+  return m;
 }
 
 // Clerk is not here; the token fetch has to succeed or every call stops at 401.
 globalThis.window = globalThis.window || {};
-globalThis.window.Clerk = { session: { getToken: async () => "test-token" } };
+globalThis.window.Clerk = { user: { id: "user_synthetic_ai_errors" }, session: { getToken: async () => "test-token" } };
 
 /** A fetch Response shaped like the proxy's, with headers that behave. */
 const proxyResponse = (status, body, headers = {}) => ({

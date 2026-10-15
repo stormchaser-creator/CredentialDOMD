@@ -8,7 +8,7 @@
 import { test } from './support/fixtures.mjs';
 import {
   LAB_EMAIL_DOMAIN, base64Marker, chooseFiles, field, landing, newMember, openCredentials, profileOf, recordButtons, row, rows, scriptAi, signIn, sleep, stamp,
-  syntheticPdf, waitFor,
+  syntheticPdf, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import {
   openSettings, openSetupPage, phoneBrowser, reloadApp, serveSyntheticRegistry, stripCounts,
@@ -120,23 +120,35 @@ test('setup: licenses from the registry and by hand, expiration dates, DEA, remi
 
   await qa.feature('SETTINGS-010', 'A date typed on the keyboard into the strip is saved once, whole', async () => {
     // Desk browsers fire a change for every digit of the year, the way a physician types it.
+    // Playwright's WebKit date field takes digits into the month part only and never moves on
+    // (a plain HTML date input does the same; Safari moves on as each part fills): there the
+    // slashes move it on, as Tab would. Once the year is whole, the strip saves the date and
+    // drops the row, and Safari crashed the page when that happened inside the field's own
+    // keystroke (release/goal2 before the fix): the page must still be there.
+    const webkit = page.context().browser()?.browserType().name() === 'webkit';
+    let crashed = false;
+    page.once('crash', () => { crashed = true; });
     const nm = page.locator('input[aria-label^="Expiration date for NM"]');
     await nm.focus();
-    await page.keyboard.type('05012027', { delay: 120 });
-    await page.keyboard.press('Tab');
+    await page.keyboard.type(webkit ? '05/01/2027' : '05012027', { delay: 120 });
+    await page.keyboard.press('Tab').catch(() => {});
     await sleep(3000);
     const saved = row(`select expiration_date from public.licenses where user_id = '${profile.id}' and state = 'NM'`);
-    await qa.shot('typed date');
+    if (!crashed) await qa.shot('typed date');
+    qa.check('the page is still there once the year is typed (no crash)', !crashed && await page.getByRole('heading', { name: /^Setup$/ }).first().isVisible().catch(() => false));
     qa.check('licenses.expiration_date is 2027-05-01', saved?.expiration_date === '2027-05-01', JSON.stringify(saved));
-    if (saved?.expiration_date !== '2027-05-01') {
+    if (crashed || saved?.expiration_date !== '2027-05-01') {
       qa.bug({
-        title: 'Setup > Expiration dates: typing a year saves a partial year (the license reads as expired in year 2) and the row disappears mid-typing',
+        title: crashed
+          ? 'Setup > Expiration dates: the page crashes as the year of a typed date is finished (Safari)'
+          : 'Setup > Expiration dates: a date typed on the keyboard is not saved whole',
         step: 'More > Setup > Expiration dates; click the NM row\'s date field and type 05/01/2027 on the keyboard',
-        expected: 'The license is saved once with 2027-05-01',
-        actual: `licenses.expiration_date = ${saved?.expiration_date}. DateRow's date input saves on every change (src/components/features/setup/DateFixList.jsx:52-55 setDate -> editItem, wired to the input's onChange at line 141); desktop Chrome fires a change for each year digit (0002-05-01, 0020-05-01, ...), the first one dates the license in year 2, the Dates task treats it as dated, and the row unmounts before the rest of the year can be typed`,
+        expected: 'The license is saved once with 2027-05-01, and the page stays',
+        actual: `licenses.expiration_date = ${saved?.expiration_date}${crashed ? '; the page crashed' : ''}`,
         severity: 'high',
       });
     }
+    if (crashed) { await page.reload(); await waitForMemberApp(page); await openSetupPage(page); await page.locator('button').filter({ hasText: 'Expiration dates' }).first().click(); }
     const nmFix = page.locator('input[aria-label^="Expiration date for NM"]');
     if (await nmFix.count()) { await nmFix.fill('2027-05-01'); await sleep(2000); }
     if (saved?.expiration_date !== '2027-05-01') {
@@ -247,12 +259,12 @@ test('setup: licenses from the registry and by hand, expiration dates, DEA, remi
       await dlg.waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
       const back = await phone.page.getByRole('heading', { name: /^Setup$/ }).first().waitFor({ timeout: 10000 }).then(() => true, () => false);
       await sleep(800);
-      await phone.page.screenshot({ path: (await qa.shot('phone back from packet add')).replace(/\.png$/, '-phone.png'), fullPage: true });
+      await qa.shot('phone back from packet add', phone.page);
       const drawerOpen = await phone.page.getByRole('button', { name: 'Add my position' }).isVisible().catch(() => false);
       const header = phone.page.getByRole('button', { name: /items · \d+ done/ }).first();
       await header.scrollIntoViewIfNeeded().catch(() => {});
       const folded = /›\s*$/.test((await header.innerText().catch(() => '')).trim());
-      await phone.page.screenshot({ path: (await qa.shot('phone packet header on return')).replace(/\.png$/, '-phone.png') });
+      await qa.shot('phone packet header on return', phone.page);
       qa.check('closing returns to More > Setup', back);
       qa.check('the "Your current position" drawer is open on return (packet unfolded)', drawerOpen && !folded, `drawer ${drawerOpen ? 'open' : 'not shown'}, packet ${folded ? 'folded' : 'open'}; Tier 1 ${JSON.stringify(strip)}`);
       if (back && (!drawerOpen || folded)) {

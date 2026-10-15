@@ -42,7 +42,7 @@ test('Vera sends a packet by email and by the share sheet; sign-out has nothing 
 }, async ({ page, context, qa }) => {
   test.setTimeout(8 * 60 * 1000);
   await installDeviceStandIns(context);
-  const { profile, user } = await newMember(page, { firstName: 'Paige', lastName: 'Packet' });
+  const { profile, user } = await newMember(page, { firstName: 'Paige', lastName: 'Packet', profession: 'MD' });
   const pid = profile.id;
   const tag = runTag();
   const recipient = `credentialing-${tag.toLowerCase()}@${LAB_EMAIL_DOMAIN}`;
@@ -147,7 +147,7 @@ test('Vera: reference draft, feedback ticket, dictation, archived chats, source 
   test.setTimeout(9 * 60 * 1000);
   await installDeviceStandIns(context);
   await installFakeSpeech(context, 'QA dictated which licenses expire this year');
-  const { profile } = await newMember(page, { firstName: 'Quinn', lastName: 'Conversation' });
+  const { profile } = await newMember(page, { firstName: 'Quinn', lastName: 'Conversation', profession: 'MD' });
   const pid = profile.id;
   const tag = runTag();
 

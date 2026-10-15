@@ -52,6 +52,16 @@ export function createMockServer({ port, appOrigin, supabaseUrl = SUPABASE_API_U
       else res.end();
     }
   });
+  // Deno's pooled HTTP client can reuse a socket as Node's default idle
+  // timeout closes it. A disposable edge-runtime comparison reproduced the
+  // resulting "connection closed before message completed" transport error.
+  // Keep these local provider connections across ordinary journey pauses.
+  // This mitigates that proven pool race; it does not explain every timeout.
+  server.keepAliveTimeout = 10 * 60 * 1000;
+  server.headersTimeout = server.keepAliveTimeout + 1000;
+  // Closing an embedded mock has the same persistence boundary as the CLI.
+  // Flush its coalesced write before close callbacks can remove its directory.
+  server.on('close', () => store.flush());
   return { server, store, clerk, stripe, resend, ai, listen: () => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); }) };
 }
 
@@ -61,5 +71,6 @@ if (isMain(import.meta.url)) {
   const appOrigin = values['app-origin'] || process.env.QA_APP_ORIGIN || 'http://127.0.0.1:54390';
   const mock = createMockServer({ port, appOrigin });
   mock.listen().then(() => console.log(`[mock] listening on http://127.0.0.1:${port} (inbox http://127.0.0.1:${port}/qa/inbox)`), (e) => { console.error(`[mock] ${e.message}`); process.exit(1); });
+  process.on('exit', () => { try { mock.store.flush(); } catch { /* the state is a convenience, never worth a hang on exit */ } });
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { mock.server.close(); process.exit(0); });
 }

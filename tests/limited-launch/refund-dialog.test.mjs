@@ -55,10 +55,10 @@ const exported = { exports: {} };
 new Function('require', 'module', 'exports', built.outputFiles[0].text)(name => name === 'react' ? new Proxy({}, { get: (_, n) => active.hooks[n] }) : require(name), exported, exported.exports);
 const { Refund } = exported.exports;
 
-function fixture({ paid = true, accessStatus = 'active', carry } = {}) {
+function fixture({ paid = true, accessStatus = 'active', carry, accountId = owner } = {}) {
   active = runtime();
   const calls = [];
-  const context = { user: { id: owner }, theme: THEME, isDesktop: false, navigate: (...args) => calls.push(['navigate', ...args]),
+  const context = { user: { id: accountId }, theme: THEME, isDesktop: false, navigate: (...args) => calls.push(['navigate', ...args]),
     limitedLaunch: { enabled: true, access: { accessStatus }, refresh: async () => { calls.push(['refresh']); } } };
   const state = { context, calls, client: {
     refundStatus: async () => { calls.push(['status']); return { schemaVersion: 1, state: 'none' }; },
@@ -412,4 +412,66 @@ test('an unfinished request whose payment was refunded already says the refund w
   failed.render(); active.flush(); await settle();
   assert.ok(failed.html().includes(REFUND_COPY.notStarted));
   for (const text of [REFUND_COPY.notStarted, REFUND_COPY.issuedNotCancelled, REFUND_COPY.issuedCancelled]) assert.doesNotMatch(text, /[—–-]/, 'no dashes or hyphens');
+});
+
+// Scope controls added by the operational multi-user review.
+test('a refund outcome carried across a branch never appears for another account', async () => {
+  const carry = {current: null};
+  const a = fixture({carry});
+  await button(a, REFUND_COPY.action).props.onClick(); tick(a);
+  await button(a, 'Cancel membership and refund').props.onClick();
+  assert.match(a.html(), /Refunded: \$149\.00/);
+  const b = fixture({carry, paid:false, accountId:'user_synthetic_other'});
+  assert.equal(b.html(), '', 'the first render must not show the previous account payment');
+});
+test('changing the account clears a displayed refund quote before any effect', async () => {
+  const f = fixture();
+  await button(f, REFUND_COPY.action).props.onClick(); tick(f);
+  f.context.user = {id:'user_synthetic_other'};
+  const html = f.html();
+  assert.doesNotMatch(html, /We will refund \$149\.00/);
+  assert.equal(Boolean(button(f, 'Cancel membership and refund')), false);
+});
+test('a prior account quote completing after a context change cannot replace the new view', async () => {
+  const f = fixture({carry:{current:null}});
+  let resolve; f.client.refundQuote = () => new Promise(r => {resolve=r;});
+  const request=button(f, REFUND_COPY.action).props.onClick();
+  f.context.user = {id:'user_synthetic_other'}; f.render(); active.flush();
+  resolve(quote()); await request;
+  assert.doesNotMatch(f.html(), /We will refund \$149\.00/);
+});
+
+test('a saved confirmation handler from an old account cannot submit after the account changes', async () => {
+  const f = fixture();
+  await button(f, REFUND_COPY.action).props.onClick(); tick(f);
+  const submit = button(f, 'Cancel membership and refund').props.onClick;
+  f.context.user = {id:'user_synthetic_other'}; f.render();
+  await submit();
+  assert.equal(f.calls.some(call => call[0] === 'refund'), false);
+});
+test('a refund response after an account switch does not change its carry or refresh the other membership', async () => {
+  const carry={current:null}; const f=fixture({carry});
+  await button(f, REFUND_COPY.action).props.onClick(); tick(f);
+  let resolve; f.client.refund=()=>new Promise(r=>{resolve=r;});
+  const request=button(f, 'Cancel membership and refund').props.onClick();
+  f.context.user={id:'user_synthetic_other'}; f.render(); active.flush();
+  resolve(refunded()); await request;
+  assert.doesNotMatch(f.html(), /Refunded:|We will refund/);
+  assert.equal(carry.current.view.state, 'available', 'the stale completion did not replace the original quote');
+  assert.equal(f.calls.some(call=>call[0]==='refresh'), false);
+});
+test('a quote from before A to B to A remains stale even when the account id matches again', async () => {
+  const f=fixture(); let resolve; f.client.refundQuote=()=>new Promise(r=>{resolve=r;});
+  const request=button(f, REFUND_COPY.action).props.onClick();
+  f.context.user={id:'user_synthetic_other'}; f.render();
+  f.context.user={id:owner}; f.render();
+  resolve(quote()); await request;
+  assert.doesNotMatch(f.html(), /We will refund/);
+});
+
+test('a missing account renders no refund action or carried payment', async () => {
+  const f=fixture({accountId:null});
+  assert.equal(f.html(), '');
+  f.context.user=undefined;
+  assert.equal(f.html(), '');
 });

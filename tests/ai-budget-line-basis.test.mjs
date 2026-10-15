@@ -32,7 +32,7 @@ const CACHE = path.join(ROOT, 'node_modules/.cache', `credentialdomd-ai-budget-b
 fs.mkdirSync(CACHE, { recursive: true });
 process.on('exit', () => { try { fs.rmSync(CACHE, { recursive: true, force: true }); } catch { /* best effort */ } });
 
-globalThis.window = { Clerk: { session: { getToken: async () => 'synthetic-clerk-token' } } };
+globalThis.window = { Clerk: { user: { id: 'user_synthetic_budget' }, session: { getToken: async () => 'synthetic-clerk-token' } } };
 
 async function proxyFigures() {
   const noop = () => {};
@@ -73,6 +73,7 @@ async function client(status, opus = null) {
   const file = path.join(CACHE, `aiClient.${++seq}.mjs`);
   fs.writeFileSync(file, PATCHED);
   const m = await import(pathToFileURL(file).href);
+  m.registerSharedAiProfile('user_synthetic_budget', true);
   await m.fetchSharedAiStatus({ force: true });
   return { m, requests };
 }

@@ -10,6 +10,9 @@
 // Capacitor store. Synthetic records only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createMemoryIndexedDB } from '../helpers/memory-indexeddb.mjs';
+import { setOfflineStoreFactory } from '../../src/utils/offlineStore.js';
+import { _resetInvoiceHandoff } from '../../src/utils/invoiceHandoff.js';
 import { readFile } from 'node:fs/promises';
 import {
   BASE_KEYS, DEVICE_KEYS_BASE, purgeForSignOut, purgeUserStorage, purgeAfterSessionEnd,
@@ -24,6 +27,11 @@ const key = (base, id = ACCOUNT) => `${base}:${id}`;
 function withStores(fn) {
   return async () => {
     const store = new Map(), native = new Map();
+    const previousIndexedDB = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
+    const deviceIndexedDB = createMemoryIndexedDB();
+    _resetInvoiceHandoff();
+    globalThis.indexedDB = deviceIndexedDB;
+    setOfflineStoreFactory(deviceIndexedDB);
     globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k),
       key: i => [...store.keys()][i], get length() { return store.size; } };
     globalThis.window = { sessionStorage: globalThis.localStorage,
@@ -32,6 +40,11 @@ function withStores(fn) {
       // What a Sign out notes in this module's memory stays two minutes; the
       // next sign-in ends it (AppContext), so each test ends it too.
       clearDeliberateSignOut(ACCOUNT); clearDeliberateSignOut(OTHER);
+      _resetInvoiceHandoff();
+      deviceIndexedDB.closeConnections();
+      setOfflineStoreFactory(undefined);
+      if (previousIndexedDB) Object.defineProperty(globalThis, 'indexedDB', previousIndexedDB);
+      else delete globalThis.indexedDB;
       delete globalThis.localStorage; delete globalThis.window;
     }
   };

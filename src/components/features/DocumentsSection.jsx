@@ -36,7 +36,8 @@ import { resolveDocuments, missingReceiptMessage } from "../../utils/receiptFile
 import { relinkCorrection, keepCorrection, recordCorrection } from "../../utils/intakeCorrections";
 import { alertWriteRefused, scopesForWrite } from "../../utils/limitedLaunchAccess.js";
 import { documentMime } from "../../utils/syncRules.js";
-import { findStoredDuplicate } from "../../utils/storedDuplicate.js";
+import { findDocumentDuplicate } from "../../utils/documentDuplicate.js";
+import { localWriteGuard } from "../../utils/storageScope.js";
 import { cmeEntryFromScan } from "../../utils/scanShape";
 
 // Section a linked document belongs to -> the scan category that styles its
@@ -147,6 +148,12 @@ const ALL_CARDS_SHOWN = Object.freeze({ ref: () => undefined, isShown: () => tru
 
 function DocumentsSection() {
   const { data, setData, addItem, canAddItem, confirmCanAddItem, editItem, updateSection, deleteItem: deleteItemCtx, updateSettings, theme: T, navigate, userIdRef, user } = useApp();
+  const shareOwner = userIdRef?.current ?? user?.id;
+  const shareScopeRef = useRef(null);
+  if (!shareScopeRef.current || shareScopeRef.current.owner !== shareOwner) shareScopeRef.current = { owner: shareOwner, live: true };
+  const shareScope = shareScopeRef.current;
+  const currentShare = () => shareScope.live && shareScopeRef.current === shareScope && (userIdRef?.current ?? user?.id) === shareOwner;
+  useEffect(() => { shareScope.live = true; return () => { shareScope.live = false; }; }, [shareScope]);
   // The bytes of the files whose cards are on screen or near it, while this
   // tab is open: a long list no longer downloads every file of the account
   // as it opens (utils/documentBytes.js keeps a few that scrolled away).
@@ -168,6 +175,9 @@ function DocumentsSection() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+  const fileOperationRef = useRef(null);
+  const [fileOperation, setFileOperation] = useState(null);
+  const [fileBusyNotice, setFileBusyNotice] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanQueue, setScanQueue] = useState([]);
   const [scanError, setScanError] = useState(null);
@@ -222,6 +232,7 @@ function DocumentsSection() {
   // Bundle-send: one share sheet carrying ALL selected files, with a cover
   // note listing the contents, instead of sharing documents one by one.
   const sendBundle = useCallback(async () => {
+    if (!currentShare()) return;
     // A file linked to Protected Identity never goes out in a bundle.
     const docs = data.documents.filter(d => selectedIds.has(d.id) && !isIdentityLink(d.linkedTo));
     if (docs.length === 0) return;
@@ -280,7 +291,9 @@ function DocumentsSection() {
     const { title, letter, blurb } = bundleShareText(data.settings, sentDocs);
     let letterCopied = false;
     try { letterCopied = await copyToClipboard(letter); } catch { /* clipboard unavailable */ }
+    if (!currentShare()) return;
 
+    if (!currentShare()) return;
     if (!(navigator.share && navigator.canShare?.({ files }))) {
       setBundleMsg("This browser can't attach files to a share. Use the app on your phone, or send documents individually.");
       return;
@@ -292,7 +305,8 @@ function DocumentsSection() {
     // offer. Taken back only when the sheet says it did not go.
     const logId = generateId();
     const ticked = selectedIds;
-    const outcome = await shareAtHandoff({ files, title, text: blurb }, {
+    void shareAtHandoff({ files, title, text: blurb }, {
+      isCurrent: currentShare,
       share: (payload) => navigator.share(payload),
       onHanded: () => {
         addItem("shareLog", {
@@ -302,7 +316,7 @@ function DocumentsSection() {
           section: "documents", method: "share", recipient: "",
           sentAt: new Date().toISOString(),
         });
-        setBundleMsg(`Sent ${files.length} documents as one packet.${letterCopied ? " The formatted cover letter is on your clipboard if you want to paste it over the short intro." : ""}`);
+        setBundleMsg(`Sharing requested for ${files.length} documents as one packet. Delivery is not confirmed.${letterCopied ? " The formatted cover letter is on your clipboard if you want to paste it over the short intro." : ""}`);
         setSelectMode(false);
         setSelectedIds(new Set());
       },
@@ -311,10 +325,12 @@ function DocumentsSection() {
         setSelectMode(true);
         setSelectedIds(ticked);
       },
+    }).then(outcome => {
+      if (!currentShare()) return;
+      if (outcome === "cancelled") setBundleMsg(null);
+      else if (outcome !== "shared") setBundleMsg(shareNotStartedMessage(outcome, "Sharing failed. Try fewer or smaller files."));
     });
-    if (outcome === "cancelled") setBundleMsg(null);
-    else if (outcome !== "shared") setBundleMsg(shareNotStartedMessage(outcome, "Sharing failed. Try fewer or smaller files."));
-  }, [data, selectedIds, addItem, deleteItemCtx, fetched]);
+  }, [data, selectedIds, addItem, deleteItemCtx, fetched, shareScope]);
 
   const openCamera = useCallback(async () => {
     // On mobile, use native camera capture
@@ -371,6 +387,25 @@ function DocumentsSection() {
     setScanError(`${describeAiStatus(data.settings)} Documents are read and filed automatically when uploaded, which needs AI.`);
     return false;
   }, [aiOn, data.settings]);
+  // Two picker/drop events can overlap while a stored file or AI read is
+  // pending. Only one may decide what is new from this component's snapshot.
+  // The rejected selection is explicitly said, never silently discarded.
+  const beginFileOperation = useCallback((owner, current) => {
+    if (fileOperationRef.current?.current()) {
+      setFileBusyNotice({ owner, text: "Another file upload is still in progress. Your new selection was not uploaded. Wait for it to finish, then select the files again." });
+      return null;
+    }
+    const operation = { owner, current };
+    fileOperationRef.current = operation;
+    setFileOperation(operation);
+    setFileBusyNotice(null);
+    return () => {
+      if (fileOperationRef.current !== operation) return;
+      fileOperationRef.current = null;
+      setFileOperation(null);
+      setScanning(false);
+    };
+  }, []);
   // Upload is this screen's Add control; at desk width `n` opens the same
   // file picker the button opens, behind the same AI gate.
   useDeskAddShortcut(() => { if (requireApiKey()) fileRef.current?.click(); });
@@ -395,6 +430,13 @@ function DocumentsSection() {
 
   const handleFiles = useCallback(async (files) => {
     if (!requireApiKey()) return;
+    const owner = userIdRef?.current;
+    const copyCurrent = localWriteGuard(user?.id, { adopted: false });
+    const current = () => !!owner && userIdRef?.current === owner && copyCurrent();
+    if (!current()) return;
+    const finish = beginFileOperation(owner, current);
+    if (!finish) return;
+    try {
     setScanError(null);
     const MAX_BATCH = 10;
     const fileList = Array.from(files).slice(0, MAX_BATCH);
@@ -408,23 +450,35 @@ function DocumentsSection() {
     // forms do). Shown as they happen, and again ahead of whatever the last
     // file said once the pick is done.
     const refused = [];
+    const accepted = [];
     const refuse = (text) => { refused.push(text); setScanError(refused.join(" ")); };
     // A stop ends the pick: what it says follows every refusal, once.
     const stop = (text) => setScanError(withRefusals([...refused, text]));
     if (files.length > MAX_BATCH) refuse(`Only the first ${MAX_BATCH} files will be processed.`);
     for (const file of fileList) {
-      const gate = await checkBeforeRead(file);
-      if (gate.refused) { refuse(gate.refused); continue; }
-      if (gate.warning) setScanError(gate.warning);
-      const type = gate.type;
-
-      const dataUrl = await readAsDataUrl(file, type);
+      let type, dataUrl;
+      try {
+        const gate = await checkBeforeRead(file);
+        if (!current()) return;
+        if (gate.refused) { refuse(gate.refused); continue; }
+        if (gate.warning) setScanError(gate.warning);
+        type = gate.type;
+        dataUrl = await readAsDataUrl(file, type);
+      } catch {
+        if (!current()) return;
+        refuse(`"${file.name}" could not be read. It was not uploaded. Try selecting the file again.`);
+        continue;
+      }
+      if (!current()) return;
 
       const docId = generateId();
-      const dup = (data.documents || []).find(d =>
-        (d.data && d.data.length === dataUrl.length && d.data === dataUrl) ||
-        (d.name === file.name && d.size === file.size)
-      ) || await findStoredDuplicate(data.documents, file, { download: downloadDocumentBlob });
+      const checked = await findDocumentDuplicate([...(data.documents || []), ...accepted], file, dataUrl, { downloadBlob: downloadDocumentBlob, isCurrent: current });
+      if (!current() || checked.cancelled) return;
+      if (checked.unavailable) {
+        stop(`"${file.name}" was not uploaded because an existing file could not be checked for duplicates. Open "${checked.unavailable.name || "the existing document"}" to check its file, then try again when online.`);
+        return;
+      }
+      const dup = checked.duplicate;
       if (dup) {
         refuse(`"${file.name}" is already uploaded${dup.linkedTo ? " (and linked)" : ", find it below and use File with AI"}. Skipped duplicate.`);
         continue;
@@ -450,16 +504,19 @@ function DocumentsSection() {
         // answers first, so a read is never paid for a save it then refuses.
         if ((canAddItem && !canAddItem("documents", candidate))
           || (confirmCanAddItem && !(await confirmCanAddItem("documents", candidate)))) {
+          if (!current()) return;
           alertWriteRefused({ scope: scopesForWrite("documents", candidate), section: "documents" });
           stop(`"${file.name}" was not saved, so it was not read. Nothing was changed.`);
           return;
         }
+        if (!current()) return;
         setScanning(true);
         try {
           ({ result, text } = await readScan(file, dataUrl, type, deg, apiKey, scanHints));
         } catch (err) {
           readError = err;
         }
+        if (!current()) return;
         setScanning(false);
         const screened = screenScan(file, result);
         if (screened.refused) { refuse(screened.refused); continue; }
@@ -472,6 +529,7 @@ function DocumentsSection() {
         stop(`"${file.name}" was not saved${result ? "" : ", so it was not read"}. Nothing was changed.`);
         return;
       }
+      accepted.push(candidate);
 
       if (result) {
         // A CV holds many records across many sections, and this queue
@@ -491,7 +549,8 @@ function DocumentsSection() {
       }
     }
     if (refused.length) setScanError(withRefusals(refused));
-  }, [apiKey, aiOn, deg, addItem, canAddItem, confirmCanAddItem, data.documents, data.settings, requireApiKey, scanHints]);
+    } finally { finish(); }
+  }, [apiKey, aiOn, deg, addItem, canAddItem, confirmCanAddItem, data.documents, data.settings, requireApiKey, scanHints, user?.id, userIdRef, beginFileOperation]);
 
   const capturePhoto = useCallback(() => {
     const video = videoRef.current;
@@ -707,6 +766,13 @@ function DocumentsSection() {
     const doc = (data.documents || []).find(d => d.id === docId);
     if (!doc || !file) return;
     if (!requireApiKey()) return;
+    const owner = userIdRef?.current;
+    const copyCurrent = localWriteGuard(user?.id, { adopted: false });
+    const current = () => !!owner && userIdRef?.current === owner && copyCurrent();
+    if (!current()) return;
+    const finish = beginFileOperation(owner, current);
+    if (!finish) return;
+    try {
     setScanError(null);
     const others = (data.documents || []).filter(d => d.id !== docId);
     const quota = checkStorageQuota(others, [file]);
@@ -715,19 +781,21 @@ function DocumentsSection() {
     let type;
     try {
       const gate = await checkBeforeRead(file);
+      if (!current()) return;
       if (gate.refused) { setScanError(gate.refused); return; }
       if (gate.warning) setScanError(gate.warning);
       type = gate.type;
       dataUrl = await readAsDataUrl(file, type);
     } catch {
+      if (!current()) return;
       setScanError(`"${file.name}" could not be read. Nothing was changed.`);
       return;
     }
-    // The stored copies too: since a load stopped downloading files, almost
-    // no other document holds its bytes here, and a scan stored under
-    // another name was stored twice (review of release/goal2, 2026-10-02).
-    const dup = others.find(d => (d.data && d.data === dataUrl) || (d.name === file.name && d.size === file.size))
-      || await findStoredDuplicate(others, file, { download: downloadDocumentBlob });
+    if (!current()) return;
+    const checked = await findDocumentDuplicate(others, file, dataUrl, { downloadBlob: downloadDocumentBlob, isCurrent: current });
+    if (!current() || checked.cancelled) return;
+    if (checked.unavailable) { setScanError(`"${file.name}" was not uploaded because an existing file could not be checked for duplicates. Try again when online.`); return; }
+    const dup = checked.duplicate;
     if (dup) { setScanError(`"${file.name}" is already stored as another document. Pick the file that belongs to "${doc.name}".`); return; }
     if (isScannable(file, type) && aiOn) {
       const candidate = { ...doc, data: dataUrl, type, size: file.size };
@@ -735,13 +803,16 @@ function DocumentsSection() {
       // membership answer that is only old until its check has answered.
       if ((canAddItem && !canAddItem("documents", candidate))
         || (confirmCanAddItem && !(await confirmCanAddItem("documents", candidate)))) {
+        if (!current()) return;
         alertWriteRefused({ scope: scopesForWrite("documents", candidate, doc), section: "documents" });
         setScanError(`"${file.name}" was not saved, so it was not read. Nothing was changed.`);
         return;
       }
+      if (!current()) return;
       let result = null;
       setScanning(true);
       try { ({ result } = await readScan(file, dataUrl, type, deg, apiKey, scanHints)); } catch { /* unread, like any upload whose read failed */ }
+      if (!current()) return;
       setScanning(false);
       const screened = screenScan(file, result);
       if (screened.refused) { setScanError(screened.refused); return; }
@@ -768,6 +839,7 @@ function DocumentsSection() {
       if (error?.code === "membership_read_only") refused = true;
       return null;
     });
+    if (!current()) return;
     if (refused) return;
     if (path) {
       // Any screen warning above stays on screen.
@@ -775,7 +847,8 @@ function DocumentsSection() {
     } else {
       setScanError(`"${doc.name}" is back on this device. It goes to your account the next time the app opens online.`);
     }
-  }, [data.documents, requireApiKey, aiOn, canAddItem, confirmCanAddItem, deg, apiKey, scanHints, updateSection, setData, user?.id, userIdRef]);
+    } finally { finish(); }
+  }, [data.documents, requireApiKey, aiOn, canAddItem, confirmCanAddItem, deg, apiKey, scanHints, updateSection, setData, user?.id, userIdRef, beginFileOperation]);
   // Full-screen viewing: images get a lightbox, PDFs open in a viewer sheet
   const [lightbox, setLightbox] = useState(null);
   // Escape must close the lightbox, not the modal underneath it: capture
@@ -889,7 +962,7 @@ function DocumentsSection() {
         {!isIdentityLink(doc.linkedTo) && (
           <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
             {!doc.linkedTo && doc.data && isReadableDoc(doc) && (
-              <button onClick={() => rescanDoc(doc)} disabled={scanning} style={{
+              <button onClick={() => rescanDoc(doc)} disabled={scanning || !!fileOperation?.current()} style={{
                 flexShrink: 0, padding: "7px 12px", minHeight: 32, borderRadius: 8, border: "none",
                 backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
               }}>
@@ -988,6 +1061,14 @@ function DocumentsSection() {
         >
           Drop files here or use the buttons above
         </div>
+      )}
+
+      {fileBusyNotice && fileBusyNotice.owner === userIdRef?.current && (
+        <div role="alert" style={{ padding: "12px 16px", borderRadius: 12, backgroundColor: T.dangerDim, color: T.danger, fontSize: 14, marginBottom: 14 }}>{fileBusyNotice.text}</div>
+      )}
+
+      {!scanning && fileOperation?.current() && (
+        <div role="status" style={{ padding: 18, borderRadius: 14, backgroundColor: T.accentGlow, color: T.accent, marginBottom: 14, textAlign: "center" }}>Checking files before upload…</div>
       )}
 
       {scanning && (

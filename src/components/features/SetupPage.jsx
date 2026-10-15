@@ -947,7 +947,9 @@ export default function SetupPage({
     if (id === "reminders") return <RemindersDrawer />;
     if (id === "cme") return <CmeDrawer onOpenSection={onOpenSection} />;
     if (id === "headshot") return <HeadshotDrawer onOpenSection={onOpenSection} />;
-    if (task.tier === 2) return <PacketDrawer task={task} onOpenSection={onOpenSection} />;
+    // Each task owns its review and frozen capture queue. Reusing a drawer
+    // for another task would keep the old record under the new section.
+    if (task.tier === 2) return <PacketDrawer key={task.id} task={task} onOpenSection={onOpenSection} />;
     return null;
   };
 
