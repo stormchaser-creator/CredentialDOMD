@@ -27,6 +27,7 @@ async function fixture(run, options = {}) {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   };
   const listeners = new Map(), workerListeners = new Map(), timers = [], intervals = [], values = new Map();
+  let editorOpen = options.editorOpen === true;
   const observed = { reloads: 0, cacheDeletes: [], workerMessages: [], registrations: 0 };
   const registration = { update: async () => {}, addEventListener() {}, waiting: options.waiting ? {
     postMessage: message => { observed.workerMessages.push(message); },
@@ -37,7 +38,7 @@ async function fixture(run, options = {}) {
   };
   setGlobal('window', { location: { reload: () => { observed.reloads++; } }, caches,
     addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) });
-  setGlobal('document', { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} });
+  setGlobal('document', { visibilityState: 'visible', querySelector: () => editorOpen ? {} : null, addEventListener() {}, removeEventListener() {} });
   setGlobal('navigator', { serviceWorker: {
     getRegistration: async () => { observed.registrations++; return registration; },
     addEventListener: (name, fn) => workerListeners.set(name, fn),
@@ -78,7 +79,7 @@ async function fixture(run, options = {}) {
       cleanups.forEach(fn => fn());
       cleanups = mountedEffects.map(fn => fn()).filter(Boolean);
     }
-    await run({ observed, render, flush, timers, intervals, listeners, workerListeners, values, markInvoiceBusy });
+    await run({ observed, render, flush, timers, intervals, listeners, workerListeners, values, markInvoiceBusy, setEditorOpen: value => { editorOpen = value; } });
     cleanups.forEach(fn => fn());
   } finally {
     for (const [key, descriptor] of originals) {
@@ -202,5 +203,53 @@ test('an invoice opened after the automatic update began: the delayed reload doe
     } finally {
       markInvoiceBusy('test', false);
     }
+  }, { allowed: true, waiting: true });
+});
+
+test('an open record editor keeps its page and caches until a deliberate update after closing', async () => {
+  await fixture(async ({ observed, render, flush, timers, listeners, values, setEditorOpen }) => {
+    await flush(); listeners.get('focus')(); await flush();
+    assert.deepEqual(observed.cacheDeletes, []);
+    assert.equal(observed.reloads, 0);
+    assert.equal(timers.length, 0);
+    assert.equal(values.size, 0, 'an open editor does not consume the automatic update attempt');
+    const button = render(true);
+    assert.equal(button.props['aria-label'], 'Update app to the new version');
+    setEditorOpen(false);
+    await button.props.onClick(); await flush();
+    timers.find(timer => timer.delay === 600).fn();
+    assert.equal(observed.reloads, 1);
+  }, { allowed: true, editorOpen: true });
+});
+
+test('an editor opened during the version request prevents automatic cache deletion', async () => {
+  const response = deferred();
+  await fixture(async ({ observed, render, flush, timers, setEditorOpen }) => {
+    await flush(); setEditorOpen(true);
+    response.resolve({ ok: true, json: async () => ({ build: 'new-build' }) }); await flush();
+    assert.deepEqual(observed.cacheDeletes, []);
+    assert.equal(timers.length, 0);
+    assert.equal(observed.reloads, 0);
+    assert.equal(render(true).props['aria-label'], 'Update app to the new version');
+  }, { allowed: true, fetch: response });
+});
+
+test('an editor opened while cache enumeration waits prevents the cache wipe', async () => {
+  const keys = deferred();
+  await fixture(async ({ observed, flush, timers, setEditorOpen }) => {
+    await flush(); setEditorOpen(true); keys.resolve(['synthetic-public-app-cache']); await flush();
+    assert.deepEqual(observed.cacheDeletes, []);
+    assert.equal(timers.length, 0);
+    assert.equal(observed.reloads, 0);
+  }, { allowed: true, cacheKeys: keys });
+});
+
+test('an editor opened after scheduling blocks delayed and service-worker reloads', async () => {
+  await fixture(async ({ observed, render, flush, timers, workerListeners, setEditorOpen }) => {
+    await flush(); setEditorOpen(true);
+    workerListeners.get('controllerchange')();
+    timers.find(timer => timer.delay === 600).fn();
+    assert.equal(observed.reloads, 0);
+    assert.equal(render(true).props['aria-label'], 'Update app to the new version');
   }, { allowed: true, waiting: true });
 });

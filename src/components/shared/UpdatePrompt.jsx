@@ -19,7 +19,7 @@ import { reloadPage } from "../../utils/pageLeave.js";
  *    instead of yanking the page out from under the user mid-task.
  *  - Authentication keeps this component's cache wipe and reload as a manual
  *    choice. Background service-worker installation/activation is unchanged.
- *  - Never while an invoice is open (utils/invoiceBusy.js): the pill again.
+ *  - Never while an invoice or a dialog editor is open: the pill again.
  *    An automatic reload as the physician came back from Mail threw away an
  *    invoice that had gone to the agency before anything recorded it.
  */
@@ -27,6 +27,13 @@ import { reloadPage } from "../../utils/pageLeave.js";
 const CURRENT_BUILD = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const AUTO_GUARD_PREFIX = "cmd-auto-update-";
+
+// A version check can finish after a physician opens a form. Inspect the
+// current DOM at every automatic-update boundary, including delayed reloads,
+// instead of closing that editor as they return from another app.
+const editingDialogOpen = () => !!globalThis.document?.querySelector?.(
+  ':is([role="dialog"], dialog[open]) :is(input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select, [contenteditable="true"])'
+);
 
 async function getRegistration() {
   if (!("serviceWorker" in navigator)) return null;
@@ -70,7 +77,7 @@ function UpdatePrompt({ allowAutomaticUpdates = true } = {}) {
   }, [allowAutomaticUpdates]);
 
   const pauseAutomaticUpdate = useCallback(() => {
-    if (updateKind.current !== "automatic" || (automaticAllowed.current && !invoiceBusy())) return false;
+    if (updateKind.current !== "automatic" || (automaticAllowed.current && !invoiceBusy() && !editingDialogOpen())) return false;
     setMode("pill");
     return true;
   }, []);
@@ -124,7 +131,7 @@ function UpdatePrompt({ allowAutomaticUpdates = true } = {}) {
     }
     if (!newBuild) return;
 
-    if (silent && automaticAllowed.current && !invoiceBusy() && !autoAttempted(newBuild)) {
+    if (silent && automaticAllowed.current && !invoiceBusy() && !editingDialogOpen() && !autoAttempted(newBuild)) {
       markAutoAttempt(newBuild);
       applyUpdate(true);
     } else {
