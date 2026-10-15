@@ -1161,9 +1161,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               && !(f.type === "checkbox" && !isTicked(viewItem[f.key]))
               && !(f.key === "name" && clearsPersonName(sectionKey, viewItem, data.settings.name))
               && !(f.type === "choice" && f.defaultValue && viewItem[f.key] === f.defaultValue)).map(f => (
-              <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
-                <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{resolveFieldProp(f, "label", viewItem)}</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              <div key={f.key} style={{ display: "flex", flexDirection: !isDesktop || f.type === "textarea" ? "column" : "row", justifyContent: "space-between", gap: !isDesktop || f.type === "textarea" ? 6 : 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
+                <span style={{ fontSize: 13, color: T.textMuted, minWidth: 0, overflowWrap: "anywhere" }}>{resolveFieldProp(f, "label", viewItem)}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: T.text, minWidth: 0, textAlign: !isDesktop || f.type === "textarea" ? "left" : "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {(() => {
                     const v = viewItem[f.key];
                     // Only a ticked box reaches here at all (the filter above
