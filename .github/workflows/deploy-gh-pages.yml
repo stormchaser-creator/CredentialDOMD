@@ -76,6 +76,11 @@ jobs:
         working-directory: src
         run: npm ci --legacy-peer-deps
 
+      - name: Install zsh for host-shell regression controls
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zsh
+
       # Gate the deploy on the tests. Until 2026-09-22 this workflow only
       # built, so a hook placed below App's early returns shipped and crashed
       # the app for every signed-in user. Nothing ran the suite or eslint.

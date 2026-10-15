@@ -21,7 +21,7 @@ function fixture() {
 const legacySweep = 'for STALE in "${TMPDIR:-/tmp}"/credentialdomd-attachments.*(N/); do /bin/rm -rf "$STALE"; done';
 function oldCleanup(tmp) {
   const r = spawnSync('/bin/zsh', ['-c', legacySweep], { env: { PATH: '/usr/bin:/bin', TMPDIR: tmp }, encoding: 'utf8' });
-  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.status, 0, r.error?.message || r.stderr);
 }
 
 test('an old concurrently running shell erases the legacy control but preserves a new live root and its bytes', () => {
@@ -136,7 +136,7 @@ test('the shell allocator creates an owned root and a later run reclaims it afte
     const host = realpathSync(new URL('../../scripts/', import.meta.url));
     const result = spawnSync('/bin/zsh', ['-c', `set -u\nREPO=${quoted(f.repo)}\nWORK_STATE=${quoted(f.work)}\nHOST=${quoted(host)}\nRUN_DIR=${quoted(path.join(f.tmp,'run'))}\nLOCK=${quoted(path.join(f.tmp,'lock'))}\n${line}\nprint -r -- "$ATTACH_ROOT"`],
       {encoding:'utf8',env:{PATH:process.env.PATH,TMPDIR:f.tmp}});
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 0, result.error?.message || result.stderr);
     const root = result.stdout.trim();
     assert.equal(path.dirname(root),f.tmp);
     assert.ok(path.basename(root).startsWith(`${ATTACH_ROOT_PREFIX}${attachmentScope(f)}.${result.pid}.`));

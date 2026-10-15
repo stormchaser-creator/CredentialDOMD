@@ -41,6 +41,11 @@ jobs:
         working-directory: src
         run: npm ci --legacy-peer-deps
 
+      - name: Install zsh for host-shell regression controls
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zsh
+
       # PG_BIN points the PostgreSQL integration tests at the runner's server;
       # if it is missing they skip with a message. LC_ALL=C matches the local
       # run (the macOS postmaster needs it; it is harmless on Linux).
