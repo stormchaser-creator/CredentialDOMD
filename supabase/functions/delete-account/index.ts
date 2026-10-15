@@ -6,15 +6,17 @@
  * Tickets and their screenshots, the assistant log, feedback, backup ZIPs,
  * usage and error rows, and the tombstone ledger are service-role only, so
  * a deletion that stops at the client leaves most of the operating record
- * behind. This function finishes the job, and the daily job calls it for
- * every account whose post-cancellation deletion date has passed.
+ * behind. This function finishes the explicitly requested job. Cancellation
+ * retains records; the retired date-only daily job cannot authorize a wipe.
  *
  * Auth, either one:
  *   - a Clerk JWT (clerkProfile): deletes the caller's own account and
  *     nothing else; an admin may pass profile_id for someone else's.
  *   - header x-hook-secret = WELCOME_HOOK_SECRET plus profile_id (required;
- *     there is deliberately no "everyone" form). Optional requested_by
- *     (letters and underscores) labels the audit row; default "scheduled".
+ *     there is deliberately no "everyone" form). Dry-run inspection only;
+ *     destructive hook calls are refused, including old queued jobs. Optional
+ *     requested_by (letters and underscores) labels the dry-run audit row;
+ *     default "scheduled".
  *
  * Body: { dry_run?: boolean, profile_id?: uuid, requested_by?: string }
  *   dry_run is the DEFAULT. Nothing is deleted unless dry_run === false is
@@ -63,8 +65,8 @@
  *
  * Timing: the heaviest real account (about 2,700 rows, 70 tickets) takes
  * about 10 s, most of it the 45 count queries, which run in batches of
- * COUNT_BATCH. The daily job calls through pg_net with a 120 s timeout; the
- * function keeps running to completion even if the caller hangs up first.
+ * COUNT_BATCH. An explicitly requested deletion keeps running to completion
+ * even if the caller hangs up first.
  *
  * Deploy with --no-verify-jwt: the gateway cannot check Clerk RS256 tokens.
  */
@@ -287,8 +289,8 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
   //    tombstone stood without deleted_at, which reads as a provider closure,
   //    and the member could never sign in again. Now a failure in either
   //    rolls both back: the account stays open with its routing as it was,
-  //    and the run is retryable (the member presses Delete again; the daily
-  //    job retries a scheduled one). The mailbox clock is the deletion
+  //    and the run is retryable when the member explicitly presses Delete
+  //    again. The mailbox clock is the deletion
   //    stamp's own instant, so the wipe's tombstone is never later than it.
   const eventMs = Date.now();
   const { data: closed, error } = await db.rpc("close_account_for_data_deletion", {
@@ -321,6 +323,15 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
 
   if (hookOk) {
     if (!askedFor) return json(400, { error: "profile_id is required" });
+    // A date on a profile is not consent to erase it. Refuse before creating
+    // a client, reading/counting the footprint, writing an audit or deleting
+    // anything. This also catches an old queued request after reactivation;
+    // no eligibility read can race a later membership change. requested_by is
+    // only an audit label and must not turn a hook into an owner/admin request.
+    if (!dryRun) return json(409, {
+      code: "automatic_deletion_retired",
+      error: "Automatic account deletion is disabled. Your records have not been deleted. Use the authenticated account data-deletion action for an explicit request.",
+    });
     db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     targetId = askedFor;
     const label = typeof body?.requested_by === "string" ? body.requested_by : "";
@@ -362,8 +373,7 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error(`delete-account: ${mode} failed for ${row.id}: ${message}`);
-    // The failure is part of the record too; the daily job retries tomorrow
-    // and a second run is safe.
+    // The failure is part of the record too. An explicit second request is safe.
     await db.from("account_deletions").insert({
       profile_id: row.id, requested_by: requestedBy, mode, counts: {}, error: message.slice(0, 500),
     });

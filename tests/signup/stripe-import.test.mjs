@@ -49,7 +49,7 @@ const mac = new Uint8Array(await globalThis.crypto.subtle.sign('HMAC', key, new 
 const header = 't=' + t + ',v1=' + [...mac].map((b) => b.toString(16).padStart(2, '0')).join('');
 const event = await stripe.webhooks.constructEventAsync(body, header, secret, undefined, crypto);
 let refused = false;
-try { await stripe.webhooks.constructEventAsync(body, header.replace(/v1=./, 'v1=0'), secret, undefined, crypto); } catch { refused = true; }
+try { await stripe.webhooks.constructEventAsync(body, header.replace(/v1=(.)/, (_, first) => 'v1=' + (first === '0' ? '1' : '0')), secret, undefined, crypto); } catch { refused = true; }
 console.log(JSON.stringify({ id: event.id, refused, processPolyfill: typeof (globalThis as any).process?.runMicrotasks }));
 `);
     const r = spawnSync('deno', ['run', '--quiet', '--allow-env', '--allow-read', '--allow-net=registry.npmjs.org', script], { encoding: 'utf8', timeout: 120000 });
