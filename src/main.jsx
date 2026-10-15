@@ -1,6 +1,7 @@
 import { captureLaunchInvitation } from "./utils/launchInvitation.js";
 import { captureAppDeepLink } from "./utils/supportDeepLink.js";
 import React from "react";
+import { registerAppWorker } from "./utils/registerAppWorker.js";
 import ReactDOM from "react-dom/client";
 import { ClerkProvider, useUser } from "@clerk/clerk-react";
 import AuthGate from "./AuthGate.jsx";
@@ -118,9 +119,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", async () => {
     try {
-      const reg = await navigator.serviceWorker.register(
-        `${import.meta.env.BASE_URL}sw.js`
-      );
+      const reg = await registerAppWorker(import.meta.env.BASE_URL, __APP_BUILD_ID__);
       // Ask the browser to re-check sw.js on each full page load — combined
       // with the build-id stamp in sw.js this makes every deploy detectable.
       reg.update().catch(() => {});
