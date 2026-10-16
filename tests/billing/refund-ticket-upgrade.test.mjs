@@ -5,6 +5,10 @@ import { pgSkip, withSlotWait } from '../credential-portal/postgresFixture.mjs';
 import { billingChain, readMigration } from './billingChainFixture.mjs';
 const NAME = '20261001020000_upgrade_refund_support_tickets.sql';
 const UPGRADE = readMigration(NAME);
+const FINAL = readMigration('20261016013140_preserve_refund_ticket_wording_after_upgrade.sql');
+const HAND_CANCEL = readMigration('20261001041500_limited_refund_hand_cancel.sql');
+const wordingStart = HAND_CANCEL.indexOf('create or replace function public.limited_refund_support_ticket()');
+const LATEST_WORDING = HAND_CANCEL.slice(wordingStart, HAND_CANCEL.indexOf('end $$;', wordingStart) + 'end $$;'.length);
 const OLD = readFileSync(new URL('./fixtures/limited-refund-support-tickets-6907.sql', import.meta.url), 'utf8');
 const SUPPORT = `
   create function public.current_profile_id() returns uuid language sql stable security definer set search_path = public as
@@ -104,6 +108,11 @@ test('additive refund-ticket upgrade preserves existing operator decisions and a
     const ledgerBefore=JSON.parse(await sql('select json_agg(to_jsonb(r) order by id) from limited_refund_requests r'));
     const noticesBefore=await sql('select count(*) from fixture_ticket_notifications');
     await sql(`begin;${UPGRADE}commit;`);
+    // Existing installations can already have the later wording before the
+    // additive legacy-schema upgrade is applied. Exercise that real order.
+    await sql(LATEST_WORDING);
+    await sql(`begin;${UPGRADE}commit;`);
+    await sql(FINAL);
     await t.test('upgrade alone preserves status, archive, ordering, ledger and conversations',async()=>{
       assert.deepEqual(await Promise.all([1,2,3,4].map(operatorState)),before);
       const after=JSON.parse(await sql('select json_agg(to_jsonb(r)-\'support_ticket_standing\' order by id) from limited_refund_requests r'));
@@ -154,9 +163,30 @@ test('additive refund-ticket upgrade preserves existing operator decisions and a
       assert.match(fresh.body,/Your request needs a person to look at it first/);
       assert.equal(await sql(`select support_ticket_standing from limited_refund_requests where id='${rid(6)}'`),'needs_support');
     });
+    await t.test('late upgrade preserves truthful payment facts as well as trusted ticket markers',async()=>{
+      const cases = [
+        { n:7, error:'subscription_mismatch', expected:/request needs a person to look at it first/, forbidden:/will finish this refund/ },
+        { n:8, error:'charge_missing', expected:/request needs a person to look at it first/, forbidden:/will finish this refund/ },
+        { n:9, error:'refund_payment_changed', expected:/request needs a person to look at it first/, forbidden:/will finish this refund/ },
+        { n:10, error:'charge_partly_refunded', cancelled:true, expected:/Part of this payment has already been refunded/, forbidden:/payment has not been returned/ },
+        { n:11, error:'refund_failed', cancelled:true, refund:true, state:'requested', expected:/A refund of this payment was issued/, forbidden:/payment has not been returned/ },
+        { n:12, error:'subscription_mismatch', refund:true, expected:/A refund of this payment was issued/, forbidden:/nothing has been refunded/ },
+        { n:13, error:'refunded_payment_not_latest', expected:/A refund of this payment has already been made/, forbidden:/nothing has been refunded/ },
+      ];
+      for (const x of cases) {
+        await enroll(x.n);
+        await sql(`insert into limited_refund_requests(id,profile_id,clerk_subject,livemode,customer_id,subscription_id,invoice_id,charge_id,offer_id,price_phase,amount_cents,paid_at,state,error_code,subscription_canceled_at,refund_id,refund_status)
+          values('${rid(x.n)}','${pid(x.n)}','${subject(x.n)}',true,'cus_Upgrade${x.n}','sub_Upgrade${x.n}','in_Upgrade${x.n}','ch_Upgrade${x.n}','core','founding',9900,'2026-09-01T12:00:00Z','${x.state||'needs_support'}','${x.error}',${x.cancelled?"'2026-09-30T12:00:00Z'":'null'},${x.refund?"'re_Upgrade"+x.n+"'":'null'},${x.refund?"'succeeded'":'null'})`);
+        const actual=await ticket(x.n);
+        assert.match(actual.body,x.expected,`correct payment facts for ${x.error}`);
+        assert.doesNotMatch(actual.body,x.forbidden,`no contrary refund promise for ${x.error}`);
+        assert.deepEqual(actual.context_payload,{source:'limited_refund',refund_request_id:rid(x.n)});
+      }
+    });
     await t.test('reapplication is idempotent on the upgraded schema',async()=>{
       const before=await sql('select json_agg(to_jsonb(t) order by id) from support_tickets t');
       await sql(`begin;${UPGRADE}commit;`);
+      await sql(FINAL);
       assert.equal(await sql('select json_agg(to_jsonb(t) order by id) from support_tickets t'),before);
       assert.equal(await sql("select count(*) from pg_trigger where tgname in ('limited_refund_support_ticket','limited_refund_ticket_guard')"),'2');
     });
