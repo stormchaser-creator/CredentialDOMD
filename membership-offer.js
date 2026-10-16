@@ -169,7 +169,10 @@ if (typeof document !== 'undefined') {
   const refresh = createOfferUpdater(document, endpoint);
   void refresh();
   // Recheck long-lived and back-forward-cache pages without caching a public price.
-  window.addEventListener('pageshow', () => { void refresh(); });
+  // pageshow also fires on every first load (persisted false), right after the
+  // refresh above, so only a page restored from the back forward cache asks again.
+  // Without this check every view sent two requests and cold started two workers.
+  window.addEventListener('pageshow', event => { if (event.persisted) void refresh(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void refresh(); });
   setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 60000);
 }
