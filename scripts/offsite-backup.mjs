@@ -9,7 +9,7 @@
 // keychain item "CredentialDOMD Backup Key"):
 //   manifest.json            what is in here, counts and bytes
 //   schema/tables.json       every table in public + storage (+ cron.job): columns, types, primary key
-//   schema/ddl.json          public schema DDL as ordered statements (restore runs these)
+//   schema/ddl.json          public DDL and Storage access policies as ordered statements
 //   schema/ddl.sql           the same DDL, readable
 //   data/<schema>.<table>.ndjson   one to_jsonb() row per line, every table
 //   objects-index.json       bucket/path, size, updated_at, sha256 for every object
@@ -151,7 +151,7 @@ async function exportCatalog(sql) {
 function policyStatement(p) {
   const roles = (Array.isArray(p.roles) ? p.roles : String(p.roles).replace(/[{}]/g, '').split(','))
     .map((r) => r.trim()).filter(Boolean);
-  let s = `CREATE POLICY ${qIdent(p.policyname)} ON public.${qIdent(p.tablename)}`;
+  let s = `CREATE POLICY ${qIdent(p.policyname)} ON ${qIdent(p.schemaname || 'public')}.${qIdent(p.tablename)}`;
   s += ` AS ${String(p.permissive).toUpperCase() === 'RESTRICTIVE' ? 'RESTRICTIVE' : 'PERMISSIVE'}`;
   s += ` FOR ${p.cmd}`;
   if (roles.length) s += ` TO ${roles.map((r) => (r === 'public' ? 'public' : qIdent(r))).join(', ')}`;
@@ -343,9 +343,12 @@ async function exportDdl(sql, catalog) {
     if (t.rls_forced) add('rls', `${t.name} (force)`, `ALTER TABLE public.${qIdent(t.name)} FORCE ROW LEVEL SECURITY;`);
   }
   const policies = await sql(`
-    select tablename, policyname, permissive, roles, cmd, qual, with_check
-      from pg_policies where schemaname = 'public' order by 1, 2`);
-  for (const p of policies) add('policies', `${p.tablename}.${p.policyname}`, policyStatement(p));
+    select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
+      from pg_policies where schemaname in ('public','storage') order by 1, 2, 3`);
+  for (const p of policies) {
+    const storage = p.schemaname === 'storage';
+    add(storage ? 'storage_policies' : 'policies', `${storage ? 'storage.' : ''}${p.tablename}.${p.policyname}`, policyStatement(p));
+  }
 
   // Foreign keys last: the restore loads data before adding them.
   const foreignKeys = [];
@@ -371,7 +374,7 @@ async function exportDdl(sql, catalog) {
   const counts = {};
   for (const s of statements) counts[s.section] = (counts[s.section] || 0) + 1;
 
-  const sections = ['extensions', 'types', 'sequences', 'tables', 'functions', 'views', 'indexes', 'triggers', 'rls', 'policies', 'grants', 'sequence_values', 'foreign_keys', 'foreign_keys_external'];
+  const sections = ['extensions', 'types', 'sequences', 'tables', 'functions', 'views', 'indexes', 'triggers', 'rls', 'policies', 'storage_policies', 'grants', 'sequence_values', 'foreign_keys', 'foreign_keys_external'];
   const sqlText = [`-- CredentialDOMD public schema, exported ${new Date().toISOString()} from ${PROJECT_REF}`,
     '-- Sections run in this order on restore; foreign keys go on after the data.', ''];
   for (const sec of sections) {

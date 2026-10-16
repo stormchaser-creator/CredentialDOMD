@@ -22,7 +22,7 @@
 //   3. data      inserts every public table, chunked, ON CONFLICT DO NOTHING,
 //                with the app's user triggers disabled so no email fires
 //   4. sequences setval for sequences, then foreign keys go on last
-//   5. cron      re-schedules the pg_cron jobs
+//   5. cron      restores every pg_cron definition INACTIVE for target review
 //   6. objects   uploads every object through the Storage API (no overwrite)
 //
 // Everything is additive: nothing is dropped, overwritten or deleted on the
@@ -183,6 +183,9 @@ function describe({ manifest, ddl, catalog, index }, phases, tableFilter) {
   if (phases.includes('cron')) say(`cron: ${cronRows} jobs to schedule`);
   if (phases.includes('objects')) {
     say(`objects: ${Object.keys(index.objects || {}).length} (${formatBytes(manifest.objects.bytes)}) across buckets ${Object.entries(buckets).map(([b, n]) => `${b}=${n}`).join(' ')}`);
+  }
+  if (Object.keys(index.objects || {}).length && !ddl.sections.includes('storage_policies')) {
+    say('storage access: this older archive has no Storage-policy section; restore reviewed Storage policies before member file access can be accepted.');
   }
   say(`catalog: ${Object.keys(catalog).length} relations described in schema/tables.json`);
   return { publicTables, rows };
@@ -392,15 +395,15 @@ async function applyCron(sql, tmp, summary) {
   let scheduled = 0;
   for (const line of lines) {
     const j = JSON.parse(line);
-    if (!j.active) continue;
     try {
-      await sql(`select cron.schedule(${dollarQuote(j.jobname)}, ${dollarQuote(j.schedule)}, ${dollarQuote(j.command)})`);
+      // One statement: no interval in which a restored job can fire at the old project.
+      await sql(`select cron.alter_job(cron.schedule(${dollarQuote(j.jobname)}, ${dollarQuote(j.schedule)}, ${dollarQuote(j.command)}), active := false)`);
       scheduled += 1;
     } catch (e) {
       summary.failures.push(`cron/${j.jobname}: ${String(e.message).replace(/^POST [^:]+: /, '').slice(0, 200)}`);
     }
   }
-  say(`cron: ${scheduled}/${lines.length} jobs scheduled`);
+  say(`cron: ${scheduled}/${lines.length} definitions restored INACTIVE; review target URLs, secrets and delivery settings before enabling`);
 }
 
 async function applyObjects(storage, tmp, index, summary) {
@@ -491,7 +494,7 @@ async function main() {
     for (const n of summary.notes) say(`note: ${n}`);
     for (const f of summary.failures) say(`failed: ${f}`);
     say(`restore ${summary.failures.length ? 'finished with failures' : 'finished'}: ${summary.failures.length} failure(s)`);
-    if (!dsn) say('remaining by hand: deploy the edge functions and their secrets, point VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY at the new project, update the Clerk JWT template and the Supabase third-party auth setting, redeploy. See docs/REDUNDANCY-RUNBOOK-2026-09-02.md.');
+    if (!dsn) say('remaining by hand: review and rewrite all restored project URLs; keep schedules inactive until target acceptance; deploy the edge functions with their reviewed JWT settings and secrets, point VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY at the new project, update the Clerk JWT template and the Supabase third-party auth setting, redeploy. See docs/REDUNDANCY-RUNBOOK-2026-09-02.md.');
     return summary.failures.length ? 1 : 0;
   } finally {
     if (flag('--keep-temp')) say(`decrypted archive kept at ${tmp}; delete it when done`);
@@ -499,7 +502,7 @@ async function main() {
   }
 }
 
-export { loadArchive, psqlExecutor, runStatements, applySchema, applyData };
+export { loadArchive, psqlExecutor, runStatements, applySchema, applyData, applyCron, applyBuckets, applyObjects };
 
 // Run only as a script: tests import the functions above.
 if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === fs.realpathSync(fileURLToPath(import.meta.url))) {

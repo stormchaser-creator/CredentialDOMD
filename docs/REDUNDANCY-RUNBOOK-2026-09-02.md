@@ -9,23 +9,38 @@ physicians' uploaded documents all sat in the same project. This document
 describes the nightly off-provider copy that now runs on the Mac Studio, what
 it does and does not cover, and exactly what to do in each failure.
 
-## 0. The one thing to do today
+## 0. Protect the backup key
 
 The archives are encrypted with a passphrase that lives only in the Studio's
 login keychain, item name:
 
     CredentialDOMD Backup Key
 
-Copy it into your password manager now. On the Studio, in Terminal:
+Keep a separate secure password-manager copy using the native credential UI.
+Do not print the passphrase in Terminal, paste it into chat, or put it in a log.
+The backup/restore tools read it internally and pass it to OpenSSL through a
+private pipe. The current Studio can verify an archive without exposing the
+value; that does not prove the key can be recovered after losing the Studio.
 
-```bash
-security find-generic-password -s "CredentialDOMD Backup Key" -w
-```
+### Recovery guards verified October 16, 2026
 
-Paste the value into a new password-manager entry named "CredentialDOMD
-Backup Key", then clear the Terminal. Without that value every archive, local
-or in iCloud, is unreadable noise. If the Studio is lost, the iCloud copies plus
-that entry are the whole recovery.
+- New archives include public-schema DDL and the application's Storage access
+  policies, retaining roles, restrictive rules and both ownership predicates.
+  Older archives without a `storage_policies` section cannot alone restore member
+  file access. Recover those policies from a reviewed schema/migration snapshot;
+  do not grant broad bucket access as a workaround. Supabase supplies the Storage
+  platform tables/functions; they are not recreated as application tables.
+- Failed archive loading removes its temporary plaintext by default. Explicit
+  `--keep-temp` retains it for operator review and reports the private path.
+- Restored cron definitions are always **inactive**, including definitions that
+  were inactive in the archive. Review every project URL, secret, provider and
+  delivery setting before explicitly enabling the selected jobs. Production's
+  existing schedules are not changed by the backup exporter.
+- Preserve each Edge Function's reviewed `verify_jwt` value. The older blanket
+  `--no-verify-jwt` deployment procedure below has been replaced. Never use it
+  for a whole project.
+- A completed row/object restore is separate from real Clerk identity continuity,
+  provider webhook acceptance and a browser sign-in on the new project.
 
 ## 1. What is backed up, and where
 
@@ -33,7 +48,7 @@ that entry are the whole recovery.
 | --- | --- | --- | --- | --- |
 | Supabase daily snapshot | Whole Postgres database, physical backup | Supabase, us-east-2 | 7 days, PITR off | Supabase only |
 | App monthly ZIP (`build-backup`) | Per-user JSON, CSV and documents, emailed link | Bucket `backups` in the same project | 3 newest months kept (`prune-backups` edge function, Storage API), link 35 days | Supabase only |
-| This job, nightly 03:10 | Every table in `public` and `storage` plus `cron.job` as row data, public schema DDL, every object in buckets `documents` and `backups`, one encrypted archive | `/Users/ew/Backups/credentialdomd/<date>.tar.enc` | 30 days | The Studio |
+| This job, nightly 03:10 | Every table in `public` and `storage` plus `cron.job` as row data, public DDL and Storage policies, every object in buckets `documents` and `backups`, one encrypted archive | `/Users/ew/Backups/credentialdomd/<date>.tar.enc` | 30 days | The Studio |
 | Second copy of the same archive | Copied by the job after each run | `~/Library/Mobile Documents/com~apple~CloudDocs/Backups/CredentialDOMD/<date>.tar.enc` | 14 days | Apple iCloud, off site |
 | Device mirror | Each physician's own records in their browser storage | Their phone or laptop | Live | The physician |
 
@@ -187,7 +202,7 @@ Step by step:
    Order inside `--apply`: extensions, sequences, tables, functions, views,
    indexes, triggers, RLS, policies, grants; then buckets; then every public
    table with user triggers disabled; then sequence values and foreign keys;
-   then `cron.schedule()` for each job; then every object. It prints a line
+   then each cron definition restored inactive; then every object. It prints a line
    per phase and a list of failures. Expect the `user_events -> auth.users`
    foreign key to fail on a fresh project (no Clerk users in `auth.users`
    yet); the rows still load. Nothing else should fail. Functions are created
@@ -196,28 +211,30 @@ Step by step:
    `OVERRIDING SYSTEM VALUE`, and each identity sequence is set from the
    loaded ids. A failed function, policy or `data/<table>` line is a
    restore bug, not an expected gap (QA OPS-003, 2026-09-30).
-3. Patch the old project URL out of the database. Five functions
-   (`dispatch_account_deletions`, `dispatch_guide_emails`,
-   `dispatch_monthly_backups`, `notify_ticket_reply`, `welcome_new_lead`) and
-   the `send-reminders-daily` cron command call edge functions at
-   `https://hkpnnsjcwprrwobmpqyy.supabase.co/...`. In the new project's SQL
-   editor, `CREATE OR REPLACE` each of those functions from
-   `schema/ddl.sql` with the URL swapped to `https://NEWREF.supabase.co`, and
-   re-schedule the job with its command (in `data/cron.job.ndjson` of the
-   decrypted archive; `--keep-temp` leaves it on disk) edited the same way:
+3. Review every occurrence of the archived project URL in `schema/ddl.sql`
+   and `data/cron.job.ndjson`; do not rely on a fixed list of five functions.
+   Recreate the affected functions with the reviewed new API URL and update each
+   restored cron command while keeping it inactive. Do not enable jobs during
+   this step. The hook secret still belongs in the new project's vault and edge
+   configuration, never in a command body or a log.
 
    ```sql
-   select cron.unschedule('send-reminders-daily');
-   select cron.schedule('send-reminders-daily', '0 13 * * *', $$<command from cron.job.ndjson with NEWREF>$$);
+   select cron.alter_job(
+     (select jobid from cron.job where jobname = 'send-reminders-daily'),
+     command := $$<reviewed command with NEWREF>$$,
+     active := false
+   );
    ```
-4. Deploy the edge functions. Every function is deployed with
-   `--no-verify-jwt` because the gateway cannot verify Clerk RS256 tokens;
-   each function checks Clerk, Svix or the hook secret itself.
+4. Deploy the exact reviewed Edge Function set and preserve each function's
+   gateway JWT setting from the retained deployment inventory and
+   `qa-lab/supabase-config.template.toml`. Clerk/Svix/hook-verified functions
+   commonly need `--no-verify-jwt`; gateway-verified functions must retain their
+   gateway check. Do not apply one flag to all functions.
 
    ```bash
-   for f in $(ls supabase/functions | grep -v _shared); do
-     npx supabase functions deploy "$f" --no-verify-jwt --project-ref NEWREF
-   done
+   # Examples only; verify the complete current function plan first.
+   supabase functions deploy billing-quote --no-verify-jwt --project-ref NEWREF
+   supabase functions deploy track-event --project-ref NEWREF
    ```
 
 5. Set the edge-function secrets on the new project. Names used by the
