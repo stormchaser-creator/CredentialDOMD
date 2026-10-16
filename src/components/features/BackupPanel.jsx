@@ -126,8 +126,8 @@ function BackupPanel() {
       if (out.error) throw new Error(String(out.error));
 
       const bits = [];
-      if (out.record_count != null) bits.push(`${out.record_count} records`);
-      if (out.document_count != null) bits.push(`${out.document_count} documents`);
+      if (out.record_count != null) bits.push(`${out.record_count} record${Number(out.record_count) === 1 ? "" : "s"}`);
+      if (out.document_count != null) bits.push(`${out.document_count} document${Number(out.document_count) === 1 ? "" : "s"}`);
       const totalBytes = Array.isArray(out.results)
         ? out.results.reduce((n, part) => n + (Number(part.bytes) || 0), 0)
         : Number(out.bytes) || 0;
@@ -290,8 +290,8 @@ function BackupPanel() {
               const canGet = r.status === "ready" || r.status === "emailed";
               const facts = [
                 sizeLabel(r.bytes),
-                r.record_count != null ? `${r.record_count} records` : "",
-                r.document_count != null ? `${r.document_count} documents` : "",
+                r.record_count != null ? `${r.record_count} record${Number(r.record_count) === 1 ? "" : "s"}` : "",
+                r.document_count != null ? `${r.document_count} document${Number(r.document_count) === 1 ? "" : "s"}` : "",
               ].filter(Boolean).join(" | ");
               return (
                 <div key={r.id} style={{ padding: "10px 0", borderTop: `1px solid ${T.border}` }}>
