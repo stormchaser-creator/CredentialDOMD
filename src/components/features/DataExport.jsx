@@ -43,7 +43,7 @@ function DataExport() {
   const [vaultPaste, setVaultPaste] = useState(null);
   const vaultN = vaultCount();
   const doVaultExport = () => {
-    const blob = new Blob([JSON.stringify(exportVault(), null, 1)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(exportVault(), null, 1)], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -81,7 +81,7 @@ function DataExport() {
         itemCount: totalItems,
       },
     };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     try {
       const a = document.createElement("a");

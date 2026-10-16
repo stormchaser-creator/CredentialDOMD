@@ -27,7 +27,7 @@ function RecoveryNotice() {
   }, [accountId]);
   const download = entryId => {
     try {
-      const blob = new Blob([JSON.stringify(recoveryDownload(accountId, entryId), null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(recoveryDownload(accountId, entryId), null, 2)], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(blob), link = document.createElement("a");
       link.href = url; link.download = "CredentialDOMD recovery copies (KEEP PRIVATE).json";
       document.body.appendChild(link); link.click(); link.remove();

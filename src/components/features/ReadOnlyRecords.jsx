@@ -48,7 +48,7 @@ export default function ReadOnlyRecords({ scope }) {
     : deviceCopyBehind ? "Your latest changes may not be in this device's copy yet. Your records show here once your account connects."
       : "This device has no saved copy of records in this section. Your records show here once your account connects.";
   const exportRecords = () => {
-    downloadBlob(new Blob([JSON.stringify(saved, null, 2)], { type: "application/json" }), `credentialdomd-${scope}-records.json`);
+    downloadBlob(new Blob([JSON.stringify(saved, null, 2)], { type: "application/json;charset=utf-8" }), `credentialdomd-${scope}-records.json`);
   };
   const downloadDocument = async record => {
     try {
