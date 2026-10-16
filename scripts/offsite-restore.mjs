@@ -137,18 +137,28 @@ function isAlreadyExists(message) {
 
 // ------------------------------------------------------------------- plan
 
-async function loadArchive(archive, keepTemp) {
-  await fsp.mkdir(TMP_ROOT, { recursive: true, mode: 0o700 });
-  const tmp = await fsp.mkdtemp(path.join(TMP_ROOT, 'restore-'));
-  await fsp.chmod(tmp, 0o700);
-  const passphrase = await readPassphrase();
-  say(`decrypting ${path.basename(archive)} into ${keepTemp ? tmp : 'a temporary directory'}`);
-  await extractEncryptedTar(archive, tmp, passphrase);
-  const manifest = await readJson(path.join(tmp, 'manifest.json'));
-  const ddl = await readJson(path.join(tmp, 'schema', 'ddl.json'));
-  const catalog = await readJson(path.join(tmp, 'schema', 'tables.json'));
-  const index = await readJson(path.join(tmp, 'objects-index.json'));
-  return { tmp, manifest, ddl, catalog, index };
+async function loadArchive(archive, keepTemp, {
+  tmpRoot = TMP_ROOT, getPassphrase = readPassphrase, extract = extractEncryptedTar,
+} = {}) {
+  await fsp.mkdir(tmpRoot, { recursive: true, mode: 0o700 });
+  const tmp = await fsp.mkdtemp(path.join(tmpRoot, 'restore-'));
+  try {
+    await fsp.chmod(tmp, 0o700);
+    const passphrase = await getPassphrase();
+    say(`decrypting ${path.basename(archive)} into ${keepTemp ? tmp : 'a temporary directory'}`);
+    await extract(archive, tmp, passphrase);
+    const manifest = await readJson(path.join(tmp, 'manifest.json'));
+    const ddl = await readJson(path.join(tmp, 'schema', 'ddl.json'));
+    const catalog = await readJson(path.join(tmp, 'schema', 'tables.json'));
+    const index = await readJson(path.join(tmp, 'objects-index.json'));
+    return { tmp, manifest, ddl, catalog, index };
+  } catch (error) {
+    // main's cleanup starts only after this function returns. A failed decrypt
+    // or metadata read must not strand a partially unpacked private archive.
+    if (keepTemp) say(`incomplete archive kept at ${tmp}; delete it when done`);
+    else await fsp.rm(tmp, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 function describe({ manifest, ddl, catalog, index }, phases, tableFilter) {
@@ -489,7 +499,7 @@ async function main() {
   }
 }
 
-export { psqlExecutor, runStatements, applySchema, applyData };
+export { loadArchive, psqlExecutor, runStatements, applySchema, applyData };
 
 // Run only as a script: tests import the functions above.
 if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === fs.realpathSync(fileURLToPath(import.meta.url))) {
