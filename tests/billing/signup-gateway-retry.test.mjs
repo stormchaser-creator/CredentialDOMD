@@ -38,10 +38,11 @@ function handler(url, options = {}) {
       throw Error(`Unexpected dependency ${name}`);
     },
     Deno: { env: { get(key) { return { CREDENTIALDOMD_BILLING_MODE: options.mode || 'live', SUPABASE_URL: url,
-      SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-key', CLERK_SECRET_KEY: 'sk_live_synthetic-key' }[key]; } } },
+      SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-key', CLERK_SECRET_KEY: options.clerkKey || 'sk_live_synthetic-key',
+      CLERK_IDENTITY_MODE: options.clerkMode }[key]; } } },
     async fetch(target, init) {
       assert.equal(target, `https://clerk.synthetic.invalid/v1/users/${subject}`);
-      assert.equal(init.redirect, 'error'); assert.equal(init.headers.Authorization, 'Bearer sk_live_synthetic-key');
+      assert.equal(init.redirect, 'error'); assert.equal(init.headers.Authorization, `Bearer ${options.clerkKey || 'sk_live_synthetic-key'}`);
       clerkReads++;
       return new Response(JSON.stringify(options.user || user), { status: options.clerkStatus || 200 });
     },
@@ -49,6 +50,25 @@ function handler(url, options = {}) {
   });
   return { run: () => served(request()), counts: () => ({ authenticated, clerkReads, clients }) };
 }
+test('an explicit Clerk identity mode is independent of Stripe mode without changing billing enrollment', async () => {
+  for (const [mode, clerkMode, clerkKey] of [['test', 'live', 'sk_live_synthetic-key'], ['live', 'test', 'sk_test_synthetic-key']]) {
+    let writes = 0;
+    const h = handler('http://127.0.0.1:1', { mode, clerkMode, clerkKey, createClient: () => ({
+      from() { return { select() { return { eq() { return { maybeSingle: async () => ({ data: profile, error: null }) }; } }; } }; },
+      rpc(name, input) { assert.equal(name, 'bootstrap_limited_signup'); assert.equal(input.p_livemode, mode === 'live'); writes++; return Promise.resolve({ data: enrollment, error: null }); },
+    }) });
+    assert.equal((await h.run()).status, 200); assert.equal(writes, 1); assert.equal(h.counts().clerkReads, 1);
+  }
+});
+test('default mode coupling and mismatched or invalid Clerk overrides still fail closed before provider reads', async () => {
+  for (const options of [{ mode: 'test' }, { mode: 'test', clerkMode: 'live', clerkKey: 'sk_test_synthetic-key' }, { clerkMode: 'invalid' }]) {
+    const h = handler('http://127.0.0.1:1', { ...options, createClient: () => ({
+      from() { return { select() { return { eq() { return { maybeSingle: async () => ({ data: profile, error: null }) }; } }; } }; },
+      rpc() { throw Error('must not enroll'); },
+    }) });
+    assert.equal((await h.run()).status, 503); assert.equal(h.counts().clerkReads, 0);
+  }
+});
 async function gateway(t, statuses, data = enrollment, options = {}) {
   const calls = [], profiles = [];
   const server = createServer(async (req, res) => {

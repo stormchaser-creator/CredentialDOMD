@@ -5,6 +5,10 @@ import { createSelfServiceSignupHandler } from '../_shared/selfServiceSignup.mjs
 import { CLERK_API_BASE } from '../_shared/clerkContinuity.ts';
 
 const mode = Deno.env.get('CREDENTIALDOMD_BILLING_MODE') || 'disabled';
+// Identity and payments can use different environments (for example, a
+// staging identity gateway with Stripe test billing). Preserve the existing
+// default; an explicit override changes only the Clerk key-prefix check.
+const clerkMode = Deno.env.get('CLERK_IDENTITY_MODE') || mode;
 let db: ReturnType<typeof createClient>;
 const database = () => db ||= createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const checked = async (query: PromiseLike<{ data: unknown; error: unknown }>) => {
@@ -17,7 +21,7 @@ serve(createSelfServiceSignupHandler({
   profile: (id: string) => checked(database().from('profiles').select('id,auth_user_id,access_status,deleted_at').eq('id', id).maybeSingle()),
   clerkUser: async (subject: string) => {
     const key = Deno.env.get('CLERK_SECRET_KEY') || '';
-    if (!['test', 'live'].includes(mode) || !key.startsWith(`sk_${mode}_`)) throw Error('Clerk backend mode mismatch');
+    if (!['test', 'live'].includes(clerkMode) || !key.startsWith(`sk_${clerkMode}_`)) throw Error('Clerk backend mode mismatch');
     const response = await fetch(`${CLERK_API_BASE}/v1/users/${encodeURIComponent(subject)}`, {
       headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000), redirect: 'error',
     });
