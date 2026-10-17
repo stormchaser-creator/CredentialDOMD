@@ -2926,10 +2926,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 
-          {/* Administrator access: shown only when the server offers it to this account */}
-          <AdministratorAccessEntry variant="more" onOpen={() => setSubPage("adminAccess")} />
-
-
           {/* Setup */}
           <button onClick={() => openSetup(null)} className="cmd-card-hover" style={{
             display: "flex", alignItems: "center", gap: 12,
@@ -3114,6 +3110,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
               <span style={{ fontSize: 15, fontWeight: 600, color: T.danger }}>Sign Out</span>
             </button>
           )}
+
+          {/* Availability arrives asynchronously. Append this card so it cannot
+              move an existing menu control beneath a pointer or finger. */}
+          <AdministratorAccessEntry variant="more" onOpen={() => setSubPage("adminAccess")} />
         </div>
       </div>
     );
