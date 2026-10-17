@@ -654,12 +654,26 @@ export function downscalePhoto(dataUrl, max = 512) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const scale = Math.min(1, max / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.85));
+      try {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        // JPEG size differs by browser. Bound the actual data URL stored in
+        // every profile read, retaining the original document separately.
+        for (;;) {
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Profile photo could not be resized");
+          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+          for (const quality of [0.85, 0.7, 0.55, 0.4]) {
+            const photo = canvas.toDataURL("image/jpeg", quality);
+            if (photo.startsWith("data:image/jpeg") && photo.length < 300000) { resolve(photo); return; }
+          }
+          if (canvas.width === 1 && canvas.height === 1) throw new Error("Profile photo could not be compressed");
+          canvas.width = Math.max(1, Math.floor(canvas.width * 0.75));
+          canvas.height = Math.max(1, Math.floor(canvas.height * 0.75));
+        }
+      } catch (error) { reject(error); }
     };
     img.onerror = reject;
     img.src = dataUrl;

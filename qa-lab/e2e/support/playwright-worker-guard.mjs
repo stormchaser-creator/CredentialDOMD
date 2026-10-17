@@ -5,7 +5,7 @@
 import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 export const original = "if (navigator.serviceWorker) navigator.serviceWorker.register = async () => { console.warn('Service Worker registration blocked by Playwright'); };";
-export const replacement = "try { const worker = navigator.serviceWorker; if (worker) worker.register = async () => { console.warn('Service Worker registration blocked by Playwright'); }; } catch (error) { if (error?.name !== 'SecurityError') throw error; }";
+export const replacement = "(() => { let worker; try { worker = navigator.serviceWorker; } catch (error) { if (error?.name !== 'SecurityError') throw error; } if (worker) worker.register = async () => { console.warn('Service Worker registration blocked by Playwright'); }; })();";
 export function patchWorkerGuard(repoRoot) {
   const root = realpathSync(repoRoot);
   const core = realpathSync(path.join(root, 'node_modules/playwright-core'));

@@ -345,7 +345,13 @@ test('stored documents: an image becomes the profile photo (downscaled, kept aft
     await waitFor('the image row', async () => docRow(profile.id, 'qa-headshot.png')?.storage_path || null, { timeoutMs: 45000 });
     await chooseFiles(page, upload(page), [{ name: 'qa-stored.pdf', mimeType: 'application/pdf', buffer: pdf }]);
     await waitFor('the pdf row', async () => docRow(profile.id, 'qa-stored.pdf')?.storage_path || null, { timeoutMs: 45000 });
-    for (const b of await page.getByRole('button', { name: 'Keep as plain document' }).all()) await b.click().catch(() => {});
+    // Each keep removes its card. Resolve the first remaining button again
+    // instead of retaining nth locators whose indices shift after removal.
+    const keepPlain = page.getByRole('button', { name: 'Keep as plain document' });
+    for (let remaining = await keepPlain.count(); remaining > 0; remaining--) {
+      await keepPlain.first().click();
+      await expect(keepPlain).toHaveCount(remaining - 1);
+    }
     await sleep(1000);
     await page.getByAltText('qa-headshot.png').first().click();
     const setPhoto = page.getByRole('button', { name: 'Set as my profile photo' });
