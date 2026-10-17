@@ -119,7 +119,7 @@ export const ASSISTANT_SOURCES = {
     {
       "id": "mate-statute",
       "title": "U.S. Code: DEA registration and training, section 823(m)",
-      "url": "https://uscode.house.gov/view.xhtml?edition=prelim&path=%2Fprelim%40title21%2Fchapter13%2Fsubchapter1%2FpartC",
+      "url": "https://uscode.house.gov/us/usc/119-118/t21/s823/",
       "recordedReview": "2026-09-19"
     }
   ],

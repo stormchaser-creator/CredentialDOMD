@@ -3218,11 +3218,11 @@ export const PA_STATE_RULES = {
     "cites": [
      {
       "cite": "32 MRSA §3270-G(5)",
-      "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-G.html"
+      "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-G-1.html"
      },
      {
       "cite": "32 MRSA §3270-G(5)",
-      "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-G.html"
+      "url": "https://legislature.maine.gov/legis/statutes/32/title32sec3270-G-1.html"
      },
      {
       "cite": "BOLIM PA licence page",
@@ -6245,7 +6245,7 @@ export const PA_STATE_RULES = {
    "notForTopics": [],
    "note": "",
    "cite": "Utah Admin. Code R156-70a-304(2)(b)",
-   "url": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules"
+   "url": "https://adminrules.utah.gov/Rule/304/51/3945/R156"
   },
   "certificationRequired": null,
   "practiceHours": null,
@@ -6344,7 +6344,7 @@ export const PA_STATE_RULES = {
     "hours": 0,
     "status": "verified",
     "cite": "Utah Admin. Code R156-70a-304(2)(a)(iii)",
-    "url": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules",
+    "url": "https://adminrules.utah.gov/Rule/304/51/3945/R156",
     "coveredByCertification": false
    },
    {
@@ -6376,16 +6376,16 @@ export const PA_STATE_RULES = {
    {
     "text": "Up to 15% of the CME may come from documented volunteer service.",
     "cite": "Utah Admin. Code R156-70a-304(2)(c)",
-    "url": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules"
+    "url": "https://adminrules.utah.gov/Rule/304/51/3945/R156"
    },
    {
     "text": "Controlled substance hours are prorated from licensure for a prescriber not licensed for the whole two-year period.",
     "cite": "Utah Admin. Code R156-37-402(3)(b)",
-    "url": "https://adminrules.utah.gov/public/rule/R156-37/Current%20Rules"
+    "url": "https://adminrules.utah.gov/Rule/267/51/6988/R156"
    }
   ],
   "source": "Utah Admin. Code R156-70a-304(2)(a)",
-  "sourceUrl": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules",
+  "sourceUrl": "https://adminrules.utah.gov/Rule/304/51/3945/R156",
   "verified": "2026-10",
   "unverified": [
    {
@@ -6446,9 +6446,9 @@ export const PA_STATE_RULES = {
    ]
   },
   "cycleCite": "Utah Admin. Code R156-70a-304(2)(a)",
-  "cycleUrl": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules",
+  "cycleUrl": "https://adminrules.utah.gov/Rule/304/51/3945/R156",
   "cat1Cite": "Utah Admin. Code R156-70a-304(2)(a)",
-  "cat1Url": "https://adminrules.utah.gov/public/rule/R156-70a/Current%20Rules"
+  "cat1Url": "https://adminrules.utah.gov/Rule/304/51/3945/R156"
  },
  "VA": {
   "profession": "pa",

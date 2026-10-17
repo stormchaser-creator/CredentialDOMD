@@ -9543,11 +9543,11 @@ export const NP_STATE_RULES = {
     {
      "text": "The RN license renews January 31 of odd years and the APRN license January 31 of even years: two separate renewals.",
      "cite": "Utah Admin. Code R156-1-308a, Table 1",
-     "url": "https://adminrules.utah.gov/public/rule/R156-1/Current%20Rules"
+     "url": "https://adminrules.utah.gov/Rule/250/51/6905/R156"
     }
    ],
    "source": "Utah Admin. Code R156-31b-303(3)(a)",
-   "sourceUrl": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules",
+   "sourceUrl": "https://adminrules.utah.gov/Rule/265/51/6920/R156",
    "verified": "2026-10",
    "unverified": [],
    "practice": null,
@@ -9562,17 +9562,17 @@ export const NP_STATE_RULES = {
     {
      "text": "Licensed practice for at least 400 hours in the two years before renewal",
      "cite": "Utah Admin. Code R156-31b-303(3)(a)",
-     "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules"
+     "url": "https://adminrules.utah.gov/Rule/265/51/6920/R156"
     },
     {
      "text": "Licensed practice for at least 200 hours plus 15 contact hours of approved continuing education",
      "cite": "Utah Admin. Code R156-31b-303(3)(a)",
-     "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules"
+     "url": "https://adminrules.utah.gov/Rule/265/51/6920/R156"
     },
     {
      "text": "30 contact hours of approved continuing education",
      "cite": "Utah Admin. Code R156-31b-303(3)(a)",
-     "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules"
+     "url": "https://adminrules.utah.gov/Rule/265/51/6920/R156"
     }
    ]
   },
@@ -9599,7 +9599,7 @@ export const NP_STATE_RULES = {
    "certificationRequired": {
     "value": true,
     "cite": "Utah Admin. Code R156-31b-303(3)(b)(i)",
-    "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules",
+    "url": "https://adminrules.utah.gov/Rule/265/51/6920/R156",
     "condition": {
      "field": "Licensed as an APRN on or after July 1, 1992",
      "question": "Were you licensed as a Utah APRN on or after July 1, 1992?",
@@ -9678,7 +9678,7 @@ export const NP_STATE_RULES = {
      "hours": 0.5,
      "status": "verified",
      "cite": "Utah Admin. Code R156-37-402(3)(c)",
-     "url": "https://adminrules.utah.gov/public/rule/R156-37/Current%20Rules",
+     "url": "https://adminrules.utah.gov/Rule/267/51/6988/R156",
      "coveredByCertification": false
     },
     {
@@ -9710,16 +9710,16 @@ export const NP_STATE_RULES = {
     {
      "text": "An APRN licensed before July 1, 1992 may instead complete 30 hours of approved CE and 400 hours of practice.",
      "cite": "Utah Admin. Code R156-31b-303(3)(b)(i)(B)",
-     "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules"
+     "url": "https://adminrules.utah.gov/Rule/265/51/6920/R156"
     },
     {
      "text": "Controlled substance hours are prorated from licensure for a prescriber not licensed for the whole two-year period.",
      "cite": "Utah Admin. Code R156-37-402(3)(b)",
-     "url": "https://adminrules.utah.gov/public/rule/R156-37/Current%20Rules"
+     "url": "https://adminrules.utah.gov/Rule/267/51/6988/R156"
     }
    ],
    "source": "Utah Admin. Code R156-31b-303(3)(b)(i)",
-   "sourceUrl": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules",
+   "sourceUrl": "https://adminrules.utah.gov/Rule/265/51/6920/R156",
    "verified": "2026-10",
    "unverified": [],
    "practice": null,
@@ -9736,7 +9736,7 @@ export const NP_STATE_RULES = {
    "stateCsRegistration": {
     "value": true,
     "cite": "Utah Admin. Code R156-31b-303(3)(b)(ii)",
-    "url": "https://adminrules.utah.gov/public/rule/R156-31b/Current%20Rules"
+    "url": "https://adminrules.utah.gov/Rule/265/51/6920/R156"
    }
   },
   "unverified": []
