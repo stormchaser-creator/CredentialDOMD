@@ -1,6 +1,6 @@
 {
-  "_App-G-8B63qB.js": {
-    "file": "assets/App-G-8B63qB.js",
+  "_App-DvuQgvk0.js": {
+    "file": "assets/App-DvuQgvk0.js",
     "name": "App",
     "isDynamicEntry": true,
     "imports": [
@@ -9,7 +9,7 @@
     "dynamicImports": [
       "src/utils/appRulesData.js",
       "node_modules/@anthropic-ai/sdk/index.mjs",
-      "_mammoth.browser-Dv2pxNFN.js",
+      "_mammoth.browser-DXhHFcQ7.js",
       "node_modules/html2canvas/dist/html2canvas.esm.js",
       "node_modules/dompurify/dist/purify.es.mjs",
       "node_modules/canvg/lib/index.es.js",
@@ -23,30 +23,30 @@
     "src": "__vite-browser-external",
     "isDynamicEntry": true
   },
-  "_mammoth.browser-Dv2pxNFN.js": {
-    "file": "assets/mammoth.browser-Dv2pxNFN.js",
+  "_mammoth.browser-DXhHFcQ7.js": {
+    "file": "assets/mammoth.browser-DXhHFcQ7.js",
     "name": "mammoth.browser",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_App-G-8B63qB.js"
+      "_App-DvuQgvk0.js"
     ]
   },
   "index.html": {
-    "file": "assets/index-BUu0ES6W.js",
+    "file": "assets/index-ejt5n6SO.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
-      "_App-G-8B63qB.js",
-      "_App-G-8B63qB.js"
+      "_App-DvuQgvk0.js",
+      "_App-DvuQgvk0.js"
     ],
     "css": [
       "assets/index-kFK6Wn6R.css"
     ]
   },
   "node_modules/@anthropic-ai/sdk/index.mjs": {
-    "file": "assets/index-BQK9WoWU.js",
+    "file": "assets/index-DpyQiL2B.js",
     "name": "index",
     "src": "node_modules/@anthropic-ai/sdk/index.mjs",
     "isDynamicEntry": true,
@@ -70,7 +70,7 @@
     ]
   },
   "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs": {
-    "file": "assets/node.browser-3RuDmHIU.js",
+    "file": "assets/node.browser-DzQLWkoB.js",
     "name": "node.browser",
     "src": "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs",
     "isDynamicEntry": true,
@@ -80,13 +80,13 @@
     ]
   },
   "node_modules/canvg/lib/index.es.js": {
-    "file": "assets/index.es-DDGG84Uq.js",
+    "file": "assets/index.es-DG8UzaWH.js",
     "name": "index.es",
     "src": "node_modules/canvg/lib/index.es.js",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_App-G-8B63qB.js"
+      "_App-DvuQgvk0.js"
     ]
   },
   "node_modules/docx/dist/index.mjs": {
