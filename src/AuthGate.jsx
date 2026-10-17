@@ -56,11 +56,19 @@ export default function AuthGate() {
     if (!signedOut) return undefined;
     // The link an email opened (main.jsx captureAppDeepLink) is kept for this
     // tab, renewed as App would, so it is still there once he has signed in.
-    const link = takeAppDeepLink();
-    if (link) stashAppDeepLink(link);
+    const keepLink = () => {
+      const link = takeAppDeepLink();
+      if (link) stashAppDeepLink(link);
+    };
+    keepLink();
+    // A mail link can reuse this sign-in tab without loading main.jsx again.
+    window.addEventListener("hashchange", keepLink);
     // The app, quietly, once the sign-in screen is up.
     const timer = setTimeout(() => { loadApp().catch(() => { /* fetched again when it is needed */ }); }, APP_PREFETCH_DELAY_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("hashchange", keepLink);
+    };
   }, [signedOut]);
 
   if (view === "sign-in") return <>

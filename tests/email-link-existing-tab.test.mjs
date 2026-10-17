@@ -45,3 +45,38 @@ test('existing-tab support links reach the support sheet without treating auth o
   }
   t.app.unmount();
 });
+
+test('a link arriving at an existing sign-in screen survives Clerk hash steps and the post-sign-in reload', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { transformSync } = await import('esbuild');
+  const t = await existingTab();
+  t.app.unmount();
+  const effects = [];
+  const react = { lazy: () => () => null, useState: init => [typeof init === 'function' ? init() : init, () => {}], useEffect: fn => effects.push(fn) };
+  const mod = { exports: {} };
+  const src = await readFile(new URL('../src/AuthGate.jsx', import.meta.url), 'utf8');
+  const code = transformSync(src, { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code;
+  const window = globalThis.window;
+  const modules = {
+    react,
+    'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
+    '@clerk/clerk-react': { useAuth: () => ({ isLoaded: true, userId: null }) },
+    './utils/offlineSession': { readLastIdentity: () => null },
+    './utils/supportDeepLink.js': deepLinks,
+  };
+  new Function('require', 'module', 'exports', 'window', 'setTimeout', 'clearTimeout', code)(name => modules[name] || { default: () => null }, mod, mod.exports, window, () => 1, () => {});
+  mod.exports.default();
+  const cleanups = effects.map(fn => fn());
+  for (const hash of ['#backups', '#requests', ticket]) {
+    t.location.hash = hash;
+    t.listeners.get('hashchange')();
+    assert.equal(t.location.hash, '', 'recognized destination leaves Clerk a clean route');
+    t.location.hash = '#/factor-one';
+    t.listeners.get('hashchange')();
+    assert.equal(t.location.hash, '#/factor-one', 'Clerk route unchanged');
+    t.location.hash = '';
+    assert.equal(deepLinks.takeAppDeepLink(), hash, 'destination survives sign-in page load');
+  }
+  cleanups.forEach(fn => fn?.());
+  assert.equal(t.listeners.has('hashchange'), false, 'listener removed when leaving sign-in');
+});
