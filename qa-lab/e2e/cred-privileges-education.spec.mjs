@@ -8,7 +8,7 @@ import {
   chooseFiles, goTab, landing, newMember, openCredentials, openMore, pendingOps, recordButtons, row, rows, signIn, sleep,
   syncWarnings, syntheticPdf, syntheticPng, tombstones, waitForMemberApp,
 } from './support/lab.mjs';
-import { allowClipboard, clipboardText, day, dbWait, fillField, fillForm, openAdd, saveDialog } from './support/cred-helpers.mjs';
+import { allowClipboard, day, dbWait, fillField, fillForm, openAdd, saveDialog } from './support/cred-helpers.mjs';
 
 const PASSWORD = 'QaPortal-Pass-7731';
 const LOCK = 'qa-lock-4417';

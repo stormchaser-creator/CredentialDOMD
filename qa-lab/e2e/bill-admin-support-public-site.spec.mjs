@@ -353,10 +353,22 @@ test('visitor: landing controls at phone width', {
       await sleep(400);
       const bar = pg.locator('#sticky-cta');
       const shownAtTop = await bar.evaluate((el) => el.classList.contains('show'));
+      const heroButton = pg.locator('[data-hero-signup]');
+      const buttonExists = await heroButton.count();
+      const heroVisibleAtTop = await pg.evaluate(() => {
+        const r = (document.querySelector('[data-hero-signup]') || document.getElementById('hero')).getBoundingClientRect();
+        return r.bottom > 0 && r.top < window.innerHeight;
+      });
+      qa.check('at the top, the sticky CTA follows whether the hero signup control is actually visible', shownAtTop === !heroVisibleAtTop, `${shownAtTop}; hero control visible=${heroVisibleAtTop}`);
+      if (buttonExists) {
+        await heroButton.scrollIntoViewIfNeeded();
+        await waitFor('sticky CTA hidden while the signup button is visible', async () => !(await bar.evaluate(el => el.classList.contains('show'))));
+        qa.check('no duplicate sticky CTA while the hero signup control is visible', !(await bar.evaluate(el => el.classList.contains('show'))));
+      }
       await pg.evaluate(() => window.scrollTo(0, document.getElementById('hero').offsetHeight + 400));
       await sleep(900);
       const shown = await bar.evaluate((el) => el.classList.contains('show'));
-      qa.check('hidden on the hero, shown once the hero scrolls away', !shownAtTop && shown, `${shownAtTop} -> ${shown}`);
+      qa.check('shown once the hero signup control scrolls away', shown, `${shownAtTop} -> ${shown}`);
       qa.check('its CTA goes to /app/', (await bar.locator('a').getAttribute('href')) === '/app/');
       await bar.getByRole('button', { name: 'Dismiss' }).click();
       await sleep(500);

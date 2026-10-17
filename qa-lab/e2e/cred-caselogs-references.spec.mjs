@@ -11,7 +11,7 @@ import {
   waitForMemberApp,
 } from './support/lab.mjs';
 import {
-  allowClipboard, clipboardText, day, dbWait, download, fakeContactPicker, fakeSpeech, fillForm, monthsFrom, openAdd, pdfText,
+  allowClipboard, day, dbWait, download, fakeContactPicker, fakeSpeech, fillForm, monthsFrom, openAdd, pdfText,
   saveDialog, shareSheet, shared, sheetRows,
 } from './support/cred-helpers.mjs';
 
@@ -86,6 +86,9 @@ test('case logs: summary, reports, Vera export, dictation; references: contacts,
     let h = await headline();
     const n12 = dbCases(`and date >= '${last12From}' and date <= current_date`).length;
     qa.check(`Last 12 mo: ${n12} cases, as the database has since ${last12From}`, h[1] === 'Last 12 Months' && Number(h[3]) === n12 && (await cards()) === n12, h[0]);
+    // Select the browser-download branch explicitly. WebKit can offer the
+    // native share sheet even at desktop width; that success emits no download.
+    await shareSheet(page, { absent: true });
     // CSV of the last 12 months.
     const csv = await download(page, page.getByRole('button', { name: 'CSV', exact: true }));
     const lines = csv.buffer.toString('utf8').trim().split(/\r?\n/);
