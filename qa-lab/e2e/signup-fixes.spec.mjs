@@ -17,11 +17,12 @@
 // Synthetic physicians only, on the lab's reserved domain.
 import { devices } from '@playwright/test';
 import { test } from './support/fixtures.mjs';
+import { browserSettings } from './support/run-options.mjs';
 import { LAB_EMAIL_DOMAIN, lab, labExec, mockApi, rows, sleep, stamp, waitForCheckoutEvents, waitForMemberApp } from './support/lab.mjs';
 
 const { defaultBrowserType: _webkit, ...iphone } = devices['iPhone 15'];
-// The engine the run asks for (QA_ENGINE=webkit: Safari's), Chromium otherwise.
-test.use({ ...iphone, browserName: String(process.env.QA_ENGINE || '').trim().toLowerCase() === 'webkit' ? 'webkit' : 'chromium' });
+// Honor either supported engine selector; the receipt must reflect the engine the run requested.
+test.use({ ...iphone, ...browserSettings() });
 
 const CONTINUE = 'Continue to secure payment';
 const CONSENT = /agree to the payment and renewal terms/;
