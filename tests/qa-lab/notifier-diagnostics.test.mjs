@@ -29,7 +29,7 @@ async function exercise(result,{failAttachment=false,failStateRead=false}={}) {
   vm.runInNewContext(code,{module:{exports:{}},exports:{},Buffer,process:{env:{TOKEN:secret}},require(name){
    if(name==='node:fs')return {...fs,...(failStateRead?{readFileSync(){throw Error(`state unreadable ${secret}`);}}:{})};
    if(name.startsWith('node:'))return require(name);
-   if(name==='./support/fixtures.mjs')return {test:Object.assign((title,options,fn)=>registered.push({title,fn}),{setTimeout(){}})};
+   if(name==='./support/fixtures.mjs')return {test:Object.assign((title,options,fn)=>registered.push({title,fn}),{setTimeout(){},describe(_title,body){body();},use(){}})};
    if(name==='./support/host-diagnostics.mjs')return {hostCommandDiagnostics,sanitizeHostOutput};
    if(name==='../lib/paths.mjs')return {GENERATED_DIR:base};
    if(name==='./support/ops-helpers.mjs')return {REPO_ROOT:'/synthetic',hostRun};
