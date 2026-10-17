@@ -1,3 +1,4 @@
+import { canStartBackgroundRead, backgroundReadAbandoned, isBackgroundReadAbandoned } from "./backgroundReads.js";
 import { LIMITED_LAUNCH_ACCESS_ENABLED, validateAccessSnapshot } from "./limitedLaunchAccess.js";
 import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from "../../supabase/functions/_shared/accessPolicy.mjs";
 import { isLaunchInvitationToken } from "./launchInvitation.js";
@@ -179,6 +180,8 @@ export function createLimitedLaunchClient({
   fetchImpl = globalThis.fetch, timeoutMs = 9000,
 } = {}) {
   async function request(endpoint, body = {}, tokenOptions) {
+    const backgroundRead = endpoint === "billing-entitlements";
+    if (backgroundRead && !canStartBackgroundRead()) throw backgroundReadAbandoned();
     if (!enabled || !accountId || !url || !anonKey) throw unavailable(undefined, undefined, "config");
     const session = getSession();
     // Compared by session id and user, not by object: Clerk replaces the
@@ -208,6 +211,7 @@ export function createLimitedLaunchClient({
       const token = await Promise.race([tokenOptions ? live.getToken(tokenOptions) : live.getToken(), deadline]);
       if (!sameSession()) throw changed();
       if (!token || controller.signal.aborted) throw unavailable();
+      if (backgroundRead && !canStartBackgroundRead()) throw backgroundReadAbandoned();
       stage = "network";
       response = await Promise.race([fetchImpl(`${url}/functions/v1/${endpoint}`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, apikey: anonKey, "Content-Type": "application/json" },
@@ -236,6 +240,7 @@ export function createLimitedLaunchClient({
       if (!response.ok) throw unavailable(value?.error, response.status, "http");
       return value;
     } catch (error) {
+      if (isBackgroundReadAbandoned(error)) throw error;
       // The deadline fired: a fetch or read that rejected as it was aborted
       // (some browsers reject before the deadline's own rejection lands) is
       // still a timeout, reported where it stopped.

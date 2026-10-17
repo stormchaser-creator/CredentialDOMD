@@ -13,6 +13,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import * as refreshFailure from '../../src/utils/accessRefreshFailure.js';
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 import { ACCESS_REFRESH_MS, OUTDATED_MESSAGE, RECONNECTING_MESSAGE, accessVerifying, alertWriteRefused, createAccessAuthority, membershipReadOnly, writeRefusalMessage } from '../../src/utils/limitedLaunchAccess.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 
@@ -87,6 +88,7 @@ function fixture({ answers = [], initialAccount = ACCOUNT, memory = deviceMemory
     '../utils/launchInvitation.js': { clearLaunchInvitation() {} },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: () => client },
     '../utils/accessRefreshFailure.js': refreshFailure,
+    '../utils/backgroundReads.js': backgroundReads,
     '../lib/errorReport.js': { reportError: (...args) => reports.push(args), reportUnlessLeaving: (...args) => reports.push(args) },
   };
   const module = { exports: {} };
@@ -399,4 +401,18 @@ test('a save that meets an old answer waits for the check the hook runs, sharing
   await f.settle();
   await again;
   assert.equal(f.authority.writeStatus('practice').status, 'allow');
+});
+
+test('an abandoned page-leave background read retries without a failure report or granting access', async () => {
+  const f = fixture({ answers: [backgroundReads.backgroundReadAbandoned(), snapshot()] });
+  await f.advance(0);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.value.status, 'error');
+  assert.equal(f.value.reconnecting, false);
+  assert.equal(f.reports.length, 0);
+  assert.equal(f.authority.allowsMutation('workLog', { id: 'synthetic' }), false);
+  await f.advance(1000);
+  assert.equal(f.calls.length, 2);
+  assert.equal(f.value.status, 'ready');
+  assert.equal(f.reports.length, 0);
 });

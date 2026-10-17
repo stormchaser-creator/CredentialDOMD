@@ -1,3 +1,4 @@
+import { isBackgroundReadAbandoned } from "../utils/backgroundReads.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { accessAuthority, ACCESS_REFRESH_MS, LIMITED_LAUNCH_ACCESS_ENABLED, PUBLIC_SELF_SERVICE_SIGNUP_ENABLED } from "../utils/limitedLaunchAccess.js";
 import { clearLaunchInvitation } from "../utils/launchInvitation.js";
@@ -83,6 +84,13 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
       if (!current()) return;
       // Retrying cannot fix a build that cannot read the answer: no backoff,
       // and the page asks for a reload instead of saying it is reconnecting.
+      if (isBackgroundReadAbandoned(error)) {
+        // No answer was requested after navigation began. A canceled navigation
+        // still retries normally; no failed-check report or extra authority is created.
+        setResult(previous => ({ ...previous, accountId, status: "error", error: null, outdated: false, reconnecting: false,
+          answered: previous.accountId === accountId && previous.answered === true }));
+        return;
+      }
       const outdated = PERMANENT_PHASES.has(describeAccessRefreshFailure(error).phase);
       // Only a failed check: a save inside the grace is kept on the device.
       accessAuthority.suspendWrites({ outdated, checkFailed: true });

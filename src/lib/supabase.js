@@ -1,3 +1,4 @@
+import { guardPageLeaveReads } from "../utils/backgroundReads.js";
 import { accessAuthority, allowsSettingsChange, membershipWriteError } from "../utils/limitedLaunchAccess.js";
 import { createClient } from "@supabase/supabase-js";
 // Extensions are explicit on purpose: node resolves these specifiers as
@@ -71,9 +72,10 @@ function followBody(response, progress) {
   next();
 }
 function fetchReportingProgress(send) {
+  const guardedSend = guardPageLeaveReads(send);
   return (input, init) => {
     const progress = init && init.signal ? readProgress.get(init.signal) : undefined;
-    const sent = send(input, init);
+    const sent = guardedSend(input, init);
     if (!progress) return sent;
     return Promise.resolve(sent).then(response => {
       progress();

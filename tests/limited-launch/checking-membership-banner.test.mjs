@@ -13,6 +13,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import * as refreshFailure from '../../src/utils/accessRefreshFailure.js';
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 import { ACCESS_REFRESH_MS, NOT_CONNECTED_MESSAGE, RECONNECTING_MESSAGE, createAccessAuthority, membershipReadOnly, membershipWriteError, validateAccessSnapshot, writeRefusalMessage } from '../../src/utils/limitedLaunchAccess.js';
 import { createLimitedLaunchClient } from '../../src/utils/limitedLaunchClient.js';
 import { BASE_KEYS, purgeForSignOut, purgeUserStorage } from '../../src/utils/storageScope.js';
@@ -88,6 +89,7 @@ function fixture({ signup = true, profileReady = true, clerkUser = OWNER, memory
     // `makeClient` swaps in production's own client, given the fake clock and Clerk.
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: args => (makeClient ? makeClient(args, { later, clerk: () => clerk }) : client) },
     '../utils/accessRefreshFailure.js': refreshFailure,
+    '../utils/backgroundReads.js': backgroundReads,
     '../lib/errorReport.js': { reportError: (...args) => reports.push(args), reportUnlessLeaving: (...args) => reports.push(args) },
   };
   const module = { exports: {} };
