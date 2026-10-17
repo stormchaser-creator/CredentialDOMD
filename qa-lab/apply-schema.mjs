@@ -28,7 +28,7 @@ export function assertSchemaTargetsInstance(text, { gateway = localGatewayOrigin
 // before serving a lab whose worker would silently claim no queued work.
 export const RUNTIME_SEED_TABLES = Object.freeze([
   "access_policy_settings", "vera_source_settings", "welcome_email_settings",
-  "reminder_email_drain", "support_operations_config", "owner_notify_settings",
+  "reminder_email_drain", "owner_notify_settings",
 ]);
 export const RUNTIME_SEED_COUNTS_SQL = `select json_agg(s) from (${RUNTIME_SEED_TABLES.map(name =>
   `select '${name}' as name, count(*)::integer as n from public.${name} where singleton`).join(" union all ")}) s`;

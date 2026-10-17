@@ -15,8 +15,7 @@
 --                                   Admin > Emails; the migration inserts this row,
 --                                   and without it that screen says "settings missing")
 -- Migration-created runtime defaults (not part of catalog DDL):
---   public.reminder_email_drain, public.support_operations_config,
---   public.owner_notify_settings (captured email only in the lab).
+--   public.reminder_email_drain, public.owner_notify_settings (captured email only in the lab).
 -- Synthetic, because production's rows hold member mailboxes:
 --   public.limited_beta_cohorts, public.limited_founding_programs,
 --   public.limited_founding_slots  (founding programs built by the same functions
@@ -54,8 +53,7 @@ insert into public.welcome_email_settings (singleton, enabled) values (true, fal
 -- Catalog reconstruction copies DDL, not rows inserted by migrations. Without
 -- the sender lease singleton every reminder claim returns no work forever.
 insert into public.reminder_email_drain (singleton) values (true) on conflict do nothing;
--- Keep support automation disabled in the lab; owner notices use captured mail.
-insert into public.support_operations_config (singleton) values (true) on conflict do nothing;
+-- Owner notices use captured mail in the lab.
 insert into public.owner_notify_settings (singleton, enabled) values (true, true) on conflict do nothing;
 
 -- 2. Sealed synthetic cohorts and the founding programs (capacity 100 each).
