@@ -74,7 +74,7 @@ import { IntakeNotesBanner } from "./components/features/IntakeNotes";
 import { useRequestProposals } from "./hooks/useRequestProposals";
 import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
-import { supportDeepLink, takeAppDeepLink, stashAppDeepLink, forgetAppDeepLink } from "./utils/supportDeepLink.js";
+import { isAppDeepLink, supportDeepLink, takeAppDeepLink, stashAppDeepLink, forgetAppDeepLink } from "./utils/supportDeepLink.js";
 import { shareAtHandoff, shareNotStartedMessage } from "./utils/shareHandoff.js";
 import { RequestPacketSummary, ApproveSendButton, ReviewButton, canSendOnOneTap, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
 import { actionButtonStyle, cardActionSize, TAP_MIN } from "./components/shared/actionButton";
@@ -183,6 +183,21 @@ export default function App() {
   // 2026-10-01).
   const [deepLink, setDeepLink] = useState(openedOnLink);
   const settleDeepLink = useCallback(() => setDeepLink(""), []);
+  // Mail can reuse a tab whose app is already mounted. A fragment change
+  // does not reload React, so route it just like a link opened at startup.
+  useEffect(() => {
+    const openLink = () => {
+      if (!isAppDeepLink(window.location.hash)) return;
+      const link = takeAppDeepLink();
+      const screen = LINK_SCREENS[link];
+      if (screen) { setTab("more"); setSubPage(screen); setNavRecord(null); }
+      setDeepLink(link);
+    };
+    window.addEventListener("hashchange", openLink);
+    openLink(); // A link may arrive while the app chunk is loading.
+    return () => window.removeEventListener("hashchange", openLink);
+  }, []);
+
   // Kept for this tab until its screen is on view, from the first render:
   // App renders the sign-in screen too, and Clerk's email-code sign-in ends
   // in a new page load of /app/ (or Safari discards the tab while he is in
