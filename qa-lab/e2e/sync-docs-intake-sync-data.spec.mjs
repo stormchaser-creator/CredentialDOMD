@@ -25,7 +25,7 @@ const tab = (page, name) => page.getByRole('button', { name, exact: true }).firs
 
 test('every write fits its table: share-log rows from the Documents packet, the reference list and Vera\'s packet', { tag: ['@SYNC-002'] }, async ({ page, context, qa }) => {
   const { profile } = await newMember(page, { firstName: 'Sam', lastName: 'Schema', profession: 'MD' });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin }).catch(() => {});
   const writes = watchRestWrites(page);
   // The device's share sheet: the lab stands in for it and records what it receives.
   const shareStub = () => page.evaluate(() => {

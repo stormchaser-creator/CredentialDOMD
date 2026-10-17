@@ -12,7 +12,7 @@
 //               photo (downscaled); a stored PDF opens in a new tab.
 // The mock AI answers each file's scan with a scripted reading, matched to
 // that file's own bytes, so parallel journeys never take each other's answers.
-import { test } from './support/fixtures.mjs';
+import { test, expect } from './support/fixtures.mjs';
 import {
   base64Marker, chooseFiles, newMember, profileOf, row, rows, scriptAi, sleep, syntheticPdf, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
