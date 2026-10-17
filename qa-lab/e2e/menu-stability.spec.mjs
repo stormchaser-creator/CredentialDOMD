@@ -18,7 +18,8 @@ test('More controls stay in place when administrator availability arrives', asyn
     await route.continue();
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await goTab(page, 'More');
+  if (phone) await page.locator('button').filter({ hasText: /^More$/ }).click();
+  else await goTab(page, 'More');
   await held;
   const setup = page.getByRole('button', { name: /^\S+ Setup Get everything on file/ });
   await setup.waitFor();
