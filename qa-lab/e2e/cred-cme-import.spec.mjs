@@ -1,3 +1,4 @@
+import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 // CME Credits: importing a transcript (a generic CSV mapped by hand, an Excel
 // export read by its column names, pasted text read as columns, line by line
@@ -12,7 +13,7 @@ import {
 } from './support/lab.mjs';
 import { supabaseStatus } from '../lib/local-db.mjs';
 import {
-  addLicense, allowClipboard, clipboardText, day, dbWait, fillForm, makeXlsx, openAdd, saveDialog, stubExternalPages,
+  addLicense, allowClipboard, day, dbWait, fillForm, makeXlsx, openAdd, saveDialog, stubExternalPages,
 } from './support/cred-helpers.mjs';
 
 const importDialog = (page) => page.getByRole('dialog', { name: 'Import CME transcript' });
@@ -332,9 +333,9 @@ test('CME import, certificates and the CME Passport panel', {
     if (!(await page.getByRole('button', { name: 'Copy reporting details' }).isVisible().catch(() => false))) await page.getByRole('button', { name: /ACCME CME Passport/ }).click();
     panelText = await page.locator('main, body').first().innerText();
     qa.check('with birth month and day and a license number the details are ready', /Your reporting details are ready/.test(panelText) && /July 25/.test(panelText), panelText.match(/Birth month and day[^\n]*\n?[^\n]*/)?.[0]);
-    await page.getByRole('button', { name: 'Copy reporting details' }).click();
-    await sleep(500);
-    const copied = await clipboardText(page);
+    const copied = await copyAndReadSynthetic(page, async () => {
+      await page.getByRole('button', { name: 'Copy reporting details' }).click(); await sleep(500);
+    }, ['QA-OR-6060', 'Birth month and day: July 25']);
     qa.check('Copy puts the reporting details and the permission sentence on the clipboard (month and day, never a year)', /QA-OR-6060/.test(copied) && /Birth month and day: July 25/.test(copied) && /I give permission to report this CME credit to the ACCME\./.test(copied) && !/\b(19|20)\d\d\b.*July|July 25, \d{4}/.test(copied), copied);
     // The links open in new tabs; the lab answers for cmepassport.org.
     const links = await page.getByRole('link', { name: /CME Passport/ }).evaluateAll((as) => as.map((a) => ({ text: a.innerText.trim(), href: a.href, target: a.target })));
