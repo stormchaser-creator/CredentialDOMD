@@ -35,6 +35,7 @@ import { parseArgs } from 'node:util';
 import { DEFAULT_SIM_API_PORT, DEFAULT_SIM_APP_PORT } from './lib/lab-config.mjs';
 import { LAB_LOG_DIR, QA_LAB_DIR, QA_VITE_CONFIG, REPO_ROOT, SIM_APP_DIST, SIM_BUILD_JSON, SIM_DIR, SIM_RUNTIME_JSON, isMain } from './lib/paths.mjs';
 import { qaAppEnv } from './lib/app-env.mjs';
+import { prepareQaPublicAssets } from './lib/public-assets.mjs';
 import { freePort, sleep, waitFor } from './lib/procs.mjs';
 import { stackStatus } from './lib/stack.mjs';
 import { bootedIosSimulators, ensureSimCertificates, simctl, trustCaInSimulator } from './lib/sim-tls.mjs';
@@ -194,6 +195,7 @@ export async function runSim(argv = process.argv.slice(2), { log = console.log }
   const apiPort = await freePort(Number(values['api-port'] || existing?.apiPort || DEFAULT_SIM_API_PORT), { avoid: [...avoid, appPort] });
   const appOrigin = `https://127.0.0.1:${appPort}`;
   const apiOrigin = `https://127.0.0.1:${apiPort}`;
+  prepareQaPublicAssets();
   const appEnv = { ...qaAppEnv({ appPort, apiPort, anonKey: status.ANON_KEY, scheme: 'https' }), QA_LAB_MOCK_URL: lab.urls.mock, QA_LAB_APP_DIST: SIM_APP_DIST };
 
   const buildFor = { appPort, apiOrigin, anonKey: anonKeyIdentity(status.ANON_KEY) };

@@ -35,6 +35,7 @@ import { labSecrets, randomAlnum } from './lib/lab-secrets.mjs';
 import { startStack } from './lib/stack.mjs';
 import { writeFunctionsEnv } from './lib/functions-env.mjs';
 import { qaAppEnv } from './lib/app-env.mjs';
+import { prepareQaPublicAssets } from './lib/public-assets.mjs';
 import { localExec } from './lib/local-db.mjs';
 import { resolveLabPorts, startChild, stopChild, waitFor } from './lib/procs.mjs';
 import { instanceName, localMailOrigin, localStudioOrigin, projectId } from './lib/config.mjs';
@@ -178,6 +179,7 @@ export async function runLab(argv = process.argv.slice(2)) {
     children.push(api); watch(api, 'the API proxy');
     await waitFor('the API proxy', async () => (await httpStatus(`${apiOrigin}/rest/v1/`, { headers: { apikey: status.ANON_KEY } })).status < 500, { timeoutMs: 20000 });
 
+    prepareQaPublicAssets({ quiet: values.quiet });
     const appEnv = { ...qaAppEnv({ appPort, apiPort, anonKey: status.ANON_KEY }), QA_LAB_MOCK_URL: mockUrl };
     let app;
     let buildSource = null;
