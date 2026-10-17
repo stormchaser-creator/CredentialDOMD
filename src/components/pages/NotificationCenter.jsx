@@ -136,7 +136,7 @@ function NotificationCenter({ open, onClose }) {
             {/* Send actions */}
             <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 14, marginTop: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 8 }}>
-                {sent ? "\u2713 Notification sent!" : "Send this alert to yourself:"}
+                {sent ? `Continue in your ${sending === "email" ? "email" : "text message"} app` : "Send this alert to yourself:"}
               </div>
               {!sent ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
