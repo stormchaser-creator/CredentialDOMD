@@ -11,6 +11,12 @@ test('notification contact labels fit narrow dialogs without clipping the verifi
   await seed(user, profile.id, 'licenses', [{ type: 'State Medical License', license_number: 'QA-LAYOUT-ONLY', state: 'CO', expiration_date: expires.toISOString().slice(0, 10) }]);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForMemberApp(page);
+  // Only the external mail-app handoff is replaced: retain the real component,
+  // persisted notification log, dialog lifecycle, and member context.
+  await page.evaluate(() => {
+    const originalOpen = window.open.bind(window);
+    window.open = (url, ...args) => String(url).startsWith('mailto:') ? null : originalOpen(url, ...args);
+  });
   await qa.feature('NOTIFY-002', 'The real notification dialog retains its complete email label on narrow screens', async () => {
     for (const width of [320, 375, 390]) {
       await page.setViewportSize({ width, height: 844 });
@@ -29,6 +35,13 @@ test('notification contact labels fit narrow dialogs without clipping the verifi
       qa.check(`${width}px: no horizontal overflow`, geometry.bodyScroll <= geometry.bodyWidth + 1 && geometry.labelScroll <= geometry.labelWidth + 1, geometry);
       qa.check(`${width}px: the action icon remains readable`, geometry.iconWidth >= 17, geometry);
       await qa.shot(`notification contact ${width}px`);
+      await action.click();
+      await dialog.getByRole('status').filter({ hasText: 'Your email app should open' }).waitFor();
+      qa.check(`${width}px: composing does not claim delivery`, await dialog.getByText('Notification sent!', { exact: true }).count() === 0);
+      await dialog.getByRole('button', { name: 'Close dialog' }).click();
+      await page.getByRole('button', { name: /^Notifications(?:,|$)/ }).click();
+      await action.waitFor();
+      qa.check(`${width}px: reopening allows another composition`, await action.isVisible());
       await dialog.getByRole('button', { name: 'Close dialog' }).click();
     }
   });

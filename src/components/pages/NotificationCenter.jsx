@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
 import { EmailIcon, TextMsgIcon, AlertIcon } from "../shared/Icons";
@@ -13,6 +13,14 @@ function NotificationCenter({ open, onClose }) {
   const [sent, setSent] = useState(false);
   // Said when the text had to be shortened (textAlert); never silent.
   const [textNotice, setTextNotice] = useState("");
+  // Composition feedback belongs to this opening of the dialog. Closing and
+  // reopening must let the member try again, including a canceled handoff.
+  useEffect(() => {
+    if (!open) return;
+    setSending(null);
+    setSent(false);
+    setTextNotice("");
+  }, [open]);
 
   const s = data.settings;
   const alerts = useMemo(() => generateAlerts(data), [data]);
