@@ -297,6 +297,11 @@ test('AI metering: Vera and a scan are metered with cost; at the monthly budget 
   }, { soft: true });
 });
 
+// This checks the prompt/reload/session behavior through a controlled direct
+// version response. Firefox worker-owned fetches bypass context.route; native
+// worker activation belongs to the separate real two-build acceptance.
+test.describe('version detection with direct request control', () => {
+  test.use({ serviceWorkers: 'block' });
 test('new version: a deploy while the tab is open updates it, then the pill; tapping it reloads with the session kept', {
   tag: ['@OPS-007'],
 }, async ({ page, context, qa }) => {
@@ -306,7 +311,7 @@ test('new version: a deploy while the tab is open updates it, then the pill; tap
   const current = await (await fetch(`${appOrigin}/app/version.json`)).json();
   const next = `${current.build}-qa-next`;
   let served = 0;
-  // A deploy: version.json (fetched no-store by the page, through the service worker) names a new build.
+  // A deploy: the direct, no-store version response names a new build.
   const deployed = (route) => { served += 1; return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Cache-Control': 'no-store' }, body: JSON.stringify({ build: next }) }); };
   const isVersion = (u) => u.origin === appOrigin && u.pathname === '/app/version.json';
 
@@ -340,8 +345,9 @@ test('new version: a deploy while the tab is open updates it, then the pill; tap
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await sleep(3000);
     qa.check('with the deployed build matching, no pill', !(await pill.isVisible().catch(() => false)));
-    qa.blocked('OPS-007', 'The lab serves one build, so "reload on the new build" is the same bundle here; the journey proves the detection, the prompt, the reload and the kept session.');
+    qa.blocked('OPS-007', 'This context blocks worker registration so the version response is directly controllable. The lab serves one build: this proves detection, prompt, reload and kept session, not worker activation or reload into a distinct deployed build. Native two-build acceptance is separate.');
   }, { soft: true });
+});
 });
 
 test('dormant screens: Quick Share and Team are reachable from no menu at desk or phone width; nothing mounts HospitalRotations or the portal modal; rotations still sync, back up and delete', {
