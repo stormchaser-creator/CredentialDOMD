@@ -45,7 +45,7 @@ async function settledTop(page, selector) {
 }
 
 const visible = async (page) => (await page.locator('body').innerText()).replace(/\s+/g, ' ');
-const noSideScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+const noSideScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
 
 test('visitor: landing offer, create-account path, fallback, beacon', {
   tag: ['@PUBLIC-001', '@PUBLIC-006', '@BILL-004'],
