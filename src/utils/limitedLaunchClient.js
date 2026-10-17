@@ -180,7 +180,9 @@ export function createLimitedLaunchClient({
   fetchImpl = globalThis.fetch, timeoutMs = 9000,
 } = {}) {
   async function request(endpoint, body = {}, tokenOptions) {
-    const backgroundRead = endpoint === "billing-entitlements";
+    // Startup initialization/enrollment are idempotent and retried by the
+    // page that survives navigation; never begin them from a retiring page.
+    const backgroundRead = ["billing-entitlements", "initialize-clerk-profile", "bootstrap-launch-access"].includes(endpoint);
     if (backgroundRead && !canStartBackgroundRead()) throw backgroundReadAbandoned();
     if (!enabled || !accountId || !url || !anonKey) throw unavailable(undefined, undefined, "config");
     const session = getSession();

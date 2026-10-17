@@ -1,3 +1,4 @@
+import { canStartBackgroundRead, backgroundReadAbandoned, waitForBackgroundReads } from "../../src/utils/backgroundReads.js";
 // The QA lab's stand-in for the Clerk browser SDK (window.Clerk).
 //
 // Only a QA-lab build contains this file: qa-lab/app/vite.config.mjs aliases
@@ -22,6 +23,7 @@ export function assertQaLabRuntime() {
   }
 }
 assertQaLabRuntime();
+canStartBackgroundRead(); // Observe page leave before React schedules the QA SDK load.
 
 export async function qaApi(path, { method = 'GET', body } = {}) {
   const res = await fetch(`${MOCK}${path}`, {
@@ -84,6 +86,7 @@ function createQaClerk() {
         const cached = cache.get(template);
         if (cached && !options.skipCache && cached.expMs - EARLY_REFRESH_MS > Date.now()) return cached.jwt;
         if (inflight.has(template)) return inflight.get(template);
+        if (!canStartBackgroundRead()) throw backgroundReadAbandoned();
         const p = qaApi(`/qa/sessions/${encodeURIComponent(session.id)}/tokens`, { method: 'POST', body: template ? { template } : {} })
           .then(({ jwt }) => {
             const exp = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp;
@@ -133,6 +136,8 @@ function createQaClerk() {
       const sid = readCookie();
       if (sid) {
         try {
+          await waitForBackgroundReads();
+          if (readCookie() !== sid) { clerk._loading = null; return load(); }
           const { session, user } = await qaApi(`/qa/sessions/${encodeURIComponent(sid)}`);
           clerk.loaded = true;
           setSignedIn(session, user);

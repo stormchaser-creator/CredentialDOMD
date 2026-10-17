@@ -1,3 +1,4 @@
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -56,6 +57,7 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false, c
       adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
       // The queue's write (storageScope makes room first in the app).
       setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/backgroundReads.js': backgroundReads,
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { return { initializeProfile: () => f.initializeProfile() }; } },
     '../utils/profileIssueDiagnostics.js': { profileInitializationError },
     '../utils/continuityRecovery.js': { PRODUCTION_CLERK_ISSUER: 'https://clerk.credentialdomd.com',

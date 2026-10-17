@@ -1,3 +1,4 @@
+import * as backgroundReads from '../src/utils/backgroundReads.js';
 // A synthetic Supabase client for src/lib/supabase.js, loaded in a vm with
 // every import replaced (the shape tests/limited-launch/persistence.test.mjs
 // uses). Each request the module makes is recorded; f.onRequest answers it.
@@ -57,6 +58,7 @@ export function fixture() {
     '../utils/storageScope.js': { localWriteGuard: () => () => true, BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor,
       adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null, setItemMakingRoom: (key, value) => values.set(key, value) },
     '../utils/syncRecovery.js': recoveryFor(values, () => actor),
+    '../utils/backgroundReads.js': backgroundReads,
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {},
     // Reached only from a sign-in receipt, which this continuity-disabled

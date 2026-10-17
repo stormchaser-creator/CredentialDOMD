@@ -1,3 +1,4 @@
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 // A second device holding a copy from before a server data deletion purges it
 // before anything loads, and never sends it back up (owner decision
 // 2026-09-29, QA SYNC-012). Driven through the REAL pieces: ensureProfile
@@ -168,6 +169,7 @@ function sdk() {
     '../utils/dataDeletion.js': dataDeletion,
     '../utils/continuityRecovery.js': continuityRecovery,
     '../utils/syncRules.js': syncRules,
+    '../utils/backgroundReads.js': backgroundReads,
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: options => createLimitedLaunchClient({ ...options,
       url: 'https://synthetic.invalid', anonKey: 'synthetic-public', fetchImpl: serverFetch, getSession: () => clerk.session }) },
     '../utils/profileIssueDiagnostics.js': { profileInitializationError },

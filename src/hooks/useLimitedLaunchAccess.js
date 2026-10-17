@@ -69,6 +69,7 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
           enrolled.current = accountId;
         } catch (error) {
           if (!current()) return;
+          if (isBackgroundReadAbandoned(error)) throw error;
           enrollmentError = error.code;
           reportEnrollmentFailure(error);
         }

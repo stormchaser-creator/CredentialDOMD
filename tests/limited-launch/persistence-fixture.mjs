@@ -1,3 +1,4 @@
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 // The persistence fixture: the real src/lib/supabase.js run in a node:vm realm
 // with a recording, in-memory Supabase client. No network, production data or
 // deployment is involved. Shared by the persistence tests.
@@ -62,6 +63,7 @@ export function fixture({ enabled = true, practice = true, supabaseJs = null, sh
       adoptedLocalFence: () => undefined, localCopyCurrent: (_id, fence) => fence === undefined || fence === f.fence, localFence: () => f.fence, setItemMakingRoom: (key, value) => values.set(key, value) },
     '../utils/recordAcknowledgements.js': f.acknowledgements,
     '../utils/syncRecovery.js': f.recovery,
+    '../utils/backgroundReads.js': backgroundReads,
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {},
     // Reached only from a sign-in receipt, which this continuity-disabled

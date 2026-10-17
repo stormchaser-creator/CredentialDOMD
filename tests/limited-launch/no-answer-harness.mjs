@@ -1,3 +1,4 @@
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 // The harness of no-answer-settings.test.mjs, shared with
 // no-answer-records.test.mjs: AppContext's save path (cut from the source),
 // the real src/lib/supabase.js on an in-memory client and localStorage, and
@@ -63,6 +64,7 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
     '../utils/recordAcknowledgements.js': createRecordAcknowledgements({ activeAccount: () => ACCOUNT, fenceFor: () => null, copyCurrent: () => true, receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null, write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } }),
     '../utils/syncRecovery.js': recoveryFor(values, () => ACCOUNT),
     '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
+    '../utils/backgroundReads.js': backgroundReads,
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': {}, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},

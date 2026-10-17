@@ -1,4 +1,4 @@
-import { guardPageLeaveReads } from "../utils/backgroundReads.js";
+import { guardPageLeaveReads, isBackgroundReadAbandoned, isAbandonedRestRead, waitForBackgroundReads } from "../utils/backgroundReads.js";
 import { accessAuthority, allowsSettingsChange, membershipWriteError } from "../utils/limitedLaunchAccess.js";
 import { createClient } from "@supabase/supabase-js";
 // Extensions are explicit on purpose: node resolves these specifiers as
@@ -2054,18 +2054,24 @@ function readWithDeadline(build, limitMs = LOAD_READ_LIMIT_MS) {
   });
 }
 async function withLoadRetries(owner, delays, run, transient) {
-  for (let attempt = 0; ; attempt++) {
+  for (let attempt = 0; ; ) {
     let outcome;
     try { outcome = { value: await run() }; }
     catch (error) { outcome = { error }; }
     // A changed or signed-out account stops at once, never retried.
     owner.check();
     const failed = "error" in outcome ? outcome.error : outcome.value;
+    if (("error" in outcome && isBackgroundReadAbandoned(outcome.error))
+      || (!("error" in outcome) && isAbandonedRestRead(outcome.value))) {
+      await waitForBackgroundReads();
+      owner.check();
+      continue; // Navigation does not consume a real network-failure retry.
+    }
     if (!transient(failed, "error" in outcome) || attempt >= delays.length) {
       if ("error" in outcome) throw outcome.error;
       return outcome.value;
     }
-    await pause(delays[attempt]);
+    await pause(delays[attempt++]);
     owner.check();
   }
 }

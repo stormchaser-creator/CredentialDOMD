@@ -1,3 +1,4 @@
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 // A transient failure of the identity read at load (initialize-clerk-profile)
 // or of the profile row read is tried again, with the session Clerk holds
 // then, before the load stops and asks for a reload. Live, 2026-10-01, on an
@@ -165,6 +166,7 @@ function loadFixture({ edge, rows } = {}) {
       adoptedLocalFence: () => undefined, localCopyCurrent: () => true, localFence: () => null,
       // The queue's write (storageScope makes room first in the app).
       setItemMakingRoom: (key, value) => values.set(key, value) },
+    '../utils/backgroundReads.js': backgroundReads,
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: options => createLimitedLaunchClient({
       ...options, url: 'https://synthetic.invalid', anonKey: 'synthetic-public', timeoutMs: 30,
       getSession: () => clerk.session,
@@ -498,4 +500,20 @@ test('a profile row read whose body arrives slowly past the deadline is used (th
   const profile = await within(f.api.ensureProfile(OWNER, { ...FAST, readLimitMs: 80 }), 3000);
   assert.equal(profile.id, PROFILE_ID);
   assert.equal(f.restRequests.length, 1, 'answered on the first try');
+});
+
+test('abandoned initialization resumes without consuming the ordinary failure retry budget', async () => {
+  const f = loadFixture({ edge: async n => { if (n === 1) throw backgroundReads.backgroundReadAbandoned(); return Response.json(receipt()); } });
+  assert.equal((await f.api.ensureProfile(OWNER, { retryDelaysMs: [] })).id, PROFILE_ID);
+  assert.equal(f.edgeRequests.length, 2);
+  assert.equal(f.restRequests.length, 1);
+});
+test('the real PostgREST SDK retains the local abandonment marker so profile loading can resume', async () => {
+  const f = loadFixture({ edge: async () => Response.json(receipt()), rows: async n => {
+    if (n === 1) throw backgroundReads.backgroundReadAbandoned();
+    return Response.json([{ id: PROFILE_ID, auth_user_id: OWNER }]);
+  } });
+  assert.equal((await f.api.ensureProfile(OWNER, { retryDelaysMs: [] })).id, PROFILE_ID);
+  assert.equal(f.edgeRequests.length, 1);
+  assert.equal(f.restRequests.length, 2);
 });

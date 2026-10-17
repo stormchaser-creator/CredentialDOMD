@@ -3,6 +3,7 @@
 // identified background reads use this guard; an accepted write keeps its transport.
 const LEAVE_WINDOW_MS = 10000;
 const ABANDONED = "background_read_page_leaving";
+const ABANDONED_MESSAGE = "Background read abandoned as the page leaves.";
 let watchedWindow = null, leavingSince = null, pageHidden = false;
 
 function watch() {
@@ -22,7 +23,7 @@ export function canStartBackgroundRead(now = Date.now()) {
 }
 
 export function backgroundReadAbandoned() {
-  return Object.assign(new Error("Background read abandoned as the page leaves."), { name: "AbortError", code: ABANDONED });
+  return Object.assign(new Error(ABANDONED_MESSAGE), { name: "AbortError", code: ABANDONED });
 }
 export function isBackgroundReadAbandoned(error) {
   return error?.name === "AbortError" && error?.code === ABANDONED;
@@ -42,4 +43,30 @@ export function guardPageLeaveReads(send) {
     if (backgroundRead && !canStartBackgroundRead()) return Promise.reject(backgroundReadAbandoned());
     return send(input, init);
   };
+}
+
+// PostgREST drops client-side error codes but retains the exact local error
+// message in a status-zero result. A real HTTP refusal never enters this path.
+export function isAbandonedRestRead(result) {
+  return result?.status === 0 && result?.error?.message === `AbortError: ${ABANDONED_MESSAGE}`;
+}
+
+/** A canceled navigation or BFCache return can resume account initialization without a false identity failure. */
+export function waitForBackgroundReads() {
+  if (canStartBackgroundRead()) return Promise.resolve();
+  return new Promise(resolve => {
+    const target = globalThis.window;
+    let timer;
+    const check = () => {
+      clearTimeout(timer);
+      if (canStartBackgroundRead()) {
+        target?.removeEventListener?.("pageshow", check);
+        resolve();
+      } else if (!pageHidden) {
+        timer = setTimeout(check, Math.max(1, LEAVE_WINDOW_MS - (Date.now() - leavingSince)));
+      }
+    };
+    target?.addEventListener?.("pageshow", check);
+    check();
+  });
 }

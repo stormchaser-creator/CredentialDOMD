@@ -1,3 +1,4 @@
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 // goal4 (2026-10-02): every app open read the whole account twice, about 3 s
 // apart (production gateway logs: 20 of 25 launches, 11 of 14 on the owner's
 // iPhone). The page load's first membership answer always started a second
@@ -169,6 +170,7 @@ function launch({ cloud = [licence(L1), licence(L2)], device = cloud, deviceExtr
     '../utils/storageScope.js': storageScope,
     '../utils/recordAcknowledgements.js': acknowledgements, '../utils/syncRecovery.js': recovery,
     '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
+    '../utils/backgroundReads.js': backgroundReads,
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': dataDeletion, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {}, configureSecretContinuity() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},

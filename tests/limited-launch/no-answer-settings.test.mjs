@@ -1,3 +1,4 @@
+import * as backgroundReads from '../../src/utils/backgroundReads.js';
 // QA (pre-existing on main): once the profile row says active, App.jsx opens
 // the member app from the loaded settings before the page load's first
 // membership answer. The Setup board mounts and stamps the profile (started,
@@ -81,6 +82,7 @@ function loadPersistence(authority, { onRequest, values = new Map(), navigator =
     '../utils/recordAcknowledgements.js': createRecordAcknowledgements({ activeAccount: () => ACCOUNT, fenceFor: () => null, copyCurrent: () => true, receiptBase: 'acks', queueBase: 'ops', read: (base, id) => values.get(`${base}:${id}`) ?? null, write: (base, value, id) => { values.set(`${base}:${id}`, value); return true; } }),
     '../utils/syncRecovery.js': recoveryFor(values, () => ACCOUNT),
     '../utils/invoiceHandoff.js': { registerInvoiceHandoffOwner() {} },
+    '../utils/backgroundReads.js': backgroundReads,
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
     '../utils/continuityRecovery.js': {}, '../utils/dataDeletion.js': {}, '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) }, '../utils/profileIssueDiagnostics.js': {},

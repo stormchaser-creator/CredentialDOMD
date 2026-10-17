@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canStartBackgroundRead, guardPageLeaveReads, isBackgroundReadAbandoned } from '../../src/utils/backgroundReads.js';
+import { canStartBackgroundRead, guardPageLeaveReads, isBackgroundReadAbandoned, isAbandonedRestRead, waitForBackgroundReads } from '../../src/utils/backgroundReads.js';
 import { createLimitedLaunchClient } from '../../src/utils/limitedLaunchClient.js';
 
 function page(t) {
@@ -79,4 +79,32 @@ test('late database reads and last-seen bookkeeping are declined while writes an
 test('an unrelated AbortError cannot masquerade as a locally abandoned background read', () => {
   assert.equal(isBackgroundReadAbandoned(Object.assign(new Error('unrelated'), { name: 'AbortError' })), false);
   assert.equal(isBackgroundReadAbandoned({ name: 'Error', code: 'background_read_page_leaving' }), false);
+});
+
+test('a canceled navigation releases the initialization wait after its bounded grace', async t => {
+  let now = 1000; t.mock.method(Date, 'now', () => now);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const event = page(t); canStartBackgroundRead(); event('beforeunload');
+  let done = false; const waiting = waitForBackgroundReads().then(() => { done = true; });
+  await Promise.resolve(); assert.equal(done, false);
+  now += 10000; t.mock.timers.tick(10000); await waiting;
+  assert.equal(done, true);
+});
+test('a hidden BFCache page waits for pageshow before initialization can resume', async t => {
+  const event = page(t); canStartBackgroundRead(); event('pagehide');
+  let done = false; const waiting = waitForBackgroundReads().then(() => { done = true; });
+  await Promise.resolve(); assert.equal(done, false);
+  event('pageshow'); await waiting; assert.equal(done, true);
+});
+test('only a status-zero locally abandoned PostgREST read is resumable as navigation', () => {
+  const error = { message: 'AbortError: Background read abandoned as the page leaves.' };
+  assert.equal(isAbandonedRestRead({ status: 0, error }), true);
+  assert.equal(isAbandonedRestRead({ status: 403, error }), false);
+  assert.equal(isAbandonedRestRead({ status: 0, error: { code: '42501' } }), false);
+});
+test('a token-delayed profile initialization is abandoned without creating a profile on the retiring page', async t => {
+  const event = page(t), token = delayed(); let calls = 0;
+  const membership = client(() => token.promise, () => { calls++; return Response.json({}); });
+  const request = membership.initializeProfile(); event('beforeunload'); token.resolve('synthetic-token');
+  await assert.rejects(request, isBackgroundReadAbandoned); assert.equal(calls, 0);
 });
