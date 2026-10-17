@@ -110,6 +110,9 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
     if (!opened) return;
     // The certificate is fetched while the picker is open ("getting the certificates ready").
     await waitFor('the certificates to be ready', async () => (/getting the certificates ready/.test(await ohio.innerText()) ? null : true), { timeoutMs: 30000 }).catch(() => null);
+    // This stretch verifies the download fallback; native-share delivery is
+    // exercised separately below with its files and email text inspected.
+    await shareSheet(page, { absent: true });
     const { name, buffer } = await download(page, ohio);
     await page.keyboard.press('Escape').catch(() => {});
     const pdf = await pdfText(buffer);
@@ -262,6 +265,7 @@ test('CME against the rules: transcript PDF, compliance cards, cycle grouping, c
         severity: 'medium',
       });
     }
+    await shareSheet(page, { absent: true });
     const { name, buffer } = await download(page, picker.getByRole('button', { name: /Colorado \(CO\)/ }));
     const t = (await pdfText(buffer)).text;
     qa.check('picking Colorado builds its transcript with its 3 entries in window', /^CME(-Transcript-CO-| Transcript, Colorado, )/.test(name) && /Colorado medical license renewal/.test(t) && /CME ACTIVITIES IN WINDOW \(3\)/.test(t) && /QA Older Skull Base Course/.test(t), t.match(/CME ACTIVITIES IN WINDOW \(\d+\)/)?.[0]);

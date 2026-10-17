@@ -28,15 +28,15 @@ const LOCAL = new Set(['127.0.0.1', 'localhost', '[::1]']);
 export async function guardContext(context, report) {
   const rt = lab();
   // WebKit only (webkit.config.mjs): the lab's plain-http loopback and the installed iPhone app (support/ios.mjs).
-  if (context.browser()?.browserType().name() === 'webkit') {
-    await context.addInitScript(webkitLabInitScript);
-    // WebKit has no clipboard permissions to grant (Playwright: "Unknown permission: clipboard-write");
-    // its clipboard answers a tap without one.
-    if (!context.__qaGrant) {
-      const grant = context.grantPermissions.bind(context);
-      context.__qaGrant = grant;
-      context.grantPermissions = (permissions, options) => grant(permissions.filter((p) => !/^clipboard-/.test(p)), options);
-    }
+  const engine = context.browser()?.browserType().name();
+  if (engine === 'webkit') await context.addInitScript(webkitLabInitScript);
+  // Firefox has no clipboard permission grant; WebKit cannot grant write.
+  // Keep their native gesture requirements. Actual copy/paste checks work
+  // without granting either clipboard permission (isolated engine controls).
+  if ((engine === 'webkit' || engine === 'firefox') && !context.__qaGrant) {
+    const grant = context.grantPermissions.bind(context);
+    context.__qaGrant = grant;
+    context.grantPermissions = (permissions, options) => grant(permissions.filter((p) => !/^clipboard-/.test(p)), options);
   }
   return context.route('**/*', (route) => {
     const url = new URL(route.request().url());
