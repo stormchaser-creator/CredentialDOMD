@@ -24,6 +24,20 @@ export function assertSchemaTargetsInstance(text, { gateway = localGatewayOrigin
   }
 }
 
+// Migration-created singleton rows are runtime state, not catalog DDL. Fail
+// before serving a lab whose worker would silently claim no queued work.
+export const RUNTIME_SEED_TABLES = Object.freeze([
+  "access_policy_settings", "vera_source_settings", "welcome_email_settings",
+  "reminder_email_drain", "support_operations_config", "owner_notify_settings",
+]);
+export const RUNTIME_SEED_COUNTS_SQL = `select json_agg(s) from (${RUNTIME_SEED_TABLES.map(name =>
+  `select '${name}' as name, count(*)::integer as n from public.${name} where singleton`).join(" union all ")}) s`;
+export function assertRuntimeSeedCounts(rows) {
+  const missing = RUNTIME_SEED_TABLES.filter(name => !Array.isArray(rows)
+    || rows.filter(row => row?.name === name && row.n === 1).length !== 1);
+  if (missing.length) throw new Error(`QA runtime seed rows missing or invalid: ${missing.join(", ")}. Rebuild this disposable lab with npm run qa:down -- --wipe, then npm run qa:lab.`);
+}
+
 /** The version seed.sql stamps into qa_lab.seed_version. */
 export function seedFileVersion(text = readFileSync(SEED_SQL, 'utf8')) {
   const m = /insert into qa_lab\.seed_version \(version\) values \((\d+)\)/.exec(text);
@@ -80,6 +94,7 @@ export function apply({ seed = true, schema = true } = {}) {
       if (have < want) throw new Error(`the local database holds seed version ${have}, and qa-lab/seed.sql is version ${want}. Rebuild it: npm run qa:down -- --wipe && npm run qa:up`);
       console.log(`Seed version ${have} already present; skipping.`);
     } else run(SEED_SQL, 'qa-lab/seed.sql');
+    assertRuntimeSeedCounts(localJson(RUNTIME_SEED_COUNTS_SQL));
   }
 }
 
