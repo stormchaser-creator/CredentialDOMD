@@ -2613,8 +2613,29 @@ function lastingStamp(settings, previous) {
  * `previous`: the settings as they were before this change (setupState),
  * for a kept copy's base.
  */
-export async function saveSettings(userId, settings, authUserId, { automatic = false, previous = null } = {}) {
-  const owner = writeContext(authUserId);
+export async function saveSettings(userId, settings, authUserId, { automatic = false, previous = null, deferCloud = false } = {}) {
+  const owner = writeContext(authUserId, { cloud: deferCloud !== true });
+  if (deferCloud === true) {
+    // pagehide/hidden: do not start a membership check, token mint or PATCH
+    // from a document that is leaving. The queue must be durable before this
+    // function returns its promise. Replay performs the normal fresh access
+    // and account checks; a known refusal is still refused here.
+    const status = accessAuthority.settingsStatus(settings, owner.accountId);
+    if (status.status === "refuse") throw membershipWriteError(status.reason);
+    if (status.status === "allow") owner.check = () => guardSettings(owner, settings);
+    owner.check();
+    saveDeviceKeys(owner.accountId, settings);
+    // Derived scores/first-paint stamps are recomputed, never queued over a
+    // newer device's copy. A newly closed task keeps only its lasting stamp.
+    const lasting = automatic === true ? lastingStamp(settings, previous) : null;
+    const kept = automatic === true ? lasting?.settings : settings;
+    // Even a currently active account needs the next foreground/launch
+    // answer. If that answer is read-only, the retained manual change must
+    // say it was refused rather than promise a sync that cannot happen.
+    if (kept) queuePendingOp("settings", "settings", redactForExport(kept), owner,
+      { ...setupBaseMeta(kept, previous), ...lasting?.meta, ...AWAITING_ACCESS });
+    return null;
+  }
   authorizeOwner(owner, () => guardSettings(owner, settings), options => accessAuthority.settingsStatus(settings, owner.accountId, options));
   // The identity and the membership decision are taken now, when the change
   // was made, and an allowed change's device keys (never sent) are kept now

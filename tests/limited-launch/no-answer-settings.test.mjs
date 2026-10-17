@@ -368,11 +368,12 @@ test('no answer and no check that could bring one: refused as before, but the bo
 // ─── The Setup board's queue: its own stamps are flushed as automatic ───
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const Q = await (async () => {
-  const out = await build({ entryPoints: [`${root}src/components/features/setup/useSetupState.js`], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent', external: ['react'], define: { 'import.meta.env': '{}' },
+  const hookSource = await readFile(`${root}src/components/features/setup/useSetupState.js`, 'utf8');
+  const out = await build({ stdin: { contents: hookSource + '\nexport { flushSetupWrites as __testFlushSetupWrites };', resolveDir: `${root}src/components/features/setup`, loader: 'js' }, bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent', external: ['react'], define: { 'import.meta.env': '{}' },
     plugins: [{ name: 'stub', setup(b) { b.onResolve({ filter: /context\/AppContext$/ }, () => ({ path: 'ctx', namespace: 'stub' })); b.onLoad({ filter: /^ctx$/, namespace: 'stub' }, () => ({ contents: 'export const useApp = () => ({});', loader: 'js' })); } }] });
-  const mod = { exports: {} };
-  new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);
-  return mod.exports;
+  const mod = { exports: {} }, document = { visibilityState: 'visible' };
+  new Function('require', 'module', 'exports', 'document', out.outputFiles[0].text)(require, mod, mod.exports, document);
+  return { ...mod.exports, __testDocument: document };
 })();
 
 test('the Setup board flushes its own stamps as automatic, and a write with a member\'s tap in it as not', () => {
@@ -839,4 +840,104 @@ test('review 3.2: the task a board stamp closed before the first answer is kept 
   assert.deepEqual(e.writes(), []);
   assert.deepEqual(e.queue(), []);
   assert.deepEqual(e.reports, []);
+});
+
+
+// A pagehide flush cannot begin an asynchronous token/PATCH round trip. WebKit
+// rejects that late fetch before any request is dispatched. The member's work
+// must already be durable when the pagehide callback returns.
+const manualLeavePatch = () => ({ setupState: { ...storedState(), tasks: { dea: { s: 'skipped', at: '2026-10-17T02:00:00.000Z' } } } });
+test('page-leave: an allowed manual setup change is durably queued before the async save returns', async () => {
+  const f = fixture({ answered: true });
+  const pending = f.api.saveSettings(PROFILE, manualLeavePatch(), ACCOUNT, { deferCloud: true, previous: { setupState: storedState() } });
+  try {
+    assert.equal(f.queue().length, 1, 'synchronous durable copy');
+    assert.equal(f.queue()[0].payload.setupState.tasks.dea.s, 'skipped');
+    assert.deepEqual(f.requests, [], 'no fetch started from the leaving document');
+  } finally { await pending.catch(() => {}); }
+});
+test('page-leave: an unanswered membership is not checked over the network while leaving', async () => {
+  const f = fixture();
+  const pending = f.api.saveSettings(PROFILE, manualLeavePatch(), ACCOUNT, { deferCloud: true, previous: { setupState: storedState() } });
+  try {
+    assert.equal(f.checks.length, 0, 'no new membership request');
+    assert.equal(f.queue().length, 1);
+    assert.equal(f.queue()[0].awaitingAccess, true, 'the next answer must authorize replay');
+    assert.deepEqual(f.requests, []);
+  } finally { for (const check of f.checks) check.fail(); await pending.catch(() => {}); }
+});
+test('page-leave: derived setup bookkeeping is recomputed instead of queued or sent', async () => {
+  const f = fixture({ answered: true });
+  await f.api.saveSettings(PROFILE, setupStamp(), ACCOUNT, { deferCloud: true, automatic: true, previous: { setupState: storedState() } });
+  assert.deepEqual(f.requests, []);
+  assert.deepEqual(f.queue(), []);
+});
+test('page-leave: a newly closed task keeps its narrow durable stamp', async () => {
+  const f = fixture({ answered: true });
+  const pending = f.api.saveSettings(PROFILE, closedStamp(), ACCOUNT, { deferCloud: true, automatic: true, previous: { setupState: storedState() } });
+  try {
+    assert.equal(f.queue().length, 1);
+    assert.equal(f.queue()[0].payload.setupState.lastDone, 'licenses');
+    assert.equal(f.queue()[0].payload.setupState.progress.done, storedState().progress.done, 'the queued base does not carry the new derived score');
+    assert.deepEqual(f.requests, []);
+  } finally { await pending.catch(() => {}); }
+  const next = fixture({ storage: f.values, answered: true, onRequest: cloudAt(laptopState()) });
+  await replayOnAnswer(next);
+  assert.equal(profileWrites(next).length, 1);
+  assert.equal(profileWrites(next)[0].value.setup_state.lastDone, 'licenses');
+  assert.deepEqual(JSON.parse(JSON.stringify(profileWrites(next)[0].value.setup_state.progress)), laptopState().progress, 'replay preserves the newer device score');
+});
+test('page-leave: a read-only membership still refuses a manual change', async () => {
+  const f = fixture({ answered: true }); f.authority.accept(ACCOUNT, revoked());
+  await assert.rejects(f.api.saveSettings(PROFILE, manualLeavePatch(), ACCOUNT, { deferCloud: true }), e => e.code === access.membershipWriteError().code);
+  assert.deepEqual(f.requests, []); assert.deepEqual(f.queue(), []);
+});
+test('page-leave: AppContext passes a setup-only deferral to persistence', async () => {
+  const f = fixture({ answered: true });
+  try {
+    assert.equal(f.app.updateSettings(manualLeavePatch(), { deferCloud: true }), true);
+    assert.equal(f.queue().length, 1);
+    assert.deepEqual(f.requests, []);
+  } finally { await settle(); }
+});
+test('page-leave: the actual setup debounce flush carries the deferral flag', () => {
+  const calls = [];
+  Q.commitSetupState(() => manualLeavePatch().setupState, { stored: storedState(), updateSettings: (patch, options) => calls.push({ patch, options }), userId: 'synthetic-leave' });
+  Q.__testFlushSetupWrites({ deferCloud: true });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].options, { automaticSetup: false, deferCloud: true });
+});
+
+test('page-leave: a setup change arriving while already hidden is flushed durably at once', () => {
+  const calls = []; Q.__testDocument.visibilityState = 'hidden';
+  try {
+    Q.commitSetupState(() => manualLeavePatch().setupState, { stored: storedState(), updateSettings: (patch, options) => calls.push({ patch, options }), userId: 'synthetic-hidden' });
+    assert.equal(calls.length, 1, 'do not wait for a timer in a suspended document');
+    assert.deepEqual(calls[0].options, { automaticSetup: false, deferCloud: true });
+  } finally { Q.__testDocument.visibilityState = 'visible'; Q.__testFlushSetupWrites(); }
+});
+for (const answered of [true, false]) test(`page-leave: a deferred manual change replays once over newer cloud data (prior answer ${answered})`, async () => {
+  const storage = new Map(), f = fixture({ storage, answered });
+  await f.api.saveSettings(PROFILE, manualLeavePatch(), ACCOUNT, { deferCloud: true, previous: { setupState: storedState() } });
+  assert.equal(f.checks.length, 0);
+  const cloud = { ...laptopState(), cvImportedAt: '2026-10-16T12:00:00.000Z' };
+  const next = fixture({ storage, answered: true, onRequest: cloudAt(cloud) });
+  await replayOnAnswer(next);
+  assert.equal(profileWrites(next).length, 1);
+  const saved = profileWrites(next)[0].value.setup_state;
+  assert.equal(saved.tasks.dea.at, manualLeavePatch().setupState.tasks.dea.at);
+  assert.equal(saved.cvImportedAt, cloud.cvImportedAt, 'another device’s import survives');
+  assert.deepEqual(JSON.parse(JSON.stringify(saved.progress)), cloud.progress);
+  assert.deepEqual(next.queue(), []);
+  await replayOnAnswer(next);
+  assert.equal(profileWrites(next).length, 1, 'no duplicate replay');
+});
+test('page-leave: later read-only access keeps the deferred manual change visibly refused and never sends it', async () => {
+  const storage = new Map(), f = fixture({ storage, answered: true });
+  await f.api.saveSettings(PROFILE, manualLeavePatch(), ACCOUNT, { deferCloud: true, previous: { setupState: storedState() } });
+  const next = fixture({ storage }); next.authority.accept(ACCOUNT, revoked());
+  const replayed = await replayOnAnswer(next);
+  assert.deepEqual(next.writes(), []);
+  assert.deepEqual(Array.from(replayed.refused), ['settings']);
+  assert.equal(next.queue()[0].accessRefused, true);
 });

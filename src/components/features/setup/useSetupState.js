@@ -36,17 +36,18 @@ let pendingHasManualChange = false;
 const listeners = new Set();
 const emit = () => { for (const l of [...listeners]) l(); };
 
-function flushSetupWrites() {
+function flushSetupWrites({ deferCloud = false } = {}) {
   if (timer) { clearTimeout(timer); timer = null; }
   if (!pending || !writer) return;
   const payload = pending;
   const write = writer;
   const automaticSetup = !pendingHasManualChange;
+  const hidden = typeof document !== "undefined" && document.visibilityState === "hidden";
   pending = null;
   writer = null;
   owner = null;
   pendingHasManualChange = false;
-  write({ setupState: payload }, { automaticSetup });
+  write({ setupState: payload }, { automaticSetup, ...(deferCloud || hidden ? { deferCloud: true } : {}) });
   emit();
 }
 
@@ -61,6 +62,10 @@ function queueSetupWrite(next, updateSettings, userId, automatic) {
   // import. Such a batch is still the member's work and must report refusal.
   pendingHasManualChange ||= !automatic;
   if (timer) clearTimeout(timer);
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+    flushSetupWrites({ deferCloud: true });
+    return;
+  }
   timer = setTimeout(flushSetupWrites, DEBOUNCE_MS);
   emit();
 }
@@ -232,12 +237,16 @@ export function useSetupState() {
   }, [userId]);
 
   useEffect(() => {
-    const onHide = () => { if (document.visibilityState === "hidden") flushSetupWrites(); };
+    // A hidden/unloading document cannot finish a new token/PATCH round trip.
+    // Persist its pending work synchronously; the next foreground check or
+    // launch authorizes replay under the same account.
+    const onPageHide = () => flushSetupWrites({ deferCloud: true });
+    const onHide = () => { if (document.visibilityState === "hidden") onPageHide(); };
     document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", flushSetupWrites);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", flushSetupWrites);
+      window.removeEventListener("pagehide", onPageHide);
       flushSetupWrites();
     };
   }, []);

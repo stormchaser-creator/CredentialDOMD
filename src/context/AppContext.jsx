@@ -2023,7 +2023,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return guardedSetData(d => ({ ...d, [key]: updater(d[key]) }), { section: key, keepOnRefusal });
   }, [guardedSetData]);
 
-  const updateSettings = useCallback((updates, { automaticSetup = false, automatic = false } = {}) => {
+  const updateSettings = useCallback((updates, { automaticSetup = false, automatic = false, deferCloud = false } = {}) => {
     // Only derived Setup bookkeeping is automatic. A member's edit, or a
     // stopped account load, must still report why it could not be saved.
     const backgroundSetup = (automaticSetup === true || automatic === true)
@@ -2045,7 +2045,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // it goes up later as what it changed, not whole over a newer copy.
     const previous = updates && Object.hasOwn(updates, "setupState") ? { setupState: dataRef.current?.settings?.setupState ?? null } : null;
     if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }), { section: "settings", quiet })) return false;
-    sbSaveSettings(userIdRef.current, updates, user?.id, { automatic: backgroundSetup, previous }).then(result => {
+    const deferSetupCloud = deferCloud === true && Object.keys(updates || {}).length === 1 && Object.hasOwn(updates, "setupState");
+    sbSaveSettings(userIdRef.current, updates, user?.id, { automatic: backgroundSetup, previous, ...(deferSetupCloud ? { deferCloud: true } : {}) }).then(result => {
       // An address another account holds is refused and everything else
       // saved (saveSettings). Put back the address the profile still holds,
       // unless something newer was typed meanwhile, and say why.
