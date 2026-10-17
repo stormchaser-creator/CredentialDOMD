@@ -144,13 +144,13 @@ function NotificationCenter({ open, onClose }) {
                     <button onClick={() => { composeEmail(s.email, msg.subject, msg.body); markSent("email"); }} style={{
                       padding: "12px", borderRadius: 12, border: "none", backgroundColor: T.accent, color: "#fff",
                       fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                    }}><EmailIcon /> Email to {s.email}</button>
+                    }}><span style={{ display: "flex", flexShrink: 0 }}><EmailIcon /></span><span style={{ minWidth: 0, overflowWrap: "anywhere" }}>Email to {s.email}</span></button>
                   )}
                   {hasPhone && s.notifyText !== false && (
                     <button onClick={() => { setTextNotice(""); textAlert(s.phone, msg.body, setTextNotice); markSent("text"); }} style={{
                       padding: "12px", borderRadius: 12, border: "none", backgroundColor: T.success, color: "#fff",
                       fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                    }}><TextMsgIcon /> Text to {s.phone}</button>
+                    }}><span style={{ display: "flex", flexShrink: 0 }}><TextMsgIcon /></span><span style={{ minWidth: 0, overflowWrap: "anywhere" }}>Text to {s.phone}</span></button>
                   )}
                   {!hasEmail && !hasPhone && (
                     <div style={{ fontSize: 12, color: T.warning, padding: "10px", borderRadius: 10, backgroundColor: T.warningDim, textAlign: "center" }}>
