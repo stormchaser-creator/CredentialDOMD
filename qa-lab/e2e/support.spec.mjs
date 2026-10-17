@@ -60,15 +60,15 @@ test('support: ticket with a screenshot, owner replies in the app, member sees i
     await sleep(2000);
     const images = await other.page.locator('img').evaluateAll((els) => els.filter((e) => /sign|blob:/i.test(e.src) && e.complete && e.naturalWidth > 0).length);
     qa.check('the admin sees the ticket details', true);
-    const cspBlocked = qa.report.console.filter((l) => /Loading the image .*storage\/v1\/object\/sign.*violates|img-src/i.test(l));
+    const cspBlocked = qa.report.console.filter((l) => /storage\/v1\/object\/sign/.test(l) && /img-src|Content-Security-Policy/i.test(l));
     qa.check('the admin sees the screenshot (the image loads)', images > 0, `${images} loaded image(s)${cspBlocked.length ? `; CSP: ${cspBlocked[0].slice(0, 160)}` : ''}`);
     if (!images) {
       await qa.shot('admin ticket attachment', other.page);
       qa.bug({
-        title: 'Admin > Tickets: the ticket\'s screenshot never displays; the app\'s Content-Security-Policy blocks the signed Storage URL',
+        title: cspBlocked.length ? 'Admin > Tickets: signed screenshot refused by Content-Security-Policy' : 'Admin > Tickets: the screenshot thumbnail did not load or decode',
         step: 'More > Admin > Tickets > open a ticket filed with a screenshot',
         expected: 'The screenshot thumbnail shows (TicketAttachments renders <img src=signed URL>)',
-        actual: `Broken image. src/main.jsx sets img-src 'self' data: blob: https://img.clerk.com, but ticket-attachment-url returns a signed URL on the Supabase host (production: the project's supabase.co URL; lab: the gateway). Console: ${(cspBlocked[0] || 'blocked by CSP').slice(0, 200)}`,
+        actual: `No completed signed/blob image with nonzero naturalWidth. ${cspBlocked.length ? `A Storage-image CSP refusal was captured: ${cspBlocked[0].slice(0, 200)}` : 'No Storage-image CSP refusal was captured; inspect the response bytes, image decoder and request trace before assigning a cause.'}` ,
         severity: 'medium',
       });
     }
