@@ -5,6 +5,7 @@
 // subspecialty that follows its primary board, and "Rules changed?" (Cancel
 // sends nothing, Send lands in the owner's review queue).
 import { readFileSync } from 'node:fs';
+import { shareSheet } from './support/cred-helpers.mjs';
 import { test } from './support/fixtures.mjs';
 import { openMore, pendingOps, profileOf, rows, sleep, syncWarnings } from './support/lab.mjs';
 import {
@@ -73,7 +74,8 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
 
   await qa.feature('HOME-017', 'Renewal packet: a board-ready PDF to the share sheet or a download; an empty state explains', async () => {
     await home(page);
-    // A desk browser without a share sheet downloads the PDF.
+    // Select the no-share-sheet branch explicitly; desktop WebKit can share.
+    await shareSheet(page, { absent: true });
     const consoleMark = qa.report.console.length;
     const [dl] = await Promise.all([
       page.waitForEvent('download', { timeout: 30000 }).catch(() => null),
