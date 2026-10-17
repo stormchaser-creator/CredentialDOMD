@@ -581,10 +581,10 @@ export async function barState(page) {
 /** Scrolls content for the fixed-bar layout assertion. Native swipe behavior is checked on simulators. */
 export async function scrollContent(page, dy) {
   const vp = page.viewportSize();
-  const mobileWebkit = page.context().browser()?.browserType().name() === 'webkit'
-    && await page.evaluate(() => navigator.maxTouchPoints > 0);
-  if (mobileWebkit) {
-    // Playwright cannot send mouse.wheel in mobile WebKit. Exercise the same
+  const webkit = page.context().browser()?.browserType().name() === 'webkit';
+  if (webkit) {
+    // WebKit can report zero maxTouchPoints in a mobile touch context.
+    // Playwright cannot send mouse.wheel there. Exercise the same
     // real content scroller; retain the resulting offset and fixed-bar checks.
     await page.evaluate(dy => {
       const shell = [...document.querySelectorAll('#root div')].find(d => { const s = getComputedStyle(d); return (s.overflowY === 'auto' || s.overflowY === 'scroll') && Math.abs(d.clientHeight - window.innerHeight) < 3; });

@@ -54,14 +54,24 @@ export function webkitLabInitScript() {
       meta.set.call(this, csp ? String(v).replace(/;\s*upgrade-insecure-requests/g, '') : v);
     },
   });
-  if (!/iPhone|iPad/.test(navigator.userAgent) || !(navigator.maxTouchPoints > 0)) return;
-  try { Object.defineProperty(Navigator.prototype, 'standalone', { configurable: true, get: () => true }); } catch { /* read-only */ }
-  const mm = window.matchMedia.bind(window);
-  window.matchMedia = (q) => {
-    const r = mm(q);
-    if (!/display-mode:\s*standalone/.test(String(q))) return r;
-    return { matches: true, media: r.media, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } };
+  // WebKit reports zero maxTouchPoints, and its pointer media query can
+  // become coarse only after document start. Apply the installed-app model
+  // when the document is ready as well as immediately where supported.
+  if (!/iPhone|iPad/.test(navigator.userAgent)) return;
+  let modeled = false;
+  const modelInstalled = () => {
+    if (modeled || !(navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches)) return;
+    modeled = true;
+    try { Object.defineProperty(Navigator.prototype, 'standalone', { configurable: true, get: () => true }); } catch { /* read-only */ }
+    const mm = window.matchMedia.bind(window);
+    window.matchMedia = (q) => {
+      const r = mm(q);
+      if (!/display-mode:\s*standalone/.test(String(q))) return r;
+      return { matches: true, media: r.media, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } };
+    };
   };
+  modelInstalled();
+  document.addEventListener('DOMContentLoaded', modelInstalled, { once: true });
 }
 
 /** The iOS behaviour model's page side (window.__ios); a journey adds it with context.addInitScript. */
