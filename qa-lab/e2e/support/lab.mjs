@@ -643,7 +643,7 @@ export function syntheticPdf(text = 'QA synthetic document') {
 
 /** A tiny PNG (solid colour) for screenshot attachments. */
 export function syntheticPng() {
-  return Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAHklEQVR4nGNkYPjPQApgIkn1qIZRDaMaRjUMKw0AdTgBH0jPmM0AAAAASUVORK5CYII=', 'base64');
+  return Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGPQaLpDEmIY1TCqYfhqAACh/IYQaFWFngAAAABJRU5ErkJggg==', 'base64');
 }
 
 /** Clicks `trigger` and answers the file chooser it opens with `files` ({name, mimeType, buffer}). */
