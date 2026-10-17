@@ -32,6 +32,9 @@ export async function copyAndReadSynthetic(page, copy, markers) {
   const paste = async () => {
     await page.locator(`#${id} textarea`).focus();
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
+    // Chromium dispatches the native paste asynchronously after keyup. Wait
+    // for the input event without returning any clipboard contents.
+    await page.waitForFunction(id => Boolean(document.querySelector(`#${id} textarea`)?.value), id, { timeout: 5000 });
   };
   try {
     await panel(true);

@@ -25,6 +25,12 @@ test('the complete config schedules the WebKit-only journeys, and the dedicated 
   assert.equal(dedicated.use.browserName, 'webkit'); assert.equal(dedicated.use.isMobile, true);
   assert.equal(dedicated.use.serviceWorkers, 'block');
   assert.equal(main.projects[0].testIgnore, dedicated.testMatch);
-  assert.equal(ios.projects.length, 1); assert.equal(ios.projects[0].testIgnore, undefined);
+  const phone = ios.projects.find(p => p.name === 'ios-practice-webkit');
+  assert.equal(phone.testMatch, '**/ios-practice.spec.mjs');
+  assert.equal(ios.projects[0].testIgnore, phone.testMatch);
+  assert.equal(phone.use.browserName, 'webkit');
+  assert.equal(phone.use.isMobile, true); assert.equal(phone.use.hasTouch, true);
+  assert.equal(phone.use.serviceWorkers, 'block');
+  assert.deepEqual(phone.use.viewport, { width: 393, height: 852 });
   assert.equal(ios.use.browserName, 'webkit');
 });

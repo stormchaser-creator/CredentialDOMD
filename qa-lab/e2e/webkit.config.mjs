@@ -27,7 +27,11 @@ const { channel: _channel, ...use } = base.use;
 
 export default {
   ...base,
-  projects: [{ name: 'webkit' }],
+  projects: [
+    { name: 'webkit', testIgnore: '**/ios-practice.spec.mjs' },
+    { name: 'ios-practice-webkit', testMatch: '**/ios-practice.spec.mjs',
+      use: { ...IPHONE_15_APP, browserName: 'webkit', channel: undefined, serviceWorkers: 'block' } },
+  ],
   use: {
     ...use,
     ...(desk ? { ...devices['Desktop Safari'], viewport: { width: 1280, height: 900 } } : IPHONE_15_APP),

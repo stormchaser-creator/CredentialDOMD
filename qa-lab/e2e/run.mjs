@@ -45,6 +45,7 @@ import { settleDeliveryAudit } from '../lib/delivery-audit-fence.mjs';
 import { assessLabHealth } from '../lib/health-evidence.mjs';
 import { aggregateClientErrors, reconcileHealthClaims } from '../lib/health-claims.mjs';
 import { dockerClockWindow, readEdgeClock } from '../lib/edge-clock.mjs';
+import { patchWorkerGuard } from './support/playwright-worker-guard.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG = path.join(HERE, 'playwright.config.mjs');
@@ -139,6 +140,7 @@ export function startTopUps({ everyMs = TOP_UP_EVERY_MS, below = TOP_UP_BELOW, d
 
 /** Runs Playwright as a child (not spawnSync, so the top-ups can run meanwhile); resolves with its exit status. */
 function runPlaywright(args, env) {
+  patchWorkerGuard(REPO_ROOT);
   return new Promise((resolve) => {
     const pw = spawn(process.execPath, [PLAYWRIGHT, ...args], { stdio: 'inherit', cwd: REPO_ROOT, env });
     pw.once('error', (e) => { console.error(`qa-e2e: could not start Playwright: ${e.message}`); resolve(1); });

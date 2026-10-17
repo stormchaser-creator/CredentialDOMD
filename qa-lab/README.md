@@ -40,7 +40,7 @@ end to end:
    production's catalog, read-only, with a Supabase Management API token from
    the macOS keychain item `Supabase CLI` (what `supabase login` stores) or
    `SUPABASE_ACCESS_TOKEN` (section "Production access").
-2. **Once per checkout.** `npm ci`. The lab needs the dev dependencies
+2. **Once per checkout.** `npm ci --legacy-peer-deps`. The lab needs the dev dependencies
    `@playwright/test`, `playwright-core`, `jose`, `stripe` and `svix`
    (`package.json`), and so does `npm test`: `tests/qa-lab/mocks.test.mjs`
    drives the mocks with `jose`, `svix` and `stripe`, and
@@ -4360,3 +4360,23 @@ REPLAY_VARIANTS=main,redirect-early,redirect-late,weaknet,resume,discard,idle31-
 The PA/NP and signup/replay workflow checks are registered in the required
 feature manifest with stable numeric IDs. `legacyFeatureId` retains the labels
 used by earlier diagnosis captures.
+
+
+### Pinned Playwright opaque-frame guard (2026-10-17)
+
+The QA runner corrects the Playwright 1.63.0 worker-blocking initializer before
+starting the browser process. The original initializer reads
+`navigator.serviceWorker` outside a try; WebKit throws a SecurityError in the
+app's opaque invoice-email preview iframe. The correction catches only that
+SecurityError, keeps worker registration blocked in ordinary frames, and does
+not change the iframe sandbox or product code. It refuses unknown versions or
+initializer contents and refuses dependencies outside the checkout. Install a
+private dependency tree with `npm ci --legacy-peer-deps`; do not point this
+checkout's node_modules at another contributor's installation.
+
+`QA_WEBKIT_DESK=1` keeps ordinary journeys on desktop Safari; the seven
+`ios-practice` journeys retain their own touch-enabled iPhone project (with the
+iPad case overriding its viewport). Listing the configuration still finds all
+208 journeys. Clipboard checks use actual copy and keyboard paste, wait for
+the paste event to populate the input, and reject the synthetic sentinel when
+no copy happened. Only fixture-matching text is returned into test evidence.
