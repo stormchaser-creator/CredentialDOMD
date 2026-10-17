@@ -1,3 +1,4 @@
+import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 // RVUs and CPT codes, the way a surgeon uses them after a case: look a code
 // up (and ask the AI), bill it straight into the RVU log; describe the day's
 // work and let the coder turn it into CPT codes (the mock AI answers with a
@@ -38,9 +39,9 @@ test('practice CPT lookup: search, copy, ask the AI, bill it; a Credential-only 
     await qa.shot('cpt search');
     qa.check('searching 61343 finds it with its wRVU', /61343/.test(hitText) && /31\.06 wRVU/.test(hitText), hitText);
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
-    await hit.click();
+    const clip = await copyAndReadSynthetic(page, () => hit.click(), ['61343']);
     const copied = await waitFor('confirmed CPT copy', async () => /Copied to clipboard/.test(await hit.innerText()), { timeoutMs: 5000 }).catch(() => false);
-    qa.check('tapping a result confirms the clipboard write before saying copied', copied && await page.evaluate(() => navigator.clipboard.readText()) === '61343');
+    qa.check('tapping a result confirms the clipboard write before saying copied', copied && clip === '61343');
 
     // Simulate both browser permission routes being denied in this isolated
     // page. The UI must handle the rejection; no pageerror is expected.

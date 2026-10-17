@@ -1,3 +1,4 @@
+import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 // Case Logs and Peer References: the case-log summary by academic year with
 // its PDF and CSV reports and Vera's Excel export, a dictated case (the
 // browser's speech engine stood in for by the lab, the mock AI building the
@@ -246,9 +247,8 @@ test('case logs: summary, reports, Vera export, dictation; references: contacts,
     await shareSheet(page, { absent: true });
     const mark = qa.report.console.length;
     const dialogsBefore = qa.report.dialogs.length;
-    await (await pick()).click();
-    await sleep(3000);
-    const clip = await clipboardText(page);
+    const sendList = await pick();
+    const clip = await copyAndReadSynthetic(page, async () => { await sendList.click(); await sleep(3000); }, ['Violet Vance', 'Wendell Wu']);
     const said = qa.report.dialogs.slice(dialogsBefore).join(' | ');
     qa.check('without a share sheet the formatted list is copied and it says so', /Violet Vance/.test(clip) && /Wendell Wu/.test(clip) && !/Quincy Picker/.test(clip) && /reference list has been copied/i.test(said), { said, clip: clip.slice(0, 200) });
     let log = row(`select item_name, section, method, item_id, sent_at from public.share_log where user_id = '${pid}' order by created_at desc limit 1`);
@@ -293,9 +293,9 @@ test('case logs: summary, reports, Vera export, dictation; references: contacts,
       await card.getByRole('button', { name: /Email Heads-Up/ }).click();
       await email.waitFor({ timeout: 10000 });
     }
-    await email.getByRole('button', { name: 'Copy to Clipboard' }).click();
-    await sleep(500);
-    const clip = await clipboardText(page);
+    const clip = await copyAndReadSynthetic(page, async () => {
+      await email.getByRole('button', { name: 'Copy to Clipboard' }).click(); await sleep(500);
+    }, ['Dear Dr. Holt,', 'Casey Casebook']);
     qa.check('Copy to Clipboard copies the email body', /^Dear Dr\. Holt,/.test(clip) && /With sincere gratitude,\s*Casey Casebook/.test(clip), clip.slice(0, 120));
     qa.check('the draft closes after copying', !(await email.count()));
     await qa.shot('heads-up drafted');

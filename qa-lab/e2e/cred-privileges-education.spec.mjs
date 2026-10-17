@@ -1,3 +1,4 @@
+import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 // Credentials journeys: hospital privileges with a portal password encrypted
 // under a device lock code (read on a second browser with the same code),
 // education records (sorting, the CV, star, delete) and a professional photo
@@ -87,9 +88,9 @@ test('privileges keep an encrypted portal password; education and a professional
     await view.getByRole('button', { name: 'Show', exact: true }).click();
     const shown = await view.getByText(PASSWORD).first().waitFor({ timeout: 10000 }).then(() => true, () => false);
     qa.check('Show reveals the password on this device without asking (lock code remembered)', shown && prompts.length === 0, `prompts: ${prompts.length}`);
-    await view.getByRole('button', { name: 'Copy', exact: true }).click();
-    await sleep(500);
-    qa.check('Copy puts the password on the clipboard', (await clipboardText(page)) === PASSWORD);
+    const copiedPassword = await copyAndReadSynthetic(page,
+      () => view.getByRole('button', { name: 'Copy', exact: true }).click(), [PASSWORD]);
+    qa.check('Copy puts the password on the clipboard', copiedPassword === PASSWORD);
     await view.getByRole('button', { name: 'Hide', exact: true }).click();
     qa.check('Hide masks it again', !(await view.innerText()).includes(PASSWORD));
     await page.keyboard.press('Escape');

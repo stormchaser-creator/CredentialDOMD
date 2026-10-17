@@ -1,3 +1,4 @@
+import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 // The owner's Admin tabs beyond accounts and emails: Errors, Waitlist, Fields
 // and AI (tab counts against the database), Overview & reports (refresh, CSV),
 // Control history (paging) and Support views, Traffic history (visits and
@@ -143,8 +144,8 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
         severity: 'low',
       });
     }
-    await page.getByRole('button', { name: 'Copy waiting emails' }).click();
-    const clip = await page.evaluate(() => navigator.clipboard.readText()).catch((e) => `clipboard unavailable: ${e.message}`);
+    const clip = await copyAndReadSynthetic(page,
+      () => page.getByRole('button', { name: 'Copy waiting emails' }).click(), [`${leadName} <${leadEmail}>`]);
     qa.check('Copy waiting emails puts the new lead on the clipboard ("Name <email>")', clip.includes(`${leadName} <${leadEmail}>`), clip.slice(0, 200));
     // Re-open the tab: the label is read again.
     await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Fields/ }).click();
