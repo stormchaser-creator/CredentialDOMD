@@ -36,12 +36,15 @@ export function webkitLabInitScript() {
   // POST with workers blocked was routed). So guardContext's refusal of every host but this
   // machine, and every route stand-in, would be off. The installed app's offline shell is not
   // exercised in WebKit runs because of it.
-  if (navigator.serviceWorker) {
-    try {
+  try {
+    // In an opaque sandbox (the invoice email preview), even reading this
+    // property throws. Such a frame cannot register a worker in the first
+    // place; do not introduce a harness exception into its page.
+    if (navigator.serviceWorker) {
       Object.defineProperty(ServiceWorkerContainer.prototype, 'register', { configurable: true,
         value() { return Promise.reject(new DOMException('QA lab: no service worker in WebKit runs (Playwright cannot route a controlled page)', 'SecurityError')); } });
-    } catch { /* not replaceable */ }
-  }
+    }
+  } catch { /* unavailable in this context, or not replaceable */ }
   const meta = Object.getOwnPropertyDescriptor(HTMLMetaElement.prototype, 'content');
   Object.defineProperty(HTMLMetaElement.prototype, 'content', {
     configurable: true,
