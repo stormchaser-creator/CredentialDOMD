@@ -108,3 +108,22 @@ test('a token-delayed profile initialization is abandoned without creating a pro
   const request = membership.initializeProfile(); event('beforeunload'); token.resolve('synthetic-token');
   await assert.rejects(request, isBackgroundReadAbandoned); assert.equal(calls, 0);
 });
+
+
+test('a mobile hidden-to-visible return releases reads without pageshow; focus alone does not', async t => {
+  const event = page(t);
+  const doc = new EventTarget();
+  doc.visibilityState = 'visible';
+  window.document = doc;
+  canStartBackgroundRead();
+  doc.visibilityState = 'hidden'; doc.dispatchEvent(new Event('visibilitychange'));
+  event('pagehide');
+  let done = false;
+  const waiting = waitForBackgroundReads().then(() => { done = true; });
+  event('focus'); await Promise.resolve();
+  assert.equal(done, false);
+  assert.equal(canStartBackgroundRead(), false);
+  doc.visibilityState = 'visible'; doc.dispatchEvent(new Event('visibilitychange'));
+  await waiting;
+  assert.equal(canStartBackgroundRead(), true);
+});

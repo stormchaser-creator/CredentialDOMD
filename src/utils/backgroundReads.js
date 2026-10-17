@@ -13,7 +13,20 @@ function watch() {
   watchedWindow = target; leavingSince = null; pageHidden = false;
   target.addEventListener("beforeunload", () => { leavingSince = Date.now(); });
   target.addEventListener("pagehide", () => { pageHidden = true; });
-  target.addEventListener("pageshow", () => { pageHidden = false; leavingSince = null; });
+  const resume = () => { pageHidden = false; leavingSince = null; };
+  target.addEventListener("pageshow", resume);
+  // Mobile app switches can return through visibilitychange without pageshow.
+  // Require an observed hidden-to-visible transition; a focus event alone must
+  // never reopen transport on a document that is still navigating away.
+  const doc = target.document;
+  let observedHidden = doc?.visibilityState === "hidden";
+  doc?.addEventListener?.("visibilitychange", () => {
+    if (doc.visibilityState === "hidden") observedHidden = true;
+    else if (observedHidden && doc.visibilityState === "visible") {
+      observedHidden = false;
+      resume();
+    }
+  });
   return true;
 }
 
@@ -61,12 +74,14 @@ export function waitForBackgroundReads() {
       clearTimeout(timer);
       if (canStartBackgroundRead()) {
         target?.removeEventListener?.("pageshow", check);
+        target?.document?.removeEventListener?.("visibilitychange", check);
         resolve();
       } else if (!pageHidden) {
         timer = setTimeout(check, Math.max(1, LEAVE_WINDOW_MS - (Date.now() - leavingSince)));
       }
     };
     target?.addEventListener?.("pageshow", check);
+    target?.document?.addEventListener?.("visibilitychange", check);
     check();
   });
 }
