@@ -156,7 +156,20 @@ for (const width of [375, 390]) {
         if (!tb.bigEnough) file({ small: [{ el: 'button "Back"', size: tb.size }] });
         // A tap on the bar just above the word "Back" (still inside the 56 px bar, where a thumb lands).
         const bb = await back.boundingBox();
-        await page.touchscreen.tap(bb.x + bb.width / 2, Math.max(bb.y - 8, 2));
+        const textTop = await back.evaluate((button) => {
+          const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (!node.textContent.includes('Back')) continue;
+            const range = document.createRange(); range.selectNodeContents(node);
+            return range.getBoundingClientRect().top;
+          }
+          throw new Error('Back button has no visible text node');
+        });
+        // Measure above the word, not above the button itself. The previous
+        // coordinate was outside the 44px target and relied on touch adjustment.
+        const tapY = Math.max(bb.y + 1, textTop - 8);
+        qa.check('the upper-edge tap stays inside the actual Back target', tapY >= bb.y && tapY < bb.y + bb.height);
+        await page.touchscreen.tap(bb.x + bb.width / 2, tapY);
         await sleep(500);
         const stillLicenses = await page.getByRole('heading', { name: 'Licenses' }).first().isVisible().catch(() => false);
         qa.check('a tap 8 px above the word "Back" (inside the top bar) also goes back', !stillLicenses, stillLicenses ? 'still on Licenses: the tap missed' : 'went back');
