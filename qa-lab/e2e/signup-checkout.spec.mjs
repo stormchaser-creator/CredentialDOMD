@@ -170,6 +170,13 @@ profileReadinessTest('new signup: pending gate, $99 founding offer with Practice
     await waitForMemberApp(page);
     await qa.shot('member home after payment');
     qa.check('Home opens after payment', await page.getByRole('button', { name: /^Home$/ }).first().isVisible());
+    // AUTH-004 requested Support before payment. Its held destination now
+    // survives the membership gate and Checkout, just as an incoming link does.
+    const heldSupport = page.getByRole('dialog', { name: 'Help and feedback' });
+    await expect(heldSupport).toBeVisible();
+    qa.check('the requested Support destination opens after membership activation', true);
+    await heldSupport.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(heldSupport).not.toBeVisible();
     const pid = profileOf(subject).id;
     const subs = rows(`select offer_id, status, membership_active from public.billing_subscriptions where profile_id = '${pid}'`);
     qa.check('exactly one billing_subscriptions row, active', subs.length === 1 && subs[0].membership_active === true, subs);

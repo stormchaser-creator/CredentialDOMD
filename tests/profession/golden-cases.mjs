@@ -54,6 +54,7 @@ export async function loadModules() {
     ['cmeImport', 'src/utils/cmeImport.js'],
     ['forms', 'src/utils/credentialForms.js'],
     ['topicSources', 'src/utils/cmeTopicSources.js'],
+    ['assistantSources', 'src/constants/assistantSources.js'],
   ].map(([name, path]) => `export * as ${name} from ${JSON.stringify(`./${path}`)};`).join('\n');
   const out = await build({
     stdin: { contents, resolveDir: root, loader: 'js' },
