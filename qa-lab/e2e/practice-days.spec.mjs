@@ -6,6 +6,7 @@
 // CallSync (the lab answers the app's call to its callsync-feed function in
 // the browser, so nothing reaches CallSync).
 import path from 'node:path';
+import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 import { test } from './support/fixtures.mjs';
 import {
   SHOT_DIR,
@@ -184,7 +185,8 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
     const text = (await preview.innerText()).replace(/\s+/g, ' ');
     await qa.shot('duty invoice preview');
     qa.check('the preview itemises day rates and grid call rates to $5,150.00', /Day worked/.test(text) && /On call \(backup\): QA North Hospital \(QNH\)/.test(text) && /On call \(backup\): QA South Hospital \(QSH\)/.test(text) && /TOTAL DUE \$5,150\.00/.test(text), text.slice(0, 700));
-    await preview.getByRole('button', { name: 'Copy text & mark sent' }).click();
+    const clip = await copyAndReadSynthetic(page,
+      () => preview.getByRole('button', { name: 'Copy text & mark sent' }).click(), ['Day worked', '5,150.00']);
     const inv = await waitFor('the invoice', async () => row(`select * from public.invoices where user_id = '${profile.id}'`), { timeoutMs: 20000 }).catch(() => null);
     qa.check('an invoices row for $5,150.00 on the day-rate agreement covering the three days', !!inv && Number(inv.total_amount) === 5150 && inv.contract_id === contract.id && (inv.entry_ids || []).length === 3 && inv.period_start === day1 && inv.period_end === day3, inv && { number: inv.number, total: inv.total_amount, entries: inv.entry_ids, period: `${inv.period_start}..${inv.period_end}` });
     const billed = await waitFor('the exact duty days linked to this invoice', async () => {
@@ -198,7 +200,6 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
     }, { timeoutMs: 20000 }).catch(() => []);
     qa.check('each duty day now carries the invoice id', billed.length === 3 && billed.every((b) => b.invoice_id === inv?.id), billed);
     qa.check('the preview says it was marked sent', /Recorded as sent\. It's on the Invoices tab\./.test(await bodyText(page)) || !!inv);
-    const clip = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
     qa.check('the copied text is the invoice: its number, the lines and $5,150.00', clip.includes(inv?.number || '???') && /Day worked/.test(clip) && /5,150\.00/.test(clip), clip.slice(0, 300));
     await sleep(2000);
     qa.check('nothing is left to invoice', !(await page.getByRole('button', { name: /Invoice \d+ unbilled day/ }).isVisible().catch(() => false)));

@@ -5,6 +5,7 @@
 // mail composer and reads what they were handed); open an agreement's summary
 // and its signed file, archive and unarchive it, delete one with no work.
 import { randomUUID } from 'node:crypto';
+import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 import { test } from './support/fixtures.mjs';
 import {
   base64Marker, goTab, newMember, restAs, row, rows, scriptAi, sleep, syntheticPdf, tombstones, waitFor, waitForMemberApp,
@@ -215,11 +216,11 @@ test('practice invoices and agreements: share the PDF again, resend a text-only 
     await goTab(page, 'Practice');
     await subTab(page, 'Invoices');
     await installShareStandIn(page);
-    await page.getByRole('row').filter({ hasText: short.number }).getByRole('button', { name: 'Resend invoice' }).click();
+    const clip = await copyAndReadSynthetic(page,
+      () => page.getByRole('row').filter({ hasText: short.number }).getByRole('button', { name: 'Resend invoice' }).click(), ['INV-20250313-01', 'TOTAL DUE: $750.00']);
     const composer = await waitFor('the mail composer', async () => (await opened(page)).find((u) => /^mailto:/.test(u)) || null, { timeoutMs: 10000 }).catch(() => null);
     const mailBody = composer ? decodeURIComponent((/[?&]body=([^&]*)/.exec(composer) || [])[1] || '') : '';
     qa.check('Resend on a short text-only invoice opens the mail composer with the invoice text', !!composer && mailBody.includes('INV-20250313-01') && mailBody.includes('$750.00'), mailBody.slice(0, 300) || composer);
-    const clip = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
     qa.check('the full text is also on the clipboard', clip.includes('INV-20250313-01') && clip.includes('TOTAL DUE: $750.00'), clip.slice(0, 200));
     await page.getByRole('row').filter({ hasText: long.number }).getByRole('button', { name: 'Resend invoice' }).click();
     const longShare = await waitFor('the long invoice PDF', async () => (await shared(page)).find((s) => s.files.some((f) => /pdf/.test(f.type))) || null, { timeoutMs: 15000 }).catch(() => null);
