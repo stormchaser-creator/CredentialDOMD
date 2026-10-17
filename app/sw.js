@@ -1,7 +1,7 @@
-// 20261017T0026-bdae7fc is replaced at build time (see stampBuildId in vite.config.js).
+// 20261017T0138-f08d442 is replaced at build time (see stampBuildId in vite.config.js).
 // Because the id changes every deploy, this file's bytes change every deploy,
 // which is what makes the browser fire `updatefound` and install the new SW.
-const BUILD_ID = "20261017T0026-bdae7fc";
+const BUILD_ID = "20261017T0138-f08d442";
 const CACHE_NAME = `credentialdomd-${BUILD_ID}`;
 
 // All URLs are relative to the SW's own location so the same file works at
@@ -16,9 +16,9 @@ const PRECACHE_URLS = [
   "./manifest.json",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",
-  "./assets/App-D8kFurR9.js",
-  "./assets/index-C9rS31mj.js",
-  "./assets/index-kFK6Wn6R.css"
+  "./assets/App-Dz2GuyRF.js",
+  "./assets/index-kFK6Wn6R.css",
+  "./assets/index-tYYpg77g.js"
 ];
 
 // The PA and NP rule data's own chunk (src/utils/appRules.js), stamped at
@@ -27,7 +27,7 @@ const PRECACHE_URLS = [
 // loads the data, so a PA or NP opens offline after an update while an MD or
 // DO device never downloads it.
 const APP_RULES_URLS = [
-  "./assets/appRulesData-CCPwlP85.js"
+  "./assets/appRulesData-j5-FBW55.js"
 ];
 const FLAG_CACHE = "credentialdomd-flags";
 const APP_RULES_FLAG = "./__app-rules-wanted";
