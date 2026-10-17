@@ -112,14 +112,8 @@ test('the camera: a photo is taken into the review queue and kept; Cancel stores
   });
   const { profile } = await newMember(page, { firstName: 'Cam', lastName: 'Camera' });
   const cameraDocs = () => rows(`select name, type from public.documents where user_id = '${profile.id}' and name like 'camera-%'`);
-  const supportsSyntheticCamera = await page.evaluate(() => typeof HTMLCanvasElement.prototype.captureStream === 'function');
 
   await qa.feature('DOCS-005', 'Camera > Take Photo: a camera-<time>.jpg is read and kept', async () => {
-    if (!supportsSyntheticCamera) {
-      qa.blocked('DOCS-005', 'This engine has no canvas captureStream for the synthetic camera. Actual capture and review remain unverified here; the refused-permission path below still runs.');
-      await openDocuments(page);
-      return;
-    }
     await openDocuments(page);
     // Exact name: a stored photo's delete button is "Delete camera-<time>.jpg" (43341dc1).
     await page.getByRole('button', { name: 'Camera', exact: true }).click();
@@ -147,10 +141,6 @@ test('the camera: a photo is taken into the review queue and kept; Cancel stores
   });
 
   await qa.feature('DOCS-005', 'Camera > Cancel stores nothing', async () => {
-    if (!supportsSyntheticCamera) {
-      qa.blocked('DOCS-005', 'Cancel during an active synthetic camera stream requires canvas captureStream, absent in this engine. No capture permission or product API is overridden to claim coverage.');
-      return;
-    }
     const before = cameraDocs().length;
     await page.getByRole('button', { name: 'Camera', exact: true }).click();
     await page.getByRole('button', { name: 'Take Photo' }).waitFor({ timeout: 15000 });
