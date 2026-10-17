@@ -97,8 +97,7 @@ test('the camera: a photo is taken into the review queue and kept; Cancel stores
       } catch { /* the scan then gets the default answer */ }
       return url;
     };
-    const md = navigator.mediaDevices || (navigator.mediaDevices = {});
-    md.getUserMedia = async () => {
+    const fake = async () => {
       if (window.__qaCamera === 'deny') throw new DOMException('Permission denied', 'NotAllowedError');
       const cv = document.createElement('canvas');
       cv.width = 640; cv.height = 400;
@@ -109,8 +108,16 @@ test('the camera: a photo is taken into the review queue and kept; Cancel stores
       setInterval(draw, 100);
       return cv.captureStream(10);
     };
+    window.__qaCameraGetUserMedia = fake;
+    // Pin this property: WebKit can replace the native mediaDevices object
+    // after document-start initialization. Never fall through to a real camera.
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true,
+      value: { getUserMedia: fake, enumerateDevices: async () => [] } });
   });
   const { profile } = await newMember(page, { firstName: 'Cam', lastName: 'Camera' });
+  if (!(await page.evaluate(() => navigator.mediaDevices?.getUserMedia === window.__qaCameraGetUserMedia))) {
+    throw new Error('Synthetic camera adapter was not retained after signup; refusing a real camera call');
+  }
   const cameraDocs = () => rows(`select name, type from public.documents where user_id = '${profile.id}' and name like 'camera-%'`);
 
   await qa.feature('DOCS-005', 'Camera > Take Photo: a camera-<time>.jpg is read and kept', async () => {
