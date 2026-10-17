@@ -366,7 +366,7 @@ test('admin tier preview in the URL is ignored for a non-admin (unpaid signup an
 
 test('invitation link: captured before sign-in, removed from the address bar, kept out of error reports, grants nothing', {
   tag: ['@AUTH-015', '@AUTH-007'],
-}, async ({ page, qa }) => {
+}, async ({ page, qa, browserName }) => {
   test.setTimeout(6 * 60 * 1000);
   const token = randomBytes(33).toString('base64url').slice(0, 44);
   const since = nowSql();
@@ -404,7 +404,8 @@ test('invitation link: captured before sign-in, removed from the address bar, ke
 
   await qa.feature('AUTH-015', 'A client error carrying the token is reported with it redacted', async () => {
     qa.allowPageError(`QA forced error while opening /app/#launch_invite=${token}`);
-    qa.allowPageError(`QA forced rejection {"launch_invite":"${token}"}`);
+    // WebKit includes the Error name on promise rejections; the exact synthetic payload and count stay bounded.
+    qa.allowPageError(`${browserName === 'webkit' ? 'Error: ' : ''}QA forced rejection {"launch_invite":"${token}"}`);
     const sent = [];
     page.on('request', (r) => { if (r.url().includes('/functions/v1/report-error') && r.method() === 'POST') sent.push({ body: r.postData() || '', response: r.response() }); });
     await page.evaluate((t) => {

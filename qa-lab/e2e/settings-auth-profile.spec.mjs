@@ -296,10 +296,17 @@ test('settings: appearance, dashboard, notifications follow the account; text si
     if (!(await browserSw.count()) && await enable.count()) { await enable.click(); await sleep(1000); }
     const hasBrowser = await browserSw.count();
     if (hasBrowser) await browserSw.click();
-    if (browserState === 'denied') {
-      // Headless Chromium answers "denied" whatever the context grants; the app must then say so rather than offer a dead switch.
-      qa.check('with notifications blocked by the browser, the row says how to allow them', /Blocked\. Allow notifications/.test(await page.locator('body').innerText()), 'permission denied in the lab browser');
-    } else qa.check('Browser Notifications offers a switch once the browser allows notifications', hasBrowser > 0, `permission ${browserState}`);
+    const permissionAfter = await page.evaluate(() => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission));
+    if (permissionAfter === 'granted') {
+      qa.check('Browser Notifications offers a switch after permission is granted', hasBrowser > 0, `permission ${permissionAfter}`);
+    } else if (permissionAfter === 'denied') {
+      qa.check('with notifications blocked by the browser, the row says how to allow them', !hasBrowser && /Blocked\. Allow notifications/.test(await page.locator('body').innerText()), 'permission denied in the lab browser');
+    } else if (permissionAfter === 'default') {
+      qa.check('an unanswered notification prompt retains Enable without a dead toggle', !hasBrowser && await enable.isVisible() && /Click to enable/.test(await page.locator('body').innerText()), `permission stayed ${permissionAfter} after Enable; initially ${browserState}`);
+      qa.blocked('SETTINGS-014', 'This engine leaves notification permission at default after the real Enable click. The pending-permission UI is checked; granted native notification delivery is outside this browser control.');
+    } else {
+      qa.check('unsupported notifications offer no toggle or Enable button', !hasBrowser && !(await enable.count()), permissionAfter);
+    }
     await page.getByRole('button', { name: 'Biweekly', exact: true }).click();
     await sleep(3000);
     const p = profileOf(user.id);
