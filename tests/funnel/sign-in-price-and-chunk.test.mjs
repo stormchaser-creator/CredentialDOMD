@@ -54,7 +54,7 @@ async function compileAuthPage(states) {
     external: ['react', 'react/jsx-runtime'], define: { 'import.meta.env': JSON.stringify({ VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_synthetic' }) },
     plugins: [{ name: 'clerk-stub', setup(b) {
       b.onResolve({ filter: /^@clerk\/clerk-react$/ }, () => ({ path: 'clerk', namespace: 'fixture' }));
-      b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'import React from "react"; export const SignIn = () => React.createElement("div", { "data-clerk-widget": "SignIn" });', loader: 'jsx', resolveDir: root }));
+      b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'import React from "react"; export const SignIn = () => React.createElement("div", { "data-clerk-widget": "SignIn" }); export const useClerk = () => null; export const useSignIn = () => ({ isLoaded: false, signIn: null }); export const useSignUp = () => ({ isLoaded: false, signUp: null });', loader: 'jsx', resolveDir: root }));
     } }],
   });
   // useState in call order: the entry, the offer, the chunk notice.

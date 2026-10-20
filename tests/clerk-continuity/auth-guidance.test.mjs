@@ -32,6 +32,11 @@ async function compile(continuityFlag, reactRuntime = React) {
         });
         export const SignIn = props => widget('SignIn', props);
         export const SignUp = props => widget('SignUp', props);
+        // The guard imports these to patch Clerk 5.128's missed setActive;
+        // in SSR there is no sign-in resource, so the guard is a no-op.
+        export const useClerk = () => null;
+        export const useSignIn = () => ({ isLoaded: false, signIn: null });
+        export const useSignUp = () => ({ isLoaded: false, signUp: null });
       ` }));
     } }],
   });

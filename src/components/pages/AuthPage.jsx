@@ -1,6 +1,6 @@
 import { reservedAuthHeights } from "../../utils/authLayout.js";
 import { memo, useEffect, useRef, useState } from "react";
-import { SignIn } from "@clerk/clerk-react";
+import { SignIn, useClerk, useSignIn, useSignUp } from "@clerk/clerk-react";
 import { THEMES } from "../../constants/themes";
 import { AsclepiusIcon } from "../shared/Icons";
 import { SMS_SIGN_IN_ENABLED } from "../../utils/signInMethods";
@@ -71,6 +71,32 @@ function useOneTapEmailCode(containerRef, enabled) {
     root.addEventListener("click", onClick, true);
     return () => { mo.disconnect(); root.removeEventListener("click", onClick, true); };
   }, [containerRef, enabled]);
+}
+
+// Clerk 5.128.0's <SignIn withSignUp routing="hash"> can leave the client with
+// a successful sign-in or sign-up (status === "complete" + createdSessionId)
+// that it never activates: the widget keeps spinning. Verified live on
+// 2026-10-20: attemptFirstFactor returned complete + sess_... but
+// Clerk.session stayed null until something called setActive. This safety-net
+// watches both resources and activates the session the widget has already
+// created. A no-op when the widget behaves correctly (session already set).
+function SessionActivationGuard() {
+  const clerk = useClerk();
+  const { isLoaded: siLoaded, signIn } = useSignIn();
+  const { isLoaded: suLoaded, signUp } = useSignUp();
+  const createdSessionId =
+    (siLoaded && signIn?.status === "complete" && signIn.createdSessionId) ||
+    (suLoaded && signUp?.status === "complete" && signUp.createdSessionId) ||
+    null;
+  const activeSessionId = clerk?.session?.id || null;
+  useEffect(() => {
+    if (!clerk || !createdSessionId) return;
+    if (activeSessionId === createdSessionId) return;
+    clerk.setActive({ session: createdSessionId }).catch((err) => {
+      console.warn("Clerk fallback setActive failed:", err?.message || err);
+    });
+  }, [clerk, createdSessionId, activeSessionId]);
+  return null;
 }
 
 function AuthPage() {
@@ -193,6 +219,7 @@ function AuthPage() {
         )}
         {/* Clerk widget */}
         <div ref={widgetRef} data-auth-widget="" style={{ display: "flex", justifyContent: "center", minHeight: reserved.widget }}>
+          <SessionActivationGuard />
           {entry.ready && (
             <SignIn
               key={entry.version}

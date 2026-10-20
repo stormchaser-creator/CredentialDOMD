@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const built = await build({entryPoints:[`${root}src/components/pages/AuthPage.jsx`],bundle:true,write:false,format:'cjs',platform:'node',jsx:'automatic',external:['react','react/jsx-runtime'],define:{'import.meta.env':JSON.stringify({VITE_CLERK_PUBLISHABLE_KEY:'pk_live_synthetic'})},plugins:[{name:'auth-effects-fixture',setup(b){
  b.onResolve({filter:/^@clerk\/clerk-react$|useOneTapEmailCode|visitBeacon|authOffer/},a=>({path:a.path,namespace:'fixture'}));
- b.onLoad({filter:/.*/,namespace:'fixture'},({path})=>({contents:path.includes('clerk-react')?'import React from "react";export const SignIn=()=>React.createElement("div",{"data-clerk-widget":""});':path.includes('useOneTapEmailCode')?'export const useOneTapEmailCode=()=>{};':path.includes('visitBeacon')?'export const sendAuthVisit=()=>{};':'export const loadAuthOffer=async()=>null;',loader:'jsx',resolveDir:root}));
+ b.onLoad({filter:/.*/,namespace:'fixture'},({path})=>({contents:path.includes('clerk-react')?'import React from "react";export const SignIn=()=>React.createElement("div",{"data-clerk-widget":""});export const useClerk=()=>null;export const useSignIn=()=>({isLoaded:false,signIn:null});export const useSignUp=()=>({isLoaded:false,signUp:null});':path.includes('useOneTapEmailCode')?'export const useOneTapEmailCode=()=>{};':path.includes('visitBeacon')?'export const sendAuthVisit=()=>{};':'export const loadAuthOffer=async()=>null;',loader:'jsx',resolveDir:root}));
 }}]});
 function fixture(initialFields=false){
  const saved={window:globalThis.window,setTimeout:globalThis.setTimeout,clearTimeout:globalThis.clearTimeout,MutationObserver:globalThis.MutationObserver};
