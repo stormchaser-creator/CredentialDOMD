@@ -6,7 +6,7 @@
 // SignInMethodsCard.jsx) runs unchanged against a local test physician.
 //
 // Exports exactly what the app imports from Clerk: ClerkProvider, useUser,
-// useAuth, useClerk, SignedIn, SignedOut, SignIn.
+// useAuth, useClerk, useSignIn, useSignUp, SignedIn, SignedOut, SignIn.
 import { useEffect, useSyncExternalStore } from 'react';
 import { qaClerk } from './qa-clerk.js';
 import QaSignIn from './QaSignIn.jsx';
@@ -62,4 +62,15 @@ export function SignedOut({ children }) {
 // AuthPage passes Clerk's appearance/routing props; the QA sign-in ignores them.
 export function SignIn() {
   return <QaSignIn clerk={qaClerk} />;
+}
+
+// AuthPage's SessionActivationGuard uses these as a safety-net against the
+// Clerk 5.128 setActive miss. In the QA lab the local QaSignIn owns the
+// session directly, so these resources are always empty — the guard is a no-op.
+export function useSignIn() {
+  return { isLoaded: true, signIn: null };
+}
+
+export function useSignUp() {
+  return { isLoaded: true, signUp: null };
 }

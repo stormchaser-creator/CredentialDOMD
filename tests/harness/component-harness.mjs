@@ -39,7 +39,7 @@ const STUBS = {
 };
 // Sign-in (Clerk) for screens that read the signed-in user, such as Settings.
 // Only bundled in by a test that asks for it: loadScreens(src, { clerk: true }).
-const CLERK = 'const u = () => globalThis.__screen.clerkUser ?? null; export const useUser = () => ({ isLoaded: true, isSignedIn: !!u(), user: u() }); export const useClerk = () => ({ user: u(), signOut: async () => {}, openUserProfile() {} }); export const useAuth = () => ({ isLoaded: true, userId: u()?.id ?? null, getToken: async () => null }); export const SignedIn = ({ children }) => children; export const SignedOut = () => null; export const SignIn = () => null; export const ClerkProvider = ({ children }) => children;';
+const CLERK = 'const u = () => globalThis.__screen.clerkUser ?? null; export const useUser = () => ({ isLoaded: true, isSignedIn: !!u(), user: u() }); export const useClerk = () => ({ user: u(), signOut: async () => {}, openUserProfile() {} }); export const useAuth = () => ({ isLoaded: true, userId: u()?.id ?? null, getToken: async () => null }); export const useSignIn = () => ({ isLoaded: false, signIn: null }); export const useSignUp = () => ({ isLoaded: false, signUp: null }); export const SignedIn = ({ children }) => children; export const SignedOut = () => null; export const SignIn = () => null; export const ClerkProvider = ({ children }) => children;';
 
 // A minimal hook runtime: state and refs persist by call order; memo and
 // callback recompute every render (always correct, never stale); effects run
