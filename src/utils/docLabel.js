@@ -17,6 +17,7 @@ const SECTION_LABELS = {
   education: "Education",
   locumContracts: "Agreement",
   workHistory: "Work history",
+  addressHistory: "Address",
   peerReferences: "Reference",
   malpracticeHistory: "Malpractice",
   screenings: "Screening",

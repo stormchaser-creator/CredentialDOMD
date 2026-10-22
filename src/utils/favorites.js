@@ -31,7 +31,7 @@ export const PRO_GATED = new Set([
 //                              correct for the star write
 export const STARRABLE_SECTIONS = [
   "licenses", "privileges", "insurance",
-  "cme", "education", "workHistory", "caseLogs",
+  "cme", "education", "workHistory", "addressHistory", "caseLogs",
   "healthRecords", "travelDocs", "screenings", "professionalPhotos",
   "publications", "memberships", "peerReferences", "malpracticeHistory",
   // Records in the physician's own categories. custom_records declares its

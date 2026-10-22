@@ -20,12 +20,14 @@ export const ADMIN_ACCESS_POLICY = Object.freeze({
 });
 
 // Fixed owner-facing line. Enforced by the SQL allowlist, not by this text.
-export const ADMIN_ACCESS_NEVER_SHARED = 'Passport and travel IDs, receipts, taxes, invoices, contracts, unfiled uploads';
+export const ADMIN_ACCESS_NEVER_SHARED = 'Passport and travel IDs, your address history, receipts, taxes, invoices, contracts, unfiled uploads';
 
 // Collections that are never offered and never shown (document for the tests;
-// the SQL simply has no branch for them).
+// the SQL simply has no branch for them). addressHistory: where the physician
+// lived is personal, and sharing it would need its own opt-in section and a
+// branch in the SQL allowlist (credential_portal_records), not a catalog line.
 export const ADMIN_ACCESS_DENIED = Object.freeze([
-  'travelDocs', 'travelExpenses', 'taxPayments', 'invoices', 'deductibles', 'locumContracts', 'workLog', 'encounters',
+  'addressHistory', 'travelDocs', 'travelExpenses', 'taxPayments', 'invoices', 'deductibles', 'locumContracts', 'workLog', 'encounters',
   'scheduleDays', 'dutyDays', 'rotations', 'taskNotes', 'shareLog', 'notificationLog', 'alertAcks', 'followUps',
   'identityVault', 'answerBank', 'documents', 'customCategories', 'customRecords',
 ]);

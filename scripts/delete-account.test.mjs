@@ -39,9 +39,12 @@ function mapValues(constName) {
   return [...block.matchAll(/^\s*\w+:\s*"([^"]+)"/gm)].map((m) => m[1]);
 }
 
-// ── The 31 collections: exactly TABLE_MAP, no more, no less ─────────────────
+// ── The 34 collections: exactly TABLE_MAP, no more, no less ─────────────────
+// The count is a tripwire, and it works: adding address_history fired it, which
+// is the prompt to check that deletion sweeps the new table too. Raise it only
+// after confirming the equality below, which is the assertion that matters.
 const tableMap = mapValues("TABLE_MAP");
-eq("TABLE_MAP parsed from supabase.js has 33 tables", tableMap.length, 33);
+eq("TABLE_MAP parsed from supabase.js has 34 tables", tableMap.length, 34);
 eq("COLLECTION_TABLES is TABLE_MAP, same order", COLLECTION_TABLES, tableMap);
 eq("no duplicate collection table", new Set(COLLECTION_TABLES).size, COLLECTION_TABLES.length);
 

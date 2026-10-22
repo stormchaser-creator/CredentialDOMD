@@ -71,6 +71,7 @@ export const DEFAULT_DATA = {
   shareLog: [],
   notificationLog: [],
   workHistory: [],
+  addressHistory: [], // [{ id, kind: "home"|"work", placeName, street, unit, city, state, postalCode, country, startDate, endDate, isCurrent, notes, favorite }]
   peerReferences: [],
   dutyDays: [],       // [{ id, contractId, date, workedDay, scholarly, callHospital, callRole, amount }]
   taskNotes: [],      // [{ id, text, contractId, capturedAt, startedAt, completedAt }]

@@ -1,6 +1,26 @@
 {
- "_source": "information_schema.columns, production project, read 2026-09-25 (column names only, no data)",
+ "_source": "information_schema.columns, production project, read 2026-09-25 (column names only, no data); address_history added 2026-10-22 from the production column list (2026-09-18 migration, verified read-only) plus kind, place_name and favorite from 20261022120000_address_history_kind.sql",
  "tables": {
+  "address_history": [
+   "id",
+   "user_id",
+   "street",
+   "unit",
+   "city",
+   "state",
+   "postal_code",
+   "country",
+   "start_date",
+   "end_date",
+   "is_current",
+   "notes",
+   "custom_fields",
+   "created_at",
+   "updated_at",
+   "kind",
+   "place_name",
+   "favorite"
+  ],
   "alert_acks": [
    "id",
    "user_id",

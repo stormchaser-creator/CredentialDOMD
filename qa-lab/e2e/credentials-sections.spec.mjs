@@ -24,6 +24,8 @@ const SECTIONS = [
     ['Activity / Title', 'QA Neurosurgery Update'], ['Credit Category', { label: 'AMA PRA Category 1' }], ['Hours', '5'], ['Date Completed', day(-20)], ['Provider / Institution', 'QA CME Provider'] ] },
   { id: 'CRED-019', section: 'Work History', table: 'work_history', mark: 'QA Health Partners', edit: ['City', 'Aurora'], fields: [
     ['Position Type', { index: 1 }], ['Position/Title', 'Attending Neurosurgeon'], ['Employer/Organization', 'QA Health Partners'], ['City', 'Denver'], ['State', { label: 'CO' }], ['Start Date', day(-1500)] ] },
+  { id: 'CRED-049', section: 'Addresses', table: 'address_history', mark: 'QA Synthetic General Hospital', edit: ['City', 'Aurora'], fields: [
+    ['Type', { label: 'Work (worked here)' }], ['Place', 'QA Synthetic General Hospital'], ['Street Address', '100 QA Clinic Way'], ['City', 'Denver'], ['State', { label: 'CO' }], ['From', day(-900)] ] },
   { id: 'CRED-021', section: 'Health Records', table: 'health_records', mark: 'QA Flu Shot', edit: ['Lot / Batch #', 'QA-LOT-22'], fields: [
     ['Category', { label: 'Vaccination' }], ['Display Name', 'QA Flu Shot'], ['Date Administered', day(-30)], ['Lot / Batch #', 'QA-LOT-21'], ['Administrator / Facility', 'QA Clinic'] ] },
   { id: 'CRED-022', section: 'Travel & IDs', table: 'travel_docs', mark: 'QA-TRAVEL-4410', edit: ['Label (optional)', 'QA frequent flyer (edited)'], fields: [
@@ -124,7 +126,7 @@ test('credentials: every other section adds, edits, survives a reload and delete
   await qa.feature('CRED-006', 'Credentials menu shows each section', async () => {
     await openCredentials(page);
     const nav = page.getByRole('navigation').filter({ hasText: 'Active Credentials' });
-    for (const s of ['Licenses', 'Privileges', 'Insurance', 'CME Credits', 'Education', 'Work History', 'Case Logs', 'Health Records', 'Travel & IDs', 'Screenings', 'Publications', 'Peer References', 'Malpractice History']) {
+    for (const s of ['Licenses', 'Privileges', 'Insurance', 'CME Credits', 'Education', 'Work History', 'Addresses', 'Case Logs', 'Health Records', 'Travel & IDs', 'Screenings', 'Publications', 'Peer References', 'Malpractice History']) {
       qa.check(`the menu lists ${s}`, await nav.getByRole('button', { name: new RegExp(`${s.replace(/[&]/g, '&')}`) }).count() > 0);
     }
     qa.check('the Setup row shows "X of Y"', /Setup\s*\d of \d/.test(await nav.innerText()));

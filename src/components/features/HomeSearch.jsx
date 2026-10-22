@@ -24,6 +24,7 @@ export const SECTIONS = [
   { key: "screenings", label: "Screenings", tab: "credentials", sub: "screenings" },
   { key: "education", label: "Education", tab: "credentials", sub: "education" },
   { key: "workHistory", label: "Work history", tab: "credentials", sub: "workHistory" },
+  { key: "addressHistory", label: "Addresses", tab: "credentials", sub: "addressHistory" },
   { key: "peerReferences", label: "References", tab: "credentials", sub: "peerReferences" },
   { key: "memberships", label: "Memberships", tab: "credentials", sub: "memberships" },
   { key: "malpracticeHistory", label: "Malpractice", tab: "credentials", sub: "malpracticeHistory" },
@@ -48,7 +49,9 @@ const TEXT_FIELDS = ["name", "type", "title", "facility", "state", "city", "prov
   "licenseNumber", "number", "policyNumber", "notes", "description", "category", "topics", "vendor", "merchant", "payer", "agency",
   "invoiceNumber", "contact", "email", "phone", "portalUrl", "loginUsername", "specialty", "role", "procedure", "cptCodes", "codes",
   "subject", "text", "label", "degree", "school", "employer", "position", "journal", "authors", "location", "billTo", "billToLabel",
-  "categoryName", "fieldValues", "customFields"];
+  "categoryName", "fieldValues", "customFields",
+  // Addresses: a search by street, ZIP or the place worked finds the address.
+  "street", "postalCode", "placeName"];
 
 // "UHS" should find "University Health System": add the
 // initials of every multi-word value (with and without small words) to

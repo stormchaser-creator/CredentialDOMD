@@ -29,6 +29,7 @@ export const SECTIONS: Section[] = [
   { table: "education", key: "education", label: "Education and training" },
   { table: "case_logs", key: "caseLogs", label: "Case log" },
   { table: "work_history", key: "workHistory", label: "Work history" },
+  { table: "address_history", key: "addressHistory", label: "Addresses (home and work)" },
   { table: "peer_references", key: "peerReferences", label: "Peer references" },
   { table: "malpractice_history", key: "malpracticeHistory", label: "Malpractice history" },
   { table: "documents", key: "documents", label: "Documents" },

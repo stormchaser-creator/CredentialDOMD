@@ -9,6 +9,7 @@ import { mergeIdentityRestore, SECTION as IDENTITY_SECTION } from "../../utils/p
 import BackupPanel from "./BackupPanel";
 import { plainLabel, isCurrentJob } from "../../utils/helpers";
 import { lifecycleSummary } from "../../utils/lifecycle";
+import { addressGroups } from "../../utils/addressHistory";
 import { professionCopy } from "../../constants/professionCopy";
 
 // What a vault restore says: how many notes it put back, or why none.
@@ -296,6 +297,11 @@ function DataExport() {
       `${h.type || h.category} | ${h.result || ""} | ${h.dateAdministered || ""}`);
     addSection("Work History", data.workHistory, w =>
       `${w.position || ""} | ${w.employer || ""} | ${w.startDate || ""} - ${isCurrentJob(w.current) ? "Present" : (w.endDate || "")}`);
+    // Addresses: Home (where you lived) then Work (where you worked), each
+    // oldest first, the order an application asks for them in.
+    for (const g of addressGroups(data.addressHistory)) {
+      addSection(g.label, g.rows, r => `${r.line} | ${r.dates}`);
+    }
     addSection("Peer References", data.peerReferences, r =>
       `${r.name || ""}, ${r.degree || ""} | ${r.specialty || ""} | ${r.email || ""} | ${r.phone || ""}`);
 

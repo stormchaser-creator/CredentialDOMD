@@ -5,6 +5,7 @@ import { redactForExport } from "../lib/supabase.js";
 import { isIdentityLink, withoutIdentityRecords } from "./pausedApplicationRecords.js";
 import { lifecycleSummary, isDateUnknown } from "./lifecycle.js";
 import { isCurrentJob } from "./helpers.js";
+import { addressGroups, isCurrent as isCurrentAddress } from "./addressHistory.js";
 
 /**
  * Section key to the folder its documents belong in. This is the ONE list:
@@ -189,6 +190,26 @@ export function buildCredentialRows(data, { privateNotes = false } = {}) {
       State: wh.state || "",
       Notes: wh.title || wh.position || "",
     });
+  }
+
+  // Addresses: Home (where you lived) then Work (where you worked), each
+  // sorted oldest first and rendered as one line, because the form this is
+  // copied onto asks for them in that order and checks where you lived for gaps.
+  for (const g of addressGroups(data.addressHistory)) {
+    for (const { row: ad, line } of g.rows) {
+      const current = isCurrentAddress(ad);
+      rows.push({
+        Credential: line,
+        Type: g.kind === "work" ? "Work Address" : "Home Address",
+        "Issuing Authority": "",
+        "License/Cert #": "",
+        "Issue Date": ad.startDate || "",
+        "Expiration Date": current ? "Present" : (ad.endDate || ""),
+        Status: current ? "Current" : "Past",
+        State: ad.state || "",
+        Notes: memo(ad.notes),
+      });
+    }
   }
 
   for (const ref of data.peerReferences || []) {

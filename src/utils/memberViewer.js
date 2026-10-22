@@ -50,7 +50,7 @@ export function createReadOnlyView(snapshot) {
 
 // ─── Presentation, the way the member's own cards read ──────────────────
 
-const TITLE_SECTIONS = new Set(["licenses", "insurance", "privileges", "workHistory", "education", "healthRecords", "malpracticeHistory", "memberships", "peerReferences", "publications", "caseLogs", "customRecords"]);
+const TITLE_SECTIONS = new Set(["licenses", "insurance", "privileges", "workHistory", "addressHistory", "education", "healthRecords", "malpracticeHistory", "memberships", "peerReferences", "publications", "caseLogs", "customRecords"]);
 
 function contractLabel(snapshot, id) {
   const contract = (snapshot?.sections?.locumContracts || []).find(item => item.id === id);

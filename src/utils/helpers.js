@@ -8,6 +8,7 @@ import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
 import { scrubSsn, plainDashes, withDegree } from "./outgoingText.js";
 import { LIFECYCLE_SECTIONS, lifecycleNote } from "./lifecycle.js";
 import { daysUntilDate } from "./dateDays.js";
+import { isWorkAddress, isCurrent as isCurrentAddress } from "./addressHistory.js";
 
 export const MS_PER_DAY = 86400000;
 
@@ -238,6 +239,15 @@ export function getSectionFacts(item, section) {
     a("State", item.state); a("Outcome", item.outcome); a("Settlement Amount", item.settlementAmount);
     a("Facility", item.facility); a("Insurance Carrier", item.insuranceCarrier);
     a("Date Resolved", formatDate(item.dateResolved)); a("Description", item.description);
+  } else if (section === "addressHistory") {
+    const work = isWorkAddress(item);
+    a("Type", work ? "Work" : "Home");
+    if (work) a("Place", item.placeName);
+    a("Address", [[item.street, item.unit].filter(Boolean).join(" "), item.city,
+      [item.state, item.postalCode].filter(Boolean).join(" "), item.country].filter(Boolean).join(", "));
+    a("From", formatDate(item.startDate));
+    a("To", isCurrentAddress(item) ? "Present" : formatDate(item.endDate));
+    a("Notes", item.notes);
   } else if (section === "workHistory") {
     a("Position", item.position); a("Employer", item.employer);
     a("Location", [item.city, item.state].filter(Boolean).join(", "));
@@ -569,6 +579,9 @@ export function describeItem(item, physicianName, sectionKey) {
     || ("policyNumber" in item ? "insurance" : null)
     || ("appointmentDate" in item ? "privileges" : null)
     || ("employer" in item ? "workHistory" : null)
+    // Before education, which also carries a city: an address record is the
+    // only one with a street.
+    || ("street" in item ? "addressHistory" : null)
     || ("graduationDate" in item && "institution" in item ? "education" : null)
     || ("citation" in item ? "publications" : null)
     || ("organization" in item ? "memberships" : null);
@@ -582,6 +595,12 @@ export function describeItem(item, physicianName, sectionKey) {
       return join(t(item.type) || "Privileges", t(item.facility));
     case "workHistory":
       return join(t(item.position) || t(item.type) || "Position", t(item.employer));
+    case "addressHistory":
+      // A work address is named by its place (the hospital or practice).
+      // Otherwise the street is the name of an address: city alone repeats
+      // across a history and reads as three identical cards.
+      if (isWorkAddress(item) && t(item.placeName)) return join(t(item.placeName), t(item.city));
+      return join(t(item.street) || t(item.city) || "Address", t(item.city) && t(item.street) ? t(item.city) : "");
     case "education":
       // The curated display name IS the information ("Skull Base
       // Fellowship") — type-first collapsed every card into "Residency,

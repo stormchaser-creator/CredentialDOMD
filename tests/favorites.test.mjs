@@ -96,6 +96,12 @@ test("every table in TABLE_MAP has a favorite column in some migration", () => {
     for (const m of sql.matchAll(/create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gi)) {
       if (/\bfavorite\s+boolean\b/i.test(m[2])) covered.add(m[1]);
     }
+    // A table created before it had one gains it in a later, additive
+    // migration (address_history: 20261022120000_address_history_kind.sql).
+    for (const st of sql.split(";")) {
+      const m = /alter table public\.([a-z_]+)\b/i.exec(st);
+      if (m && /add column if not exists favorite\s+boolean\b/i.test(st)) covered.add(m[1]);
+    }
   }
   for (const table of Object.values(tableMap())) {
     assert.ok(covered.has(table),

@@ -354,6 +354,7 @@ const TABLE_MAP = {
   education: "education",
   caseLogs: "case_logs",
   workHistory: "work_history",
+  addressHistory: "address_history",
   peerReferences: "peer_references",
   malpracticeHistory: "malpractice_history",
   documents: "documents",
@@ -515,6 +516,8 @@ const RECORD_COLUMN_DEFAULTS = {
   insurance: { lifecycle_status: "active", date_unknown: false },
   privileges: { lifecycle_status: "active", date_unknown: false },
   workHistory: { is_current: false, current: false },
+  // 20260918b_address_history.sql: is_current boolean default false.
+  addressHistory: { is_current: false },
   locumContracts: {
     hourly_rate: 0, call_hourly_rate: 0, increment_minutes: 15, min_call_minutes: 15,
     call_stipend: 0, stipend_hours: 0, overage_hourly_rate: 0, orientation_fee: 0,
@@ -591,7 +594,7 @@ export function recordContent(collectionKey, item) {
 const JSONB_RECORD_COLUMNS = {
   licenses: ["custom_fields"], cme: ["topics", "custom_fields"], privileges: ["custom_fields"],
   insurance: ["custom_fields"], healthRecords: ["doses", "custom_fields"], education: ["custom_fields"],
-  caseLogs: ["custom_fields"], workHistory: ["custom_fields"], peerReferences: ["custom_fields"],
+  caseLogs: ["custom_fields"], workHistory: ["custom_fields"], addressHistory: ["custom_fields"], peerReferences: ["custom_fields"],
   malpracticeHistory: ["custom_fields"], locumContracts: ["coverage_periods", "custom_fields", "call_rate_grid"],
   encounters: ["codes"], screenings: ["components", "custom_fields"], professionalPhotos: ["custom_fields"],
   publications: ["custom_fields"], travelDocs: ["custom_fields"], travelExpenses: ["custom_fields"],

@@ -22,6 +22,7 @@ const ROUTES = {
   screenings: ["credentials", "screenings", "Screening"],
   education: ["credentials", "education", "Education"],
   workHistory: ["credentials", "workHistory", "Work history"],
+  addressHistory: ["credentials", "addressHistory", "Address"],
   peerReferences: ["credentials", "peerReferences", "Reference"],
   memberships: ["credentials", "memberships", "Membership"],
   malpracticeHistory: ["credentials", "malpracticeHistory", "Malpractice"],

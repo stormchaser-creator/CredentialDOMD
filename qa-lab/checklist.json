@@ -5222,6 +5222,32 @@
     ]
   },
   {
+    "id": "CRED-049",
+    "priority": "P1",
+    "area": "CRED",
+    "name": "Addresses (home and work)",
+    "roles": [
+      "full member"
+    ],
+    "where": "Credentials > Addresses",
+    "steps": [
+      "Open Credentials; Addresses is listed next to Work History",
+      "Add a Home address: street, city, state, From, Current ticked",
+      "Add a Work address: Type Work, Place (hospital or practice), city, state, From, To",
+      "Add an older Home address leaving a gap of a few months before the current one",
+      "Edit the Work address's city; reload; delete it"
+    ],
+    "expected": "Both save and survive a reload. The banner talks about where you lived and names the gap between the two homes; the Work address never changes it. A work card is named by its place.",
+    "server_checks": [
+      "select kind, place_name, street, city, state, start_date, end_date, is_current, favorite from address_history where id='<id>'"
+    ],
+    "tests": [
+      "scripts/address-history.test.mjs",
+      "tests/address-history-export.test.mjs",
+      "tests/address-history-sql.test.mjs"
+    ]
+  },
+  {
     "id": "HOME-019",
     "priority": "P2",
     "area": "HOME",

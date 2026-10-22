@@ -30,6 +30,10 @@ export const REQUIRED_COLUMNS = {
   // trainingStartYear through SETTINGS_TO_PROFILE, and one unknown column
   // rejects the whole settings save.
   profiles: ["training_start_year"],
+  // 20261022120000_address_history_kind.sql: the Addresses form writes kind
+  // and placeName, and the star writes favorite. (Its Current is is_current,
+  // created with the table in 20260918b, which check-tables-exist covers.)
+  address_history: ["kind", "place_name", "favorite"],
   // Not listed: invoices.last_emailed_at / last_emailed_to
   // (20260925130000_invoice_email_sends.sql). send-invoice-email writes them
   // and the app only reads them; src/lib/supabase.js strips them from every

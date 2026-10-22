@@ -19,6 +19,7 @@ export const COLLECTION_TABLES: string[] = [
   "education",
   "case_logs",
   "work_history",
+  "address_history",
   "peer_references",
   "malpractice_history",
   "documents",

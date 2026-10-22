@@ -64,10 +64,11 @@ test("every required column is created by a migration in this repo", () => {
 test("the lifecycle columns are required exactly as src/utils/lifecycle.js lists them", async () => {
   const { LIFECYCLE_COLUMNS } = await import("../src/utils/lifecycle.js");
   for (const [table, cols] of Object.entries(LIFECYCLE_COLUMNS)) assert.deepEqual(REQUIRED_COLUMNS[table], cols, table);
-  // 13 lifecycle + 3 call-day split + profiles.training_start_year. The
-  // invoice email stamp is server-owned and never written by the client, so
-  // it is not a client-written column.
-  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 17);
+  // 13 lifecycle + 3 call-day split + profiles.training_start_year + the 3
+  // address columns (kind, place_name, favorite). The invoice email stamp is
+  // server-owned and never written by the client, so it is not a
+  // client-written column.
+  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 20);
 });
 
 test("the client keys these columns stand for are the ones it writes", () => {
@@ -75,6 +76,10 @@ test("the client keys these columns stand for are the ones it writes", () => {
   assert.match(read("components/features/locum/Contracts.jsx"), /entry\.splitAtDayStart =/);
   assert.match(read("components/features/locum/Contracts.jsx"), /entry\.dayStartHour =/);
   assert.match(read("utils/billing.js"), /splitGroupId/);
+  // The Addresses form: Type is kind, Place is placeName, and it is starrable.
+  assert.match(read("App.jsx"), /\{ key: "kind", label: "Type", type: "choice"/);
+  assert.match(read("App.jsx"), /\{ key: "placeName", label: "Place"/);
+  assert.match(read("App.jsx"), /sectionKey="addressHistory" favoritable/);
   // The invoice email stamp: written by send-invoice-email and mirrored into
   // the device cache by Invoices.jsx, but stripped from every client write,
   // so it is not required here (tests/limited-launch/persistence.test.mjs

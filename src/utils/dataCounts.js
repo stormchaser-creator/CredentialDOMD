@@ -13,7 +13,7 @@ export const COUNT_EXCLUDED = Object.freeze(["shareLog", "notificationLog", "ale
 
 const LABELS = Object.freeze({
   licenses: "Licenses", cme: "CME", privileges: "Privileges", insurance: "Insurance", healthRecords: "Health records",
-  education: "Education", caseLogs: "Case logs", workHistory: "Work history", peerReferences: "Peer references",
+  education: "Education", caseLogs: "Case logs", workHistory: "Work history", addressHistory: "Addresses", peerReferences: "Peer references",
   malpracticeHistory: "Malpractice history", documents: "Documents", locumContracts: "Contracts", workLog: "Work log",
   encounters: "RVU entries", screenings: "Screenings", followUps: "Follow-ups", professionalPhotos: "Professional photos",
   publications: "Publications", travelDocs: "Travel & IDs", travelExpenses: "Expenses", taxPayments: "Tax payments",

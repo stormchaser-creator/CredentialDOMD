@@ -185,6 +185,7 @@ export const BUILT_IN_SECTIONS = Object.freeze([
   "education",
   "caseLogs",
   "workHistory",
+  "addressHistory",
   "peerReferences",
   "malpracticeHistory",
   "documents",

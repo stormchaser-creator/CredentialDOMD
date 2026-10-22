@@ -10,6 +10,7 @@ import { normalizeLifecycle } from "./lifecycle.js";
 import { withRequiredDefaults } from "./syncRules.js";
 import { billedWRVU, billedCodes, sameCodes } from "./caseBilling.js";
 import { identifierReason } from "./identifierGate.js";
+import { isCurrent as isCurrentAddress } from "./addressHistory.js";
 
 /**
  * The record as it should be stored:
@@ -33,7 +34,7 @@ import { identifierReason } from "./identifierGate.js";
  */
 export function prepareRecord(sectionKey, item, physicianName, previous = null) {
   if (sectionKey === "shareLog") return shareLogShape(item);
-  return withRequiredDefaults(sectionKey, withoutDictatedIdentifiers(sectionKey, caseBilling(sectionKey, currentAsBoolean(sectionKey, normalizeLifecycle(sectionKey, withPlausibleDates(withoutPersonName(sectionKey, item, physicianName), previous), previous)), previous)));
+  return withRequiredDefaults(sectionKey, withoutDictatedIdentifiers(sectionKey, caseBilling(sectionKey, addressShape(sectionKey, currentAsBoolean(sectionKey, normalizeLifecycle(sectionKey, withPlausibleDates(withoutPersonName(sectionKey, item, physicianName), previous), previous))), previous)));
 }
 
 // A year before 1900 is a date still being typed (a desktop date field fires
@@ -107,6 +108,27 @@ function caseBilling(sectionKey, item, previous) {
 function currentAsBoolean(sectionKey, item) {
   if (sectionKey !== "workHistory" || !item || typeof item !== "object" || !("current" in item)) return item;
   return { ...item, current: isCurrentJob(item.current) };
+}
+
+// An address's "Current" is address_history.is_current, so its key is
+// isCurrent. The table has no `current` column (work_history does), and every
+// key is sent as a column, so a `current` key (the first version of this form,
+// or any path that copied work history's shape) would refuse the WHOLE row. It
+// is moved to isCurrent here. kind is "home" or "work"; anything else is
+// stored blank, which reads as home.
+function addressShape(sectionKey, item) {
+  if (sectionKey !== "addressHistory" || !item || typeof item !== "object") return item;
+  const next = { ...item };
+  if ("current" in next) {
+    if (next.isCurrent == null || next.isCurrent === "") next.isCurrent = next.current;
+    delete next.current;
+  }
+  if (next.isCurrent != null) next.isCurrent = isCurrentAddress({ isCurrent: next.isCurrent });
+  if ("kind" in next) {
+    const kind = String(next.kind ?? "").trim().toLowerCase();
+    next.kind = kind === "home" || kind === "work" ? kind : null;
+  }
+  return next;
 }
 
 /**

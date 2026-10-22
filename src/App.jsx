@@ -87,6 +87,7 @@ import { isNonExpiring, mailtoHref, copyToClipboard, avatarInitials } from "./ut
 import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { referencesShareTitle, referencesShareText, followUpEmail } from "./utils/shareText";
 import { buildSetup, setupOwns, dateless, setupSurfaceCounts } from "./utils/setupTasks";
+import { historySummary, DEFAULT_LOOKBACK_YEARS, ADDRESS_KIND_OPTIONS, isWorkAddress } from "./utils/addressHistory";
 import { claimBetaAccess, touchLastSeen, supabase, downloadDocumentBlob } from "./lib/supabase";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut, useAuth, useUser } from "@clerk/clerk-react";
@@ -2496,6 +2497,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     { title: "Professional History", items: [
       { id: "education", label: "Education", icon: "\ud83c\udf93", count: (data.education || []).length },
       { id: "workHistory", label: "Work History", icon: "\ud83c\udfe2", count: (data.workHistory || []).length },
+      { id: "addressHistory", label: "Addresses", icon: "\ud83c\udfe0", count: (data.addressHistory || []).length },
       { id: "caseLogs", label: "Case Logs", icon: "\ud83d\udccb", count: (data.caseLogs || []).length, pro: true },
     ]},
     { title: "Supporting Records", items: [
@@ -2693,6 +2695,53 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       }
     }
     if (sub === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" favoritable {...crudTarget("workHistory")} items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES, required: true }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "checkbox", checkboxLabel: "Current position" }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "addressHistory") {
+      const rows = data.addressHistory || [];
+      const summary = historySummary(rows, { years: DEFAULT_LOOKBACK_YEARS });
+      // The banner is rendered here rather than passed in: CrudSection takes no
+      // header prop, and a prop it does not read would have been dropped in
+      // silence, which is the worst way for a warning to fail.
+      return (
+        <>
+          {rows.length > 0 && (
+            <div style={{
+              padding: "10px 12px", borderRadius: 10, marginBottom: 10,
+              backgroundColor: summary.ok ? T.successDim : T.warningDim,
+              border: `1px solid ${summary.ok ? T.success : T.warning}`,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: summary.ok ? T.success : T.warning }}>
+                {summary.text}
+              </div>
+              {(summary.problems || []).map((pr, n) => (
+                <div key={n} style={{ fontSize: 12, color: T.textDim, marginTop: 4, lineHeight: 1.45 }}>{pr.text}</div>
+              ))}
+            </div>
+          )}
+          <CrudSection title="Addresses" sectionKey="addressHistory" favoritable {...crudTarget("addressHistory")} items={rows} {...crud("addressHistory")} onShare={openShare}
+            emptyIcon={"\ud83c\udfe0"} emptyTitle="No addresses yet"
+            emptySub="Add every place you have lived and every place you have worked, with dates. Applications ask for both, and they check where you lived for gaps over the last five years. Start with where you live now and work backwards."
+            fields={[
+              // kind is address_history.kind: "home" or "work". Blank reads as
+              // home (utils/addressHistory.js addressKind), so it is not required.
+              { key: "kind", label: "Type", type: "choice", options: ADDRESS_KIND_OPTIONS, defaultValue: "home" },
+              { key: "placeName", label: "Place", placeholder: "e.g. hospital, clinic or practice name", show: f => isWorkAddress(f) },
+              { key: "street", label: "Street Address", placeholder: "e.g. 1450 Cherry Creek Dr" },
+              { key: "unit", label: "Apt / Unit" },
+              { key: "city", label: "City" },
+              { key: "state", label: "State", type: "select", options: STATES },
+              { key: "postalCode", label: "ZIP" },
+              { key: "country", label: "Country", placeholder: "USA" },
+              { key: "startDate", label: "From", type: "date" },
+              { key: "endDate", label: "To", type: "date" },
+              // address_history.is_current (boolean), so the key is isCurrent:
+              // every key on a record is sent as a column, and a column the
+              // table does not have would refuse the whole row.
+              { key: "isCurrent", label: "Current", type: "checkbox", checkboxLabel: f => isWorkAddress(f) ? "Current: I still work here" : "Current: I still live here" },
+              { key: "notes", label: "Notes", type: "textarea" },
+            ]} />
+        </>
+      );
+    }
     if (sub === "peerReferences") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Peer References" /></div>;
       // Import from Contacts lives inside the Add form (CrudSection
