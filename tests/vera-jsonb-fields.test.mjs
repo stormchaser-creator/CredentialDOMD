@@ -60,6 +60,7 @@ test('the CME screen opens with a row saved with topics as text', async () => {
     forwardingAddresses: await import(src('utils/forwardingAddresses.js')),
     credentialTypes: await import(src('constants/credentialTypes.js')),
     cmeTopics: await import(src('constants/cmeTopics.js')),
+    cmeCore: await import(src('utils/cmeCore.js')),
     stateRequirements: await import(src('constants/stateRequirements.js')),
     boardRequirements: await import(src('constants/boardRequirements.js')),
     states: await import(src('constants/states.js')),

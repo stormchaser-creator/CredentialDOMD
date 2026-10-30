@@ -28,12 +28,12 @@ import { getCmeTopics } from "../../constants/cmeTopics";
 import { getCMECategories, PHARMACOLOGY_HOURS_FIELD, NCCPA_ACTIVITY_FIELD, NCCPA_ACTIVITIES } from "../../constants/credentialTypes";
 import { isAdvancedPractice, practiceKindsFor } from "../../constants/professions";
 import { ruleSetFor } from "../../utils/ruleResolver";
-import { outsidePeriodText } from "../../utils/cmeCore.js";
+import { outsidePeriodText, mateProgress, countingTopics } from "../../utils/cmeCore.js";
 import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
-import { complianceFor, complianceListFor, mainCardFor, cardWindowNotes, topicOutsidePeriod, cycleBucket, round2 } from "../../utils/compliance";
+import { complianceFor, complianceListFor, mainCardFor, hasDEARegistration, cardWindowNotes, topicOutsidePeriod, cycleBucket, round2 } from "../../utils/compliance";
 import { boardComplianceFor, effectiveBoardSpecialties, aoaNationalEntry } from "../../utils/boardCompliance";
 import { certificationCards } from "../../utils/certCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateSummary, certificatesNotIncludedMessage } from "../../utils/cmeTranscriptPdf";
@@ -147,6 +147,10 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
     ).map(t => t.topic)))],
     [allTrackedStates, deg, appProfession]
   );
+  // What a tag on a course counts toward: a tracked state's topic, or the DEA
+  // MATE training for a DEA registrant (ticket 53890221).
+  const hasDea = hasDEARegistration(data.licenses || []);
+  const counting = countingTopics(requiredTopics, hasDea);
 
   // "Restored what you were typing..." on a form opened from a draft (CRED-021).
   const [draftNote, setDraftNote] = useState(null);
@@ -779,9 +783,26 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
             );
           })();
 
+          // DEA MATE Act training: one time, for a DEA registrant. Shown here so
+          // courses tagged Opioid Prescribing or Substance Use Disorders visibly
+          // count toward something (ticket 53890221).
+          const mateCard = hasDea && (() => {
+            const m = mateProgress(data.cme);
+            return (
+              <div style={cardStyle(T.border)}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>DEA MATE Act training</div>
+                <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>One time, for your DEA registration</div>
+                <ComplianceBar label="Opioid and substance use disorder training" earned={m.earned} required={m.required} met={m.met} />
+                <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5, marginTop: -4 }}>
+                  Counts courses tagged Opioid Prescribing or Substance Use Disorders, from any date.
+                </div>
+              </div>
+            );
+          })();
+
           return isDesktop
-            ? <div className="cmd-responsive-grid-2" style={{ marginBottom: 16 }}>{stateCards}{certCard}{boardCard}{aoaCard}</div>
-            : <div style={{ marginBottom: 16 }}>{stateCards}{certCard}{boardCard}{aoaCard}</div>;
+            ? <div className="cmd-responsive-grid-2" style={{ marginBottom: 16 }}>{stateCards}{certCard}{boardCard}{aoaCard}{mateCard}</div>
+            : <div style={{ marginBottom: 16 }}>{stateCards}{certCard}{boardCard}{aoaCard}{mateCard}</div>;
       })()}
 
       {/* Add/Edit Modal */}
@@ -986,7 +1007,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                       {list.map((t, i) => (
                         <span key={i}>
                           {i > 0 && ", "}
-                          <span style={requiredTopics.includes(t) ? { color: T.accent, fontWeight: 600 } : undefined}>{t}</span>
+                          <span style={counting.has(t) ? { color: T.accent, fontWeight: 600 } : undefined}>{t}</span>
                         </span>
                       ))}
                     </span>
@@ -1071,9 +1092,13 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                       {topicsOf(item).map(t => (
                         <span key={t} style={{
                           padding: "2px 8px", fontSize: 11, fontWeight: 600, borderRadius: 12,
-                          backgroundColor: requiredTopics.includes(t) ? T.accentGlow : T.input,
-                          color: requiredTopics.includes(t) ? T.accent : T.textDim,
-                          border: `1px solid ${requiredTopics.includes(t) ? T.accent : T.inputBorder}`,
+                          // Every chip here is a topic ticked on this course,
+                          // so none reads as unselected (ticket 53890221: the
+                          // dim chips looked like ticks that had not saved).
+                          // A topic that counts toward a requirement is filled.
+                          backgroundColor: counting.has(t) ? T.accentGlow : "transparent",
+                          color: T.accent,
+                          border: `1px solid ${T.accent}`,
                         }}>{t}</span>
                       ))}
                     </div>

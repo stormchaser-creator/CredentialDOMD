@@ -174,3 +174,20 @@ export function outsidePeriodText(topic, out) {
   }
   return parts.join(" ");
 }
+
+/**
+ * The DEA MATE Act training a CME list has earned (one time, any date): hours
+ * of courses tagged with a MATE topic. The CME page shows it to a member with
+ * a DEA registration, so the Opioid Prescribing and Substance Use Disorders
+ * tags visibly count toward something (ticket 53890221).
+ */
+export function mateProgress(entries) {
+  const earned = round2((entries || []).filter((c) => cmeTopics(c).some((t) => MATE_TOPICS.includes(t)))
+    .reduce((s, c) => s + (parseFloat(c?.hours) || 0), 0));
+  return { required: MATE_HOURS, earned, met: earned >= MATE_HOURS };
+}
+
+/** Topics a tag counts toward: every state-required topic, plus the MATE topics for a DEA registrant. */
+export function countingTopics(requiredTopics, hasDea) {
+  return new Set([...(requiredTopics || []), ...(hasDea ? MATE_TOPICS : [])]);
+}

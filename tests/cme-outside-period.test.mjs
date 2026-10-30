@@ -88,3 +88,25 @@ test("the PA and NP engine reports tagged courses outside its period too", async
   assert.equal(t.outsidePeriod.before, 1);
   assert.equal(t.outsidePeriod.hours, 3);
 });
+
+// Ticket 53890221, the card chips: the member's Substance Use Disorders and
+// Opioid Prescribing tags were dim on the course card (no tracked state
+// requires them), which read as ticks that had not saved. They count toward
+// the DEA MATE training, which the CME page now shows to a DEA registrant.
+import { mateProgress, countingTopics } from "../src/utils/cmeCore.js";
+
+test("the MATE training total counts its two topics from any date, once per course", () => {
+  const m = mateProgress([
+    course(["Substance Use Disorders", "Opioid Prescribing"], "2019-08-08", 1.25),
+    course(["Opioid Prescribing"], "2024-08-09", 7),
+    course(["Ethics"], "2026-01-01", 5),
+  ]);
+  assert.deepEqual(m, { required: 8, earned: 8.25, met: true });
+  assert.deepEqual(mateProgress([]), { required: 8, earned: 0, met: false });
+});
+
+test("a tag counts toward a state topic, and toward MATE only for a DEA registrant", () => {
+  assert.equal(countingTopics(["Ethics"], true).has("Substance Use Disorders"), true);
+  assert.equal(countingTopics(["Ethics"], false).has("Substance Use Disorders"), false);
+  assert.equal(countingTopics(["Ethics"], false).has("Ethics"), true);
+});
