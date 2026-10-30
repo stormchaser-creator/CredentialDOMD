@@ -783,19 +783,28 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
                   {r.subject || "(no subject)"}
                 </div>
                 <div style={{ fontSize: 13, color: T.textMuted, marginTop: 2, lineHeight: 1.4 }}>{snippet(r.body_text)}</div>
-                {r.proposal && (
+                {(r.proposal || r.status === "new") && (
                   // The button's own click stops propagation; the wrapper also
                   // stops the keyboard, because Enter on the button would
                   // otherwise bubble to the card's Enter handler and open it.
                   <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}
                     style={{ marginTop: 10, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 12px", minWidth: 0, cursor: "default" }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: sum.ready || sum.prepared ? T.success : T.warning, overflowWrap: "anywhere" }}>{sum.line}</div>
+                    {r.proposal && <div style={{ fontSize: 12.5, fontWeight: 700, color: sum.ready || sum.prepared ? T.success : T.warning, overflowWrap: "anywhere" }}>{sum.line}</div>}
                     {/* One tap only for a packet a model read with every ask
                         matched; anything else leads with Review, which opens
                         the request with its draft, and says what is unclear. */}
-                    {r.status === "new" && (canSendOnOneTap(r)
+                    {r.proposal && r.status === "new" && (canSendOnOneTap(r)
                       ? <ApproveSendButton key={r.id} request={r} T={T} accountEmail={realEmail} ownAddresses={senders} send={sendPacket} onSent={onPacketSent(r)} buildReportFiles={buildFiles} />
                       : <ReviewButton key={r.id} request={r} T={T} onReview={() => setOpenId(r.id)} />)}
+                    {/* Owner ticket 16ba1758: a request he will not act on
+                        stayed open, because Dismiss lived only inside the
+                        opened request. It sits on the card too; the Dismissed
+                        tab still brings it back. */}
+                    {r.status === "new" && (
+                      <button onClick={() => setStatus(r, "dismissed")} disabled={busyId === r.id}
+                        aria-label={`Dismiss the request from ${fromLabel(r)}`}
+                        style={{ ...btn(false), color: T.textMuted }}>Dismiss</button>
+                    )}
                   </div>
                 )}
               </div>
