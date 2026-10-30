@@ -10,6 +10,7 @@ import { docAttachedLabel, docBytes, fmtBytes } from "../../utils/docLabel";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { scrubSsn, withDegree } from "../../utils/outgoingText.js";
 import { defaultPacketNote } from "../../utils/shareText";
+import { reportFileSpecs } from "../../utils/requestReports.js";
 
 export const PACKET_FROM_ADDRESS = "docs@credentialdomd.com";
 // Fired on window after a successful send so the Requests inbox (and the
@@ -98,9 +99,19 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
   }, [data.documents, initialDocIds]);
 
   const chosen = docs.filter((d) => selected.has(d.id));
+  // The reports the app prepared for this request (a case log, a CV:
+  // utils/requestReports.js), opened from the request's Review in full with
+  // the note that names them. They go with the send as report_files, built
+  // at Send from the records, and are not optional here: the note says
+  // they are attached. A request that was not prepared names none.
+  const reports = useMemo(() => {
+    const specs = reportFileSpecs(request?.proposal);
+    return Array.isArray(specs) ? specs : [];
+  }, [request?.proposal]);
+  const fileCount = chosen.length + reports.length;
   const chosenBytes = chosen.reduce((t, d) => t + docBytes(d), 0);
   const encodedBytes = Math.round(chosenBytes * BASE64_FACTOR);
-  const overFiles = chosen.length > MAX_FILES;
+  const overFiles = fileCount > MAX_FILES;
   const overSize = encodedBytes > MAX_BYTES;
   // Not yet in cloud AND not on this device: newly uploaded docs have bytes
   // locally and the server falls back to the standard storage path.
@@ -112,13 +123,19 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
     return n;
   });
 
-  const canSend = !sending && !result?.ok && EMAIL_RE.test(to.trim()) && subject.trim() && chosen.length > 0 && !!accountEmail && !!supabase;
+  const canSend = !sending && !result?.ok && EMAIL_RE.test(to.trim()) && subject.trim() && fileCount > 0 && !!accountEmail && !!supabase;
 
   const send = async () => {
     if (!canSend) return;
     setSending(true); setError(null); setResult(null);
     const startedAt = new Date().toISOString();
     try {
+      let reportFiles = [];
+      if (reports.length) {
+        const { buildReportFiles } = await import("../../utils/requestReportFiles.js");
+        reportFiles = await buildReportFiles(request?.proposal, data);
+        if (reportFiles.length !== reports.length) throw new Error("A prepared report could not be built. Close this and try again.");
+      }
       const res = await supabase.functions.invoke("send-packet-email", {
         body: {
           request_id: request?.id || undefined,
@@ -127,6 +144,7 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
           subject: scrubSsn(subject.trim()),
           text: scrubSsn(text),
           doc_ids: chosen.map((d) => d.id),
+          ...(reportFiles.length ? { report_files: reportFiles } : {}),
           // The record this sheet was opened from (ShareModal), so the
           // server's share_log row lands in that record's Send history.
           ...(!request && shareItem ? { item_id: shareItem.id, item_name: shareItem.name || "", item_section: shareItem.section || "" } : {}),
@@ -214,6 +232,16 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
           {chosen.length} of {docs.length} selected{chosen.length ? ` · ${fmtBytes(chosenBytes)}` : ""}
         </div>
       </div>
+      {reports.length > 0 && (
+        <div style={{ border: `1px solid ${T.border}`, borderRadius: 10, marginBottom: 8 }}>
+          {reports.map((r) => (
+            <div key={`${r.file}|${r.from || ""}`} style={{ padding: "9px 12px", borderBottom: `1px solid ${T.border}`, backgroundColor: T.accentDim }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflowWrap: "anywhere" }}>{r.label}</div>
+              <div style={{ fontSize: 12, color: T.textDim }}>Prepared from your records, attached as a PDF</div>
+            </div>
+          ))}
+        </div>
+      )}
       {docs.length === 0 ? (
         <div style={{ fontSize: 13.5, color: T.textDim, padding: "10px 0 14px" }}>
           No documents on file yet. Upload them under Files first.
@@ -267,7 +295,7 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
       {error && <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 6 }}>{error}</div>}
       {result?.ok && (
         <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, backgroundColor: T.successDim, color: T.success, fontSize: 13.5, fontWeight: 600, lineHeight: 1.5 }}>
-          Sent to {to.trim()} with {result.attached ?? chosen.length} attachment{(result.attached ?? chosen.length) === 1 ? "" : "s"}.
+          Sent to {to.trim()} with {result.attached ?? fileCount} attachment{(result.attached ?? fileCount) === 1 ? "" : "s"}.
           {Array.isArray(result.skipped) && result.skipped.length > 0 && (
             <div style={{ color: T.warning, marginTop: 4 }}>Left out (over the size or file cap): {result.skipped.join(", ")}</div>
           )}
@@ -287,7 +315,7 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
               background: canSend ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
               color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: canSend ? "pointer" : "default",
             }}>
-              {sending ? "Sending…" : chosen.length ? `Send ${chosen.length} document${chosen.length === 1 ? "" : "s"}` : "Send"}
+              {sending ? "Sending…" : fileCount ? `Send ${fileCount} document${fileCount === 1 ? "" : "s"}` : "Send"}
             </button>
             <button onClick={onClose} disabled={sending} style={{
               padding: "13px 16px", borderRadius: 12, border: `1px solid ${T.border}`,

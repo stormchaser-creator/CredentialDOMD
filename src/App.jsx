@@ -1202,6 +1202,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       if (!supabase) throw new Error("Not connected to your account.");
       return unwrapInvoke(await supabase.functions.invoke("send-packet-email", { body }));
     };
+    // A prepared request's case log or CV, written at the tap (utils/requestReportFiles.js).
+    const buildRequestReportFiles = async (req) => {
+      const { buildReportFiles } = await import("./utils/requestReportFiles.js");
+      return buildReportFiles(req?.proposal, data);
+    };
     const onPacketSent = (result) => {
       const sentId = newestRequest?.id;
       setLastSent({ id: sentId, to: result?.to || newestRequest?.from_addr || "", attached: result?.attached ?? 0 });
@@ -1247,6 +1252,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
             <>
               <ApproveSendButton key={newestRequest.id} request={newestRequest} T={T}
                 accountEmail={data.settings?.email || user?.email} ownAddresses={ownSenders} send={sendPacket} onSent={onPacketSent}
+                buildReportFiles={buildRequestReportFiles}
                 notFoundReason={HOME_NOT_FOUND_REASON} noMatchReason={HOME_NO_MATCH_REASON} />
               <button onClick={reviewRequest} style={linkStyle}>Review</button>
             </>

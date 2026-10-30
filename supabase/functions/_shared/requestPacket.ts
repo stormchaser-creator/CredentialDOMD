@@ -98,6 +98,8 @@ export interface ProposalItem {
   ruleKind?: string;
   /** The kind the model named, when it differs from `kind` (the rules read the quote as something else). */
   modelKind?: string;
+  /** Set only by the app on a report it prepared (see Prepared); never by the matcher. */
+  prepared?: unknown;
 }
 
 export interface Proposal {
@@ -178,7 +180,10 @@ export const KINDS = [
 // exports case logs and a CV, the NPI is a number on the profile, references
 // and work history are records, not files. These read "report" in the
 // proposal so the cover note can say they follow separately instead of
-// claiming they are attached.
+// claiming they are attached. Since 2026-10-30 the app prepares them from the
+// records when it shows the request (src/utils/requestReports.js sets
+// item.prepared), and the note then lists them as attached or writes them in;
+// only one it could not prepare still follows separately.
 const REPORT_KINDS = new Set(["case_logs", "npi", "references", "work_history", "cv"]);
 export const isReportKind = (kind: string): boolean => REPORT_KINDS.has(kind);
 
@@ -1499,6 +1504,28 @@ function expiredDate(iso: string): string {
 }
 
 /**
+ * What the app prepared from the physician's own records for a report ask
+ * (src/utils/requestReports.js): a file it generates and attaches at send
+ * time ({ how: "file", label }), or text written into the note ({ how:
+ * "text", text }). Only the app sets it, on a proposal it is showing; the
+ * matcher here never does, so a proposal built on arrival is unchanged.
+ * Anything malformed reads as not prepared, and the ask follows separately.
+ */
+export interface Prepared {
+  how: "file" | "text";
+  label?: string;
+  text?: string;
+}
+
+function preparedOf(it: { status?: unknown; kind?: unknown; prepared?: unknown } | null | undefined): Prepared | null {
+  const p = it && it.status === "report" && it.kind !== "unknown" ? it.prepared as Record<string, unknown> | null | undefined : null;
+  if (!p || typeof p !== "object") return null;
+  if (p.how === "file" && typeof p.label === "string" && p.label.trim()) return { how: "file", label: p.label.trim() };
+  if (p.how === "text" && typeof p.text === "string" && p.text.trim()) return { how: "text", text: p.text.trim() };
+  return null;
+}
+
+/**
  * The note itself. `items` are the proposal's; `selected` is null for every
  * proposed document, or the set the physician ticked, in which case an ask
  * whose every document was dropped is named under "Not enclosed this time:"
@@ -1511,6 +1538,15 @@ function coverNoteFor(items: ProposalItem[], fromName: unknown, physician: Physi
   const seen = new Set<string>();
   const held: string[] = [];
   for (const it of items) {
+    const prep = preparedOf(it);
+    if (prep && prep.how === "file") {
+      // A report the app generates and attaches with this send. It is not a
+      // document id, so no tick removes it, and it is listed only because
+      // the send carries it (RequestPacket.js ApproveSendButton).
+      const key = `report:${prep.label}`;
+      if (!seen.has(key)) { seen.add(key); attached.push(prep.label!); }
+      continue;
+    }
     if (it.status !== "found") continue;
     let kept = 0;
     it.docIds.forEach((id, i) => {
@@ -1531,7 +1567,17 @@ function coverNoteFor(items: ProposalItem[], fromName: unknown, physician: Physi
   // way under "Not on file:". The app asks the physician about both
   // (reviewReason) and adds "Not on file" lines to the draft only when they
   // say so (noteWithNotOnFile).
-  const report = items.filter((it) => it.status === "report" && it.kind !== "unknown").map((it) => it.ask);
+  //
+  // Since 2026-10-30 the app prepares most reports itself when the
+  // physician opens the request (requestReports.js): an attached file joins
+  // the list above, text (an NPI, references, work history) is written in
+  // below it, and only what could not be prepared still follows separately.
+  const report = items.filter((it) => it.status === "report" && it.kind !== "unknown" && !preparedOf(it)).map((it) => it.ask);
+  const included: string[] = [];
+  for (const it of items) {
+    const prep = preparedOf(it);
+    if (prep && prep.how === "text" && !included.includes(prep.text!)) included.push(prep.text!);
+  }
   const lines: string[] = [`Hello ${firstName(fromName)},`, ""];
   if (!items.length && unclear) {
     // Nothing in the email read as an ask: a draft that said "your request"
@@ -1541,15 +1587,19 @@ function coverNoteFor(items: ProposalItem[], fromName: unknown, physician: Physi
     lines.push("I did not find a list of documents in your request. Reply with what you need and I will send it.");
   } else {
     if (attached.length) lines.push("Attached are the documents you asked for:", ...attached.map((l) => `- ${l}`));
+    for (const block of included) {
+      if (lines.length > 2) lines.push("");
+      lines.push(block);
+    }
     if (held.length) {
-      if (attached.length) lines.push("");
+      if (lines.length > 2) lines.push("");
       lines.push("Not enclosed this time:", ...held.map((a) => `- ${a}`));
     }
     if (report.length) {
-      if (attached.length || held.length) lines.push("");
+      if (lines.length > 2) lines.push("");
       lines.push("These will follow separately:", ...report.map((a) => `- ${a}`));
     }
-    if (!attached.length && !held.length && !report.length) lines.push("Thank you for your email.");
+    if (!attached.length && !included.length && !held.length && !report.length) lines.push("Thank you for your email.");
   }
   // No name, no sign-off. "Regards," over a blank line, or over a bare
   // "DO", read as a letter nobody signed, so both lines go together.
@@ -1588,7 +1638,8 @@ export function noteForSelection(
       status: it.status === "found" || it.status === "report" ? it.status : "missing",
       docIds,
       labels: docIds.map((_, i) => String(labels[i] || "Document")),
-    };
+      prepared: (it as { prepared?: unknown }).prepared,
+    } as ProposalItem;
   });
   const selected = new Set<string>(Array.from(selectedIds || [], (x) => String(x)));
   return coverNoteFor(items, fromName, physician, selected);

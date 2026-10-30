@@ -14,7 +14,7 @@ import { planAccept, planDismiss, planUndo, withItem, recordAnswerCorrection } f
 import { useIntakeNotes, saveNote } from "../../hooks/useIntakeNotes";
 import { IntakeNoteCard } from "./IntakeNotes";
 import EmailPacketModal, { PACKET_FROM_ADDRESS, REQUEST_REPLIED_EVENT } from "./EmailPacketModal";
-import { ProposalChecklist, ApproveSendButton, ReviewButton, UnclearNote, canSendOnOneTap, proposalSummary, requesterMissing, requesterName, unwrapInvoke } from "./RequestPacket";
+import { ProposalChecklist, ApproveSendButton, ReviewButton, UnclearNote, canSendOnOneTap, proposalSummary, requesterMissing, requesterName, unwrapInvoke, filesOf } from "./RequestPacket";
 import { REQUESTS_CHANGED_EVENT } from "../../hooks/useNewRequestCount";
 import { useRequestProposals } from "../../hooks/useRequestProposals";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
@@ -350,8 +350,15 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
     if (!supabase) throw new Error("Not connected to your account.");
     return unwrapInvoke(await supabase.functions.invoke("send-packet-email", { body }));
   };
+  // The case log and CV a prepared request attaches (utils/requestReports.js),
+  // written at the tap from the records as they are then. jsPDF loads only
+  // here, when a send needs it.
+  const buildFiles = async (req) => {
+    const { buildReportFiles } = await import("../../utils/requestReportFiles.js");
+    return buildReportFiles(req?.proposal, data);
+  };
   const onPacketSent = (req) => (result) => {
-    setSentInfo({ id: req.id, to: result?.to || req.from_addr, attached: result?.attached ?? req.proposal?.docIds?.length ?? 0 });
+    setSentInfo({ id: req.id, to: result?.to || req.from_addr, attached: result?.attached ?? ((req.proposal?.docIds?.length ?? 0) + filesOf(req.proposal).length) });
     try { window.dispatchEvent(new CustomEvent(REQUEST_REPLIED_EVENT, { detail: { id: req.id, email_id: result?.email_id } })); } catch { /* no window */ }
   };
 
@@ -473,6 +480,8 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
     // correction the next reading learns from (utils/intakeCorrections.js).
     const drafted = proposal ? noteForSelection(proposal, selectedIds, physician, open.from_name) : "";
     const oneTap = canSendOnOneTap(open);
+    // Attached with the send whatever is ticked: the files the app prepared.
+    const sendCount = selectedIds.length + filesOf(proposal).length;
     const onDetailSent = (result) => {
       onPacketSent(viewReq)(result);
       if (noteEdited) recordCorrection(supabase, userIdRef?.current, coverNoteCorrection(open, drafted, note, { physicianName: physician.name }));
@@ -509,7 +518,7 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
               <div style={sectionLabel}>Packet</div>
               {proposal && (
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: proposalSummary(proposal).ready ? T.success : T.warning, marginBottom: 6 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: proposalSummary(proposal).ready || proposalSummary(proposal).prepared ? T.success : T.warning, marginBottom: 6 }}>
                   {proposalSummary(proposal).line}
                 </div>
               )}
@@ -567,9 +576,9 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
                         send only for a packet that could have gone on one tap. */}
                     <ApproveSendButton key={open.id} request={viewReq} T={T} accountEmail={realEmail} ownAddresses={senders}
                       docIds={selectedIds} text={note} reviewed
-                      label={edited && selectedIds.length > 0 ? `${oneTap ? "Approve and send" : "Send"} ${selectedIds.length} selected` : (oneTap && selectedIds.length > 0 ? `Approve and send ${selectedIds.length} document${selectedIds.length === 1 ? "" : "s"}` : undefined)}
+                      label={edited && selectedIds.length > 0 ? `${oneTap ? "Approve and send" : "Send"} ${sendCount} selected` : (oneTap && sendCount > 0 ? `Approve and send ${sendCount} document${sendCount === 1 ? "" : "s"}` : undefined)}
                       notFoundReason={requesterGone ? "Type the requester's email above to send." : undefined}
-                      send={sendWithAddress} onSent={onDetailSent} />
+                      send={sendWithAddress} onSent={onDetailSent} buildReportFiles={buildFiles} />
                     <button onClick={() => replyByEmail(modalReq, selectedIds, note)} style={linkBtn}>Review in full</button>
                   </>
                 ) : (
@@ -780,12 +789,12 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
                   // otherwise bubble to the card's Enter handler and open it.
                   <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}
                     style={{ marginTop: 10, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 12px", minWidth: 0, cursor: "default" }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: sum.ready ? T.success : T.warning, overflowWrap: "anywhere" }}>{sum.line}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: sum.ready || sum.prepared ? T.success : T.warning, overflowWrap: "anywhere" }}>{sum.line}</div>
                     {/* One tap only for a packet a model read with every ask
                         matched; anything else leads with Review, which opens
                         the request with its draft, and says what is unclear. */}
                     {r.status === "new" && (canSendOnOneTap(r)
-                      ? <ApproveSendButton key={r.id} request={r} T={T} accountEmail={realEmail} ownAddresses={senders} send={sendPacket} onSent={onPacketSent(r)} />
+                      ? <ApproveSendButton key={r.id} request={r} T={T} accountEmail={realEmail} ownAddresses={senders} send={sendPacket} onSent={onPacketSent(r)} buildReportFiles={buildFiles} />
                       : <ReviewButton key={r.id} request={r} T={T} onReview={() => setOpenId(r.id)} />)}
                   </div>
                 )}

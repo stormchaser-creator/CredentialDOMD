@@ -709,6 +709,59 @@ export function approveRequestBody(body: unknown): ApproveBody {
 }
 
 /**
+ * The reports the app prepared for a request and generated at the tap (a
+ * case log, a CV: src/utils/requestReports.js and requestReportFiles.js),
+ * carried in the send call as report_files: [{ name, base64 }]. Owner ticket
+ * c3f23aa8 (2026-10-29): a request arrives ready for one approval, so the
+ * case log a credentialer asked for goes with the reply instead of
+ * "following separately". The app generates these from the physician's own
+ * records the way send-invoice-email's invoice PDF is generated, and the
+ * cover note on the same call names them as attached, so the send either
+ * carries every one of them or does not go: send-packet-email reserves room
+ * for them under its caps before any document, and a malformed one refuses
+ * the whole call here.
+ *
+ * Only PDFs (the bytes must open with "%PDF-"), at most MAX_REPORT_FILES of
+ * them, each at most MAX_REPORT_BYTES decoded. The name is one line with the
+ * path and control characters taken out and ".pdf" on the end. Absent or
+ * null is no reports; anything else malformed is an error.
+ */
+export const MAX_REPORT_FILES = 3;
+export const MAX_REPORT_BYTES = 5 * 1024 * 1024;
+
+export type ReportFiles =
+  | { ok: true; files: { filename: string; content: string; bytes: number }[] }
+  | { ok: false; error: string };
+
+const B64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
+
+export function reportFilesFromBody(body: unknown): ReportFiles {
+  const b = body as Record<string, unknown> | null;
+  const raw = b && typeof b === "object" ? b.report_files : undefined;
+  if (raw === undefined || raw === null) return { ok: true, files: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: "report_files must be a list" };
+  if (raw.length > MAX_REPORT_FILES) return { ok: false, error: `At most ${MAX_REPORT_FILES} prepared reports go with one reply` };
+  const files: { filename: string; content: string; bytes: number }[] = [];
+  for (const f of raw) {
+    const r = f as Record<string, unknown> | null;
+    if (!r || typeof r !== "object" || typeof r.name !== "string" || typeof r.base64 !== "string") {
+      return { ok: false, error: "A prepared report is missing. Open the request and try again." };
+    }
+    const content = r.base64.replace(/\s+/g, "");
+    if (!content || content.length % 4 !== 0 || !B64_RE.test(content)) return { ok: false, error: "A prepared report could not be read. Open the request and try again." };
+    const bytes = content.length / 4 * 3 - (content.endsWith("==") ? 2 : content.endsWith("=") ? 1 : 0);
+    if (bytes > MAX_REPORT_BYTES) return { ok: false, error: "A prepared report is over 5 MB. Send it from its own screen." };
+    // "%PDF-" is "JVBERi0" in base64 at the start of the string.
+    if (!content.startsWith("JVBERi0")) return { ok: false, error: "A prepared report is not a PDF. Open the request and try again." };
+    // deno-lint-ignore no-control-regex
+    let filename = r.name.replace(/[\\/:*?"<>|\x00-\x1f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 150);
+    if (!/\.pdf$/i.test(filename)) filename = `${filename || "Report"}.pdf`;
+    files.push({ filename, content, bytes });
+  }
+  return { ok: true, files };
+}
+
+/**
  * The record a hand-built send (a record's Send sheet) was made from, for
  * the share_log row, so the record's Send history shows the email:
  * { itemId, itemName, section } or null when the call names none. Only a

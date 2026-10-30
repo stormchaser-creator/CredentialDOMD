@@ -1,5 +1,12 @@
 import React, { useState } from "react";
 import { oneTapReady, reviewReason } from "../../utils/requestPacket.js";
+import { reportFileSpecs } from "../../utils/requestReports.js";
+
+/** The prepared report files a proposal attaches (requestReports.js), [] when none or when the import is stubbed. */
+export function filesOf(proposal) {
+  const out = reportFileSpecs(proposal);
+  return Array.isArray(out) ? out : [];
+}
 
 // The one-tap packet. A credentialer's email lands as a document_requests row
 // with a `proposal` (built on the server at arrival, or on the client when the
@@ -10,8 +17,10 @@ import { oneTapReady, reviewReason } from "../../utils/requestPacket.js";
 // drift apart is how the old flow grew to seven taps.
 //
 // Written with React.createElement rather than JSX and importing nothing from
-// the app but the pure matcher, so scripts/request-packet-ui.test.mjs can
-// render every state with react-dom/server in plain node against a fake theme.
+// the app but the pure matcher (and reportFileSpecs, the pure list of
+// prepared report files), so scripts/request-packet-ui.test.mjs can render
+// every state with react-dom/server in plain node against a fake theme. A
+// harness that stubs the second import gets "no prepared files" (filesOf).
 //
 // One tap is for a proposal that can go unread (requestPacket.js
 // oneTapReady): a model read the email, every ask it read is the email's own
@@ -50,7 +59,9 @@ const uniq = (xs) => {
  * email, not about the physician's file; one saved as unclear (nothing in
  * the email read as an ask, requestPacket.js Proposal.unclear) says so. An
  * absent proposal yields an empty line, so a card without one prints
- * nothing rather than a false zero.
+ * nothing rather than a false zero. A report the app prepared from the
+ * records (utils/requestReports.js) is counted as `prepared`, "N prepared
+ * from your records", not as following separately.
  */
 export function proposalSummary(proposal) {
   if (!proposal || typeof proposal !== "object") return { ready: 0, missing: 0, report: 0, unclear: 0, line: "" };
@@ -60,20 +71,34 @@ export function proposalSummary(proposal) {
     ? proposal.docIds
     : items.flatMap((i) => (Array.isArray(i?.docIds) ? i.docIds : []));
   const ready = uniq(ids).length;
-  const report = items.filter((i) => i?.status === "report").length;
+  // A report the app prepared from the records (utils/requestReports.js) is
+  // in the reply, attached or written into the note; only the rest follow.
+  const prepared = items.filter((i) => i?.status === "report" && isPrepared(i)).length;
+  const report = items.filter((i) => i?.status === "report" && !isPrepared(i)).length;
   const unclear = items.filter((i) => i?.status === "missing" && i?.kind === "unknown").length;
   const missing = hasItems
     ? items.filter((i) => i?.status === "missing" && i?.kind !== "unknown").length
     : (Array.isArray(proposal.missing) ? proposal.missing.length : 0);
   const base = ready > 0
     ? `${plural(ready, "document")} ready`
+    : prepared > 0 ? `${plural(prepared, "item")} prepared from your records`
     : proposal.unclear === true ? "Not clear that it asks for anything"
       : (hasItems && items.length === 0 ? "Nothing could be read from this email" : "Nothing on file for this yet");
   const parts = [base];
-  if (ready > 0 && missing) parts.push(`${missing} not on file`);
+  if (ready > 0 && prepared) parts.push(`${prepared} prepared from your records`);
+  if ((ready > 0 || prepared > 0) && missing) parts.push(`${missing} not on file`);
   if (report) parts.push(`${report} ${report === 1 ? "follows" : "follow"} separately`);
   if (unclear) parts.push(`${unclear} not recognised`);
-  return { ready, missing, report, unclear, line: parts.join(", ") };
+  // `prepared` is present only when something was: the shape a proposal
+  // with nothing to prepare returns is the one it always returned.
+  return { ready, missing, report, unclear, ...(prepared ? { prepared } : {}), line: parts.join(", ") };
+}
+
+/** Whether a report ask carries something the app prepared for the reply (requestPacket.js reads the same shape). */
+function isPrepared(item) {
+  const p = item && item.prepared;
+  if (!p || typeof p !== "object") return false;
+  return (p.how === "file" && typeof p.label === "string" && !!p.label.trim()) || (p.how === "text" && typeof p.text === "string" && !!p.text.trim());
 }
 
 /**
@@ -151,6 +176,10 @@ export const HOME_NO_MATCH_REASON = "No documents could be matched from this ema
 // was handed it without a review. Every screen that offers the button checks
 // oneTapReady first and leads with Review; this is the backstop.
 export const REVIEW_FIRST_REASON = "Tap Review and check the draft first.";
+// A packet that attaches a report the app generates (a case log, a CV) on a
+// screen that was not given the generator. Every screen that offers the
+// button passes one; this is the backstop.
+export const REPORTS_ELSEWHERE_REASON = "Open the request to send it with its reports.";
 // A forward that was not positively authenticated (email-inbound stamps
 // proposal.verified false): the address it came from can be forged, and with
 // it the requester the packet would go to. Same words as reviewReason.
@@ -256,7 +285,7 @@ export function RequestPacketSummary({ request, T, compact, ownAddresses }) {
       ? h("div", { style: { ...WRAP, fontSize: compact ? 12.5 : 13.5, color: T.textMuted, lineHeight: 1.4 } }, `Asked for: ${asks}`)
       : null,
     sum.line
-      ? h("div", { style: { ...WRAP, fontSize: compact ? 12.5 : 13.5, fontWeight: 700, color: sum.ready ? T.success : T.warning } }, sum.line)
+      ? h("div", { style: { ...WRAP, fontSize: compact ? 12.5 : 13.5, fontWeight: 700, color: sum.ready || sum.prepared ? T.success : T.warning } }, sum.line)
       : null,
   );
 }
@@ -271,8 +300,10 @@ const isSelected = (selected, id) => {
 /**
  * Every ask with what answers it. Found items list their documents with a
  * checkbox each (so a physician can drop one before sending); missing items
- * say "Not on file"; report items ("12 months of case logs") say "Follows
- * separately" because the app exports those on their own. An ask the rules
+ * say "Not on file"; report items ("12 months of case logs") say what the
+ * app prepared from the records ("Attached: Case log, ..." or "In the note,
+ * from your records"), or "Follows separately" with the reason it could not
+ * (item.notPrepared, utils/requestReports.js). An ask the rules
  * could not name says "Not recognised", muted rather than amber: "Not on
  * file" for a facility form the app could not even identify told the
  * physician their file was short of something. `selected` may be a Set, an
@@ -299,10 +330,18 @@ export function ProposalChecklist({ proposal, T, selected, onToggle }) {
           style: { marginTop: 2, flexShrink: 0 },
         }),
         h("span", { style: WRAP }, labels[i] || "Document")))
-        : [h("div", {
-          key: "status",
-          style: { fontSize: 13, fontWeight: 600, padding: "2px 0", color: status === "report" || unclear ? T.textMuted : T.warning },
-        }, status === "report" ? "Follows separately" : unclear ? "Not recognised" : "Not on file")];
+        : status === "report" && isPrepared(item)
+          ? [h("div", {
+            key: "status",
+            style: { ...WRAP, fontSize: 13, fontWeight: 600, padding: "2px 0", color: T.success },
+          }, item.prepared.how === "file" ? `Attached: ${item.prepared.label}` : "In the note, from your records")]
+          : [h("div", {
+            key: "status",
+            style: { fontSize: 13, fontWeight: 600, padding: "2px 0", color: status === "report" || unclear ? T.textMuted : T.warning },
+          }, status === "report" ? "Follows separately" : unclear ? "Not recognised" : "Not on file"),
+          status === "report" && typeof item?.notPrepared === "string" && item.notPrepared
+            ? h("div", { key: "why", style: { ...WRAP, fontSize: 12.5, color: T.textMuted, lineHeight: 1.45 } }, item.notPrepared)
+            : null];
       return h("div", { key: `${idx}-${item?.ask || ""}`, style: { minWidth: 0 } },
         h("div", { style: { ...WRAP, fontSize: 13.5, fontWeight: 700, color: T.text } }, String(item?.ask || "Request")),
         ...rows,
@@ -332,20 +371,27 @@ export function ProposalChecklist({ proposal, T, selected, onToggle }) {
  * no Open, and "Open the request" there sent a physician on a phone to
  * More > Requests past the link that lands on it.
  */
-export function ApproveSendButton({ request, T, accountEmail, ownAddresses, docIds, text: noteText, send, onSent, label, notFoundReason, noMatchReason, reviewed }) {
+export function ApproveSendButton({ request, T, accountEmail, ownAddresses, docIds, text: noteText, send, onSent, label, notFoundReason, noMatchReason, reviewed, buildReportFiles }) {
   const [phase, setPhase] = useState("idle"); // idle | sending | sent
   const [error, setError] = useState(null);
   const [sentTo, setSentTo] = useState("");
   // `reviewed` is the detail view, where the physician is looking at the
   // draft: the button sends what the screen shows and says so ("Send"). Away
   // from it, only a one-tap proposal may send at all.
+  // The reports the app prepared and attaches with this send (case log,
+  // CV: utils/requestReports.js). They are generated at the tap by
+  // `buildReportFiles(request)` and travel as report_files; a screen that
+  // cannot generate them does not offer the send, because the note already
+  // says they are attached.
+  const reportFiles = filesOf(request?.proposal);
   const computed = approveBlockedReason(request, accountEmail, ownAddresses, docIds)
-    || (!reviewed && !oneTapReady(request?.proposal) ? REVIEW_FIRST_REASON : null);
+    || (!reviewed && !oneTapReady(request?.proposal) ? REVIEW_FIRST_REASON : null)
+    || (reportFiles.length && typeof buildReportFiles !== "function" ? REPORTS_ELSEWHERE_REASON : null);
   const reason = computed === REQUESTER_NOT_FOUND_REASON && notFoundReason ? notFoundReason
     : computed === NOTHING_MATCHED_REASON && noMatchReason ? noMatchReason
     : computed;
   const ids = Array.isArray(docIds) ? docIds : (Array.isArray(request?.proposal?.docIds) ? request.proposal.docIds : []);
-  const n = ids.length;
+  const n = ids.length + reportFiles.length;
   const items = Array.isArray(request?.proposal?.items) ? request.proposal.items : [];
   const nothingToAttach = n === 0 && items.length > 0;
   const ready = !reason && phase === "idle" && typeof send === "function";
@@ -361,7 +407,15 @@ export function ApproveSendButton({ request, T, accountEmail, ownAddresses, docI
     setPhase("sending");
     setError(null);
     try {
-      const result = await send(approveBody(request, { docIds: ids, text: noteText, reviewed: reviewed === true }));
+      const body = approveBody(request, { docIds: ids, text: noteText, reviewed: reviewed === true });
+      if (reportFiles.length) {
+        const files = await buildReportFiles(request);
+        // Every file the note names, or no send: a short list would mail a
+        // note that says a report is attached when it is not.
+        if (!Array.isArray(files) || files.length !== reportFiles.length) throw new Error("A prepared report could not be built. Open the request and try again.");
+        body.report_files = files;
+      }
+      const result = await send(body);
       setSentTo(String(result?.to || request?.from_addr || ""));
       setPhase("sent");
       if (onSent) onSent(result);

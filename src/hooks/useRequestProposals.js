@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
 import { REQUESTS_CHANGED_EVENT } from "./useNewRequestCount";
 import { buildClientProposals, withProposals, documentSetKey } from "../utils/requestProposals";
+import { withPreparedReports } from "../utils/requestReports";
 
 const EMPTY = Object.freeze({});
 
@@ -42,7 +43,17 @@ export function useRequestProposals(rows) {
     return Object.keys(b).length ? b : EMPTY;
   }, [rows, data, ready]);
 
-  const viewRows = useMemo(() => withProposals(rows, built), [rows, built]);
+  // The report asks (case logs, NPI, references, work history, CV) prepared
+  // from the records, on what the screen shows only: the reply carries them
+  // and the note says so (utils/requestReports.js). Never written back: the
+  // row keeps the proposal as it was built, so an edit to a reference shows
+  // in the next draft instead of a copy frozen on the row. Not before the
+  // file has loaded from the cloud, for the reason above: "No references
+  // saved" read from a half-loaded device would be wrong.
+  const viewRows = useMemo(() => {
+    const withBuilt = withProposals(rows, built);
+    return ready ? withPreparedReports(withBuilt, data) : withBuilt;
+  }, [rows, built, ready, data]);
 
   useEffect(() => {
     const ids = Object.keys(built).filter((id) => !persisted.has(`${id}|${docKey}`));

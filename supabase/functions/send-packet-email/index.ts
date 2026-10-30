@@ -91,6 +91,17 @@
  *     what "Reply again by email" sends from, on purpose, so a second copy
  *     is always one deliberate step away.
  *
+ *   Prepared reports (both paths): report_files?: [{ name, base64 }]. The
+ *     case log or CV the app prepared for a request from the physician's own
+ *     records and generated at the tap (src/utils/requestReports.js,
+ *     owner ticket c3f23aa8), sent the way send-invoice-email takes the
+ *     invoice PDF. PDFs only, at most 3, 5 MB each (requestFlow.ts
+ *     reportFilesFromBody). The cover note on the same call names them as
+ *     attached, so they are never skipped: their room under the file and
+ *     size caps is set aside before any document is read, and a malformed
+ *     one refuses the call. They are not documents, so doc_ids does not
+ *     name them; `attached` counts them.
+ *
  *   -> { ok: true, email_id, attached: n, skipped: [filenames], to } | { error }
  *
  * Auth: Clerk JWT verified in _shared/clerkAuth.ts (deploy with
@@ -144,7 +155,7 @@ import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { answerAuthUnavailable, clerkProfile } from "../_shared/clerkAuth.ts";
 import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
 import { storageSubjects } from "../_shared/clerkContinuity.ts";
-import { approveRequestBody, longDate, replySubject, shareLogItem, unverifiedApproveRefusal, withoutGuessBlock } from "../_shared/requestFlow.ts";
+import { approveRequestBody, longDate, replySubject, reportFilesFromBody, shareLogItem, unverifiedApproveRefusal, withoutGuessBlock } from "../_shared/requestFlow.ts";
 import { withDegree } from "../_shared/app/utils/outgoingText.js";
 import { invoiceEmailFooter } from "../_shared/app/utils/invoiceEmail.js";
 
@@ -426,6 +437,9 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
   let ccSelf = false;
   let requestId: string | null = null;
   const docIds: string[] = [];
+  const reports = reportFilesFromBody(body);
+  if (!reports.ok) return json(400, { error: reports.error });
+  const reportFiles = reports.files;
   if (body.approve === true) {
     const v = approveRequestBody(body);
     if (!v.ok) return json(400, { error: v.error });
@@ -539,7 +553,7 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
       // holds no proposal, the screen does, and the note is what the screen
       // showed); with no items and no note there was nothing to approve.
       const proposed = approve.docIds ?? (Array.isArray(proposal?.docIds) ? proposal.docIds : []);
-      if (proposed.length === 0 && proposalItems === 0 && !approve.textOverride) {
+      if (proposed.length === 0 && proposalItems === 0 && !approve.textOverride && reportFiles.length === 0) {
         return json(400, { error: "Nothing is proposed for this request yet. Open it and choose the documents." });
       }
       for (const d of proposed) {
@@ -710,15 +724,19 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
       claimedId = request.id;
     }
 
-    // Pull bytes from Storage in the caller's order, within the caps.
+    // Pull bytes from Storage in the caller's order, within the caps. The
+    // prepared reports' room is set aside first: the note names them as
+    // attached, so a document is what gets left out when both cannot fit.
     const attachments: { filename: string; content: string; content_type: string }[] = [];
     const attachedIds: string[] = [];
     const taken = new Set<string>();
-    let totalB64 = 0;
+    const reportB64 = reportFiles.reduce((t, f) => t + f.content.length, 0);
+    let totalB64 = reportB64;
+    const docSlots = MAX_FILES - reportFiles.length;
     for (const id of sendIds) {
       const d = byId.get(id)!;
       const filename = safeFilename(d.name, `document-${attachments.length + 1}`);
-      if (attachments.length >= MAX_FILES) { skipped.push(filename); continue; }
+      if (attachments.length >= docSlots) { skipped.push(filename); continue; }
       // Only files inside the caller's own storage folder are ever read: a
       // user can edit their own row's storage_path, and the service role
       // must not become a way around storage RLS.
@@ -744,6 +762,13 @@ serve(answerAuthUnavailable(corsHeaders, async (req) => {
     if (sendIds.length > 0 && attachments.length === 0) {
       await releaseClaim();
       return json(400, { error: "None of the chosen documents could be attached (missing file, or all over the 25 MB limit)", skipped });
+    }
+    if (reportB64 > MAX_TOTAL_B64_BYTES) {
+      await releaseClaim();
+      return json(400, { error: "The prepared reports are over the 25 MB limit. Send them from their own screens." });
+    }
+    for (const f of reportFiles) {
+      attachments.push({ filename: uniqueName(safeFilename(f.filename, "Report.pdf"), taken), content: f.content, content_type: "application/pdf" });
     }
 
     // Threading, when the request carries a message id.
