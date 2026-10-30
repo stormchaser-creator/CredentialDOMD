@@ -88,7 +88,7 @@ test('setup board: task menu, skip and not-applicable persist, put back, declare
     await field(dlg, 'License #').fill('QA-BOARD-CO1');
     await field(dlg, 'State').selectOption('CO');
     await field(dlg, /^Expires/).fill('2029-02-28');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await openSetupPage(page);
     await page.locator('button').filter({ hasText: 'DEA registration' }).first().click();

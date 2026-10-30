@@ -114,7 +114,7 @@ test('setup packet: CME drawer, headshot, capture run, public-record fill; each 
     await field(dlg, 'License #').fill(number);
     await field(dlg, 'State').selectOption(state);
     await field(dlg, /^Expires/).fill('2028-08-31');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
     await onSetup(page);
   };

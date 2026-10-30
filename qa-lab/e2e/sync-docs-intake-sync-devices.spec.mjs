@@ -175,7 +175,7 @@ test('device-only secrets and settings stay on the device they were set on', { t
     await field(p, 'Reappointment Due').fill('2028-12-31');
     await field(p, 'Portal password').fill(portalPassword);
     await p.getByPlaceholder('Lock code (4+ characters)').fill(lockCode);
-    await p.getByRole('button', { name: 'Add' }).click();
+    await p.getByRole('button', { name: 'Add', exact: true }).click();
     await p.waitFor({ state: 'detached', timeout: 15000 });
     await sleep(2500);
     const priv = row(`select login_secret from public.privileges where user_id = '${profile.id}'`);

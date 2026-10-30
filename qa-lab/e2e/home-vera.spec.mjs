@@ -28,13 +28,13 @@ test('home and Vera: search opens a record, Vera answers, notification center, a
   test.setTimeout(6 * 60 * 1000);
   const { profile } = await newMember(page, { firstName: 'Harper', lastName: 'Home', profession: 'MD' });
   await openCredentials(page, 'Licenses');
-  await page.getByRole('button', { name: 'Add' }).first().click();
+  await page.getByRole('button', { name: 'Add', exact: true }).first().click();
   const dlg = page.getByRole('dialog', { name: 'Add' });
   await field(dlg, 'Type').selectOption('State Medical License');
   await field(dlg, 'License #').fill('QA-FIND-4242');
   await field(dlg, 'State').selectOption('AZ');
   await field(dlg, /^Expires/).fill(day(25));
-  await dlg.getByRole('button', { name: 'Add' }).click();
+  await dlg.getByRole('button', { name: 'Add', exact: true }).click();
   await dlg.waitFor({ state: 'detached' });
   await sleep(2000);
 

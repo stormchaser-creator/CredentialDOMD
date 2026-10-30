@@ -61,13 +61,13 @@ const replaceSession = (page) => page.evaluate(() => window.Clerk.replaceSession
 
 async function addLicenseByHand(page, number, state = 'CO') {
   await openCredentials(page, 'Licenses');
-  await page.getByRole('button', { name: 'Add' }).first().click();
+  await page.getByRole('button', { name: 'Add', exact: true }).first().click();
   const dlg = page.getByRole('dialog', { name: 'Add' });
   await field(dlg, 'Type').selectOption('State Medical License');
   await field(dlg, 'License #').fill(number);
   await field(dlg, 'State').selectOption(state);
   await field(dlg, /^Expires/).fill('2028-10-31');
-  await dlg.getByRole('button', { name: 'Add' }).click();
+  await dlg.getByRole('button', { name: 'Add', exact: true }).click();
   await dlg.waitFor({ state: 'detached', timeout: 15000 });
 }
 const licenseOnServer = (profileId, number) => rows(`select id from public.licenses where user_id = '${profileId}' and license_number = '${number}'`).length > 0;

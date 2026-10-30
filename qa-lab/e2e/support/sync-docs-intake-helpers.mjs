@@ -241,7 +241,7 @@ export async function readZip(filePath) {
  */
 export async function addLicense(page, profileId, { type = 'State Medical License', name, number, state = 'CO', expires = '2029-05-31', file } = {}) {
   await openCredentials(page, 'Licenses');
-  await page.getByRole('button', { name: 'Add' }).first().click();
+  await page.getByRole('button', { name: 'Add', exact: true }).first().click();
   const dlg = page.getByRole('dialog', { name: 'Add' });
   await dlg.waitFor();
   await field(dlg, 'Type').selectOption(type);
@@ -255,7 +255,7 @@ export async function addLicense(page, profileId, { type = 'State Medical Licens
     await dlg.getByText(file.name).first().waitFor({ timeout: 30000 });
     await sleep(800);
   }
-  await dlg.getByRole('button', { name: 'Add' }).click();
+  await dlg.getByRole('button', { name: 'Add', exact: true }).click();
   await dlg.waitFor({ state: 'detached', timeout: 20000 });
   const lic = await waitFor('the license row', async () => row(`select * from public.licenses where user_id = '${profileId}' ${number ? `and license_number = '${number}'` : ''} order by created_at desc limit 1`), { timeoutMs: 30000 });
   let doc = null;

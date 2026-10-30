@@ -253,14 +253,14 @@ test('membership ends: read-only archive, downloads, no edits; buying again', {
   const licNumber = `QA-RO-${letters(5).toUpperCase()}`;
   await qa.feature('BILL-009', 'Setup: a license with an attached file, a Protected Identity record, an agreement, logged work and an invoice', async () => {
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
     await field(dlg, 'Type').selectOption('State Medical License');
     await field(dlg, 'Display Name').fill('QA Archive License');
     await field(dlg, 'License #').fill(licNumber);
     await field(dlg, 'State').selectOption('OH');
     await field(dlg, /^Expires/).fill('2027-06-30');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await sleep(2000);
     await openCredentials(page, 'Licenses');

@@ -101,13 +101,13 @@ test('client errors: a records-load failure and a render crash reach Admin > Err
     const licensesUrl = (u) => u.origin === apiOrigin && u.pathname === '/rest/v1/licenses';
     await page.route(licensesUrl, failWrite);
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
     await field(dlg, 'Type').selectOption('State Medical License');
     await field(dlg, 'License #').fill(`QA-UNSAVED-${tag.slice(-5)}`);
     await field(dlg, 'State').selectOption('VT');
     await field(dlg, /^Expires/).fill('2029-06-30');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     const closed = await dlg.waitFor({ state: 'detached', timeout: 15000 }).then(() => true, () => false);
     if (!closed) { qa.check('(the Add dialog stayed open)', false, (await dlg.innerText().catch(() => '')).slice(-200)); await dlg.getByRole('button', { name: 'Cancel' }).click().catch(() => {}); }
     await sleep(6000);

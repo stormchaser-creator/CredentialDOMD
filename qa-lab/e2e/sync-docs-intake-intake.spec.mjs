@@ -269,6 +269,19 @@ test('More > Requests: tabs, refresh, reply by email with chosen documents and a
   });
 
   await qa.feature('INTAKE-005', 'Dismiss, then Move back to New; Ask Vera to build the packet instead', async () => {
+    // Owner ticket 16ba1758: Dismiss straight from the list card, without
+    // opening the request.
+    await page.getByRole('button', { name: /^New/ }).click();
+    await page.locator('[role="button"]').filter({ hasText: 'Bravo Clinic: BLS card' }).first()
+      .getByRole('button', { name: /^Dismiss the request from/ }).click();
+    await sleep(1500);
+    qa.check('Dismiss on the list card dismisses it', row(`select status from public.document_requests where id = '${rB.req?.id}'`)?.status === 'dismissed');
+    await page.getByRole('button', { name: /^Dismissed/ }).click();
+    await page.getByText('Bravo Clinic: BLS card').first().click();
+    await page.getByRole('button', { name: 'Move back to New' }).click();
+    await sleep(1500);
+    qa.check('and Move back to New restores it', row(`select status from public.document_requests where id = '${rB.req?.id}'`)?.status === 'new');
+    await page.getByRole('button', { name: '‹ All requests' }).click().catch(() => {});
     await page.getByRole('button', { name: /^New/ }).click();
     await page.getByText('Bravo Clinic: BLS card').first().click();
     await page.getByRole('button', { name: 'Dismiss', exact: true }).click();

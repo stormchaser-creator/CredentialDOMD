@@ -131,7 +131,7 @@ test('a save refused during a membership re-check keeps the form and its file; a
   await qa.feature('SYNC-006', 'Add form with a file while the membership check fails: Save keeps the license and its file on this device and says so; a check that answers active sends one record and one linked file', async () => {
     const faultSince = new Date().toISOString();
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
     await dlg.waitFor();
     await field(dlg, 'Type').selectOption('State Medical License');
@@ -144,7 +144,7 @@ test('a save refused during a membership re-check keeps the form and its file; a
     await dlg.getByText('qa-refused-license.pdf').first().waitFor({ timeout: 30000 });
     const unblock = await failChecks();
     const dialogs = qa.report.dialogs.length;
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     const closed = await dlg.waitFor({ state: 'detached', timeout: 20000 }).then(() => true, () => false);
     const said = qa.report.dialogs.slice(dialogs).join(' | ');
     const kept = page.getByRole('status').filter({ hasText: KEPT });
@@ -192,7 +192,7 @@ test('a save refused during a membership re-check keeps the form and its file; a
   await qa.feature('SYNC-006', 'A real read-only answer: the membership ends while a save waits for the check; the save is taken back and the member told', async () => {
     const faultSince = new Date().toISOString();
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
     await dlg.waitFor();
     await field(dlg, 'Type').selectOption('State Medical License');
@@ -214,7 +214,7 @@ test('a save refused during a membership re-check keeps the form and its file; a
     // The check can answer again; the save asks for it and waits for the answer.
     await unblock();
     const dialogs = qa.report.dialogs.length;
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     const told = await waitFor('the refusal', async () => (qa.report.dialogs.length > dialogs ? true : null), { timeoutMs: 20000 }).catch(() => false);
     await sleep(1500);
     const said = qa.report.dialogs.slice(dialogs).join(' | ');
@@ -246,7 +246,7 @@ test('an add that never reached the cloud, edited once the network is back, keep
     await field(d, 'Number').fill('QA-PASS-1111');
     await field(d, 'Label (optional)').fill('QA replay passport');
     await field(d, /Expires/).fill('2031-01-31');
-    await d.getByRole('button', { name: 'Add' }).click();
+    await d.getByRole('button', { name: 'Add', exact: true }).click();
     await d.waitFor({ state: 'detached', timeout: 15000 });
     await sleep(2500);
     const queue = await pendingOps(page);

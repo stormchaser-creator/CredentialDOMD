@@ -25,7 +25,7 @@ const storageKeysFor = async (page, id) => ({
 
 async function addEducation(page, { name, institution }) {
   await openCredentials(page, 'Education');
-  await page.getByRole('button', { name: 'Add' }).first().click();
+  await page.getByRole('button', { name: 'Add', exact: true }).first().click();
   const dlg = page.getByRole('dialog', { name: 'Add' });
   await dlg.waitFor();
   const type = field(dlg, 'Type');
@@ -33,7 +33,7 @@ async function addEducation(page, { name, institution }) {
   await field(dlg, 'Display Name').fill(name);
   await field(dlg, 'Institution').fill(institution);
   await field(dlg, 'Graduation / End Date').fill('2015-06-01');
-  await dlg.getByRole('button', { name: 'Add' }).click();
+  await dlg.getByRole('button', { name: 'Add', exact: true }).click();
   await dlg.waitFor({ state: 'detached', timeout: 15000 });
 }
 
@@ -41,13 +41,13 @@ test('sign out purges the device; signing back in restores the cloud records', {
   const { user, profile } = await newMember(page, { firstName: 'Drew', lastName: 'Device' });
   await addEducation(page, { name: 'QA Residency', institution: 'QA Teaching Hospital' });
   await openCredentials(page, 'Licenses');
-  await page.getByRole('button', { name: 'Add' }).first().click();
+  await page.getByRole('button', { name: 'Add', exact: true }).first().click();
   const dlg = page.getByRole('dialog', { name: 'Add' });
   await field(dlg, 'Type').selectOption('State Medical License');
   await field(dlg, 'License #').fill('QA-OUT-1');
   await field(dlg, 'State').selectOption('WA');
   await field(dlg, /^Expires/).fill('2028-02-01');
-  await dlg.getByRole('button', { name: 'Add' }).click();
+  await dlg.getByRole('button', { name: 'Add', exact: true }).click();
   await dlg.waitFor({ state: 'detached' });
   await sleep(2500);
   const counts = () => row(`select (select count(*) from public.licenses where user_id = '${profile.id}')::int as licenses, (select count(*) from public.education where user_id = '${profile.id}')::int as education`);
@@ -151,7 +151,7 @@ test('opened offline: the device copy shows as a read-only archive; nothing can 
     qa.check('the device copy renders the education record', /QA University/.test(text));
     qa.check('it says the records are read-only', /These records are read-only/.test(text));
     const before = rows(`select id from public.education where user_id = '${profile.id}'`).length;
-    qa.check('no Add or edit control is offered offline', !(await page.getByRole('button', { name: 'Add' }).count()), `${await page.getByRole('button', { name: 'Add' }).count()} Add button(s)`);
+    qa.check('no Add or edit control is offered offline', !(await page.getByRole('button', { name: 'Add', exact: true }).count()), `${await page.getByRole('button', { name: 'Add', exact: true }).count()} Add button(s)`);
     qa.check('Download saved records is offered offline', await page.getByRole('button', { name: 'Download saved records' }).isVisible().catch(() => false));
     await goTab(page, 'More');
     await page.getByRole('button', { name: /Vera/ }).first().click().catch(() => {});

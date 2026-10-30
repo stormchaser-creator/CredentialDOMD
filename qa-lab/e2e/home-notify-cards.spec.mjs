@@ -352,7 +352,7 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     qa.check('Setup Tier 1 is complete (setup_state.tier1DoneAt)', !!tier1, JSON.stringify(profileOf(user.id).setup_state || {}).slice(0, 160));
     // The Health Records form refuses a TB test without its expiration date.
     await openCredentials(page, 'Health Records');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const add = page.getByRole('dialog', { name: 'Add Health Record' });
     await add.waitFor();
     await field(add, 'Category').selectOption('TB Test');
@@ -368,13 +368,13 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     await seed(user, profile.id, 'licenses', [{ type: 'State Medical License', name: 'QA AZ from the registry', license_number: 'QA-AZ-UNDATED', state: 'AZ', npi_imported: true }]);
     // A professional malpractice policy with Expires blank: the form refuses it, so that checklist step is skipped.
     await openCredentials(page, 'Insurance');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const ins = page.getByRole('dialog', { name: 'Add' });
     await ins.waitFor();
     await field(ins, 'Type').selectOption('Medical Malpractice (Claims-Made)');
     await field(ins, 'Carrier').fill('QA Mutual');
     await field(ins, 'Policy #').fill('QA-MAL-1');
-    await ins.getByRole('button', { name: 'Add' }).click();
+    await ins.getByRole('button', { name: 'Add', exact: true }).click();
     await sleep(800);
     const insRefusal = (await ins.innerText().catch(() => '')).match(/Required:[^\n]*/)?.[0] || '';
     qa.check('the Insurance form refuses a malpractice policy without Expires ("Required: Expires"), so it cannot reach the banner from the form', /Required: .*Expires/.test(insRefusal) && !row(`select 1 as ok from public.insurance where user_id = '${profile.id}'`), insRefusal);
@@ -423,7 +423,7 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     const before = await homeTiles(page);
     // A license whose date is not known yet, and one awaiting confirmation with a date inside the reminder window.
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     let dlg = page.getByRole('dialog', { name: 'Add' });
     await field(dlg, 'Type').selectOption('State Medical License');
     await field(dlg, 'Display Name').fill('QA CO pending date');
@@ -431,9 +431,9 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     await field(dlg, 'State').selectOption('CO');
     await dlg.getByRole('checkbox', { name: 'Expiration date not yet known' }).check();
     await field(dlg, 'Status source').fill('QA Colorado board email 9/29');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     dlg = page.getByRole('dialog', { name: 'Add' });
     await field(dlg, 'Type').selectOption('State Medical License');
     await field(dlg, 'Display Name').fill('QA UT awaiting confirmation');
@@ -442,7 +442,7 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
     await field(dlg, /^Expires/).fill(day(20));
     await dlg.getByRole('button', { name: 'Pending confirmation', exact: true }).click().catch(async () => { await field(dlg, 'Status').selectOption({ label: 'Pending confirmation' }); });
     await field(dlg, 'Status source').fill('QA Utah licensing letter');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await sleep(2500);
     const co = row(`select id, date_unknown, lifecycle_status, status_source, expiration_date from public.licenses where user_id = '${profile.id}' and license_number = 'QA-CO-UNKNOWN'`);
@@ -480,13 +480,13 @@ test('cards: missing dates, resolve, no license, profile, preview, all clear', {
 
   await qa.feature('HOME-025', 'A state with a DEA but no medical license: warned on Home, the warning opens Licenses', async () => {
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
     await field(dlg, 'Type').selectOption('DEA Registration');
     await field(dlg, 'License #').fill('QA-DEA-WY');
     await field(dlg, 'State').selectOption('WY');
     await field(dlg, /^Expires/).fill(day(600));
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await sleep(2000);
     await home(page);

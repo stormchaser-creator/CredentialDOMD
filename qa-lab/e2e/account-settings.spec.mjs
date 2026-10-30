@@ -113,13 +113,13 @@ test('settings: setup card, profile and reminder settings persist, support acces
 
   await qa.feature('NOTIFY-001', 'Daily email reminder for a license expiring soon', async () => {
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
     await field(dlg, 'Type').selectOption('State Medical License');
     await field(dlg, 'License #').fill('QA-REMIND-20');
     await field(dlg, 'State').selectOption('NM');
     await field(dlg, /^Expires/).fill(day(20));
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached' });
     await sleep(2500);
     qa.check('email reminders are on for the member (the default)', profileOf(user.id).notify_email === true);

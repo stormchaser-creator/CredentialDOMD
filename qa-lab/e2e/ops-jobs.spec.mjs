@@ -141,13 +141,13 @@ test('scheduled jobs: each command runs as pg_cron would, the functions it calls
 
   await qa.feature('OPS-001', 'send-reminders-daily: its request reaches send-reminders and a due license is emailed', async () => {
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
     await field(dlg, 'Type').selectOption('State Medical License');
     await field(dlg, 'License #').fill(`QA-CRON-${tag.slice(-6)}`);
     await field(dlg, 'State').selectOption('WY');
     await field(dlg, /^Expires/).fill(day(12));
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached' });
     await waitFor('the license in the cloud', async () => countWhere('licenses', `user_id = '${pid}' and license_number = ${lit(`QA-CRON-${tag.slice(-6)}`)}`) === 1, { timeoutMs: 30000 });
     const r = runCronJob('send-reminders-daily');
@@ -270,13 +270,13 @@ test('cancellation retains records and files; scheduled deletion is refused whil
   test.setTimeout(10 * 60 * 1000);
   const { user: payer, profile: payerProfile } = await newMember(page, { firstName: 'Paige', lastName: `Retained ${letters()}` });
   await openCredentials(page, 'Licenses');
-  await page.getByRole('button', { name: 'Add' }).first().click();
+  await page.getByRole('button', { name: 'Add', exact: true }).first().click();
   const dlg = page.getByRole('dialog', { name: 'Add' });
   await field(dlg, 'Type').selectOption('State Medical License');
   await field(dlg, 'License #').fill('QA-KEEP-1');
   await field(dlg, 'State').selectOption('MT');
   await field(dlg, /^Expires/).fill(day(300));
-  await dlg.getByRole('button', { name: 'Add' }).click();
+  await dlg.getByRole('button', { name: 'Add', exact: true }).click();
   await dlg.waitFor({ state: 'detached' });
   await waitFor('the license in the cloud', async () => countWhere('licenses', `user_id = '${payerProfile.id}'`) === 1);
 

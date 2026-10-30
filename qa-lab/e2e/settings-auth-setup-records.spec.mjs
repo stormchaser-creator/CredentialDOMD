@@ -67,7 +67,7 @@ test('setup: licenses from the registry and by hand, expiration dates, DEA, remi
     await field(dlg, 'State').selectOption('WA');
     // The form requires an expiration date (or "not yet known"), as the physician is told.
     await field(dlg, /^Expires/).fill('2029-01-31');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
     const back = await page.getByRole('heading', { name: /^Setup$/ }).first().waitFor({ timeout: 10000 }).then(() => true, () => false);
     await qa.shot('back from add by hand');

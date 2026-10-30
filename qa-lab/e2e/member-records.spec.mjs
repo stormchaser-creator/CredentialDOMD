@@ -42,7 +42,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
   const addDialog = () => page.getByRole('dialog', { name: 'Add' });
   const openAdd = async () => {
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     await addDialog().waitFor();
     return addDialog();
   };
@@ -55,7 +55,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     // Medical license, State left blank first.
     let dlg = await openAdd();
     await field(dlg, 'Type').selectOption('State Medical License');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     const blank = (await dlg.innerText()).match(/Required:[^\n]*/)?.[0] || '';
     qa.check('saving with the state blank says what is required', /Required:.*State/.test(blank), blank);
     await field(dlg, 'Display Name').fill('QA Texas Medical License');
@@ -66,7 +66,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     await field(dlg, /Renewal Cost/).fill('450');
     const cycle = field(dlg, /CME Cycle Start/);
     if (await cycle.count()) await cycle.fill('2025-01-01');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await evidence('medical license added', () => {
       const l = byNumber('QA-TX-1001');
@@ -78,7 +78,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     dlg = await openAdd();
     await field(dlg, 'Type').selectOption('DEA Registration');
     await field(dlg, 'License #').fill('QA-DEA-0001');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     const dea = (await dlg.innerText()).match(/Required:[^\n]*/)?.[0] || '';
     qa.check('a DEA without State or Expires is refused with "Required: State, Expires"', /Required: State, Expires/.test(dea), dea);
     qa.check('the refused DEA was not saved', !byNumber('QA-DEA-0001'));
@@ -90,7 +90,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     await field(dlg, 'Display Name').fill('QA Board Certification');
     await field(dlg, 'License #').fill('QA-ABMS-77');
     await dlg.getByRole('checkbox', { name: 'This certificate does not expire' }).check();
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await evidence('non-expiring board certification added', () => { const l = byNumber('QA-ABMS-77'); return !!l && l.no_expiration === true && !l.expiration_date; });
     await openCredentials(page, 'Licenses');
@@ -103,7 +103,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     await field(dlg, 'License #').fill('QA-CO-2002');
     await field(dlg, 'State').selectOption('CO');
     await dlg.getByRole('checkbox', { name: 'Expiration date not yet known' }).check();
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await evidence('date-unknown license added', () => { const l = byNumber('QA-CO-2002'); return !!l && l.date_unknown === true && !l.expiration_date; });
     await openCredentials(page, 'Licenses');
@@ -116,7 +116,7 @@ test('full member: licenses added, edited, starred, attached, deleted; Home and 
     await field(dlg, 'License #').fill(soonNumber);
     await field(dlg, 'State').selectOption('NM');
     await field(dlg, /^Expires/).fill(day(30));
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await evidence('license expiring in 30 days added', () => !!byNumber(soonNumber));
     qa.check('four licenses saved in the database', licenses().length === 4, licenses().map((l) => l.license_number).join(', '));

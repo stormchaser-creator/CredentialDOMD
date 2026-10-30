@@ -43,14 +43,14 @@ test('one transient membership 503 recovers automatically and resumes an account
     }
     // Confirm normal product writes, not merely an HTTP200 or a cached visual.
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dialog = page.getByRole('dialog', { name: 'Add' });
     const number = `QA-TRANSIENT-${profile.id.slice(0,8)}`;
     await field(dialog, 'Type').selectOption('State Medical License');
     await field(dialog, 'License #').fill(number);
     await field(dialog, 'State').selectOption('CO');
     await field(dialog, /^Expires/).fill('2029-10-31');
-    await dialog.getByRole('button', { name: 'Add' }).click();
+    await dialog.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(dialog).toBeHidden();
     const saved = await waitFor('the license persisted after automatic recovery', () => row(`select id,user_id,license_number from public.licenses where license_number='${number}'`), { timeoutMs: 20000, intervalMs: 100 });
     const all = rows(`select id,user_id from public.licenses where license_number='${number}'`);

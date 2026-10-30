@@ -46,7 +46,7 @@ test('every write fits its table: share-log rows from the Documents packet, the 
     await field(r, 'Full Name').fill('Jordan Sample, MD');
     await field(r, 'Institution/Hospital').fill('QA Teaching Hospital');
     await field(r, 'Relationship').selectOption({ index: 1 });
-    await r.getByRole('button', { name: 'Add' }).click();
+    await r.getByRole('button', { name: 'Add', exact: true }).click();
     await r.waitFor({ state: 'detached', timeout: 15000 });
     await sleep(1500);
     await page.evaluate(() => { try { Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); } catch { /* keep */ } });

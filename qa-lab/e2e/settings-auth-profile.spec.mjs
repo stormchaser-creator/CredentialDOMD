@@ -62,13 +62,13 @@ test('settings: birth month and day, licensed states, CME requirements, AI keys 
   await qa.feature('SETTINGS-009', 'Licensed states: add two, Set Primary, remove one; Home CME cards and the Matrix follow and it persists', async () => {
     // A license in NV, so one tracked state comes from a license rather than the list.
     await openCredentials(page, 'Licenses');
-    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Add' });
     await field(dlg, 'Type').selectOption('State Medical License');
     await field(dlg, 'License #').fill('QA-STATES-NV1');
     await field(dlg, 'State').selectOption('NV');
     await field(dlg, /^Expires/).fill('2028-12-31');
-    await dlg.getByRole('button', { name: 'Add' }).click();
+    await dlg.getByRole('button', { name: 'Add', exact: true }).click();
     await dlg.waitFor({ state: 'detached', timeout: 15000 });
     await openSettings(page);
     const card = settingsCard(page, 'Licensed States');
@@ -384,7 +384,7 @@ test('settings: appearance, dashboard, notifications follow the account; text si
       const viewShot = (await qa.shot(`${size} licenses`)).replace(/\.png$/, '-scrolled.png');
       await page.screenshot({ path: viewShot, fullPage: false });
       await page.evaluate(() => window.scrollTo(0, 0));
-      await page.getByRole('button', { name: 'Add' }).first().click();
+      await page.getByRole('button', { name: 'Add', exact: true }).first().click();
       const dlg = page.getByRole('dialog', { name: 'Add' });
       await dlg.waitFor({ timeout: 10000 });
       await sleep(400);
