@@ -85,6 +85,7 @@ import { useIsAdmin } from "./lib/admin";
 import AdminPreviewBanner, { ADMIN_PREVIEW_BANNER_CLEARANCE } from "./components/pages/AdminPreview";
 import { isNonExpiring, mailtoHref, copyToClipboard, avatarInitials } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
+import { installPhoneViewportReset, paintPageBackground } from "./utils/phoneViewport.js";
 import { referencesShareTitle, referencesShareText, followUpEmail } from "./utils/shareText";
 import { buildSetup, setupOwns, dateless, setupSurfaceCounts } from "./utils/setupTasks";
 import { historySummary, DEFAULT_LOOKBACK_YEARS, ADDRESS_KIND_OPTIONS, isWorkAddress } from "./utils/addressHistory";
@@ -324,6 +325,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   useLayoutEffect(() => {
     if (!isDesktop && phoneContentRef.current) phoneContentRef.current.scrollTop = 0;
   }, [tab, subPage, user?.id, isDesktop]);
+  // The bottom menu stuck high after the keyboard closed (ticket 23920b06):
+  // the page carries the app's background, and on phones a document the
+  // keyboard left scrolled goes back to the top (utils/phoneViewport.js).
+  useEffect(() => { paintPageBackground(document, T.bg); }, [T.bg]);
+  useEffect(() => (isDesktop ? undefined : installPhoneViewportReset(window, document)), [isDesktop]);
   const draftResumeOwner = useRef(null);
   useEffect(() => {
     if (!loaded || !authChecked || credentialReadOnly || !user?.id || !userIdRef?.current) return;
